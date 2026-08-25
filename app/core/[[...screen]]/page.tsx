@@ -57,6 +57,8 @@ import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import LiveScores from '@/components/core-app/screens/LiveScores'
+import { getLivePageData } from '@/lib/live/liveScoresPage'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
@@ -121,6 +123,71 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
    * additional routes against Vercel's 2048 ceiling.
    */
   bracket: 'tools',
+  /*
+   * 38a — the live slate inside the shell. Another segment on the same
+   * catch-all, so it costs zero routes; the public `/live` page is untouched
+   * and stays the signed-out, indexable one.
+   */
+  live: 'live',
+}
+
+/**
+ * Per-tab titles and descriptions.
+ *
+ * ⚠ THE ROOT LAYOUT DECLARES `robots: { index: true, follow: true }` AND EVERY
+ * SCREEN HERE INHERITED IT. Nothing was ever actually indexed — /core redirects
+ * an anonymous request to /login, so a crawler never sees a page — but the
+ * markup was telling search engines to index a signed-in dashboard, which is
+ * the wrong instruction to be shipping either way. `generateMetadata` below
+ * overrides it for the whole catch-all.
+ *
+ * The titles are not an SEO play; they are what a browser tab, a bookmark and a
+ * pasted link say. Nineteen screens that all read "AllFantasy" is unusable once
+ * more than two tabs are open, which is the normal state for this product.
+ */
+const TAB_META: Record<string, { title: string; description: string }> = {
+  '': { title: 'Your leagues', description: 'Every league you play, ordered by what needs you first.' },
+  players: { title: 'Player Finder', description: 'Search any player and see what they are worth in your leagues.' },
+  'my-team': { title: 'My team', description: 'Your lineup, slots and lock times for one league.' },
+  matchup: { title: 'Matchup', description: 'This week head to head, scored against your league rules.' },
+  trades: { title: 'Trades', description: 'Trade offers and grades, priced against one league.' },
+  waivers: { title: 'Waivers', description: 'Targets, bids and claim order for this league.' },
+  'war-room': { title: 'War Room', description: 'The live draft board, clock and queue.' },
+  'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
+  portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
+  career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
+  rankings: { title: 'Rankings', description: 'Your AF level, XP and where you sit on the ladder.' },
+  commissioner: { title: 'Commissioner', description: 'League health, disputes and settings.' },
+  tools: { title: 'Tools', description: 'Everything you can decide or understand about a league.' },
+  week: { title: 'Your week', description: 'Every matchup this week, ordered by what needs a decision.' },
+  'season-outlook': { title: 'Season Outlook', description: 'Playoff odds, title odds and what decides your season.' },
+  share: { title: 'Career Share', description: 'A shareable card of your fantasy career.' },
+  notifications: { title: 'Notifications', description: 'Trades, waivers, lineups and commissioner alerts.' },
+  discord: { title: 'Discord bridge', description: 'Connect a league to a Discord channel.' },
+  bracket: { title: 'Bracket Challenge', description: 'Fill a bracket and track it against the field.' },
+  live: { title: 'Live Scores', description: 'Live scores across every sport, scored against your rosters.' },
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ screen?: string[] }>
+}) {
+  const { screen } = await params
+  const segment = (screen?.[0] ?? '').toLowerCase()
+  const meta = TAB_META[segment]
+
+  return {
+    title: meta ? `${meta.title} · AllFantasy` : 'AllFantasy',
+    description: meta?.description,
+    /*
+     * Signed-in surface. `noindex` is the honest instruction and `nofollow`
+     * stops a crawler that somehow reaches one of these from walking the whole
+     * league graph. The public player pages every player name here links to are
+     * the surfaces that are meant to rank — this one never is.
+     */
+    robots: { index: false, follow: false, nocache: true },
+  }
 }
 
 function titleCase(slug: string): string {
@@ -381,6 +448,27 @@ export default async function AfCorePage({
   const warRoom =
     activeKey === 'war-room' && selectedLeagueId
       ? await getWarRoomData(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  /*
+   * 38a·2 — the live slate.
+   *
+   * ⚠ NULL USER IS A SUPPORTED INPUT AND MUST STAY ONE. `getLivePageData` takes
+   * a nullable userId and simply returns no roster tie-ins; the screen then says
+   * so instead of rendering an empty panel. Passing a non-null id here is fine
+   * because /core is behind the session gate, but the loader's contract is what
+   * lets the same data layer serve the public /live page.
+   *
+   * `scope` and `sport` are read from the URL so a shared link lands on the same
+   * slate the sender was looking at; the client takes over from there.
+   */
+  const liveScores =
+    activeKey === 'live'
+      ? await getLivePageData({
+          userId,
+          sport: typeof sp.sport === 'string' ? sp.sport : 'NFL',
+          scope: sp.scope === 'all' ? 'all' : 'my',
+        }).catch(() => null)
       : null
 
   const now = new Date()
@@ -664,6 +752,14 @@ export default async function AfCorePage({
       plan={plan}
       commissionerCount={commissionerCount}
       notificationCount={unreadNotifications}
+      /*
+       * Only populated on the Live screen itself — the count comes from the
+       * payload we already loaded there. Reading the slate on every /core page
+       * to decorate one nav badge would put a provider call in front of every
+       * screen in the product, which is exactly the cost the per-screen loader
+       * pattern above exists to avoid.
+       */
+      liveGameCount={liveScores?.games.filter((g) => g.isLive).length ?? null}
       comms={{
         leagues: playedLeagues.slice(0, 12).map((l) => ({
           id: l.id,
@@ -840,6 +936,20 @@ export default async function AfCorePage({
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
               We could not read this week&apos;s matchups just now. This is a read failure on our
               side, not a week with no games.
+            </p>
+          </div>
+        )
+      ) : activeKey === 'live' ? (
+        liveScores ? (
+          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Live Scores
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read the slate just now. This is a read failure on our side, not a day
+              with no games on — your players may well be playing.
             </p>
           </div>
         )

@@ -59,6 +59,14 @@ export type CoreNavKey =
   | 'season-outlook'
   | 'share'
   | 'notifications'
+  /*
+   * 38a. `live` is the league-dashboard entry to the cross-league live slate
+   * that /live already serves — same data layer, inside the shell. `standings`
+   * and `sync` land with their screens in later phases; adding a nav entry
+   * before its screen exists is what produced the "not built yet" panel this
+   * suite is replacing.
+   */
+  | 'live'
 
 type NavItem = {
   key: CoreNavKey
@@ -67,6 +75,21 @@ type NavItem = {
   href: string
   badge?: { text: string; tone: 'live' | 'level' | 'count' }
 }
+
+/**
+ * Nav sections.
+ *
+ * ⚠ THIS WAS A FLAT LIST OF SIXTEEN AND 38a TAKES IT TO NINETEEN. Sixteen
+ * undifferentiated rows already scanned as a wall; nineteen is not a nav, it is
+ * an index. The grouping is the same cut the Tools screen already makes — what
+ * you decide inside one league, what is happening this week, what you have
+ * done, and what you administer — so the two surfaces describe the product the
+ * same way instead of two different ways.
+ *
+ * Headings are presentational only: every item keeps its own key and href, so
+ * nothing about routing or active state changes with them.
+ */
+type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
   active: CoreNavKey
@@ -98,6 +121,13 @@ export type AfCoreShellProps = {
   } | null
   /** Unread count for the Notifications nav badge. Omitted when zero. */
   notificationCount?: number
+  /**
+   * Games in progress right now, for the Live scores badge. Same rule as every
+   * other badge here: only rendered when something is actually live, never a
+   * placeholder. Null/0 means the slate is quiet or we could not read it, and
+   * either way the badge is absent rather than showing a zero.
+   */
+  liveGameCount?: number | null
   children: React.ReactNode
 }
 
@@ -145,10 +175,51 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/waivers?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/waivers',
     },
-    { key: 'players', label: 'Player Finder', glyph: '●', href: '/core/players' },
-    // 24a — every matchup at once, ordered by what needs a decision. Cross-league,
-    // so no ?league= on it: scoping this to one league is the thing it replaces.
-    { key: 'week', label: 'Your week', glyph: '◱', href: '/core/week' },
+    {
+      key: 'players',
+      label: 'Player Finder',
+      glyph: '●',
+      // 38a scopes this to the league in context — "in THIS league" rather than
+      // "across every platform" — so the link carries the league the way the
+      // other league-scoped entries do. Without ?league= it stays the
+      // cross-platform finder it is today.
+      href: props.selectedLeagueId
+        ? `/core/players?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/players',
+    },
+    /*
+     * 24a — every matchup at once, ordered by what needs a decision.
+     *
+     * ⚠ THE LEAGUE ID IS DELIBERATE AND DOES NOT NARROW THE SCREEN BY ITSELF.
+     * 38a adds a one-league hero to this same key (the user's call: add a
+     * league view, do not replace the cross-league board). The screen reads the
+     * parameter; the cross-league board is still what renders without it.
+     */
+    {
+      key: 'week',
+      label: 'Your week',
+      glyph: '◱',
+      href: props.selectedLeagueId
+        ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/week',
+    },
+    /*
+     * 38a — the live slate, inside the shell. Cross-league by definition: the
+     * question it answers is "what is happening right now across everything I
+     * own", which stops meaning anything scoped to one league. It carries the
+     * league only so the screen can mark which tie-ins are this league's.
+     */
+    {
+      key: 'live',
+      label: 'Live scores',
+      glyph: '◉',
+      href: props.selectedLeagueId
+        ? `/core/live?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/live',
+      badge: props.liveGameCount && props.liveGameCount > 0
+        ? { text: String(props.liveGameCount), tone: 'live' }
+        : undefined,
+    },
     {
       key: 'war-room',
       label: 'War Room',
@@ -178,9 +249,27 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // Label and glyph are the handoff's, verbatim: "Your career" with ★. I first
     // shipped "Career" with ◷ — which is Waivers' glyph, so the rail had the same
     // mark twice.
-    { key: 'career', label: 'Your career', glyph: '★', href: '/core/career' },
+    // 38a adds a one-league career view on this same key — titles, record and
+    // grades *inside* this league. The cross-league trophy room is still what
+    // renders without a league.
+    {
+      key: 'career',
+      label: 'Your career',
+      glyph: '★',
+      href: props.selectedLeagueId
+        ? `/core/career?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/career',
+    },
     // 26b — replaces the dashboard entry that pointed at /af-legacy?tab=pulse.
-    { key: 'season-outlook', label: 'Season Outlook', glyph: '◎', href: '/core/season-outlook' },
+    // 38a scopes it to one league's full standings table when a league is held.
+    {
+      key: 'season-outlook',
+      label: 'Season Outlook',
+      glyph: '◎',
+      href: props.selectedLeagueId
+        ? `/core/season-outlook?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/season-outlook',
+    },
     {
       key: 'rankings',
       label: 'Rankings',
@@ -203,7 +292,11 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       key: 'notifications',
       label: 'Notifications',
       glyph: '◐',
-      href: '/core/notifications',
+      // 38a filters the feed to one league. Same key, same rows — the league
+      // is a filter over `NotificationRow.leagueId`, which the row already has.
+      href: props.selectedLeagueId
+        ? `/core/notifications?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/notifications',
       // Only when something is actually unread — a badge with nothing behind it
       // is an invented notification, the same rule ChimmyFab follows.
       badge:
@@ -214,6 +307,64 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     { key: 'tools', label: 'Tools', glyph: '⚙', href: '/core/tools' },
   ]
 }
+
+/**
+ * The order the sections appear in, and which keys belong to each.
+ *
+ * Declared as key lists rather than by rebuilding the items so `navItems` stays
+ * the single place an item's label, glyph, href and badge are defined — a nav
+ * entry that exists in two places drifts in one of them.
+ *
+ * Any key not named here still renders, in a trailing unheaded group, so adding
+ * a nav item can never silently drop it off the rail.
+ */
+const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey[] }> = [
+  { id: 'top', heading: null, keys: ['home'] },
+  {
+    id: 'league',
+    heading: 'This league',
+    keys: ['my-team', 'matchup', 'waivers', 'trades', 'players', 'draft-hq', 'war-room'],
+  },
+  { id: 'now', heading: 'This week', keys: ['week', 'live', 'season-outlook'] },
+  { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
+  { id: 'manage', heading: 'Manage', keys: ['commissioner', 'notifications', 'tools'] },
+]
+
+function navSections(props: AfCoreShellProps): NavSection[] {
+  const items = navItems(props)
+  const byKey = new Map(items.map((i) => [i.key, i]))
+  const placed = new Set<CoreNavKey>()
+
+  const sections: NavSection[] = NAV_SECTIONS.map((s) => {
+    const picked = s.keys.flatMap((k) => {
+      const item = byKey.get(k)
+      if (!item) return []
+      placed.add(k)
+      return [item]
+    })
+    return { id: s.id, heading: s.heading, items: picked }
+  }).filter((s) => s.items.length > 0)
+
+  const leftover = items.filter((i) => !placed.has(i.key))
+  if (leftover.length > 0) sections.push({ id: 'other', heading: null, items: leftover })
+
+  return sections
+}
+
+/**
+ * The phone's bottom bar.
+ *
+ * ⚠ A HORIZONTAL SCROLLER IS NOT A PHONE NAV. Below 720px the primary nav
+ * became a strip you had to swipe sideways through nineteen items to reach
+ * anything past the fifth — reachable, but only in the sense that a directory
+ * is reachable. These five are the destinations a phone session actually starts
+ * from, pinned where a thumb reaches, and "More" opens the full strip rather
+ * than hiding the rest.
+ *
+ * `home` is included even when a league is selected: on a phone the league
+ * switcher is off-screen, so the way back to the league list has to be here.
+ */
+const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'week', 'live', 'notifications']
 
 type TopSearchHit = {
   id: string
@@ -405,11 +556,31 @@ function HelpDot({ title, body }: { title: string; body: string }) {
 }
 
 export function AfCoreShell(props: AfCoreShellProps) {
-  const items = useMemo(() => navItems(props), [props])
+  const sections = useMemo(() => navSections(props), [props])
+  const mobileItems = useMemo(() => {
+    const byKey = new Map(navItems(props).map((i) => [i.key, i]))
+    return MOBILE_BAR_KEYS.flatMap((k) => {
+      const item = byKey.get(k)
+      return item ? [item] : []
+    })
+  }, [props])
   const { leagues, syncAge, plan, weekLabel, active, children, comms } = props
+  // "More" is current whenever the screen you are on is not one of the five
+  // pinned ones — otherwise the bar shows nothing as active and reads broken.
+  const activeInBar = mobileItems.some((i) => i.key === active)
 
   return (
     <div className="af-core af-shell">
+      {/*
+        Keyboard users land on the rail, then the nav, then the search box —
+        three groups and roughly thirty tabbable controls — before reaching the
+        screen they navigated to. This is the standard fix and it costs nothing
+        visually: it is off-screen until focused.
+      */}
+      <a href="#af-content" className="af-skip">
+        Skip to content
+      </a>
+
       {/* ── League rail ─────────────────────────────────────────────── */}
       <nav className="af-rail" aria-label="Leagues">
         <Link href="/core" className="af-rail-logo" aria-label="AllFantasy home">
@@ -462,28 +633,44 @@ export function AfCoreShell(props: AfCoreShellProps) {
       </nav>
 
       {/* ── Primary nav ─────────────────────────────────────────────── */}
-      <aside className="af-nav">
-        <div className="af-nav-items">
-          {items.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className="af-nav-item"
-              data-active={item.key === active}
-              aria-current={item.key === active ? 'page' : undefined}
-            >
-              <span className="af-nav-glyph" aria-hidden>
-                {item.glyph}
-              </span>
-              <span className="af-nav-label">{item.label}</span>
-              {item.badge ? (
-                <span className="af-nav-badge" data-tone={item.badge.tone}>
-                  {item.badge.text}
-                </span>
-              ) : null}
-            </Link>
-          ))}
-        </div>
+      <aside className="af-nav" id="af-nav" aria-label="Sections">
+        {sections.map((section) => (
+          <div className="af-nav-group" key={section.id}>
+            {section.heading ? (
+              <div className="af-nav-heading af-label" aria-hidden>
+                {section.heading}
+              </div>
+            ) : null}
+            {/*
+              One <ul> per section so the headings are structure a screen reader
+              can use, not decoration between anonymous links. The heading is
+              aria-hidden because it is repeated as the list's accessible name —
+              announcing it twice is worse than not styling it at all.
+            */}
+            <ul className="af-nav-items" aria-label={section.heading ?? 'Primary'}>
+              {section.items.map((item) => (
+                <li key={item.key}>
+                  <Link
+                    href={item.href}
+                    className="af-nav-item"
+                    data-active={item.key === active}
+                    aria-current={item.key === active ? 'page' : undefined}
+                  >
+                    <span className="af-nav-glyph" aria-hidden>
+                      {item.glyph}
+                    </span>
+                    <span className="af-nav-label">{item.label}</span>
+                    {item.badge ? (
+                      <span className="af-nav-badge" data-tone={item.badge.tone}>
+                        {item.badge.text}
+                      </span>
+                    ) : null}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
 
         {/*
           The import CTA states read-only and the time cost up front. Both are
@@ -552,7 +739,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           </div>
         </header>
 
-        <main className="af-content">
+        <main className="af-content" id="af-content" tabIndex={-1}>
           {/*
             ⚠ COMPLIANCE, NOT CHROME — AND IT SITS IN THE SHELL SO NO SCREEN CAN
             FORGET IT. /dashboard carried this and /core did not, which made it a
@@ -574,6 +761,37 @@ export function AfCoreShell(props: AfCoreShellProps) {
         and a per-screen mount would unmount it on every link. Same placement
         reasoning as GeoRestrictionNotice above.
       */}
+      {/* ── Phone bottom bar ────────────────────────────────────────── */}
+      <nav className="af-tabbar" aria-label="Main">
+        {mobileItems.map((item) => (
+          <Link
+            key={item.key}
+            href={item.href}
+            className="af-tabbar-item"
+            data-active={item.key === active}
+            aria-current={item.key === active ? 'page' : undefined}
+          >
+            <span className="af-tabbar-glyph" aria-hidden>
+              {item.glyph}
+              {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
+            </span>
+            <span className="af-tabbar-label">{item.label}</span>
+          </Link>
+        ))}
+        {/*
+          Anchors to the nav strip rather than opening a sheet. The strip is
+          already on the page and already scrollable, so a sheet would be a
+          second copy of the same list — one more thing to keep in step with
+          navItems for no gain.
+        */}
+        <a className="af-tabbar-item" href="#af-nav" data-active={!activeInBar}>
+          <span className="af-tabbar-glyph" aria-hidden>
+            ⋯
+          </span>
+          <span className="af-tabbar-label">More</span>
+        </a>
+      </nav>
+
       {comms ? (
         <CommsDock
           leagues={comms.leagues}
