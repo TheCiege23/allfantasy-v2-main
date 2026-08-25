@@ -697,3 +697,61 @@
   color: var(--muted);
   margin-left: 2px;
 }
+
+/* ── Byes ────────────────────────────────────────────────────────────── */
+/* Loud. A starter on bye is a guaranteed zero, not a caveat. */
+.af-mt-bye {
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+  color: var(--bad);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+/* Same treatment as an empty slot, because that is what it is. */
+.af-mt-row[data-bye='true'] {
+  background: var(--bad-soft);
+  border-radius: 10px;
+  border-bottom-color: transparent;
+}
+.af-mt-row[data-bye='true'] .af-mt-slot {
+  background: transparent;
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.af-mt-byes {
+  padding: 12px 16px;
+}
+.af-mt-byes-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-mt-byes-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.af-mt-byes-wk {
+  flex: 0 0 auto;
+  min-width: 62px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+/* Three or more in one week is a planning problem, not a note. */
+.af-mt-byes-list li[data-stack='true'] .af-mt-byes-wk {
+  color: var(--warn);
+}
+.af-mt-byes-who {
+  min-width: 0;
+}

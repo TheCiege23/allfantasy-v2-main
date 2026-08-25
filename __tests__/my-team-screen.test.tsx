@@ -23,6 +23,7 @@ function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
     projectedPoints: 19.8,
     afProjectedPoints: 22.4,
     indoors: false,
+    onBye: false,
     ...over,
   }
 }
@@ -89,6 +90,7 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
         bye: false,
       },
     },
+    upcomingByes: [],
     rosterGrade: {
       available: true,
       data: {
@@ -473,5 +475,61 @@ describe('My Team — the reported problems', () => {
       />,
     )
     expect(t).toContain('we need prices for most of this league')
+  })
+
+  it('⚠ flags a starter whose team is not playing at all', () => {
+    /*
+     * The most preventable loss in fantasy, and nothing on this screen warned
+     * about it. A starter on bye is a guaranteed zero, so the row gets the same
+     * treatment as an empty slot — because that is what it is.
+     */
+    const c = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [
+              {
+                slotLabel: 'RB',
+                player: player({ onBye: true, projectedPoints: 0, afProjectedPoints: 0 }),
+                empty: false,
+                unresolvedId: null,
+              },
+            ],
+          },
+        })}
+      />,
+    ).container
+    expect(c.textContent).toContain('BYE')
+    expect(c.querySelector('.af-mt-row[data-bye="true"]')).toBeTruthy()
+  })
+
+  it('shows byes forming before the waiver wire is picked over', () => {
+    const t = text(
+      <MyTeam
+        data={data({
+          upcomingByes: [{ week: 7, names: ['Bo Nix', 'RJ Harvey', 'Tyler Allgeier'] }],
+        } as never)}
+      />,
+    )
+    expect(t).toContain('Byes coming up')
+    expect(t).toContain('Week 7')
+    expect(t).toContain('3 off')
+  })
+
+  it('marks three-or-more in one week as a stack', () => {
+    const c = render(
+      <MyTeam
+        data={data({
+          upcomingByes: [
+            { week: 7, names: ['a', 'b', 'c'] },
+            { week: 9, names: ['d'] },
+          ],
+        } as never)}
+      />,
+    ).container
+    const items = c.querySelectorAll('.af-mt-byes-list li')
+    expect(items[0].getAttribute('data-stack')).toBe('true')
+    expect(items[1].getAttribute('data-stack')).toBe('false')
   })
 })

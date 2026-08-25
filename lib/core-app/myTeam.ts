@@ -11,6 +11,7 @@ import { describeScoringDifferences } from './scoringNotes'
 import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
 import { getNextMatchup, type NextMatchup } from './nextMatchup'
 import { getRosterGrade, type RosterGrade } from './rosterGrade'
+import { getByeWeeks } from './byeWeeks'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 
 /**
@@ -90,6 +91,15 @@ export type LineupPlayer = {
    * means "roofed", not "definitely closed".
    */
   indoors: boolean | null
+  /**
+   * His team is not playing this week.
+   *
+   * ⚠ THE MOST PREVENTABLE LOSS IN FANTASY. Starting a player on bye is a
+   * guaranteed zero and nothing on this screen warned about it. Only ever set
+   * when the week's schedule is complete enough to tell a bye from a gap in
+   * our own data — see byeWeeks.ts.
+   */
+  onBye: boolean
   /**
    * Weekly projection for this player, or null when the feed does not carry him.
    *
@@ -205,6 +215,11 @@ export type MyTeamData = {
    */
   nextMatchup: SectionState<NextMatchup>
   rosterGrade: SectionState<RosterGrade>
+  /**
+   * Byes coming up, so a stack is visible before the waiver wire is picked
+   * over rather than on the morning it bites.
+   */
+  upcomingByes: Array<{ week: number; names: string[] }>
   liveScore: UnavailableSection
 }
 
@@ -446,6 +461,8 @@ async function resolvePlayers(
       projectedPoints: ruledOut ? 0 : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
       indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
+      // Filled in by the caller once the week's slate is known to be complete.
+      onBye: false,
     })
   }
 
@@ -495,6 +512,7 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       available: false as const,
       reason: 'no schedule on file for this league yet',
     },
+    upcomingByes: [],
     rosterGrade: {
       available: false as const,
       reason: 'no roster found to grade',
@@ -738,6 +756,47 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     ? await resolveCurrentWeekForLeague(league.platformLeagueId)
     : null
 
+  /*
+   * Byes for THIS week (to flag a starter who is not playing) and the next few
+   * (to show a stack forming). Null whenever the schedule is too thin to tell a
+   * bye from a gap in ingestion — see byeWeeks.ts.
+   */
+  const byes = sportsWeek
+    ? await getByeWeeks({
+        sport,
+        season: sportsWeek.season,
+        playerTeams: new Map([...resolved.values()].map((p) => [p.sleeperId, p.team])),
+        fromWeek: sportsWeek.week,
+      }).catch(() => null)
+    : null
+
+  if (byes && sportsWeek) {
+    for (const id of byes.byWeek.get(sportsWeek.week) ?? []) {
+      const p = resolved.get(id)
+      if (!p) continue
+      p.onBye = true
+      /*
+       * A player on bye scores nothing, and unlike "no projection on file" that
+       * is a fact — the same rule as a ruled-out player. Leaving a stale number
+       * beside a bye badge would be the screen arguing with itself.
+       */
+      p.projectedPoints = 0
+      p.afProjectedPoints = 0
+    }
+  }
+
+  const upcomingByes = byes
+    ? [...byes.byWeek.entries()]
+        .filter(([w]) => w !== sportsWeek?.week)
+        .sort((a, b) => a[0] - b[0])
+        .slice(0, 4)
+        .map(([week, ids]) => ({
+          week,
+          names: ids.map((id) => resolved.get(id)?.name).filter(Boolean) as string[],
+        }))
+        .filter((b) => b.names.length > 0)
+    : []
+
   const grade = await getRosterGrade({
     leagueId,
     myPlatformUserIds: candidates,
@@ -761,6 +820,7 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     ...base,
     team,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
+    upcomingByes,
     rosterGrade: grade
       ? { available: true, data: grade }
       : {

@@ -211,6 +211,14 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         <div className="af-mt-player-meta">
           {player.gameContext ?? 'no game found for this week'}
           <VenueMark indoors={player.indoors} />
+          {player.onBye ? (
+            <span
+              className="af-mt-bye"
+              title="His team is not playing this week. A starter on bye is a guaranteed zero."
+            >
+              BYE
+            </span>
+          ) : null}
           {player.preseason ? (
             <span
               className="af-mt-pre"
@@ -315,7 +323,13 @@ function SlotRow({
   shareOfLineup: number | null
 }) {
   return (
-    <li className="af-mt-row" data-empty={slot.empty}>
+    /*
+      ⚠ A STARTER ON BYE IS TREATED LIKE AN EMPTY SLOT, because it is one — a
+      guaranteed zero in a slot the manager still has time to fill. The empty
+      state was already the loudest thing on the row; this is the same problem
+      wearing a name.
+    */
+    <li className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true}>
       <span className="af-mt-slot af-num">{slot.slotLabel}</span>
 
       {slot.player ? (
@@ -571,6 +585,28 @@ export function MyTeam({ data }: MyTeamProps) {
       ) : (
         <p className="af-mt-footnote">{data.nextMatchup.reason}</p>
       )}
+
+      {/* ── Byes forming ────────────────────────────────────────────── */}
+      {/*
+        Shown ahead of time on purpose. Discovering in week 6 that four
+        starters share a week 7 bye is discovering it after the waiver wire has
+        been picked over.
+      */}
+      {data.upcomingByes.length > 0 ? (
+        <section className="af-frame af-mt-byes">
+          <span className="af-label">Byes coming up</span>
+          <ul className="af-mt-byes-list">
+            {data.upcomingByes.map((b) => (
+              <li key={b.week} data-stack={b.names.length >= 3}>
+                <span className="af-mt-byes-wk af-num">Week {b.week}</span>
+                <span className="af-mt-byes-who">
+                  {b.names.length} off · {b.names.join(', ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* ── Why the two numbers differ ──────────────────────────────── */}
       {proj ? (
