@@ -1023,6 +1023,41 @@ export function TradeValueModal({
             one unstartable Sunday. The point is that they decide on purpose.
           */}
           {/*
+            Where each side stands. A trade is not good or bad in the abstract:
+            a 3-7 team sending its quarterback out for picks is doing the right
+            thing, and a grader that prices the assets and stops tells them they
+            lost. The bubble case is deliberately NAMED and not resolved --
+            telling a 6-5 team what to do is inventing certainty nobody has.
+          */}
+          {Array.isArray(result?.postureNotes) && (result.postureNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-[#5c6480]/30 bg-white/[0.03] px-3 py-2 text-[11px] text-[#c8cde0]">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-[#8b93ad]">
+                Where each side stands
+              </div>
+              {(result.postureNotes as string[]).map((n) => (
+                <div key={n} className="mb-0.5 last:mb-0">{n}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {/*
+            What the picks actually are. "A 2027 1st" is a range, not a value,
+            and which end it lands at depends entirely on the team it comes
+            from -- a first from the side acquiring the best player in the deal
+            is a late first, possibly for both years.
+          */}
+          {Array.isArray(result?.pickNotes) && (result.pickNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-orange-500/20 bg-orange-500/[0.06] px-3 py-2 text-[11px] text-orange-100/90">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-orange-200/80">
+                What these picks really are
+              </div>
+              {(result.pickNotes as string[]).map((n) => (
+                <div key={n} className="mb-0.5 last:mb-0">{n}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {/*
             Leverage. The mirror of "worth to your roster", and the half that
             changes behaviour: knowing a player is worth more to YOU tells you to
             accept, knowing he is worth more to THEM tells you not to hand him

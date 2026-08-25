@@ -10,6 +10,15 @@ import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
 import { buildTradeContextNotes } from '@/lib/trade-intel/tradeContextNotes'
+
+/** Every note list empty — used on both the no-league and the failure path. */
+const EMPTY_CONTEXT = {
+  byeNotes: [] as string[],
+  needNotes: [] as string[],
+  leverageNotes: [] as string[],
+  postureNotes: [] as string[],
+  pickNotes: [] as string[],
+}
 import {
   compareConsoleVerdictWithCanonicalGrade,
   type ConsoleComparableAsset,
@@ -159,6 +168,30 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * simply absent, because a trade screen that guesses at bye collisions
        * trains managers to ignore the warning.
        */
+      /*
+       * Which side receives the most valuable PLAYER, by the console's own
+       * market prices. Null when neither side has a priced player or the two
+       * are level — a tie is not a star arriving anywhere.
+       */
+      const topOf = (lines: typeof out.players.give) =>
+        lines.reduce<number | null>(
+          (best, l) =>
+            typeof l.marketValue === 'number' && (best == null || l.marketValue > best)
+              ? l.marketValue
+              : best,
+          null,
+        )
+      const topGive = topOf(out.players.give)
+      const topGet = topOf(out.players.get)
+      const bestPlayerSide: 'me' | 'them' | null =
+        topGive == null && topGet == null
+          ? null
+          : (topGive ?? -1) > (topGet ?? -1)
+            ? 'them'
+            : (topGet ?? -1) > (topGive ?? -1)
+              ? 'me'
+              : null
+
       const context =
         parsed.data.leagueId && userId
           ? await buildTradeContextNotes({
@@ -175,13 +208,28 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                 team: l.team,
               })),
               opponentTeamExternalId: parsed.data.opponentTeamExternalId ?? null,
-            }).catch(() => ({ byeNotes: [], needNotes: [], leverageNotes: [] }))
-          : { byeNotes: [], needNotes: [], leverageNotes: [] }
+              /*
+               * Picks, so each can be priced against the record of the team it
+               * comes FROM. A first from the side acquiring the best player in
+               * the deal is a late first, and pricing it off a round average
+               * hands that side a discount on every pick they send out.
+               */
+              picksToMe: parsed.data.sideGet
+                .filter((a) => a.kind === 'pick')
+                .map((a) => ({ season: a.year, round: a.round })),
+              picksToThem: parsed.data.sideGive
+                .filter((a) => a.kind === 'pick')
+                .map((a) => ({ season: a.year, round: a.round })),
+              bestPlayerGoesTo: bestPlayerSide,
+            }).catch(() => EMPTY_CONTEXT)
+          : EMPTY_CONTEXT
 
       const hasContext =
         context.byeNotes.length > 0 ||
         context.needNotes.length > 0 ||
-        context.leverageNotes.length > 0
+        context.leverageNotes.length > 0 ||
+        context.postureNotes.length > 0 ||
+        context.pickNotes.length > 0
 
       return NextResponse.json(hasContext ? { ...out, ...context } : out)
     } catch (e) {

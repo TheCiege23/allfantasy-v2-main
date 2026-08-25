@@ -109,6 +109,19 @@ export function regularSeasonWeeks(settings: unknown): number | null {
   )
 }
 
+/**
+ * How many teams make the playoffs, from the league's own settings.
+ *
+ * Shared with the contention model so "are they in the hunt" and "when do the
+ * playoffs start" cannot disagree. Null rather than a guess: a league that did
+ * not tell us how many teams qualify is one where nobody can say who is on the
+ * bubble.
+ */
+export function playoffSpots(settings: unknown): number | null {
+  const s = readSettings(settings)
+  return num(s.playoff_teams ?? s.playoff_team_count ?? s.playoffTeams)
+}
+
 export function buildSeasonTimeline(args: {
   settings: unknown
   /** The league's current week, when known. */
@@ -144,7 +157,8 @@ export function buildSeasonTimeline(args: {
   const rawDeadline = num(
     s.trade_deadline_week ?? s.trade_deadline ?? s.tradeDeadline ?? s.tradeDeadlineWeek,
   )
-  const playoffTeams = num(s.playoff_teams ?? s.playoff_team_count ?? s.playoffTeams)
+  // Same rule the contention model uses -- one implementation.
+  const playoffTeams = playoffSpots(args.settings)
   // Same rule the week picker uses -- one implementation, so they cannot drift.
   const regularSeasonLength = regularSeasonWeeks(args.settings)
 

@@ -4,6 +4,13 @@ import { prisma } from '@/lib/prisma'
 import { getByeWeeks } from '@/lib/core-app/byeWeeks'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
+import {
+  leagueWeekFromSettings,
+  playoffSpots,
+  regularSeasonWeeks,
+} from '@/lib/core-app/seasonTimeline'
+import { assessContention, postureNote } from './contention'
+import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import {
   byeCollisionDelta,
@@ -60,9 +67,34 @@ export type TradeContextNotes = {
    * runs perfectly well as a two-sided calculator with nobody on the other end.
    */
   leverageNotes: string[]
+  /**
+   * Where each side stands, and what shape of deal that makes correct.
+   *
+   * ⚠ A TRADE IS NOT GOOD OR BAD IN THE ABSTRACT. A 3-7 team sending its
+   * quarterback out for picks is doing the right thing; a grader that prices the
+   * assets and stops tells them they lost.
+   */
+  postureNotes: string[]
+  /**
+   * What the picks in this deal are actually likely to be.
+   *
+   * ⚠ "A 2027 1ST" IS A RANGE, NOT A VALUE, and which end it lands at depends
+   * on the team it comes from. A first from the side acquiring the best player
+   * in the deal is a late first.
+   */
+  pickNotes: string[]
 }
 
-const EMPTY: TradeContextNotes = { byeNotes: [], needNotes: [], leverageNotes: [] }
+const EMPTY: TradeContextNotes = {
+  byeNotes: [],
+  needNotes: [],
+  leverageNotes: [],
+  postureNotes: [],
+  pickNotes: [],
+}
+
+/** A future pick in the deal, and which side it is coming from. */
+export type PickLine = { season: number; round: number }
 
 export async function buildTradeContextNotes(args: {
   leagueId: string
@@ -73,6 +105,16 @@ export async function buildTradeContextNotes(args: {
   get: Line[]
   /** `LeagueTeam.externalId` of the other side, when the console knows it. */
   opponentTeamExternalId?: string | null
+  /** Picks coming to the viewer — they originate from the opponent. */
+  picksToMe?: PickLine[]
+  /** Picks the viewer is sending — they originate from the viewer. */
+  picksToThem?: PickLine[]
+  /**
+   * Which side receives the most valuable player in the deal, by market price.
+   * Drives the pick-inflation warning: a first from the team that just acquired
+   * the best asset lands later than their record suggests.
+   */
+  bestPlayerGoesTo?: 'me' | 'them' | null
 }): Promise<TradeContextNotes> {
   const { leagueId, userId, give, get } = args
   if (get.length === 0) return EMPTY
@@ -80,7 +122,7 @@ export async function buildTradeContextNotes(args: {
   const league = await prisma.league
     .findUnique({
       where: { id: leagueId },
-      select: { id: true, starters: true, season: true, sport: true },
+      select: { id: true, starters: true, season: true, sport: true, settings: true },
     })
     .catch(() => null)
 
@@ -257,7 +299,160 @@ export async function buildTradeContextNotes(args: {
     theirOutgoingNames: get.map((g) => g.name),
   }).catch(() => [])
 
-  return { byeNotes, needNotes, leverageNotes }
+  const { postureNotes, pickNotes } = await buildPostureAndPickNotes({
+    leagueId,
+    settings: league.settings,
+    season: league.season,
+    userId,
+    opponentTeamExternalId: args.opponentTeamExternalId ?? null,
+    picksToMe: args.picksToMe ?? [],
+    picksToThem: args.picksToThem ?? [],
+    bestPlayerGoesTo: args.bestPlayerGoesTo ?? null,
+  }).catch(() => ({ postureNotes: [], pickNotes: [] }))
+
+  return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes }
+}
+
+/**
+ * Contention posture for both sides, and what the picks in the deal really are.
+ *
+ * One standings read serves both: posture is a statement about a team's record,
+ * and a pick's likely slot is a statement about the record of the team it comes
+ * from. They are the same query asked twice.
+ */
+async function buildPostureAndPickNotes(args: {
+  leagueId: string
+  settings: unknown
+  season: number | null
+  userId: string
+  opponentTeamExternalId: string | null
+  picksToMe: PickLine[]
+  picksToThem: PickLine[]
+  bestPlayerGoesTo: 'me' | 'them' | null
+}): Promise<{ postureNotes: string[]; pickNotes: string[] }> {
+  const none = { postureNotes: [] as string[], pickNotes: [] as string[] }
+
+  const teams = await prisma.leagueTeam
+    .findMany({
+      where: { leagueId: args.leagueId },
+      select: {
+        id: true,
+        externalId: true,
+        teamName: true,
+        ownerName: true,
+        claimedByUserId: true,
+        wins: true,
+        losses: true,
+        ties: true,
+        currentRank: true,
+      },
+      orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
+    })
+    .catch(() => [])
+  if (teams.length < 4) return none
+
+  const standings = teams.map((t) => ({
+    teamId: t.id,
+    wins: t.wins,
+    losses: t.losses,
+    ties: t.ties,
+    rank: t.currentRank,
+  }))
+
+  const spots = playoffSpots(args.settings)
+  const weeks = regularSeasonWeeks(args.settings)
+  const currentWeek = leagueWeekFromSettings(args.settings)
+
+  const mine = teams.find((t) => t.claimedByUserId === args.userId) ?? null
+  const theirs = args.opponentTeamExternalId
+    ? teams.find((t) => t.externalId === args.opponentTeamExternalId) ?? null
+    : null
+
+  const stateFor = (teamId: string | undefined) =>
+    teamId
+      ? assessContention({
+          standings,
+          teamId,
+          playoffSpots: spots,
+          seasonWeeks: weeks,
+          currentWeek,
+        })
+      : null
+
+  const myState = stateFor(mine?.id)
+  const theirState = stateFor(theirs?.id)
+
+  /*
+   * Which way the deal leans. Picks are the only unambiguous future asset we can
+   * count here — a young starter is future value too, but calling that from a
+   * name would be a guess, and a guess in this position tells a manager their
+   * rebuild is a win-now move.
+   */
+  const futureLeanForMe = args.picksToMe.length - args.picksToThem.length
+
+  const postureNotes: string[] = []
+  if (myState) {
+    const n = postureNote({ state: myState, futureLean: futureLeanForMe })
+    if (n) postureNotes.push(`You: ${n.replace(/^They are /, '')}`)
+  }
+  if (theirState) {
+    const n = postureNote({ state: theirState, futureLean: -futureLeanForMe })
+    if (n) postureNotes.push(`${theirs?.teamName || theirs?.ownerName || 'They'}: ${n.replace(/^They are /, '')}`)
+  }
+
+  /*
+   * Picks. Each one is priced against the record of the team it comes FROM, not
+   * against a round average.
+   */
+  const pickNotes: string[] = []
+  const currentSeason = args.season
+  if (currentSeason != null) {
+    const add = (
+      p: PickLine,
+      from: { rank: number | null; name: string } | null,
+      senderIsAcquiringStar: boolean,
+    ) => {
+      const outlook = projectPickSlot({
+        season: p.season,
+        round: p.round,
+        currentSeason,
+        senderRank: from?.rank ?? null,
+        teamCount: teams.length,
+        senderName: from?.name ?? null,
+      })
+      /*
+       * A round-average estimate is not a finding. Saying "we priced it as a
+       * middle pick" on every pick in every deal is noise that buries the one
+       * line that matters.
+       */
+      if (!outlook.isRoundAverage) pickNotes.push(outlook.basis)
+      const warn = pickInflationWarning({
+        senderIsAcquiringStar,
+        season: p.season,
+        round: p.round,
+      })
+      if (warn) pickNotes.push(warn)
+    }
+
+    for (const p of args.picksToMe) {
+      add(
+        p,
+        theirs
+          ? { rank: theirs.currentRank, name: theirs.teamName || theirs.ownerName || 'Their team' }
+          : null,
+        args.bestPlayerGoesTo === 'them',
+      )
+    }
+    for (const p of args.picksToThem) {
+      add(
+        p,
+        mine ? { rank: mine.currentRank, name: 'Your team' } : null,
+        args.bestPlayerGoesTo === 'me',
+      )
+    }
+  }
+
+  return { postureNotes, pickNotes }
 }
 
 /**
