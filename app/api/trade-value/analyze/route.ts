@@ -174,14 +174,16 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                 position: l.position,
                 team: l.team,
               })),
-            }).catch(() => ({ byeNotes: [], needNotes: [] }))
-          : { byeNotes: [], needNotes: [] }
+              opponentTeamExternalId: parsed.data.opponentTeamExternalId ?? null,
+            }).catch(() => ({ byeNotes: [], needNotes: [], leverageNotes: [] }))
+          : { byeNotes: [], needNotes: [], leverageNotes: [] }
 
-      return NextResponse.json(
-        context.byeNotes.length > 0 || context.needNotes.length > 0
-          ? { ...out, byeNotes: context.byeNotes, needNotes: context.needNotes }
-          : out,
-      )
+      const hasContext =
+        context.byeNotes.length > 0 ||
+        context.needNotes.length > 0 ||
+        context.leverageNotes.length > 0
+
+      return NextResponse.json(hasContext ? { ...out, ...context } : out)
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

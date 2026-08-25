@@ -1023,6 +1023,25 @@ export function TradeValueModal({
             one unstartable Sunday. The point is that they decide on purpose.
           */}
           {/*
+            Leverage. The mirror of "worth to your roster", and the half that
+            changes behaviour: knowing a player is worth more to YOU tells you to
+            accept, knowing he is worth more to THEM tells you not to hand him
+            over at market price -- which is the mistake a manager actually
+            makes, because the market price feels fair right up until you learn
+            the other side has no other way to fill the slot.
+          */}
+          {Array.isArray(result?.leverageNotes) && (result.leverageNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] px-3 py-2 text-[11px] text-violet-100/90">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-violet-200/80">
+                Your leverage
+              </div>
+              {(result.leverageNotes as string[]).map((n) => (
+                <div key={n}>{n}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {/*
             What this deal is worth to THIS roster, over the market price.
             The scarcity half is the point: a hole at a position with a dozen
             free agents behind it is a waiver claim, not a need. The same hole

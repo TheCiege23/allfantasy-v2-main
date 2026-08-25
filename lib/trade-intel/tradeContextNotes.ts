@@ -10,6 +10,7 @@ import {
   computeRosterNeed,
   counterpartyPriceDelta,
   readSlotRequirements,
+  type SlotRequirements,
 } from './rosterNeed'
 
 /**
@@ -45,9 +46,23 @@ export type TradeContextNotes = {
    * player is genuinely worth more here than his market price.
    */
   needNotes: string[]
+  /**
+   * What the OTHER side needs, and therefore what you can ask for.
+   *
+   * ⚠ THE MIRROR OF `needNotes`, AND THE HALF THAT CHANGES BEHAVIOUR. Knowing a
+   * player is worth more to you tells you to accept. Knowing he is worth more to
+   * THEM tells you not to hand him over at market price — which is the move a
+   * manager actually gets wrong, because the market price feels like the fair
+   * price right up until you learn the other side has no other way to fill the
+   * slot.
+   *
+   * Empty when no opponent was named, which is the common case: the console
+   * runs perfectly well as a two-sided calculator with nobody on the other end.
+   */
+  leverageNotes: string[]
 }
 
-const EMPTY: TradeContextNotes = { byeNotes: [], needNotes: [] }
+const EMPTY: TradeContextNotes = { byeNotes: [], needNotes: [], leverageNotes: [] }
 
 export async function buildTradeContextNotes(args: {
   leagueId: string
@@ -56,6 +71,8 @@ export async function buildTradeContextNotes(args: {
   give: Line[]
   /** Players arriving on the viewer's roster. */
   get: Line[]
+  /** `LeagueTeam.externalId` of the other side, when the console knows it. */
+  opponentTeamExternalId?: string | null
 }): Promise<TradeContextNotes> {
   const { leagueId, userId, give, get } = args
   if (get.length === 0) return EMPTY
@@ -223,5 +240,127 @@ export async function buildTradeContextNotes(args: {
     )
   }
 
-  return { byeNotes, needNotes }
+  /*
+   * ── Leverage: the same machinery pointed the other way ────────────────
+   *
+   * What YOU are giving up, priced against THEIR holes and the same waiver wire.
+   * A manager who knows the other side cannot replace a kicker does not hand one
+   * over at market price.
+   */
+  const leverageNotes = await buildLeverageNotes({
+    leagueId,
+    sport: league.sport ?? 'NFL',
+    requirements,
+    opponentTeamExternalId: args.opponentTeamExternalId ?? null,
+    give,
+    /* What they are sending you leaves THEIR roster, so it is their outgoing. */
+    theirOutgoingNames: get.map((g) => g.name),
+  }).catch(() => [])
+
+  return { byeNotes, needNotes, leverageNotes }
+}
+
+/**
+ * The other side's needs, from their roster.
+ *
+ * Deliberately a separate read rather than a parameter on the main function:
+ * the opponent is optional and most analyses do not name one, so this cost is
+ * only paid when there is actually a counterparty to reason about.
+ */
+async function buildLeverageNotes(args: {
+  leagueId: string
+  sport: string
+  requirements: SlotRequirements
+  opponentTeamExternalId: string | null
+  /** Players heading to them. */
+  give: Line[]
+  /** Players they are sending away, which leaves holes on their side. */
+  theirOutgoingNames: string[]
+}): Promise<string[]> {
+  const { leagueId, sport, requirements, opponentTeamExternalId, give } = args
+  if (!opponentTeamExternalId || give.length === 0) return []
+
+  const team = await prisma.leagueTeam
+    .findFirst({
+      where: { leagueId, externalId: opponentTeamExternalId },
+      select: { platformUserId: true, teamName: true, ownerName: true },
+    })
+    .catch(() => null)
+  if (!team?.platformUserId) return []
+
+  const roster = await prisma.roster
+    .findFirst({
+      where: { leagueId, platformUserId: team.platformUserId },
+      select: { playerData: true },
+    })
+    .catch(() => null)
+  if (!roster) return []
+
+  const pd = (roster.playerData ?? {}) as Record<string, unknown>
+  const ids = Array.isArray(pd.players)
+    ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
+    : []
+  if (ids.length === 0) return []
+
+  const players = await prisma.sportsPlayer
+    .findMany({
+      where: { sleeperId: { in: ids } },
+      select: { sleeperId: true, name: true, position: true },
+    })
+    .catch(() => [])
+  const byId = new Map(players.filter((p) => p.sleeperId).map((p) => [p.sleeperId as string, p]))
+
+  const injuries = await prisma.sportsInjury
+    .findMany({
+      where: { sport, playerName: { in: players.map((p) => p.name) } },
+      orderBy: { fetchedAt: 'desc' },
+      select: { playerName: true, status: true },
+    })
+    .catch(() => [])
+  const statusByName = new Map<string, string | null>()
+  for (const i of injuries) {
+    const k = i.playerName.toLowerCase()
+    if (!statusByName.has(k)) statusByName.set(k, i.status)
+  }
+
+  /* Their roster after the deal removes what they are sending you. */
+  const leaving = new Set(
+    args.theirOutgoingNames.map((n) => n.toLowerCase()).filter(Boolean),
+  )
+  const need = computeRosterNeed({
+    requirements,
+    rostered: ids
+      .filter((id) => !leaving.has((byId.get(id)?.name ?? '').toLowerCase()))
+      .map((id) => ({
+        position: byId.get(id)?.position ?? '',
+        unavailable: isRuledOut(statusByName.get((byId.get(id)?.name ?? '').toLowerCase()) ?? null),
+      })),
+  })
+
+  const positions = [...new Set(give.map((g) => g.position).filter((p): p is string => Boolean(p)))]
+  const scarcity = await getPositionScarcity({
+    leagueId,
+    sport,
+    projectionWeek: await latestProjectionWeek().catch(() => null),
+    positions,
+  }).catch(() => new Map())
+
+  const who = team.teamName || team.ownerName || 'they'
+  const notes: string[] = []
+  for (const g of give) {
+    if (!g.position) continue
+    const pos = g.position.toUpperCase().trim()
+    const d = counterpartyPriceDelta({ position: pos, need, scarcity: scarcity.get(pos) ?? null })
+    /*
+     * Only a PREMIUM is leverage. That they are deep at the position is true and
+     * is not something a manager can act on — and a panel that also lists every
+     * non-finding is one people stop reading.
+     */
+    if (!d || d.factor <= 1) continue
+    const pct = Math.round((d.factor - 1) * 100)
+    notes.push(
+      `${who} would value ${g.name} about ${pct}% above market — ${d.basis}. Do not hand him over at the market price.`,
+    )
+  }
+  return notes
 }
