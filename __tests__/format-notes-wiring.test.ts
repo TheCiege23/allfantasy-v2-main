@@ -47,29 +47,39 @@ describe('every format model is reachable from the trade console', () => {
   it('every branch returns, so formats cannot fall through to each other', () => {
     // Pirate falling through to keeper logic would price protections as keeper
     // costs — wrong in a way that still produces a confident number.
+    // Windows are generous because the pirate and survivor branches now do real
+    // state reads. What is pinned is that each branch RETURNS.
     for (const c of ['tournament', 'king_of_the_hill', 'pirate', 'survivor']) {
       const from = SRC.indexOf(`rules.concept === '${c}'`)
-      expect(SRC.slice(from, from + 1400)).toContain('return notes')
+      expect(SRC.slice(from, from + 3200)).toContain('return notes')
     }
   })
 })
 
 describe('⚠ what a format CANNOT see is stated, not guessed', () => {
-  it('survivor admits tribe membership is unread', () => {
+  it('⚠ survivor now READS tribe membership, and still admits a miss', () => {
     /*
-     * The tribemate-vs-rival distinction is the single largest factor in a
-     * pre-merge Survivor trade. We hold no tribe data, so the note says the
-     * factor is missing rather than quietly grading without it.
+     * This assertion used to pin the gap. The gap is filled — SurvivorTribe was
+     * in the schema all along — but the honesty guarantee survives: when both
+     * managers cannot be placed in a tribe, the note says the largest factor is
+     * missing rather than grading quietly without it.
      */
-    expect(SRC).toContain('We do not read tribe membership')
+    expect(SRC).toContain('resolveTribeRelation(')
+    expect(SRC).toContain('could not place both managers in a tribe')
   })
 
   it('king of the hill does not pretend to know who wears the crown', () => {
     expect(SRC).toContain('WE DO NOT KNOW WHO WEARS THE CROWN')
   })
 
-  it('pirate omits the protection notes rather than guessing protections', () => {
-    expect(SRC).toContain('Protections are not in any schema')
+  it('⚠ pirate now READS protections, and distinguishes absent from empty', () => {
+    /*
+     * Also previously a pinned gap. Protections live on Roster.settings — no
+     * migration — and a roster that has never declared them must not be told its
+     * whole roster is exposed.
+     */
+    expect(SRC).toContain('readProtections(')
+    expect(SRC).toContain('An ABSENT list is not an')
   })
 
   it('tournament treats trading as barred by default', () => {

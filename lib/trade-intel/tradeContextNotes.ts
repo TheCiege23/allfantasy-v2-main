@@ -11,9 +11,16 @@ import {
   regularSeasonWeeks,
   tradeDeadlineWeek,
 } from '@/lib/core-app/seasonTimeline'
+import { getDepthRole, depthRoleNote } from './depthChartRole'
+import { readProtections, resolveTribeRelation } from './formatState'
 import { crownValue, dethroneNote } from './kingOfTheHill'
-import { attritionNote as pirateAttritionNote, concentrationCorrectionNote } from './pirate'
-import { mergeInversionNote } from './survivor'
+import {
+  acquisitionSafety,
+  attritionNote as pirateAttritionNote,
+  concentrationCorrectionNote,
+  stealExposure,
+} from './pirate'
+import { mergeInversionNote, tribeRelationNote } from './survivor'
 import {
   idolExpiryNote,
   lineupAt,
@@ -223,10 +230,35 @@ export async function buildTradeContextNotes(args: {
   const roster = await prisma.roster
     .findFirst({
       where: { leagueId, platformUserId: team.platformUserId },
-      select: { playerData: true },
+      select: { id: true, playerData: true },
     })
     .catch(() => null)
   if (!roster) return EMPTY
+  const rosterRowId = roster.id
+
+  /*
+   * The counterparty's Roster row, for the Survivor tribe read. Resolved from
+   * the console's opponent id through LeagueTeam, because `externalId` is the
+   * platform's roster id and `Roster` is keyed on the owner.
+   */
+  let opponentRosterRowId: string | null = null
+  if (args.opponentTeamExternalId) {
+    const oppTeam = await prisma.leagueTeam
+      .findFirst({
+        where: { leagueId, externalId: args.opponentTeamExternalId },
+        select: { platformUserId: true },
+      })
+      .catch(() => null)
+    if (oppTeam?.platformUserId) {
+      const oppRoster = await prisma.roster
+        .findFirst({
+          where: { leagueId, platformUserId: oppTeam.platformUserId },
+          select: { id: true },
+        })
+        .catch(() => null)
+      opponentRosterRowId = oppRoster?.id ?? null
+    }
+  }
 
   const pd = (roster.playerData ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)
@@ -340,7 +372,24 @@ export async function buildTradeContextNotes(args: {
   }).catch(() => new Map())
   const scarcity = scarcityForGet
 
+  /*
+   * Depth-chart role for the players coming in — the first piece of the value
+   * ledger's trajectory layer. Only speaks when the role bears on the deal: a
+   * confirmed starter says nothing, because that is what the price already
+   * assumes.
+   */
   const needNotes: string[] = []
+  for (const g of get) {
+    const role = await getDepthRole({
+      playerName: g.name,
+      team: g.team,
+      position: g.position,
+      sport: league.sport ?? 'NFL',
+    }).catch(() => null)
+    const rn = depthRoleNote({ playerName: g.name, role })
+    if (rn) needNotes.push(rn)
+  }
+
   for (const g of get) {
     if (!g.position) continue
     const pos = g.position.toUpperCase().trim()
@@ -434,6 +483,17 @@ export async function buildTradeContextNotes(args: {
     pickCount: (args.picksToMe?.length ?? 0) + (args.picksToThem?.length ?? 0),
     percentDiff: args.percentDiff ?? null,
     userId,
+    /*
+     * ⚠ THESE ARE WHAT MAKE THE FORMAT BRANCHES REAL. Wiring a branch that then
+     * receives nothing is the same bug as never wiring it — it just fails
+     * quietly instead of visibly.
+     */
+    platformUserId: team.platformUserId,
+    rosterIds,
+    yourRosterId: rosterRowId,
+    theirRosterId: opponentRosterRowId,
+    givingValue: args.pricedGive?.reduce((a, l) => a + (l.marketValue ?? 0), 0) ?? null,
+    gettingValue: args.pricedGet?.reduce((a, l) => a + (l.marketValue ?? 0), 0) ?? null,
   }).catch(() => [])
 
   return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes, scaleNotes, formatNotes }
@@ -633,6 +693,16 @@ async function buildFormatNotes(args: {
   percentDiff: number | null
   /** The viewer, so their own item inventory can be read. */
   userId: string
+  /** The viewer's platform id, for the Pirate protection read. */
+  platformUserId?: string | null
+  /** Roster ids on both sides, for the Survivor tribe read. */
+  yourRosterId?: string | null
+  theirRosterId?: string | null
+  /** The viewer's whole roster, for the Pirate exposure maths. */
+  rosterIds: string[]
+  /** Totals, so a tribe deal can tell which way value is flowing. */
+  givingValue?: number | null
+  gettingValue?: number | null
 }): Promise<string[]> {
   const rules = readFormatRules(args.league)
   const notes = [...rules.notes]
@@ -701,10 +771,66 @@ async function buildFormatNotes(args: {
 
   if (rules.concept === 'pirate') {
     /*
-     * Protections are not in any schema, so the two notes that need them are
-     * omitted rather than guessed. What remains is week-driven and real: the
-     * pool shrinks all season, and the concentration rule inverts here.
+     * Protections live on `Roster.settings` — see lib/trade-intel/formatState.ts
+     * for why that column rather than a new table. An ABSENT list is not an
+     * empty one: a manager who has not declared protections must not be told
+     * their whole roster is exposed.
      */
+    const prot = await readProtections({
+      leagueId: args.leagueId,
+      platformUserId: args.platformUserId ?? null,
+    }).catch(() => ({ protectedIds: null, basis: null }))
+    if (prot.basis) notes.push(prot.basis)
+
+    if (prot.protectedIds && args.rosterIds.length > 0) {
+      /*
+       * Loaded here rather than threaded from the caller: only this branch needs
+       * roster prices, and every other format would pay for a query it never
+       * reads.
+       */
+      const rows = await prisma.playerValueSnapshot
+        .findMany({
+          where: { sleeperId: { in: args.rosterIds }, source: 'FANTASYCALC' },
+          orderBy: { capturedAt: 'desc' },
+          select: { sleeperId: true, value: true },
+        })
+        .catch((): Array<{ sleeperId: string; value: number }> => [])
+
+      const seen = new Set<string>()
+      const valueBy = new Map<string, number>()
+      for (const r of rows) {
+        if (seen.has(r.sleeperId)) continue
+        seen.add(r.sleeperId)
+        valueBy.set(r.sleeperId, r.value)
+      }
+
+      /* Unpriced roster players stay null, never zero. */
+      const rosterValues = args.rosterIds.map((id) => valueBy.get(id) ?? null)
+      const protectedValues = prot.protectedIds.map((id) => valueBy.get(id) ?? null)
+
+      const exposure = stealExposure({
+        rosterValues,
+        protectedCount: prot.protectedIds.length,
+      })
+      if (exposure) notes.push(exposure.basis)
+
+      /*
+       * Whether what you are acquiring can actually be shielded. Only asked for
+       * the most valuable incoming player — if the best one cannot be protected,
+       * none of the others can either.
+       */
+      const incoming = args.incomingIds
+        .map((id) => valueBy.get(id))
+        .filter((v): v is number => typeof v === 'number' && v > 0)
+      if (incoming.length > 0) {
+        const safety = acquisitionSafety({
+          incomingValue: Math.max(...incoming),
+          protectedValues,
+        })
+        if (safety) notes.push(safety.basis)
+      }
+    }
+
     const attrition = pirateAttritionNote({
       currentWeek: week ?? 1,
       seasonWeeks: regularSeasonWeeks(args.league.settings ?? null),
@@ -726,9 +852,29 @@ async function buildFormatNotes(args: {
       const merge = mergeInversionNote({ weeksToMerge: Math.max(0, Math.round(seasonWeeks / 2) - week) })
       if (merge) notes.push(merge)
     }
-    notes.push(
-      'We do not read tribe membership for this league, so the biggest factor in a Survivor trade is missing from this verdict: a deal with a TRIBEMATE can be worth making at a loss, because your tribe attends Tribal only if it scores lowest.',
-    )
+    /*
+     * ⚠ THE TRIBE DATA EXISTED ALL ALONG. `SurvivorTribe` and
+     * `SurvivorTribeMember` were in the schema; nothing read them, so the single
+     * largest factor in a pre-merge Survivor trade was absent from the verdict.
+     */
+    const tribe = await resolveTribeRelation({
+      leagueId: args.leagueId,
+      yourRosterId: args.yourRosterId ?? null,
+      theirRosterId: args.theirRosterId ?? null,
+    }).catch(() => ({ relation: 'unknown' as const, yourTribe: null, theirTribe: null }))
+
+    const relationNote = tribeRelationNote({
+      relation: tribe.relation,
+      /* Value flowing away from the viewer is what makes a tribemate deal
+         defensible and a rival deal expensive. */
+      valueOutFlow: (args.givingValue ?? 0) >= (args.gettingValue ?? 0),
+    })
+    if (relationNote) notes.push(relationNote)
+    else {
+      notes.push(
+        'We could not place both managers in a tribe for this league, so the biggest factor in a Survivor trade is missing: a deal with a TRIBEMATE can be worth making at a loss, because your tribe attends Tribal only if it scores lowest.',
+      )
+    }
     return notes
   }
 
