@@ -24,7 +24,29 @@ export type LeagueConcept =
   | 'tournament'
   | 'pirate'
   | 'king_of_the_hill'
+  /**
+   * College assets are held alongside NFL ones. ⚠ These two exist so that a
+   * college asset is RECOGNISED rather than silently priced — see
+   * lib/trade-intel/devyOutlook.ts: nothing prices college players, so a deal
+   * spanning both is refused rather than blended.
+   */
+  | 'devy'
+  | 'c2c'
   | 'other'
+
+/**
+ * The formats where a roster holds college players.
+ *
+ * Kept as a lookup rather than folded into the concept chain below so that
+ * chain stays exactly as it was — it is long, it is load-bearing, and every
+ * format in it was a separate piece of work.
+ */
+const COLLEGE_CONCEPTS: Record<string, LeagueConcept> = {
+  devy: 'devy',
+  c2c: 'c2c',
+  campus2canton: 'c2c',
+  campus_to_canton: 'c2c',
+}
 
 export type FormatRules = {
   concept: LeagueConcept
@@ -84,7 +106,7 @@ export function readFormatRules(league: {
   const raw = (alias[0] ?? league.leagueType ?? '').trim().toLowerCase()
   const keeperCount = league.keeperCount ?? 0
 
-  const concept: LeagueConcept =
+  const baseConcept: LeagueConcept =
     raw === 'king_of_the_hill' || raw === 'koth'
       ? 'king_of_the_hill'
       : raw === 'pirate' || raw === 'pirate_vampire'
@@ -107,6 +129,20 @@ export function readFormatRules(league: {
                            as redraft — a caller that does not know how to price
                            a format should be able to tell. */
                         'other'
+
+  /*
+   * ⚠ UNLIKE KOTH, THESE TWO ARRIVE INTACT. `normalizeConcept.ts` maps them to
+   * first-class format ids (`devy: 'devy'`, `c2c: 'c2c'`) rather than flattening
+   * them onto a base format the way it does king_of_the_hill, idp, royal and
+   * pirate_vampire — so they reach us as `leagueType` and carry no alias tag.
+   * They are matched off `raw` anyway, which reads the alias first and the
+   * leagueType second, so this keeps working if that ever changes.
+   *
+   * Before this existed they fell to 'other': safe, in that nothing silently
+   * priced them as dynasty, but silent — every college asset in the deal went
+   * unremarked.
+   */
+  const concept: LeagueConcept = COLLEGE_CONCEPTS[raw] ?? baseConcept
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -198,6 +234,28 @@ export function readFormatRules(league: {
     futurePicksTradeable = true
     notes.push(
       'Zombie Universe: there are no waivers at all, only free agents you can add at will — even during games. Replacement is close to free, so depth players carry little trade value here. Zombie teams cannot trade, so the pool of legal partners only ever shrinks.',
+    )
+  } else if (concept === 'devy' || concept === 'c2c') {
+    /*
+     * ⚠ TWO PICK SPACES WITH NEARLY IDENTICAL LABELS. "A 2027 1st" is the NFL
+     * rookie draft; "a 2027 college 1st" is the college league's own draft. They
+     * are different assets worth wildly different amounts, and
+     * `C2CLeagueConfig` already separates `supportsTradeableRookiePicks` from
+     * `supportsTradeableCollegePicks`.
+     *
+     * ⚠ LEFT UNKNOWN, and unlike keeper this is not merely unread — as of
+     * 2026-08-25 `c2c_league_configs` holds ZERO rows, so there is no setting to
+     * read even in principle. Claiming either pick type is tradeable would
+     * invent an asset class.
+     */
+    futurePicksTradeable = null
+    notes.push(
+      concept === 'devy'
+        ? 'Devy league: college players are held but do not score, so they are an option on a future NFL contributor rather than a producing asset. No market prices them — see the scale note below before treating any verdict here as covering the whole deal.'
+        : 'Campus to Canton: college players DO score here, weighted against the pro side, so a college asset is both a producing player and an option on his NFL future. No market prices the college half.',
+    )
+    notes.push(
+      'This format has two separate pick pools. A "2027 1st" means the NFL rookie draft; a "2027 college 1st" means the college draft. They are different assets — check which one a deal actually contains, because we cannot read which pool your league opens for trading.',
     )
   } else if (concept === 'keeper') {
     /*

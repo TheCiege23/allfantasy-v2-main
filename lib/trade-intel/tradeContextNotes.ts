@@ -55,6 +55,11 @@ import {
   assessUnpriced,
 } from './rosterShape'
 import { assessContention, postureNote } from './contention'
+import {
+  projectDevyOutlook,
+  refuseMixedScaleGrade,
+  type TradeAsset as DevyTradeAsset,
+} from './devyOutlook'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import {
@@ -459,6 +464,8 @@ export async function buildTradeContextNotes(args: {
     starters: league.starters,
     rosterIds,
     format: null,
+    /* Needed to discount a devy asset by how far off his draft eligibility is. */
+    season: league.season,
     incoming: get.length + (args.picksToMe?.length ?? 0),
     outgoing: give.length + (args.picksToThem?.length ?? 0),
     futureLean: (args.picksToMe?.length ?? 0) - (args.picksToThem?.length ?? 0),
@@ -972,6 +979,73 @@ async function buildFormatNotes(args: {
  * None of these are about the players in the deal, which is exactly why a value
  * chart cannot hold them and why they are worth saying out loud.
  */
+/**
+ * Which unpriced names in this deal are college players, and what that means.
+ *
+ * ⚠ MATCHED BY NAME, WHICH IS THE WEAKEST JOIN IN THIS FILE — but the trade
+ * console passes names, college players hold no sleeperId, and the surrounding
+ * code already resolves NFL players the same way. A miss here degrades to the
+ * generic unpriced note, which is the safe direction: it under-claims rather
+ * than mislabelling an NFL player as a college one.
+ *
+ * ⚠ ONLY PLAYERS WITH NO MARKET VALUE ARE CONSIDERED. A name that priced is an
+ * NFL player whatever else shares his name, so he is never reinterpreted as a
+ * college asset on the strength of a string match.
+ *
+ * Returns null when the deal contains no college assets at all, so the ordinary
+ * path is untouched.
+ */
+async function identifyDevyAssets(args: {
+  give: Array<{ name: string; marketValue: number | null }>
+  get: Array<{ name: string; marketValue: number | null }>
+  season: number
+}): Promise<{ matched: Array<{ name: string }>; refusal: string | null; standings: string[] } | null> {
+  const all = [...args.give, ...args.get]
+  const unpricedNames = all.filter((x) => x.marketValue == null).map((x) => x.name)
+  if (unpricedNames.length === 0) return null
+
+  const candidates = await prisma.devyPlayer.findMany({
+    where: {
+      graduatedToNFL: false,
+      OR: unpricedNames.map((n) => ({ name: { equals: n, mode: 'insensitive' as const } })),
+    },
+    select: {
+      name: true,
+      position: true,
+      school: true,
+      draftEligibleYear: true,
+      recruitingComposite: true,
+      breakoutAge: true,
+      projectedDraftRound: true,
+      devyAdp: true,
+    },
+  })
+  if (candidates.length === 0) return null
+
+  const assets: DevyTradeAsset[] = [
+    ...candidates.map((c) => ({ label: c.name, kind: 'devy_player' as const })),
+    ...all
+      .filter((x) => x.marketValue != null)
+      .map((x) => ({ label: x.name, kind: 'nfl_player' as const })),
+  ]
+
+  const standings = candidates.map((c) => {
+    const outlook = projectDevyOutlook({
+      player: c,
+      draftEligibleYear: c.draftEligibleYear,
+      currentSeason: args.season,
+      name: c.name,
+    })
+    return `${c.name} (${c.position}, ${c.school}) — ${outlook.basis}`
+  })
+
+  return {
+    matched: candidates.map((c) => ({ name: c.name })),
+    refusal: refuseMixedScaleGrade(assets)?.reason ?? null,
+    standings,
+  }
+}
+
 async function buildScaleNotes(args: {
   abundantPositions: Array<{ pos: string; freeAgents: number }>
   leagueId: string
@@ -984,6 +1058,8 @@ async function buildScaleNotes(args: {
   futureLean: number
   pricedGive: Array<{ name: string; marketValue: number | null }>
   pricedGet: Array<{ name: string; marketValue: number | null }>
+  /** The season being played, so a devy asset's wait can be priced. */
+  season: number
 }): Promise<string[]> {
   const notes: string[] = []
 
@@ -1018,8 +1094,43 @@ async function buildScaleNotes(args: {
   })
   if (deadline.basis) notes.push(deadline.basis)
 
-  const unpriced = assessUnpriced({ give: args.pricedGive, get: args.pricedGet })
+  /*
+   * ⚠ A COLLEGE PLAYER IS UNPRICED FOR A DIFFERENT REASON THAN A DEFENDER IS,
+   * AND SAYING THE WRONG ONE IS WORSE THAN SAYING NOTHING. `assessUnpriced`
+   * explains a null value with "our value feed covers offence and picks only",
+   * which is true of an IDP linebacker and false of a devy wideout — nothing
+   * anywhere prices him, and no amount of feed coverage would. Worse, the deal
+   * spans two scales that do not convert, so the verdict is not merely partial;
+   * it is not a verdict. See lib/trade-intel/devyOutlook.ts.
+   *
+   * So devy assets are pulled OUT of the generic count and explained on their
+   * own terms, leaving that note to speak only about players it is actually
+   * right about.
+   */
+  const devy = await identifyDevyAssets({
+    give: args.pricedGive,
+    get: args.pricedGet,
+    season: args.season,
+  }).catch(() => null)
+
+  const devyNames = new Set(devy?.matched.map((m) => m.name.toLowerCase()) ?? [])
+  const notDevy = (l: Array<{ name: string; marketValue: number | null }>) =>
+    l.filter((x) => !devyNames.has(x.name.toLowerCase()))
+
+  const unpriced = assessUnpriced({
+    give: notDevy(args.pricedGive),
+    get: notDevy(args.pricedGet),
+  })
   if (unpriced.basis) notes.push(unpriced.basis)
+
+  if (devy) {
+    /*
+     * Leads, like impossiblePickWarning: a verdict that silently spans both
+     * scales is a correctness problem, not a nuance.
+     */
+    if (devy.refusal) notes.unshift(devy.refusal)
+    notes.push(...devy.standings)
+  }
 
   /*
    * Only in a shallow league, and only for positions the wire actually holds in
