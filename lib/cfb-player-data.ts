@@ -1,6 +1,7 @@
 // CFB Player Data - Integrates with CollegeFootballData.com API for devy player info
 import { prisma } from '@/lib/prisma'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
+import { cfbdGet, describeCfbdFailure, type CfbdResult } from '@/lib/cfbd-fetch'
 
 export interface CFBPlayer {
   id: number
@@ -261,68 +262,86 @@ export interface CFBDraftPick {
   weight: number | null
 }
 
-export async function getCFBDraftPicks(year: number, college?: string): Promise<CFBDraftPick[]> {
-  const apiKey = getCfbdApiKey()
-  if (!apiKey) return []
-
-  try {
-    let url = `${CFBD_BASE}/draft/picks?year=${year}`
-    if (college) url += `&college=${encodeURIComponent(college)}`
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Accept': 'application/json',
-      },
-    })
-
-    if (!response.ok) {
-      console.error('[CFBD] Draft picks fetch failed:', response.status)
-      return []
-    }
-
-    const data = await response.json()
-    return data.map((p: any) => ({
-      collegeId: p.collegeAthleteId || p.collegeId || null,
-      collegeName: p.name || '',
-      collegeTeam: p.collegeTeam || p.college || '',
-      collegeConference: p.collegeConference || null,
-      nflTeam: p.nflTeam || '',
-      year: p.year,
-      round: p.round,
-      pick: p.pick,
-      overallPick: p.overall || p.pick,
-      position: p.position || '',
-      playerName: p.name || '',
-      height: p.height || null,
-      weight: p.weight || null,
-    }))
-  } catch (error) {
-    console.error('[CFBD] Draft picks error:', String(error))
-    return []
+function mapDraftPick(p: any): CFBDraftPick {
+  return {
+    collegeId: p.collegeAthleteId || p.collegeId || null,
+    collegeName: p.name || '',
+    collegeTeam: p.collegeTeam || p.college || '',
+    collegeConference: p.collegeConference || null,
+    nflTeam: p.nflTeam || '',
+    year: p.year,
+    round: p.round,
+    pick: p.pick,
+    overallPick: p.overall || p.pick,
+    position: p.position || '',
+    playerName: p.name || '',
+    height: p.height || null,
+    weight: p.weight || null,
   }
 }
 
-export async function getCFBTeamRoster(team: string, year?: number): Promise<CFBPlayer[]> {
-  const apiKey = getCfbdApiKey()
-  if (!apiKey) return []
+/**
+ * Draft picks, with a failed request kept distinct from an empty draft class.
+ *
+ * ⚠ PREFER THIS ANYWHERE THE ANSWER GETS WRITTEN DOWN. The plain version below
+ * still collapses a failure into `[]` for its existing callers, and "nobody was
+ * drafted" is a conclusion no caller should reach by being rate limited. See
+ * lib/cfbd-fetch.ts.
+ */
+export async function getCFBDraftPicksResult(
+  year: number,
+  college?: string,
+): Promise<CfbdResult<CFBDraftPick[]>> {
+  let path = `/draft/picks?year=${year}`
+  if (college) path += `&college=${encodeURIComponent(college)}`
 
-  try {
-    const rosterYear = year || new Date().getFullYear()
-    const response = await fetch(
-      `${CFBD_BASE}/roster?team=${encodeURIComponent(team)}&year=${rosterYear}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Accept': 'application/json',
-        },
-      }
-    )
+  const res = await cfbdGet<unknown>(path, getCfbdApiKey())
+  if (!res.ok) return res
+  if (!Array.isArray(res.data)) {
+    return {
+      ok: false,
+      failure: { kind: 'http', status: null, message: 'CFBD draft picks was not an array', path },
+    }
+  }
+  return { ok: true, data: res.data.map(mapDraftPick) }
+}
 
-    if (!response.ok) return []
+export async function getCFBDraftPicks(year: number, college?: string): Promise<CFBDraftPick[]> {
+  const res = await getCFBDraftPicksResult(year, college)
+  if (!res.ok) {
+    console.error('[CFBD] Draft picks fetch failed:', describeCfbdFailure(res.failure))
+    return []
+  }
+  return res.data
+}
 
-    const data = await response.json()
-    return data
+/**
+ * A team's roster, with a failed request kept distinct from an empty roster.
+ *
+ * ⚠ THE CLASSIFIER TREATS ABSENCE FROM THIS LIST AS EVIDENCE. If the request
+ * merely failed, "not on a current roster" becomes a fact about the network
+ * rather than the player, and lib/devy-classification.ts writes it down.
+ */
+export async function getCFBTeamRosterResult(
+  team: string,
+  year?: number,
+): Promise<CfbdResult<CFBPlayer[]>> {
+  const rosterYear = year || new Date().getFullYear()
+  const path = `/roster?team=${encodeURIComponent(team)}&year=${rosterYear}`
+
+  const res = await cfbdGet<unknown>(path, getCfbdApiKey())
+  if (!res.ok) return res
+  if (!Array.isArray(res.data)) {
+    return {
+      ok: false,
+      failure: { kind: 'http', status: null, message: 'CFBD roster was not an array', path },
+    }
+  }
+  return { ok: true, data: mapRoster(res.data, team) }
+}
+
+function mapRoster(data: any[], team: string): CFBPlayer[] {
+  return data
       .filter((p: any) => {
         const fn = p.firstName || p.first_name
         const ln = p.lastName || p.last_name
@@ -347,10 +366,15 @@ export async function getCFBTeamRoster(team: string, year?: number): Promise<CFB
           homeCountry: p.homeCountry || p.home_country || null,
         }
       })
-  } catch (error) {
-    console.error('CFBD roster error:', error)
+}
+
+export async function getCFBTeamRoster(team: string, year?: number): Promise<CFBPlayer[]> {
+  const res = await getCFBTeamRosterResult(team, year)
+  if (!res.ok) {
+    console.error('CFBD roster error:', describeCfbdFailure(res.failure))
     return []
   }
+  return res.data
 }
 
 export function enrichFantraxPlayerWithDevyValue(

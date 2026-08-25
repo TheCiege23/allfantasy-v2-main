@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import {
-  getCFBPlayerStats, getCFBTeamRoster, getCFBDraftPicks,
+  getCFBPlayerStats, getCFBTeamRoster,
+  getCFBDraftPicksResult, getCFBTeamRosterResult,
   getCFBRecruits, getCFBTransferPortal, getCFBReturningProduction,
   getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings,
   getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing,
@@ -8,6 +9,7 @@ import {
   type CFBRecruit, type CFBTransferPortalEntry, type CFBReturningProduction,
   type CFBPlayerUsage, type CFBPlayerPPA, type CFBTeamSPRating, type CFBPlayerWEPA,
 } from '@/lib/cfb-player-data'
+import { describeCfbdFailure } from '@/lib/cfbd-fetch'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
 
 export type DraftStatus = 'college' | 'declared' | 'drafted' | 'nfl_active' | 'returning'
@@ -373,39 +375,75 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
   console.log('[ClassifyStatus] Fetching CFBD draft picks...')
   const draftPicksByName = new Map<string, CFBDraftPick[]>()
   const draftYearsToCheck = [currentYear, currentYear - 1]
+  let draftYearsLoaded = 0
   for (const draftYear of draftYearsToCheck) {
-    try {
-      const picks = await getCFBDraftPicks(draftYear)
-      for (const pick of picks) {
-        if (!pick.playerName) continue
-        const normalizedPickName = normalizeName(pick.playerName)
-        if (normalizedPickName.length < 3) continue
-        const existing = draftPicksByName.get(normalizedPickName) || []
-        existing.push(pick)
-        draftPicksByName.set(normalizedPickName, existing)
-      }
-      console.log(`[ClassifyStatus] CFBD draft ${draftYear}: ${picks.length} picks loaded`)
-      await new Promise(r => setTimeout(r, 300))
-    } catch (err: any) {
-      result.errors.push(`Draft picks ${draftYear} fetch error: ${err.message?.slice(0, 100)}`)
+    const res = await getCFBDraftPicksResult(draftYear)
+    if (!res.ok) {
+      result.errors.push(`Draft picks ${draftYear}: ${describeCfbdFailure(res.failure)}`)
+      continue
     }
+    draftYearsLoaded++
+    for (const pick of res.data) {
+      if (!pick.playerName) continue
+      const normalizedPickName = normalizeName(pick.playerName)
+      if (normalizedPickName.length < 3) continue
+      const existing = draftPicksByName.get(normalizedPickName) || []
+      existing.push(pick)
+      draftPicksByName.set(normalizedPickName, existing)
+    }
+    console.log(`[ClassifyStatus] CFBD draft ${draftYear}: ${res.data.length} picks loaded`)
+    await new Promise(r => setTimeout(r, 300))
   }
 
   console.log('[ClassifyStatus] Building current roster index from CFBD...')
   const currentRosterSet = new Set<string>()
+  let teamsLoaded = 0
   for (const team of TOP_CFB_TEAMS) {
-    try {
-      const roster = await getCFBTeamRoster(team, rosterYear)
-      for (const p of roster) {
-        if (!FANTASY_POSITIONS.has(p.position)) continue
-        const key = `${normalizeName(p.fullName)}|${p.position}|${team}`
-        currentRosterSet.add(key)
-      }
-      await new Promise(r => setTimeout(r, 100))
-    } catch {
+    const res = await getCFBTeamRosterResult(team, rosterYear)
+    if (!res.ok) {
+      result.errors.push(`Roster ${team}: ${describeCfbdFailure(res.failure)}`)
+      continue
     }
+    teamsLoaded++
+    for (const p of res.data) {
+      if (!FANTASY_POSITIONS.has(p.position)) continue
+      const key = `${normalizeName(p.fullName)}|${p.position}|${team}`
+      currentRosterSet.add(key)
+    }
+    await new Promise(r => setTimeout(r, 100))
   }
   console.log(`[ClassifyStatus] Current roster index: ${currentRosterSet.size} players on ${rosterYear} rosters`)
+
+  /*
+   * ⚠ FAIL CLOSED. Every branch below infers status from ABSENCE — not in the
+   * draft-pick index means not drafted, not in the roster index means gone from
+   * college — and then WRITES `graduatedToNFL` for all ~1,700 players. If those
+   * indexes are empty because CFBD refused the request rather than because the
+   * players are genuinely not in them, the write turns an outage into a fact
+   * about every player on the board.
+   *
+   * Not hypothetical: verified 2026-08-25 the key returns HTTP 429
+   * `{"message":"Monthly call quota exceeded."}`, and before lib/cfbd-fetch.ts
+   * every one of those became an empty array indistinguishable from a real
+   * result. It is masked right now only because the table holds forward-looking
+   * cohorts, so nobody is graduatedToNFL=true yet to be wiped. Backfilling
+   * historical draft classes removes that accident.
+   *
+   * Refusing to classify beats classifying from nothing: the previous run's
+   * values stand, and the errors say why.
+   */
+  if (draftYearsLoaded === 0) {
+    result.errors.push(
+      'ABORTED before writing: no draft-pick year loaded, so "not drafted" could not be told apart from "could not ask". Existing classifications left untouched.',
+    )
+    return result
+  }
+  if (teamsLoaded === 0) {
+    result.errors.push(
+      'ABORTED before writing: no team roster loaded, so "not on a current roster" would have been a fact about the network rather than the player. Existing classifications left untouched.',
+    )
+    return result
+  }
 
   const allDevyPlayers = await prisma.devyPlayer.findMany()
   console.log(`[ClassifyStatus] Classifying ${allDevyPlayers.length} devy players...`)
