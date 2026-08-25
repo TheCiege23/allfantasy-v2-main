@@ -21,6 +21,7 @@ export type LeagueConcept =
   | 'guillotine'
   | 'zombie'
   | 'survivor'
+  | 'tournament'
   | 'other'
 
 export type FormatRules = {
@@ -65,22 +66,24 @@ export function readFormatRules(league: {
   const keeperCount = league.keeperCount ?? 0
 
   const concept: LeagueConcept =
-    raw === 'survivor'
-      ? 'survivor'
-      : raw === 'zombie'
-        ? 'zombie'
-        : raw === 'guillotine'
-          ? 'guillotine'
-          : raw === 'dynasty' || (raw === '' && league.isDynasty)
-            ? 'dynasty'
-            : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-              ? 'keeper'
-              : raw === 'redraft' || raw === ''
-                ? 'redraft'
-                : /* Anything still unrecognised is NOT silently treated as
-                     redraft — a caller that does not know how to price a format
-                     should be able to tell. */
-                  'other'
+    raw === 'tournament'
+      ? 'tournament'
+      : raw === 'survivor'
+        ? 'survivor'
+        : raw === 'zombie'
+          ? 'zombie'
+          : raw === 'guillotine'
+            ? 'guillotine'
+            : raw === 'dynasty' || (raw === '' && league.isDynasty)
+              ? 'dynasty'
+              : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+                ? 'keeper'
+                : raw === 'redraft' || raw === ''
+                  ? 'redraft'
+                  : /* Anything still unrecognised is NOT silently treated as
+                       redraft — a caller that does not know how to price a
+                       format should be able to tell. */
+                    'other'
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -102,6 +105,22 @@ export function readFormatRules(league: {
     futurePicksTradeable = false
     notes.push(
       'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+    )
+  } else if (concept === 'tournament') {
+    /*
+     * ⚠ MOST TOURNAMENTS FORBID TRADES OUTRIGHT, and the King Buffalo rules bar
+     * both trades (rule 3) and draft pick trading (rule 1). The platform spec
+     * makes it a setting, so a variant can enable it — but the DEFAULT here is
+     * barred, and reporting a tradeable asset in a tournament that forbids
+     * trading would imply a deal that cannot happen.
+     *
+     * Pricing for the enabled case lives in lib/trade-intel/tournament.ts, where
+     * the roster expires at the next redraft and single elimination compresses
+     * every acquisition to about two games.
+     */
+    futurePicksTradeable = false
+    notes.push(
+      'Tournament: rosters dissolve at the next redraft, so nothing you acquire carries forward — and in the bracket, single elimination means a player is worth about two more games however many rounds remain. Most tournaments bar trades entirely; confirm before building a deal around one.',
     )
   } else if (concept === 'survivor') {
     /*
