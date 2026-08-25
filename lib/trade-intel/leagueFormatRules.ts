@@ -23,6 +23,7 @@ export type LeagueConcept =
   | 'survivor'
   | 'tournament'
   | 'pirate'
+  | 'king_of_the_hill'
   | 'other'
 
 export type FormatRules = {
@@ -62,31 +63,50 @@ export function readFormatRules(league: {
   keeperCount?: number | null
   keeperCostSystem?: string | null
   keeperRoundPenalty?: number | null
+  /**
+   * Concept alias tags from `conceptRules`.
+   *
+   * ⚠ READ THESE OR FOUR FORMATS PRICE AS SOMETHING ELSE.
+   * `lib/league-creation/canonical/normalizeConcept.ts` flattens product
+   * concepts onto base formats and keeps the original only as an alias tag:
+   * `king_of_the_hill` and `idp` become "redraft", `pirate_vampire` and `royal`
+   * become "dynasty". A reader that trusts `leagueType` alone sees a plain
+   * redraft league and silently drops everything that makes the format itself.
+   */
+  aliasTags?: string[] | null
 }): FormatRules {
-  const raw = (league.leagueType ?? '').trim().toLowerCase()
+  const alias = (league.aliasTags ?? []).map((t) => String(t).trim().toLowerCase())
+  /*
+   * The alias wins when present: it is the more specific statement, and the
+   * base format is what the normaliser fell back to rather than what the
+   * league is.
+   */
+  const raw = (alias[0] ?? league.leagueType ?? '').trim().toLowerCase()
   const keeperCount = league.keeperCount ?? 0
 
   const concept: LeagueConcept =
-    raw === 'pirate'
-      ? 'pirate'
-      : raw === 'tournament'
-        ? 'tournament'
-        : raw === 'survivor'
-          ? 'survivor'
-          : raw === 'zombie'
-            ? 'zombie'
-            : raw === 'guillotine'
-              ? 'guillotine'
-              : raw === 'dynasty' || (raw === '' && league.isDynasty)
-                ? 'dynasty'
-                : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-                  ? 'keeper'
-                  : raw === 'redraft' || raw === ''
-                    ? 'redraft'
-                    : /* Anything still unrecognised is NOT silently treated as
-                         redraft — a caller that does not know how to price a
-                         format should be able to tell. */
-                      'other'
+    raw === 'king_of_the_hill' || raw === 'koth'
+      ? 'king_of_the_hill'
+      : raw === 'pirate' || raw === 'pirate_vampire'
+        ? 'pirate'
+        : raw === 'tournament'
+          ? 'tournament'
+          : raw === 'survivor'
+            ? 'survivor'
+            : raw === 'zombie'
+              ? 'zombie'
+              : raw === 'guillotine'
+                ? 'guillotine'
+                : raw === 'dynasty' || raw === 'royal' || (raw === '' && league.isDynasty)
+                  ? 'dynasty'
+                  : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+                    ? 'keeper'
+                    : raw === 'redraft' || raw === 'idp' || raw === ''
+                      ? 'redraft'
+                      : /* Anything still unrecognised is NOT silently treated
+                           as redraft — a caller that does not know how to price
+                           a format should be able to tell. */
+                        'other'
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -108,6 +128,18 @@ export function readFormatRules(league: {
     futurePicksTradeable = false
     notes.push(
       'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+    )
+  } else if (concept === 'king_of_the_hill') {
+    /*
+     * ⚠ NORMALISED TO "redraft" UPSTREAM, so this branch is only reachable
+     * because `aliasTags` is read above. Without it a KOTH league prices as a
+     * plain redraft and loses the crown, the penalty and the waiver shock.
+     *
+     * Pricing lives in lib/trade-intel/kingOfTheHill.ts.
+     */
+    futurePicksTradeable = false
+    notes.push(
+      `King of the Hill: the King scores +10 a week until he loses, and when he does he forfeits that week's top 3 scorers to waivers for the whole league to bid on. It is the biggest single-week roster loss in any format here, and it stops at the playoffs.`,
     )
   } else if (concept === 'pirate') {
     /*
