@@ -380,10 +380,39 @@ export async function getLeagueHomeData(
   // finding rather than as an absence.
   const anyResults = teams.some((t) => t.wins > 0 || t.losses > 0 || t.ties > 0 || t.pointsFor > 0)
 
+  /*
+   * ⚠ STANDINGS AND THE POWER BOARD READ DIFFERENT TABLES, and only one of them
+   * was being consulted. `LeagueTeam.wins/losses` comes from the import and sits
+   * at 0-0 for plenty of leagues that have absolutely been played; the power
+   * board derives its records from `WeeklyMatchup`, week by week. So the panel
+   * said "no results read yet" while a full record for every team sat one
+   * section above it.
+   *
+   * The import's own numbers still win when it has them — they are the
+   * platform's official record, including any commissioner correction we would
+   * never see in the weekly rows. This is only a fallback.
+   */
+  const standingsFromPowerBoard: LeagueStanding[] | null =
+    !anyResults && powerBoard
+      ? powerBoard.rows.map((r) => ({
+          teamId: String(r.rosterId),
+          teamName: r.teamName ?? r.managerName ?? `Roster ${r.rosterId}`,
+          ownerName: r.managerName ?? '',
+          wins: r.wins,
+          losses: r.losses,
+          ties: r.ties,
+          pointsFor: r.pointsFor,
+          rank: r.powerRank,
+          isYou: yours?.externalId != null && String(yours.externalId) === String(r.rosterId),
+        }))
+      : null
+
   const standings: SectionState<LeagueStanding[]> =
     teams.length === 0
       ? { available: false, reason: 'no teams imported for this league' }
-      : !anyResults
+      : !anyResults && standingsFromPowerBoard && standingsFromPowerBoard.length > 0
+        ? { available: true, data: standingsFromPowerBoard }
+        : !anyResults
         ? preSeason
           ? { available: false, reason: 'no standings until the season starts — this league has not drafted' }
           : { available: false, reason: 'teams imported but no results read yet — every record is 0-0' }

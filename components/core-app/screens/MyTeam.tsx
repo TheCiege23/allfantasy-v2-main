@@ -9,6 +9,7 @@ import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'
 import { buildProjectionQuestion } from '@/lib/core-app/scoringNotes'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { teamLogoUrl } from '@/lib/media-url'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -276,6 +277,26 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           {player.name.charAt(0)}
         </div>
       )}
+      {/*
+        The NFL team crest, beside the headshot. Two images that mean different
+        things — who he is, and who he plays for — and the second is how a
+        manager scanning sixteen rows finds the player they are thinking of.
+
+        Sport is passed through rather than assumed: `teamLogoUrl` resolves a
+        different CDN per sport and returns '' for one it does not know, which
+        renders nothing rather than a broken image.
+      */}
+      {player.team && teamLogoUrl(player.team, player.sport ?? 'NFL') ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="af-mt-teamlogo"
+          src={teamLogoUrl(player.team, player.sport ?? 'NFL')}
+          alt=""
+          width={18}
+          height={18}
+          loading="lazy"
+        />
+      ) : null}
       <div className="af-mt-player-text">
         <div className="af-mt-player-name">
           {player.name}

@@ -13,6 +13,7 @@ function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
     name: 'Bo Nix',
     position: 'QB',
     team: 'DEN',
+    sport: 'NFL',
     imageUrl: null,
     gameContext: 'DEN vs MIA · Sun 9:05p',
     kickoff: new Date('2026-09-13T21:05:00Z'),

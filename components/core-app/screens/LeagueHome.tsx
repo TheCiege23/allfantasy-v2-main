@@ -215,7 +215,12 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
         className="af-lh-scoreboard-panel"
         state={data.scoreboard}
       >
-        {(board) => <LeagueScoreboardPanel board={board} />}
+        {(board) => (
+          <LeagueScoreboardPanel
+            board={board}
+            winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
+          />
+        )}
       </StatePanel>
 
       {/* ── Power board: all-play + movement ────────────────────────── */}
@@ -307,46 +312,15 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
       <div className="af-lh-grid">
         <div className="af-lh-main">
           {/*
-            Matchup strip.
-            ⚠ THIS CALLBACK USED TO BE `() => null`, WHICH IS WHY PROMOTING THE TYPE
-            ALONE WAS NOT ENOUGH. The panel rendered its frame and nothing else, so
-            even once the loader produced a real matchup the screen would have shown
-            an empty box and tsc would not have complained — `() => null` satisfies
-            any `T`. The win probability appears only when the engine produced one.
-           */}
-          <StatePanel title="This week's matchup" className="af-lh-matchup" state={data.matchup}>
-            {(m) => (
-              <div className="af-lh-mrow">
-                <div className="af-lh-mside">
-                  <span className="af-lh-mlabel">YOU</span>
-                  <b className="af-lh-mteam">{m.you.name}</b>
-                  <b className="af-lh-mscore af-lh-good">{m.you.points.toFixed(1)}</b>
-                </div>
-                <div className="af-lh-mmid">
-                  {m.winProbability ? (
-                    <>
-                      <span className="af-lh-mlabel">WIN PROB</span>
-                      <b className="af-lh-mwin">{Math.round(m.winProbability.pWin * 100)}%</b>
-                      <span className="af-lh-mbar">
-                        <span style={{ width: `${Math.round(m.winProbability.pWin * 100)}%` }} />
-                      </span>
-                      <em className="af-lh-mnote">{m.winProbability.confidence}</em>
-                    </>
-                  ) : (
-                    <em className="af-lh-mnote">
-                      Week {m.week} · both lineups could not be priced, so there is no
-                      win probability
-                    </em>
-                  )}
-                </div>
-                <div className="af-lh-mside af-lh-mright">
-                  <span className="af-lh-mlabel">OPPONENT</span>
-                  <b className="af-lh-mteam">{m.opponent.name}</b>
-                  <b className="af-lh-mscore">{m.opponent.points.toFixed(1)}</b>
-                </div>
-              </div>
-            )}
-          </StatePanel>
+            ⚠ THE "THIS WEEK'S MATCHUP" PANEL WAS HERE AND HAS BEEN DELETED.
+            The scoreboard above shows every game in the league with yours
+            marked and sorted first, so this panel printed week 1 a second time
+            a few hundred pixels lower.
+
+            The one thing it had that the scoreboard did not is the win
+            probability, which now renders on your own game up there rather
+            than being lost with the panel.
+          */}
 
           {/* The one urgent action */}
           {urgent ? (

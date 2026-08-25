@@ -40,6 +40,12 @@ export type LineupPlayer = {
   name: string
   position: string | null
   team: string | null
+  /**
+   * The league's sport, carried per player so the crest resolves off the right
+   * CDN. Hardcoding NFL would silently show a wrong or missing logo the day a
+   * roster is anything else.
+   */
+  sport: string | null
   imageUrl: string | null
   /** "DEN vs LV · Sun 4:05p" — from the ingested schedule, null when unknown. */
   gameContext: string | null
@@ -488,6 +494,7 @@ async function resolvePlayers(
       name: r.name,
       position: r.position,
       team: r.team,
+      sport,
       imageUrl: r.imageUrl,
       gameContext: g ? `${r.team} ${g.home ? 'vs' : '@'} ${g.opponent}${time ? ` · ${time}` : ''}` : null,
       kickoff: g?.at ?? null,

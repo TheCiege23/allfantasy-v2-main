@@ -50,7 +50,23 @@ function Side({ team, unplayed }: { team: ScoreboardTeam; unplayed: boolean }) {
   )
 }
 
-export function LeagueScoreboardPanel({ board }: { board: LeagueScoreboard }) {
+export function LeagueScoreboardPanel({
+  board,
+  winProbability,
+}: {
+  board: LeagueScoreboard
+  /**
+   * The engine's read on YOUR game, when it produced one.
+   *
+   * ⚠ IT ARRIVES FROM THE PANEL THAT USED TO SIT BELOW THIS ONE. That panel
+   * printed the same matchup a second time and was deleted; this was the only
+   * thing on it the scoreboard did not already say, so it moved rather than
+   * going with it. Null when both lineups could not be priced — a probability
+   * built on a half-priced lineup is a number about our coverage, not about
+   * the game.
+   */
+  winProbability?: { pWin: number; confidence: string } | null
+}) {
   return (
     <div className="af-sb">
       <div className="af-sb-head">
@@ -72,7 +88,14 @@ export function LeagueScoreboardPanel({ board }: { board: LeagueScoreboard }) {
                 <Side key={t.rosterId} team={t} unplayed={g.unplayed} />
               ))}
             </div>
-            {g.margin != null ? (
+            {g.teams.some((t) => t.isYou) && winProbability ? (
+              <span
+                className="af-sb-winprob af-num"
+                title={`Win probability · ${winProbability.confidence}`}
+              >
+                {Math.round(winProbability.pWin * 100)}%
+              </span>
+            ) : g.margin != null ? (
               <span className="af-sb-margin af-num">
                 {g.margin === 0 ? 'level' : `by ${g.margin.toFixed(1)}`}
               </span>

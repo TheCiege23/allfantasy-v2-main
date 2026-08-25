@@ -810,3 +810,14 @@
   .af-pb-row { grid-template-columns: 24px 30px 1fr 64px 44px; }
   .af-pb-rec { display: none; }
 }
+
+/* Win probability on your own game — the one thing the deleted matchup panel
+   carried that the scoreboard did not. Accent, because it is a verdict. */
+.af-sb-winprob {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

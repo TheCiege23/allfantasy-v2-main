@@ -614,7 +614,49 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
     ...legacyBoardItems,
   ]
 
-  const leaguesSorted = filtered.sort((a: any, b: any) => {
+  /*
+   * ⚠ ONE ROW PER LEAGUE, NOT ONE PER SEASON.
+   *
+   * `League` is unique on (userId, platform, platformLeagueId, season) — the
+   * SEASON is part of the key, deliberately, because a dynasty league genuinely
+   * is a different row each year. Nothing downstream collapsed them, so the
+   * rail rendered the same league once for every season on file: three
+   * identical crests with the same name and the same avatar, which reads as a
+   * duplicate import and is indistinguishable from one.
+   *
+   * The newest season wins. Older rows are still in the database and still
+   * reachable — this is a display collapse, not a delete, and no history is
+   * lost by it.
+   *
+   * Keyed on platform + platformLeagueId, NOT on name: two genuinely different
+   * leagues can share a name (and often a crest — a league series reuses its
+   * logo), and collapsing those would hide a league someone actually plays in.
+   * That failure is worse than the one being fixed.
+   */
+  const byLeague = new Map<string, any>()
+  const passthrough: any[] = []
+  for (const lg of filtered as any[]) {
+    const platformId = lg.platform_league_id ?? lg.platformLeagueId ?? null
+    const platform = lg.platform ?? null
+    if (!platformId || !platform) {
+      // No provider identity to group on — AF-native and tournament rows keep
+      // their own id and are never collapsed against each other.
+      passthrough.push(lg)
+      continue
+    }
+    const key = `${platform}:${platformId}`
+    const seen = byLeague.get(key)
+    if (!seen) {
+      byLeague.set(key, lg)
+      continue
+    }
+    const seasonOf = (x: any) => (typeof x?.season === 'number' ? x.season : -1)
+    if (seasonOf(lg) > seasonOf(seen)) byLeague.set(key, lg)
+  }
+
+  const deduped = [...passthrough, ...byLeague.values()]
+
+  const leaguesSorted = deduped.sort((a: any, b: any) => {
     const aDate = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0
     const bDate = b.lastSyncedAt ? new Date(b.lastSyncedAt).getTime() : 0
     return bDate - aDate

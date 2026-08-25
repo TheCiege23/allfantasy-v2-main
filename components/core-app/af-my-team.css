@@ -921,3 +921,17 @@ html[data-mode='light'] .af-core .af-mt-slot[data-pos='db']   { background: rgba
 /* The preseason and bye chips are already token-driven, so they follow the
    mode on their own — but the temperature beside a weather glyph is not. */
 html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
+
+/* The NFL crest, between the headshot and the name. Sized down and set back —
+   it is orientation, not the subject of the row. */
+.af-mt-teamlogo {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  opacity: 0.9;
+}
+@media (max-width: 860px) {
+  /* First thing to go: the abbreviation is already in the meta line. */
+  .af-mt-teamlogo { display: none; }
+}
