@@ -20,6 +20,7 @@ export type LeagueConcept =
   | 'dynasty'
   | 'guillotine'
   | 'zombie'
+  | 'survivor'
   | 'other'
 
 export type FormatRules = {
@@ -64,20 +65,22 @@ export function readFormatRules(league: {
   const keeperCount = league.keeperCount ?? 0
 
   const concept: LeagueConcept =
-    raw === 'zombie'
-      ? 'zombie'
-      : raw === 'guillotine'
-        ? 'guillotine'
-        : raw === 'dynasty' || (raw === '' && league.isDynasty)
-          ? 'dynasty'
-          : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-            ? 'keeper'
-            : raw === 'redraft' || raw === ''
-              ? 'redraft'
-              : /* survivor and friends are their own thing and are NOT silently
-                   treated as redraft — a caller that does not know how to price
-                   them should be able to tell. */
-                'other'
+    raw === 'survivor'
+      ? 'survivor'
+      : raw === 'zombie'
+        ? 'zombie'
+        : raw === 'guillotine'
+          ? 'guillotine'
+          : raw === 'dynasty' || (raw === '' && league.isDynasty)
+            ? 'dynasty'
+            : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+              ? 'keeper'
+              : raw === 'redraft' || raw === ''
+                ? 'redraft'
+                : /* Anything still unrecognised is NOT silently treated as
+                     redraft — a caller that does not know how to price a format
+                     should be able to tell. */
+                  'other'
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -99,6 +102,19 @@ export function readFormatRules(league: {
     futurePicksTradeable = false
     notes.push(
       'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+    )
+  } else if (concept === 'survivor') {
+    /*
+     * ⚠ IDOLS ARE TRADEABLE AND MOSTLY EXPIRE AT THE MERGE. Nine to twelve are
+     * seeded from a twenty-power pool after the draft; only two convert rather
+     * than expiring. And WHO you trade with decides whether the deal helps —
+     * see lib/trade-intel/survivor.ts, where a losing trade with a tribemate can
+     * still be correct because your tribe attends Tribal only if it scores
+     * lowest.
+     */
+    futurePicksTradeable = true
+    notes.push(
+      'Survivor: idols are tradeable and almost all of them expire at the merge, so an idol saved for the perfect moment is how it ends up worth nothing. Pre-merge, who you trade with matters as much as what — your tribe attends Tribal only if it scores lowest.',
     )
   } else if (concept === 'zombie') {
     /*

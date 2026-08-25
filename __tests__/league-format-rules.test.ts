@@ -73,8 +73,11 @@ describe('readFormatRules', () => {
     // Zombie and guillotine now have real rules, so they are their own concepts.
     // Survivor does not, and must stay visibly unpriced rather than inheriting
     // redraft behaviour it was never checked against.
-    expect(readFormatRules({ leagueType: 'survivor' }).concept).toBe('other')
+    // Guillotine, zombie and survivor all have real rules now. Anything still
+    // unrecognised must stay visibly unpriced rather than inheriting redraft
+    // behaviour it was never checked against.
     expect(readFormatRules({ leagueType: 'best-ball' }).concept).toBe('other')
+    expect(readFormatRules({ leagueType: 'exile' }).concept).toBe('other')
   })
 
   it('falls back to isDynasty only when leagueType says nothing', () => {

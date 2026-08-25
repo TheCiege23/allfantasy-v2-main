@@ -242,8 +242,10 @@ describe('the zombie model is actually reachable', () => {
     expect(block.slice(0, 260)).toContain('return notes')
   })
 
-  it('survivor still resolves to "other", because we have no rules for it', () => {
-    expect(readFormatRules({ leagueType: 'survivor' }).concept).toBe('other')
+  it('a format we have no rules for still resolves to "other"', () => {
+    // Survivor has rules now. The guarantee is unchanged: anything unrecognised
+    // stays visibly unpriced rather than inheriting redraft behaviour.
+    expect(readFormatRules({ leagueType: 'best-ball' }).concept).toBe('other')
   })
 })
 
