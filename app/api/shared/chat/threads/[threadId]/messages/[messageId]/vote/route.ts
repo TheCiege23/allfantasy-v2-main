@@ -72,6 +72,20 @@ export async function POST(
       return NextResponse.json({ error: "That message is not a poll" }, { status: 400 })
     }
 
+    /*
+     * ⚠ THE DEADLINE IS ENFORCED HERE, NOT ONLY IN THE UI. The composer has
+     * stored `closeAt` on every poll it has ever posted and nothing read it
+     * back, so every poll ran forever. A device with a slow clock — or anything
+     * that is not the drawer — must not be able to vote late, so the server
+     * decides with its own clock and the UI's disabled state is a courtesy.
+     */
+    const closedByHand = poll.closed === true
+    const closeAt = typeof poll.closeAt === "string" ? Date.parse(poll.closeAt) : NaN
+    const pastDeadline = Number.isFinite(closeAt) && closeAt <= Date.now()
+    if (closedByHand || pastDeadline) {
+      return NextResponse.json({ error: "This poll is closed" }, { status: 409 })
+    }
+
     const options = poll.options as LeagueOption[]
     const targetIndex = options.findIndex(
       (o, i) => (typeof o?.id === "string" && o.id ? o.id : `opt-${i}`) === optionId
@@ -89,12 +103,22 @@ export async function POST(
       ? (options[targetIndex].votes as unknown[]).includes(user.appUserId)
       : false
 
+    /*
+     * `allowMultiple` was stored by the composer and ignored too: a poll whose
+     * author chose multi-choice behaved as single-choice, quietly discarding a
+     * setting they had picked. On a multi-choice poll a tap only touches the
+     * option tapped; on a single-choice one the vote moves.
+     */
+    const allowMultiple = poll.allowMultiple === true
+
     const nextOptions = options.map((o, i) => {
-      const votes = Array.isArray(o?.votes)
-        ? (o.votes as unknown[]).filter(
-            (v): v is string => typeof v === "string" && v !== user.appUserId
-          )
+      const existing = Array.isArray(o?.votes)
+        ? (o.votes as unknown[]).filter((v): v is string => typeof v === "string")
         : []
+
+      if (allowMultiple && i !== targetIndex) return { ...o, votes: existing }
+
+      const votes = existing.filter((v) => v !== user.appUserId)
       if (i === targetIndex && !alreadyHere) votes.push(user.appUserId as string)
       return { ...o, votes }
     })

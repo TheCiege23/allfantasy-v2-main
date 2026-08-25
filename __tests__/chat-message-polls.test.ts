@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pollShare, readViewerPoll, votePollLocally } from '@/lib/chat-core/messagePolls'
+import { isPollClosed, pollShare, readViewerPoll, votePollLocally } from '@/lib/chat-core/messagePolls'
 
 const ME = 'user-me'
 
@@ -14,6 +14,9 @@ describe('readViewerPoll', () => {
       question: 'Who wins?',
       options: [{ id: 'a', text: 'Chiefs', count: 2, mine: true }],
       totalVotes: 2,
+      closesAt: null,
+      closedByHand: false,
+      allowMultiple: false,
     })
   })
 
@@ -107,5 +110,91 @@ describe('pollShare', () => {
   /* Equal bars across an unvoted poll would render a tie nobody cast. */
   it('is zero before anybody votes', () => {
     expect(pollShare({ id: 'a', text: 'x', count: 0, mine: false }, 0)).toBe(0)
+  })
+})
+
+/*
+ * The composer has collected a deadline and a multi-choice flag on every poll it
+ * has ever posted. Both were stored and neither was ever read back, so a poll
+ * ran forever and a multi-choice poll behaved as single-choice.
+ */
+describe('poll deadlines', () => {
+  const withClose = (closeAt: string, closed?: boolean) => ({
+    poll: { question: 'Q', options: [{ id: 'a', text: 'x', votes: [] }], closeAt, closed },
+  })
+
+  it('reads the deadline the composer stored', () => {
+    const out = readViewerPoll(withClose('2026-09-01T00:00:00.000Z'), ME)
+    expect(out?.closesAt).toBe('2026-09-01T00:00:00.000Z')
+  })
+
+  it('ignores a deadline that is not a date', () => {
+    expect(readViewerPoll(withClose('whenever'), ME)?.closesAt).toBeNull()
+  })
+
+  it('is open before the deadline', () => {
+    const poll = readViewerPoll(withClose(new Date(Date.now() + 60_000).toISOString()), ME)!
+    expect(isPollClosed(poll)).toBe(false)
+  })
+
+  it('is closed once the deadline has passed', () => {
+    const poll = readViewerPoll(withClose(new Date(Date.now() - 60_000).toISOString()), ME)!
+    expect(isPollClosed(poll)).toBe(true)
+  })
+
+  it('is closed when somebody closed it, deadline or not', () => {
+    const poll = readViewerPoll(withClose(new Date(Date.now() + 60_000).toISOString(), true), ME)!
+    expect(isPollClosed(poll)).toBe(true)
+  })
+
+  it('never closes a poll with no deadline on its own', () => {
+    const poll = readViewerPoll({ poll: { question: 'Q', options: [{ id: 'a', text: 'x' }] } }, ME)!
+    expect(isPollClosed(poll)).toBe(false)
+  })
+
+  it('decides against the clock it is given, not the device’s', () => {
+    const poll = readViewerPoll(withClose('2026-09-01T00:00:00.000Z'), ME)!
+    expect(isPollClosed(poll, Date.parse('2026-08-31T23:59:59Z'))).toBe(false)
+    expect(isPollClosed(poll, Date.parse('2026-09-01T00:00:01Z'))).toBe(true)
+  })
+
+  it('refuses a vote on a closed poll', () => {
+    const poll = readViewerPoll(withClose(new Date(Date.now() - 60_000).toISOString()), ME)!
+    expect(votePollLocally(poll, 'a')).toEqual(poll)
+  })
+})
+
+describe('multi-choice polls', () => {
+  const multi = () =>
+    readViewerPoll(
+      {
+        poll: {
+          question: 'Q',
+          allowMultiple: true,
+          options: [
+            { id: 'a', text: 'Chiefs', votes: [ME] },
+            { id: 'b', text: 'Bills', votes: [] },
+          ],
+        },
+      },
+      ME,
+    )!
+
+  it('reads the flag the composer stored', () => {
+    expect(multi().allowMultiple).toBe(true)
+  })
+
+  /* On a single-choice poll this would have moved the vote. */
+  it('keeps an existing choice when a second is added', () => {
+    const out = votePollLocally(multi(), 'b')
+
+    expect(out.options.find((o) => o.id === 'a')).toMatchObject({ count: 1, mine: true })
+    expect(out.options.find((o) => o.id === 'b')).toMatchObject({ count: 1, mine: true })
+    expect(out.totalVotes).toBe(2)
+  })
+
+  it('still withdraws a choice that is tapped again', () => {
+    const out = votePollLocally(multi(), 'a')
+    expect(out.options.find((o) => o.id === 'a')).toMatchObject({ count: 0, mine: false })
   })
 })

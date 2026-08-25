@@ -29,8 +29,11 @@ function voteReq(body: unknown) {
 
 const ctx = { params: { threadId: 'league:l1', messageId: 'm1' } } as never
 
-function pollRow(options: Array<{ id: string; text: string; votes: string[] }>) {
-  return { id: 'm1', leagueId: 'l1', metadata: { poll: { question: 'Q', options } } }
+function pollRow(
+  options: Array<{ id: string; text: string; votes: string[] }>,
+  extra: Record<string, unknown> = {},
+) {
+  return { id: 'm1', leagueId: 'l1', metadata: { poll: { question: 'Q', options, ...extra } } }
 }
 
 /** The options the route wrote back. */
@@ -163,5 +166,79 @@ describe('league poll voting', () => {
 
     expect(res.status).toBe(200)
     expect(votePollMessageMock).toHaveBeenCalledWith('u1', 'thread-abc', 'm1', 1)
+  })
+
+  /*
+   * The composer has stored `closeAt` on every poll it ever posted and nothing
+   * read it back, so every poll ran forever. The UI's disabled state is a
+   * courtesy — a slow clock, or anything that is not the drawer, must not be
+   * able to vote late.
+   */
+  it('refuses a vote after the deadline has passed', async () => {
+    const { POST } = await import(ROUTE)
+    prismaMock.leagueChatMessage.findUnique.mockResolvedValue(
+      pollRow([{ id: 'a', text: 'x', votes: [] }], {
+        closeAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    )
+
+    const res = await POST(voteReq({ optionId: 'a' }), ctx)
+
+    expect(res.status).toBe(409)
+    expect(prismaMock.leagueChatMessage.update).not.toHaveBeenCalled()
+  })
+
+  it('accepts a vote before the deadline', async () => {
+    const { POST } = await import(ROUTE)
+    prismaMock.leagueChatMessage.findUnique.mockResolvedValue(
+      pollRow([{ id: 'a', text: 'x', votes: [] }], {
+        closeAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    )
+
+    expect((await POST(voteReq({ optionId: 'a' }), ctx)).status).toBe(200)
+  })
+
+  it('refuses a vote on a poll somebody closed', async () => {
+    const { POST } = await import(ROUTE)
+    prismaMock.leagueChatMessage.findUnique.mockResolvedValue(
+      pollRow([{ id: 'a', text: 'x', votes: [] }], { closed: true }),
+    )
+
+    expect((await POST(voteReq({ optionId: 'a' }), ctx)).status).toBe(409)
+  })
+
+  /*
+   * `allowMultiple` was stored and ignored too: a poll whose author chose
+   * multi-choice behaved as single-choice.
+   */
+  it('keeps other choices on a multi-choice poll', async () => {
+    const { POST } = await import(ROUTE)
+    prismaMock.leagueChatMessage.findUnique.mockResolvedValue(
+      pollRow(
+        [
+          { id: 'a', text: 'Chiefs', votes: ['u1'] },
+          { id: 'b', text: 'Bills', votes: [] },
+        ],
+        { allowMultiple: true },
+      ),
+    )
+
+    await POST(voteReq({ optionId: 'b' }), ctx)
+
+    const options = writtenOptions()
+    expect(options[0].votes).toEqual(['u1'])
+    expect(options[1].votes).toEqual(['u1'])
+  })
+
+  it('still withdraws a repeated choice on a multi-choice poll', async () => {
+    const { POST } = await import(ROUTE)
+    prismaMock.leagueChatMessage.findUnique.mockResolvedValue(
+      pollRow([{ id: 'a', text: 'Chiefs', votes: ['u1', 'u2'] }], { allowMultiple: true }),
+    )
+
+    await POST(voteReq({ optionId: 'a' }), ctx)
+
+    expect(writtenOptions()[0].votes).toEqual(['u2'])
   })
 })

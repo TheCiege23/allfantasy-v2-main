@@ -580,6 +580,8 @@ function ChimmyPanel({
 
 type LeagueMessage = {
   id: string
+  /** Needed to tell whether the viewer may close a poll they posted. */
+  authorId: string | null
   author: string
   message: string
   createdAt: string
@@ -645,6 +647,7 @@ function LeaguePanel({
           id: string
           text?: string | null
           createdAt: string
+          authorId?: string | null
           authorName?: string | null
           metadata?: Record<string, unknown> | null
         }>
@@ -654,6 +657,7 @@ function LeaguePanel({
       setMessages(
         (data.messages ?? []).map((m) => ({
           id: m.id,
+          authorId: typeof m.authorId === 'string' && m.authorId ? m.authorId : null,
           author: m.authorName || 'Someone',
           message: m.text ?? '',
           createdAt: m.createdAt,
@@ -765,6 +769,26 @@ function LeaguePanel({
         await load(scopeId, true)
       } catch (e) {
         setError(e instanceof Error ? `Vote did not save — ${e.message}.` : 'Vote did not save.')
+      } finally {
+        setVoteBusy(null)
+      }
+    },
+    [scopeId, voteBusy, load],
+  )
+
+  const closePoll = useCallback(
+    async (messageId: string) => {
+      if (!scopeId || voteBusy) return
+      setVoteBusy(messageId)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/messages/${encodeURIComponent(messageId)}/close-poll`,
+          { method: 'POST' },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await load(scopeId, true)
+      } catch (e) {
+        setError(e instanceof Error ? `Could not close the poll — ${e.message}.` : 'Could not close the poll.')
       } finally {
         setVoteBusy(null)
       }
@@ -977,6 +1001,16 @@ function LeaguePanel({
                 metadata={m.metadata}
                 viewerUserId={viewerUserId}
                 onVote={(optionId) => void votePoll(m.id, optionId)}
+                onClosePoll={
+                  /*
+                   * Only offered to the author or a commissioner. The server
+                   * checks the same thing — this just avoids showing a control
+                   * that would be refused.
+                   */
+                  (viewerUserId && m.authorId === viewerUserId) || scope?.isCommissioner
+                    ? () => void closePoll(m.id)
+                    : undefined
+                }
               />
               <MessageReactions
                 reactions={reactionOverride[m.id] ?? readReactions(m.metadata, viewerUserId)}

@@ -100,6 +100,7 @@ export function RichMessage({
   metadata,
   viewerUserId,
   onVote,
+  onClosePoll,
 }: {
   metadata: RichMetadata
   /*
@@ -109,6 +110,8 @@ export function RichMessage({
    */
   viewerUserId?: string | null
   onVote?: (optionId: string) => void
+  /** Only passed when the viewer wrote the poll or runs the league. */
+  onClosePoll?: () => void
 }) {
   const gif = readGif(metadata)
   const attachments = readAttachments(metadata)
@@ -144,7 +147,7 @@ export function RichMessage({
       })}
 
       {viewerPoll && onVote ? (
-        <MessagePoll poll={viewerPoll} onVote={onVote} />
+        <MessagePoll poll={viewerPoll} onVote={onVote} onClose={onClosePoll} />
       ) : poll ? (
         <div className="af-cm-poll">
           <p className="af-cm-poll-q">{poll.question}</p>

@@ -30,6 +30,18 @@ export type ViewerPoll = {
   options: ViewerPollOption[]
   /** Total votes cast across all options — the honest denominator for a share. */
   totalVotes: number
+  /**
+   * The composer has collected a deadline on every poll it has ever posted and
+   * stored it as `closeAt`. Nothing has ever read it back.
+   */
+  closesAt: string | null
+  /** Closed explicitly by its author or a commissioner. */
+  closedByHand: boolean
+  /**
+   * Also stored by the composer and also ignored until now: a multi-choice poll
+   * behaved as single-choice, silently discarding the setting its author picked.
+   */
+  allowMultiple: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,7 +91,33 @@ export function readViewerPoll(
   })
 
   if (options.length === 0) return null
-  return { question, options, totalVotes }
+
+  const closesAtRaw = str(raw.closeAt)
+  const closesAt = closesAtRaw && !Number.isNaN(new Date(closesAtRaw).getTime()) ? closesAtRaw : null
+
+  return {
+    question,
+    options,
+    totalVotes,
+    closesAt,
+    closedByHand: raw.closed === true,
+    allowMultiple: raw.allowMultiple === true,
+  }
+}
+
+/**
+ * Is this poll finished?
+ *
+ * Two ways to be closed and both count: somebody closed it, or its deadline has
+ * passed. `now` is injectable so the server can decide with its own clock — the
+ * client's is not authoritative about whether voting is still open, and a device
+ * with a slow clock must not be able to vote late.
+ */
+export function isPollClosed(poll: ViewerPoll, now: number = Date.now()): boolean {
+  if (poll.closedByHand) return true
+  if (!poll.closesAt) return false
+  const deadline = new Date(poll.closesAt).getTime()
+  return Number.isFinite(deadline) && deadline <= now
 }
 
 /**
@@ -91,14 +129,20 @@ export function readViewerPoll(
  * comes back from a refetch agree.
  */
 export function votePollLocally(poll: ViewerPoll, optionId: string): ViewerPoll {
+  if (isPollClosed(poll)) return poll
   const target = poll.options.find((o) => o.id === optionId)
   if (!target) return poll
 
   const withdrawing = target.mine
 
   const options = poll.options.map((o) => {
-    if (o.mine && o.id !== optionId) {
-      /* The vote is moving away from this option. */
+    /*
+     * On a single-choice poll the vote MOVES; on a multi-choice one the other
+     * options are none of this tap's business. `allowMultiple` has been stored
+     * on every poll the composer has posted and ignored, so a poll whose author
+     * chose multi-choice behaved as single-choice.
+     */
+    if (!poll.allowMultiple && o.mine && o.id !== optionId) {
       return { ...o, count: Math.max(0, o.count - 1), mine: false }
     }
     if (o.id === optionId) {
