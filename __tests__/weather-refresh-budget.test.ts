@@ -37,6 +37,15 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/weather/weatherService', () => ({
   getWeatherForEvent: getWeatherMock,
   MLB_VENUE_COORDS: { 'Test Park': { lat: 1, lng: 2 } },
+  /*
+   * ⚠ THE REAL BUILDER, NOT A STUB. The cron used to invent its own key format
+   * — `lat_lng_hour`, underscores — which matched none of the four builders in
+   * this module, so its cache lookup could never hit and every game was
+   * refetched on every run. Mocking this with a fake would hide a repeat of
+   * exactly that: the point is that the route and the writer agree.
+   */
+  buildWeatherGameCacheKey: (sport: string, gameId: string) =>
+    `weather:game:${sport.toLowerCase()}:${gameId}`,
 }))
 vi.mock('@/lib/openweathermap', () => ({
   NFL_VENUE_COORDS: { 'Test Park': { lat: 1, lng: 2 } },
@@ -102,5 +111,86 @@ describe('weather refresh budget', () => {
     // Railway ignores maxDuration (this route ran 300s against a declared 60s), but Vercel would
     // enforce it. A budget above it would never engage there — green here, 504 there.
     expect(mod.maxDuration * 1000).toBeGreaterThan(mod.WEATHER_REFRESH_BUDGET_MS)
+  })
+
+  it('⚠ SKIPS a game whose cached forecast is still fresh', async () => {
+    /*
+     * THE BUG THIS EXISTS FOR. The freshness gate built its key as
+     * `lat_lng_hour` while every writer used `weather:game:{sport}:{eventId}`,
+     * so findUnique could never hit, `stale` was always true, and
+     * `if (!force) continue` was unreachable. Combined with an unconditional
+     * `forceRefresh: true` — which bypasses the cache check inside the service
+     * as well — every game in the window hit the provider every three hours.
+     */
+    const fresh = new Date()
+    findUniqueMock.mockResolvedValue({
+      cacheKey: 'weather:game:nfl:g0',
+      // Comfortably unexpired and fetched moments ago.
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      fetchedAt: fresh,
+    })
+    // Far enough out that proximity to kickoff is not a reason to refresh.
+    findManyMock.mockResolvedValue([
+      {
+        externalId: 'g0',
+        sport: 'NFL',
+        venue: 'Test Park',
+        startTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      },
+    ])
+
+    const { GET } = await import('@/app/api/weather/refresh-cron/route')
+    const res = await GET(new Request('http://localhost/api/weather/refresh-cron') as never)
+    const body = await res.json()
+
+    expect(body.ok).toBe(true)
+    expect(body.refreshed).toBe(0)
+    expect(body.skipped).toBe(1)
+    // The whole point: no provider call at all.
+    expect(getWeatherMock).not.toHaveBeenCalled()
+  })
+
+  it('still refreshes a fresh row when kickoff is close, because the forecast moves', async () => {
+    findUniqueMock.mockResolvedValue({
+      cacheKey: 'weather:game:nfl:g0',
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      fetchedAt: new Date(),
+    })
+    findManyMock.mockResolvedValue([
+      {
+        externalId: 'g0',
+        sport: 'NFL',
+        venue: 'Test Park',
+        startTime: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ])
+
+    const { GET } = await import('@/app/api/weather/refresh-cron/route')
+    const res = await GET(new Request('http://localhost/api/weather/refresh-cron') as never)
+    const body = await res.json()
+    expect(body.refreshed).toBe(1)
+    expect(getWeatherMock).toHaveBeenCalled()
+  })
+
+  it('⚠ does NOT force past the service cache unless the row is genuinely stale', async () => {
+    // Near kickoff with a fresh row: call it, but let the service's own cache
+    // answer. `forceRefresh: true` there means a paid provider request.
+    findUniqueMock.mockResolvedValue({
+      cacheKey: 'weather:game:nfl:g0',
+      expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      fetchedAt: new Date(),
+    })
+    findManyMock.mockResolvedValue([
+      {
+        externalId: 'g0',
+        sport: 'NFL',
+        venue: 'Test Park',
+        startTime: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ])
+
+    const { GET } = await import('@/app/api/weather/refresh-cron/route')
+    await GET(new Request('http://localhost/api/weather/refresh-cron') as never)
+    expect(getWeatherMock.mock.calls[0][0].forceRefresh).toBe(false)
   })
 })

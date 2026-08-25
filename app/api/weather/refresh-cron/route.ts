@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { NFL_VENUE_COORDS } from '@/lib/openweathermap'
-import { getWeatherForEvent, MLB_VENUE_COORDS } from '@/lib/weather/weatherService'
+import {
+  buildWeatherGameCacheKey,
+  getWeatherForEvent,
+  MLB_VENUE_COORDS,
+} from '@/lib/weather/weatherService'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { createRunBudget } from '@/lib/cron/runBudget'
 
@@ -61,6 +65,12 @@ export async function POST(request: NextRequest) {
   const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
   let refreshed = 0
+  /*
+   * Counted and reported so the fix is verifiable from the cron's own response
+   * rather than from a provider bill. Before this change it was structurally
+   * always zero.
+   */
+  let skipped = 0
   // Hoisted beside `refreshed` deliberately: the catch below reports both, and a counter
   // declared inside the try is out of scope exactly where the failure path needs it.
   const budget = createRunBudget(WEATHER_REFRESH_BUDGET_MS)
@@ -91,18 +101,45 @@ export async function POST(request: NextRequest) {
       if (!coords || !g.startTime) continue
 
       const hoursUntil = (g.startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-      let force = false
-      if (hoursUntil < 48) {
-        force = true
-      } else {
-        const cacheKey = `${coords.lat.toFixed(2)}_${coords.lng.toFixed(2)}_${g.startTime.toISOString().slice(0, 13)}`
-        const row = await prisma.weatherCache.findUnique({ where: { cacheKey } })
-        const stale =
-          !row || row.expiresAt <= now || now.getTime() - row.fetchedAt.getTime() > 3 * 60 * 60 * 1000
-        if (stale) force = true
-      }
 
-      if (!force) continue
+      /*
+       * ⚠ THIS GATE WAS DEAD CODE AND EVERY GAME WAS REFETCHED EVERY RUN.
+       *
+       * The key was built as `${lat}_${lng}_${hourBucket}` — underscores,
+       * hour-bucketed. Every writer in weatherService uses a colon-prefixed
+       * form, and because this cron always supplies an eventId the row is
+       * always written as `weather:game:{sport}:{eventId}`. The two formats
+       * have never matched, so `findUnique` could not hit: `row` was always
+       * null, `stale` was therefore always true, and `if (!force) continue`
+       * was unreachable.
+       *
+       * The second half was worse. `forceRefresh: true` was passed
+       * unconditionally, and that flag bypasses the cache check INSIDE the
+       * service too — so even a row written eight minutes earlier triggered a
+       * live provider call. Up to 120 games, every three hours, all paid for
+       * and all discarded.
+       *
+       * Now: the key is built by the same function that writes it, and the
+       * refresh is forced only when it is actually warranted — inside 48 hours
+       * of kickoff, or when the stored row has genuinely gone stale.
+       */
+      const cacheKey = buildWeatherGameCacheKey(g.sport, g.externalId)
+      const row = await prisma.weatherCache
+        .findUnique({ where: { cacheKey } })
+        .catch(() => null)
+
+      const stale =
+        !row ||
+        row.expiresAt <= now ||
+        now.getTime() - row.fetchedAt.getTime() > 3 * 60 * 60 * 1000
+
+      // Near kickoff the forecast moves, so it is worth paying for. Further out
+      // a fresh row is a fresh row.
+      const nearKickoff = hoursUntil < 48
+      if (!stale && !nearKickoff) {
+        skipped += 1
+        continue
+      }
 
       await getWeatherForEvent({
         lat: coords.lat,
@@ -110,19 +147,31 @@ export async function POST(request: NextRequest) {
         gameTime: g.startTime,
         sport: g.sport,
         eventId: g.externalId,
-        forceRefresh: true,
+        // Only bypass the service's own cache when we established a reason to.
+        forceRefresh: stale,
       })
       refreshed += 1
     }
   } catch (e) {
     console.error('[weather/refresh-cron]', e)
-    return NextResponse.json({ ok: false, error: String(e), refreshed, deferred }, { status: 500 })
+    return NextResponse.json(
+      { ok: false, error: String(e), refreshed, skipped, deferred },
+      { status: 500 },
+    )
   }
 
   console.info(`[weather/refresh-cron] refreshed ${refreshed} cache entries`)
   // Deferred work is reported, never silently dropped: a run that refreshed 12 of 120 and one
   // that found only 12 to do are the same number otherwise.
-  return NextResponse.json({ ok: true, refreshed, deferred, budgetExhausted: budget.exhausted() })
+  return NextResponse.json({
+    ok: true,
+    refreshed,
+    // A healthy run skips most games most of the time. A run that skips nothing
+    // means the gate is broken again.
+    skipped,
+    deferred,
+    budgetExhausted: budget.exhausted(),
+  })
 }
 
 /**
