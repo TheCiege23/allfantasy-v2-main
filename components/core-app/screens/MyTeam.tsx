@@ -209,6 +209,17 @@ function gradeSubtitle(g: RosterGrade): string {
   if (g.pricedPlayers < g.totalPlayers) {
     parts.push(`priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
   }
+  /*
+   * WHICH CLAIM THIS RANK IS MAKING. Repriced under your league's scoring is a
+   * different and much stronger statement than a raw market ordering, and a
+   * manager in a TE-premium or IDP league is entitled to know which one they
+   * are reading. Both are honest; presenting them identically would not be.
+   */
+  parts.push(
+    g.basis.leagueScored
+      ? 'valued under your scoring'
+      : 'market prices, not adjusted for your scoring',
+  )
   return parts.join(' · ')
 }
 

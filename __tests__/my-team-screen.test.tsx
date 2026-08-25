@@ -102,7 +102,12 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
         strongest: { position: 'WR', value: 18400, rank: 2, outOf: 12, playerCount: 7 },
         weakest: { position: 'TE', value: 2100, rank: 11, outOf: 12, playerCount: 2 },
         pricedPlayers: 24, totalPlayers: 26,
-        basis: { format: 'DYNASTY', qbFormat: 'ONE_QB', capturedAt: '2026-08-22T00:00:00.000Z' },
+        basis: {
+          format: 'DYNASTY',
+          qbFormat: 'ONE_QB',
+          capturedAt: '2026-08-22T00:00:00.000Z',
+          leagueScored: true,
+        },
       },
     },
     liveScore: { available: false, reason: 'no live scoring' },
@@ -630,5 +635,31 @@ describe('My Team — the reported problems', () => {
     expect(group!.querySelector('.af-mt-tile')?.className).toContain('af-mt-tile--af')
     // Record is context, not a projection, and stays outside the frame.
     expect(group!.textContent).not.toContain('Record')
+  })
+
+  it('⚠ says whether the roster rank was priced under YOUR scoring', () => {
+    /*
+     * "3rd of 12" repriced under a TE-premium rulebook is a different and much
+     * stronger claim than "3rd of 12" on raw 12-team full-PPR market prices.
+     * Both are honest; rendering them identically is not, because the manager
+     * cannot tell which one they are being shown.
+     */
+    expect(text(<MyTeam data={data()} />)).toContain('valued under your scoring')
+
+    const raw = data({
+      rosterGrade: {
+        available: true,
+        data: {
+          ...(data().rosterGrade as { available: true; data: Record<string, unknown> }).data,
+          basis: {
+            format: 'DYNASTY',
+            qbFormat: 'ONE_QB',
+            capturedAt: '2026-08-22T00:00:00.000Z',
+            leagueScored: false,
+          },
+        },
+      },
+    })
+    expect(text(<MyTeam data={raw} />)).toContain('not adjusted for your scoring')
   })
 })
