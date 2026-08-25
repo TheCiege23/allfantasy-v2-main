@@ -34,12 +34,12 @@
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  border: 1px solid var(--accent-line);
-  background: var(--accent-soft);
+  /* The crest carries its own edge now, so the tile drops the boxed-letter
+     chrome it needed when it was the text "AF". No border, no tinted fill —
+     the mark sits on the rail rather than in a button on it. */
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--accent);
-  font-weight: 900;
-  font-size: 15px;
-  letter-spacing: -0.02em;
   text-decoration: none;
 }
 

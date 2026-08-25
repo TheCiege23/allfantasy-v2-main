@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import CommsDock from '@/components/core-app/comms/CommsDock'
+import { AfCrest } from '@/components/core-app/AfCrest'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -509,8 +510,12 @@ export function AfCoreShell(props: AfCoreShellProps) {
     <div className="af-core af-shell">
       {/* ── League rail ─────────────────────────────────────────────── */}
       <nav className="af-rail" aria-label="Leagues">
+        {/*
+          The crest, above the leagues, drawn rather than loaded — see
+          AfCrest's header for why /af-crest.png cannot sit on a dark rail.
+        */}
         <Link href="/core" className="af-rail-logo" aria-label="AllFantasy home">
-          AF
+          <AfCrest size={34} />
         </Link>
 
         <div className="af-rail-divider" />

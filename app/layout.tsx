@@ -43,11 +43,20 @@ export const metadata: Metadata = {
       'fantasy bracket challenge',
     ],
   }),
+  /*
+   * ⚠ `/af-crest.png` IS A JPEG WEARING A .png EXTENSION — its magic bytes say
+   * so — and it was declared here as `image/png`. Browsers sniff and mostly
+   * cope, but iOS is stricter about the apple-touch icon, and that icon is on
+   * the path to "Add to Home Screen", which is the only way a user can ever
+   * receive a push. The manifest icons beside it are real PNGs at every size,
+   * so the honest fix is to point at those rather than re-declare a lie.
+   */
   icons: {
     icon: [
-      { url: '/af-crest.png', type: 'image/png' },
+      { url: '/icons/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/icons/icon-512.png', type: 'image/png', sizes: '512x512' },
     ],
-    apple: '/af-crest.png',
+    apple: '/icons/icon-192.png',
   },
   manifest: metadataManifestPath,
   robots: {
