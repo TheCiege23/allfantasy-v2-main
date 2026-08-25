@@ -241,10 +241,18 @@ describe('phase 1 — the seams', () => {
 })
 
 describe('phase 2 — mobile and drafts', () => {
+  /*
+   * ⚠ NORMALISED, BECAUSE THIS REPO CHECKS OUT CRLF. `core.autocrlf=true` means
+   * the same file is LF in CI and CRLF on a Windows working tree, so an
+   * assertion spanning a line break passes in one place and fails in the other
+   * — it did, immediately after a rebase re-checked the file out. The rule is
+   * the same one that bit the migration checksums: never let a test depend on
+   * which machine wrote the newline.
+   */
   const CSS = readFileSync(
     resolve(process.cwd(), 'components/core-app/af-trade-center.css'),
     'utf8',
-  )
+  ).replace(/\r\n/g, '\n')
 
   it('⚠ does NOT add a bottom tab bar to one screen', () => {
     /*
