@@ -879,3 +879,65 @@
   width: 100%;
   justify-content: center;
 }
+
+/* ── Commissioner Hub + Draft HQ previews ────────────────────────────── */
+.af-ch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-ch-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.af-ch-tile {
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/*
+ * A count of zero inactive managers is good news and should look like it. The
+ * tone comes from the number, not from the label — a red "0" beside "Inactive"
+ * would read as an alarm about nothing.
+ */
+.af-ch-tile[data-tone='bad'] { border-color: var(--bad); background: var(--bad-soft); }
+.af-ch-tile[data-tone='warn'] { border-color: var(--warn); background: var(--warn-soft); }
+.af-ch-n {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.af-ch-tile[data-tone='bad'] .af-ch-n { color: var(--bad); }
+.af-ch-tile[data-tone='warn'] .af-ch-n { color: var(--warn); }
+
+.af-ch-names {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-ch-names--ok { color: var(--muted); }
+
+.af-ch-headline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-ch-detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-ch-open {
+  align-self: flex-start;
+  margin-top: 2px;
+}

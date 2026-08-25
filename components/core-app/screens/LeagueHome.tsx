@@ -350,23 +350,66 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
           {/* Draft HQ + Commissioner Hub, two-up */}
           <div className="af-lh-two">
             <StatePanel title="Draft HQ" state={data.draftHq}>
-              {(d) => (
-                <div>
-                  <div className="af-lh-card-headline">{d.headline}</div>
-                  {d.detail ? <p className="af-lh-card-detail">{d.detail}</p> : null}
-                  <Link
-                    href={`/core/draft-hq?league=${encodeURIComponent(league.id)}`}
-                    className="af-lh-cardlink"
-                  >
-                    Open Draft HQ →
+            {(d) => (
+              <div className="af-ch">
+                <p className="af-ch-headline">{d.headline}</p>
+                {d.detail ? <p className="af-ch-detail">{d.detail}</p> : null}
+                {d.href && d.linkLabel ? (
+                  <Link href={d.href} className="af-btn af-ch-open">
+                    {d.linkLabel}
                   </Link>
-                </div>
-              )}
-            </StatePanel>
+                ) : null}
+              </div>
+            )}
+          </StatePanel>
 
-            <StatePanel title="Commissioner Hub" tone="warn" state={data.commissioner}>
-              {(c) => <div className="af-lh-card-headline">{c.openCount} open</div>}
-            </StatePanel>
+            <StatePanel
+            title="Commissioner Hub"
+            help={<span className="af-lh-scope">Commissioners only</span>}
+            state={data.commissioner}
+          >
+            {(hub) => (
+              <div className="af-ch">
+                {/*
+                  THE TWO FACTS A COMMISSIONER OPENS THE APP FOR: is anybody
+                  checked out, and who. Everything else belongs behind the link
+                  rather than crammed into a preview card.
+                */}
+                <div className="af-ch-tiles">
+                  <div className="af-ch-tile" data-tone={hub.inactiveCount > 0 ? 'bad' : 'ok'}>
+                    <span className="af-ch-n af-num">{hub.inactiveCount}</span>
+                    <span className="af-label">Inactive</span>
+                  </div>
+                  <div className="af-ch-tile" data-tone={hub.atRiskCount > 0 ? 'warn' : 'ok'}>
+                    <span className="af-ch-n af-num">{hub.atRiskCount}</span>
+                    <span className="af-label">At risk</span>
+                  </div>
+                  <div className="af-ch-tile">
+                    <span className="af-ch-n af-num">{hub.totalManagers}</span>
+                    <span className="af-label">Managers</span>
+                  </div>
+                </div>
+
+                {/*
+                  Named rather than counted. "3 inactive" is a statistic; three
+                  names is something to act on this afternoon.
+                */}
+                {hub.inactiveNames.length > 0 ? (
+                  <p className="af-ch-names">
+                    Not touched their team lately: {hub.inactiveNames.join(', ')}
+                  </p>
+                ) : (
+                  <p className="af-ch-names af-ch-names--ok">
+                    Every manager has touched their team inside the window.
+                  </p>
+                )}
+
+                <Link href={hub.href} className="af-btn af-ch-open">
+                  Open the commissioner hub
+                </Link>
+              </div>
+            )}
+          </StatePanel>
           </div>
 
           {/* Standings */}

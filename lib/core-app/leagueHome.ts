@@ -5,6 +5,7 @@ import { buildSeasonTimeline, leagueWeekFromSettings, type TimelinePhase } from 
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { getLeagueActivity } from './leagueActivity'
 import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
+import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
@@ -145,8 +146,30 @@ export type LeagueHomeData = {
     /** Absent when both lineups could not be priced. Never a hedged number. */
     winProbability: { pWin: number; detail: string; confidence: string } | null
   }>
-  draftHq: SectionState<{ headline: string; detail: string }>
-  commissioner: SectionState<{ openCount: number }>
+  draftHq: SectionState<{
+    headline: string
+    detail: string
+    /** Where the board or results live, when there is something to open. */
+    href: string | null
+    linkLabel: string | null
+  }>
+  /**
+   * A preview of what the commissioner can do here, for commissioners only.
+   *
+   * THE PANEL WAS PERMANENTLY BLANK, with a reason claiming commissioner tasks
+   * are not ingested. League health and manager activity are both real and both
+   * work on imported leagues; nothing was reading them.
+   */
+  commissioner: SectionState<{
+    /** Managers who have not touched their team inside the idle window. */
+    inactiveCount: number
+    atRiskCount: number
+    totalManagers: number
+    /** Named, because "3 inactive" is a statistic and a name is an action. */
+    inactiveNames: string[]
+    /** Deep link into the full commissioner surface. */
+    href: string
+  }>
   buzz: SectionState<
     Array<{
       id: string
@@ -355,6 +378,14 @@ export async function getLeagueHomeData(
     at: new Date(t.acceptedAt),
   }))
 
+  /*
+   * Rosters that actually hold players. One count, used as evidence that a
+   * draft happened even when the draft object itself was never ingested.
+   */
+  const rosterCountForDraft = await prisma.roster
+    .count({ where: { leagueId } })
+    .catch(() => 0)
+
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId },
     select: {
@@ -369,11 +400,35 @@ export async function getLeagueHomeData(
       claimedByUserId: true,
       // The platform's roster id, so the scoreboard can mark your own game.
       externalId: true,
+      // Both flags: a co-commissioner is exactly who the hub preview is for.
+      isCommissioner: true,
+      isCoCommissioner: true,
     },
     orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
   })
 
   const yours = teams.find((t) => t.claimedByUserId === userId) ?? null
+
+  /*
+   * Commissioner status decides whether the hub preview exists at all.
+   *
+   * NOT `lib/commissioner/permissions.ts`. That family gates on `League.userId`
+   * alone, which 403s every CO-commissioner — exactly the people this panel is
+   * for. The team's own flags are the complete answer and are already loaded.
+   */
+  const viewerIsCommissioner = Boolean(yours?.isCommissioner || yours?.isCoCommissioner)
+
+  const managerHealth = viewerIsCommissioner
+    ? await getLeagueManagerHealth(league.id).catch(() => null)
+    : null
+
+  /*
+   * Did this league draft, whatever we captured of the board? Populated rosters
+   * are the evidence. Without this, a league with full rosters on screen was
+   * told "no draft has been set up".
+   */
+  const draftedAlready = rosterCountForDraft > 0
+
 
   // A league whose teams all sit at 0-0 has been imported but never had results
   // read. Showing that as a standings table would present "everyone is 0-0" as a
@@ -647,13 +702,22 @@ export async function getLeagueHomeData(
       ? {
           available: true,
           data: {
+            href: `/core/draft-hq?league=${league.id}`,
+            linkLabel:
+              draftRow.phase === 'done'
+                ? 'Open the draft board'
+                : draftRow.phase === 'live'
+                  ? 'Go to the draft room'
+                  : 'Open Draft HQ',
             headline:
               draftRow.phase === 'unknown'
                 ? draftRow.rawStatus
                 : draftRow.phase === 'live'
                   ? 'Draft is live'
                   : draftRow.phase === 'done'
-                    ? 'Draft complete'
+                    ? // The season is the useful half. "Draft complete" on a
+                      // dynasty league says nothing about WHICH draft.
+                      `${league.season ?? ''} draft has ended`.trim()
                     : 'Draft not started',
             detail: [
               draftRow.teamCount != null ? `${draftRow.teamCount} teams` : null,
@@ -669,8 +733,63 @@ export async function getLeagueHomeData(
               .join(' · '),
           },
         }
-      : { available: false, reason: 'no draft has been set up for this league' },
-    commissioner: { available: false, reason: 'votes and commissioner tasks are not ingested for imported leagues' },
+      : draftedAlready
+        ? {
+            /*
+             * WE DID NOT INGEST A DRAFT OBJECT, BUT THE LEAGUE HAS OBVIOUSLY
+             * DRAFTED — there are populated rosters sitting on the same screen.
+             * "No draft has been set up" is then a false statement about the
+             * league rather than a true one about our data, which is the exact
+             * failure the buzz panel had.
+             */
+            available: true,
+            data: {
+              headline: `${league.season ?? ''} draft has ended`.trim(),
+              detail:
+                'Rosters are populated, so this league drafted \u2014 but we did not capture the board itself.',
+              href: null,
+              linkLabel: null,
+            },
+          }
+        : { available: false, reason: 'no draft on file for this league' },
+    /*
+     * THE OLD REASON WAS FALSE AND THE PANEL WAS PERMANENTLY BLANK. It claimed
+     * commissioner tasks are not ingested for imported leagues. League health
+     * and manager activity are both real, both work on imported leagues, and
+     * nothing was reading either.
+     *
+     * This is a PREVIEW, deliberately: the two facts a commissioner would open
+     * the app for — is anybody checked out, and who — plus a way through to the
+     * full surface. Anything more belongs behind that link.
+     */
+    commissioner: !viewerIsCommissioner
+      ? {
+          available: false,
+          reason: 'the commissioner hub is visible to this league\u2019s commissioner and co-commissioners',
+        }
+      : managerHealth && managerHealth.totalManagers > 0
+        ? {
+            available: true,
+            data: {
+              inactiveCount: managerHealth.inactiveCount,
+              atRiskCount: managerHealth.atRiskCount,
+              totalManagers: managerHealth.totalManagers,
+              /*
+               * Named, not counted. "3 inactive" is a statistic; three names is
+               * something a commissioner can act on this afternoon.
+               */
+              inactiveNames: managerHealth.rows
+                .filter((r) => r.status === 'inactive')
+                .map((r) => r.teamName || r.managerName)
+                .filter(Boolean)
+                .slice(0, 4) as string[],
+              href: `/league/${league.id}/intelligence`,
+            },
+          }
+        : {
+            available: false,
+            reason: 'no managers read for this league yet, so there is nothing to report on',
+          },
     rivalry: resolvedRivalry,
     /*
      * ⚠ THIS WAS HARD-CODED UNAVAILABLE, AND ITS STATED REASON WAS FALSE:

@@ -109,3 +109,74 @@ describe('league home: a pre-season league is not a broken one', () => {
     expect(firstUse === -1 || firstUse > decl).toBe(true)
   })
 })
+
+/**
+ * Both panels shipped as permanent blanks. Draft HQ told leagues with full rosters
+ * on the same screen that "no draft has been set up for this league", and the
+ * Commissioner Hub carried a reason claiming commissioner tasks are not ingested
+ * for imported leagues — while league health and manager activity were sitting
+ * there, working, read by nothing.
+ */
+describe('league home: Draft HQ says which draft, and stops calling a finished one absent', () => {
+  it('names the season, because "Draft complete" says nothing on a dynasty league', () => {
+    expect(SRC).toContain('draft has ended')
+    expect(SRC).toContain('${league.season ?? \'\'}')
+  })
+
+  it('⚠ populated rosters are evidence a draft happened, even with no draft row', () => {
+    /*
+     * The old else-branch was a false statement about the LEAGUE rather than a
+     * true one about our data — the same failure the buzz panel had. A league
+     * whose rosters we are rendering has obviously drafted.
+     */
+    expect(SRC).toContain('const draftedAlready = rosterCountForDraft > 0')
+    expect(SRC).not.toContain("reason: 'no draft has been set up for this league'")
+    expect(SRC).toContain('we did not capture the board itself')
+  })
+
+  it('offers a link only when there is something behind it', () => {
+    expect(SRC).toContain('href: string | null')
+    expect(SRC).toContain('linkLabel: string | null')
+    // The no-board branch must not fabricate a destination.
+    const branch = SRC.slice(SRC.indexOf('const draftedAlready'), SRC.length)
+    expect(branch).toContain('href: null')
+  })
+})
+
+describe('league home: the Commissioner Hub is gated on the flags that include co-commissioners', () => {
+  it('⚠ reads BOTH team flags, not League.userId', () => {
+    /*
+     * `lib/commissioner/permissions.ts` gates on `League.userId` alone, which
+     * 403s every co-commissioner — exactly the people this panel exists for.
+     * On an imported league `League.userId` is whoever ran the import, who is
+     * frequently not the commissioner at all.
+     */
+    expect(SRC).toContain('yours?.isCommissioner || yours?.isCoCommissioner')
+    expect(SRC).not.toContain("from '@/lib/commissioner/permissions'")
+  })
+
+  it('selects both flags — without them the gate reads undefined and hides the panel from everyone', () => {
+    const start = SRC.indexOf('prisma.leagueTeam.findMany')
+    const query = SRC.slice(start, SRC.indexOf('})', start))
+    expect(query).toContain('isCommissioner: true')
+    expect(query).toContain('isCoCommissioner: true')
+  })
+
+  it('does not read manager health for non-commissioners', () => {
+    // Gating the render but not the READ would leak who is inactive to anyone
+    // who opened devtools, and pay for the query on every page load.
+    expect(SRC).toContain('viewerIsCommissioner\n    ? await getLeagueManagerHealth')
+  })
+
+  it('names inactive managers rather than only counting them', () => {
+    expect(SRC).toContain('inactiveNames')
+    expect(SRC).toContain(".filter((r) => r.status === 'inactive')")
+  })
+
+  it('withholds the panel when no managers were read, instead of reporting zero inactive', () => {
+    // Zero inactive out of zero managers is a clean bill of health for a league
+    // we know nothing about — the exact shape of the "C grade means no data" bug.
+    expect(SRC).toContain('managerHealth && managerHealth.totalManagers > 0')
+    expect(SRC).toContain('there is nothing to report on')
+  })
+})
