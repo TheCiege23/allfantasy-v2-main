@@ -73,6 +73,8 @@ import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTrad
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
+import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
+import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -1974,6 +1976,34 @@ ${tradeHistoryCtx}`
 
 ${standingsCtx}`
                   : standingsCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * The draft. Live for 7 leagues and paused for 2 as of writing —
+               * the one surface with rich data while the season has not started.
+               */
+              const draftCtx = await buildDraftContext(planInput.leagueId, planInput.userId)
+              if (draftCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${draftCtx}`
+                  : draftCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * Waiver RULES, which exist for 92 leagues — carrying with them the
+               * explicit statement that waiver ACTIVITY does not exist at all.
+               */
+              const waiverCtx = await buildWaiverContext(planInput.leagueId, planInput.userId)
+              if (waiverCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${waiverCtx}`
+                  : waiverCtx
               }
             } catch { /* non-fatal */ }
           }
