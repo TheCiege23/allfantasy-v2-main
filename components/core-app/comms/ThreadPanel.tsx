@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import RichMessage from './RichMessage'
+import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -183,8 +184,22 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             }),
           },
         )
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          message?: { id?: string }
+        }
         if (!res.ok) throw new Error(data.error ?? 'Message not sent.')
+        /*
+         * A huddle can carry @all; the endpoint resolves it to every thread
+         * member. A DM cannot, and the mention hook already withholds it there.
+         */
+        if (data.message?.id) {
+          void notifyMentions({
+            threadId: openThread.id,
+            messageId: data.message.id,
+            text: displayText,
+          })
+        }
         await loadMessages(openThread)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Message not sent.')

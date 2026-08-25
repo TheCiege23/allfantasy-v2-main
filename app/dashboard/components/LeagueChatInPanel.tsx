@@ -7,6 +7,7 @@ import { ChatComposer, type LeagueComposerPayload } from './chat/ChatComposer'
 import { ChatSenderAvatar } from './chat/ChatSenderAvatar'
 import { isLeagueMessageThreaded } from './chat/chat-timestamps'
 import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
+import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 
 export type LeagueChatMessage = {
   id: string
@@ -462,18 +463,17 @@ export function LeagueChatInPanel({
           : []
 
         if (serverMessage?.id) {
-          const mentionParsed = parseAtMentions(payload.text.trim())
-          if (mentionParsed.userMentions.length > 0) {
-            void fetch('/api/shared/chat/mentions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                threadId: `league:${selectedLeague.id}`,
-                messageId: serverMessage.id,
-                mentionedUsernames: mentionParsed.userMentions,
-              }),
-            }).catch(() => {})
-          }
+          /*
+           * Was assembled inline here, and dropped `@all`: parseAtMentions
+           * strips that token out of `userMentions`, and the guard skipped the
+           * request whenever that array was empty — so an @all reached nobody.
+           * The shared helper re-adds it.
+           */
+          void notifyMentions({
+            threadId: leagueMentionRoomId(selectedLeague.id),
+            messageId: serverMessage.id,
+            text: payload.text.trim(),
+          })
         }
 
         setMessages((current) => {

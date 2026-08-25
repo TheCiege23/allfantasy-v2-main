@@ -3,6 +3,7 @@
 import ThreadPanel from './ThreadPanel'
 import RichMessage from './RichMessage'
 import LeagueActivityFeed from './LeagueActivityFeed'
+import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -722,6 +723,20 @@ function LeaguePanel({
           }),
         })
         if (!res.ok) throw new Error(`Send returned ${res.status}`)
+        /*
+         * The composer offers @mentions and @all; without this the drawer
+         * autocompleted them and notified nobody. Fire-and-forget on purpose —
+         * the message is already posted, and a failed ping must not read as a
+         * failed send.
+         */
+        const posted = (await res.json().catch(() => ({}))) as { message?: { id?: string } }
+        if (posted.message?.id) {
+          void notifyMentions({
+            threadId: leagueMentionRoomId(scopeId),
+            messageId: posted.message.id,
+            text: displayText,
+          })
+        }
         setDraft('')
         await load(scopeId)
       } catch (e) {
