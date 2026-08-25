@@ -70,6 +70,7 @@ import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBall
 import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-room/guillotineChimmyGrounding'
 import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
+import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import {
@@ -1932,6 +1933,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 ${pendingTradeCtx}`
                   : pendingTradeCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * The trades that actually exist. The pending block above reads
+               * AllFantasy's own proposal table, which is empty in production
+               * because imported leagues trade on Sleeper — this reads what came
+               * back from there.
+               */
+              const tradeHistoryCtx = await buildLeagueTradeHistoryContext(
+                planInput.leagueId,
+                planInput.userId,
+              )
+              if (tradeHistoryCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${tradeHistoryCtx}`
+                  : tradeHistoryCtx
               }
             } catch { /* non-fatal */ }
           }
