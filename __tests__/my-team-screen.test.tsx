@@ -615,4 +615,20 @@ describe('My Team — the reported problems', () => {
     expect(portrait).toBeTruthy()
     expect(portrait?.querySelector('.af-mt-teamlogo')).toBeTruthy()
   })
+
+  it('⚠ groups the two totals in one frame, because they are one comparison', () => {
+    /*
+     * Four equal bordered rectangles in a row is what "blocky" meant, and it
+     * hid the point: the whole reason both numbers are on screen is that they
+     * differ. The frame belongs around the pair, not around each of them.
+     */
+    const c = render(<MyTeam data={data()} />).container
+    const group = c.querySelector('.af-mt-projgroup')
+    expect(group).not.toBeNull()
+    expect(group!.querySelectorAll('.af-mt-tile').length).toBe(2)
+    // Your league's total leads.
+    expect(group!.querySelector('.af-mt-tile')?.className).toContain('af-mt-tile--af')
+    // Record is context, not a projection, and stays outside the frame.
+    expect(group!.textContent).not.toContain('Record')
+  })
 })

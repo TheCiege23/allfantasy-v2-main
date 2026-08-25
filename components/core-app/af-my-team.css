@@ -587,15 +587,52 @@
   border-radius: 12px;
 }
 
+/*
+ * FOUR EQUAL BORDERED RECTANGLES IN A ROW is what "blocky" meant, and the
+ * bordered box was doing no work: a tile is already separated from its
+ * neighbour by space and by its own label.
+ *
+ * So the frame appears exactly once, around the pair that belongs together, and
+ * the numbers carry the hierarchy instead of the boxes.
+ */
+.af-mt-projgroup {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  border-radius: 12px;
+  overflow: hidden;
+}
+/* A hairline, not a gap: they are two readings of one week. */
+.af-mt-projgroup > .af-mt-tile + .af-mt-tile {
+  border-left: 1px solid var(--accent-line);
+}
+.af-mt-projgroup > .af-mt-tile {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .af-mt-tile--proj .af-mt-tile-value {
   font-variant-numeric: tabular-nums;
 }
+/* Your league's number is the one that applies to you, so it is the big one. */
 .af-mt-tile--af .af-mt-tile-value {
   color: var(--accent);
+  font-size: 24px;
 }
-.af-mt-tile--af {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
+/* Standard is the comparison, and reads as one. */
+.af-mt-projgroup > .af-mt-tile--proj:not(.af-mt-tile--af) .af-mt-tile-value {
+  font-size: 16px;
+  color: var(--text2);
+}
+
+/*
+ * The context tiles keep their shape but lose the hard border. Record and grade
+ * are not projections and should not compete with the pair above for weight.
+ */
+.af-mt-tiles > .af-mt-tile {
+  border-color: transparent;
 }
 
 @media (max-width: 720px) {

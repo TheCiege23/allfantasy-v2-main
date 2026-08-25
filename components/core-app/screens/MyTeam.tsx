@@ -679,12 +679,20 @@ export function MyTeam({ data }: MyTeamProps) {
 
             {/* ── Both weekly totals, at the top where they belong ──── */}
             <div className="af-mt-tiles">
-              <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af">
-                <div className="af-mt-tile-value af-num">
-                  {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
+              {/*
+                THE TWO TOTALS ARE ONE COMPARISON, NOT TWO FACTS, so they share a
+                frame. As four equal slabs in a row nothing said which number
+                applies to the reader, and the whole reason both are here is that
+                they differ. Your league's total leads at full size; standard
+                sits beside it, smaller, as the thing being compared against.
+              */}
+              <div className="af-mt-projgroup">
+                <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af">
+                  <div className="af-mt-tile-value af-num">
+                    {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
+                  </div>
+                  <div className="af-label">Projected · your league</div>
                 </div>
-                <div className="af-label">Projected · your league</div>
-              </div>
               {/*
                 ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
                 generic line does not score defenders, so this total covers only
@@ -692,20 +700,21 @@ export function MyTeam({ data }: MyTeamProps) {
                 total of 166.7, two numbers that look like a pair and are
                 measured over different players.
               */}
-              <div
-                className="af-mt-tile af-mt-tile--proj"
-                data-missing={proj ? !proj.standardComparable : undefined}
-              >
-                <div className="af-mt-tile-value af-num">
-                  {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
-                </div>
-                <div className="af-label">Projected · standard</div>
-                {proj && !proj.standardComparable ? (
-                  <div className="af-mt-tile-why">
-                    Standard scoring does not price defenders, so there is no
-                    like-for-like total in an IDP league.
+                <div
+                  className="af-mt-tile af-mt-tile--proj"
+                  data-missing={proj ? !proj.standardComparable : undefined}
+                >
+                  <div className="af-mt-tile-value af-num">
+                    {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
                   </div>
-                ) : null}
+                  <div className="af-label">Projected · standard</div>
+                  {proj && !proj.standardComparable ? (
+                    <div className="af-mt-tile-why">
+                      Standard scoring does not price defenders, so there is no
+                      like-for-like total in an IDP league.
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <div className="af-mt-tile">
                 <div className="af-mt-tile-value af-num">{data.team.data.record}</div>
