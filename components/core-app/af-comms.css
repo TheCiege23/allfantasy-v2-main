@@ -552,6 +552,57 @@
 
 .af-cm-poll-n { color: var(--faint); font-size: 10px; }
 
+/*
+ * A votable option. The bar is a share of votes cast and is painted behind the
+ * label rather than beside it, so the row keeps its height whether or not
+ * anybody has voted yet.
+ */
+.af-cm-poll-btn {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  padding: 4px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.af-cm-poll-btn[data-mine='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-cm-poll-btn:disabled { opacity: 0.6; cursor: default; }
+
+.af-cm-poll-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.af-cm-poll-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  opacity: 0.14;
+  pointer-events: none;
+  transition: width 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-cm-poll-bar { transition: none; }
+}
+
+.af-cm-poll-t { position: relative; }
+
+.af-cm-poll-tot {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Cross-league activity ─────────────────────────────────────────── */
 
 .af-cm-activity { display: flex; flex-direction: column; }

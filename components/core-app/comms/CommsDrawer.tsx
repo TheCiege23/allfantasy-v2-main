@@ -617,6 +617,7 @@ function LeaguePanel({
    */
   const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
   const [reactionBusy, setReactionBusy] = useState<string | null>(null)
+  const [voteBusy, setVoteBusy] = useState<string | null>(null)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -741,6 +742,34 @@ function LeaguePanel({
       }
     },
     [scopeId, reactionBusy, load],
+  )
+
+  /*
+   * Poll voting. The vote route had no league branch at all until now, so a poll
+   * posted in league chat could be rendered and never answered.
+   */
+  const votePoll = useCallback(
+    async (messageId: string, optionId: string) => {
+      if (!scopeId || voteBusy) return
+      setVoteBusy(messageId)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/messages/${encodeURIComponent(messageId)}/vote`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ optionId }),
+          },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await load(scopeId, true)
+      } catch (e) {
+        setError(e instanceof Error ? `Vote did not save — ${e.message}.` : 'Vote did not save.')
+      } finally {
+        setVoteBusy(null)
+      }
+    },
+    [scopeId, voteBusy, load],
   )
 
   /*
@@ -944,7 +973,11 @@ function LeaguePanel({
                 <MessageTime value={m.createdAt} />
               </span>
               <p className="af-cm-msg-text">{m.message}</p>
-              <RichMessage metadata={m.metadata} />
+              <RichMessage
+                metadata={m.metadata}
+                viewerUserId={viewerUserId}
+                onVote={(optionId) => void votePoll(m.id, optionId)}
+              />
               <MessageReactions
                 reactions={reactionOverride[m.id] ?? readReactions(m.metadata, viewerUserId)}
                 disabled={reactionBusy === m.id}

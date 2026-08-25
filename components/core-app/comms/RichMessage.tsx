@@ -14,6 +14,9 @@
  * inside a message list — one bad row must not blank the whole conversation.
  */
 
+import { readViewerPoll } from '@/lib/chat-core/messagePolls'
+import { MessagePoll } from './MessagePoll'
+
 export type RichMetadata = Record<string, unknown> | null | undefined
 
 type Gif = { previewUrl: string; url: string; title: string }
@@ -93,10 +96,24 @@ export function readPoll(meta: RichMetadata): Poll | null {
  * The rich half of a message. Returns null when there is nothing beyond text, so
  * an ordinary message renders exactly as it did before.
  */
-export function RichMessage({ metadata }: { metadata: RichMetadata }) {
+export function RichMessage({
+  metadata,
+  viewerUserId,
+  onVote,
+}: {
+  metadata: RichMetadata
+  /*
+   * Both optional. Without them the poll renders exactly as it always has —
+   * read-only — which is what the DM and huddle panel still needs, because the
+   * vote route has no branch for a platform thread this app actually creates.
+   */
+  viewerUserId?: string | null
+  onVote?: (optionId: string) => void
+}) {
   const gif = readGif(metadata)
   const attachments = readAttachments(metadata)
   const poll = readPoll(metadata)
+  const viewerPoll = onVote ? readViewerPoll(metadata, viewerUserId ?? null) : null
   if (!gif && attachments.length === 0 && !poll) return null
 
   return (
@@ -126,16 +143,18 @@ export function RichMessage({ metadata }: { metadata: RichMetadata }) {
         return null
       })}
 
-      {poll ? (
+      {viewerPoll && onVote ? (
+        <MessagePoll poll={viewerPoll} onVote={onVote} />
+      ) : poll ? (
         <div className="af-cm-poll">
           <p className="af-cm-poll-q">{poll.question}</p>
           {poll.options.map((o) => (
             <div key={o.id} className="af-cm-poll-o">
               <span>{o.text}</span>
               {/*
-                A count, not a bar. We hold the votes array but no total to size a
-                bar against honestly, and a bar drawn from one number invents a
-                proportion.
+                A count, not a bar. Read-only here because nothing on this surface
+                can vote yet, and a bar drawn from one number with no denominator
+                invents a proportion.
               */}
               <span className="af-cm-poll-n af-num">{o.votes.length}</span>
             </div>
