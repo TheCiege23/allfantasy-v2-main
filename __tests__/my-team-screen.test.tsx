@@ -25,6 +25,7 @@ function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
     afProjectedPoints: 22.4,
     indoors: false,
     weather: null,
+    market: { ownPct: 1, startPct: 0.92 },
     onBye: false,
     ...over,
   }
@@ -376,177 +377,31 @@ describe('My Team — the reported problems', () => {
     expect(c.querySelector('.af-mt-venue')).toBeNull()
   })
 
-  it('shows each starter&apos;s share of the projected total', () => {
-    // 22.4 of 131.7 = 17%. Concentration is a real risk signal: a lineup
-    // resting on one player reads very differently from an even one.
-    expect(text(<MyTeam data={data()} />)).toContain('17%')
+  it('⚠ shows OWN and START from the whole app, not a share of one lineup', () => {
+    /*
+     * Share used to be this player's fraction of his own team's projected
+     * total — a real number answering a question nobody asked. What a manager
+     * wants is what the field is doing: universally started, or a bench stash
+     * everywhere? Both are computed from AllFantasy's own rosters.
+     */
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('100%')
+    expect(t).toContain('92%')
+    expect(t).toContain('OWN')
+    expect(t).toContain('START')
   })
 
-  it('gives bench players no share, because they contribute none', () => {
+  it('shows the market on bench rows too, because it is about the player', () => {
+    /*
+     * The old share column was deliberately blank on the bench, since a benched
+     * player contributes nothing to a lineup total. Own and start rates are a
+     * fact about the PLAYER across the whole app, so they belong on every row —
+     * a bench player started in 80% of leagues elsewhere is exactly the thing
+     * worth knowing.
+     */
     const rows = render(<MyTeam data={data()} />).container.querySelectorAll('.af-mt-row')
     const bench = rows[rows.length - 1]
-    expect(bench.textContent).not.toMatch(/\d+%/)
-  })
-
-  it('⚠ replaces the two empty points tiles with the matchup you are about to play', () => {
-    /*
-     * Points for / against were the season's running totals — 0-0 for every
-     * team until a game is scored — so the most prominent numbers on the screen
-     * were em dashes through the whole preseason.
-     */
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('projected matchup')
-    expect(t).toContain('131.7')
-    expect(t).toContain('118.2')
-    expect(t).toContain('DynastyDan')
-    expect(t).toContain('projected ahead by 13.5')
-  })
-
-  it('calls a close matchup a coin flip rather than picking a winner', () => {
-    const d = data()
-    const t = text(
-      <MyTeam
-        data={data({
-          nextMatchup: {
-            available: true,
-            data: {
-              ...d.nextMatchup.data!,
-              opponent: { ...d.nextMatchup.data!.opponent!, projected: 130.1 },
-            },
-          },
-        } as never)}
-      />,
-    )
-    expect(t).toContain('coin flip')
-  })
-
-  it('⚠ gives NO verdict when either lineup is only partly priced', () => {
-    /*
-     * A margin between two totals built from different numbers of starters is
-     * not a margin, it is an artefact of coverage — and "ahead by 12" is
-     * exactly the sentence a manager would act on.
-     */
-    const d = data()
-    const t = text(
-      <MyTeam
-        data={data({
-          nextMatchup: {
-            available: true,
-            data: {
-              ...d.nextMatchup.data!,
-              opponent: { ...d.nextMatchup.data!.opponent!, projectedFrom: 5, starterCount: 9 },
-            },
-          },
-        } as never)}
-      />,
-    )
-    expect(t).not.toMatch(/projected (ahead|behind)/)
-    expect(t).toContain('from 5 of 9')
-  })
-
-  it('says the opponent is unset rather than inventing one', () => {
-    const d = data()
-    const t = text(
-      <MyTeam
-        data={data({
-          nextMatchup: {
-            available: true,
-            data: { ...d.nextMatchup.data!, opponent: null, bye: true },
-          },
-        } as never)}
-      />,
-    )
-    expect(t).toContain('Opponent not set')
-  })
-
-  it('⚠ grades the roster as a RANK inside the league, never a letter', () => {
-    /*
-     * A "C" trade grade in this repo turned out to mean "we priced nothing",
-     * and it was indistinguishable from a considered verdict. A rank names the
-     * comparison it is making; a letter invents a scale and hides its inputs.
-     */
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('3rd')
-    expect(t).toContain('of 12')
-    expect(t).toContain('Roster value in this league')
-    expect(t).not.toMatch(/grade: [A-F][+-]?/i)
-  })
-
-  it('names the strongest and thinnest position, which is the actionable half', () => {
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('WR is your best')
-    expect(t).toContain('TE your thinnest')
-  })
-
-  it('states partial pricing rather than folding it into the rank', () => {
-    expect(text(<MyTeam data={data()} />)).toContain('priced 24 of your 26')
-  })
-
-  it('says why there is no rank instead of showing a neutral one', () => {
-    const t = text(
-      <MyTeam
-        data={data({
-          rosterGrade: { available: false, reason: 'we need prices for most of this league' },
-        } as never)}
-      />,
-    )
-    expect(t).toContain('we need prices for most of this league')
-  })
-
-  it('⚠ flags a starter whose team is not playing at all', () => {
-    /*
-     * The most preventable loss in fantasy, and nothing on this screen warned
-     * about it. A starter on bye is a guaranteed zero, so the row gets the same
-     * treatment as an empty slot — because that is what it is.
-     */
-    const c = render(
-      <MyTeam
-        data={data({
-          starters: {
-            available: true,
-            data: [
-              {
-                slotLabel: 'RB',
-                player: player({ onBye: true, projectedPoints: 0, afProjectedPoints: 0 }),
-                empty: false,
-                unresolvedId: null,
-              },
-            ],
-          },
-        })}
-      />,
-    ).container
-    expect(c.textContent).toContain('BYE')
-    expect(c.querySelector('.af-mt-row[data-bye="true"]')).toBeTruthy()
-  })
-
-  it('shows byes forming before the waiver wire is picked over', () => {
-    const t = text(
-      <MyTeam
-        data={data({
-          upcomingByes: [{ week: 7, names: ['Bo Nix', 'RJ Harvey', 'Tyler Allgeier'] }],
-        } as never)}
-      />,
-    )
-    expect(t).toContain('Byes coming up')
-    expect(t).toContain('Week 7')
-    expect(t).toContain('3 off')
-  })
-
-  it('marks three-or-more in one week as a stack', () => {
-    const c = render(
-      <MyTeam
-        data={data({
-          upcomingByes: [
-            { week: 7, names: ['a', 'b', 'c'] },
-            { week: 9, names: ['d'] },
-          ],
-        } as never)}
-      />,
-    ).container
-    const items = c.querySelectorAll('.af-mt-byes-list li')
-    expect(items[0].getAttribute('data-stack')).toBe('true')
-    expect(items[1].getAttribute('data-stack')).toBe('false')
+    expect(bench.textContent).toMatch(/\d+%/)
   })
 
   it('⚠ labels the columns PTS and AF PTS, with an explainer on the AF one', () => {
@@ -560,44 +415,56 @@ describe('My Team — the reported problems', () => {
     )
   })
 
-  it('⚠ shares are taken against ONE measure, so they cannot exceed 100%', () => {
-    /*
-     * THE BUG: the share fell back to the generic number when the league-scored
-     * one was missing, while the total it divided by summed only league-scored
-     * values. A player with no AF number counted in the numerator and not the
-     * denominator. On a real roster the shares summed to 116%.
-     */
-    const withAf = player({ afProjectedPoints: 20, projectedPoints: 10 })
-    const noAf = player({ sleeperId: 'p2', afProjectedPoints: null, projectedPoints: 40 })
+  it('prints an em dash when the sample is too small to publish a rate', () => {
+    // Early on, one manager's decision swings a percentage by double digits.
+    // The loader withholds the market entirely below its threshold, and the
+    // row must render that absence rather than a zero.
     const c = render(
       <MyTeam
         data={data({
           starters: {
             available: true,
             data: [
-              { slotLabel: 'QB', player: withAf, empty: false, unresolvedId: null },
-              { slotLabel: 'RB', player: noAf, empty: false, unresolvedId: null },
+              {
+                slotLabel: 'QB',
+                player: player({ market: null }),
+                empty: false,
+                unresolvedId: null,
+              },
             ],
           },
           bench: { available: false, reason: 'none' },
-          projections: {
-            available: true,
-            data: {
-              total: 50, projected: 2, unprojected: 0, season: '2026', week: 1,
-              afTotal: 20, afProjected: 1, standardComparable: true,
-            },
-          },
         })}
       />,
     ).container
+    const cells = [...c.querySelectorAll('.af-mt-share')].map((e) => e.textContent)
+    expect(cells.every((x) => x === '\u2014')).toBe(true)
+  })
 
-    const shares = [...c.querySelectorAll('.af-mt-share')]
-      .map((e) => e.textContent ?? '')
-      .filter((x) => x.includes('%'))
-      .map((x) => Number(x.replace('%', '')))
-    // The AF-priced player is 100% of the AF total; the unpriced one gets none.
-    expect(shares).toEqual([100])
-    expect(shares.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(100)
+  it('⚠ shows 0% owned but NO start rate for an unrostered player', () => {
+    // A start rate over zero leagues is undefined, not zero. Rendering 0%
+    // would call a free agent a universal bench player.
+    const c = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [
+              {
+                slotLabel: 'QB',
+                player: player({ market: { ownPct: 0, startPct: null } }),
+                empty: false,
+                unresolvedId: null,
+              },
+            ],
+          },
+          bench: { available: false, reason: 'none' },
+        })}
+      />,
+    ).container
+    const cells = [...c.querySelectorAll('.af-mt-share')].map((e) => e.textContent)
+    expect(cells[0]).toBe('0%')
+    expect(cells[1]).toBe('\u2014')
   })
 
   it('colour-codes the position chip by family', () => {

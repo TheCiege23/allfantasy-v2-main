@@ -212,7 +212,19 @@ export function LandingV4({
       <header className="af-lp-hero">
         <div className="af-lp-hero-text">
           <span className="af-lp-eyebrow af-num">{c.hero.eyebrow}</span>
-          <h1 className="af-lp-h1">
+          {/*
+            THE PERFORMANCE GATE LOOKS FOR THIS, AND IT WAS NOT HERE.
+            `landing-hero-headline` lives on LandingHero and ArrivalSection —
+            both retired. `/` renders THIS component, so the gate waited 20
+            seconds for a selector that is not on the page and failed every
+            build. It reported as a budget failure for weeks and was a missing
+            attribute.
+
+            A test id rather than the class: `af-lp-h1` is a styling hook and
+            renaming it during a redesign is legitimate, which is exactly how
+            this broke the first time.
+          */}
+          <h1 className="af-lp-h1" data-testid="landing-hero-headline">
             {c.hero.h1a}
             <br />
             <span className="af-lp-h1-accent">{c.hero.h1b}</span>

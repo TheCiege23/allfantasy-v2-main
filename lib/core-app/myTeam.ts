@@ -13,6 +13,7 @@ import { getNextMatchup, type NextMatchup } from './nextMatchup'
 import { getRosterGrade, type RosterGrade } from './rosterGrade'
 import { getByeWeeks } from './byeWeeks'
 import { getGameWeather, type GameWeather } from './gameWeather'
+import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 
 /**
@@ -98,6 +99,19 @@ export type LineupPlayer = {
    * means "roofed", not "definitely closed".
    */
   indoors: boolean | null
+  /**
+   * How the whole app is treating this player, not how one roster is.
+   *
+   * SHARE USED TO BE THIS PLAYER'S FRACTION OF ONE TEAM'S PROJECTED TOTAL,
+   * which answered a much smaller question than anybody was asking. What a
+   * manager wants is what the field is doing: universally started, or a bench
+   * stash everywhere? Computed from AllFantasy's own rosters, so it sharpens
+   * every time somebody imports a league.
+   *
+   * Null when the sample is too small to mean anything — see
+   * MIN_LEAGUES_FOR_MARKET.
+   */
+  market: { ownPct: number; startPct: number | null } | null
   /**
    * The cached forecast for this player's game, when one exists.
    *
@@ -515,9 +529,10 @@ async function resolvePlayers(
           : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
       indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
-      // Both filled in by the caller: byes need the week's full slate, and the
-      // forecast is one batched cache read for the whole roster.
+      // All filled in by the caller: byes need the week's full slate, the
+      // forecast is one batched cache read, and the market is app-wide.
       weather: null,
+      market: null,
       onBye: false,
     })
   }
@@ -839,6 +854,31 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
   for (const [id, w] of weather) {
     const p = resolved.get(id)
     if (p) p.weather = w
+  }
+
+  /*
+   * One read for the whole app, cached and user-independent — own and start
+   * rates are a property of the league corpus, not of who is looking.
+   *
+   * Scoped to this league's format: a player started in every dynasty league
+   * can be a waiver add in redraft, and blending those describes neither.
+   */
+  const market = await getRosteredMarket({
+    sport,
+    dynastyOnly: league.isDynasty ?? null,
+  }).catch(() => null)
+
+  if (market && market.leaguesCounted >= MIN_LEAGUES_FOR_MARKET) {
+    for (const p of resolved.values()) {
+      const row = market.byPlayerId.get(p.sleeperId)
+      /*
+       * Absent from the board means nobody rosters him — genuinely 0% owned,
+       * and an undefined start rate. That is a real reading, not a gap.
+       */
+      p.market = row
+        ? { ownPct: row.ownPct, startPct: row.startPct }
+        : { ownPct: 0, startPct: null }
+    }
   }
 
   const byes = sportsWeek

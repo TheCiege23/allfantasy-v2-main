@@ -438,9 +438,9 @@
 */
 .af-mt-projpair {
   display: grid;
-  grid-template-columns: 52px 52px 44px;
+  grid-template-columns: 54px 46px 44px 46px;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-variant-numeric: tabular-nums;
 }
 .af-mt-projpair .af-mt-proj {
@@ -467,8 +467,8 @@
 .af-mt-projhead {
   margin-left: auto;
   display: grid;
-  grid-template-columns: 52px 52px 44px;
-  gap: 4px;
+  grid-template-columns: 54px 46px 44px 46px;
+  gap: 5px;
   text-align: right;
   font-size: 9.5px;
   opacity: 0.75;
@@ -601,12 +601,15 @@
 @media (max-width: 720px) {
   /* Share is the first thing to go: it is the least load-bearing of the three
      and the two point totals must stay side by side to be comparable at all. */
+  /* Market columns go first on narrow screens: the two point totals must stay
+     side by side to be comparable at all, which is the whole point of them. */
   .af-mt-projpair,
   .af-mt-projhead {
-    grid-template-columns: 48px 48px;
+    grid-template-columns: 50px 46px;
   }
   .af-mt-share,
-  .af-mt-projhead > *:last-child {
+  .af-mt-projhead > *:nth-child(3),
+  .af-mt-projhead > *:nth-child(4) {
     display: none;
   }
   .af-mt-basis {
@@ -1017,4 +1020,23 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   .af-mt-portrait,
   .af-mt-portrait .af-mt-avatar { width: 30px; height: 30px; }
   .af-mt-portrait .af-mt-teamlogo { width: 14px; height: 14px; }
+}
+
+/* ── Projection cells ────────────────────────────────────────────────── */
+/*
+ * The numbers read as figures, not as boxes. They were sitting in tinted
+ * blocks that gave four adjacent cells four competing backgrounds — the
+ * "blocky" look. Weight and colour separate them now; nothing is boxed.
+ */
+.af-mt-projpair > span {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: right;
+  line-height: 1.25;
+}
+.af-mt-share {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
 }

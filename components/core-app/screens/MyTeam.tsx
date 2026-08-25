@@ -399,9 +399,11 @@ function StatusChip({ status }: { status: string | null }) {
  * one is present, that is not a gap in the player's data — it means the league's
  * own scoring could not be applied, and the caveat under the roster says so.
  */
-function Projections({ player, shareOfLineup }: { player: LineupPlayer; shareOfLineup: number | null }) {
+function Projections({ player }: { player: LineupPlayer }) {
   const fmt = (v: number | null) =>
-    v == null ? <span className="af-mt-proj--none">—</span> : v.toFixed(1)
+    v == null ? <span className="af-mt-proj--none">&mdash;</span> : v.toFixed(1)
+  const pct = (v: number | null | undefined) =>
+    v == null ? <span className="af-mt-proj--none">&mdash;</span> : `${Math.round(v * 100)}%`
 
   return (
     <div className="af-mt-projpair">
@@ -424,16 +426,23 @@ function Projections({ player, shareOfLineup }: { player: LineupPlayer; shareOfL
       >
         {fmt(player.projectedPoints)}
       </span>
-      {shareOfLineup != null ? (
-        <span
-          className="af-mt-share af-num"
-          title="Share of your projected starting total. High numbers mean your week rests on one player."
-        >
-          {Math.round(shareOfLineup * 100)}%
-        </span>
-      ) : (
-        <span className="af-mt-share af-mt-proj--none">—</span>
-      )}
+      {/*
+        OWN and START are the app's own market, read from every roster we hold.
+        They replaced a "share" column that divided this player's projection by
+        his own team's total — a real number answering a question nobody asked.
+      */}
+      <span
+        className="af-mt-share af-num"
+        title="Share of AllFantasy leagues rostering this player"
+      >
+        {pct(player.market?.ownPct)}
+      </span>
+      <span
+        className="af-mt-share af-num"
+        title="Of the leagues that roster him, how many are starting him this week. Byes and injuries move this on their own."
+      >
+        {pct(player.market?.startPct)}
+      </span>
     </div>
   )
 }
@@ -460,8 +469,14 @@ function ProjHeader() {
       <span className="af-label" title="Standard PPR from the feed — a generic baseline, not your league">
         PPR
       </span>
-      <span className="af-label" title="Share of your projected starting total">
-        SHARE
+      <span className="af-label" title="Share of AllFantasy leagues rostering this player">
+        OWN
+      </span>
+      <span
+        className="af-label"
+        title="Of the leagues rostering him, how many start him this week"
+      >
+        START
       </span>
     </div>
   )
@@ -470,11 +485,9 @@ function ProjHeader() {
 function SlotRow({
   slot,
   platform,
-  shareOfLineup,
 }: {
   slot: LineupSlot
   platform: string
-  shareOfLineup: number | null
 }) {
   return (
     /*
@@ -492,7 +505,7 @@ function SlotRow({
         <>
           <PlayerCell player={slot.player} />
           <StatusChip status={slot.player.injuryStatus} />
-          <Projections player={slot.player} shareOfLineup={shareOfLineup} />
+          <Projections player={slot.player} />
         </>
       ) : slot.unresolvedId ? (
         <div className="af-mt-player af-mt-unresolved">
@@ -545,7 +558,7 @@ function BenchRow({
         to the projected starting total, and printing "0%" beside them would
         read as a judgement on the player rather than a fact about the lineup.
       */}
-      <Projections player={player} shareOfLineup={null} />
+      <Projections player={player} />
       {trailing}
     </li>
   )
@@ -580,22 +593,14 @@ export function MyTeam({ data }: MyTeamProps) {
   const proj = data.projections.available ? data.projections.data : null
 
   /*
-   * ⚠ NUMERATOR AND DENOMINATOR MUST BE THE SAME MEASURE, and they were not.
-   * The share fell back to the generic number when the league-scored one was
-   * missing, while the total it divided by summed ONLY league-scored values —
-   * so a player with no AF number contributed to the top of the fraction and
-   * not the bottom. On a real roster the shares summed to 116%.
+   * The per-lineup "share" helper lived here and has been DELETED, not merely
+   * unused. It divided a player's projection by his own team's total, which is
+   * a real number answering a question nobody asked — and left in place it
+   * would invite someone to wire it back beside OWN and START, where two
+   * different meanings of "share" would sit in adjacent columns.
    *
-   * One measure is chosen for the whole lineup, and a player missing THAT
-   * measure gets no share rather than a borrowed one.
+   * What replaced it is app-wide: see lib/core-app/rosteredMarket.ts.
    */
-  const useAf = proj?.afTotal != null && proj.afTotal > 0
-  const shareBase = useAf ? proj!.afTotal! : (proj?.total ?? 0)
-  const shareFor = (p: LineupPlayer | null): number | null => {
-    if (!p || shareBase <= 0) return null
-    const v = useAf ? p.afProjectedPoints : p.projectedPoints
-    return v == null ? null : v / shareBase
-  }
 
   function askChimmy() {
     window.dispatchEvent(
@@ -853,7 +858,6 @@ export function MyTeam({ data }: MyTeamProps) {
                 key={`${slot.slotLabel}-${i}`}
                 slot={slot}
                 platform={platform}
-                shareOfLineup={shareFor(slot.player)}
               />
             ))}
           </ul>
