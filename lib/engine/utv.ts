@@ -8,6 +8,7 @@
  */
 
 import type { SportKey } from './trade-types'
+import { pickRoundTable } from '@/lib/pick-curve'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -173,9 +174,11 @@ export function computePickUTV(inputs: {
   const { year, round, tier, sport, format, currentYear, classStrength = 50 } = inputs
 
   // Base pick values by round (dynasty scale)
-  const BASE_PICK_VALUES: Record<number, number> = {
-    1: 750, 2: 450, 3: 250, 4: 150, 5: 80,
-  }
+  /*
+   * ⚠ SHAPE NOW SHARED. Paid 0.60 of a first for a second against the canonical 0.48. The
+   * 750-point anchor is this module's own scale; see lib/pick-curve.ts for the shape.
+   */
+  const BASE_PICK_VALUES: Record<number, number> = pickRoundTable(750)
   let base = BASE_PICK_VALUES[round] ?? Math.max(20, 800 - round * 150)
 
   // Tier adjustment within round

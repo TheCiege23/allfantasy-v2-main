@@ -19,6 +19,8 @@
  *   value = amount × FAAB_VALUE_PER_DOLLAR
  */
 
+import { pickRoundTable } from '@/lib/pick-curve'
+
 export const PROJ_TO_VALUE = 26
 export const ADP_PIVOT = 120
 export const ADP_SLOPE = 6
@@ -108,13 +110,12 @@ export const POSITION_SCARCITY: Record<string, number> = {
   FLEX: 1.0,
 }
 
-export const PICK_ROUND_BASE: Record<number, number> = {
-  1: 2500,
-  2: 1200,
-  3: 600,
-  4: 320,
-  5: 180,
-}
+/**
+ * Unchanged in value — this module's shape was the one that best matched observed trades, so
+ * collapsing the five curves adopted it. It now comes from `lib/pick-curve.ts` so the other
+ * modules cannot drift away from it again.
+ */
+export const PICK_ROUND_BASE: Record<number, number> = pickRoundTable(2500)
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))

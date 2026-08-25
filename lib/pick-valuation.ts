@@ -1,9 +1,17 @@
+import { pickRoundValue } from '@/lib/pick-curve'
+
+/**
+ * ⚠ SHAPE NOW SHARED. This curve paid 0.65 of a first for a second where the canonical shape
+ * pays 0.48, so it was the second-flattest of the five and over-priced mid-round picks. The
+ * 100-point first-round anchor is this module's own scale and is unchanged; only the decay
+ * below it is now sourced from one place. See lib/pick-curve.ts for how the shape was chosen.
+ */
 const BASE_PICK_VALUE: Record<string, number> = {
-  "1st": 100,
-  "2nd": 65,
-  "3rd": 40,
-  "4th": 20,
-  "5th+": 10
+  "1st": pickRoundValue(1, 100),
+  "2nd": pickRoundValue(2, 100),
+  "3rd": pickRoundValue(3, 100),
+  "4th": pickRoundValue(4, 100),
+  "5th+": pickRoundValue(5, 100)
 }
 
 const TIME_MULTIPLIER_BY_YEARS_OUT: Record<number, number> = {

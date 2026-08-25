@@ -1,3 +1,4 @@
+import { pickRoundTable } from '@/lib/pick-curve';
 export type AssetTier = 0 | 1 | 2 | 3 | 4;
 export type SemanticTier = 'elite' | 'high' | 'starter' | 'replaceable' | 'depth';
 
@@ -124,12 +125,15 @@ export const TIER_BASE_VALUES: Record<AssetTier, number> = {
   4: 300,
 };
 
-export const PICK_BASE_VALUES: Record<number, number> = {
-  1: 650,
-  2: 180,
-  3: 70,
-  4: 25,
-};
+/**
+ * ⚠ THE SHAPE CHANGED HERE, AND IT IS THE BIGGEST MOVE OF THE COLLAPSE. This curve was the
+ * steepest of the five — a second round at 0.277 of a first where the canonical shape pays
+ * 0.48, and a third at 0.108 against 0.24. Measured against 771 real dynasty trades it fit
+ * worse than the shape now used, so mid-round picks were being under-priced here relative to
+ * every other surface. The first-round anchor of 650 is this module's own scale and is
+ * untouched.
+ */
+export const PICK_BASE_VALUES: Record<number, number> = pickRoundTable(650, 4);
 
 export const PICK_SLOT_MODIFIERS: Record<string, number> = {
   'early': 1.35,
