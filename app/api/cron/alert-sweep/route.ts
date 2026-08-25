@@ -26,6 +26,8 @@ import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
+import { getBaseUrl } from '@/lib/get-base-url'
+import { renderInjuryEmail } from '@/lib/notifications/injuryEmail'
 import { fetchSleeperStatuses } from '@/lib/autocoach/status-sources/SleeperStatusAdapter'
 import { detectInjuredStarterAlerts } from '@/lib/chimmy-alerts/ChimmyAlertDetectors'
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
@@ -214,11 +216,40 @@ async function handle(req: NextRequest) {
         // leagues is how someone turns notifications off permanently.
         const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
 
-        // In-app row first, so the bell and the notifications centre carry the alert even
-        // when push is unconfigured or the subscription has gone stale. Every transport is
-        // skipped — the targeted push below stays the only push, and email/SMS would be new
-        // noise this sweep never promised. The UTC-day bucket in the dedupe prefix keeps a
-        // 15-minute cadence from writing 96 rows for the same injury.
+        /*
+         * The email lists EVERY flagged starter, not just `top`. A phone
+         * banner has room for one sentence; an email does not have that
+         * constraint, and a manager with three starters out is badly served by
+         * an email about one of them — the other two are the ones he misses.
+         */
+        const injuryEmail = renderInjuryEmail({
+          alerts: alerts.map((a) => ({
+            title: a.title,
+            message: a.message,
+            leagueId: a.leagueId ?? null,
+          })),
+          baseUrl: getBaseUrl(),
+        })
+
+        /*
+         * In-app row first, so the bell and the notifications centre carry the
+         * alert even when push is unconfigured or the subscription has gone
+         * stale. The UTC-day bucket in the dedupe prefix keeps a 15-minute
+         * cadence from writing 96 rows for the same injury.
+         *
+         * ⚠ EMAIL IS NO LONGER SKIPPED. It was, on the reasoning that this
+         * sweep never promised one — but the effect was that an injured
+         * starter, the single most time-critical thing this product knows,
+         * had no email at all while digests and trade alerts did. The dedupe
+         * prefix is what makes it safe at a 15-minute cadence: one send per
+         * league per day, not ninety-six.
+         *
+         * It rides `emailOverride` deliberately. The dispatcher's default
+         * sender strips its own HTML — every tag replaced with a space — so
+         * anything designed must come through the override, which is the only
+         * path to sendTemplatedEmail. SMS and push stay skipped: the targeted
+         * push below is the only push, and SMS is not configured.
+         */
         await dispatchNotification({
           userIds: [sub.userId],
           category: 'injury_alerts',
@@ -232,7 +263,8 @@ async function handle(req: NextRequest) {
           severity: top.urgencySignal >= 78 ? 'high' : 'medium',
           meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
           dedupePrefix: `injured-starter:${top.leagueId ?? 'all'}:${new Date().toISOString().slice(0, 10)}`,
-          skipChannels: { email: true, sms: true, push: true },
+          skipChannels: { email: injuryEmail == null, sms: true, push: true },
+          ...(injuryEmail ? { emailOverride: injuryEmail } : {}),
         })
 
         if (!pushConfigured) {

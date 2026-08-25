@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { getBaseUrl } from "@/lib/get-base-url";
+import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
 
 type ResendClientResult = {
   client: Resend;
@@ -245,6 +246,22 @@ export async function sendNotificationEmail(params: {
       ? `<p><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;">${escapeHtml(params.actionLabel)}</a></p>`
       : ""
 
+  /*
+   * ⚠ EVERY NOTIFICATION EMAIL CARRIES A WAY OUT. This footer was the product
+   * name and nothing else — no unsubscribe, no preferences link — while the
+   * marketing and trade-alert senders both minted a signed per-recipient
+   * token. At the volume paid acquisition brings, unsubscribe-less mail is how
+   * a sending domain's reputation gets burned, and this is the sender the
+   * dispatcher reaches for by default, so it carries most of the volume.
+   *
+   * The token is signed over THIS recipient's own address. It is minted here,
+   * per send, rather than passed in: a shared link would let any recipient
+   * unsubscribe someone else.
+   */
+  const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?token=${encodeURIComponent(
+    createEmailUnsubscribeToken(params.to),
+  )}`
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -253,7 +270,11 @@ export async function sendNotificationEmail(params: {
   <div>
     <div>${safeBody}</div>
     ${ctaHtml}
-    <p style="color:#666;font-size:12px;">AllFantasy.ai</p>
+    <p style="color:#666;font-size:12px;">
+      AllFantasy.ai
+      &middot; <a href="${escapeHtml(`${baseUrl}/settings?tab=notifications`)}" style="color:#666;">Notification settings</a>
+      &middot; <a href="${escapeHtml(unsubscribeUrl)}" style="color:#666;">Unsubscribe</a>
+    </p>
   </div>
 </body>
 </html>`
