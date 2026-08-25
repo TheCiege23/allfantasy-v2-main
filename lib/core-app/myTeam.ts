@@ -474,7 +474,28 @@ async function resolvePlayers(
    * given for every platform and the join will silently return nothing the day an
    * importer writes a different id space.
    */
-  const projections = await lookupProjections(ids, projectionWeek)
+  /*
+   * The defensive half of the component line, for IDP leagues only.
+   *
+   * ⚠ THIS IS WHAT TURNS THE EM DASH BACK INTO A NUMBER. The suppression below is correct
+   * and stays — the GENERIC feed number remains meaningless for a defender — but with a
+   * projected defensive line present, `computeLeagueProjectedPoints` can finally price him
+   * under his own league's rules, and `afProjectedPoints` stops being null.
+   *
+   * The opponent comes from the schedule join this function already did, rather than from a
+   * second `SportsGame` query with its own chances of picking the wrong fixture.
+   */
+  const byId = rows.filter((r) => r.sleeperId)
+  const projections = await lookupProjections(ids, projectionWeek, {
+    scoringSettings,
+    positionBySleeperId: new Map(byId.map((r) => [r.sleeperId as string, r.position])),
+    opponentBySleeperId: new Map(
+      byId.map((r) => [r.sleeperId as string, (r.team ? nextGameFor.get(r.team)?.opponent : null) ?? null])
+    ),
+    injuryBySleeperId: new Map(
+      byId.map((r) => [r.sleeperId as string, injuryByName.get(r.name.toLowerCase()) ?? null])
+    ),
+  })
 
   for (const r of rows) {
     if (!r.sleeperId) continue

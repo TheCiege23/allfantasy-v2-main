@@ -1,6 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadIdpProjections } from '@/lib/idp-projections/loadIdpProjections'
+import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
+import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 
 /**
  * Weekly player projections, shared by My Team and Player Finder.
@@ -33,6 +36,14 @@ export type PlayerProjection = {
    * carries name/position/team at the top and the real stat line at `stats.stats`.
    */
   componentStats: Record<string, unknown> | null
+  /**
+   * Present only when a defensive line was projected for this player.
+   *
+   * Carries the basis, the confidence derived from real coverage, and the notes — including
+   * the standing one that no defensive snap data exists. A surface rendering the number
+   * without them is showing a projection whose provenance it is choosing not to state.
+   */
+  idpProjection?: IdpProjectionSuccess
 }
 
 type ProjectionStats = {
@@ -82,10 +93,29 @@ export async function latestProjectionWeek(): Promise<{ season: string; week: nu
   return row ? { season: row.season, week: row.week } : null
 }
 
+/**
+ * Ask for defensive component lines alongside the vendor feed.
+ *
+ * ⚠ ONLY SUPPLY THIS FOR A LEAGUE THAT ACTUALLY SCORES IDP. The enrichment is skipped
+ * outright unless `hasIdpScoring` agrees, so a league that rosters no defenders pays nothing
+ * for the feature — no extra query runs at all.
+ */
+export interface IdpEnrichment {
+  /** The league's own `scoring_settings`, already extracted. */
+  scoringSettings: Record<string, unknown> | null
+  /** Position by Sleeper id. Falls back to the position on the projection row itself. */
+  positionBySleeperId?: ReadonlyMap<string, string | null>
+  /** Opponent abbreviation for the target week, by Sleeper id. Drives the pace adjustment. */
+  opponentBySleeperId?: ReadonlyMap<string, string | null>
+  /** Injury designation by Sleeper id. Reported on the projection, never applied to it. */
+  injuryBySleeperId?: ReadonlyMap<string, string | null>
+}
+
 /** Projections for a set of players, keyed by player id. */
 export async function lookupProjections(
   playerIds: readonly string[],
-  at?: { season: string; week: number } | null
+  at?: { season: string; week: number } | null,
+  idp?: IdpEnrichment | null
 ): Promise<Map<string, PlayerProjection>> {
   const ids = playerIds.filter((id) => typeof id === 'string' && id.length > 0 && !id.startsWith('name:'))
   if (ids.length === 0) return new Map()
@@ -97,7 +127,97 @@ export async function lookupProjections(
     where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' } },
     select: { playerId: true, projectedPoints: true, stats: true },
   })
-  return new Map(rows.map((r) => [r.playerId, toProjection(r)]))
+  const out = new Map(rows.map((r) => [r.playerId, toProjection(r)]))
+
+  if (idp && hasIdpScoring(idp.scoringSettings)) {
+    await enrichWithIdpProjections(out, ids, when, idp)
+  }
+  return out
+}
+
+/**
+ * Fill in the defensive half of the component line.
+ *
+ * WHY THIS IS NEEDED AT ALL. The vendor line is standard PPR, which contains no defensive
+ * scoring, so a linebacker arrives with an offensive component line and nothing for
+ * `computeLeagueProjectedPoints` to price. This adds a projected defensive line in the same
+ * key vocabulary, and every surface that already re-scores `componentStats` starts producing
+ * a real number without changing a line of its own code.
+ *
+ * Mutates the map in place. Failures are absorbed: an enrichment that cannot run must leave
+ * the vendor projection exactly as it was, never take the screen down with it.
+ */
+async function enrichWithIdpProjections(
+  out: Map<string, PlayerProjection>,
+  ids: readonly string[],
+  when: { season: string; week: number },
+  idp: IdpEnrichment
+): Promise<void> {
+  const positionOf = (id: string): string | null =>
+    idp.positionBySleeperId?.get(id) ?? out.get(id)?.position ?? null
+
+  /*
+   * Scoped to defenders before any query runs. A 10-man offensive lineup in an IDP league
+   * produces an empty list here and returns without touching the database.
+   */
+  const defenders = ids
+    .filter((id) => isIdpPosition(positionOf(id)))
+    .map((id) => ({ sleeperId: id, position: positionOf(id) }))
+  if (defenders.length === 0) return
+
+  const season = Number(when.season)
+  if (!Number.isFinite(season)) return
+
+  try {
+    const { bySleeperId } = await loadIdpProjections({
+      prisma,
+      season,
+      week: when.week,
+      players: defenders,
+      opponentBySleeperId: idp.opponentBySleeperId,
+      injuryBySleeperId: idp.injuryBySleeperId,
+    })
+
+    for (const [sleeperId, outcome] of bySleeperId) {
+      if (!outcome.ok) continue
+      const existing = out.get(sleeperId)
+      /*
+       * A defender with no vendor row at all still deserves his league's number. The
+       * importer drops any player Sleeper gives no numeric `pts_ppr`, so this is the only
+       * path by which those players are priced — and `projectedPoints` stays 0 because the
+       * GENERIC number really is nothing for them, while `componentStats` carries the truth.
+       */
+      const base: PlayerProjection = existing ?? {
+        playerId: sleeperId,
+        projectedPoints: 0,
+        name: null,
+        position: positionOf(sleeperId),
+        team: null,
+        componentStats: null,
+      }
+
+      /*
+       * ⚠ THE VENDOR WINS WHERE IT SPOKE. Sleeper's forward-looking payload sometimes does
+       * carry `idp_*` keys, and a real projection FOR the week beats one inferred from
+       * completed games. Only absent or zero keys are filled, so this can add information
+       * and never overwrite it.
+       */
+      const merged: Record<string, unknown> = { ...(base.componentStats ?? {}) }
+      for (const [key, value] of Object.entries(outcome.statLine)) {
+        const current = merged[key]
+        if (typeof current === 'number' && Number.isFinite(current) && current !== 0) continue
+        merged[key] = value
+      }
+
+      out.set(sleeperId, { ...base, componentStats: merged, idpProjection: outcome })
+    }
+  } catch {
+    /*
+     * Swallowed on purpose, and only here. The vendor projection in `out` is already correct
+     * and complete for every offensive player; a failed defensive enrichment must degrade to
+     * the em dash it was showing yesterday rather than fail the whole lineup.
+     */
+  }
 }
 
 export type PositionRank = {

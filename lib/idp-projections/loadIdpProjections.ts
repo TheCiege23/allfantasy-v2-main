@@ -32,6 +32,17 @@ export interface LoadIdpProjectionsArgs {
    * would look extraordinarily accurate in backtests and be useless on Sunday morning.
    */
   week: number
+  /**
+   * How many earlier seasons to fold into the history.
+   *
+   * ⚠ ONE, NOT ZERO, AND THE DEFAULT MATTERS. Restricted to the current season, week 1 has
+   * no games with `week < 1`, so every defender in the league refuses for `no_history` and
+   * the feature reads as broken for the first month of the season. Prior-season games are
+   * older evidence, not absent evidence; the recency weighting already discounts them, and
+   * it decays on sequence position rather than week number precisely so last season's week
+   * 17 cannot outrank this season's week 1.
+   */
+  priorSeasons?: number
   /** Players to project, in Sleeper-id space — the same space `PlayerGameStat.playerId` uses. */
   players: ReadonlyArray<{ sleeperId: string; position: string | null; team?: string | null }>
   /** Opponent team abbreviation for the target week, by Sleeper id. Optional. */
@@ -41,6 +52,8 @@ export interface LoadIdpProjectionsArgs {
   /** Injury designation by Sleeper id. Reported on the projection, never applied. Optional. */
   injuryBySleeperId?: ReadonlyMap<string, string | null>
 }
+
+const DEFAULT_PRIOR_SEASONS = 1
 
 export interface IdpProjectionCoverageReport {
   requested: number
@@ -68,10 +81,21 @@ export interface LoadIdpProjectionsResult {
 async function loadPace(
   prisma: LoadIdpProjectionsArgs['prisma'],
   season: number,
+  priorSeasons: number,
 ): Promise<{ byTeam: Map<string, number>; mean: number | null }> {
-  const rows = await prisma.teamTendencySeason
-    .findMany({ where: { season }, select: { teamId: true, secPerPlay: true } })
-    .catch(() => [] as Array<{ teamId: string; secPerPlay: number | null }>)
+  /*
+   * The target season's tendency rows do not exist until it has been played, so early in a
+   * season this legitimately finds nothing and falls back to the most recent season that has
+   * data. Team AND mean always come from the SAME season — mixing one season's team pace
+   * with another's mean would label teams fast or slow against a baseline they never faced.
+   */
+  let rows: Array<{ teamId: string; secPerPlay: number | null }> = []
+  for (let s = season; s >= season - priorSeasons; s--) {
+    rows = await prisma.teamTendencySeason
+      .findMany({ where: { season: s }, select: { teamId: true, secPerPlay: true } })
+      .catch(() => [] as Array<{ teamId: string; secPerPlay: number | null }>)
+    if (rows.some((r) => typeof r.secPerPlay === 'number' && r.secPerPlay > 0)) break
+  }
 
   const byTeam = new Map<string, number>()
   for (const r of rows) {
@@ -139,7 +163,11 @@ export async function loadIdpProjections(
     if (priors) priorsByPosition.set(position, priors)
   }
 
-  const { byTeam: paceByTeam, mean: leagueMeanSecPerPlay } = await loadPace(args.prisma, args.season)
+  const { byTeam: paceByTeam, mean: leagueMeanSecPerPlay } = await loadPace(
+    args.prisma,
+    args.season,
+    args.priorSeasons ?? DEFAULT_PRIOR_SEASONS,
+  )
 
   // --- project ------------------------------------------------------------------------
   const bySleeperId = new Map<string, IdpProjectionOutcome>()
@@ -218,10 +246,18 @@ function loadPriorGames(
       where: {
         sportType: sport,
         playerId: { in: ids },
-        season: args.season,
-        // ⚠ STRICTLY EARLIER. See the note on `week` above — including the target week
-        // leaks the answer into its own projection.
-        weekOrRound: { lt: args.week },
+        OR: [
+          // ⚠ STRICTLY EARLIER within the target season. See the note on `week` above —
+          // including the target week leaks the answer into its own projection.
+          { season: args.season, weekOrRound: { lt: args.week } },
+          // Whole earlier seasons, which carry no leakage risk at all.
+          {
+            season: {
+              gte: args.season - (args.priorSeasons ?? DEFAULT_PRIOR_SEASONS),
+              lt: args.season,
+            },
+          },
+        ],
       },
       select: {
         playerId: true,

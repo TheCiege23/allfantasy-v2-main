@@ -20,16 +20,22 @@ function game(playerId: string, week: number, over: Record<string, number> = {})
   }
 }
 
-/** A prisma double that applies the `weekOrRound` filter the way Postgres would. */
+/**
+ * A prisma double that evaluates the real `OR` the loader builds: earlier weeks of the target
+ * season, plus whole earlier seasons. Modelling the actual clause is the point — a double that
+ * quietly ignores it would let a leak through and still go green.
+ */
 function fakePrisma(rows: GameRow[], pace: Array<{ teamId: string; secPerPlay: number | null }>) {
   const findMany = vi.fn(async ({ where }: any) => {
     const ids: string[] = where.playerId.in
-    return rows.filter(
-      (r) =>
-        ids.includes(r.playerId) &&
-        r.season === where.season &&
-        r.weekOrRound < where.weekOrRound.lt,
-    )
+    const matches = (r: GameRow) =>
+      where.OR.some((clause: any) => {
+        if (typeof clause.season === 'number') {
+          return r.season === clause.season && r.weekOrRound < clause.weekOrRound.lt
+        }
+        return r.season >= clause.season.gte && r.season < clause.season.lt
+      })
+    return rows.filter((r) => ids.includes(r.playerId) && matches(r))
   })
   return {
     playerGameStat: { findMany },
@@ -64,7 +70,8 @@ describe('loadIdpProjections', () => {
     expect(out.ok).toBe(true)
     if (!out.ok) return
     expect(out.statLine.idp_tkl_solo).toBeCloseTo(5, 1)
-    expect(prisma._findMany.mock.calls[0][0].where.weekOrRound).toEqual({ lt: 7 })
+    const where = prisma._findMany.mock.calls[0][0].where
+    expect(where.OR).toContainEqual({ season: 2025, weekOrRound: { lt: 7 } })
   })
 
   it('reports coverage and counts refusals by reason instead of swallowing them', async () => {
@@ -146,6 +153,29 @@ describe('loadIdpProjections', () => {
     })
     expect(coverage.paceAvailable).toBe(false)
     expect(bySleeperId.get('lb0')!.ok).toBe(true)
+  })
+
+  it('projects in week 1 from last season rather than refusing the whole league', async () => {
+    /*
+     * The regression this guards. Restricted to the target season, week 1 has no games with
+     * `week < 1`, so every defender refuses for `no_history` and the feature reads as broken
+     * for the first month of every season.
+     */
+    const lastSeason = fullHistory().map((r) => ({ ...r, season: 2025 }))
+    const prisma = fakePrisma(lastSeason, [{ teamId: 'IND', secPerPlay: 27 }])
+
+    const { bySleeperId, coverage } = await loadIdpProjections({
+      prisma,
+      season: 2026,
+      week: 1,
+      players: LBS,
+    })
+
+    expect(coverage.refused).toBe(0)
+    const out = bySleeperId.get('lb0')!
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.statLine.idp_tkl_solo).toBeCloseTo(5, 1)
   })
 
   it('short-circuits on an empty player list without touching the database', async () => {
