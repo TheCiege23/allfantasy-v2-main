@@ -1013,6 +1013,26 @@ export function TradeValueModal({
             </div>
           ) : null}
 
+          {/*
+            Bye-week collisions. ADVISORY, AND DELIBERATELY NOT PART OF THE
+            VERDICT above: the value maths decides whether the deal is fair,
+            this says what the maths cannot see. Trading for a quarterback who
+            is off the same week as the one you already hold does not fix the
+            hole it looks like it fixes -- and the manager may well take the
+            deal anyway, because two years of a player of that calibre is worth
+            one unstartable Sunday. The point is that they decide on purpose.
+          */}
+          {Array.isArray(result?.byeNotes) && (result.byeNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2 text-[11px] text-sky-100/90">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-sky-200/80">
+                Bye weeks
+              </div>
+              {(result.byeNotes as string[]).map((n) => (
+                <div key={n}>{n}</div>
+              ))}
+            </div>
+          ) : null}
+
           {Array.isArray(result?.dataGaps) && (result.dataGaps as string[]).length > 0 ? (
             <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.05] px-3 py-2 text-[11px] text-amber-100/90">
               Data gaps: {(result.dataGaps as string[]).join(' · ')}

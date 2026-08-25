@@ -9,6 +9,7 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
+import { buildTradeByeNotes } from '@/lib/trade-intel/tradeByeNotes'
 import {
   compareConsoleVerdictWithCanonicalGrade,
   type ConsoleComparableAsset,
@@ -148,7 +149,35 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         return NextResponse.json(out, { status })
       }
 
-      return NextResponse.json(out)
+      /*
+       * The bye-week advisory. ADDITIVE AND NEVER PART OF THE VERDICT — the
+       * console's own value maths decides whether a trade is fair; this says
+       * what the maths cannot see, which is that the quarterback coming back is
+       * off the same week as the one already on the roster.
+       *
+       * Best-effort by design. If anything it needs is missing the notes are
+       * simply absent, because a trade screen that guesses at bye collisions
+       * trains managers to ignore the warning.
+       */
+      const byeNotes =
+        parsed.data.leagueId && userId
+          ? await buildTradeByeNotes({
+              leagueId: parsed.data.leagueId,
+              userId,
+              give: out.players.give.map((l) => ({
+                name: l.name,
+                position: l.position,
+                team: l.team,
+              })),
+              get: out.players.get.map((l) => ({
+                name: l.name,
+                position: l.position,
+                team: l.team,
+              })),
+            }).catch(() => [])
+          : []
+
+      return NextResponse.json(byeNotes.length > 0 ? { ...out, byeNotes } : out)
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })
