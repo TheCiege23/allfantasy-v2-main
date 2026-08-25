@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildProjectionQuestion, describeScoringDifferences } from '@/lib/core-app/scoringNotes'
+import { buildProjectionQuestion, describeScoringDifferences, hasIdpScoring } from '@/lib/core-app/scoringNotes'
 
 /**
  * The screen shows two projections for the same player and claims they differ
@@ -77,5 +77,49 @@ describe('buildProjectionQuestion', () => {
 
   it('drops the week rather than inventing one', () => {
     expect(buildProjectionQuestion('Bla bla bla', null)).not.toContain('week')
+  })
+})
+
+describe('hasIdpScoring', () => {
+  /**
+   * ⚠ THE DEFAULT SLEEPER DEF-UNIT BLOCK IS NOT IDP, AND MISREADING IT AS IDP MISCLASSIFIED
+   * MOST OF THE PRODUCT. Measured on production 2026-08-25: counting these bare keys called
+   * 64 of 110 leagues IDP; requiring a genuinely IDP-only key gave 10. Zero of 11 sampled
+   * false positives rostered a single defender.
+   */
+  const SLEEPER_DEFAULT_DEF_UNIT = {
+    sack: 1,
+    int: 2,
+    ff: 1,
+    fum_rec: 2,
+    safe: 2,
+    def_td: 6,
+    pts_allow_0: 10,
+    rec: 1,
+  }
+
+  it('does not call the default team-defense block an IDP league', () => {
+    expect(hasIdpScoring(SLEEPER_DEFAULT_DEF_UNIT)).toBe(false)
+  })
+
+  it('recognises an idp_-prefixed rule', () => {
+    expect(hasIdpScoring({ ...SLEEPER_DEFAULT_DEF_UNIT, idp_tkl_solo: 2 })).toBe(true)
+  })
+
+  it('recognises bare tackle rules, which no team defense carries', () => {
+    expect(hasIdpScoring({ tkl_solo: 1 })).toBe(true)
+    expect(hasIdpScoring({ tkl_ast: 0.5 })).toBe(true)
+    expect(hasIdpScoring({ tkl: 1 })).toBe(true)
+  })
+
+  it('ignores a rule the league has explicitly zeroed', () => {
+    // A zero weight is a deliberate "we do not score this", not a gap.
+    expect(hasIdpScoring({ idp_tkl_solo: 0 })).toBe(false)
+  })
+
+  it('is false for absent or unreadable settings rather than throwing', () => {
+    expect(hasIdpScoring(null)).toBe(false)
+    expect(hasIdpScoring(undefined)).toBe(false)
+    expect(hasIdpScoring({})).toBe(false)
   })
 })

@@ -227,7 +227,11 @@ export async function getLeagueScoreboard(args: {
    */
   const everyStarter = anyScored ? [] : [...new Set([...startersBy.values()].flat())]
   const projections = everyStarter.length
-    ? await lookupProjections(everyStarter, args.projectionWeek).catch(() => new Map())
+    ? await lookupProjections(everyStarter, args.projectionWeek, {
+        // Defenders are priced under this league's own rules here too, so a board that
+        // includes IDP lineups is measured the same way for every team on it.
+        scoringSettings: args.scoringSettings,
+      }).catch(() => new Map())
     : new Map()
 
   function build(rosterId: number, points: number | null): ScoreboardTeam {

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { loadIdpProjections } from '@/lib/idp-projections/loadIdpProjections'
+import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/loadIdpProjections'
 import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 
@@ -196,19 +196,7 @@ async function enrichWithIdpProjections(
         componentStats: null,
       }
 
-      /*
-       * ⚠ THE VENDOR WINS WHERE IT SPOKE. Sleeper's forward-looking payload sometimes does
-       * carry `idp_*` keys, and a real projection FOR the week beats one inferred from
-       * completed games. Only absent or zero keys are filled, so this can add information
-       * and never overwrite it.
-       */
-      const merged: Record<string, unknown> = { ...(base.componentStats ?? {}) }
-      for (const [key, value] of Object.entries(outcome.statLine)) {
-        const current = merged[key]
-        if (typeof current === 'number' && Number.isFinite(current) && current !== 0) continue
-        merged[key] = value
-      }
-
+      const merged = mergeIdpStatLine(base.componentStats, outcome.statLine)
       out.set(sleeperId, { ...base, componentStats: merged, idpProjection: outcome })
     }
   } catch {

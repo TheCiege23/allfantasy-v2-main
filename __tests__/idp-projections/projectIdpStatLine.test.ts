@@ -90,6 +90,33 @@ describe('projectIdpStatLine — the projected line', () => {
     expect(out.statLine.idp_tkl_ast).toBeCloseTo(3, 1)
   })
 
+  it('treats a game without a sack as zero sacks, not as a missing sample', () => {
+    /*
+     * THE PRODUCTION BUG THIS PINS DOWN. Averaging a component only over the games it
+     * appeared in gives a per-occurrence rate that can never fall below one. Measured on
+     * prod before the fix: Kam Curl projected for 1 sack, 2 interceptions and 1 defensive
+     * touchdown every week, scoring 56.58 in a league that has him in the teens.
+     */
+    const oneBigGame = [
+      lbGame(1),
+      lbGame(2),
+      lbGame(3),
+      lbGame(4),
+      lbGame(5),
+      lbGame(6, { idp_sack: 1, idp_int: 2, idp_def_td: 1 }),
+    ]
+    const out = projectIdpStatLine({ position: 'LB', history: oneBigGame })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+
+    // One sack in six games is a fraction of a sack per game, however it is weighted.
+    expect(out.statLine.idp_sack!).toBeLessThan(0.5)
+    expect(out.statLine.idp_int!).toBeLessThan(1)
+    expect(out.statLine.idp_def_td!).toBeLessThan(0.5)
+    // Tackles, which really do happen every game, are unaffected.
+    expect(out.statLine.idp_tkl_solo).toBeCloseTo(5, 1)
+  })
+
   it('always states that defensive snap data is absent', () => {
     const out = projectIdpStatLine({ position: 'LB', history: STARTER_LB })
     expect(out.ok).toBe(true)

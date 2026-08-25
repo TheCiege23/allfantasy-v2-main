@@ -128,12 +128,38 @@ export function isIdpPosition(position: string | null | undefined): boolean {
 export function hasIdpScoring(scoring: Record<string, unknown> | null | undefined): boolean {
   if (!scoring || typeof scoring !== 'object') return false
   return Object.keys(scoring).some(
-    (k) =>
-      (k.startsWith('idp_') ||
-        ['tkl', 'tkl_solo', 'tkl_ast', 'sack', 'int', 'ff', 'fr', 'safe'].includes(k)) &&
-      (num(scoring[k]) ?? 0) !== 0,
+    (k) => IDP_ONLY_SCORING_KEY(k) && (num(scoring[k]) ?? 0) !== 0,
   )
 }
+
+/**
+ * Is this a scoring key that can ONLY belong to an individual defender?
+ *
+ * ⚠ BARE `sack` / `int` / `ff` / `fum_rec` / `safe` DO NOT COUNT, AND THIS IS THE WHOLE
+ * POINT OF THE FUNCTION. Those are the TEAM-DEFENSE settings that every Sleeper league
+ * ships by default, so treating them as evidence of IDP classifies almost the entire
+ * product as an IDP league.
+ *
+ * Measured on production 2026-08-25, across 110 leagues (81 with readable scoring):
+ *   - counting the bare DEF keys:        64 leagues "score IDP"
+ *   - requiring a genuinely IDP-only key: 10 leagues
+ *   - of 11 sampled false positives, ZERO rostered a single defender.
+ *
+ * The earlier, looser version was wrong in both directions it could be wrong in. It told 54
+ * leagues that they "score individual defensive players" in `describeScoringDifferences`,
+ * which is a false statement shown to a manager; and it suppressed a defender's generic
+ * projection to an em dash in leagues that do not roster defenders at all.
+ *
+ * (The "54 of 120" figure in `STAT_ALIASES` is the same population and is NOT an IDP count —
+ * it measures leagues carrying bare `sack`/`int`/`ff`/`fum_rec`, which is exactly the
+ * team-defense default this function now excludes.)
+ *
+ * Tackle keys are kept in their bare form on purpose: a team defense has no `tkl_solo`
+ * setting, so those cannot be confused for a DEF-unit rule.
+ */
+const IDP_ONLY_BARE_KEYS = new Set(['tkl', 'tkl_solo', 'tkl_ast', 'tkl_loss'])
+const IDP_ONLY_SCORING_KEY = (k: string): boolean =>
+  k.startsWith('idp_') || IDP_ONLY_BARE_KEYS.has(k)
 
 /**
  * The question to hand Chimmy when the manager asks why the numbers differ.

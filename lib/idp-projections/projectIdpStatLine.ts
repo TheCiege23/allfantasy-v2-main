@@ -201,9 +201,7 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
    * carries no solo/assist split) is interpreted by the one module that has measured that
    * split, rather than by a second guess here.
    */
-  const series = new Map<IdpStatKey, Array<{ index: number; value: number }>>()
-
-  history.forEach((g, index) => {
+  const perGame: Array<Partial<Record<IdpStatKey, number>>> = history.map((g) => {
     const { components, combinedTackles } = extractIdpComponents(g.statMap, 'sleeper_weekly')
 
     const resolved: Partial<Record<IdpComponent, number>> = { ...components }
@@ -222,14 +220,35 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
       resolved.soloTackle = combinedTackles
     }
 
+    const row: Partial<Record<IdpStatKey, number>> = {}
     for (const [component, amount] of Object.entries(resolved) as Array<[IdpComponent, number]>) {
       const key = COMPONENT_TO_KEY[component]
       if (!key || typeof amount !== 'number' || !Number.isFinite(amount)) continue
-      const arr = series.get(key) ?? []
-      arr.push({ index, value: amount })
-      series.set(key, arr)
+      row[key] = (row[key] ?? 0) + amount
     }
+    return row
   })
+
+  /*
+   * ⚠ THE SERIES MUST BE DENSE, AND THIS IS THE WHOLE BALLGAME FOR RATE STATS.
+   *
+   * A game in which a defender recorded no sack is an observation OF ZERO SACKS, not a
+   * missing sample. Averaging a component only over the games it appeared in produces a
+   * per-occurrence rate that can never fall below one: measured on production, Kam Curl came
+   * back projected for 1 sack, 2 interceptions and 1 defensive touchdown EVERY WEEK, scoring
+   * 56.58 in a league that should have him in the teens. Absence is evidence here, and
+   * dropping it turns every rare event into a certainty.
+   */
+  const observedKeys = new Set<IdpStatKey>()
+  for (const row of perGame) for (const k of Object.keys(row) as IdpStatKey[]) observedKeys.add(k)
+
+  const series = new Map<IdpStatKey, Array<{ index: number; value: number }>>()
+  for (const key of observedKeys) {
+    series.set(
+      key,
+      perGame.map((row, index) => ({ index, value: row[key] ?? 0 })),
+    )
+  }
 
   if (series.size === 0) {
     return {

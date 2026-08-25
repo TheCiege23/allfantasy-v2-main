@@ -5,6 +5,8 @@ import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/proj
 import { latestProjectionWeek } from './playerProjections'
 import type { SectionState } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
+import { hasIdpScoring, isIdpPosition } from './scoringNotes'
+import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/loadIdpProjections'
 import { startingSlots, slotForStarterIndex, canFillSlot, shareAnySlot } from './slotEligibility'
 import { leagueDisplayName } from './leagueHome'
 
@@ -254,6 +256,42 @@ export async function getPlayerImpact(
         return [p.playerId, (s.stats ?? null) as Record<string, unknown> | null]
       })
     )
+
+    /*
+     * The defensive half of the component line, for IDP leagues only.
+     *
+     * ⚠ WITHOUT THIS, EVERY DEFENDER IN AN IDP LEAGUE IS UNPRICEABLE HERE — and this is the
+     * screen that answers "he is out, who do I start instead". The vendor line is standard
+     * PPR, which carries no defensive scoring, so `priceOf` returns null for a linebacker and
+     * he is silently absent from both the injury verdict and the replacement ranking. An IDP
+     * manager would be told there is nobody to bring in while his bench is full of them.
+     *
+     * Gated twice, same as the shared lookup: the league must genuinely score individual
+     * defenders, and the roster must actually hold some, so an offensive league issues no
+     * extra query.
+     */
+    if (scoring && hasIdpScoring(scoring)) {
+      const defenders = players
+        .filter((p) => p.sleeperId && isIdpPosition(p.position))
+        .map((p) => ({ sleeperId: p.sleeperId as string, position: p.position }))
+      if (defenders.length > 0 && Number.isFinite(Number(at.season))) {
+        try {
+          const { bySleeperId } = await loadIdpProjections({
+            prisma,
+            season: Number(at.season),
+            week: at.week,
+            players: defenders,
+          })
+          for (const [sleeperId, outcome] of bySleeperId) {
+            if (!outcome.ok) continue
+            statsById.set(sleeperId, mergeIdpStatLine(statsById.get(sleeperId), outcome.statLine))
+          }
+        } catch {
+          // A failed enrichment leaves defenders unpriced, exactly as before. It must never
+          // take down the injury answer for the offensive players on the same roster.
+        }
+      }
+    }
 
     const priceOf = (id: string): { points: number; matchedKeys: number; scoredKeys: number } | null => {
       if (!scoring) return null

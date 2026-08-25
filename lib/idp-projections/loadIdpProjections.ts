@@ -270,3 +270,24 @@ function loadPriorGames(
     })
     .catch(() => [])
 }
+
+/**
+ * Merge a projected defensive line into a vendor component line.
+ *
+ * ⚠ THE VENDOR WINS WHERE IT SPOKE. Sleeper's forward-looking payload sometimes does carry
+ * `idp_*` keys, and a projection FOR the week being played beats one inferred from completed
+ * games. Only absent or zero keys are filled, so this can add information and never overwrite
+ * it. Shared by every caller so the rule cannot drift between surfaces.
+ */
+export function mergeIdpStatLine(
+  vendor: Record<string, unknown> | null | undefined,
+  statLine: Record<string, number>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...(vendor ?? {}) }
+  for (const [key, value] of Object.entries(statLine)) {
+    const current = merged[key]
+    if (typeof current === 'number' && Number.isFinite(current) && current !== 0) continue
+    merged[key] = value
+  }
+  return merged
+}

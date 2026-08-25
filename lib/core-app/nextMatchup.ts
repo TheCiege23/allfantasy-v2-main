@@ -136,7 +136,9 @@ export async function getNextMatchup(args: {
 
   const everyId = [...new Set([...allStarters.values()].flat())]
   const projections = everyId.length
-    ? await lookupProjections(everyId, args.projectionWeek).catch(() => new Map())
+    ? await lookupProjections(everyId, args.projectionWeek, {
+        scoringSettings: args.scoringSettings,
+      }).catch(() => new Map())
     : new Map()
 
   function side(rosterId: number): MatchupSide {
