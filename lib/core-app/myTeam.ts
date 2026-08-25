@@ -7,11 +7,12 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { isPreseason, resolveSportsWeek, type SportsWeek } from './sportsWeek'
-import { describeScoringDifferences } from './scoringNotes'
+import { describeScoringDifferences, hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
 import { getNextMatchup, type NextMatchup } from './nextMatchup'
 import { getRosterGrade, type RosterGrade } from './rosterGrade'
 import { getByeWeeks } from './byeWeeks'
+import { getGameWeather, type GameWeather } from './gameWeather'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 
 /**
@@ -91,6 +92,15 @@ export type LineupPlayer = {
    * means "roofed", not "definitely closed".
    */
   indoors: boolean | null
+  /**
+   * The cached forecast for this player's game, when one exists.
+   *
+   * Null for a game further out than the weather cron reaches, which is the
+   * common case before the week starts. The venue mark still renders from the
+   * stadium alone — "outdoors, forecast not in yet" is a different statement
+   * from "outdoors, and here is the forecast".
+   */
+  weather: GameWeather | null
   /**
    * His team is not playing this week.
    *
@@ -279,6 +289,15 @@ async function resolvePlayers(
    */
   scoringSettings: Record<string, unknown> | null
 ): Promise<Map<string, LineupPlayer>> {
+  /*
+   * ⚠ IN AN IDP LEAGUE THE GENERIC NUMBER IS NOT A PROJECTION OF ANYTHING for a
+   * defender. Standard PPR contains no defensive scoring, so the vendor's line
+   * returns whatever incidental offensive stat a defender is projected for.
+   * Measured on a real roster: 0.3 for a linebacker the league projects at 18,
+   * 0.6 for an edge rusher projected at 9. Those are not low estimates, they
+   * are the absence of an estimate wearing a number.
+   */
+  const leagueScoresIdp = hasIdpScoring(scoringSettings)
   const out = new Map<string, LineupPlayer>()
   if (ids.length === 0) return out
 
@@ -458,10 +477,16 @@ async function resolvePlayers(
        * dash. Everywhere else null survives, because "we have no projection"
        * and "we project nothing" are different claims.
        */
-      projectedPoints: ruledOut ? 0 : feedProjection,
+      projectedPoints: ruledOut
+        ? 0
+        : leagueScoresIdp && isIdpPosition(r.position)
+          ? null
+          : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
       indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
-      // Filled in by the caller once the week's slate is known to be complete.
+      // Both filled in by the caller: byes need the week's full slate, and the
+      // forecast is one batched cache read for the whole roster.
+      weather: null,
       onBye: false,
     })
   }
@@ -761,6 +786,30 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
    * (to show a stack forming). Null whenever the schedule is too thin to tell a
    * bye from a gap in ingestion — see byeWeeks.ts.
    */
+  /*
+   * One cache read for the whole roster. Keyed by the HOST team, because the
+   * forecast belongs to the stadium the game is played in, not to the player.
+   */
+  const weather = await getGameWeather({
+    sport,
+    games: new Map(
+      [...resolved.values()].map((p) => [
+        p.sleeperId,
+        {
+          hostTeam: p.gameContext?.includes(' @ ')
+            ? (p.gameContext.split(' @ ')[1] ?? '').split(' · ')[0]
+            : p.team,
+          kickoff: p.kickoff,
+        },
+      ]),
+    ),
+  }).catch(() => new Map())
+
+  for (const [id, w] of weather) {
+    const p = resolved.get(id)
+    if (p) p.weather = w
+  }
+
   const byes = sportsWeek
     ? await getByeWeeks({
         sport,

@@ -105,6 +105,36 @@ export function describeScoringDifferences(
   return notes
 }
 
+/** Positions the vendor's generic PPR line does not score at all. */
+const IDP_POSITIONS = new Set([
+  'DL', 'DE', 'DT', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'IDP_FLEX',
+])
+
+export function isIdpPosition(position: string | null | undefined): boolean {
+  return IDP_POSITIONS.has((position ?? '').trim().toUpperCase())
+}
+
+/**
+ * Does this league score individual defensive players?
+ *
+ * ⚠ IF IT DOES, THE VENDOR'S GENERIC NUMBER IS NOT A WORSE ESTIMATE FOR A
+ * LINEBACKER — IT IS NOT AN ESTIMATE OF ANYTHING. The generic line is standard
+ * PPR, which contains no defensive scoring whatsoever, so it returns whatever
+ * incidental offensive stats a defender is projected for: a fumble return, a
+ * receiving yard. Measured against a real IDP league, that produced 0.3 for a
+ * linebacker the league projects at 18. Printing 0.3 is the fake-zero mistake
+ * with extra steps.
+ */
+export function hasIdpScoring(scoring: Record<string, unknown> | null | undefined): boolean {
+  if (!scoring || typeof scoring !== 'object') return false
+  return Object.keys(scoring).some(
+    (k) =>
+      (k.startsWith('idp_') ||
+        ['tkl', 'tkl_solo', 'tkl_ast', 'sack', 'int', 'ff', 'fr', 'safe'].includes(k)) &&
+      (num(scoring[k]) ?? 0) !== 0,
+  )
+}
+
 /**
  * The question to hand Chimmy when the manager asks why the numbers differ.
  *

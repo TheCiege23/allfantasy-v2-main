@@ -353,7 +353,19 @@ describe('assertImportCommissioner — Sleeper commissioner gate (Phase 2.2)', (
     expect(result.isCommissioner).toBe(true)
   })
 
-  it('blocks full import when the requester is a normal manager (not owner)', async () => {
+  it('lets a verified member import WITHOUT recording them as commissioner', async () => {
+    /*
+     * ⚠ THIS TEST USED TO ASSERT ok:false, AND THE BLOCK WAS THE BUG.
+     *
+     * Most people are not commissioner of most leagues they play in. Blocking
+     * them — or, later, showing "Needs your confirmation" and asking them to
+     * attest to a role they had just been told they do not hold — stopped the
+     * ordinary case and added no fact. Membership is already PROVEN above by
+     * resolveImportGate; a non-member never reaches this branch.
+     *
+     * The property the old assertion was really protecting is unchanged and is
+     * asserted explicitly below: they must never be recorded AS commissioner.
+     */
     await setup([{ user_id: SLEEPER_UID, is_owner: false }])
     const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
     const result = await assertImportCommissioner({
@@ -362,10 +374,12 @@ describe('assertImportCommissioner — Sleeper commissioner gate (Phase 2.2)', (
       sourceLeagueId: LEAGUE_ID,
       requireCommissioner: true,
     })
-    expect(result.ok).toBe(false)
-    // Phase 0 (b4) — the hard-block message is now provider-neutral (Sleeper is not the only
-    // provider that can return a hard `isCommissioner === false`).
-    expect(result.reason).toBe('Only the league commissioner can import this league into AllFantasy.')
+    expect(result.ok).toBe(true)
+    // Still not the commissioner, and the audit trail says so precisely.
+    expect(result.isCommissioner).toBe(false)
+    expect(result.verification).toBe('member')
+    // And nothing asks them to confirm anything.
+    expect(result.requiresAttestation).toBeFalsy()
   })
 
   it('still allows a normal manager for membership/legacy imports (no requireCommissioner)', async () => {
@@ -380,8 +394,14 @@ describe('assertImportCommissioner — Sleeper commissioner gate (Phase 2.2)', (
     expect(result.isCommissioner).toBe(false)
   })
 
-  it('fails closed on missing/ambiguous commissioner metadata (member, no owner flag)', async () => {
-    // metadata.is_commissioner is null on real Sleeper leagues — must not pass as commissioner.
+  it('⚠ never passes ambiguous metadata off AS commissioner', async () => {
+    /*
+     * `metadata.is_commissioner` is null on real Sleeper leagues, so absence of
+     * the flag must never be read as presence. That is the guarantee, and it
+     * still holds: the import proceeds as a MEMBER import, and `isCommissioner`
+     * stays false. What changed is that not being the commissioner no longer
+     * blocks the import — only the claim.
+     */
     await setup([{ user_id: SLEEPER_UID, is_owner: false, metadata: {} }])
     const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
     const result = await assertImportCommissioner({
@@ -390,7 +410,32 @@ describe('assertImportCommissioner — Sleeper commissioner gate (Phase 2.2)', (
       sourceLeagueId: LEAGUE_ID,
       requireCommissioner: true,
     })
+    expect(result.isCommissioner).toBe(false)
+    expect(result.verification).not.toBe('api')
+    expect(result.verification).toBe('member')
+  })
+
+  it('⚠ still refuses a REPLAYED attestation rather than downgrading it to a member import', async () => {
+    /*
+     * A confirmation captured for a different league or provider is a replay,
+     * and letting it fall through to the member path would quietly retire a
+     * guard that exists for a reason. The mismatch is refused explicitly.
+     */
+    await setup([{ user_id: SLEEPER_UID, is_owner: false }])
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'u1',
+      provider: 'sleeper',
+      sourceLeagueId: LEAGUE_ID,
+      requireCommissioner: true,
+      attestation: {
+        accepted: true,
+        confirmedProvider: 'espn',
+        confirmedSourceLeagueId: 'some-other-league',
+      },
+    })
     expect(result.ok).toBe(false)
+    expect(result.reason).toContain('different league or provider')
   })
 
   it('honors metadata.is_commissioner="true" as a secondary commissioner signal', async () => {

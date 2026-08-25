@@ -23,6 +23,7 @@ function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
     projectedPoints: 19.8,
     afProjectedPoints: 22.4,
     indoors: false,
+    weather: null,
     onBye: false,
     ...over,
   }
@@ -531,5 +532,110 @@ describe('My Team — the reported problems', () => {
     const items = c.querySelectorAll('.af-mt-byes-list li')
     expect(items[0].getAttribute('data-stack')).toBe('true')
     expect(items[1].getAttribute('data-stack')).toBe('false')
+  })
+
+  it('⚠ labels the columns PTS and AF PTS, with an explainer on the AF one', () => {
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('AF PTS')
+    // Two numbers side by side with no explanation read as a bug, not a feature.
+    const c = render(<MyTeam data={data()} />).container
+    expect(c.querySelector('.af-mt-info')).toBeTruthy()
+    expect(c.querySelector('.af-mt-info')?.getAttribute('aria-label')?.toLowerCase()).toContain(
+      'your league',
+    )
+  })
+
+  it('⚠ shares are taken against ONE measure, so they cannot exceed 100%', () => {
+    /*
+     * THE BUG: the share fell back to the generic number when the league-scored
+     * one was missing, while the total it divided by summed only league-scored
+     * values. A player with no AF number counted in the numerator and not the
+     * denominator. On a real roster the shares summed to 116%.
+     */
+    const withAf = player({ afProjectedPoints: 20, projectedPoints: 10 })
+    const noAf = player({ sleeperId: 'p2', afProjectedPoints: null, projectedPoints: 40 })
+    const c = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [
+              { slotLabel: 'QB', player: withAf, empty: false, unresolvedId: null },
+              { slotLabel: 'RB', player: noAf, empty: false, unresolvedId: null },
+            ],
+          },
+          bench: { available: false, reason: 'none' },
+          projections: {
+            available: true,
+            data: {
+              total: 50, projected: 2, unprojected: 0, season: '2026', week: 1,
+              afTotal: 20, afProjected: 1,
+            },
+          },
+        })}
+      />,
+    ).container
+
+    const shares = [...c.querySelectorAll('.af-mt-share')]
+      .map((e) => e.textContent ?? '')
+      .filter((x) => x.includes('%'))
+      .map((x) => Number(x.replace('%', '')))
+    // The AF-priced player is 100% of the AF total; the unpriced one gets none.
+    expect(shares).toEqual([100])
+    expect(shares.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(100)
+  })
+
+  it('colour-codes the position chip by family', () => {
+    const c = render(<MyTeam data={data()} />).container
+    expect(c.querySelector('.af-mt-slot[data-pos="qb"]')).toBeTruthy()
+  })
+
+  it('puts the BYE chip beside the name, where it is read first', () => {
+    const c = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [
+              { slotLabel: 'RB', player: player({ onBye: true }), empty: false, unresolvedId: null },
+            ],
+          },
+        })}
+      />,
+    ).container
+    expect(c.querySelector('.af-mt-player-name .af-mt-bye')).toBeTruthy()
+  })
+
+  it('shows a real forecast when one is cached, and a bare venue mark when not', () => {
+    const withForecast = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [
+              {
+                slotLabel: 'WR',
+                player: player({
+                  weather: {
+                    indoors: false, temperatureF: 31, windSpeedMph: 18,
+                    precipChancePct: 60, conditionLabel: 'Snow', symbol: '❄',
+                  },
+                }),
+                empty: false,
+                unresolvedId: null,
+              },
+            ],
+          },
+          bench: { available: false, reason: 'none' },
+        })}
+      />,
+    ).container
+    expect(withForecast.querySelector('.af-mt-venue[data-forecast="true"]')).toBeTruthy()
+    expect(withForecast.textContent).toContain('31°')
+
+    // No forecast yet is a different statement from no weather.
+    const bare = render(<MyTeam data={data()} />).container
+    expect(bare.querySelector('.af-mt-venue[data-forecast="true"]')).toBeNull()
+    expect(bare.querySelector('.af-mt-venue')).toBeTruthy()
   })
 })

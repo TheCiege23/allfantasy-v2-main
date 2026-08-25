@@ -386,6 +386,18 @@
   color: var(--faint);
 }
 
+/*
+ * ⚠ `--accent-ink` IS NEAR-BLACK (#04050c). IT IS THE INK YOU PUT *ON* AN
+ * ACCENT BACKGROUND, NOT ACCENT-COLOURED TEXT.
+ *
+ * Six rules below used it as a text colour on the dark surface, which renders
+ * black on near-black. The AF projection column was computing correctly and
+ * matching Sleeper to within a point — and was completely invisible. Nothing
+ * errors, nothing logs; the number is simply not there.
+ *
+ * Accent-coloured text on a dark ground is `--accent` (#22d3ee).
+ */
+
 /* ── Two projections + lineup share ──────────────────────────────────── */
 /*
   A three-column block pinned to the right of every roster row, so STD, AF and
@@ -410,7 +422,7 @@
 /* The league-scored number is the one that applies to the reader, so it
    carries the accent and the generic one sits back. */
 .af-mt-proj--af {
-  color: var(--accent-ink);
+  color: var(--accent);
   font-weight: 700;
 }
 
@@ -437,7 +449,7 @@
   text-align: right;
 }
 .af-mt-projhead--af {
-  color: var(--accent-ink);
+  color: var(--accent);
   opacity: 1;
 }
 
@@ -449,7 +461,7 @@
   cursor: help;
 }
 .af-mt-venue[data-indoors='true'] {
-  color: var(--accent-ink);
+  color: var(--accent);
 }
 .af-mt-venue[data-indoors='false'] {
   color: var(--muted);
@@ -551,7 +563,7 @@
   font-variant-numeric: tabular-nums;
 }
 .af-mt-tile--af .af-mt-tile-value {
-  color: var(--accent-ink);
+  color: var(--accent);
 }
 .af-mt-tile--af {
   border-color: var(--accent-line);
@@ -638,7 +650,7 @@
   margin-left: auto;
   font-size: 22px;
   font-weight: 800;
-  color: var(--accent-ink);
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
@@ -689,7 +701,7 @@
 /* ── Roster value rank ───────────────────────────────────────────────── */
 /* A rank, never a letter — see gradeSubtitle in MyTeam.tsx for why. */
 .af-mt-tile--grade .af-mt-tile-value {
-  color: var(--accent-ink);
+  color: var(--accent);
 }
 .af-mt-grade-of {
   font-size: 12px;
@@ -754,4 +766,77 @@
 }
 .af-mt-byes-who {
   min-width: 0;
+}
+
+/* ── Position colours ────────────────────────────────────────────────── */
+/*
+  Grouped by family, not one hue per slot: scanning a 16-slot IDP lineup, the
+  question is "where are my defenders", not "which shade is my WR3". Offence
+  runs warm, defence runs cool, so the two halves of an IDP roster separate at
+  a glance.
+
+  Each is a tinted chip with a matching border and bright text — the same
+  construction as the status chips, so the row reads as one system.
+*/
+.af-mt-slot[data-pos='qb']   { background: rgba(244,114,182,.14); border-color: rgba(244,114,182,.42); color: #f9a8d4; }
+.af-mt-slot[data-pos='rb']   { background: rgba(45,212,191,.14);  border-color: rgba(45,212,191,.42);  color: #5eead4; }
+.af-mt-slot[data-pos='wr']   { background: rgba(96,165,250,.14);  border-color: rgba(96,165,250,.42);  color: #93c5fd; }
+.af-mt-slot[data-pos='te']   { background: rgba(251,146,60,.14);  border-color: rgba(251,146,60,.42);  color: #fdba74; }
+.af-mt-slot[data-pos='k']    { background: rgba(167,139,250,.14); border-color: rgba(167,139,250,.42); color: #c4b5fd; }
+.af-mt-slot[data-pos='def']  { background: rgba(148,163,184,.14); border-color: rgba(148,163,184,.42); color: #cbd5e1; }
+.af-mt-slot[data-pos='flex'] { background: rgba(34,211,238,.12);  border-color: rgba(34,211,238,.38);  color: #67e8f9; }
+/* Defence: cooler and closer together, so it reads as one block. */
+.af-mt-slot[data-pos='dl']   { background: rgba(248,113,113,.13); border-color: rgba(248,113,113,.40); color: #fca5a5; }
+.af-mt-slot[data-pos='lb']   { background: rgba(129,140,248,.13); border-color: rgba(129,140,248,.40); color: #a5b4fc; }
+.af-mt-slot[data-pos='db']   { background: rgba(52,211,153,.13);  border-color: rgba(52,211,153,.40);  color: #6ee7b7; }
+
+/* An empty slot's red border still wins — a hole outranks a position. */
+.af-mt-row[data-empty='true'] .af-mt-slot,
+.af-mt-row[data-bye='true'] .af-mt-slot {
+  background: transparent;
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* ── The AF PTS explainer ────────────────────────────────────────────── */
+.af-mt-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: 3px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+  opacity: 0.8;
+}
+
+/* The bye chip now sits beside the name, so it needs to sit on that baseline. */
+.af-mt-player-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.af-mt-player-name .af-mt-bye {
+  margin-left: 0;
+  flex: 0 0 auto;
+}
+
+/* A real forecast earns a temperature beside the glyph; a bare venue mark
+   does not, so the two never read as the same amount of knowledge. */
+.af-mt-venue[data-forecast='true'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.af-mt-temp {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }

@@ -31,8 +31,20 @@ export interface CommissionerGateResult {
   reason?: string
   /** Source manager id belonging to the requesting user (when we can resolve it). */
   sourceManagerId?: string | null
-  /** How the check passed — lets the persistence layer stamp an audit trail. */
-  verification?: 'api' | 'attestation'
+  /**
+   * How the check passed — lets the persistence layer stamp an audit trail.
+   *
+   * `'api'`         commissioner status proven by the provider.
+   * `'member'`      membership proven by the provider; commissioner status is
+   *                 false or undeterminable, and NOT claimed.
+   * `'attestation'` the user personally claimed commissioner status.
+   *
+   * ⚠ `'member'` EXISTS SO WE STOP ASKING PEOPLE TO ATTEST TO SOMETHING THEY
+   * ARE NOT. It records exactly what happened, which the old flow could not:
+   * a verified member either clicked a confirmation that overstated their role,
+   * or was blocked. Neither was true or useful.
+   */
+  verification?: 'api' | 'member' | 'attestation'
   /** True when the provider can't be API-verified and caller must resubmit with attestation. */
   requiresAttestation?: boolean
   /**
@@ -301,24 +313,43 @@ export async function assertImportCommissioner(args: {
   if (!args.requireCommissioner || !base.ok) return base
 
   if (base.isCommissioner === false) {
-    // Member-import (Aug 2026): the provider PROVED the requester is a real
-    // member of the source league — just not its commissioner. Hard-blocking
-    // members killed the growth loop (most users aren't commish of every
-    // league they play in), so a verified member may proceed WITH an explicit
-    // recorded attestation. Stamped `verification:'attestation'`, never
-    // `'api'`, so the audit trail records that commissioner status was NOT
-    // proven. Non-members are still rejected outright by the membership check.
-    if (args.attestation?.accepted === true && attestationMatchesThisRequest(args.attestation, args)) {
+    /*
+     * ⚠ A VERIFIED MEMBER IS NOT ASKED TO CONFIRM ANYTHING.
+     *
+     * This used to return `requiresAttestation` and show "Needs your
+     * confirmation", which was wrong twice over. It blocked the ordinary case —
+     * most people are not commissioner of most leagues they play in — and the
+     * thing it asked them to confirm was a claim they could not truthfully
+     * make. Answering it did not add a fact; it added a click.
+     *
+     * The safety this gate exists for is already enforced ABOVE, by
+     * `resolveImportGate`: a non-member never reaches this branch. Membership
+     * was proven by the provider. Importing a league you are demonstrably in is
+     * the product working, not a risk to mitigate.
+     *
+     * Stamped `verification: 'member'` — a NEW level that says precisely what
+     * was established. That is a more honest audit trail than the attestation
+     * it replaces, which recorded a commissioner claim from someone who had
+     * just been told they were not the commissioner.
+     */
+    if (args.attestation?.accepted === true) {
+      /*
+       * A claim that does not match THIS request is a replayed one, and it is
+       * still refused — passing it through as a member import would quietly
+       * retire a guard that exists for a reason. The refusal is explicit so the
+       * mismatch is visible rather than silently downgraded.
+       */
+      if (!attestationMatchesThisRequest(args.attestation, args)) {
+        return {
+          ...base,
+          ok: false,
+          isCommissioner: false,
+          reason: 'That confirmation was for a different league or provider.',
+        }
+      }
       return { ...base, verification: 'attestation' }
     }
-    return {
-      ...base,
-      ok: false,
-      isCommissioner: false,
-      requiresAttestation: true,
-      reason:
-        'You’re a verified member of this league (not its commissioner). Confirm to import it anyway — your leaguemates can claim their teams, and the commissioner can take it over later.',
-    }
+    return { ...base, ok: true, isCommissioner: false, verification: 'member' }
   }
 
   // Scoped explicitly to providers that went through REAL, active membership
@@ -341,6 +372,15 @@ export async function assertImportCommissioner(args: {
     if (args.attestation?.accepted === true && attestationMatchesThisRequest(args.attestation, args)) {
       return { ...base, verification: 'attestation' }
     }
+    /*
+     * ⚠ LEFT ALONE ON PURPOSE, AND NOT THE CASE THE FOUNDER HIT.
+     *
+     * This branch is `isCommissioner === undefined` — the provider could not
+     * tell us either way. That is a genuinely different situation from Sleeper's
+     * definite "member, not commissioner", and one of these providers is
+     * open-read, where this gate is what closed the "any authenticated user"
+     * hole. Removing the attestation here would reopen it.
+     */
     return {
       ...base,
       ok: false,

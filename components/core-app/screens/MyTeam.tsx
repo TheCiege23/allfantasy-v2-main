@@ -85,28 +85,98 @@ function LockCountdown({
   )
 }
 
-/** Indoors, outdoors, or we do not know which. */
-function VenueMark({ indoors }: { indoors: boolean | null }) {
-  if (indoors == null) return null
-  return indoors ? (
-    <span
-      className="af-mt-venue"
-      data-indoors="true"
-      title="Indoor or roofed stadium — weather is not a factor. Retractable roofs count as roofed; we do not track whether the roof is open."
-      aria-label="Indoor stadium"
-    >
-      ⌂
-    </span>
-  ) : (
-    <span
-      className="af-mt-venue"
-      data-indoors="false"
-      title="Open-air stadium — weather can matter here"
-      aria-label="Outdoor stadium"
-    >
-      ☁
-    </span>
-  )
+/**
+ * Which colour family a slot belongs to.
+ *
+ * Grouped rather than one colour per slot: a manager scanning a 16-slot IDP
+ * lineup is looking for "where are my defenders", not for a unique hue per
+ * label. FLEX and SUPER_FLEX take the group of whoever is actually in them,
+ * which the caller passes.
+ */
+function posGroup(label: string | null | undefined): string {
+  const p = (label ?? '').trim().toUpperCase()
+  if (p.startsWith('QB')) return 'qb'
+  if (p.startsWith('RB')) return 'rb'
+  if (p.startsWith('WR')) return 'wr'
+  if (p.startsWith('TE')) return 'te'
+  if (p === 'K' || p.startsWith('PK')) return 'k'
+  if (['DEF', 'DST'].includes(p)) return 'def'
+  if (['DL', 'DE', 'DT'].includes(p)) return 'dl'
+  if (['LB', 'ILB', 'OLB', 'MLB'].includes(p)) return 'lb'
+  if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return 'db'
+  if (p.includes('FLEX') || p === 'WRT' || p === 'WRTQ') return 'flex'
+  return 'other'
+}
+
+/**
+ * Weather, or the venue when there is no forecast yet.
+ *
+ * Two different statements, and they must not look alike: "roofed, so weather
+ * cannot matter" is settled, while "open-air, and we have no forecast for a
+ * game twelve days out" is a gap that will fill in. The forecast cron reaches
+ * about a week ahead, so most of a preseason roster shows the second.
+ */
+function VenueMark({
+  indoors,
+  weather,
+}: {
+  indoors: boolean | null
+  weather: LineupPlayer['weather']
+}) {
+  if (weather?.indoors || indoors === true) {
+    return (
+      <span
+        className="af-mt-venue"
+        data-indoors="true"
+        title="Indoor or roofed stadium — weather is not a factor. Retractable roofs count as roofed; we do not track whether the roof is open."
+        aria-label="Indoor stadium"
+      >
+        ⌂
+      </span>
+    )
+  }
+
+  if (weather && !weather.indoors) {
+    const bits = [
+      weather.temperatureF != null ? `${Math.round(weather.temperatureF)}°F` : null,
+      weather.windSpeedMph != null && weather.windSpeedMph >= 8
+        ? `${Math.round(weather.windSpeedMph)} mph wind`
+        : null,
+      weather.precipChancePct != null && weather.precipChancePct >= 20
+        ? `${Math.round(weather.precipChancePct)}% precip`
+        : null,
+      weather.conditionLabel,
+    ].filter(Boolean)
+    return (
+      <span
+        className="af-mt-venue"
+        data-indoors="false"
+        data-forecast="true"
+        title={bits.join(' · ') || 'Open-air stadium'}
+        aria-label={bits.join(', ') || 'Outdoor stadium'}
+      >
+        {weather.symbol}
+        {weather.temperatureF != null ? (
+          <span className="af-mt-temp af-num">{Math.round(weather.temperatureF)}°</span>
+        ) : null}
+      </span>
+    )
+  }
+
+  if (indoors === false) {
+    return (
+      <span
+        className="af-mt-venue"
+        data-indoors="false"
+        title="Open-air stadium — no forecast yet for this kickoff"
+        aria-label="Outdoor stadium, forecast not available yet"
+      >
+        ☁
+      </span>
+    )
+  }
+
+  return null
 }
 
 function ordinal(n: number): string {
@@ -207,10 +277,14 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         </div>
       )}
       <div className="af-mt-player-text">
-        <div className="af-mt-player-name">{player.name}</div>
-        <div className="af-mt-player-meta">
-          {player.gameContext ?? 'no game found for this week'}
-          <VenueMark indoors={player.indoors} />
+        <div className="af-mt-player-name">
+          {player.name}
+          {/*
+            ⚠ BESIDE THE NAME, NOT IN THE META LINE. A bye is the single most
+            important fact about a player this week — it is the difference
+            between a starter and a guaranteed zero — and buried on the second
+            line next to a kickoff time it was being read last.
+          */}
           {player.onBye ? (
             <span
               className="af-mt-bye"
@@ -219,6 +293,10 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
               BYE
             </span>
           ) : null}
+        </div>
+        <div className="af-mt-player-meta">
+          {player.gameContext ?? 'no game found for this week'}
+          <VenueMark indoors={player.indoors} weather={player.weather} />
           {player.preseason ? (
             <span
               className="af-mt-pre"
@@ -297,14 +375,27 @@ function Projections({ player, shareOfLineup }: { player: LineupPlayer; shareOfL
   )
 }
 
+/** What AF PTS is, in one sentence a manager can act on. */
+const AF_PTS_EXPLAINER =
+  'AF PTS is this week’s projection re-scored under YOUR league’s settings — ' +
+  'your reception value, TE premium, passing-TD value and IDP scoring. ' +
+  'PTS is the vendor’s standard PPR number, which is scored for a league nobody is in.'
+
 function ProjHeader() {
   return (
     <div className="af-mt-projhead">
-      <span className="af-label" title="Standard PPR">
-        STD
+      <span className="af-label" title="Standard PPR from the feed — not your league's rules">
+        PTS
       </span>
-      <span className="af-label af-mt-projhead--af" title="Scored under your league's rules">
-        AF
+      <span className="af-label af-mt-projhead--af" title={AF_PTS_EXPLAINER}>
+        AF PTS
+        {/*
+          The question mark is the point: two numbers sitting side by side with
+          no explanation reads as a bug, not a feature.
+        */}
+        <span className="af-mt-info" role="img" aria-label={AF_PTS_EXPLAINER}>
+          ?
+        </span>
       </span>
       <span className="af-label" title="Share of your projected starting total">
         SHARE
@@ -330,7 +421,9 @@ function SlotRow({
       wearing a name.
     */
     <li className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true}>
-      <span className="af-mt-slot af-num">{slot.slotLabel}</span>
+      <span className="af-mt-slot af-num" data-pos={posGroup(slot.slotLabel)}>
+        {slot.slotLabel}
+      </span>
 
       {slot.player ? (
         <>
@@ -376,7 +469,12 @@ function BenchRow({
 }) {
   return (
     <li className="af-mt-row">
-      <span className="af-mt-slot af-num">{slotLabel}</span>
+      <span
+        className="af-mt-slot af-num"
+        data-pos={posGroup(player.position ?? slotLabel)}
+      >
+        {slotLabel}
+      </span>
       <PlayerCell player={player} />
       <StatusChip status={player.injuryStatus} />
       {/*
@@ -417,12 +515,22 @@ export function MyTeam({ data }: MyTeamProps) {
   const platform = data.league.platform === 'manual' ? 'your platform' : data.league.platform
 
   const proj = data.projections.available ? data.projections.data : null
-  // Share is taken against whichever total the league can actually stand behind,
-  // so the percentages add up to the number printed above them.
-  const shareBase = proj ? (proj.afTotal ?? proj.total) : 0
+
+  /*
+   * ⚠ NUMERATOR AND DENOMINATOR MUST BE THE SAME MEASURE, and they were not.
+   * The share fell back to the generic number when the league-scored one was
+   * missing, while the total it divided by summed ONLY league-scored values —
+   * so a player with no AF number contributed to the top of the fraction and
+   * not the bottom. On a real roster the shares summed to 116%.
+   *
+   * One measure is chosen for the whole lineup, and a player missing THAT
+   * measure gets no share rather than a borrowed one.
+   */
+  const useAf = proj?.afTotal != null && proj.afTotal > 0
+  const shareBase = useAf ? proj!.afTotal! : (proj?.total ?? 0)
   const shareFor = (p: LineupPlayer | null): number | null => {
     if (!p || shareBase <= 0) return null
-    const v = p.afProjectedPoints ?? p.projectedPoints
+    const v = useAf ? p.afProjectedPoints : p.projectedPoints
     return v == null ? null : v / shareBase
   }
 
