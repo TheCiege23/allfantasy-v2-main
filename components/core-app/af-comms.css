@@ -300,6 +300,31 @@
 
 .af-cm-handoff:hover { background: var(--accent-line); }
 
+/*
+ * What an answer could see. Authored on tokens, never `bg-white`/`text-black` —
+ * the global `.mode-readable` light clamp rewrites hardcoded pairs and would
+ * strip the ungrounded state's warning colour back to body text.
+ */
+.af-cm-grounding {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.af-cm-grounding[data-grounded='true'] { color: var(--faint); }
+
+/*
+ * Ungrounded is the state the user must not miss, so it is the one that carries
+ * weight and colour. It reads as a caveat on the answer, not as an error strip —
+ * the answer above it is still worth something, it just did not read the league.
+ */
+.af-cm-grounding[data-grounded='false'] {
+  color: var(--warn, var(--accent));
+  font-weight: 700;
+}
+
 .af-cm-cost {
   display: block;
   margin-top: 5px;
