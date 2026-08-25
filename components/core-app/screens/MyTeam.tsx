@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 import type { LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
+import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import { buildProjectionQuestion } from '@/lib/core-app/scoringNotes'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 
@@ -105,6 +106,60 @@ function VenueMark({ indoors }: { indoors: boolean | null }) {
       ☁
     </span>
   )
+}
+
+/** One side of the projected matchup. */
+function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
+  return (
+    <div className="af-mt-mu-side">
+      <div className="af-mt-mu-who">
+        {side.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="af-mt-mu-av" src={side.avatarUrl} alt="" width={26} height={26} />
+        ) : null}
+        <div>
+          <div className="af-mt-mu-name">{side.teamName ?? side.managerName ?? label}</div>
+          {side.managerName && side.teamName ? (
+            <div className="af-mt-mu-sub">{side.managerName}</div>
+          ) : null}
+        </div>
+      </div>
+      <div className="af-mt-mu-pts af-num">
+        {side.projected != null ? side.projected.toFixed(1) : '—'}
+      </div>
+      {/*
+        Coverage sits with the number, not in a footnote. A total built from
+        five of nine starters always reads LOW, and a manager comparing two
+        low-in-different-ways totals is being misled by the gap between them.
+      */}
+      {side.projected != null && side.projectedFrom < side.starterCount ? (
+        <div className="af-mt-mu-cov">
+          from {side.projectedFrom} of {side.starterCount}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The one-line read on the matchup, or nothing.
+ *
+ * ⚠ SILENT WHEN EITHER SIDE IS PARTIALLY PRICED. A margin between two totals
+ * built from different numbers of starters is not a margin, it is an artefact
+ * of coverage — and "you are favoured by 12" is exactly the sentence someone
+ * would act on.
+ */
+function edge(m: NextMatchup): string | null {
+  const you = m.you
+  const them = m.opponent
+  if (!them || you.projected == null || them.projected == null) return null
+  if (you.projectedFrom < you.starterCount || them.projectedFrom < them.starterCount) return null
+
+  const diff = Math.round((you.projected - them.projected) * 10) / 10
+  if (Math.abs(diff) < 3) return 'Projected within three points — this is a coin flip.'
+  return diff > 0
+    ? `You are projected ahead by ${Math.abs(diff).toFixed(1)}.`
+    : `You are projected behind by ${Math.abs(diff).toFixed(1)}.`
 }
 
 function PlayerCell({ player }: { player: LineupPlayer }) {
@@ -428,6 +483,48 @@ export function MyTeam({ data }: MyTeamProps) {
           <Unavailable reason={data.team.reason} />
         )}
       </header>
+
+      {/* ── Who you play, projected ─────────────────────────────────── */}
+      {/*
+        ⚠ THIS IS WHERE "POINTS FOR / AGAINST" USED TO BE. Those were the
+        season's running totals — 0-0 for every team in the league until a game
+        is scored — so the two most prominent numbers on the screen were em
+        dashes for the entire preseason. What a manager wants in that window is
+        not the points they have scored; it is the points they are about to.
+      */}
+      {data.nextMatchup.available ? (
+        <section className="af-frame af-mt-matchup">
+          <div className="af-mt-mu-head">
+            <span className="af-label">
+              Week {data.nextMatchup.data.week} · projected matchup
+            </span>
+            {data.nextMatchup.data.bye ? (
+              <span className="af-mt-mu-bye">no opponent recorded — bye</span>
+            ) : null}
+          </div>
+          <div className="af-mt-mu-body">
+            <MatchupSideView side={data.nextMatchup.data.you} label="You" />
+            <span className="af-mt-mu-v" aria-hidden>
+              v
+            </span>
+            {data.nextMatchup.data.opponent ? (
+              <MatchupSideView side={data.nextMatchup.data.opponent} label="Them" />
+            ) : (
+              <div className="af-mt-mu-side af-mt-mu-side--none">
+                <div className="af-mt-mu-name">Opponent not set</div>
+                <div className="af-mt-mu-sub">
+                  The league recorded this week without pairing teams.
+                </div>
+              </div>
+            )}
+          </div>
+          {edge(data.nextMatchup.data) ? (
+            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data)}</p>
+          ) : null}
+        </section>
+      ) : (
+        <p className="af-mt-footnote">{data.nextMatchup.reason}</p>
+      )}
 
       {/* ── Why the two numbers differ ──────────────────────────────── */}
       {proj ? (

@@ -9,6 +9,8 @@ import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { isPreseason, resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { describeScoringDifferences } from './scoringNotes'
 import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
+import { getNextMatchup, type NextMatchup } from './nextMatchup'
+import { resolveCurrentWeekForLeague } from './currentWeek'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -192,6 +194,15 @@ export type MyTeamData = {
     notes: string[]
     scoringKnown: boolean
   }
+  /**
+   * The upcoming matchup, projected.
+   *
+   * ⚠ THIS IS WHAT "POINTS FOR / AGAINST" SHOULD SAY BEFORE WEEK 1. Those tiles
+   * showed the season's running totals, which are 0-0 for everyone until a game
+   * is scored — two em dashes in the most prominent position on the screen, at
+   * exactly the moment people look at their roster most.
+   */
+  nextMatchup: SectionState<NextMatchup>
   rosterGrade: UnavailableSection
   liveScore: UnavailableSection
 }
@@ -447,6 +458,12 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       id: true, name: true, platform: true, leagueType: true, sport: true,
       // `scoring_settings` lives in here — the basis for the league-specific number.
       settings: true,
+      /*
+       * ⚠ A SECOND, DIFFERENT LEAGUE ID. `WeeklyMatchup.leagueId` holds THIS
+       * one, not `League.id`. Both are strings, so using the wrong one returns
+       * an empty result instead of an error.
+       */
+      platformLeagueId: true,
     },
   })
   if (!league) return null
@@ -470,6 +487,10 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       reason: 'no lineup found to project',
     },
     projectionBasis: { notes: [], scoringKnown: false },
+    nextMatchup: {
+      available: false as const,
+      reason: 'no schedule on file for this league yet',
+    },
     rosterGrade: {
       available: false as const,
       reason: 'a roster grade needs projections and positional replacement levels we do not compute yet',
@@ -703,10 +724,40 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
    */
   const tenure = taxiIds.length > 0 ? await getTaxiTenure(leagueId, taxiIds) : null
 
+  /*
+   * The league's own week, which is a third clock again — distinct from both
+   * the projection feed's week and the real-world NFL week. Matchups are keyed
+   * by it, and it is resolved from the matchup rows themselves rather than a
+   * calendar because sync bootstraps every week as an unscored 0-0 row.
+   */
+  const leagueWeek = league.platformLeagueId
+    ? await resolveCurrentWeekForLeague(league.platformLeagueId)
+    : null
+
+  const matchup = leagueWeek
+    ? await getNextMatchup({
+        leagueId,
+        platformLeagueId: league.platformLeagueId,
+        myExternalId: myTeamRow.externalId,
+        seasonYear: leagueWeek.seasonYear,
+        week: leagueWeek.week,
+        scoringSettings,
+        projectionWeek,
+      }).catch(() => null)
+    : null
+
   return {
     ...base,
     team,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
+    nextMatchup: matchup
+      ? { available: true, data: matchup }
+      : {
+          available: false,
+          reason: leagueWeek
+            ? `no week ${leagueWeek.week} matchup recorded for your team yet`
+            : 'no schedule on file for this league yet',
+        },
     projections:
       projectionWeek && projectedIds.length > 0
         ? {

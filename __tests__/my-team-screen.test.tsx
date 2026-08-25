@@ -73,6 +73,22 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
       },
     },
     projectionBasis: { notes: ['Tight ends get an extra 0.5 per catch on top.'], scoringKnown: true },
+    nextMatchup: {
+      available: true,
+      data: {
+        seasonYear: 2026,
+        week: 1,
+        you: {
+          rosterId: 4, teamName: '(F) SF TEP.5', managerName: 'chxnk',
+          avatarUrl: null, projected: 131.7, projectedFrom: 9, starterCount: 9,
+        },
+        opponent: {
+          rosterId: 7, teamName: 'DynastyDan', managerName: 'dan',
+          avatarUrl: null, projected: 118.2, projectedFrom: 9, starterCount: 9,
+        },
+        bye: false,
+      },
+    },
     rosterGrade: { available: false, reason: 'a roster grade needs projections we do not compute yet' },
     liveScore: { available: false, reason: 'no live scoring' },
     ...over,
@@ -343,5 +359,76 @@ describe('My Team — the reported problems', () => {
     const rows = render(<MyTeam data={data()} />).container.querySelectorAll('.af-mt-row')
     const bench = rows[rows.length - 1]
     expect(bench.textContent).not.toMatch(/\d+%/)
+  })
+
+  it('⚠ replaces the two empty points tiles with the matchup you are about to play', () => {
+    /*
+     * Points for / against were the season's running totals — 0-0 for every
+     * team until a game is scored — so the most prominent numbers on the screen
+     * were em dashes through the whole preseason.
+     */
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('projected matchup')
+    expect(t).toContain('131.7')
+    expect(t).toContain('118.2')
+    expect(t).toContain('DynastyDan')
+    expect(t).toContain('projected ahead by 13.5')
+  })
+
+  it('calls a close matchup a coin flip rather than picking a winner', () => {
+    const d = data()
+    const t = text(
+      <MyTeam
+        data={data({
+          nextMatchup: {
+            available: true,
+            data: {
+              ...d.nextMatchup.data!,
+              opponent: { ...d.nextMatchup.data!.opponent!, projected: 130.1 },
+            },
+          },
+        } as never)}
+      />,
+    )
+    expect(t).toContain('coin flip')
+  })
+
+  it('⚠ gives NO verdict when either lineup is only partly priced', () => {
+    /*
+     * A margin between two totals built from different numbers of starters is
+     * not a margin, it is an artefact of coverage — and "ahead by 12" is
+     * exactly the sentence a manager would act on.
+     */
+    const d = data()
+    const t = text(
+      <MyTeam
+        data={data({
+          nextMatchup: {
+            available: true,
+            data: {
+              ...d.nextMatchup.data!,
+              opponent: { ...d.nextMatchup.data!.opponent!, projectedFrom: 5, starterCount: 9 },
+            },
+          },
+        } as never)}
+      />,
+    )
+    expect(t).not.toMatch(/projected (ahead|behind)/)
+    expect(t).toContain('from 5 of 9')
+  })
+
+  it('says the opponent is unset rather than inventing one', () => {
+    const d = data()
+    const t = text(
+      <MyTeam
+        data={data({
+          nextMatchup: {
+            available: true,
+            data: { ...d.nextMatchup.data!, opponent: null, bye: true },
+          },
+        } as never)}
+      />,
+    )
+    expect(t).toContain('Opponent not set')
   })
 })
