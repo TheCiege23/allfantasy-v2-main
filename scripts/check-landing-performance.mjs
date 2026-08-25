@@ -74,7 +74,29 @@ async function run() {
   });
 
   try {
-    await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 60_000 });
+    /*
+     * ⚠ THIS WAS `waitUntil: "networkidle"` AND IT COULD NEVER SETTLE.
+     *
+     * networkidle resolves after 500ms with no in-flight requests. A Next.js
+     * app with any polling, prefetch or long-lived connection never gets a
+     * quiet 500ms, so `goto` ran to its 60s timeout and the check died BEFORE
+     * measuring anything. Every failure reported by this gate for the whole of
+     * this session was that timeout — not a budget breach. A required check
+     * that fails identically on every commit stops distinguishing a good push
+     * from a bad one, which is worse than not having it.
+     *
+     * Playwright's own guidance is not to use networkidle for exactly this
+     * reason. The real readiness signal is the hero selector on the next line,
+     * which this check already waits for.
+     *
+     * If a genuine budget breach exists, this change surfaces it — the failure
+     * moves from the harness to the measurement, which is the point.
+     *
+     * `load`, not `domcontentloaded`: LCP is usually an image or a web font, so
+     * the measurement needs sub-resources to have finished. `load` waits for
+     * exactly that and — unlike networkidle — is guaranteed to fire.
+     */
+    await page.goto(baseUrl, { waitUntil: "load", timeout: 60_000 });
     await page.waitForSelector('[data-testid="landing-hero-headline"]', { timeout: 20_000 });
 
     const modeToggle = page.locator('button[aria-label$="Mode"]').first();
