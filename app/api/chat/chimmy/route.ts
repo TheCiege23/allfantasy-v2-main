@@ -69,6 +69,7 @@ import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBall
 import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-room/guillotineChimmyGrounding'
 import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
+import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import {
   buildChimmyResponseForAssistantMode,
@@ -2181,9 +2182,21 @@ ${pendingTradeCtx}`
     }
     const chimmyFeatureFlags = getChimmyFeatureFlags()
 
+    /*
+     * Every player the answer names, with a headshot. Drawn from the roster the
+     * answer was grounded on rather than matched against the whole player table
+     * — see chimmyPlayerCards for why a global name match is unsafe here.
+     */
+    const playerCards = buildChimmyPlayerCards({
+      answer: modeAdjustedAnswer || '',
+      rosters: leagueSportsGrounding?.packet.rosters ?? null,
+      sport,
+    })
+
     const meta = {
       assistant: 'Chimmy',
       conversationId,
+      players: playerCards.length > 0 ? playerCards : undefined,
       /*
        * What this answer was actually grounded on. The drawer renders it, so a
        * "Chimmy is answering blind" state is VISIBLE rather than something you
