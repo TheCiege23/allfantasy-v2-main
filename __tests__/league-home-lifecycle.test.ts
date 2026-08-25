@@ -46,9 +46,23 @@ describe('league home: the stage comes from the field that tracks reality', () =
 })
 
 describe('league home: a pre-season league is not a broken one', () => {
-  it('withholds the timeline instead of pointing at a week the league has not reached', () => {
-    expect(SRC).toMatch(/timeline: preSeason/)
-    expect(SRC).toContain('the season timeline starts once this league drafts')
+  it('shows the pre-season phases instead of hiding the timeline entirely', () => {
+    /*
+     * ⚠ THIS TEST USED TO ASSERT THE OPPOSITE, and the old behaviour was the
+     * weaker half of a real point. Withholding the timeline did stop the page
+     * pointing at a week the league had not reached — but it also hid the
+     * timeline at exactly the moment a manager most wants it, when the draft
+     * and the preseason are the only things ahead of them.
+     *
+     * The guarantee that actually mattered is kept and strengthened: the
+     * timeline no longer INVENTS anything. `buildSeasonTimeline` reads the
+     * league's own settings, omits any phase whose setting is absent, and no
+     * longer falls back to a hardcoded playoff week 15.
+     */
+    expect(SRC).toContain('buildSeasonTimeline')
+    // The fabricated calendar is gone.
+    expect(SRC).not.toContain('playoffStart ?? 15')
+    expect(SRC).not.toContain('the season timeline starts once this league drafts')
   })
 
   it('explains empty standings by the calendar, not by ingestion', () => {

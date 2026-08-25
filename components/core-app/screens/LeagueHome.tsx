@@ -13,6 +13,7 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
+import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
 
 /**
  * Screen 3b — Dashboard, one league selected.
@@ -200,6 +201,21 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
             ))}
           </ol>
         )}
+      </StatePanel>
+
+      {/* ── Every game in the league ────────────────────────────────── */}
+      {/*
+        ⚠ THE PAGE SHOWED ONE MATCHUP — THE VIEWER'S. On a screen whose whole
+        subject is the league, the other games were invisible: you could not see
+        who was getting blown out, who was in a shootout, or whether next week's
+        opponent was in trouble.
+      */}
+      <StatePanel
+        title="This week in the league"
+        className="af-lh-scoreboard-panel"
+        state={data.scoreboard}
+      >
+        {(board) => <LeagueScoreboardPanel board={board} />}
       </StatePanel>
 
       {/* ── Main / side ─────────────────────────────────────────────── */}

@@ -1,6 +1,12 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { buildSeasonTimeline, leagueWeekFromSettings, type TimelinePhase } from './seasonTimeline'
+import { resolveCurrentWeekForLeague } from './currentWeek'
+import { getLeagueActivity } from './leagueActivity'
+import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
+import { extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { latestProjectionWeek } from './playerProjections'
 import { getRecentTrades } from './recentTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
@@ -82,12 +88,14 @@ export type LeagueStanding = {
   isYou: boolean
 }
 
-export type SeasonStage = {
-  key: string
-  label: string
-  when: string
-  state: 'past' | 'now' | 'future'
-}
+/**
+ * One phase of the season timeline.
+ *
+ * Now an alias of the timeline builder's own type rather than a second
+ * declaration of the same shape — two structurally identical types drift, and
+ * the drift shows up as a panel that silently renders nothing.
+ */
+export type SeasonStage = TimelinePhase
 
 export type LeagueHomeData = {
   league: {
@@ -139,6 +147,13 @@ export type LeagueHomeData = {
   draftHq: SectionState<{ headline: string; detail: string }>
   commissioner: SectionState<{ openCount: number }>
   buzz: SectionState<Array<{ id: string; actor: string; text: string; at: Date | null }>>
+  /**
+   * Every game in the league this week.
+   *
+   * ⚠ THE PAGE SHOWED ONE MATCHUP — THE VIEWER'S — on a screen whose whole
+   * subject is the league. The other games were invisible.
+   */
+  scoreboard: SectionState<LeagueScoreboard>
   /*
    * 3b draws a "Rivalry radar · this league" panel: head-to-head record against
    * each opponent, plus when that manager is usually active. Neither is stored.
@@ -185,98 +200,18 @@ function settingWeek(settings: unknown, ...keys: string[]): number | null {
   return null
 }
 
-/**
- * The season timeline.
+/*
+ * ⚠ `buildTimeline` LIVED HERE AND HAS BEEN DELETED, not merely bypassed.
  *
- * ⚠ THE DEADLINE AND PLAYOFF STAGES ARE THE LEAGUE'S OWN, NOT A GENERIC NFL
- * CALENDAR. This was previously built from the week number alone, on the stated
- * grounds that those are "league-configured dates we do not store". That is
- * true of the handoff's Offseason and Rookie draft stages and NOT true of the
- * other two: `trade_deadline_week` and `playoff_start_week` are both present in
- * League.settings on production Sleeper leagues. A 12-team league with a Week 11
- * deadline and a 14-team league with a Week 13 deadline are different seasons,
- * and hardcoding 14/15/17 told both of them the same thing.
+ * It fell back to a hardcoded playoff week 15 and a championship at +2
+ * whenever a league had no playoff start on file, so a league that trades all
+ * season — or has no bracket at all — was shown a typical 12-team redraft
+ * calendar as if it were its own. Leaving it in place unused would let the
+ * next person wire it back up.
  *
- * ⚠ OFFSEASON AND ROOKIE DRAFT ARE STILL OMITTED. The handoff draws them with
- * real dates ("AUG 14"). Nothing stores a draft date — DraftSession carries no
- * scheduled time — so those stages would be decoration with a made-up date
- * under them. A shorter true timeline beats a complete invented one.
+ * Replaced by `buildSeasonTimeline` in ./seasonTimeline, which reads the
+ * league's own settings and omits any phase whose setting is absent.
  */
-function buildTimeline(
-  currentWeek: number | null,
-  settings: unknown,
-): SectionState<SeasonStage[]> {
-  if (currentWeek == null) {
-    return { available: false, reason: 'no current week on file for this league' }
-  }
-
-  const playoffStart =
-    settingWeek(settings, 'playoff_start_week', 'playoffStartWeek') ??
-    settingWeek((settings as Record<string, unknown> | null)?.playoffSettings, 'playoffStartWeek')
-  const deadline = settingWeek(settings, 'trade_deadline_week', 'tradeDeadlineWeek')
-
-  // Fall back only where the league told us nothing; each fallback is labelled
-  // in `when` so the reader is not shown a guess dressed as a setting.
-  const playoffWeek = playoffStart ?? 15
-  const finalWeek = playoffWeek + 2
-  const configured = playoffStart != null
-
-  const stages: Array<{ key: string; label: string; when: string; startWeek: number; endWeek: number }> = []
-
-  stages.push({
-    key: 'regular',
-    label: `Weeks 1–${Math.max(1, (deadline ?? playoffWeek) - 1)}`,
-    when: 'REGULAR SEASON',
-    startWeek: 1,
-    endWeek: Math.max(1, (deadline ?? playoffWeek) - 1),
-  })
-
-  if (deadline != null) {
-    stages.push({
-      key: 'deadline',
-      label: 'Trade deadline',
-      when: `WK ${deadline}`,
-      startWeek: deadline,
-      endWeek: deadline,
-    })
-  }
-
-  if ((deadline ?? 0) + 1 <= playoffWeek - 1) {
-    stages.push({
-      key: 'push',
-      label: 'Playoff push',
-      when: `WK ${(deadline ?? 0) + 1}–${playoffWeek - 1}`,
-      startWeek: (deadline ?? 0) + 1,
-      endWeek: playoffWeek - 1,
-    })
-  }
-
-  stages.push({
-    key: 'playoffs',
-    label: 'Playoffs',
-    when: configured ? `WK ${playoffWeek}–${finalWeek - 1}` : `WK ${playoffWeek}–${finalWeek - 1} · default`,
-    startWeek: playoffWeek,
-    endWeek: finalWeek - 1,
-  })
-
-  stages.push({
-    key: 'final',
-    label: 'Championship',
-    when: configured ? `WK ${finalWeek}` : `WK ${finalWeek} · default`,
-    startWeek: finalWeek,
-    endWeek: 30,
-  })
-
-  return {
-    available: true,
-    data: stages.map((s) => ({
-      key: s.key,
-      label: s.label,
-      when: s.when,
-      state: currentWeek > s.endWeek ? 'past' : currentWeek >= s.startWeek ? 'now' : 'future',
-    })),
-  }
-}
 
 export async function getLeagueHomeData(
   leagueId: string,
@@ -305,6 +240,10 @@ export async function getLeagueHomeData(
       // deadline and playoff stages can be placed from the league's OWN
       // configuration instead of a generic NFL calendar.
       settings: true,
+      // The one affirmative signal for an elimination format: a Sleeper import
+      // can only ever write 'IDP', 'DYNASTY_IDP', 'legacy_summary' or null into
+      // leagueVariant, so the format cannot be read from there.
+      guillotineMode: true,
     },
   })
   if (!league) return null
@@ -334,6 +273,37 @@ export async function getLeagueHomeData(
     new Date(),
     6,
   ).catch(() => [])
+  /*
+   * ⚠ AND THE WAIVERS THE PANEL SAID WERE "NOT READ". They are read — the
+   * Decision-OS activity cron writes completed Sleeper waivers, free-agent
+   * moves and trades daily, league-wide. The old copy blamed the data for a
+   * query nobody had written.
+   */
+  const activity = await getLeagueActivity({
+    leagueId: league.id,
+    platformLeagueId: league.platformLeagueId,
+    limit: 8,
+  }).catch(() => null)
+
+  const activityRows = (activity?.items ?? [])
+    // Trades already arrive through the grade sweep below, with valuations
+    // attached. Listing them twice would double the feed.
+    .filter((i) => i.kind !== 'trade')
+    .map((i) => {
+      const moved = [
+        i.adds.length > 0 ? `added ${i.adds.join(', ')}` : null,
+        i.drops.length > 0 ? `dropped ${i.drops.join(', ')}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+      return {
+        id: i.id,
+        actor: i.teamName ?? i.managerName ?? 'A manager',
+        text: moved || (i.kind === 'waiver' ? 'a waiver claim' : 'a roster move'),
+        at: i.occurredAt,
+      }
+    })
+
   const buzzRows = recentTrades.map((t) => ({
     id: t.id,
     actor: t.sides.map((sd) => sd.teamName || sd.managerName).join(' ⇄ '),
@@ -362,6 +332,8 @@ export async function getLeagueHomeData(
       pointsFor: true,
       currentRank: true,
       claimedByUserId: true,
+      // The platform's roster id, so the scoreboard can mark your own game.
+      externalId: true,
     },
     orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
   })
@@ -426,20 +398,44 @@ export async function getLeagueHomeData(
    * week. If the sport's schedule was never ingested, currentWeek stays null and
    * the timeline reports itself unavailable rather than guessing.
    */
-  const nextGame = await prisma.sportsGame
-    .findFirst({
-      where: {
-        sport: String(league.sport ?? 'NFL'),
-        ...(league.season != null ? { season: league.season } : {}),
-        startTime: { gte: new Date() },
-        week: { not: null },
-      },
-      orderBy: { startTime: 'asc' },
-      select: { week: true },
-    })
-    .catch(() => null)
+  /*
+   * ⚠ THIS ASKED THE NFL CALENDAR A QUESTION ONLY THE LEAGUE CAN ANSWER.
+   *
+   * It used to take the next `SportsGame` kickoff, with no `seasonType` filter,
+   * and render that row's `week` as the fantasy week. On 2026-08-24 the next
+   * NFL fixture was PRESEASON week 3, so the header said "You are here · week 3"
+   * for a season that had not kicked off. The number was real; it was a
+   * preseason round number wearing a fantasy week's clothes.
+   *
+   * A real-world kickoff cannot answer this in principle — it knows nothing
+   * about this league. Sleeper's own `leg` does, and is read first. The matchup
+   * rows are the fallback, resolved as the earliest week still holding an
+   * unscored row (sync bootstraps all 18 weeks at 0-0, so `max(week)` returns
+   * 18 in August).
+   */
+  const currentWeek =
+    leagueWeekFromSettings(league.settings) ??
+    (league.platformLeagueId
+      ? (await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null))?.week ?? null
+      : null)
 
-  const currentWeek = nextGame?.week ?? null
+  /*
+   * The whole league's games. Scoped to the week the LEAGUE is in, not the NFL
+   * calendar's — see the currentWeek note above.
+   */
+  const board =
+    currentWeek != null && league.season != null
+      ? await getLeagueScoreboard({
+          leagueId: league.id,
+          platformLeagueId: league.platformLeagueId,
+          seasonYear: league.season,
+          week: currentWeek,
+          yourRosterId: yours?.externalId != null ? Number(yours.externalId) : null,
+          scoringSettings: extractScoringSettings(league.settings),
+          projectionWeek: await latestProjectionWeek().catch(() => null),
+        }).catch(() => null)
+      : null
+
 
   // One league through the shared aggregator — three set-based queries, and the
   // same status vocabulary handling (including `complete` vs `completed`).
@@ -536,10 +532,39 @@ export async function getLeagueHomeData(
      * made an undrafted league render as WEEK 2. Withheld rather than pointed at a week
      * the league has not reached.
      */
-    timeline: preSeason
-      ? { available: false, reason: 'the season timeline starts once this league drafts' }
-      : buildTimeline(currentWeek, league.settings),
+    /*
+     * ⚠ NO LONGER WITHHELD IN THE PRESEASON, AND NO LONGER INVENTED.
+     *
+     * The old builder fell back to a hardcoded playoff week 15 and a
+     * championship at +2 whenever the league had no playoff start on file, so a
+     * league that trades all season, or has no bracket at all, was shown a
+     * typical 12-team redraft calendar as if it were its own. It also hid
+     * itself entirely before the draft — which is exactly when a manager most
+     * wants to see the draft and preseason ahead of them.
+     *
+     * `buildSeasonTimeline` reads the league's own settings, omits any phase
+     * whose setting is absent, and reshapes for leagues with no playoffs.
+     */
+    timeline: (() => {
+      const t = buildSeasonTimeline({
+        settings: league.settings,
+        currentWeek,
+        status: league.status,
+        variant: league.leagueType,
+        guillotineMode: league.guillotineMode,
+      })
+      return { available: true as const, data: t.phases }
+    })(),
     matchup: resolvedMatchup,
+    scoreboard: board
+      ? { available: true, data: board }
+      : {
+          available: false,
+          reason:
+            currentWeek == null
+              ? 'we cannot tell which week this league is in yet'
+              : `no week ${currentWeek} matchups are on file for this league`,
+        },
     /*
      * ⚠ THIS REASON WAS STALE. It said "pick inventory and lottery odds are not
      * ingested", which is true of the handoff's LOTTERY ODDS and false of the
@@ -585,18 +610,30 @@ export async function getLeagueHomeData(
      * screen simply never looked. The remaining honest gap is narrower and now
      * says so — waivers and roster moves are not read, only completed trades.
      */
-    buzz:
-      buzzRows.length > 0
-        ? { available: true, data: buzzRows }
-        : preSeason
-          ? {
-              available: false,
-              reason: 'no league activity yet — trades and waivers start after the draft',
-            }
-          : {
-              available: false,
-              reason: 'no completed trade in the last two weeks — waivers and roster moves are not read',
-            },
+    /*
+     * ⚠ THE OLD REASON WAS FALSE. It said "waivers and roster moves are not
+     * read". They are — `decision_os_imported_activity` carries completed
+     * Sleeper waivers, free-agent moves and trades, league-wide, refreshed
+     * daily. A panel that blames the data for a query nobody wrote is worse
+     * than an empty panel, because it stops anyone looking again.
+     *
+     * Trades keep their valuations from the grade sweep; waivers and roster
+     * moves come from the activity feed. Newest first, both merged.
+     */
+    buzz: (() => {
+      const merged = [...buzzRows, ...activityRows].sort((a, b) => {
+        const at = a.at?.getTime() ?? 0
+        const bt = b.at?.getTime() ?? 0
+        return bt - at
+      })
+      if (merged.length > 0) return { available: true as const, data: merged.slice(0, 10) }
+      return {
+        available: false as const,
+        reason: preSeason
+          ? 'no league activity yet — trades and waivers start after the draft'
+          : 'nothing has moved in this league recently — no completed trades, waivers or roster moves on file',
+      }
+    })(),
     syncAge: { label: age.label, stale: age.stale },
   }
 }

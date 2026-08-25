@@ -547,3 +547,144 @@
   .af-lh-mrow { flex-wrap: wrap; gap: 12px; }
   .af-lh-mmid { order: 3; width: 100%; }
 }
+
+/* ── League scoreboard — every game, not just yours ──────────────────── */
+.af-sb-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+/*
+  ⚠ ONE LOUD FLAG, NOT A FOOTNOTE PER ROW. When the week is unplayed every
+  number below is a projection, and a projected board that reads like a live one
+  invites someone to celebrate a game nobody has played.
+*/
+.af-sb-proj-flag {
+  font-size: 11px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.af-sb-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-sb-game {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid transparent;
+}
+/* Your own game keeps the accent — it is still the one you came for. */
+.af-sb-game[data-yours='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-sb-teams {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.af-sb-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.af-sb-side[data-you='true'] .af-sb-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-sb-av {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.af-sb-av--none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.af-sb-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-sb-pts {
+  flex: 0 0 auto;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* A projection is set back from a result, so the two never read alike. */
+.af-sb-pts[data-projected='true'] {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.af-sb-cov {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.af-sb-margin {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.af-sb-unpaired {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line2);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.af-sb-unpaired-who {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* The scoreboard spans the full width, like the timeline above it — the
+   league's games are the subject of the page, not a sidebar item. */
+.af-lh-scoreboard-panel {
+  grid-column: 1 / -1;
+}
