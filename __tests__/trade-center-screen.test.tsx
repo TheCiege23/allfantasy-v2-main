@@ -239,3 +239,65 @@ describe('phase 1 — the seams', () => {
     expect(FINDER).toContain('/api/league/trade-finder')
   })
 })
+
+describe('phase 2 — mobile and drafts', () => {
+  const CSS = readFileSync(
+    resolve(process.cwd(), 'components/core-app/af-trade-center.css'),
+    'utf8',
+  )
+
+  it('⚠ does NOT add a bottom tab bar to one screen', () => {
+    /*
+     * The design shows one, but /core has no bottom nav anywhere else. Adding it
+     * here alone would make the Trade Center look like a different app the
+     * moment a user navigated away. That belongs to core chrome.
+     */
+    expect(CSS).toContain('NO BOTTOM TAB BAR HERE, DELIBERATELY')
+  })
+
+  it('scrolls chip rows on mobile rather than wrapping into a wall', () => {
+    // Six asset pills wrapping on a 390px screen is four lines of legend above
+    // the thing the page is for.
+    expect(CSS).toContain('overflow-x: auto')
+    expect(CSS).toContain('.af-tc-context .af-tc-spacer')
+  })
+
+  it('sticks the action row and drops the caption first', () => {
+    expect(CSS).toContain('position: sticky')
+    // The caption is context, not a control.
+    expect(CSS).toContain('.af-tc-caption {\n    display: none;')
+  })
+
+  it('respects the 44px touch minimum used elsewhere in /core', () => {
+    expect(CSS).toContain('min-height: 44px')
+    expect(CSS).toContain('env(safe-area-inset-bottom')
+  })
+
+  it('⚠ a draft is device-local and the UI says so', () => {
+    /*
+     * "Save draft" with no qualifier implies it will be on their phone later,
+     * and it will not. No table exists and no JSON column on a user row is a
+     * sensible home — reusing one would confuse the next reader more than it
+     * helps here.
+     */
+    expect(SRC).toContain('DEVICE-LOCAL, AND THE UI SAYS SO')
+    expect(SRC).toContain('will not follow you to another device')
+  })
+
+  it('⚠ says when the browser refused, rather than failing silently', () => {
+    // Private browsing and full quotas both throw, and silence reads as success.
+    expect(SRC).toContain('would not store the draft')
+  })
+
+  it('⚠ clears the verdict when a draft is restored', () => {
+    // A restored deal is not an analysed one — leaving the old verdict up would
+    // attach a score to a trade it was never computed for.
+    expect(SRC).toContain('A restored deal is not an analysed one')
+    expect(SRC).toContain('analyse it again to get a verdict')
+  })
+
+  it('scopes the draft key per league', () => {
+    // One draft per league, not one global draft that leaks across them.
+    expect(SRC).toContain('`af-trade-draft:${props.league.id}`')
+  })
+})

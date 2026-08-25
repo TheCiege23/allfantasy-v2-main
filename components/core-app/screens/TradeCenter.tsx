@@ -148,6 +148,7 @@ export function TradeCenter(props: {
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
+  const [draftNote, setDraftNote] = useState<string | null>(null)
 
   /** Prices the engine resolved, keyed by name, merged onto what was added. */
   const pricedBy = useMemo(() => {
@@ -256,6 +257,55 @@ export function TradeCenter(props: {
     hasSignal: Boolean(result) && !noSignal,
   })
 
+  /*
+   * ── Draft persistence ──────────────────────────────────────────
+   *
+   * ⚠ DEVICE-LOCAL, AND THE UI SAYS SO. No table exists for trade drafts and no
+   * JSON column on any user row is a sensible home — stuffing one into, say,
+   * `dashboardOnboarding` would confuse the next person to read it far more than
+   * it would help here. So a draft lives in this browser and the banner tells
+   * the manager that, because "Save draft" with no qualifier implies it will be
+   * on their phone later and it will not.
+   *
+   * A real table is the right end state; this is the version that ships without
+   * a production migration.
+   */
+  const draftKey = props.league?.id ? `af-trade-draft:${props.league.id}` : null
+
+  const saveDraft = useCallback(() => {
+    if (!draftKey) return
+    try {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({ give: giveAssets, get: getAssets, at: Date.now() }),
+      )
+      setDraftNote('Saved on this device.')
+    } catch {
+      /* Private browsing and full quotas both throw. Say so rather than
+         silently doing nothing, which reads as success. */
+      setDraftNote('This browser would not store the draft.')
+    }
+  }, [draftKey, giveAssets, getAssets])
+
+  const restoreDraft = useCallback(() => {
+    if (!draftKey) return
+    try {
+      const raw = window.localStorage.getItem(draftKey)
+      if (!raw) {
+        setDraftNote('No saved draft for this league on this device.')
+        return
+      }
+      const parsed = JSON.parse(raw) as { give?: PickedAsset[]; get?: PickedAsset[] }
+      setGiveAssets(Array.isArray(parsed.give) ? parsed.give : [])
+      setGetAssets(Array.isArray(parsed.get) ? parsed.get : [])
+      /* A restored deal is not an analysed one. */
+      setResult(null)
+      setDraftNote('Draft restored — analyse it again to get a verdict.')
+    } catch {
+      setDraftNote('That saved draft could not be read.')
+    }
+  }, [draftKey])
+
   const intel = result?.tradeIntelligence
 
   /*
@@ -346,6 +396,17 @@ export function TradeCenter(props: {
               <p key={n}>{n}</p>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {draftKey ? (
+        <div className="af-tc-draft">
+          <span>Drafts are kept in this browser only — they will not follow you to another device.</span>
+          <span className="af-tc-spacer" />
+          <button type="button" className="af-btn af-btn--ghost" onClick={restoreDraft}>
+            Restore draft
+          </button>
+          {draftNote ? <span className="af-tc-row-sub">{draftNote}</span> : null}
         </div>
       ) : null}
 
@@ -578,6 +639,14 @@ export function TradeCenter(props: {
           disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           {busy ? 'Analyzing…' : 'Analyze this trade'}
+        </button>
+        <button
+          type="button"
+          className="af-btn af-btn--ghost"
+          onClick={saveDraft}
+          disabled={!draftKey || (giveAssets.length === 0 && getAssets.length === 0)}
+        >
+          Save draft
         </button>
         <button type="button" className="af-btn af-btn--ghost" onClick={askChimmy}>
           Ask Chimmy to explain

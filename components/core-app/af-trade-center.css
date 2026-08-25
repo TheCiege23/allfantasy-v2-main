@@ -584,3 +584,90 @@
 .af-tc-grade[data-letter='C'] .af-tc-grade-letter { color: #fbbf24; }
 .af-tc-grade[data-letter='D'] .af-tc-grade-letter { color: #fb923c; }
 .af-tc-grade[data-letter='F'] .af-tc-grade-letter { color: #fb5b78; }
+
+/* ── Mobile treatment ────────────────────────────────────────────────────
+ *
+ * ⚠ NO BOTTOM TAB BAR HERE, DELIBERATELY. The design shows one, but /core has
+ * no bottom nav on any other screen — adding it to this one alone would make
+ * the Trade Center look like a different app the moment a user navigated away.
+ * That belongs to core chrome, not to a single tab.
+ *
+ * What IS screen-local and does belong here: the action bar sticking, the chip
+ * rows scrolling instead of wrapping into a wall, and touch targets that clear
+ * 44px.
+ */
+
+@media (max-width: 720px) {
+  /*
+   * Chip rows scroll rather than wrap. Six asset pills wrapping on a 390px
+   * screen becomes four lines of legend above the thing the page is for.
+   */
+  .af-tc-legend,
+  .af-tc-context {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-tc-legend::-webkit-scrollbar,
+  .af-tc-context::-webkit-scrollbar {
+    display: none;
+  }
+  .af-tc-asset-pill,
+  .af-tc-chip {
+    flex: 0 0 auto;
+  }
+  /* The spacer collapses in a scroller — it would otherwise eat the row. */
+  .af-tc-context .af-tc-spacer {
+    display: none;
+  }
+
+  /*
+   * The action row sticks to the bottom of the viewport. It carries the only
+   * two controls that end the task, and on a long page they are otherwise a
+   * scroll away from wherever the manager is reading.
+   */
+  .af-tc-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin: 0 -16px -16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--line2);
+  }
+  /* The caption is the first thing to go — it is context, not a control. */
+  .af-tc-caption {
+    display: none;
+  }
+  .af-tc-actions .af-btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  /* 44px minimum touch rows, matching the rest of /core. */
+  .af-tc-row,
+  .af-tc-add,
+  .af-tc-picker-tab {
+    min-height: 44px;
+  }
+  .af-tc-remove {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ── Draft banner ────────────────────────────────────────────────────── */
+
+.af-tc-draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  border: 1px dashed var(--line2);
+  background: var(--surface2);
+  font-size: 12.5px;
+  color: var(--text2);
+}
