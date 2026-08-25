@@ -75,6 +75,7 @@ import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGroundi
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
+import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -2007,6 +2008,25 @@ ${waiverCtx}`
               }
             } catch { /* non-fatal */ }
           }
+
+          try {
+            /*
+             * Why a number might have moved. The packet states projections and
+             * explains none of them; this supplies the dated news beside them and
+             * forbids turning it into a causal claim.
+             */
+            const newsCtx = await buildPlayerNewsContext({
+              rosters: leagueSportsGrounding?.packet.rosters ?? null,
+              sport,
+            })
+            if (newsCtx) {
+              legacyEnrichmentContext = legacyEnrichmentContext
+                ? `${legacyEnrichmentContext}
+
+${newsCtx}`
+                : newsCtx
+            }
+          } catch { /* non-fatal */ }
 
           try {
             /*
