@@ -74,6 +74,24 @@ export interface CanonicalMemoEnrichment {
    * starting requirements — and it says so by living in its own slot.
    */
   idpValueByPlayerId?: Record<string, number | null | undefined>
+  /**
+   * How often this player actually trades, from the vendor's own board.
+   *
+   * ⚠ REPORTED, NEVER APPLIED. A thin market means the price has rarely been tested, not that
+   * the asset is worth less — discounting for it would manufacture a penalty out of an absence
+   * of evidence. It belongs on the screen beside the number, not inside it.
+   */
+  liquidityByPlayerId?: Record<string, number | null | undefined>
+  /** Thirty-day movement in the vendor's units. Momentum, not level. */
+  trend30dByPlayerId?: Record<string, number | null | undefined>
+  /**
+   * Ids whose price sits in the bottom decile of liquidity FOR THEIR FORMAT.
+   *
+   * The set is computed where the format is known rather than re-derived here — dynasty and
+   * redraft boards differ about ninefold in trade frequency, so a threshold applied without the
+   * format would call almost every dynasty asset thin and almost no redraft one.
+   */
+  thinlyPricedIds?: readonly string[]
 }
 
 export interface BuildCanonicalTradeMemoInput {
@@ -163,6 +181,27 @@ export function toEnrichedAsset(
   }
   if (kind === 'player' && projection == null) {
     notes.push('Player projection not yet sourced from the Canonical World (Phase F enrichment) — value uses ADP + scarcity only.')
+  }
+  /*
+   * The market-microstructure note. Ingested daily since the value cron landed and read by
+   * nothing until now: a price the market rarely tests is a different kind of number from the
+   * same price arrived at by constant trading, and a manager weighing an offer deserves to know
+   * which one they are looking at.
+   */
+  if (kind === 'player' && playerId) {
+    const liquidity = enrich.liquidityByPlayerId?.[playerId]
+    if (enrich.thinlyPricedIds?.includes(playerId) && typeof liquidity === 'number') {
+      notes.push(
+        `Market price is thinly traded (${(liquidity * 100).toFixed(3)}% of rosters move him on a ` +
+          'typical day) — the value is less tested than a frequently traded one, not lower.',
+      )
+    }
+    const trend = enrich.trend30dByPlayerId?.[playerId]
+    if (typeof trend === 'number' && Number.isFinite(trend) && Math.abs(trend) >= 200) {
+      notes.push(
+        `Market value has moved ${trend > 0 ? 'up' : 'down'} ${Math.abs(trend)} over 30 days.`,
+      )
+    }
   }
 
   return {

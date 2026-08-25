@@ -541,5 +541,15 @@ export type RawPlayerValueRow = {
   value: number
   overallRank: number | null
   positionRank: number | null
+  /**
+   * How often this player actually trades. The liquidity signal.
+   *
+   * ⚠ A HIGH VALUE WITH NEAR-ZERO FREQUENCY IS A THIN PRICE, NOT A CONFIDENT ONE — it is a
+   * number the market has rarely been asked to defend. Ingested daily and, until now, read by
+   * nothing.
+   */
+  tradeFrequency: number | null
+  /** Thirty-day movement in the vendor's own units. Momentum, not level. */
+  trend30d: number | null
   capturedAt: Date
 }

@@ -321,7 +321,7 @@ export async function runCanonicalTradeShadowAttempt(
         },
       })
     } catch {
-      enrichmentResult = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, idpValueResolved: 0, unresolvedIds: [], warnings: ['enrichment_unavailable'] }
+      enrichmentResult = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, idpValueResolved: 0, thinlyPricedIds: [], unresolvedIds: [], warnings: ['enrichment_unavailable'] }
     }
 
     // 4. TradeWorld → canonical memo, fed the read-only enrichment. Unsourced market fields degrade to

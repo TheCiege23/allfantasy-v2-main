@@ -790,6 +790,8 @@ export async function loadPlayerValueRows(
         value: true,
         overallRank: true,
         positionRank: true,
+        tradeFrequency: true,
+        trend30d: true,
         capturedAt: true,
       },
     })

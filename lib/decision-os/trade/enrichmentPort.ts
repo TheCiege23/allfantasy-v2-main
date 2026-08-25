@@ -33,6 +33,21 @@ import { loadIdpValueRows, loadPlayerValueRows, loadProjectionRows } from '@/lib
 import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnrichedWorld'
 import type { RawIdpValueRow, RawPlayerValueRow, RawProjectionRow } from '@/lib/decision-os/world/facts'
 
+/**
+ * Below this share of trades-per-day a price is thin: the market has rarely been asked to
+ * defend it.
+ *
+ * ⚠ MEASURED PER FORMAT, BECAUSE THE TWO BOARDS ARE NOT ON THE SAME SCALE. On the FantasyCalc
+ * board of 2026-08-25 the tenth percentile of trade frequency is 0.0003 in dynasty and 0.0027
+ * in redraft — redraft assets change hands roughly nine times as often. One absolute threshold
+ * would have called almost every dynasty asset thin and almost no redraft one, which is the
+ * same format-blind mistake the value chart itself guards against.
+ */
+const THIN_PRICE_DECILE: Record<string, number> = {
+  DYNASTY: 0.0003,
+  REDRAFT: 0.0027,
+}
+
 export interface TradeEnrichmentPort {
   /** READ-ONLY: freshest-first persisted ADP records for the sport + player ids. NEVER writes/calls APIs. */
   loadAdp: (sport: string, playerIds: string[]) => Promise<AdpRecordRow[]>
@@ -97,6 +112,8 @@ export interface TradeEnrichmentResult {
   projectionResolved: number
   /** Count of requested ids that resolved a league-specific IDP value. */
   idpValueResolved: number
+  /** Ids whose market price is in the bottom decile of its format's liquidity. */
+  thinlyPricedIds: string[]
   /** Requested ids that resolved NEITHER adp nor position. */
   unresolvedIds: string[]
   /** Honest missing-field notes (provenance/debug only — never consumed by decision rules). */
@@ -111,6 +128,7 @@ function emptyResult(): TradeEnrichmentResult {
     positionResolved: 0,
     projectionResolved: 0,
     idpValueResolved: 0,
+    thinlyPricedIds: [],
     unresolvedIds: [],
     warnings: [],
   }
@@ -163,6 +181,9 @@ export async function resolveTradeEnrichment(
   // F2.5-fed below when the season/week anchor is present; otherwise honestly empty.
   const projectionByPlayerId: Record<string, number | null> = {}
   const marketValueByPlayerId: Record<string, number | null> = {}
+  const liquidityByPlayerId: Record<string, number | null> = {}
+  const trend30dByPlayerId: Record<string, number | null> = {}
+  const thinlyPricedIds: string[] = []
   const warnings: string[] = []
   const contributing: string[] = []
 
@@ -243,6 +264,7 @@ export async function resolveTradeEnrichment(
         args.valueFormat.qbFormat,
       )
       const seen = new Set<string>()
+      const thinFloor = THIN_PRICE_DECILE[args.valueFormat.format]
       for (const r of rows) {
         if (!r.sleeperId || seen.has(r.sleeperId)) continue
         seen.add(r.sleeperId)
@@ -250,8 +272,21 @@ export async function resolveTradeEnrichment(
           marketValueByPlayerId[r.sleeperId] = r.value
           marketValueResolved += 1
         }
+        /*
+         * Liquidity is reported, never used to move the price. A thin market means the number
+         * is less tested, not that the player is worth less — discounting him for it would
+         * invent a penalty out of an absence of evidence.
+         */
+        if (typeof r.tradeFrequency === 'number' && Number.isFinite(r.tradeFrequency)) {
+          liquidityByPlayerId[r.sleeperId] = r.tradeFrequency
+          if (thinFloor != null && r.tradeFrequency < thinFloor) thinlyPricedIds.push(r.sleeperId)
+        }
+        if (typeof r.trend30d === 'number' && Number.isFinite(r.trend30d)) {
+          trend30dByPlayerId[r.sleeperId] = r.trend30d
+        }
       }
       if (marketValueResolved > 0) contributing.push('player_value_snapshot')
+      if (thinlyPricedIds.length > 0) warnings.push('market_price_thin')
     } catch {
       warnings.push('market_value_source_unavailable')
     }
@@ -301,12 +336,16 @@ export async function resolveTradeEnrichment(
       projectionByPlayerId,
       marketValueByPlayerId,
       idpValueByPlayerId,
+      liquidityByPlayerId,
+      trend30dByPlayerId,
+      thinlyPricedIds,
     },
     valuationSource: contributing.length > 0 ? contributing.join('+') : null,
     adpResolved,
     positionResolved,
     projectionResolved,
     idpValueResolved,
+    thinlyPricedIds,
     unresolvedIds,
     warnings: Array.from(new Set(warnings)),
   }
