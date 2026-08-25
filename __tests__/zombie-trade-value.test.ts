@@ -11,7 +11,9 @@ import {
   serumValue,
   tradeWindow,
   vetoRiskNote,
+  serumStackingNote,
   weaponAcquisitionValue,
+  weaponSurplus,
   WEAPON_POINTS,
 } from '@/lib/trade-intel/zombie'
 
@@ -242,5 +244,76 @@ describe('the zombie model is actually reachable', () => {
 
   it('survivor still resolves to "other", because we have no rules for it', () => {
     expect(readFormatRules({ leagueType: 'survivor' }).concept).toBe('other')
+  })
+})
+
+describe('weaponSurplus: the trade asset nobody can see', () => {
+  it('⚠ a third weapon pays its holder exactly zero', () => {
+    /*
+     * The observed case from the 2025 Universe stats sheet: a manager holding a
+     * bow, three axes and a knife. Top two count 14; the other 16 points are
+     * dead. Those weapons are worth nothing to him and 6 a week to somebody
+     * holding none — an asset both sides gain real points from.
+     */
+    const s = weaponSurplus({
+      held: [WEAPON_POINTS.bow, WEAPON_POINTS.axe, WEAPON_POINTS.axe, WEAPON_POINTS.axe, WEAPON_POINTS.knife],
+      weeksRemaining: 5,
+    })
+    expect(s.counting).toEqual([8, 6])
+    expect(s.deadPointsPerWeek).toBe(16)
+    expect(s.basis).toContain('cheapest real thing')
+  })
+
+  it('says nothing when nothing is going to waste', () => {
+    expect(
+      weaponSurplus({ held: [WEAPON_POINTS.gun, WEAPON_POINTS.bow], weeksRemaining: 5 }).basis,
+    ).toBeNull()
+    expect(weaponSurplus({ held: [], weeksRemaining: 5 }).basis).toBeNull()
+  })
+
+  it('keeps the BEST two, not the first two it was handed', () => {
+    const s = weaponSurplus({
+      held: [WEAPON_POINTS.knife, WEAPON_POINTS.gun, WEAPON_POINTS.bow],
+      weeksRemaining: 3,
+    })
+    expect(s.counting).toEqual([10, 8])
+    expect(s.surplus).toEqual([4])
+  })
+})
+
+describe('serumStackingNote: serums do NOT behave like weapons', () => {
+  it('⚠ a third serum is worth what the first was', () => {
+    /*
+     * The rules allow several serums in the same week for multiple +10s. The
+     * natural assumption from the weapon cap is that items generally cap, and
+     * acting on that would leave a manager refusing serums he should take.
+     */
+    const n = serumStackingNote({ held: 3 })!
+    expect(n).toContain('do not cap')
+    expect(n).toContain('third weapon')
+  })
+
+  it('stays quiet below two, where there is nothing to explain', () => {
+    expect(serumStackingNote({ held: 1 })).toBeNull()
+  })
+})
+
+describe('the surplus note reaches the screen', () => {
+  const SRC = readFileSync(resolve(process.cwd(), 'lib/trade-intel/tradeContextNotes.ts'), 'utf8')
+
+  it('reads the viewer’s own unused inventory', () => {
+    expect(SRC).toContain('prisma.zombieTeamItem')
+    expect(SRC).toContain('isUsed: false')
+    expect(SRC).toContain('weaponSurplus(')
+  })
+
+  it('⚠ classifies serums and weapons separately, because they cap differently', () => {
+    /*
+     * A weapon we fail to recognise must not be silently counted as a serum or
+     * the reverse: weapons cap at two and serums stack without limit, so getting
+     * the class wrong inverts the advice.
+     */
+    expect(SRC).toContain("tag.includes('serum')")
+    expect(SRC).toContain('serumStackingNote(')
   })
 })

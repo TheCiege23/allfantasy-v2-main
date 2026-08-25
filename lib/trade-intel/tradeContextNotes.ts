@@ -16,7 +16,16 @@ import {
   floorOverCeilingNote,
   guillotineHorizon,
 } from './guillotine'
-import { serumValue, tradeWindow, vetoRiskNote } from './zombie'
+import {
+  BOMB_POINTS,
+  serumStackingNote,
+  serumValue,
+  tradeWindow,
+  vetoRiskNote,
+  weaponSurplus,
+  WEAPON_POINTS,
+  type WeaponTier,
+} from './zombie'
 import {
   impossiblePickWarning,
   keeperDriftNote,
@@ -414,6 +423,7 @@ export async function buildTradeContextNotes(args: {
     ),
     pickCount: (args.picksToMe?.length ?? 0) + (args.picksToThem?.length ?? 0),
     percentDiff: args.percentDiff ?? null,
+    userId,
   }).catch(() => [])
 
   return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes, scaleNotes, formatNotes }
@@ -426,7 +436,11 @@ export async function buildTradeContextNotes(args: {
  * trade, and how infected the league is — the first only ever falls and the
  * second makes serums appreciate. Both are read, not assumed.
  */
-async function zombieNotesFor(leagueId: string, percentDiff: number | null): Promise<string[]> {
+async function zombieNotesFor(
+  leagueId: string,
+  userId: string,
+  percentDiff: number | null,
+): Promise<string[]> {
   const notes: string[] = []
 
   const teams = await prisma.zombieLeagueTeam
@@ -443,6 +457,48 @@ async function zombieNotesFor(leagueId: string, percentDiff: number | null): Pro
 
     const serum = serumValue({ zombieCount: zombies, teamCount: teams.length })
     if (serum) notes.push(serum.basis)
+  }
+
+  /*
+   * What this manager is holding, and specifically what of it is dead weight.
+   *
+   * ⚠ SURPLUS WEAPONS ARE THE BEST TRADE ASSET IN THE FORMAT and are invisible
+   * on every chart: beyond your top two they pay you exactly nothing and pay
+   * somebody holding fewer their full face value every week.
+   */
+  const items = await prisma.zombieTeamItem
+    .findMany({
+      where: { userId, isUsed: false, isExpired: false },
+      select: { itemType: true, itemLabel: true },
+      take: 100,
+    })
+    .catch((): Array<{ itemType: string; itemLabel: string | null }> => [])
+
+  if (items.length > 0) {
+    /*
+     * Classified from type and label together, tolerantly: the item vocabulary
+     * is not one we control, and a weapon we fail to recognise must not be
+     * silently counted as a serum (or vice versa) — they cap differently, which
+     * is the whole point of the notes below.
+     */
+    const held: number[] = []
+    let serums = 0
+    for (const it of items) {
+      const tag = `${it.itemType ?? ''} ${it.itemLabel ?? ''}`.toLowerCase()
+      if (tag.includes('serum')) {
+        serums += 1
+        continue
+      }
+      const tier = (Object.keys(WEAPON_POINTS) as WeaponTier[]).find((k) => tag.includes(k))
+      if (tier) held.push(WEAPON_POINTS[tier])
+      else if (tag.includes('bomb')) held.push(BOMB_POINTS)
+    }
+
+    const surplus = weaponSurplus({ held, weeksRemaining: 0 })
+    if (surplus.basis) notes.push(surplus.basis)
+
+    const stacking = serumStackingNote({ held: serums })
+    if (stacking) notes.push(stacking)
   }
 
   /*
@@ -563,6 +619,8 @@ async function buildFormatNotes(args: {
   pickCount: number
   /** How one-sided the console judged this deal, for the veto warning. */
   percentDiff: number | null
+  /** The viewer, so their own item inventory can be read. */
+  userId: string
 }): Promise<string[]> {
   const rules = readFormatRules(args.league)
   const notes = [...rules.notes]
@@ -577,7 +635,9 @@ async function buildFormatNotes(args: {
    * tiebreaker. See lib/trade-intel/guillotine.ts.
    */
   if (rules.concept === 'zombie') {
-    notes.push(...(await zombieNotesFor(args.leagueId, args.percentDiff).catch(() => [])))
+    notes.push(
+      ...(await zombieNotesFor(args.leagueId, args.userId, args.percentDiff).catch(() => [])),
+    )
     return notes
   }
 

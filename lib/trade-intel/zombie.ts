@@ -203,3 +203,60 @@ export function vetoRiskNote(args: {
     Math.round(args.percentDiff),
   )}% one-sided. In this league a trade the commissioner flags goes to an eight-hour poll and two thirds can reverse it — small rosters make a lopsided deal matter more here, so expect scrutiny even if both managers are happy.`
 }
+
+/**
+ * Weapons a manager is holding that are worth nothing to him.
+ *
+ * ⚠ THE BEST TRADE ASSET IN THIS FORMAT, AND IT IS INVISIBLE ON EVERY CHART. Only
+ * your top two weapons count, so a third is dead weight — it pays its holder
+ * exactly zero and it pays somebody holding fewer its full face value every
+ * week. That is a rare thing: an asset both sides can gain real points from,
+ * because one side is currently getting none.
+ *
+ * ⚠ AND THIS IS THE COMMON CASE, NOT AN EDGE CASE. Across the 2025 Universe
+ * stats sheet, 33 managers recorded an item inventory: 48% held two or more
+ * weapons and 18% held three or more and were already wasting value. One held a
+ * bow, three axes and a knife — 14 points counting, 16 points dead.
+ *
+ * Serums behave the opposite way and must not be lumped in: the rules allow
+ * "multiple Serums in the same week to give yourself an additional +10
+ * bonus(es)", so serums never cap and never go to waste. Weapons cap at two;
+ * serums stack. A third weapon is worth nothing and a third serum is worth ten.
+ */
+export function weaponSurplus(args: { held: number[]; weeksRemaining: number }): {
+  counting: number[]
+  surplus: number[]
+  deadPointsPerWeek: number
+  basis: string | null
+} {
+  const sorted = [...args.held].sort((a, b) => b - a)
+  const counting = sorted.slice(0, WEAPONS_COUNTED)
+  const surplus = sorted.slice(WEAPONS_COUNTED)
+  const deadPointsPerWeek = surplus.reduce((a, b) => a + b, 0)
+
+  if (surplus.length === 0) {
+    return { counting, surplus, deadPointsPerWeek: 0, basis: null }
+  }
+
+  const best = surplus[0]!
+  return {
+    counting,
+    surplus,
+    deadPointsPerWeek,
+    basis: `You hold ${surplus.length} weapon${
+      surplus.length === 1 ? '' : 's'
+    } beyond your top two, worth ${deadPointsPerWeek} points a week to you \u2014 which is zero, because only your best two count. The same weapons are worth up to ${best} a week to a manager holding fewer. Surplus weapons are the cheapest real thing you can put into a deal here.`,
+  }
+}
+
+/**
+ * Serums do not cap, so a manager's tenth serum is worth what his first was.
+ *
+ * Stated because the natural assumption from the weapon rule is that items
+ * generally cap, and acting on that would leave a manager refusing serums he
+ * should be taking.
+ */
+export function serumStackingNote(args: { held: number }): string | null {
+  if (args.held < 2) return null
+  return `You hold ${args.held} serums. Unlike weapons, serums do not cap \u2014 you can use several in the same week for multiple +10 bonuses \u2014 so an extra one is worth as much as your first. Do not price them the way you price a third weapon.`
+}
