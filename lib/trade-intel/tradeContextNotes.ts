@@ -12,6 +12,11 @@ import {
 } from '@/lib/core-app/seasonTimeline'
 import { assessLeagueScale } from './leagueScale'
 import {
+  faabPurchasingPower,
+  floorOverCeilingNote,
+  guillotineHorizon,
+} from './guillotine'
+import {
   impossiblePickWarning,
   keeperDriftNote,
   readFormatRules,
@@ -411,6 +416,95 @@ export async function buildTradeContextNotes(args: {
 }
 
 /**
+ * What a guillotine league's own state says about this trade.
+ *
+ * Every number here is read rather than assumed: how many teams are still alive,
+ * what last period's scores actually were, and what people have really paid for
+ * chopped players in this league.
+ */
+async function guillotineNotes(leagueId: string): Promise<string[]> {
+  const notes: string[] = []
+
+  const [states, config] = await Promise.all([
+    prisma.guillotineRosterState
+      .findMany({ where: { leagueId }, select: { rosterId: true, choppedAt: true } })
+      .catch((): Array<{ rosterId: string; choppedAt: Date | null }> => []),
+    prisma.guillotineLeagueConfig
+      .findUnique({ where: { leagueId }, select: { teamsPerChop: true } })
+      .catch(() => null),
+  ])
+  if (states.length < 2) return notes
+
+  const alive = states.filter((s) => s.choppedAt == null)
+  const horizon = guillotineHorizon({
+    teamsRemaining: alive.length,
+    startingTeams: states.length,
+    teamsPerChop: config?.teamsPerChop ?? 1,
+  })
+  if (!horizon) return notes
+  notes.push(horizon.basis)
+
+  const floor = floorOverCeilingNote(horizon)
+  if (floor) notes.push(floor)
+
+  /*
+   * The chop line, from the most recent period that actually has scores. The
+   * distance that matters is to the BOTTOM — finishing eighth of ten is fine
+   * and finishing tenth ends the season.
+   */
+  const latest = await prisma.guillotinePeriodScore
+    .findFirst({ where: { leagueId }, orderBy: { weekOrPeriod: 'desc' }, select: { weekOrPeriod: true } })
+    .catch(() => null)
+  if (latest) {
+    const scores = await prisma.guillotinePeriodScore
+      .findMany({
+        where: { leagueId, weekOrPeriod: latest.weekOrPeriod },
+        select: { rosterId: true, periodPoints: true },
+      })
+      .catch((): Array<{ rosterId: string; periodPoints: number }> => [])
+
+    const aliveIds = new Set(alive.map((a) => a.rosterId))
+    const board = scores
+      .filter((s) => aliveIds.has(s.rosterId))
+      .map((s) => ({ rosterId: s.rosterId, points: s.periodPoints }))
+
+    /*
+     * Reported for the whole field rather than for one team: the console does
+     * not know which guillotine roster is the viewer's, and naming the wrong
+     * team's margin would be worse than naming none.
+     */
+    if (board.length >= 2) {
+      const sorted = [...board].sort((a, b) => a.points - b.points)
+      const gap = sorted[1]!.points - sorted[0]!.points
+      notes.push(
+        `Last period the chop line was ${sorted[0]!.points.toFixed(1)} and the next team up scored ${sorted[1]!.points.toFixed(
+          1,
+        )} — a margin of ${gap.toFixed(1)}. That gap is the distance that decides seasons here, not the distance to the average.`,
+      )
+    }
+  }
+
+  /*
+   * What FAAB actually buys in THIS league, from what people have really paid.
+   * Measured rather than priced off a generic anchor heuristic.
+   */
+  const releases = await prisma.guillotineWaiverRelease
+    .findMany({
+      where: { leagueId, winningBid: { not: null } },
+      select: { winningBid: true },
+      take: 500,
+    })
+    .catch((): Array<{ winningBid: number | null }> => [])
+
+  const power = faabPurchasingPower({
+    winningBids: releases.map((r) => r.winningBid).filter((b): b is number => b != null),
+  })
+  if (power) notes.push(power.basis)
+
+  return notes
+}
+
+/**
  * Format rules, and — in a keeper league — what the incoming players actually
  * cost to hold.
  */
@@ -433,6 +527,16 @@ async function buildFormatNotes(args: {
   const impossible = impossiblePickWarning({ rules, pickCount: args.pickCount })
   /* Leads, because it is a correctness problem rather than a nuance. */
   if (impossible) notes.unshift(impossible)
+
+  /*
+   * Guillotine has its own valuation curve entirely — a trade decays toward zero
+   * as the field shrinks and FAAB is the acquisition market rather than a
+   * tiebreaker. See lib/trade-intel/guillotine.ts.
+   */
+  if (rules.concept === 'guillotine') {
+    notes.push(...(await guillotineNotes(args.leagueId).catch(() => [])))
+    return notes
+  }
 
   if (rules.concept !== 'keeper' || args.incomingIds.length === 0) return notes
 

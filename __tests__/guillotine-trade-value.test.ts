@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import {
   chopMargin,
@@ -138,5 +140,43 @@ describe('floorOverCeilingNote: said when it matters, not every week', () => {
     // carrying normal instincts into this format needs telling.
     const late = guillotineHorizon({ teamsRemaining: 3, startingTeams: 18 })!
     expect(floorOverCeilingNote(late)).toContain('opposite of the advice')
+  })
+})
+
+describe('the guillotine notes are actually reachable', () => {
+  const SRC = readFileSync(resolve(process.cwd(), 'lib/trade-intel/tradeContextNotes.ts'), 'utf8')
+
+  it('⚠ the trade console routes guillotine leagues to the guillotine model', () => {
+    /*
+     * The failure this guards is the one this repo keeps hitting: a module built,
+     * tested, merged, and never executed because nothing calls it.
+     */
+    expect(SRC).toContain("rules.concept === 'guillotine'")
+    expect(SRC).toContain('guillotineNotes(')
+  })
+
+  it('reads the field from roster state rather than assuming a size', () => {
+    expect(SRC).toContain('prisma.guillotineRosterState')
+    expect(SRC).toContain('s.choppedAt == null')
+  })
+
+  it('⚠ prices FAAB from real winning bids, not a generic anchor', () => {
+    expect(SRC).toContain('prisma.guillotineWaiverRelease')
+    expect(SRC).toContain('winningBid: { not: null }')
+    expect(SRC).toContain('faabPurchasingPower(')
+  })
+
+  it('⚠ reports the chop line for the field, not a guessed viewer', () => {
+    /*
+     * The console does not know which guillotine roster belongs to the viewer.
+     * Naming the wrong team's survival margin would be worse than naming none,
+     * so the note describes the line itself.
+     */
+    expect(SRC).toContain('not know which guillotine roster is the viewer')
+  })
+
+  it('returns early rather than falling through to keeper logic', () => {
+    const block = SRC.slice(SRC.indexOf("rules.concept === 'guillotine'"))
+    expect(block.slice(0, 300)).toContain('return notes')
   })
 })
