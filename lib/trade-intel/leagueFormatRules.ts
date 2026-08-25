@@ -116,14 +116,16 @@ export function readFormatRules(league: {
      * takeable. So a player's value here depends on whether you can actually
      * keep him, which is a question no value chart asks.
      *
-     * The trade window differs per player: protected players freeze from TNF to
-     * Wednesday midnight, everyone else trades freely. See
-     * lib/trade-intel/pirate.ts, which also documents where the existing
-     * house-rule advice inverts under a protection cap.
+     * The trade window differs per player, and not the way it first reads: once
+     * the games start only PROTECTED players can be traded. Unprotected players
+     * are the steal pool, so freezing them is what stops a losing manager
+     * shipping them out before the winner picks. See lib/trade-intel/pirate.ts,
+     * which also documents where the existing house-rule advice inverts under a
+     * protection cap.
      */
     futurePicksTradeable = null
     notes.push(
-      'Pirate: winning a matchup takes a player off the loser, and only your 3 protected players are safe. Anything you acquire beyond those 3 can be stolen the first week you lose — and the tradeable pool shrinks all season, because every result moves a player and none come back.',
+      'Pirate: winning a matchup takes a player off the loser, and only your 3 protected players are safe. Anything you acquire beyond those 3 can be stolen the first week you lose. Once the games start only protected players can be traded — the unprotected ones are frozen so the winner still has something to take — and the tradeable pool shrinks all season, because every result moves a player and none come back.',
     )
   } else if (concept === 'tournament') {
     /*

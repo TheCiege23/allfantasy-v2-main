@@ -9,8 +9,23 @@
  *   2. You may only take from an opponent you BEAT head-to-head that week.
  *   3. Protections cannot be changed after the first TNF game until the
  *      following Wednesday at midnight.
- *   4. A PROTECTED player cannot be traded between TNF and that Wednesday
- *      midnight. Everyone else can be traded at any time.
+ *   4. Once the games start, the ONLY players who can be traded are PROTECTED
+ *      ones. Unprotected players are frozen until Wednesday midnight.
+ *
+ * ⚠ RULE 4 EXISTS TO PROTECT THE WINNER'S PICK, AND THAT IS WHAT MAKES IT READ
+ * BACKWARDS AT FIRST. Unprotected players are the steal pool. If a manager who
+ * is losing could ship them out mid-week, the winner would arrive to find
+ * nothing worth taking — the whole mechanic would be dodgeable. So the takeable
+ * players are exactly the ones frozen in place, and the safe ones are the only
+ * currency that still moves.
+ *
+ * ⚠ THE COMMISSIONER'S PINNED TEXT SAYS THIS THE OTHER WAY ROUND — "you cannot
+ * trade a protected player between TNF and the following Wednesday at midnight
+ * but all other players can be traded at any time". Implemented per the
+ * commissioner's stated INTENT rather than that wording, because the wording
+ * describes a rule with no purpose: freezing players who cannot be stolen while
+ * letting the stealable ones move is exactly the loophole rule 4 exists to
+ * close. Worth correcting the pinned message for the league's own members.
  *
  * ⚠ THE CONCENTRATION ADVICE IN `lib/league-context/leagueContextService.ts` IS
  * BACKWARDS FOR THIS RULE SET, and this module exists partly to say so. That file
@@ -130,20 +145,16 @@ export function acquisitionSafety(args: {
 /**
  * The trade window, which is not the same for every player on your roster.
  *
- * ⚠ DURING THE LOCK, THE ONLY THINGS YOU CAN TRADE ARE THE THINGS YOU CAN LOSE.
- * Protected players are frozen from TNF until Wednesday midnight; everyone else
- * trades freely. So the market inside that window consists entirely of stealable
- * assets — which cuts both ways: you can convert a player who is about to be
- * taken into something before it happens, and so can the manager on the other
- * side of the table.
+ * ⚠ DURING THE LOCK YOU CANNOT TRADE THE PLAYERS YOU ARE ABOUT TO LOSE. That is
+ * the point of the rule: unprotected players are the steal pool, so freezing
+ * them stops a losing manager shipping them out before the winner picks. Only
+ * protected players move mid-week.
  *
- * ⚠ THE RULES AS GIVEN TO US CONFLICT ON THE WINDOW and we do not resolve it
- * silently. The pinned message says protected players are frozen "between TNF
- * and the following Wednesday at midnight" with everyone else tradeable at any
- * time; a separate description says there is no trading at all between Thursday
- * kickoff and the Monday game ending. Those are different rules. The pinned
- * message is the more specific and is implemented; the note says a conflict
- * exists rather than pretending it does not.
+ * ⚠ AND THAT CREATES A TRAP ON THE RECEIVING END. Protections are frozen in the
+ * same window, so a player who arrives mid-week lands on your roster
+ * UNPROTECTED and cannot be covered until Wednesday. Trade for a star on Friday,
+ * lose on Sunday, and he is the first thing the winner takes — you will have
+ * paid a protected price for a player you held for two days.
  */
 export function tradeLockNote(args: {
   inLockWindow: boolean
@@ -153,12 +164,12 @@ export function tradeLockNote(args: {
   if (!args.inLockWindow) return null
 
   if (args.playerProtected === true) {
-    return 'This player is protected and protections are frozen from TNF until Wednesday midnight — he cannot be traded until then, and you cannot unprotect him to get around it.'
+    return 'He is protected, so he is one of the few players who CAN move right now — protected players are the only ones tradeable once the games start. ⚠ But protections are frozen too, so he arrives on the other roster unprotected and stays that way until Wednesday midnight: whoever takes him can lose him this week.'
   }
   if (args.playerProtected === false) {
-    return 'Trading is open for this player — only protected players are frozen until Wednesday midnight. Note that the same rule makes him stealable if you lose, so a deal now is a way to bank him before that happens.'
+    return 'He is unprotected, so he cannot be traded until Wednesday midnight. Unprotected players are the steal pool and freezing them is what stops a losing manager shipping them out before the winner picks — you cannot trade your way out of this week’s exposure.'
   }
-  return 'We cannot tell whether this player is protected. Protected players cannot be traded between TNF and Wednesday midnight; everyone else can. Check before agreeing. (Two versions of this rule are in circulation — one freezes only protected players, the other closes trading entirely from Thursday to Monday. Confirm which your league runs.)'
+  return 'We cannot tell whether this player is protected. Once the games start only PROTECTED players can be traded — the unprotected ones are frozen so the winner still has something to take. Check his status before agreeing.'
 }
 
 /**

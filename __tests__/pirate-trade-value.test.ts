@@ -82,30 +82,34 @@ describe('acquisitionSafety: the question nobody asks before trading here', () =
   })
 })
 
-describe('tradeLockNote: the window differs per player', () => {
-  it('⚠ during the lock, the only tradeable players are the stealable ones', () => {
+describe('tradeLockNote: only the SAFE players move once games start', () => {
+  it('⚠ you cannot trade your way out of this week’s exposure', () => {
     /*
-     * Protected players are frozen; everyone else trades freely. So the market
-     * inside that window is made entirely of assets at risk — which is a reason
-     * to deal, not a reason to wait.
+     * THE RULE READS BACKWARDS UNTIL YOU SEE ITS PURPOSE. Unprotected players are
+     * the steal pool. If a losing manager could ship them out mid-week the
+     * winner would arrive to find nothing worth taking and the whole mechanic
+     * would be dodgeable — so the takeable players are exactly the frozen ones.
      */
     const n = tradeLockNote({ inLockWindow: true, playerProtected: false })!
-    expect(n).toContain('bank him before that happens')
+    expect(n).toContain('cannot be traded until Wednesday midnight')
+    expect(n).toContain('stops a losing manager shipping them out')
   })
 
-  it('says a protected player is frozen and cannot be unprotected around it', () => {
-    const n = tradeLockNote({ inLockWindow: true, playerProtected: true })!
-    expect(n).toContain('cannot unprotect him to get around it')
-  })
-
-  it('⚠ names the rule conflict instead of silently picking one', () => {
+  it('⚠ a protected player CAN move, and lands unprotected on the other side', () => {
     /*
-     * One version freezes only protected players; another closes trading
-     * entirely from Thursday to Monday. Those are different rules and a manager
-     * should be told to confirm rather than handed a confident answer.
+     * The trap on the receiving end: protections are frozen in the same window,
+     * so an incoming player cannot be covered until Wednesday. Trade for a star
+     * on Friday, lose on Sunday, and he is the first thing the winner takes.
      */
+    const n = tradeLockNote({ inLockWindow: true, playerProtected: true })!
+    expect(n).toContain('the only ones tradeable once the games start')
+    expect(n).toContain('can lose him this week')
+  })
+
+  it('says which way the rule runs when the status is unknown', () => {
     const n = tradeLockNote({ inLockWindow: true, playerProtected: null })!
-    expect(n).toContain('Two versions of this rule are in circulation')
+    expect(n).toContain('only PROTECTED players can be traded')
+    expect(n).toContain('winner still has something to take')
   })
 
   it('says nothing outside the window', () => {
