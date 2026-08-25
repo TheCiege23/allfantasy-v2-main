@@ -48,6 +48,22 @@ export interface CanonicalMemoEnrichment {
   projectionByPlayerId?: Record<string, number | null | undefined>
   /** Position per player — from the D.1 `resolvePlayerMetadata` seam; falls back to the asset's own metadata. */
   positionByPlayerId?: Record<string, string | null | undefined>
+  /**
+   * FantasyCalc market value per player, from the persisted `PlayerValueSnapshot`
+   * table and matched to the league's format.
+   *
+   * ⚠ THIS SLOT HAS BEEN ON THE CONTRACT SINCE THE BEGINNING AND FED NULL AT
+   * EVERY WRITE SITE. Each deferral gave the same reason — "live external API:
+   * latency, availability, non-determinism" — and each was correct while the
+   * only FantasyCalc access was a live fetch. `PlayerValueSnapshot` is a local
+   * table with a daily cron and a dated series, so the objection no longer
+   * applies. The engine already consumes this: `snapshot.ts` passes it into
+   * `normalizedPlayerValue` as `marketValue`, and that path is test-pinned.
+   *
+   * Still honest-optional. An absent value stays null and the engine degrades
+   * exactly as it does today — filling it is strictly additive.
+   */
+  marketValueByPlayerId?: Record<string, number | null | undefined>
 }
 
 export interface BuildCanonicalTradeMemoInput {
@@ -127,6 +143,7 @@ export function toEnrichedAsset(
   const adp = playerId ? enrich.adpByPlayerId?.[playerId] ?? null : null
   const projection = playerId ? enrich.projectionByPlayerId?.[playerId] ?? null : null
   const position = (playerId ? enrich.positionByPlayerId?.[playerId] : null) ?? asset.metadata.player?.position ?? null
+  const marketValue = playerId ? enrich.marketValueByPlayerId?.[playerId] ?? null : null
 
   if (kind === 'future_consideration' && asset.assetType !== 'future_consideration') {
     notes.push(
@@ -154,7 +171,13 @@ export function toEnrichedAsset(
         projectionValue: projection ?? null,
         rankingValue: null,
         adpValue: adp ?? null,
-        fantasyCalcValue: null,
+        /*
+         * ⚠ WAS HARDCODED `null` — the single line that kept every Decision OS
+         * trade valuation blind to the market. Both memo builders share this
+         * leaf (a byte-identity test guarantees it), so filling it here reaches
+         * every consumer at once.
+         */
+        fantasyCalcValue: marketValue ?? null,
       },
     },
     notes,

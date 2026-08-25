@@ -20,6 +20,7 @@ import type {
   RawPerformanceRow,
   RawPlayerGameFactRow,
   RawPlayerMetadataRow,
+  RawPlayerValueRow,
   RawProjectionRow,
   RawRosterRow,
   RawScheduleGameRow,
@@ -696,6 +697,57 @@ export async function loadMarketValueRows(
  * Slice limit: 200 unique ids max (consistent with other enrichment ports).
  * NO writes, NO live provider calls, NO cache warming.
  */
+/**
+ * Persisted FantasyCalc valuations for a set of players.
+ *
+ * ⚠ READ-ONLY, LOCAL, AND FORMAT-MATCHED. `PlayerValueSnapshot` is written by
+ * the daily `adp-refresh` cron; this never calls FantasyCalc. That distinction
+ * is the reason this loader can exist at all — every previous attempt to give
+ * the trade substrate a market value was deferred with "live external API", and
+ * a local table with a dated series is not one.
+ *
+ * ⚠ FORMAT AND QB FORMAT ARE PARAMETERS, NOT CONSTANTS. `lib/core-app/trades.ts`
+ * hardcodes DYNASTY/SUPERFLEX, which is fine for the one screen it serves and
+ * wrong here: pricing a 1QB redraft league off the superflex dynasty chart is
+ * exactly the class of error the value engine's scarcity model was written to
+ * eliminate. The caller derives both from the league.
+ *
+ * ⚠ `source: 'FANTASYCALC'` IS A LICENCE BOUNDARY, NOT A TIDY FILTER. The
+ * ingest deliberately excludes other vendors; see the note at the top of
+ * lib/player-values/ingestPlayerValues.ts before widening it.
+ */
+export async function loadPlayerValueRows(
+  sleeperIds: string[],
+  format: string,
+  qbFormat: string,
+): Promise<RawPlayerValueRow[]> {
+  const clean = Array.from(
+    new Set(sleeperIds.filter((x) => typeof x === 'string' && x.length > 0)),
+  ).slice(0, 200)
+  if (clean.length === 0) return []
+
+  const rows = await prisma.playerValueSnapshot
+    .findMany({
+      where: { sleeperId: { in: clean }, source: 'FANTASYCALC', format, qbFormat },
+      // Freshest first, matching the dedup convention every other loader here
+      // uses — the caller keeps the first row it sees per id.
+      orderBy: { capturedAt: 'desc' },
+      select: {
+        sleeperId: true,
+        source: true,
+        format: true,
+        qbFormat: true,
+        value: true,
+        overallRank: true,
+        positionRank: true,
+        capturedAt: true,
+      },
+    })
+    .catch(() => [])
+
+  return rows as RawPlayerValueRow[]
+}
+
 export async function loadProjectionRows(
   sport: string,
   ids: string[],

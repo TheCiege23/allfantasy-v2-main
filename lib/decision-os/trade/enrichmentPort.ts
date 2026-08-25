@@ -13,7 +13,10 @@
  *   • projection — persisted `FantasyProjection` rows via the F2.5 world port (playerId-keyed), anchored
  *                  to the canonical world's season/currentWeek. Unanchored/empty ⇒ honest `projection_*`
  *                  warnings — NEVER fabricated (P3).
- *   • marketValue— Phase F enrichment; honest-absent today.
+ *   • marketValue— persisted FantasyCalc valuations (`PlayerValueSnapshot`), format-matched to the
+ *                  league. Written by the daily adp-refresh cron; the live FantasyCalc API is NEVER
+ *                  called from here. This was "honest-absent today" for as long as the only way to
+ *                  get a market value was a live call — it is a local table now.
  *
  * HONEST & READ-ONLY: never writes, never warms a cache, never calls a live provider API, never throws
  * (a prisma-unavailable env — e.g. local jsdom where `@/lib/prisma` is null — degrades to honest-empty
@@ -26,9 +29,9 @@
 import type { CanonicalMemoEnrichment } from './canonicalMemo'
 import { loadAdpRecords, type AdpRecordRow } from './loader'
 import { resolvePlayerMetadata, type PlayerMetadataResult } from '@/lib/decision-os/world'
-import { loadProjectionRows } from '@/lib/decision-os/world/port'
+import { loadPlayerValueRows, loadProjectionRows } from '@/lib/decision-os/world/port'
 import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnrichedWorld'
-import type { RawProjectionRow } from '@/lib/decision-os/world/facts'
+import type { RawPlayerValueRow, RawProjectionRow } from '@/lib/decision-os/world/facts'
 
 export interface TradeEnrichmentPort {
   /** READ-ONLY: freshest-first persisted ADP records for the sport + player ids. NEVER writes/calls APIs. */
@@ -40,12 +43,27 @@ export interface TradeEnrichmentPort {
    * playerId-keyed — the provider-id-keyed source the D.1 audit predated). NEVER calls a live API.
    */
   loadProjections: (sport: string, playerIds: string[], season: string, week: number) => Promise<RawProjectionRow[]>
+  /**
+   * READ-ONLY: persisted FantasyCalc valuations, matched to the league's own
+   * format and QB format.
+   *
+   * ⚠ THE FORMAT ARGUMENTS ARE NOT OPTIONAL DECORATION. Pricing a 1QB redraft
+   * league off the superflex dynasty chart is the exact error the value
+   * engine's scarcity model exists to prevent, and it is silent — every number
+   * still looks like a number.
+   */
+  loadMarketValue: (
+    sleeperIds: string[],
+    format: string,
+    qbFormat: string,
+  ) => Promise<RawPlayerValueRow[]>
 }
 
 export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
   loadAdp: (sport, ids) => loadAdpRecords(sport, ids),
   resolveMetadata: (sport, ids) => resolvePlayerMetadata(sport, ids),
   loadProjections: (sport, ids, season, week) => loadProjectionRows(sport, ids, season, week),
+  loadMarketValue: (ids, format, qbFormat) => loadPlayerValueRows(ids, format, qbFormat),
 }
 
 export interface TradeEnrichmentResult {
@@ -91,6 +109,15 @@ export async function resolveTradeEnrichment(
     week?: number | null
     /** League scoring preset for the projection match tier (null ⇒ any_scoring + mismatch note). */
     scoringPresetId?: string | null
+    /**
+     * The league's own value market.
+     *
+     * ⚠ NOT DEFAULTED, AND THAT IS DELIBERATE. Absent means we do not know the
+     * league's format, and pricing it off the wrong chart is silent — a 1QB
+     * redraft roster valued on the superflex dynasty market produces numbers
+     * that all look plausible and are all wrong. No format, no market value.
+     */
+    valueFormat?: { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' | 'SUPERFLEX' } | null
   },
   port: TradeEnrichmentPort = defaultTradeEnrichmentPort,
 ): Promise<TradeEnrichmentResult> {
@@ -101,6 +128,7 @@ export async function resolveTradeEnrichment(
   const positionByPlayerId: Record<string, string | null> = {}
   // F2.5-fed below when the season/week anchor is present; otherwise honestly empty.
   const projectionByPlayerId: Record<string, number | null> = {}
+  const marketValueByPlayerId: Record<string, number | null> = {}
   const warnings: string[] = []
   const contributing: string[] = []
 
@@ -167,13 +195,45 @@ export async function resolveTradeEnrichment(
   }
   if (projectionResolved === 0) warnings.push('projection_unavailable')
 
+  /*
+   * Market value — persisted FantasyCalc via the world port. Rows arrive
+   * freshest-first, so the FIRST row per id wins, the same dedup convention ADP
+   * uses above.
+   */
+  let marketValueResolved = 0
+  if (args.valueFormat) {
+    try {
+      const rows = await port.loadMarketValue(
+        ids,
+        args.valueFormat.format,
+        args.valueFormat.qbFormat,
+      )
+      const seen = new Set<string>()
+      for (const r of rows) {
+        if (!r.sleeperId || seen.has(r.sleeperId)) continue
+        seen.add(r.sleeperId)
+        if (typeof r.value === 'number' && Number.isFinite(r.value)) {
+          marketValueByPlayerId[r.sleeperId] = r.value
+          marketValueResolved += 1
+        }
+      }
+      if (marketValueResolved > 0) contributing.push('player_value_snapshot')
+    } catch {
+      warnings.push('market_value_source_unavailable')
+    }
+  } else {
+    // Said out loud rather than silently priced off a default chart.
+    warnings.push('market_value_format_unknown')
+  }
+  if (marketValueResolved === 0) warnings.push('market_value_unavailable')
+
   const adpResolved = Object.values(adpByPlayerId).filter((v) => v != null).length
   const positionResolved = Object.values(positionByPlayerId).filter((v) => v != null).length
   const unresolvedIds = ids.filter((id) => adpByPlayerId[id] == null && positionByPlayerId[id] == null)
   if (unresolvedIds.length > 0) warnings.push('enrichment_incomplete')
 
   return {
-    enrichment: { adpByPlayerId, positionByPlayerId, projectionByPlayerId },
+    enrichment: { adpByPlayerId, positionByPlayerId, projectionByPlayerId, marketValueByPlayerId },
     valuationSource: contributing.length > 0 ? contributing.join('+') : null,
     adpResolved,
     positionResolved,

@@ -497,3 +497,25 @@ export interface CanonicalWorld {
   provenance: WorldProvenance
   completeness: WorldCompleteness
 }
+
+/**
+ * One persisted FantasyCalc valuation for a player.
+ *
+ * ⚠ THIS IS A LOCAL TABLE, WHICH IS THE WHOLE POINT. Every deferral that left
+ * `fantasyCalcValue` null across the trade substrate gives the same reason —
+ * "live external API: latency, availability, non-determinism". That reason
+ * stopped applying when `PlayerValueSnapshot` landed: it is a Postgres table
+ * with a daily cron and a dated series, read the same way ADP and projections
+ * already are. Nothing about reading it is live, slow or non-deterministic.
+ */
+export type RawPlayerValueRow = {
+  sleeperId: string
+  /** The vendor. Filtered to FANTASYCALC at the port — a licence boundary. */
+  source: string
+  format: string
+  qbFormat: string
+  value: number
+  overallRank: number | null
+  positionRank: number | null
+  capturedAt: Date
+}
