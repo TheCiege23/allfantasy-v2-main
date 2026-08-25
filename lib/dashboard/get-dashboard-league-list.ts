@@ -248,6 +248,52 @@ export async function getLegacyLeagueBoardItems(legacyUserId: string): Promise<u
     .filter(isRealLeague)
 }
 
+/**
+ * One row per league, not one per season.
+ *
+ * ⚠ `League` IS UNIQUE ON (userId, platform, platformLeagueId, SEASON) — the
+ * season is part of the key, deliberately, because a dynasty league genuinely
+ * is a different row each year. Nothing downstream collapsed them, so the rail
+ * rendered the same league once for every season on file: three identical
+ * crests with the same name and the same avatar, which reads as a duplicate
+ * import and is indistinguishable from one.
+ *
+ * The newest season wins. Older rows stay in the database and stay reachable —
+ * this is a display collapse, not a delete, and no history is lost by it.
+ *
+ * ⚠ KEYED ON platform + platformLeagueId, NEVER ON NAME. Two genuinely
+ * different leagues can share a name, and they very often share a crest — a
+ * league series reuses its logo. Collapsing on either would hide a league
+ * somebody actually plays in, which is a worse failure than the one this fixes.
+ *
+ * Rows with no provider identity (AF-native, tournaments) pass through
+ * untouched: they have nothing to group on and must never be grouped with each
+ * other.
+ */
+export function collapseLeagueSeasons<T extends Record<string, unknown>>(rows: T[]): T[] {
+  const byLeague = new Map<string, T>()
+  const passthrough: T[] = []
+
+  for (const lg of rows) {
+    const platformId = (lg.platformLeagueId ?? lg.platform_league_id ?? null) as string | null
+    const platform = (lg.platform ?? null) as string | null
+    if (!platformId || !platform) {
+      passthrough.push(lg)
+      continue
+    }
+    const key = `${platform}:${platformId}`
+    const seen = byLeague.get(key)
+    if (!seen) {
+      byLeague.set(key, lg)
+      continue
+    }
+    const seasonOf = (x: T) => (typeof x.season === 'number' ? (x.season as number) : -1)
+    if (seasonOf(lg) > seasonOf(seen)) byLeague.set(key, lg)
+  }
+
+  return [...passthrough, ...byLeague.values()]
+}
+
 export async function getDashboardLeagueListForUser(userId: string): Promise<DashboardLeagueListPayload> {
   const [profile, appUser] = await Promise.all([
     prisma.userProfile
@@ -614,47 +660,7 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
     ...legacyBoardItems,
   ]
 
-  /*
-   * ⚠ ONE ROW PER LEAGUE, NOT ONE PER SEASON.
-   *
-   * `League` is unique on (userId, platform, platformLeagueId, season) — the
-   * SEASON is part of the key, deliberately, because a dynasty league genuinely
-   * is a different row each year. Nothing downstream collapsed them, so the
-   * rail rendered the same league once for every season on file: three
-   * identical crests with the same name and the same avatar, which reads as a
-   * duplicate import and is indistinguishable from one.
-   *
-   * The newest season wins. Older rows are still in the database and still
-   * reachable — this is a display collapse, not a delete, and no history is
-   * lost by it.
-   *
-   * Keyed on platform + platformLeagueId, NOT on name: two genuinely different
-   * leagues can share a name (and often a crest — a league series reuses its
-   * logo), and collapsing those would hide a league someone actually plays in.
-   * That failure is worse than the one being fixed.
-   */
-  const byLeague = new Map<string, any>()
-  const passthrough: any[] = []
-  for (const lg of filtered as any[]) {
-    const platformId = lg.platform_league_id ?? lg.platformLeagueId ?? null
-    const platform = lg.platform ?? null
-    if (!platformId || !platform) {
-      // No provider identity to group on — AF-native and tournament rows keep
-      // their own id and are never collapsed against each other.
-      passthrough.push(lg)
-      continue
-    }
-    const key = `${platform}:${platformId}`
-    const seen = byLeague.get(key)
-    if (!seen) {
-      byLeague.set(key, lg)
-      continue
-    }
-    const seasonOf = (x: any) => (typeof x?.season === 'number' ? x.season : -1)
-    if (seasonOf(lg) > seasonOf(seen)) byLeague.set(key, lg)
-  }
-
-  const deduped = [...passthrough, ...byLeague.values()]
+  const deduped = collapseLeagueSeasons(filtered as any[])
 
   const leaguesSorted = deduped.sort((a: any, b: any) => {
     const aDate = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0
