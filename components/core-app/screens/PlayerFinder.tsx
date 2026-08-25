@@ -32,13 +32,11 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
  *   - INJURY TIMELINE (WED DNP / THU LP / FRI FP). No provider we ingest carries
  *     practice participation; `sportsInjury` holds a status and a description and
  *     nothing else. The status we DO have renders as a single chip instead.
- *   - SNAP SHARE. ⚠ THIS ENTRY WAS WRONG AND THE TILE IS STILL MISSING BECAUSE OF IT.
- *     `snapShare` was a hardcoded unavailable section reading "snap share is not
- *     ingested by any current provider", so the tile was removed as permanently
- *     empty. The columns were on disk the whole time — `off_snp` on 77% of game
- *     rows and `tm_off_snp` on 89%, `def_snp` on 58% and `tm_def_snp` on 70% —
- *     and `getPlayerDetail` now returns a real share with its own coverage.
- *     Nothing renders it yet: the tile has to come back.
+ *   - SNAP SHARE — RESOLVED, AND IT WAS NEVER MISSING. This entry used to say the
+ *     section was "not ingested by any current provider" and the tile was removed
+ *     as permanently empty. The columns were on disk the whole time: `off_snp` on
+ *     77% of game rows and `tm_off_snp` on 89%, `def_snp` on 58% and `tm_def_snp`
+ *     on 70%. The tile is back and shows a real share with the games behind it.
  *   - RECENTLY SEARCHED. Nothing persists a per-user search history, so there is
  *     no list to render.
  *
@@ -305,6 +303,28 @@ export function PlayerFinder({
                 help={
                   detail.positionRank.available
                     ? `of ${detail.positionRank.data.outOf} projected ${detail.positionRank.data.position}s`
+                    : undefined
+                }
+              />
+              {/*
+                ⚠ THE TILE THAT WAS DELETED FOR BEING PERMANENTLY EMPTY. The section used to be
+                hardcoded unavailable — "snap share is not ingested by any current provider" —
+                which was simply untrue: the columns sit on 58-89% of game rows depending on
+                which side of the ball. It is back because the number is real, and it names its
+                own denominator for the same reason the position rank does: "68%" alone invites
+                the reader to assume a full season behind it.
+              */}
+              <StatTile
+                label="Snap share"
+                state={detail.snapShare}
+                value={
+                  detail.snapShare.available
+                    ? `${Math.round(detail.snapShare.data.share * 100)}%`
+                    : null
+                }
+                help={
+                  detail.snapShare.available
+                    ? `${detail.snapShare.data.basis === 'defense' ? 'Defensive' : 'Offensive'} snaps · ${detail.snapShare.data.games} game${detail.snapShare.data.games === 1 ? '' : 's'}`
                     : undefined
                 }
               />
