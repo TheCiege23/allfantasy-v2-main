@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveSleeperPlayerIdentities } from '@/lib/players/sleeperPlayerCrosswalk'
 
 /**
  * COMPLETED TRADES IN THIS LEAGUE → CHIMMY.
@@ -57,22 +58,22 @@ function pickList(value: unknown): string[] {
 }
 
 /**
- * Sleeper player ids to names.
+ * Sleeper player ids to names, via the shared crosswalk.
  *
- * ⚠ ALWAYS FILTERED BY SPORT. `SportsPlayer.externalId` is unique only WITHIN a
- * sport — id `340` is simultaneously an NBA, NCAAF, SOCCER, MLB and NCAAB player —
- * so an unfiltered lookup returns an arbitrary athlete, and a different one run to
- * run. Ids that do not resolve are counted, never guessed at.
+ * ⚠ THE CROSSWALK IS THE ONLY WAY TO DO THIS. There is no column joining Sleeper
+ * ids to `Player.id`, and the naive `SportsPlayer.externalId` lookup this used to
+ * do resolves only 15% of traded ids — the crosswalk's second hop through our own
+ * roster rows lifts it to 42%. It is sport-filtered for the same reason as before:
+ * `externalId` is unique only within one.
  */
 async function resolveNames(ids: string[], sport: string): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   if (ids.length === 0) return out
   try {
-    const rows = await prisma.sportsPlayer.findMany({
-      where: { externalId: { in: ids }, sport: sport.toUpperCase() },
-      select: { externalId: true, name: true },
-    })
-    for (const r of rows) out.set(r.externalId, r.name)
+    const { byId } = await resolveSleeperPlayerIdentities(ids, sport)
+    for (const [id, identity] of byId) {
+      if (identity.name) out.set(id, identity.name)
+    }
   } catch {
     // A failed lookup means "unnamed", which the caller reports honestly.
   }

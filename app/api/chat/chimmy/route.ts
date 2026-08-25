@@ -72,6 +72,7 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
+import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import {
   buildChimmyResponseForAssistantMode,
@@ -2261,6 +2262,23 @@ ${tradeHistoryCtx}`
       rosters: leagueSportsGrounding?.packet.rosters ?? null,
       sport,
     })
+
+    /*
+     * A roster player carried under a synthetic `name:` id has no Sleeper id to
+     * derive a headshot from, so the card comes back imageless. The NAME still
+     * reaches the canonical row 89% of the time, and every row that matches has
+     * an image — so this fills exactly the gap the id-based path cannot.
+     */
+    const cardsMissingImages = playerCards.filter((c) => !c.imageUrl)
+    if (cardsMissingImages.length > 0) {
+      const byName = await resolveImagesByPlayerName(
+        cardsMissingImages.map((c) => c.name),
+        sport,
+      ).catch(() => new Map<string, string>())
+      for (const card of cardsMissingImages) {
+        card.imageUrl = byName.get(card.name.toLowerCase()) ?? null
+      }
+    }
 
     const meta = {
       assistant: 'Chimmy',
