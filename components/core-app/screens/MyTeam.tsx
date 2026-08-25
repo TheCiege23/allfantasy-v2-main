@@ -373,14 +373,24 @@ function Projections({ player, shareOfLineup }: { player: LineupPlayer; shareOfL
 
   return (
     <div className="af-mt-projpair">
-      <span className="af-mt-proj af-num" title="Standard PPR projection from the feed">
-        {fmt(player.projectedPoints)}
-      </span>
+      {/*
+        ⚠ THE LEAGUE-SCORED NUMBER LEADS, and the order carries meaning. Generic
+        PPR was first and full weight, so the most prominent figure on every row
+        was the one scored for a league nobody is in — while the column that
+        matches what the platform itself displays sat behind it. Measured on a
+        real roster: ours 30.0 against Sleeper's 29.98; generic said 20.5.
+      */}
       <span
         className="af-mt-proj af-mt-proj--af af-num"
-        title="The same projection re-scored under your league's rules"
+        title="Scored under YOUR league's rules — the number that applies to you"
       >
         {fmt(player.afProjectedPoints)}
+      </span>
+      <span
+        className="af-mt-proj af-mt-proj--ppr af-num"
+        title="Standard PPR from the feed — a generic baseline, not your league"
+      >
+        {fmt(player.projectedPoints)}
       </span>
       {shareOfLineup != null ? (
         <span
@@ -405,9 +415,6 @@ const AF_PTS_EXPLAINER =
 function ProjHeader() {
   return (
     <div className="af-mt-projhead">
-      <span className="af-label" title="Standard PPR from the feed — not your league's rules">
-        PTS
-      </span>
       <span className="af-label af-mt-projhead--af" title={AF_PTS_EXPLAINER}>
         AF PTS
         {/*
@@ -417,6 +424,9 @@ function ProjHeader() {
         <span className="af-mt-info" role="img" aria-label={AF_PTS_EXPLAINER}>
           ?
         </span>
+      </span>
+      <span className="af-label" title="Standard PPR from the feed — a generic baseline, not your league">
+        PPR
       </span>
       <span className="af-label" title="Share of your projected starting total">
         SHARE
@@ -632,6 +642,12 @@ export function MyTeam({ data }: MyTeamProps) {
 
             {/* ── Both weekly totals, at the top where they belong ──── */}
             <div className="af-mt-tiles">
+              <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af">
+                <div className="af-mt-tile-value af-num">
+                  {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
+                </div>
+                <div className="af-label">Projected · your league</div>
+              </div>
               {/*
                 ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
                 generic line does not score defenders, so this total covers only
@@ -653,12 +669,6 @@ export function MyTeam({ data }: MyTeamProps) {
                     like-for-like total in an IDP league.
                   </div>
                 ) : null}
-              </div>
-              <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af">
-                <div className="af-mt-tile-value af-num">
-                  {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
-                </div>
-                <div className="af-label">Projected · your league</div>
               </div>
               <div className="af-mt-tile">
                 <div className="af-mt-tile-value af-num">{data.team.data.record}</div>

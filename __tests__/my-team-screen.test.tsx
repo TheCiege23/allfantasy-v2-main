@@ -640,4 +640,32 @@ describe('My Team — the reported problems', () => {
     expect(bare.querySelector('.af-mt-venue[data-forecast="true"]')).toBeNull()
     expect(bare.querySelector('.af-mt-venue')).toBeTruthy()
   })
+
+  it('⚠ leads with the LEAGUE-scored number, not the generic one', () => {
+    /*
+     * Order and weight both carry meaning here. Generic PPR used to be first
+     * and full weight, so the most prominent number on every row was the one
+     * scored for a league nobody is in — while the figure that matches what the
+     * platform itself displays sat behind it. Measured on a real roster:
+     * ours 30.0 against Sleeper's 29.98, generic 20.5.
+     */
+    const c = render(<MyTeam data={data()} />).container
+    const pair = c.querySelector('.af-mt-projpair')!
+    const nums = [...pair.querySelectorAll('.af-mt-proj')].map((e) => e.textContent)
+    // League-scored first, generic second.
+    expect(nums[0]).toBe('22.4')
+    expect(nums[1]).toBe('19.8')
+    expect(pair.querySelector('.af-mt-proj--af')?.textContent).toBe('22.4')
+  })
+
+  it('labels the generic column PPR, so it cannot be mistaken for your league', () => {
+    expect(text(<MyTeam data={data()} />)).toContain('PPR')
+  })
+
+  it('puts the league total first among the header tiles', () => {
+    const c = render(<MyTeam data={data()} />).container
+    const first = c.querySelector('.af-mt-tile')
+    expect(first?.className).toContain('af-mt-tile--af')
+    expect(first?.textContent).toContain('131.7')
+  })
 })
