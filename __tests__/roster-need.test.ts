@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  byeCollisionDelta,
   computeRosterNeed,
   counterpartyPriceDelta,
   readSlotRequirements,
@@ -134,5 +135,120 @@ describe('counterpartyPriceDelta: a preference, stated as one', () => {
     })
     const d = counterpartyPriceDelta({ position: 'RB', need: desperate })!
     expect(d.factor).toBeLessThanOrEqual(1.15)
+  })
+})
+
+describe('byeCollisionDelta: the Josh Allen case', () => {
+  const ONE_QB_REQ = readSlotRequirements(ONE_QB)!
+
+  it('⚠ flags a deal that does not fix the bye hole it looks like it fixes', () => {
+    /*
+     * The manager's own example. You hold a quarterback off in week 10 and trade
+     * for Josh Allen, who is also off in week 10. You are no worse off — but you
+     * are no better off either, at the position you were trading to improve, and
+     * you probably did not notice. No discount: two years of a player of that
+     * calibre can be worth one unstartable Sunday, and that call is the
+     * manager's. The sentence is the deliverable.
+     */
+    const d = byeCollisionDelta({
+      requirements: ONE_QB_REQ,
+      roster: [
+        { position: 'QB', byeWeek: 10, id: 'qb1' },
+        { position: 'RB', byeWeek: 5, id: 'rb1' },
+      ],
+      incoming: { position: 'QB', byeWeek: 10 },
+    })!
+    expect(d.unrelieved).toHaveLength(1)
+    expect(d.unrelieved[0].week).toBe(10)
+    expect(d.factor).toBe(1)
+    expect(d.basis).toContain('does not fix')
+  })
+
+  it('⚠ catches the hole the OUTGOING side opens', () => {
+    /*
+     * A trade is not an acquisition. You send the QB2 who was covering week 10
+     * and receive a quarterback who is also off in week 10 — a week that was
+     * covered before the deal is empty after it. A model that only looked at the
+     * incoming player would see two quarterbacks and call it fine.
+     */
+    const d = byeCollisionDelta({
+      requirements: ONE_QB_REQ,
+      roster: [
+        { position: 'QB', byeWeek: 10, id: 'qb1' },
+        { position: 'QB', byeWeek: 7, id: 'qb2' },
+      ],
+      incoming: { position: 'QB', byeWeek: 10 },
+      outgoingIds: ['qb2'],
+    })!
+    expect(d.created).toHaveLength(1)
+    expect(d.created[0].week).toBe(10)
+    expect(d.factor).toBeLessThan(1)
+    expect(d.basis).toContain('week 10 hole')
+  })
+
+  it('says nothing when the byes do not collide', () => {
+    const d = byeCollisionDelta({
+      requirements: ONE_QB_REQ,
+      roster: [{ position: 'QB', byeWeek: 7, id: 'qb1' }],
+      incoming: { position: 'QB', byeWeek: 10 },
+    })!
+    expect(d.created).toEqual([])
+    expect(d.unrelieved).toEqual([])
+    expect(d.factor).toBe(1)
+  })
+
+  it('⚠ an unknown bye is treated as available, never as a collision', () => {
+    /*
+     * Inventing a collision out of missing data is a false alarm, and false
+     * alarms on a trade screen teach managers to ignore the real ones.
+     */
+    expect(
+      byeCollisionDelta({
+        requirements: ONE_QB_REQ,
+        roster: [{ position: 'QB', byeWeek: null, id: 'qb1' }],
+        incoming: { position: 'QB', byeWeek: null },
+      }),
+    ).toBeNull()
+
+    const d = byeCollisionDelta({
+      requirements: ONE_QB_REQ,
+      roster: [{ position: 'QB', byeWeek: null, id: 'qb1' }],
+      incoming: { position: 'QB', byeWeek: 10 },
+    })!
+    expect(d.created).toEqual([])
+  })
+
+  it('⚠ the discount is capped, so a bye can never sink a trade on its own', () => {
+    // "It won't kill the trade but it should impact it" — the manager's rule.
+    const d = byeCollisionDelta({
+      requirements: readSlotRequirements(['QB', 'RB', 'RB', 'WR', 'WR'])!,
+      roster: [
+        { position: 'QB', byeWeek: 9, id: 'a' },
+        { position: 'RB', byeWeek: 9, id: 'b' },
+        { position: 'RB', byeWeek: 3, id: 'c' },
+        { position: 'WR', byeWeek: 9, id: 'd' },
+        { position: 'WR', byeWeek: 4, id: 'e' },
+      ],
+      incoming: { position: 'RB', byeWeek: 9 },
+      outgoingIds: ['c'],
+    })!
+    expect(d.factor).toBeGreaterThanOrEqual(1 - 0.09)
+  })
+
+  it('⚠ a roster with no kicker at all is not a "bye" problem', () => {
+    /*
+     * A thin roster is short at that position EVERY week, which is a
+     * roster-construction fact and not something this trade's bye weeks caused.
+     * Reporting it here would fire the warning on every deal a thin roster ever
+     * looked at — and a signal that fires constantly is one managers learn to
+     * ignore, which costs them the week it was actually about.
+     */
+    const d = byeCollisionDelta({
+      requirements: ONE_QB_REQ,
+      roster: [{ position: 'QB', byeWeek: 7, id: 'qb1' }],
+      incoming: { position: 'QB', byeWeek: 10 },
+    })!
+    expect(d.created).toEqual([])
+    expect(d.unrelieved).toEqual([])
   })
 })

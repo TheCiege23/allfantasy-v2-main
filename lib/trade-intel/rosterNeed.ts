@@ -231,3 +231,177 @@ export function counterpartyPriceDelta(args: {
 
   return { factor: 1, basis: `their ${pos} slots are exactly filled` }
 }
+
+/* ── Bye-week collision ────────────────────────────────────────────────────
+ *
+ * ⚠ A BYE DOES NOT CHANGE WHAT A PLAYER IS WORTH. It changes what a specific
+ * TRADE is worth to a specific team, which is why this sits in layer 5 beside
+ * roster need and not in the situation layer. Josh Allen is the same asset to
+ * everyone; acquiring him is a different proposition if your other quarterback
+ * is already off in week 10 and you have not noticed.
+ *
+ * ⚠ AND IT MUST NOT VETO A TRADE. Two years of a quarterback of that calibre
+ * can be worth one unstartable Sunday, and that judgement belongs to the
+ * manager. The job here is to make sure they are making it on purpose — the
+ * sentence is the deliverable, the small price nudge is not.
+ */
+
+export type ByeShortfall = {
+  week: number
+  position: string
+  /** Startable bodies at the position that week. */
+  available: number
+  required: number
+  shortfall: number
+}
+
+/**
+ * Weeks this roster cannot fill its dedicated slots because of byes.
+ *
+ * Flex is deliberately ignored here. A flex hole is a downgrade; an empty
+ * dedicated slot is a zero, and conflating the two would bury the case that
+ * actually costs a manager a week.
+ *
+ * Players with an unknown bye are counted as AVAILABLE. Treating unknown as
+ * "off" would invent collisions out of missing data, and a false alarm on a
+ * trade screen is worse than a missed one — it teaches managers to ignore it.
+ */
+export function byeShortfalls(args: {
+  requirements: SlotRequirements
+  roster: Array<{ position: string; byeWeek: number | null }>
+}): ByeShortfall[] {
+  const { requirements, roster } = args
+  const out: ByeShortfall[] = []
+
+  const weeks = new Set<number>()
+  for (const p of roster) if (p.byeWeek != null) weeks.add(p.byeWeek)
+
+  for (const week of [...weeks].sort((a, b) => a - b)) {
+    for (const [position, required] of requirements.dedicated) {
+      const atPosition = roster.filter((p) => p.position.toUpperCase().trim() === position)
+      /*
+       * ⚠ A BYE HOLE IS ONLY A BYE HOLE IF THE BODIES EXIST. A roster that
+       * simply has no kicker is short one every week of the season, and that is
+       * a roster-construction fact, not something a trade's bye weeks caused.
+       * Reporting it here would fire this warning on every deal a thin roster
+       * ever looked at, which is how a real signal gets trained away.
+       */
+      if (atPosition.length < required) continue
+      const available = atPosition.filter((p) => p.byeWeek !== week).length
+      if (available < required) {
+        out.push({ week, position, available, required, shortfall: required - available })
+      }
+    }
+  }
+  return out
+}
+
+/** How much a bye collision should move the price of one deal, and what to say. */
+export const BYE_COLLISION_DISCOUNT = 0.03
+export const BYE_COLLISION_CAP = 0.09
+
+export type ByeCollision = {
+  factor: number
+  basis: string
+  /** Weeks this trade would newly break. */
+  created: ByeShortfall[]
+  /**
+   * Weeks already broken that this trade had a chance to fix and does not,
+   * because the incoming player is off in the same week as the hole.
+   *
+   * \u26a0 NOT THE SAME AS BREAKING IT, and priced differently. The manager is no
+   * worse off than before \u2014 they are just no better off, at a position they
+   * were presumably trading to improve. Worth a sentence; not worth a discount
+   * on top of one they are already paying.
+   */
+  unrelieved: ByeShortfall[]
+}
+
+/**
+ * What a specific deal does to the acquiring roster's bye weeks.
+ *
+ * \u26a0 BOTH SIDES, BECAUSE A TRADE IS NOT AN ACQUISITION. Receiving a
+ * quarterback while sending one away can turn a covered week into an empty one,
+ * and a model that only looks at the incoming player cannot see it. That is the
+ * exact case worth catching: you send the QB2 who was covering week 10 and
+ * receive one who is also off in week 10.
+ *
+ * Returns null when the lineup or the bye is unknown \u2014 unknown byes are treated
+ * as available everywhere, because inventing a collision out of missing data is
+ * a false alarm, and false alarms on a trade screen teach managers to ignore it.
+ */
+export function byeCollisionDelta(args: {
+  requirements: SlotRequirements | null
+  /** The acquiring roster as it stands today. */
+  roster: Array<{ position: string; byeWeek: number | null; id?: string }>
+  /** The player they would be receiving. */
+  incoming: { position: string | null; byeWeek: number | null }
+  /** Anything leaving in the same deal, by the same id used on `roster`. */
+  outgoingIds?: string[]
+}): ByeCollision | null {
+  const { requirements, roster, incoming } = args
+  if (!requirements || !incoming.position || incoming.byeWeek == null) return null
+
+  const pos = incoming.position.toUpperCase().trim()
+  const out = new Set(args.outgoingIds ?? [])
+
+  const before = byeShortfalls({ requirements, roster })
+  const after = byeShortfalls({
+    requirements,
+    roster: [
+      ...roster.filter((p) => !p.id || !out.has(p.id)),
+      { position: pos, byeWeek: incoming.byeWeek },
+    ],
+  })
+
+  const key = (x: ByeShortfall) => `${x.week}:${x.position}`
+  const beforeBy = new Map(before.map((x) => [key(x), x.shortfall]))
+
+  /*
+   * Only shortfalls this deal creates or deepens. A hole the roster already had
+   * is not this trade's fault, and charging for it would penalise the one move
+   * that might fix it.
+   */
+  const created = after.filter((x) => x.shortfall > (beforeBy.get(key(x)) ?? 0))
+
+  /*
+   * The Josh Allen case. The week was already broken, the incoming player is at
+   * the position that would have fixed it, and he is off that same week \u2014 so
+   * the deal quietly fails to solve the thing it looks like it solves.
+   */
+  const unrelieved = created.length
+    ? []
+    : after.filter(
+        (x) =>
+          x.position === pos &&
+          x.week === incoming.byeWeek &&
+          (beforeBy.get(key(x)) ?? 0) > 0,
+      )
+
+  if (created.length === 0 && unrelieved.length === 0) {
+    return { factor: 1, basis: 'no bye-week problem either way', created: [], unrelieved: [] }
+  }
+
+  if (created.length > 0) {
+    const worst = created[0]!
+    return {
+      factor: 1 - Math.min(BYE_COLLISION_CAP, created.length * BYE_COLLISION_DISCOUNT),
+      basis: `this opens a week ${worst.week} hole \u2014 you would have ${worst.available} startable ${worst.position} for ${worst.required} slot${worst.required > 1 ? 's' : ''}`,
+      created,
+      unrelieved: [],
+    }
+  }
+
+  const w = unrelieved[0]!
+  return {
+    /*
+     * No discount. They are not worse off than before the trade, and they may
+     * well take it anyway \u2014 two years of a player of that calibre is worth one
+     * unstartable Sunday. The sentence is the whole deliverable here.
+     */
+    factor: 1,
+    basis: `heads up: he is off in week ${w.week}, the same week you already have no startable ${w.position} \u2014 this deal does not fix that`,
+    created: [],
+    unrelieved,
+  }
+}
