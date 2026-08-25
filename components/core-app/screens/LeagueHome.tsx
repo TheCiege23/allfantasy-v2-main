@@ -415,20 +415,45 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
           {/* Standings */}
           <StatePanel title="Standings" state={data.standings}>
             {(rows) => (
-              <ol className="af-standings">
-                {rows.slice(0, 6).map((t, i) => (
-                  <li key={t.teamId} className="af-standings-row" data-you={t.isYou}>
-                    <span className="af-standings-rank af-num">{t.rank ?? i + 1}</span>
-                    <span className="af-standings-name">
-                      {t.teamName}
-                      {t.isYou ? <span className="af-standings-you"> — you</span> : null}
-                    </span>
-                    <span className="af-standings-record af-num">
-                      {t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`}
-                    </span>
-                  </li>
-                ))}
-              </ol>
+              <div className="af-standings-wrap">
+                {/*
+                  Column heads, because three numeric columns without them is a
+                  guessing game. FAAB rather than "waiver": this league bids,
+                  it does not queue, and the two words describe opposite systems.
+                */}
+                <div className="af-standings-head" aria-hidden>
+                  <span />
+                  <span />
+                  <span className="af-label">W-L</span>
+                  <span className="af-label">PF</span>
+                  <span className="af-label">FAAB</span>
+                </div>
+                <ol className="af-standings">
+                  {rows.slice(0, 6).map((t, i) => (
+                    <li key={t.teamId} className="af-standings-row" data-you={t.isYou}>
+                      <span className="af-standings-rank af-num">{t.rank ?? i + 1}</span>
+                      <span className="af-standings-name">
+                        {t.teamName}
+                        {t.isYou ? <span className="af-standings-you"> — you</span> : null}
+                      </span>
+                      <span className="af-standings-record af-num">
+                        {t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`}
+                      </span>
+                      <span className="af-standings-pf af-num">{Math.round(t.pointsFor)}</span>
+                      {/*
+                        ⚠ A DASH, NOT $0, WHEN WE DO NOT KNOW. The importer stores
+                        null whenever it could not compute budget minus spend, and
+                        a league that does not use FAAB stores null for everyone.
+                        "$0" would tell a manager holding a full budget that they
+                        are broke.
+                      */}
+                      <span className="af-standings-faab af-num">
+                        {t.faabRemaining == null ? '\u2014' : `$${t.faabRemaining}`}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             )}
           </StatePanel>
         </div>
@@ -505,8 +530,59 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
                         {b.actor.charAt(0)}
                       </span>
                     )}
-                    <span className="af-buzz-actor">{b.actor}</span>
-                    <span className="af-buzz-text">{b.text}</span>
+                    <span className="af-buzz-body">
+                      <span className="af-buzz-line">
+                        <span className="af-buzz-actor">{b.actor}</span>
+                        <span className="af-buzz-text">{b.text}</span>
+                        {/*
+                          The bid, only when the provider recorded one. Rows
+                          written before the emitter carried it have bid === null
+                          and show nothing at all -- an unrecorded bid and a $0
+                          bid are different facts, and $0 is a real, common bid.
+                        */}
+                        {b.bid != null ? <span className="af-buzz-bid">${b.bid}</span> : null}
+                      </span>
+                      {/*
+                        Faces for who moved. The sentence above already names
+                        them; this is so a claim is recognisable before it is
+                        read. Capped at five so a twelve-player trade does not
+                        push the rest of the feed off the panel.
+                      */}
+                      {b.players && b.players.length > 0 ? (
+                        <span className="af-buzz-faces">
+                          {b.players.slice(0, 5).map((pl) =>
+                            pl.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={pl.id}
+                                className="af-buzz-face"
+                                src={pl.imageUrl}
+                                alt={pl.name ?? ''}
+                                title={pl.label}
+                                width={26}
+                                height={26}
+                              />
+                            ) : (
+                              /*
+                                No headshot on file. A labelled placeholder keeps
+                                the row's shape and still says who it is on hover,
+                                rather than silently dropping the player.
+                              */
+                              <span
+                                key={pl.id}
+                                className="af-buzz-face af-buzz-face--none"
+                                title={pl.label}
+                              >
+                                {(pl.name ?? '?').charAt(0)}
+                              </span>
+                            ),
+                          )}
+                          {b.players.length > 5 ? (
+                            <span className="af-buzz-more">+{b.players.length - 5}</span>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </span>
                   </li>
                 ))}
               </ul>

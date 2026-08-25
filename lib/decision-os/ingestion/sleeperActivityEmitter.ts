@@ -120,6 +120,17 @@ export function emitSleeperTransactionActivity(
         adds: tx.adds ?? null,
         drops: tx.drops ?? null,
         draftPicks: tx.draft_picks ?? null,
+        /*
+         * The winning FAAB bid rides in here on waiver claims. Copied wholesale
+         * rather than picked apart, so this emitter does not have to know which
+         * keys matter -- lib/core-app/leagueActivity.ts reads what it
+         * recognises and treats absence as UNKNOWN.
+         *
+         * Rows written before this line have no bid and never will; there is no
+         * backfill, because the source transactions are not retained. That is
+         * why the reader must not render a missing bid as $0.
+         */
+        settings: tx.settings ?? null,
       },
     })
   }

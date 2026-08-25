@@ -33,7 +33,7 @@ beforeEach(() => {
   ])
   playerFindMany.mockResolvedValue([
     { sleeperId: 'p1', name: 'Darren Waller', position: 'TE', team: 'CAR' },
-    { sleeperId: 'p2', name: 'Tyjae Spears', position: 'RB', team: 'TEN' },
+    { sleeperId: 'p2', name: 'Tyjae Spears', position: 'RB', team: 'TEN', imageUrl: 'https://img/p2.png' },
   ])
 })
 
@@ -58,7 +58,7 @@ describe('getLeagueActivity', () => {
     const out = await getLeagueActivity(ARGS)
     expect(out!.items).toHaveLength(1)
     expect(out!.counts.waiver).toBe(1)
-    expect(out!.items[0].adds[0]).toContain('Tyjae Spears')
+    expect(out!.items[0].adds[0].label).toContain('Tyjae Spears')
   })
 
   it('⚠ queries BOTH id spaces, because rows have been written under each', async () => {
@@ -120,7 +120,12 @@ describe('getLeagueActivity', () => {
       { id: 'a1', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null, payload: { adds: ['zz'] } },
     ])
     const out = await getLeagueActivity(ARGS)
-    expect(out!.items[0].adds).toEqual(['player zz'])
+    // Structured now, but the guarantee is unchanged: an id we hold no row for
+    // still reaches the screen as `player zz` rather than vanishing from the
+    // sentence, and every other field is an honest null rather than a guess.
+    expect(out!.items[0].adds).toEqual([
+      { id: 'zz', label: 'player zz', name: null, position: null, team: null, imageUrl: null },
+    ])
   })
 
   it('reads adds/drops sent as an object, which is how Sleeper sends them', async () => {
@@ -134,8 +139,8 @@ describe('getLeagueActivity', () => {
       },
     ])
     const out = await getLeagueActivity(ARGS)
-    expect(out!.items[0].adds[0]).toContain('Tyjae Spears')
-    expect(out!.items[0].drops[0]).toContain('Darren Waller')
+    expect(out!.items[0].adds[0].label).toContain('Tyjae Spears')
+    expect(out!.items[0].drops[0].label).toContain('Darren Waller')
   })
 
   it('labels draft picks in the language managers use', async () => {
@@ -223,5 +228,48 @@ describe('getLeagueActivity', () => {
     expect(out!.unattributed).toBe(1)
     // Shown anyway — an unnamed manager is not a reason to drop the move.
     expect(out!.items).toHaveLength(1)
+  })
+})
+
+describe('league buzz: faces and bids', () => {
+  /** One waiver row carrying whatever payload the case needs. */
+  async function one(payload: Record<string, unknown>) {
+    activityFindMany.mockResolvedValue([
+      {
+        id: 'a1',
+        activityType: 'waiver',
+        occurredAt: T('2026-08-24T10:00:00Z'),
+        rosterId: null,
+        payload,
+      },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    return out!.items[0]
+  }
+
+  it('carries the headshot through, so the feed can show who moved', async () => {
+    const item = await one({ adds: ['p2'] })
+    expect(item.adds[0].imageUrl).toBe('https://img/p2.png')
+    expect(item.adds[0].name).toBe('Tyjae Spears')
+  })
+
+  it('\u26a0 a row with no recorded bid reports null, which must never render as $0', async () => {
+    /*
+     * Every row written before the emitter started copying transaction settings
+     * has no bid on it, and there is no backfill \u2014 the source transactions
+     * are not retained. A missing bid and a $0 bid are different facts.
+     */
+    expect((await one({ adds: ['p2'] })).bid).toBeNull()
+  })
+
+  it('reads the bid whether it is nested under settings or flattened', async () => {
+    expect((await one({ adds: ['p2'], settings: { waiver_bid: 47 } })).bid).toBe(47)
+    expect((await one({ adds: ['p2'], waiverBid: 12 })).bid).toBe(12)
+  })
+
+  it('\u26a0 keeps a zero bid, because $0 is a real claim', async () => {
+    // An uncontested $0 claim is the most common waiver in most leagues. A
+    // reader treating 0 as falsy would report it as "no bid recorded".
+    expect((await one({ adds: ['p2'], settings: { waiver_bid: 0 } })).bid).toBe(0)
   })
 })

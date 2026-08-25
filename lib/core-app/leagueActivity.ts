@@ -23,12 +23,42 @@ import { prisma } from '@/lib/prisma'
  * a feed that silently returns nothing because it guessed the wrong column is
  * exactly the failure this panel already had once.
  *
- * ⚠ FAAB BIDS ARE NOT STORED. The emitter's payload carries adds, drops and
- * picks — no bid amount. "$47 on a waiver" is not available from any durable
- * table, so it is not shown. Reading it live would be a different feature.
+ * ⚠ FAAB BIDS ARE NOT STORED ON HISTORICAL ROWS. `sleeperActivityEmitter`
+ * copies `adds`, `drops` and `draft_picks` out of each transaction and nothing
+ * else, so every row already in the table has no bid on it. The emitter now also
+ * carries the bid forward when the provider sends one, which means new syncs can
+ * show "$47" and old rows stay silent — `bid: null` is read as UNKNOWN and
+ * rendered as nothing, never as $0. A losing bid and an unrecorded bid are not
+ * the same fact.
+ *
+ * Read tolerantly, the way `readWaiverBudgetUsed` does: several spellings are
+ * tried and absence is a null rather than a guess.
+ *
+ * PER-TEAM FAAB REMAINING IS A DIFFERENT AND BETTER-SUPPORTED NUMBER — it is
+ * persisted at import on `Roster.faabRemaining`, and the standings panel reads
+ * it. Do not confuse the two: one is what a claim cost, the other is what a
+ * manager has left.
  */
 
 export type ActivityKind = 'trade' | 'waiver' | 'roster_move'
+
+/**
+ * A player who moved. Carries the headshot so a feed of transactions reads as
+ * people and not as ids.
+ *
+ * ⚠ `label` IS ALWAYS SAFE TO PRINT and is never empty: a player id we hold no
+ * row for stays `player 4034` rather than vanishing from the sentence. A feed
+ * that silently drops the unresolvable half of a trade is worse than one that
+ * admits it does not know the name.
+ */
+export type ActivityPlayer = {
+  id: string
+  label: string
+  name: string | null
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+}
 
 export type LeagueActivityItem = {
   id: string
@@ -38,9 +68,15 @@ export type LeagueActivityItem = {
   managerName: string | null
   teamName: string | null
   avatarUrl: string | null
-  /** Sleeper player ids added / dropped, resolved to names where possible. */
-  adds: string[]
-  drops: string[]
+  /** Players added / dropped, resolved to names and headshots where possible. */
+  adds: ActivityPlayer[]
+  drops: ActivityPlayer[]
+  /**
+   * What the claim cost, when the provider recorded it. NULL MEANS UNKNOWN, not
+   * free — every row written before the emitter started carrying bids is null,
+   * and so is every non-FAAB league. Render nothing, never "$0".
+   */
+  bid: number | null
   /** "2027 4th" style pick labels, when the payload carried any. */
   picks: string[]
 }
@@ -59,6 +95,29 @@ type Payload = {
   drops?: unknown
   draftPicks?: unknown
   transactionType?: unknown
+  settings?: unknown
+  waiverBid?: unknown
+}
+
+/**
+ * The winning bid, if the provider recorded one anywhere we recognise.
+ *
+ * Deliberately tolerant about placement and spelling, exactly like
+ * `readWaiverBudgetUsed` in lib/decision-os/world/derive.ts: the bid may arrive
+ * nested under `settings` or flattened by a normalizer, and a reader that knows
+ * only one spelling reports "no bid" for data we are holding.
+ *
+ * Zero is a REAL bid — a $0 claim on an uncontested player is the most common
+ * waiver in most leagues — so only absence returns null.
+ */
+function readBid(p: Payload): number | null {
+  const settings = (p.settings ?? {}) as Record<string, unknown>
+  const candidates = [settings.waiver_bid, settings.waiverBid, p.waiverBid]
+  for (const c of candidates) {
+    const n = typeof c === 'string' ? Number.parseInt(c, 10) : c
+    if (typeof n === 'number' && Number.isFinite(n) && n >= 0) return n
+  }
+  return null
 }
 
 function ids(v: unknown): string[] {
@@ -183,7 +242,13 @@ export async function getLeagueActivity(args: {
     ? await prisma.sportsPlayer
         .findMany({
           where: { sleeperId: { in: [...everyPlayerId] } },
-          select: { sleeperId: true, name: true, position: true, team: true },
+          select: {
+            sleeperId: true,
+            name: true,
+            position: true,
+            team: true,
+            imageUrl: true,
+          },
         })
         .catch(() => [])
     : []
@@ -192,10 +257,19 @@ export async function getLeagueActivity(args: {
   )
 
   /** A player id we cannot name stays an id — never silently dropped. */
-  const label = (id: string): string => {
+  const resolve = (id: string): ActivityPlayer => {
     const p = nameBy.get(id)
-    if (!p) return `player ${id}`
-    return p.position && p.team ? `${p.name} (${p.position} · ${p.team})` : p.name
+    if (!p) {
+      return { id, label: `player ${id}`, name: null, position: null, team: null, imageUrl: null }
+    }
+    return {
+      id,
+      label: p.position && p.team ? `${p.name} (${p.position} · ${p.team})` : p.name,
+      name: p.name,
+      position: p.position,
+      team: p.team,
+      imageUrl: p.imageUrl,
+    }
   }
 
   let unattributed = 0
@@ -222,8 +296,9 @@ export async function getLeagueActivity(args: {
       managerName: team?.ownerName ?? null,
       teamName: team?.teamName ?? null,
       avatarUrl: team?.avatarUrl ?? null,
-      adds: ids(p.adds).map(label),
-      drops: ids(p.drops).map(label),
+      adds: ids(p.adds).map(resolve),
+      drops: ids(p.drops).map(resolve),
+      bid: readBid(p),
       picks: pickLabels(p.draftPicks),
     }
   })
@@ -236,7 +311,10 @@ export async function getLeagueActivity(args: {
    */
   const seen = new Set<string>()
   const deduped = items.filter((i) => {
-    const key = `${i.kind}:${i.occurredAt.getTime()}:${[...i.adds, ...i.drops].sort().join('|')}`
+    const key = `${i.kind}:${i.occurredAt.getTime()}:${[...i.adds, ...i.drops]
+      .map((pl) => pl.id)
+      .sort()
+      .join('|')}`
     if (seen.has(key)) return false
     seen.add(key)
     return true

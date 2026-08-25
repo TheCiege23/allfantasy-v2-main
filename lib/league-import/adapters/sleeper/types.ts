@@ -71,6 +71,14 @@ export interface SleeperTransactionRaw {
   drops?: Record<string, string>
   draft_picks?: unknown[]
   roster_ids?: number[]
+  /**
+   * Per-transaction settings. On a waiver claim this is where the winning bid
+   * lives (`waiver_bid`). Left as an open record rather than a narrow shape:
+   * the emitter copies it wholesale and the reader picks out what it
+   * recognises, so a key we have not seen is preserved rather than dropped at
+   * the boundary.
+   */
+  settings?: Record<string, unknown>
 }
 
 export interface SleeperDraftPickRaw {

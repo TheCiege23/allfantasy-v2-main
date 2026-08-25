@@ -5,6 +5,7 @@ import { buildSeasonTimeline, leagueWeekFromSettings, type TimelinePhase } from 
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { getLeagueActivity } from './leagueActivity'
 import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
+import type { ActivityPlayer } from './leagueActivity'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -88,6 +89,17 @@ export type LeagueStanding = {
   pointsFor: number
   rank: number | null
   isYou: boolean
+  /**
+   * FAAB left, from `Roster.faabRemaining` — written at import as
+   * `league.settings.waiver_budget − roster.settings.waiver_budget_used`.
+   *
+   * ⚠ NULL MEANS UNKNOWN AND MUST RENDER AS A DASH. The importer stores null
+   * whenever either half of that subtraction was missing, and a league that
+   * does not use FAAB at all stores null for everyone. Printing "$0" would tell
+   * a manager with a full budget that they are broke, which is the worst
+   * direction for this particular error to point.
+   */
+  faabRemaining: number | null
 }
 
 /**
@@ -178,6 +190,14 @@ export type LeagueHomeData = {
       at: Date | null
       /** The manager's own avatar, so the feed reads as people not rows. */
       avatarUrl?: string | null
+      /**
+       * Who moved, with headshots. The sentence in `text` already names them;
+       * these are for the faces beside it, so a claim is recognisable before
+       * it is read.
+       */
+      players?: ActivityPlayer[]
+      /** What the claim cost. Null is UNKNOWN — render nothing, never $0. */
+      bid?: number | null
     }>
   >
   /**
@@ -333,8 +353,8 @@ export async function getLeagueHomeData(
     .filter((i) => i.kind !== 'trade')
     .map((i) => {
       const moved = [
-        i.adds.length > 0 ? `added ${i.adds.join(', ')}` : null,
-        i.drops.length > 0 ? `dropped ${i.drops.join(', ')}` : null,
+        i.adds.length > 0 ? `added ${i.adds.map((pl) => pl.label).join(', ')}` : null,
+        i.drops.length > 0 ? `dropped ${i.drops.map((pl) => pl.label).join(', ')}` : null,
       ]
         .filter(Boolean)
         .join(' · ')
@@ -350,6 +370,12 @@ export async function getLeagueHomeData(
         text: moved || (i.kind === 'waiver' ? 'a waiver claim' : 'a roster move'),
         at: i.occurredAt,
         avatarUrl: i.avatarUrl,
+        /*
+         * Adds lead: the interesting half of a waiver is who you got. Drops
+         * follow so a straight swap still shows both faces.
+         */
+        players: [...i.adds, ...i.drops],
+        bid: i.bid,
       }
     })
 
@@ -379,12 +405,23 @@ export async function getLeagueHomeData(
   }))
 
   /*
-   * Rosters that actually hold players. One count, used as evidence that a
-   * draft happened even when the draft object itself was never ingested.
+   * Rosters, for two unrelated jobs: how many exist (evidence a draft happened,
+   * even when the draft object itself was never ingested) and how much FAAB
+   * each has left.
+   *
+   * Joined to teams on `platformUserId`, which is the owner id on both sides.
+   * A miss here costs one dash in one column — it is a display join, not a
+   * gate, so it does not need the three-candidate fallback the scoreboard uses.
    */
-  const rosterCountForDraft = await prisma.roster
-    .count({ where: { leagueId } })
-    .catch(() => 0)
+  const rosterRows = await prisma.roster
+    .findMany({
+      where: { leagueId },
+      select: { platformUserId: true, faabRemaining: true },
+    })
+    .catch((): Array<{ platformUserId: string; faabRemaining: number | null }> => [])
+
+  const rosterCountForDraft = rosterRows.length
+  const faabBy = new Map(rosterRows.map((r) => [r.platformUserId, r.faabRemaining]))
 
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId },
@@ -403,6 +440,8 @@ export async function getLeagueHomeData(
       // Both flags: a co-commissioner is exactly who the hub preview is for.
       isCommissioner: true,
       isCoCommissioner: true,
+      // The owner id, which is how Roster rows (and their FAAB) are found.
+      platformUserId: true,
     },
     orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
   })
@@ -459,6 +498,12 @@ export async function getLeagueHomeData(
           pointsFor: r.pointsFor,
           rank: r.powerRank,
           isYou: yours?.externalId != null && String(yours.externalId) === String(r.rosterId),
+          /*
+           * The power board is keyed on roster id and carries no owner id, so
+           * FAAB cannot be joined on this path. Null is the honest answer —
+           * better than joining on a key that means something else.
+           */
+          faabRemaining: null,
         }))
       : null
 
@@ -483,6 +528,7 @@ export async function getLeagueHomeData(
               pointsFor: t.pointsFor,
               rank: t.currentRank,
               isYou: t.id === yours?.id,
+              faabRemaining: t.platformUserId ? faabBy.get(t.platformUserId) ?? null : null,
             })),
           }
 

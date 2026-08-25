@@ -348,8 +348,15 @@
   gap: 2px;
 }
 
+/*
+ * A GRID, NOT FLEX. Three numeric columns have to line up with the heads above
+ * them; under flex each row sized its own columns to content and "PF" sat over
+ * a different column on every line.
+ */
+.af-standings-head,
 .af-standings-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 52px 44px 46px;
   align-items: center;
   gap: 10px;
   min-height: 34px;
@@ -369,8 +376,14 @@
   color: var(--faint);
   font-size: 11px;
 }
+.af-standings-head {
+  padding: 0 8px 4px;
+  min-height: 0;
+}
+.af-standings-head > .af-label {
+  text-align: right;
+}
 .af-standings-name {
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -379,9 +392,21 @@
 .af-standings-you {
   color: var(--accent);
 }
-.af-standings-record {
+.af-standings-record,
+.af-standings-pf,
+.af-standings-faab {
   font-size: 12px;
   color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * FAAB is the column a manager scans mid-week, so it gets the ink. A dash in
+ * here means unknown and stays quiet rather than reading as a zero balance.
+ */
+.af-standings-faab {
+  color: var(--text2);
+  font-weight: 600;
 }
 
 /* ── Buzz ────────────────────────────────────────────────────────────── */
@@ -395,14 +420,15 @@
   gap: 6px;
 }
 /*
- * avatar | manager | what they did — a grid, so a long manager name cannot
- * push the text out of alignment with the row above it. The actor column is
- * capped rather than sized to content for the same reason.
+ * avatar | body — the body holds the sentence and, under it, the faces of
+ * whoever moved. Two columns rather than three: the actor and the text now
+ * share a line inside the body, so a long manager name wraps within the
+ * sentence instead of widening a column and misaligning every row below it.
  */
 .af-buzz-row {
   display: grid;
-  grid-template-columns: 22px minmax(52px, 86px) minmax(0, 1fr);
-  align-items: baseline;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
   gap: 8px;
   font-size: 12.5px;
   line-height: 1.45;
@@ -940,4 +966,65 @@
 .af-ch-open {
   align-self: flex-start;
   margin-top: 2px;
+}
+
+/* ── Buzz body: sentence, bid, and the faces that moved ──────────────── */
+
+.af-buzz-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.af-buzz-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/*
+ * The bid reads as money, so it gets the accent and tabular figures. It is
+ * rendered only when the provider actually recorded one -- see
+ * lib/core-app/leagueActivity.ts. Absent is absent, never $0.
+ */
+.af-buzz-bid {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.af-buzz-faces {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.af-buzz-face {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  /* Headshots arrive on wildly different backgrounds; a ring keeps a pale
+     cutout from dissolving into the panel. */
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  flex: 0 0 auto;
+}
+.af-buzz-face--none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-buzz-more {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }

@@ -180,3 +180,32 @@ describe('league home: the Commissioner Hub is gated on the flags that include c
     expect(SRC).toContain('there is nothing to report on')
   })
 })
+
+describe('league home: FAAB is a column, and a dash when we do not know it', () => {
+  it('reads the persisted remaining rather than recomputing it', () => {
+    // `Roster.faabRemaining` is written at import as
+    // league.settings.waiver_budget − roster.settings.waiver_budget_used.
+    // Recomputing it here would be a second, drifting implementation.
+    expect(SRC).toContain('faabRemaining: true')
+    expect(SRC).toContain('faabRemaining: number | null')
+  })
+
+  it('joins on the owner id and selects it — without that every row is a dash', () => {
+    const start = SRC.indexOf('prisma.leagueTeam.findMany')
+    expect(SRC.slice(start, SRC.indexOf('})', start))).toContain('platformUserId: true')
+    expect(SRC).toContain('faabBy.get(t.platformUserId)')
+  })
+
+  it('⚠ the power-board path reports null rather than joining on the wrong key', () => {
+    /*
+     * That path is keyed on roster id and carries no owner id. Reaching for a
+     * key that means something else would produce confident wrong balances,
+     * which is worse than the dash.
+     */
+    expect(SRC).toContain('faabRemaining: null')
+  })
+
+  it('reads one roster query for two jobs instead of counting twice', () => {
+    expect(SRC).toContain('const rosterCountForDraft = rosterRows.length')
+  })
+})
