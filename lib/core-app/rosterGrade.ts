@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { detectQbFormat } from './slotEligibility'
 import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
 
 /**
@@ -66,19 +67,6 @@ function asIds(v: unknown): string[] {
 }
 
 const EMPTY_SLOT = '0'
-
-/**
- * Superflex changes quarterback prices enormously, so reading the wrong market
- * would misrank every roster with a good QB. Detected from the league's own
- * starting slots rather than its name.
- */
-function detectQbFormat(starters: unknown): 'ONE_QB' | 'SUPERFLEX' {
-  const slots = Array.isArray(starters) ? starters.map((s) => String(s).toUpperCase()) : []
-  if (slots.some((s) => s.includes('SUPER_FLEX') || s === 'SUPERFLEX' || s === 'SF')) {
-    return 'SUPERFLEX'
-  }
-  return slots.filter((s) => s === 'QB').length > 1 ? 'SUPERFLEX' : 'ONE_QB'
-}
 
 /** Median, so one superteam does not drag the midpoint the way a mean would. */
 function median(ns: number[]): number {

@@ -44,6 +44,7 @@ import {
 } from './canonicalMemo'
 import { deriveParticipants, type TradeAssetSummary } from './dco'
 import { resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
+import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import {
   resolveRosterIdentityJoin,
   type RosterIdentityResolver,
@@ -116,6 +117,7 @@ export interface CanonicalTradeShadowDeps {
     week?: number | null
     scoringPresetId?: string | null
     idpLeague?: { leagueId: string; starterSlots: string[] | null; numTeams: number; isDynasty: boolean } | null
+    valueFormat?: { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' | 'SUPERFLEX' } | null
   }) => Promise<TradeEnrichmentResult>
   /**
    * E.5 — OPTIONAL read-only roster-identity resolver mapping proposal-space roster ids to canonical join
@@ -294,6 +296,28 @@ export async function runCanonicalTradeShadowAttempt(
           starterSlots: world.league.rosterSettings.starterSlots,
           numTeams: world.rosters.length,
           isDynasty: world.league.isDynasty,
+        },
+        /*
+         * ⚠ THE MARKET SEAM WAS BUILT AND THEN NEVER FED. `resolveTradeEnrichment` refuses to
+         * price against a default chart without a format — correctly, since a 1QB redraft
+         * roster valued on the superflex dynasty market produces numbers that all look
+         * plausible and are all wrong. This call site never supplied one, so every Decision OS
+         * trade raised `market_value_format_unknown` and `fantasyCalcValue` stayed null for
+         * offence as well as defence.
+         *
+         * Both halves are canonical-world facts, so no new source is introduced. Measured
+         * before wiring it: 2,123 of 21,842 rostered assets across 82 leagues carry no usable
+         * projection and therefore price at zero today; 801 of them have a real market value
+         * waiting — Tyreek Hill at 717, Ricky Pearsall at 1,372. The remaining 1,322 have no
+         * market row either and honestly stay at zero.
+         *
+         * Strictly additive: `normalizedPlayerValue` consults market value ONLY when there is
+         * no usable projection, so this can lift an asset off zero and can never move one that
+         * the engine could already price.
+         */
+        valueFormat: {
+          format: world.league.isDynasty ? 'DYNASTY' : 'REDRAFT',
+          qbFormat: detectQbFormat(world.league.rosterSettings.starterSlots),
         },
       })
     } catch {

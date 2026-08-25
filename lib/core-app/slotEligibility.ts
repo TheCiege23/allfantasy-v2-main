@@ -122,3 +122,21 @@ export function shareAnySlot(
   }
   return slots.some((s) => canFillSlot(s, injuredPosition) && canFillSlot(s, candidatePosition))
 }
+
+/**
+ * Which FantasyCalc board this league should be priced against.
+ *
+ * ⚠ READ OFF THE SLOTS, NEVER THE LEAGUE NAME. Superflex changes quarterback prices
+ * enormously, so pricing a superflex roster against the 1QB chart misranks every team with a
+ * good quarterback — and it is silent, because every number still looks like a number.
+ *
+ * Lives here rather than beside either caller because two copies of this predicate is exactly
+ * how a league starts being valued one way on one screen and another way on the next.
+ */
+export function detectQbFormat(starters: unknown): 'ONE_QB' | 'SUPERFLEX' {
+  const slots = Array.isArray(starters) ? starters.map((s) => String(s).toUpperCase()) : []
+  if (slots.some((s) => s.includes('SUPER_FLEX') || s === 'SUPERFLEX' || s === 'SF')) {
+    return 'SUPERFLEX'
+  }
+  return slots.filter((s) => s === 'QB').length > 1 ? 'SUPERFLEX' : 'ONE_QB'
+}
