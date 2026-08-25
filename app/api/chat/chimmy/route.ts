@@ -72,6 +72,7 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
+import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -1976,6 +1977,27 @@ ${standingsCtx}`
               }
             } catch { /* non-fatal */ }
           }
+
+          try {
+            /*
+             * OUTSIDE the league-scoped block on purpose. "Is Chase for Gibbs
+             * fair?" is answerable with no league selected at all — it needs
+             * player values, not a roster — and gating it behind a league would
+             * withhold the one trade question that never required one.
+             */
+            const describedTradeCtx = await buildDescribedTradeContext({
+              message: planInput.message,
+              leagueId: planInput.leagueId ?? null,
+              sport,
+            })
+            if (describedTradeCtx) {
+              legacyEnrichmentContext = legacyEnrichmentContext
+                ? `${legacyEnrichmentContext}
+
+${describedTradeCtx}`
+                : describedTradeCtx
+            }
+          } catch { /* non-fatal */ }
 
           if (legacyEnrichment.status === 'fulfilled') {
             recordToolCall(
