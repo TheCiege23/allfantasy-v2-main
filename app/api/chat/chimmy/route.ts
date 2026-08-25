@@ -71,6 +71,7 @@ import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-roo
 import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
+import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -1953,6 +1954,25 @@ ${pendingTradeCtx}`
 
 ${tradeHistoryCtx}`
                   : tradeHistoryCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * Who is actually winning this league, and which team is the
+               * user's. The grounding packet reports only that a standings table
+               * EXISTS — its rowCount and sync time — so none of it reached the
+               * answer.
+               */
+              const standingsCtx = await buildLeagueStandingsContext(
+                planInput.leagueId,
+                planInput.userId,
+              )
+              if (standingsCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${standingsCtx}`
+                  : standingsCtx
               }
             } catch { /* non-fatal */ }
           }
