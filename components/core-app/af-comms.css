@@ -552,6 +552,76 @@
 
 .af-cm-poll-n { color: var(--faint); font-size: 10px; }
 
+/* ── Cross-league activity ─────────────────────────────────────────── */
+
+.af-cm-activity { display: flex; flex-direction: column; }
+
+.af-cm-act {
+  /* Anchors the visually-hidden label below; without it that span positions
+     against the viewport and can drag the page's scroll width. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 4px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.af-cm-act[data-static='true'] { cursor: default; }
+.af-cm-act:not([data-static='true']):hover { background: var(--line); }
+
+.af-cm-act-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.af-cm-act-type {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* The league is the point of this view, so it reads before the description. */
+.af-cm-act-league {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.af-cm-act-when { font-size: 9.5px; color: var(--faint); }
+
+.af-cm-act-desc {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.af-cm-act > span:first-child { flex: 1; min-width: 0; }
+.af-cm-act-go { flex: none; font-size: 15px; color: var(--faint); }
+
+/* Visually hidden, still read aloud — the arrow alone is not a label. */
+.af-cm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .af-cm-cost {
   display: block;
   margin-top: 5px;

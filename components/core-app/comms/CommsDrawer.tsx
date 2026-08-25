@@ -2,6 +2,7 @@
 
 import ThreadPanel from './ThreadPanel'
 import RichMessage from './RichMessage'
+import LeagueActivityFeed from './LeagueActivityFeed'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -745,9 +746,20 @@ function LeaguePanel({
             ))}
           </div>
           <p className="af-cm-scope-note">
-            League chat belongs to one league. Pick which one — this tab is the group chat, not a
-            cross-league feed.
+            League chat belongs to one league. Pick which one — chat is per league.
           </p>
+        </div>
+
+        {/*
+          With no league picked, the useful thing is what has happened ACROSS
+          them. Chat stays per-league (the note above still holds); this is the
+          cross-league half the tab was missing, and every row names its own
+          league because "somebody dropped a kicker" is unreadable across 60 of
+          them.
+        */}
+        <div className="af-cm-thread">
+          <p className="af-cm-scope-label">Recent activity, all leagues</p>
+          <LeagueActivityFeed onOpenLeague={onScope} />
         </div>
       </div>
     )
