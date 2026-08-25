@@ -156,6 +156,18 @@ function interpolatedTierValue(
   return tiers[tiers.length - 1].value
 }
 
+/**
+ * Rank within an IDP position group -> value, on the market-shaped curve.
+ *
+ * ⚠ PURE AND NETWORK-FREE, WHICH IS THE WHOLE REASON IT IS SEPARATE FROM
+ * `buildIdpKickerValueMap`. That function fetches Sleeper's player index to resolve names and
+ * ages; the Decision OS enrichment port forbids live provider calls outright, so it needs the
+ * curve without the fetch. One curve, two callers, no second copy to drift.
+ */
+export function idpValueForRank(rank: number, isDynasty: boolean): number {
+  return interpolatedTierValue(rank, isDynasty ? DYNASTY_IDP_TIERS : REDRAFT_IDP_TIERS)
+}
+
 /** Top of the IDP tier curve — for normalizing tier values onto 0–100 scales. */
 export function idpTierValueCeiling(isDynasty: boolean): number {
   return (isDynasty ? DYNASTY_IDP_TIERS : REDRAFT_IDP_TIERS)[0].value
@@ -332,20 +344,27 @@ export async function buildIdpKickerValueMap(
    */
   const vorpRankByPlayer = new Map<string, number>()
   if (leagueContext) {
-    const byPos = new Map<string, Array<{ pid: string; vorp: number }>>()
+    /*
+     * ⚠ ONE COMBINED BOARD, NOT THREE. Ranking within each position group hands the ceiling to
+     * the best linebacker, the best lineman AND the best defensive back at once, which asserts
+     * the three are equally valuable. Measured on production before this: Blake Cashman, Myles
+     * Garrett and Nick Emmanwori all priced at 5,500 in the same league.
+     *
+     * Value over replacement is already measured against each position's OWN replacement
+     * level, and that is exactly what makes it comparable across positions — so the groups
+     * merge into a single board and the curve is applied once. This must stay in step with
+     * `leagueIdpVorp.valueBySleeperId`, which ranks the same way; two boards for one concept
+     * is how the tier ladder and the projection path would start disagreeing.
+     */
+    const board: Array<{ pid: string; vorp: number }> = []
     for (const [pid, vorp] of leagueContext.vorpBySleeperId) {
       if (typeof vorp !== 'number' || !Number.isFinite(vorp)) continue
       const info = sleeperPlayers.get(pid)
-      const pos = info ? normalizeIdpPosition(info.position) : null
-      if (!pos) continue
-      const arr = byPos.get(pos) ?? []
-      arr.push({ pid, vorp })
-      byPos.set(pos, arr)
+      if (!info || !normalizeIdpPosition(info.position)) continue
+      board.push({ pid, vorp })
     }
-    for (const arr of byPos.values()) {
-      arr.sort((a, b) => b.vorp - a.vorp)
-      arr.forEach((e, i) => vorpRankByPlayer.set(e.pid, i + 1))
-    }
+    board.sort((a, b) => b.vorp - a.vorp)
+    board.forEach((e, i) => vorpRankByPlayer.set(e.pid, i + 1))
   }
 
   for (const pid of relevantPlayerIds) {

@@ -64,6 +64,16 @@ export interface CanonicalMemoEnrichment {
    * exactly as it does today — filling it is strictly additive.
    */
   marketValueByPlayerId?: Record<string, number | null | undefined>
+  /**
+   * This league's own value for an individual defender.
+   *
+   * ⚠ SEPARATE FROM `marketValueByPlayerId` ON PURPOSE. That field means "a market quoted this
+   * price". FantasyCalc quotes no price for defenders, so putting a computed number there
+   * would let it inherit a market quote's authority. This one is derived — from the league's
+   * scoring applied to a projected defensive stat line, ranked against the league's own
+   * starting requirements — and it says so by living in its own slot.
+   */
+  idpValueByPlayerId?: Record<string, number | null | undefined>
 }
 
 export interface BuildCanonicalTradeMemoInput {
@@ -144,6 +154,7 @@ export function toEnrichedAsset(
   const projection = playerId ? enrich.projectionByPlayerId?.[playerId] ?? null : null
   const position = (playerId ? enrich.positionByPlayerId?.[playerId] : null) ?? asset.metadata.player?.position ?? null
   const marketValue = playerId ? enrich.marketValueByPlayerId?.[playerId] ?? null : null
+  const idpValue = playerId ? enrich.idpValueByPlayerId?.[playerId] ?? null : null
 
   if (kind === 'future_consideration' && asset.assetType !== 'future_consideration') {
     notes.push(
@@ -178,6 +189,13 @@ export function toEnrichedAsset(
          * every consumer at once.
          */
         fantasyCalcValue: marketValue ?? null,
+        /*
+         * ⚠ THE ONE CONSUMPTION. A defender reaches this leaf with a projection of about 0.3 —
+         * the generic PPR line, which contains no defensive scoring whatsoever — and a market
+         * value of null, because no market prices him. The engine reads that as a real
+         * projection and grades him as worthless in trades that are entirely about him.
+         */
+        idpValue: idpValue ?? null,
       },
     },
     notes,

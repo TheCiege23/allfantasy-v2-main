@@ -140,7 +140,17 @@ describe('buildIdpKickerValueMap — with league context, projections drive the 
         ['db_one', 7.0],
       ]),
     })
-    expect(map.get('lb_stud')!.redraftValue).toBe(map.get('db_one')!.redraftValue)
+    const lb = map.get('lb_stud')!.redraftValue
+    const db = map.get('db_one')!.redraftValue
+
+    /*
+     * They sit on ONE combined board, so equal VORP puts them at adjacent ranks and the values
+     * differ by a single step of the curve (~5%), not by the 21% the old LB 1.15 / DB 0.95
+     * multiplier would have imposed. Adjacent, not identical, is the honest expectation.
+     */
+    const ratio = Math.min(lb, db) / Math.max(lb, db)
+    expect(ratio).toBeGreaterThan(0.9)
+    expect(ratio).toBeLessThanOrEqual(1)
   })
 
   it('keeps the age factor, which is trajectory rather than scarcity', async () => {

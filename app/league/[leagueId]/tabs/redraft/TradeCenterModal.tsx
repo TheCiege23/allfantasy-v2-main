@@ -250,16 +250,16 @@ export function TradeCenterModal({
       ...selectedMinePlayers.map((p) => ({
         kind: 'player' as const, fromRosterId: proposerRosterId, toRosterId: receiverRosterId,
         playerId: p.playerId, playerName: p.playerName, position: p.position, team: p.team,
-        sources: { projectionValue: p.restOfSeasonProjection ?? p.weeklyProjection ?? null, rankingValue: null, adpValue: null, fantasyCalcValue: null },
+        sources: { projectionValue: p.restOfSeasonProjection ?? p.weeklyProjection ?? null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null },
       })),
       ...selectedTheirsPlayers.map((p) => ({
         kind: 'player' as const, fromRosterId: receiverRosterId, toRosterId: proposerRosterId,
         playerId: p.playerId, playerName: p.playerName, position: p.position, team: p.team,
-        sources: { projectionValue: p.restOfSeasonProjection ?? p.weeklyProjection ?? null, rankingValue: null, adpValue: null, fantasyCalcValue: null },
+        sources: { projectionValue: p.restOfSeasonProjection ?? p.weeklyProjection ?? null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null },
       })),
     ]
-    if (mineFaab > 0) enriched.push({ kind: 'faab', fromRosterId: proposerRosterId, toRosterId: receiverRosterId, faabAmount: mineFaab, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null } })
-    if (theirsFaab > 0) enriched.push({ kind: 'faab', fromRosterId: receiverRosterId, toRosterId: proposerRosterId, faabAmount: theirsFaab, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null } })
+    if (mineFaab > 0) enriched.push({ kind: 'faab', fromRosterId: proposerRosterId, toRosterId: receiverRosterId, faabAmount: mineFaab, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null } })
+    if (theirsFaab > 0) enriched.push({ kind: 'faab', fromRosterId: receiverRosterId, toRosterId: proposerRosterId, faabAmount: theirsFaab, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null } })
     return buildTradeValueSnapshot({
       proposerRosterId, receiverRosterId, assets: enriched, currentSeason: null,
       context: { sport: '', leagueType: 'redraft', scoring: '', rosterFormat: 'standard', capturedAt: new Date().toISOString() },

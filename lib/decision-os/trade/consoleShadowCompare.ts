@@ -61,7 +61,7 @@ function toEnriched(asset: ConsoleComparableAsset, fromRosterId: string, toRoste
       pickSeason: asset.year ?? null,
       pickRound: asset.round ?? null,
       pickLabel: asset.year != null && asset.round != null ? `${asset.year} Round ${asset.round}` : null,
-      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null },
+      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null },
     }
   }
   if (asset.kind === 'faab') {
@@ -69,7 +69,7 @@ function toEnriched(asset: ConsoleComparableAsset, fromRosterId: string, toRoste
       ...base,
       kind: 'faab',
       faabAmount: asset.amount ?? null,
-      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null },
+      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null },
     }
   }
   return {
@@ -84,6 +84,8 @@ function toEnriched(asset: ConsoleComparableAsset, fromRosterId: string, toRoste
       adpValue: null,
       fantasyCalcValue:
         (asset.pricedSource ?? '').toLowerCase() === 'fantasycalc' ? asset.marketValue ?? null : null,
+      // The console compare path has no league context, so it cannot compute one.
+      idpValue: null,
     },
   }
 }

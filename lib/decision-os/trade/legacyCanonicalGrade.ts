@@ -71,7 +71,7 @@ function toEnriched(
         asset.pick?.year != null && asset.pick?.round != null
           ? `${asset.pick.year} Round ${asset.pick.round}`
           : null,
-      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null },
+      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null },
     }
   }
   if (asset.type === 'faab') {
@@ -79,7 +79,7 @@ function toEnriched(
       ...base,
       kind: 'faab',
       faabAmount: asset.faab?.amount ?? null,
-      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null },
+      sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null, idpValue: null },
     }
   }
   const name = (asset.player?.name ?? '').trim()
@@ -96,6 +96,8 @@ function toEnriched(
       adpValue: null,
       // The real signal legacy has. Consumed via the market-value basis.
       fantasyCalcValue: marketValueFor(name),
+      // Legacy carries no league scoring or roster slots, so it cannot compute one.
+      idpValue: null,
     },
   }
 }

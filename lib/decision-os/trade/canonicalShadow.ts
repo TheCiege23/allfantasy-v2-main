@@ -109,7 +109,14 @@ export interface CanonicalTradeShadowDeps {
    * the persisted `AdpDataRecord` + SportsPlayer caches; honest-empty when prisma is unavailable). Feeds
    * `MarketContext`; missing values stay null. Never writes, warms a cache, or calls a live provider API.
    */
-  resolveEnrichment: (args: { sport: string; playerIds: string[]; season?: number | null; week?: number | null; scoringPresetId?: string | null }) => Promise<TradeEnrichmentResult>
+  resolveEnrichment: (args: {
+    sport: string
+    playerIds: string[]
+    season?: number | null
+    week?: number | null
+    scoringPresetId?: string | null
+    idpLeague?: { leagueId: string; starterSlots: string[] | null; numTeams: number; isDynasty: boolean } | null
+  }) => Promise<TradeEnrichmentResult>
   /**
    * E.5 — OPTIONAL read-only roster-identity resolver mapping proposal-space roster ids to canonical join
    * keys (teamId/managerUserId). Absent by default ⇒ direct-match only (production shadow behavior, E.4).
@@ -277,9 +284,20 @@ export async function runCanonicalTradeShadowAttempt(
         season: world.league.season,
         week: world.league.currentWeek,
         scoringPresetId: world.league.scoringPresetId,
+        /*
+         * The league itself, so defenders can be priced against ITS starting requirements.
+         * Everything here is a canonical-world fact, so no new source is introduced and the
+         * enrichment stays provenance-safe.
+         */
+        idpLeague: {
+          leagueId: world.league.leagueId,
+          starterSlots: world.league.rosterSettings.starterSlots,
+          numTeams: world.rosters.length,
+          isDynasty: world.league.isDynasty,
+        },
       })
     } catch {
-      enrichmentResult = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, unresolvedIds: [], warnings: ['enrichment_unavailable'] }
+      enrichmentResult = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, idpValueResolved: 0, unresolvedIds: [], warnings: ['enrichment_unavailable'] }
     }
 
     // 4. TradeWorld → canonical memo, fed the read-only enrichment. Unsourced market fields degrade to

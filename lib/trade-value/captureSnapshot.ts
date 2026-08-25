@@ -90,6 +90,9 @@ export async function captureRedraftTradeValueSnapshot(input: {
         rankingValue: null, // deferred (see docs/trade-value-grader-audit.md)
         adpValue: a.playerId ? adpByPlayer.get(a.playerId) ?? null : null,
         fantasyCalcValue: null, // deferred — live external API excluded from the write path
+        // Deferred on the same grounds: this write path carries no league scoring or slots,
+        // and an IDP value computed against the wrong league is worse than an absent one.
+        idpValue: null,
       },
     }
   })

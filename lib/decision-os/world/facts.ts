@@ -508,6 +508,30 @@ export interface CanonicalWorld {
  * with a daily cron and a dated series, read the same way ADP and projections
  * already are. Nothing about reading it is live, slow or non-deterministic.
  */
+/**
+ * A defender's value in ONE league, computed rather than quoted.
+ *
+ * ⚠ DELIBERATELY NOT A `RawPlayerValueRow`, AND THE DIFFERENCE IS PROVENANCE. That type
+ * carries a vendor, a format and a capture date because it IS a market quote. This one has
+ * none of those, because FantasyCalc prices no individual defenders and there is no market to
+ * quote — the number is derived from the league's own scoring and its own starting slots.
+ * Folding it into the market row would let a computed figure inherit a market row's
+ * credibility, which is the specific lie this codebase keeps catching itself in.
+ *
+ * There is also no `capturedAt`: nothing persists this. It is recomputed per league because
+ * replacement level is a property of the league, and a stored value would be wrong for every
+ * other league that rosters the same player.
+ */
+export type RawIdpValueRow = {
+  sleeperId: string
+  /** 0-10000, the same convention the trade engine speaks. */
+  value: number
+  /** Rank within his own position group under this league's projections. */
+  positionRank: number
+  /** Points per game above the best freely available defender at his position. Null when unknown. */
+  vorp: number | null
+}
+
 export type RawPlayerValueRow = {
   sleeperId: string
   /** The vendor. Filtered to FANTASYCALC at the port — a licence boundary. */

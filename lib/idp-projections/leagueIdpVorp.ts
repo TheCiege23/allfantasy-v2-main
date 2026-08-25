@@ -16,12 +16,15 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
+import { idpValueForRank } from '@/lib/idp-kicker-values'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { buildIdpValuations } from './idpValuation'
 import { loadIdpProjections } from './loadIdpProjections'
 
 export interface LoadLeagueIdpVorpArgs {
   prisma: PrismaClient
+  /** Dynasty and redraft decay differently in the tail; the curve differs accordingly. */
+  isDynasty?: boolean
   /**
    * Either id space.
    *
@@ -42,6 +45,13 @@ export interface LoadLeagueIdpVorpArgs {
 export interface LeagueIdpVorpResult {
   /** Points over replacement by Sleeper id. Null for a player replacement could not price. */
   vorpBySleeperId: Map<string, number | null>
+  /** Rank within his own position group, by this league's projections. */
+  positionRankBySleeperId: Map<string, number>
+  /**
+   * The rank placed on the market-shaped IDP curve, in the same 0–10000 convention the trade
+   * engine speaks. Present only for players the league could actually rank.
+   */
+  valueBySleeperId: Map<string, number>
   /** Why the map is empty, when it is. Null when the valuation ran. */
   skipped:
     | null
@@ -57,7 +67,13 @@ export interface LeagueIdpVorpResult {
 const EMPTY = (
   skipped: LeagueIdpVorpResult['skipped'],
   coverage = { defenders: 0, projected: 0, priced: 0 },
-): LeagueIdpVorpResult => ({ vorpBySleeperId: new Map(), skipped, coverage })
+): LeagueIdpVorpResult => ({
+  vorpBySleeperId: new Map(),
+  positionRankBySleeperId: new Map(),
+  valueBySleeperId: new Map(),
+  skipped,
+  coverage,
+})
 
 export async function loadLeagueIdpVorp(
   args: LoadLeagueIdpVorpArgs,
@@ -146,14 +162,42 @@ export async function loadLeagueIdpVorp(
   }
 
   const vorpBySleeperId = new Map<string, number | null>()
+  const positionRankBySleeperId = new Map<string, number>()
+  const valueBySleeperId = new Map<string, number>()
   let priced = 0
   for (const p of valuation.players) {
     vorpBySleeperId.set(p.playerId, p.vorp)
+    positionRankBySleeperId.set(p.playerId, p.positionRank)
     if (p.vorp != null) priced++
   }
 
+  /*
+   * ⚠ THE CURVE IS APPLIED TO ONE COMBINED BOARD, NOT THREE POSITION BOARDS. Pricing by rank
+   * WITHIN a group hands the ceiling to the best linebacker, the best lineman AND the best
+   * defensive back, which asserts the three are equally valuable. Measured on production that
+   * is exactly what happened — Blake Cashman, Myles Garrett and Nick Emmanwori all came out at
+   * 5,500 in the same league — and it is the same flatness the tier ladder had, moved sideways.
+   *
+   * Value over replacement is already measured against each position's OWN replacement level,
+   * which is precisely what makes it comparable across positions. So the groups are merged and
+   * ranked once. `positionRank` is still reported, because "LB4 in your league" is what a
+   * manager wants to read; it is just not what sets the price.
+   *
+   * A player whose replacement level could not be established carries a null VORP and gets NO
+   * value rather than a rank at the bottom of the board — pricing a data gap as the least
+   * valuable defender in the league is the failure this whole module keeps refusing.
+   */
+  const rankable = valuation.players
+    .filter((p): p is typeof p & { vorp: number } => p.vorp != null)
+    .sort((a, b) => b.vorp - a.vorp)
+  rankable.forEach((p, i) => {
+    valueBySleeperId.set(p.playerId, idpValueForRank(i + 1, args.isDynasty ?? true))
+  })
+
   return {
     vorpBySleeperId,
+    positionRankBySleeperId,
+    valueBySleeperId,
     skipped: null,
     coverage: { defenders: defenders.length, projected, priced },
   }

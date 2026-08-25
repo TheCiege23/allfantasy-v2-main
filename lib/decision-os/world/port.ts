@@ -20,6 +20,7 @@ import type {
   RawPerformanceRow,
   RawPlayerGameFactRow,
   RawPlayerMetadataRow,
+  RawIdpValueRow,
   RawPlayerValueRow,
   RawProjectionRow,
   RawRosterRow,
@@ -27,6 +28,7 @@ import type {
   RawTeamRow,
   RawWeatherRow,
 } from './facts'
+import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 
 export interface CanonicalWorldPort {
@@ -716,6 +718,54 @@ export async function loadMarketValueRows(
  * ingest deliberately excludes other vendors; see the note at the top of
  * lib/player-values/ingestPlayerValues.ts before widening it.
  */
+/**
+ * READ-ONLY: a league's IDP values, computed from persisted projections and its own roster.
+ *
+ * ⚠ THIS ONE COMPUTES RATHER THAN READS, AND THAT IS FORCED. Every other loader here selects
+ * from a table. No table can hold this: replacement level depends on how many defenders the
+ * league starts, so the same player is worth different amounts in two leagues on the same day
+ * and a persisted row would be wrong for all but one of them.
+ *
+ * It stays inside the port's contract regardless — Postgres only, no provider call, never
+ * writes, never throws. An unpriceable league returns an empty array, which the seam reads as
+ * "no IDP value here" rather than as an error.
+ */
+export async function loadIdpValueRows(args: {
+  leagueId: string
+  starterSlots: string[] | null
+  sleeperIds: string[]
+  numTeams: number
+  isDynasty: boolean
+}): Promise<RawIdpValueRow[]> {
+  const clean = Array.from(
+    new Set(args.sleeperIds.filter((x) => typeof x === 'string' && x.length > 0)),
+  )
+  if (clean.length === 0 || !prisma) return []
+
+  try {
+    const res = await loadLeagueIdpVorp({
+      prisma,
+      leagueId: args.leagueId,
+      rosterPositions: args.starterSlots,
+      rosterPlayerIds: clean,
+      numTeams: args.numTeams,
+      isDynasty: args.isDynasty,
+    })
+    const out: RawIdpValueRow[] = []
+    for (const [sleeperId, value] of res.valueBySleeperId) {
+      out.push({
+        sleeperId,
+        value,
+        positionRank: res.positionRankBySleeperId.get(sleeperId) ?? 0,
+        vorp: res.vorpBySleeperId.get(sleeperId) ?? null,
+      })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
 export async function loadPlayerValueRows(
   sleeperIds: string[],
   format: string,

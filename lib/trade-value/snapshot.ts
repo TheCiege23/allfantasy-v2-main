@@ -48,6 +48,8 @@ function internalValueFor(
         // Slice 14: the captured market value is finally consumed (fallback
         // basis only — see normalizedPlayerValue).
         marketValue: asset.sources.fantasyCalcValue,
+        // The league's own price for a defender, which no market supplies.
+        idpValue: asset.sources.idpValue,
         // Slice 16: real league scoring settings (superflex / TE premium / PPR).
         scoring,
       })

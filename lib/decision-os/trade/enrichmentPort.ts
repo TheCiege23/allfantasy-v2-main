@@ -29,9 +29,9 @@
 import type { CanonicalMemoEnrichment } from './canonicalMemo'
 import { loadAdpRecords, type AdpRecordRow } from './loader'
 import { resolvePlayerMetadata, type PlayerMetadataResult } from '@/lib/decision-os/world'
-import { loadPlayerValueRows, loadProjectionRows } from '@/lib/decision-os/world/port'
+import { loadIdpValueRows, loadPlayerValueRows, loadProjectionRows } from '@/lib/decision-os/world/port'
 import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnrichedWorld'
-import type { RawPlayerValueRow, RawProjectionRow } from '@/lib/decision-os/world/facts'
+import type { RawIdpValueRow, RawPlayerValueRow, RawProjectionRow } from '@/lib/decision-os/world/facts'
 
 export interface TradeEnrichmentPort {
   /** READ-ONLY: freshest-first persisted ADP records for the sport + player ids. NEVER writes/calls APIs. */
@@ -57,6 +57,23 @@ export interface TradeEnrichmentPort {
     format: string,
     qbFormat: string,
   ) => Promise<RawPlayerValueRow[]>
+  /**
+   * READ-ONLY: this league's individual-defender values, computed from persisted projections
+   * and its own starting slots.
+   *
+   * ⚠ SEPARATE FROM `loadMarketValue` BECAUSE THERE IS NO MARKET. FantasyCalc prices no
+   * defenders, so an IDP league's most valuable assets arrive at the trade engine with a
+   * market value of null and a projection of ~0.3 — the generic PPR line, which contains no
+   * defensive scoring at all. That is not a low price, it is the absence of one, and it is why
+   * a linebacker currently grades as worthless in a trade that revolves around him.
+   */
+  loadIdpValue: (args: {
+    leagueId: string
+    starterSlots: string[] | null
+    sleeperIds: string[]
+    numTeams: number
+    isDynasty: boolean
+  }) => Promise<RawIdpValueRow[]>
 }
 
 export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
@@ -64,6 +81,7 @@ export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
   resolveMetadata: (sport, ids) => resolvePlayerMetadata(sport, ids),
   loadProjections: (sport, ids, season, week) => loadProjectionRows(sport, ids, season, week),
   loadMarketValue: (ids, format, qbFormat) => loadPlayerValueRows(ids, format, qbFormat),
+  loadIdpValue: (args) => loadIdpValueRows(args),
 }
 
 export interface TradeEnrichmentResult {
@@ -77,6 +95,8 @@ export interface TradeEnrichmentResult {
   positionResolved: number
   /** Count of requested ids that resolved a real stored projection (F2.5 port). */
   projectionResolved: number
+  /** Count of requested ids that resolved a league-specific IDP value. */
+  idpValueResolved: number
   /** Requested ids that resolved NEITHER adp nor position. */
   unresolvedIds: string[]
   /** Honest missing-field notes (provenance/debug only — never consumed by decision rules). */
@@ -90,6 +110,7 @@ function emptyResult(): TradeEnrichmentResult {
     adpResolved: 0,
     positionResolved: 0,
     projectionResolved: 0,
+    idpValueResolved: 0,
     unresolvedIds: [],
     warnings: [],
   }
@@ -118,6 +139,19 @@ export async function resolveTradeEnrichment(
      * that all look plausible and are all wrong. No format, no market value.
      */
     valueFormat?: { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' | 'SUPERFLEX' } | null
+    /**
+     * The league itself, for the one value that cannot be looked up.
+     *
+     * Absent ⇒ defenders stay honestly unpriced rather than being valued against some other
+     * league's starting requirements, which is the same discipline `valueFormat` enforces for
+     * the market chart.
+     */
+    idpLeague?: {
+      leagueId: string
+      starterSlots: string[] | null
+      numTeams: number
+      isDynasty: boolean
+    } | null
   },
   port: TradeEnrichmentPort = defaultTradeEnrichmentPort,
 ): Promise<TradeEnrichmentResult> {
@@ -227,17 +261,52 @@ export async function resolveTradeEnrichment(
   }
   if (marketValueResolved === 0) warnings.push('market_value_unavailable')
 
+  /*
+   * IDP value — computed per league, because replacement level is a property of the league.
+   * Gated on the league context being supplied at all, so an offensive league does no work.
+   */
+  const idpValueByPlayerId: Record<string, number | null> = {}
+  let idpValueResolved = 0
+  if (args.idpLeague) {
+    try {
+      const rows = await port.loadIdpValue({
+        leagueId: args.idpLeague.leagueId,
+        starterSlots: args.idpLeague.starterSlots,
+        sleeperIds: ids,
+        numTeams: args.idpLeague.numTeams,
+        isDynasty: args.idpLeague.isDynasty,
+      })
+      for (const r of rows) {
+        if (!r.sleeperId) continue
+        if (typeof r.value === 'number' && Number.isFinite(r.value)) {
+          idpValueByPlayerId[r.sleeperId] = r.value
+          idpValueResolved += 1
+        }
+      }
+      if (idpValueResolved > 0) contributing.push('idp_league_valuation')
+    } catch {
+      warnings.push('idp_value_source_unavailable')
+    }
+  }
+
   const adpResolved = Object.values(adpByPlayerId).filter((v) => v != null).length
   const positionResolved = Object.values(positionByPlayerId).filter((v) => v != null).length
   const unresolvedIds = ids.filter((id) => adpByPlayerId[id] == null && positionByPlayerId[id] == null)
   if (unresolvedIds.length > 0) warnings.push('enrichment_incomplete')
 
   return {
-    enrichment: { adpByPlayerId, positionByPlayerId, projectionByPlayerId, marketValueByPlayerId },
+    enrichment: {
+      adpByPlayerId,
+      positionByPlayerId,
+      projectionByPlayerId,
+      marketValueByPlayerId,
+      idpValueByPlayerId,
+    },
     valuationSource: contributing.length > 0 ? contributing.join('+') : null,
     adpResolved,
     positionResolved,
     projectionResolved,
+    idpValueResolved,
     unresolvedIds,
     warnings: Array.from(new Set(warnings)),
   }

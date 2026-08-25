@@ -15,6 +15,14 @@ export interface AssetValueSources {
   rankingValue: number | null
   adpValue: number | null
   fantasyCalcValue: number | null
+  /**
+   * League-specific value for an individual defensive player, 0-10000.
+   *
+   * ⚠ NOT A MARKET QUOTE, WHICH IS WHY IT IS NOT `fantasyCalcValue`. FantasyCalc prices no
+   * defenders; this is computed from the league's own scoring and starting slots. Null for
+   * every non-IDP asset and for any league that does not roster defenders.
+   */
+  idpValue: number | null
 }
 
 /** Immutable per-asset snapshot row. */

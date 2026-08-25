@@ -149,11 +149,33 @@ export function normalizedPlayerValue(input: {
   /** Market value (FantasyCalc convention, 0–10000). Fallback basis only. */
   marketValue?: number | null
   /**
+   * The league's own value for an individual defender, same 0–10000 convention.
+   *
+   * ⚠ THIS OUTRANKS THE PROJECTION, WHICH IS THE OPPOSITE OF HOW `marketValue` BEHAVES, AND
+   * THE ASYMMETRY IS THE POINT. For an offensive player a projection is the better signal, so
+   * market value is a fallback. For a defender the projection reaching this function is the
+   * vendor's generic PPR line — and standard PPR contains no defensive scoring at all, so it
+   * is not a low projection, it is the absence of one wearing a number. Measured on a real
+   * roster: 0.3 for a linebacker his league projects in the teens. Letting that through as
+   * `hasProjection` prices him at roughly nothing and the fallback never fires.
+   */
+  idpValue?: number | null
+  /**
    * Slice 16 — real league scoring settings. Omitted ⇒ standard 1-QB redraft,
    * i.e. byte-identical to the pre-slice-16 result.
    */
   scoring?: ScoringContext | null
 }): number {
+  /*
+   * The IDP value is checked FIRST and returns immediately. It is already the output of a
+   * scarcity model — ranked against this league's own starting requirements — so multiplying
+   * it by `POSITION_SCARCITY` would count positional scarcity twice, and that table has no IDP
+   * entry anyway: LB, DL and DB all fall through to its 1.0 default.
+   */
+  if (input.idpValue != null && Number.isFinite(input.idpValue) && input.idpValue > 0) {
+    return clamp(Math.round(input.idpValue), 0, 10000)
+  }
+
   const hasProjection = Number.isFinite(input.projection as number) && (input.projection as number) > 0
   let adpPremium = 0
   if (input.adp != null && Number.isFinite(input.adp)) {
