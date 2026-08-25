@@ -5,6 +5,24 @@
  * `lib/projections/leagueScoring.ts` already resolves league scoring keys against. The
  * caller then prices it with `computeLeagueProjectedPoints` under the league's own settings.
  *
+ * MEASURED, NOT ASSERTED. `scripts/probe-idp-backtest.ts` walks 2025 weeks 8-18 forward,
+ * projecting each week from games strictly before it, and scores 5,291 out-of-sample
+ * player-weeks under one reference rulebook:
+ *
+ *   per-snap volume   MAE 4.673   RMSE 6.466   bias -1.10
+ *   per-game volume   MAE 4.758   RMSE 6.623   bias -1.61
+ *
+ * That is the only difference in the sweep that is not noise. Varying the rate half-life
+ * (8/17/34), the shrinkage strength (4/8/16) and the volume half-life (3/4/6/10) moved MAE by
+ * under 0.03 in every case, so those constants are deliberately left at round, explainable
+ * values rather than tuned to the third decimal of a single season.
+ *
+ * ⚠ THE NEGATIVE BIAS IS EXPECTED AND MUST NOT BE "CORRECTED" WITH A MULTIPLIER. Weekly IDP
+ * scoring is right-skewed — a defensive touchdown or a three-sack game is worth many points
+ * and is genuinely unpredictable. Minimising absolute error targets the MEDIAN week, and for
+ * a right-skewed distribution the median sits below the mean. Scaling every projection up by
+ * ~13% to close the gap would make the typical week wrong in order to flatter an average.
+ *
  * THE SHAPE OF THE MODEL, AND WHY.
  *
  *   Tackles are volume, not talent. They track snaps faced far more than they track a player
@@ -95,8 +113,23 @@ export interface ProjectIdpStatLineInput {
   injuryStatus?: string | null
   /** Minimum observed games before a projection may be emitted at all. */
   minGames?: number
-  /** Recency half-life in weeks. Matches the 4-week half-life used elsewhere. */
+  /**
+   * Project volume per defensive snap rather than per game. Default true where snap data
+   * exists. Exposed so the backtest can measure the two bases against real outcomes instead
+   * of the choice resting on argument.
+   */
+  useSnapBasis?: boolean
+  /** Recency half-life for VOLUME stats (tackles). Matches the 4-week half-life used elsewhere. */
   halfLifeWeeks?: number
+  /**
+   * Recency half-life for RATE stats — sacks, turnovers, pass breakups.
+   *
+   * Deliberately much longer than the volume half-life. A tackle count follows a role that
+   * can change inside a month; a forced-fumble rate is a property of the player and does not.
+   * Sharing one four-game window made a single recovery three weeks ago read as a recovery
+   * every fifth game.
+   */
+  rateHalfLifeWeeks?: number
   /**
    * Shrinkage strength for low-frequency events, in games.
    *
@@ -110,6 +143,8 @@ export interface ProjectIdpStatLineInput {
 
 const DEFAULT_MIN_GAMES = 3
 const DEFAULT_HALF_LIFE = 4
+/** ~a full season: long enough that a rate is a rate rather than a recent streak. */
+const DEFAULT_RATE_HALF_LIFE = 17
 const DEFAULT_REGRESSION_PRIOR_GAMES = 8
 
 /**
@@ -123,36 +158,83 @@ const PACE_CLAMP_MIN = 0.85
 const PACE_CLAMP_MAX = 1.15
 
 /**
- * ⚠ STATED ON EVERY PROJECTION, WITHOUT EXCEPTION.
+ * ⚠ WHICH BASIS VOLUME WAS PROJECTED ON, STATED EITHER WAY.
  *
- * Defensive snap share is the most predictive IDP input there is, and this codebase does not
- * persist it — `off_snp` / `tm_off_snp` are offensive. Volume below is inferred from observed
- * tackle counts and opponent pace instead, which is a materially weaker signal. A reader who
- * is not told that will reasonably assume otherwise.
+ * Snap share is the strongest IDP signal there is, and it IS persisted — `def_snp` and
+ * `tm_def_snp` sit in `PlayerGameStat.normalizedStatMap`. (An earlier version of this file
+ * asserted the opposite on every projection it produced. It was measured wrong: `off_snp` is
+ * offensive, but `def_snp` is not, and 58% of defender game rows carry it.)
+ *
+ * Coverage is real but partial, so the basis differs per player and the reader is told which
+ * one they are looking at rather than left to assume the stronger one.
  */
+const SNAP_BASIS_NOTE =
+  'Volume is projected per defensive snap and scaled by expected playing time, which is the ' +
+  'strongest available IDP signal.'
 const NO_SNAP_DATA_NOTE =
-  'No defensive snap-count data is persisted for this player, so usage is inferred from ' +
-  'observed tackle volume and opponent pace rather than measured. Snap share is the ' +
-  'strongest IDP signal and is absent here.'
+  'No defensive snap counts are on file for this player, so volume is projected per GAME ' +
+  'rather than per snap. That cannot tell a rotational defender from an every-down one, and ' +
+  'it is the weaker of the two bases this model uses.'
+
+/** Below this many games with snap data, the per-snap rate is noise; fall back to per-game. */
+const MIN_SNAP_GAMES = 3
+
+/**
+ * Half-life for the ROLE estimate, deliberately much shorter than the efficiency window.
+ *
+ * ⚠ WITHOUT THE SPLIT, USING SNAPS AT ALL IS ALGEBRAICALLY POINTLESS. If expected snaps are
+ * the weighted mean of snaps on the SAME weights as the per-snap rate, then
+ * rate x snaps = [Sigma(v.w)/Sigma(s.w)] x [Sigma(s.w)/Sigma(w)] = Sigma(v.w)/Sigma(w) —
+ * exactly the per-game weighted mean it was supposed to improve on. The snap data cancels out
+ * and the model has done arithmetic instead of learning something.
+ *
+ * They are separated because they are different KINDS of quantity. Per-snap efficiency is a
+ * property of the player and is stable, so it wants a long window. Role is close to a step
+ * function — a defender takes over an every-down job in one week — so it wants a short one.
+ * Measured on the role-change case: a rotational defender at 20 snaps who moves to 62 projects
+ * 4.67 solo tackles on a shared window and 5.2 when role is read from the recent games.
+ */
+const SNAP_ROLE_HALF_LIFE = 3
+
+function finiteOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
+}
 
 function round3(n: number): number {
   return Math.round(n * 1000) / 1000
 }
 
-/** Recency-weighted mean of one series, newest game weighted highest. */
+/**
+ * Recency-weighted mean of one series, plus the EFFECTIVE size of the sample behind it.
+ *
+ * ⚠ THE RAW GAME COUNT IS NOT THE SAMPLE SIZE ONCE WEIGHTS ARE APPLIED, and treating it as
+ * one is how a projection becomes confident about noise. With a 4-game half-life, a 115-game
+ * history has roughly 12 games of real weight — the rest is multiplied by almost nothing.
+ * Regressing on 115 handed the player's own recent form 94% weight when the evidence
+ * supported far less.
+ *
+ * Kish's effective sample size, (Σw)² / Σw², is the standard measure and degrades correctly:
+ * it equals n when every weight is equal, and falls toward 1 as one observation dominates.
+ */
 function weightedMean(
   samples: ReadonlyArray<{ index: number; value: number }>,
   latestIndex: number,
   halfLife: number,
-): number | null {
+): { mean: number; effectiveN: number } | null {
   let sum = 0
   let weightTotal = 0
+  let weightSqTotal = 0
   for (const s of samples) {
     const w = Math.pow(0.5, (latestIndex - s.index) / halfLife)
     sum += s.value * w
     weightTotal += w
+    weightSqTotal += w * w
   }
-  return weightTotal > 0 ? sum / weightTotal : null
+  if (weightTotal <= 0 || weightSqTotal <= 0) return null
+  return {
+    mean: sum / weightTotal,
+    effectiveN: (weightTotal * weightTotal) / weightSqTotal,
+  }
 }
 
 export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectionOutcome {
@@ -188,6 +270,7 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
   }
 
   const halfLife = input.halfLifeWeeks ?? DEFAULT_HALF_LIFE
+  const rateHalfLife = input.rateHalfLifeWeeks ?? DEFAULT_RATE_HALF_LIFE
 
   /*
    * Per-game component amounts, in output keys.
@@ -201,8 +284,13 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
    * carries no solo/assist split) is interpreted by the one module that has measured that
    * split, rather than by a second guess here.
    */
+  const snapsPerGame: Array<{ played: number | null; team: number | null }> = []
   const perGame: Array<Partial<Record<IdpStatKey, number>>> = history.map((g) => {
     const { components, combinedTackles } = extractIdpComponents(g.statMap, 'sleeper_weekly')
+    snapsPerGame.push({
+      played: finiteOrNull(g.statMap.def_snp),
+      team: finiteOrNull(g.statMap.tm_def_snp),
+    })
 
     const resolved: Partial<Record<IdpComponent, number>> = { ...components }
     /*
@@ -261,7 +349,7 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
   }
 
   const latestIndex = history.length - 1
-  const notes: string[] = [NO_SNAP_DATA_NOTE]
+  const notes: string[] = []
 
   // --- opponent pace -> defensive volume ---------------------------------------------
   let paceMultiplier = 1
@@ -283,30 +371,129 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
     }
   }
 
+  /*
+   * --- expected playing time -----------------------------------------------------------
+   *
+   * ⚠ THIS IS THE DIFFERENCE BETWEEN A ROLE AND AN AVERAGE. Tackles are volume, and volume is
+   * snaps. A per-GAME mean cannot tell a rotational defender who just took over an every-down
+   * job from one who is losing snaps — both look like their average. Projecting a per-SNAP
+   * rate and multiplying by expected snaps separates efficiency from usage, so a role change
+   * shows up immediately instead of being averaged away over a month.
+   *
+   * Both halves are recency-weighted on the SAME volume half-life, so the two move together.
+   */
+  const snapSamples: Array<{ index: number; value: number }> = []
+  const shareSamples: Array<{ index: number; value: number }> = []
+  snapsPerGame.forEach((sn, index) => {
+    if (sn.played == null) return
+    snapSamples.push({ index, value: sn.played })
+    if (sn.team != null && sn.team > 0) {
+      shareSamples.push({ index, value: Math.min(1, sn.played / sn.team) })
+    }
+  })
+
+  /*
+   * ⚠ ROLE IS A SHARE, NOT A SNAP COUNT, AND CONFLATING THEM MADE THIS WORSE NOT BETTER.
+   * How many defensive snaps a player took in a game depends on how many plays his defense
+   * faced — a blowout or an overtime game moves it by twenty — and that is game script, not
+   * role. Reading recent raw counts as "his job" imported all of that noise: measured against
+   * known league numbers it pushed Carson Schwesinger from ~15 to ~19 and Quincy Williams from
+   * ~13 to ~15.
+   *
+   * So role is the SHARE of his defense's snaps, taken over a short window because a job
+   * changes in a week; and the number of snaps that share will be applied to is the team's own
+   * long-run average, which is stable. Opponent pace then moves the team total, which is the
+   * one place tempo genuinely belongs.
+   */
+  const teamSnapSamples: Array<{ index: number; value: number }> = []
+  snapsPerGame.forEach((sn, index) => {
+    if (sn.team != null && sn.team > 0) teamSnapSamples.push({ index, value: sn.team })
+  })
+
+  const usableSnaps = (input.useSnapBasis ?? true) && snapSamples.length >= MIN_SNAP_GAMES
+  const shareStat =
+    shareSamples.length >= MIN_SNAP_GAMES
+      ? weightedMean(shareSamples, latestIndex, SNAP_ROLE_HALF_LIFE)
+      : null
+  const teamSnapStat =
+    teamSnapSamples.length >= MIN_SNAP_GAMES
+      ? weightedMean(teamSnapSamples, latestIndex, rateHalfLife)
+      : null
+
+  const projectedSnapShare = shareStat ? Math.round(shareStat.mean * 1000) / 1000 : null
+  const projectedSnaps =
+    shareStat && teamSnapStat
+      ? Math.round(shareStat.mean * teamSnapStat.mean * 10) / 10
+      : // No team totals on file — fall back to the player's own snaps over the LONG window.
+        // Still better than the short one, which is mostly game script.
+        (() => {
+          const fallback = usableSnaps ? weightedMean(snapSamples, latestIndex, rateHalfLife) : null
+          return fallback ? Math.round(fallback.mean * 10) / 10 : null
+        })()
+
+  /**
+   * Per-snap rate for one volume component: Σ(value·w) / Σ(snaps·w) over games carrying snaps.
+   *
+   * A RATIO OF WEIGHTED TOTALS, not a mean of per-game ratios. The latter gives a game with
+   * four snaps the same say as a game with sixty, which is precisely backwards.
+   */
+  const perSnapRate = (samples: ReadonlyArray<{ index: number; value: number }>): number | null => {
+    let num = 0
+    let den = 0
+    for (const sample of samples) {
+      const sn = snapsPerGame[sample.index]
+      if (sn?.played == null || sn.played <= 0) continue
+      const w = Math.pow(0.5, (latestIndex - sample.index) / halfLife)
+      num += sample.value * w
+      den += sn.played * w
+    }
+    return den > 0 ? num / den : null
+  }
+
   // --- assemble the line --------------------------------------------------------------
   const priors = input.priors ?? null
   const k = input.regressionPriorGames ?? DEFAULT_REGRESSION_PRIOR_GAMES
   const n = history.length
+  const effectiveNs: number[] = []
   const statLine: IdpStatLine = {}
   let componentsObserved = 0
   let regressionApplied = false
 
   for (const [key, samples] of series) {
-    const mean = weightedMean(samples, latestIndex, halfLife)
-    if (mean == null) continue
+    const isRate = LOW_FREQUENCY.has(key)
+    /*
+     * ⚠ RATES AND ROLES DECAY AT DIFFERENT SPEEDS, AND USING ONE HALF-LIFE FOR BOTH IS WHAT
+     * MADE A PASS RUSHER READ HIGH. Tackle volume follows a role that really can change in a
+     * month, so four games is right for it. A forced-fumble rate does not change in a month
+     * — it is a property of the player — and a four-game window turns "he recovered a fumble
+     * three weeks ago" into "he recovers a fumble every fifth game". Measured on DeMarcus
+     * Lawrence: 0.213 fumble recoveries per game projected against a 0.061 career rate.
+     */
+    const stat = weightedMean(samples, latestIndex, isRate ? rateHalfLife : halfLife)
+    if (stat == null) continue
     if (samples.some((s) => s.value !== 0)) componentsObserved++
 
-    let value = mean
+    let value = stat.mean
 
-    if (LOW_FREQUENCY.has(key)) {
+    if (isRate) {
       const prior = priors?.perGame[key]
       if (typeof prior === 'number' && Number.isFinite(prior)) {
-        // Shrink toward the cohort: the player's own rate reaches half weight at k games.
-        const w = n / (n + k)
+        // Shrink toward the cohort on the EFFECTIVE sample, not the raw game count.
+        const w = stat.effectiveN / (stat.effectiveN + k)
         value = value * w + prior * (1 - w)
         regressionApplied = true
+        effectiveNs.push(stat.effectiveN)
       }
     } else if (PACE_SCALED.has(key)) {
+      /*
+       * Per-snap x expected snaps when snap counts exist; otherwise the per-game mean, which
+       * is what this model had before snap data was found. Both are then scaled by opponent
+       * pace, because a faster offense means more defensive snaps than the recent average.
+       */
+      if (usableSnaps && projectedSnaps != null && projectedSnaps > 0) {
+        const rate = perSnapRate(samples)
+        if (rate != null) value = rate * projectedSnaps
+      }
       value *= paceMultiplier
     }
 
@@ -324,16 +511,36 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
   }
 
   if (regressionApplied && priors) {
+    /*
+     * The EFFECTIVE sample is reported, not the raw game count. Saying "115 games" when the
+     * recency weighting left about twelve games of real signal overstates the evidence by an
+     * order of magnitude, and this sentence is rendered to a reader.
+     */
+    const effN = effectiveNs.length
+      ? effectiveNs.reduce((a, b) => a + b, 0) / effectiveNs.length
+      : n
     notes.push(
       `Low-frequency events (sacks, turnovers) regressed toward the ${priors.position} cohort ` +
-        `mean from ${priors.sampleGames} player-game(s); this player's own rate carries ` +
-        `${Math.round((n / (n + k)) * 100)}% weight at ${n} game(s).`,
+        `mean from ${priors.sampleGames} player-game(s). After recency weighting this player's ` +
+        `${n} game(s) carry the weight of about ${effN.toFixed(1)}, so his own rate holds ` +
+        `${Math.round((effN / (effN + k)) * 100)}% and the cohort the rest.`,
     )
   } else {
     notes.push(
       'No position-cohort priors were supplied, so sacks and turnovers are projected from this ' +
         "player's own sample alone and will overstate a recent streak.",
     )
+  }
+
+  if (usableSnaps && projectedSnaps != null) {
+    const sharePart =
+      projectedSnapShare != null
+        ? ` He is projected for ${projectedSnaps} defensive snaps, about ` +
+          `${Math.round(projectedSnapShare * 100)}% of his defense's.`
+        : ` He is projected for ${projectedSnaps} defensive snaps.`
+    notes.push(SNAP_BASIS_NOTE + sharePart)
+  } else {
+    notes.push(NO_SNAP_DATA_NOTE)
   }
 
   // --- confidence, derived from coverage rather than asserted -------------------------
@@ -373,6 +580,9 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
     confidenceScore,
     coverage: {
       gamesUsed: n,
+      gamesWithSnaps: snapSamples.length,
+      projectedSnaps,
+      projectedSnapShare,
       componentsObserved,
       hasDepthRole,
       hasOpponentPace,

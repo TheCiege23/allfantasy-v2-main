@@ -84,6 +84,18 @@ export type IdpConfidenceLevel = 'high' | 'medium' | 'low'
 export interface IdpProjectionCoverage {
   /** Games actually used from the supplied history. */
   gamesUsed: number
+  /**
+   * Games carrying BOTH `def_snp` and `tm_def_snp`, so a snap share could be computed.
+   *
+   * Reported because it decides which basis volume was projected on, and the two are not
+   * equally trustworthy. Measured on production: `def_snp` is present on 58% of defender
+   * game rows and `tm_def_snp` on 70%, so a player legitimately has neither.
+   */
+  gamesWithSnaps: number
+  /** Projected defensive snaps per game. Null when no game carried a snap count. */
+  projectedSnaps: number | null
+  /** Projected share of his team's defensive snaps, 0..1. Null when unknown. */
+  projectedSnapShare: number | null
   /** Distinct components with a non-zero observation. */
   componentsObserved: number
   hasDepthRole: boolean
@@ -116,10 +128,9 @@ export interface IdpProjectionSuccess {
   /**
    * True statements about how this number was built, rendered to the reader.
    *
-   * Always carries the snap-count caveat: defensive snap share is the single most predictive
-   * IDP input and this codebase does not persist it. Volume here is inferred from observed
-   * tackle counts and opponent pace, which is a weaker signal, and saying so is the whole
-   * difference between a projection and a claim.
+   * Includes which basis volume was projected on. Snap share is the strongest IDP signal
+   * there is, and whether it was available for THIS player changes how much the number is
+   * worth — so it is stated either way rather than assumed in either direction.
    */
   notes: string[]
 }

@@ -103,7 +103,7 @@ describe('lookupProjections — the linebacker finally gets priced', () => {
     expect(scored!.points).toBeGreaterThan(12)
 
     expect(p.idpProjection?.basis).toBe('weighted_game_logs')
-    expect(p.idpProjection?.notes.some((n) => n.includes('snap-count data'))).toBe(true)
+    expect(p.idpProjection?.notes.some((n) => n.includes('projected per GAME'))).toBe(true)
   })
 
   it('never overwrites a defensive stat the vendor actually projected', async () => {

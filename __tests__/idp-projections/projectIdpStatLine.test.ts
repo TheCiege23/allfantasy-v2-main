@@ -117,11 +117,116 @@ describe('projectIdpStatLine — the projected line', () => {
     expect(out.statLine.idp_tkl_solo).toBeCloseTo(5, 1)
   })
 
-  it('always states that defensive snap data is absent', () => {
+  it('does not let a two-game spike become a rate, however long the history', () => {
+    /*
+     * THE PASS-RUSHER OVERSHOOT. Sharing the four-game volume half-life with rate stats meant
+     * the last handful of games WERE the projection. Measured on DeMarcus Lawrence: 0.213
+     * fumble recoveries per game against a 0.061 career rate, and 0.281 forced fumbles against
+     * 0.139 — enough to put him 2-3 points high in every tackle-heavy league.
+     */
+    const quiet = Array.from({ length: 40 }, (_, i) => lbGame(i + 1))
+    const spike = [lbGame(41, { idp_sack: 2 }), lbGame(42, { idp_sack: 2 })]
+    const out = projectIdpStatLine({ position: 'LB', history: [...quiet, ...spike] })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+
+    // True rate is 4 sacks in 42 games ≈ 0.095. A four-game window would read ten times that.
+    expect(out.statLine.idp_sack!).toBeLessThan(0.4)
+    // Tackle volume still tracks the recent window, which is the point of keeping them apart.
+    expect(out.statLine.idp_tkl_solo).toBeCloseTo(5, 1)
+  })
+
+  it('regresses on the effective sample, not the raw game count', () => {
+    /*
+     * With a rate half-life of 17 a 200-game history still carries only a few dozen games of
+     * real weight. Shrinking on 200 hands the player's own form ~96% and makes the cohort
+     * decorative; Kish's effective N keeps the arithmetic honest.
+     */
+    const long = Array.from({ length: 200 }, (_, i) => lbGame(i + 1, i % 2 === 0 ? { idp_sack: 1 } : {}))
+    const priors = {
+      position: 'LB',
+      perGame: { idp_sack: 0.05 },
+      sampleGames: 5000,
+    }
+    const out = projectIdpStatLine({ position: 'LB', history: long, priors })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+
+    // Own rate is 0.5, cohort is 0.05. Regressing on 200 games would barely move off 0.5.
+    expect(out.statLine.idp_sack!).toBeLessThan(0.45)
+    expect(out.coverage.regressionApplied).toBe(true)
+
+    const note = out.notes.find((n) => n.includes('regressed toward'))
+    expect(note).toBeDefined()
+    // The note must report the EFFECTIVE weight, never "200 games".
+    expect(note).toContain('carry the weight of about')
+    expect(note).not.toMatch(/weight of about 200/)
+  })
+
+  it('says volume was projected per GAME when no snap counts exist', () => {
     const out = projectIdpStatLine({ position: 'LB', history: STARTER_LB })
     expect(out.ok).toBe(true)
     if (!out.ok) return
-    expect(out.notes.some((n) => n.includes('snap-count data'))).toBe(true)
+    expect(out.notes.some((n) => n.includes('projected per GAME'))).toBe(true)
+    expect(out.coverage.gamesWithSnaps).toBe(0)
+    expect(out.coverage.projectedSnaps).toBeNull()
+  })
+
+  it('projects per SNAP when snap counts exist, and says so', () => {
+    const withSnaps = STARTER_LB.map((g, i) => ({
+      ...g,
+      statMap: { ...g.statMap, def_snp: 60, tm_def_snp: 68, week: i + 1 },
+    }))
+    const out = projectIdpStatLine({ position: 'LB', history: withSnaps })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.coverage.gamesWithSnaps).toBe(6)
+    expect(out.coverage.projectedSnaps).toBeCloseTo(60, 0)
+    expect(out.coverage.projectedSnapShare).toBeCloseTo(60 / 68, 2)
+    expect(out.notes.some((n) => n.includes('per defensive snap'))).toBe(true)
+    expect(out.notes.some((n) => n.includes("88% of his defense's"))).toBe(true)
+  })
+
+  it('follows a role change instead of averaging it away', () => {
+    /*
+     * THE CASE PER-GAME AVERAGING CANNOT SEE. A rotational defender takes over an every-down
+     * job: his snaps double and his tackle counts double with them. A per-game mean drags him
+     * back toward the rotational weeks; a per-snap rate times expected snaps does not.
+     */
+    const rotational = [1, 2, 3, 4].map((w) => ({
+      season: 2025,
+      week: w,
+      opponent: 'IND',
+      statMap: { idp_tkl_solo: 2, idp_tkl_ast: 1, def_snp: 20, tm_def_snp: 65 },
+    }))
+    const everyDown = [5, 6, 7, 8].map((w) => ({
+      season: 2025,
+      week: w,
+      opponent: 'IND',
+      statMap: { idp_tkl_solo: 6, idp_tkl_ast: 3, def_snp: 62, tm_def_snp: 65 },
+    }))
+    const history = [...rotational, ...everyDown]
+
+    const withSnaps = projectIdpStatLine({ position: 'LB', history })
+    // The identical production with the snap columns stripped out — the old basis.
+    const withoutSnaps = projectIdpStatLine({
+      position: 'LB',
+      history: history.map((g) => ({
+        ...g,
+        statMap: { idp_tkl_solo: g.statMap.idp_tkl_solo, idp_tkl_ast: g.statMap.idp_tkl_ast },
+      })),
+    })
+    expect(withSnaps.ok && withoutSnaps.ok).toBe(true)
+    if (!withSnaps.ok || !withoutSnaps.ok) return
+
+    /*
+     * The invariant that matters: knowing he now plays nearly every snap moves him UP relative
+     * to a per-game average that still carries his rotational weeks. The exact size of the
+     * move is a modelling choice; that it happens at all is what the snap data buys.
+     */
+    expect(withSnaps.statLine.idp_tkl_solo!).toBeGreaterThan(withoutSnaps.statLine.idp_tkl_solo!)
+    expect(withSnaps.coverage.projectedSnapShare!).toBeGreaterThan(0.7)
+    expect(withoutSnaps.coverage.projectedSnapShare).toBeNull()
   })
 
   it('scales tackle volume by opponent pace but leaves turnovers alone', () => {
