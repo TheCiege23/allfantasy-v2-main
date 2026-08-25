@@ -633,10 +633,66 @@
 
 .af-cm-msg { display: flex; flex-direction: column; gap: 2px; }
 
+/*
+ * Presence. Deliberately small and low-contrast: it is ambient context, not a
+ * roster, and it must not read as a scoreboard of who is paying attention.
+ */
+.af-cm-presence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 8px;
+}
+
+.af-cm-presence-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.af-cm-presence-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.af-cm-presence-who[data-status='online'] .af-cm-presence-dot { background: var(--good, #35c07a); }
+.af-cm-presence-who[data-status='away'] .af-cm-presence-dot { background: var(--warn, #d8a13a); }
+
+.af-cm-presence-more {
+  font-size: 9.5px;
+  color: var(--faint);
+}
+
+.af-cm-msg-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .af-cm-msg-author {
   font-size: 10.5px;
   font-weight: 700;
   color: var(--accent);
+}
+
+/*
+ * Quiet on purpose: the time is reference, not content. Tabular figures stop
+ * the column of stamps from jittering as the digits change down a thread.
+ */
+.af-cm-msg-time {
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--faint);
+  white-space: nowrap;
+  cursor: default;
 }
 
 .af-cm-msg-text {

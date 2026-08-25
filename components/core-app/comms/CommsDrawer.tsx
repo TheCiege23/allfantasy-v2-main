@@ -3,6 +3,8 @@
 import ThreadPanel from './ThreadPanel'
 import RichMessage from './RichMessage'
 import LeagueActivityFeed from './LeagueActivityFeed'
+import { MessageTime } from './MessageTime'
+import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
@@ -604,6 +606,7 @@ function LeaguePanel({
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [askChimmy, setAskChimmy] = useState(false)
+  const [presence, setPresence] = useState<PresentViewer[]>([])
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -625,6 +628,7 @@ function LeaguePanel({
        * wrongly pointed at (and 403'd every fantasy league).
        */
       const data = (await res.json()) as {
+        presence?: PresentViewer[]
         messages?: Array<{
           id: string
           text?: string | null
@@ -633,6 +637,7 @@ function LeaguePanel({
           metadata?: Record<string, unknown> | null
         }>
       }
+      setPresence(Array.isArray(data.presence) ? data.presence : [])
       setMessages(
         (data.messages ?? []).map((m) => ({
           id: m.id,
@@ -655,7 +660,10 @@ function LeaguePanel({
 
   useEffect(() => {
     if (scopeId) void load(scopeId)
-    else setMessages([])
+    else {
+      setMessages([])
+      setPresence([])
+    }
   }, [scopeId, load])
 
   /*
@@ -849,6 +857,7 @@ function LeaguePanel({
         <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
           @chimmy — ask the league&apos;s AI, publicly
         </button>
+        <PresenceStrip viewers={presence} />
       </div>
 
       <div className="af-cm-thread">
@@ -864,7 +873,10 @@ function LeaguePanel({
         ) : (
           messages.map((m) => (
             <div key={m.id} className="af-cm-msg">
-              <span className="af-cm-msg-author">{m.author}</span>
+              <span className="af-cm-msg-head">
+                <span className="af-cm-msg-author">{m.author}</span>
+                <MessageTime value={m.createdAt} />
+              </span>
               <p className="af-cm-msg-text">{m.message}</p>
               <RichMessage metadata={m.metadata} />
             </div>

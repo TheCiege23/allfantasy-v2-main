@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
+import { MessageTime } from './MessageTime'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -287,7 +288,10 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           ) : (
             messages.map((m) => (
               <div key={m.id} className="af-cm-msg">
-                <span className="af-cm-msg-author">{m.senderName}</span>
+                <span className="af-cm-msg-head">
+                  <span className="af-cm-msg-author">{m.senderName}</span>
+                  <MessageTime value={m.createdAt} />
+                </span>
                 <span className="af-cm-msg-text">{m.body}</span>
                 <RichMessage metadata={m.metadata} />
               </div>

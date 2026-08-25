@@ -15,6 +15,7 @@ import { processIdpLeagueChatInput } from '@/lib/idp/idpChimmyLeagueChat'
 import { processDevyLeagueChatInput } from '@/lib/devy/devyChimmyLeagueChat'
 import { processC2cLeagueChatInput } from '@/lib/c2c/c2cChimmyLeagueChat'
 import { isChimmyPrivateMessage, parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
+import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -138,7 +139,31 @@ export async function GET(req: NextRequest) {
         })
       : messages
 
+  /*
+   * Presence beacon. Folded into the poll the drawer already makes rather than
+   * given a route of its own — this repo is at the platform's route ceiling —
+   * and deliberately after the access check, so viewing is only recorded for a
+   * league the caller is actually allowed to read.
+   *
+   * Both calls are best-effort inside their own module. A chat that failed to
+   * load because presence failed would be a worse product than a chat with no
+   * presence strip.
+   */
+  const presenceScope = { kind: 'league' as const, id: leagueId }
+  await markViewingChat(presenceScope, {
+    userId,
+    resolveName: async () => {
+      const row = await prisma.appUser.findUnique({
+        where: { id: userId },
+        select: { displayName: true, username: true },
+      })
+      return row?.displayName || row?.username || null
+    },
+  })
+  const presence = await readChatPresence(presenceScope)
+
   return NextResponse.json({
+    presence,
     messages: filteredMessages.map((message) =>
       toClientMessage({
         id: message.id,
