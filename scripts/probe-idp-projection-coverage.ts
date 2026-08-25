@@ -19,7 +19,7 @@
 import { PrismaClient } from '@prisma/client'
 
 import { hasIdpScoring, isIdpPosition } from '../lib/core-app/scoringNotes'
-import { loadIdpProjections } from '../lib/idp-projections/loadIdpProjections'
+import { loadIdpProjections, mergeIdpStatLine } from '../lib/idp-projections/loadIdpProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '../lib/projections/leagueScoring'
 
 const prisma = new PrismaClient()
@@ -191,6 +191,134 @@ function pct(a: number, b: number) {
   return b === 0 ? 'n/a' : `${((a / b) * 100).toFixed(1)}%`
 }
 
+/**
+ * What does the enrichment ACTUALLY add?
+ *
+ * ⚠ THE ANSWER IS NOT "IT PRICES DEFENDERS" — MOST OF THEM WERE ALREADY PRICED. Sleeper's
+ * component line carries `idp_*` keys, so `computeLeagueProjectedPoints` could already score
+ * roughly four defenders in five. Only the GENERIC `pts_ppr` scalar is meaningless for them
+ * (0.28 for a linebacker his league scores in the teens), and that is a different column.
+ *
+ * The value is the minority the vendor omits entirely, which is not a tail of nobodies —
+ * measured 2026-08-25 it included Bobby Wagner and Devin White. This function measures that
+ * split rather than letting it be assumed in either direction.
+ *
+ * Deliberately re-implements the merge against raw rows instead of calling
+ * `lookupProjections`, which imports `server-only` and cannot run under tsx.
+ */
+async function probeEnrichmentValue(leagues: IdpLeague[], season: number, week: number) {
+  heading('5. What the enrichment actually adds, vendor line vs enriched')
+
+  const at = await prisma.fantasyProjection.findFirst({
+    where: { source: { not: 'allfantasy' } },
+    orderBy: [{ season: 'desc' }, { week: 'desc' }],
+    select: { season: true, week: true },
+  })
+  if (!at) return console.log('no vendor projection rows on file')
+  console.log(`vendor feed week: ${at.season} wk${at.week}`)
+
+  let defenders = 0
+  let vendorPriced = 0
+  let newlyPriced = 0
+  let materiallyChanged = 0
+  let deltaSum = 0
+  const newNames: string[] = []
+
+  for (const league of leagues) {
+    const scoring = extractScoringSettings(league.settings)
+    if (!scoring) continue
+
+    const rosters = await prisma.roster.findMany({
+      where: { leagueId: league.id },
+      select: { playerData: true },
+    })
+    const ids = new Set<string>()
+    for (const r of rosters) {
+      const pd = (r.playerData ?? {}) as Record<string, unknown>
+      for (const k of ['starters', 'players']) {
+        const arr = pd[k]
+        if (Array.isArray(arr)) for (const v of arr) if (typeof v === 'string' && v !== '0') ids.add(v)
+      }
+    }
+    if (ids.size === 0) continue
+
+    const players = await prisma.sportsPlayer.findMany({
+      where: { sleeperId: { in: [...ids] } },
+      select: { sleeperId: true, name: true, position: true },
+    })
+    const posOf = new Map<string, string | null>()
+    const nameOf = new Map<string, string>()
+    for (const p of players) {
+      if (!p.sleeperId || posOf.has(p.sleeperId)) continue
+      posOf.set(p.sleeperId, p.position)
+      nameOf.set(p.sleeperId, p.name)
+    }
+    const defIds = [...posOf.keys()].filter((id) => isIdpPosition(posOf.get(id)))
+    if (defIds.length === 0) continue
+
+    const rows = await prisma.fantasyProjection.findMany({
+      where: {
+        playerId: { in: defIds },
+        season: at.season,
+        week: at.week,
+        source: { not: 'allfantasy' },
+      },
+      select: { playerId: true, stats: true },
+    })
+    const vendorById = new Map<string, Record<string, unknown> | null>()
+    for (const r of rows) {
+      const outer = (r.stats ?? {}) as Record<string, unknown>
+      const inner = outer.stats
+      vendorById.set(
+        r.playerId,
+        inner && typeof inner === 'object' && !Array.isArray(inner)
+          ? (inner as Record<string, unknown>)
+          : null,
+      )
+    }
+
+    const { bySleeperId } = await loadIdpProjections({
+      prisma,
+      season,
+      week,
+      players: defIds.map((id) => ({ sleeperId: id, position: posOf.get(id) ?? null })),
+    })
+
+    for (const id of defIds) {
+      defenders++
+      const vendor = vendorById.get(id) ?? null
+      const outcome = bySleeperId.get(id)
+      const enriched = outcome?.ok ? mergeIdpStatLine(vendor, outcome.statLine) : vendor
+
+      const bp = vendor ? computeLeagueProjectedPoints(vendor, scoring)?.points ?? null : null
+      const ap = enriched ? computeLeagueProjectedPoints(enriched, scoring)?.points ?? null : null
+
+      if (bp != null) vendorPriced++
+      if (bp == null && ap != null) {
+        newlyPriced++
+        if (newNames.length < 10) {
+          newNames.push(`${posOf.get(id)} ${nameOf.get(id)} -> ${ap.toFixed(2)}`)
+        }
+      }
+      if (bp != null && ap != null) {
+        deltaSum += Math.abs(ap - bp)
+        if (Math.abs(ap - bp) > 0.5) materiallyChanged++
+      }
+    }
+  }
+
+  console.log('')
+  console.log(`rostered defenders across every IDP league: ${defenders}`)
+  console.log(`  already priced by the VENDOR component line: ${vendorPriced} (${pct(vendorPriced, defenders)})`)
+  console.log(`  NEWLY priced (vendor carried nothing):       ${newlyPriced} (${pct(newlyPriced, defenders)})`)
+  console.log(`  still unpriced after enrichment:             ${defenders - vendorPriced - newlyPriced}`)
+  console.log(`  materially changed (>0.5 pt):                ${materiallyChanged}`)
+  console.log(`  mean |delta| where both priced:               ${(deltaSum / Math.max(1, vendorPriced)).toFixed(3)} pts`)
+  console.log('')
+  console.log('newly priced examples:')
+  for (const n of newNames) console.log(`   ${n}`)
+}
+
 async function main() {
   const { seasons, anyIdp } = await probeStatVocabulary()
   const idpLeagues = await probeIdpLeagues()
@@ -230,6 +358,8 @@ async function main() {
       ? '⚠ ABOVE THE 40% THRESHOLD — this would fail a scheduled job by design.'
       : '✓ within the 40% refusal threshold.',
   )
+
+  await probeEnrichmentValue(idpLeagues as IdpLeague[], season, week)
 }
 
 main()
