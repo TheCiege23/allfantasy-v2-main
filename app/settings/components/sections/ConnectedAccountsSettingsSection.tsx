@@ -81,6 +81,25 @@ export function ConnectedAccountsSettingsSection({
     } else if (discordStatus === "error") {
       setStatusTone("error")
       setStatusMessage("Discord could not be connected. Check the Discord app redirect URL and try again.")
+    } else if (discordStatus === "bot-linked") {
+      /*
+       * The BOT install statuses land on this page too, and until now this
+       * handler only knew the ACCOUNT ones — so installing the bot redirected
+       * here and said nothing at all, whether it worked or not.
+       */
+      setStatusTone("success")
+      setStatusMessage("AllFantasy is in your Discord server. You can now create a league channel from the league page.")
+    } else if (discordStatus === "bot-unverified") {
+      setStatusTone("error")
+      setStatusMessage(
+        "Discord accepted the install but we cannot see the bot in that server yet. Give it a moment and reload, or re-run the install and pick the server again.",
+      )
+    } else if (discordStatus === "bot-not-ready") {
+      setStatusTone("error")
+      setStatusMessage("The AllFantasy Discord bot is not configured on this environment yet, so it cannot be installed.")
+    } else if (discordStatus === "bot-error") {
+      setStatusTone("error")
+      setStatusMessage("Discord did not tell us which server the bot was added to. Re-run the install and pick a server.")
     } else if (spotifyStatus === "connected") {
       setStatusTone("success")
       setStatusMessage("Spotify connected. Music controls are now available where supported.")
