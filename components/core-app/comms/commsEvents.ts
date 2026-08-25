@@ -15,9 +15,21 @@
 
 /**
  * Opens the drawer. `detail.tab` optionally selects which of the four tabs
- * ('league' | 'chimmy' | 'huddle' | 'dms') it lands on.
+ * ('league' | 'chimmy' | 'huddle' | 'dms') it lands on, and `detail.prefill`
+ * optionally seeds the composer with a question.
+ *
+ * `prefill` seeds the box; it does NOT send. A screen that opens a chat and
+ * fires a question off on the user's behalf has spent their request allowance
+ * on something they never typed and cannot take back — so the question lands
+ * in the input, and the user presses send.
  */
 export const COMMS_OPEN_EVENT = 'af-comms-open'
+
+/** The shape `COMMS_OPEN_EVENT` carries, so both sides agree on it. */
+export type CommsOpenDetail = {
+  tab?: 'league' | 'chimmy' | 'huddle' | 'dms'
+  prefill?: string
+}
 
 /** Opens the support modal. */
 export const SUPPORT_OPEN_EVENT = 'af-support-open'

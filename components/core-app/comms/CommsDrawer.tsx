@@ -72,6 +72,14 @@ export type CommsDrawerProps = {
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals?: string | null
   initialTab?: CommsTab
+  /**
+   * Seeds the private Chimmy composer with a question a screen wants asked.
+   *
+   * ⚠ DELIBERATELY NOT PASSED TO THE LEAGUE TAB. That panel posts its answers
+   * to everyone in the league, and putting words a user never typed into a
+   * public composer is a different act from putting them in a private one.
+   */
+  initialDraft?: string | null
 }
 
 const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.'
@@ -132,6 +140,7 @@ function ChimmyPanel({
   tokenCost,
   publicMode,
   homeSignals,
+  initialDraft,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
@@ -141,9 +150,11 @@ function ChimmyPanel({
   publicMode: boolean
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals: string | null
+  /** A question a screen asked us to seed. Never auto-sent. */
+  initialDraft?: string | null
 }) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(initialDraft ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
@@ -156,6 +167,15 @@ function ChimmyPanel({
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns.length, busy])
+
+  /*
+   * A later open with a different question re-seeds the box, but never over
+   * something the user has already started typing — overwriting a half-written
+   * message to insert our own is the one way this could cost someone anything.
+   */
+  useEffect(() => {
+    if (initialDraft) setDraft((d) => (d.trim() ? d : initialDraft))
+  }, [initialDraft])
 
   const send = useCallback(
     async (text: string) => {
@@ -809,6 +829,7 @@ export function CommsDrawer({
   chimmyTokenCost,
   homeSignals = null,
   initialTab = 'chimmy',
+  initialDraft = null,
 }: CommsDrawerProps) {
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
@@ -923,6 +944,7 @@ export function CommsDrawer({
             tokenCost={chimmyTokenCost}
             publicMode={false}
             homeSignals={homeSignals}
+            initialDraft={initialDraft}
           />
         ) : tab === 'huddle' ? (
           <UnbuiltPanel

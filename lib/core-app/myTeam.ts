@@ -3,6 +3,12 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { latestProjectionWeek, lookupProjections, summariseLineup } from './playerProjections'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
+import { isPreseason, resolveSportsWeek, type SportsWeek } from './sportsWeek'
+import { describeScoringDifferences } from './scoringNotes'
+import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -30,10 +36,57 @@ export type LineupPlayer = {
   position: string | null
   team: string | null
   imageUrl: string | null
-  /** "DEN vs LV · 4:05p" — from the ingested schedule, null when unknown. */
+  /** "DEN vs LV · Sun 4:05p" — from the ingested schedule, null when unknown. */
   gameContext: string | null
   kickoff: Date | null
+  /**
+   * Exhibition or the real thing.
+   *
+   * ⚠ A PRESEASON PROJECTION IS NOT A FANTASY PROJECTION. Starters play a
+   * series and sit. Showing an August game beside a number, with nothing
+   * saying which kind of game it is, invites someone to read a meaningless
+   * total as their week.
+   */
+  preseason: boolean
+  /** Stadium, when the schedule carries one — the basis for the dome symbol. */
+  venue: string | null
   injuryStatus: string | null
+  /**
+   * He is ruled out, so the projection is 0.0 rather than absent.
+   *
+   * ⚠ THIS IS THE ONE CASE WHERE ZERO IS HONEST. Everywhere else a zero would
+   * be a claim we cannot support, which is why `projectedPoints` stays null.
+   * A player the league has declared OUT will score nothing, and saying 0.0
+   * next to the reason is more useful than an em dash that makes the reader
+   * go and look it up.
+   */
+  ruledOut: boolean
+  /**
+   * The same projection re-scored under THIS LEAGUE'S rules.
+   *
+   * ⚠ THIS IS THE NUMBER THAT ACTUALLY APPLIES TO YOU. `projectedPoints` is the
+   * vendor's line collapsed under a generic PPR preset — a league nobody is in.
+   * This one is the vendor's per-stat components multiplied by the league's own
+   * `scoring_settings`. In a TE-premium, six-point-passing-TD or IDP league the
+   * two are not close, and the generic one is the one that is wrong.
+   *
+   * Null when the league's scoring cannot be read, or when not one of its
+   * scoring keys matched the projected stat line — which is NOT a zero-point
+   * projection and must never render as 0.0.
+   */
+  afProjectedPoints: number | null
+  /**
+   * He plays indoors this week, so weather is not a factor.
+   *
+   * Resolved from the HOME TEAM, not from `SportsGame.venue` — the rows that
+   * carry a season type do not carry a venue, so reading the venue column would
+   * return nothing for most games.
+   *
+   * ⚠ Retractable roofs are recorded as domes. Six stadiums can play open, and
+   * nothing in this repo tracks whether the roof was shut, so a "dome" here
+   * means "roofed", not "definitely closed".
+   */
+  indoors: boolean | null
   /**
    * Weekly projection for this player, or null when the feed does not carry him.
    *
@@ -67,7 +120,10 @@ export type MyTeamData = {
   league: { id: string; name: string; platform: string; format: string | null }
   team: SectionState<{
     teamName: string
+    /** The manager's display name. Imported since day one, never rendered. */
     ownerName: string
+    /** Their own avatar, not the league crest. Already a full URL when present. */
+    managerAvatarUrl: string | null
     record: string
     rank: number | null
     pointsFor: number
@@ -76,9 +132,32 @@ export type MyTeamData = {
   }>
   starters: SectionState<LineupSlot[]>
   bench: SectionState<LineupPlayer[]>
-  reserve: SectionState<LineupPlayer[]>
+  /**
+   * Injured reserve and taxi squad, kept apart.
+   *
+   * ⚠ THEY WERE ONE LIST AND EVERY ROW IN IT WAS LABELLED "IR". A taxi-squad
+   * rookie is not injured, and a screen that says he is tells a manager to go
+   * and fix something that is not broken. They are different rules, different
+   * eligibility and different deadlines, so they are different sections.
+   */
+  ir: SectionState<LineupPlayer[]>
+  taxi: SectionState<Array<LineupPlayer & { tenure: TaxiTenure | null }>>
   /** Earliest kickoff among starters — the real lineup lock. */
-  lock: SectionState<{ at: Date; anyEmptySlot: boolean }>
+  lock: SectionState<{
+    at: Date
+    anyEmptySlot: boolean
+    /** The week this lock belongs to, so the banner can name it. */
+    week: number | null
+    season: number | null
+    /**
+     * A lock further out than a week is not a deadline, it is a coverage gap.
+     *
+     * ⚠ THIS IS THE 2,321-HOUR COUNTDOWN, MADE VISIBLE. Rather than silently
+     * counting down to a game months away, the banner can say the schedule for
+     * the coming week has not been ingested yet — which is the actual problem.
+     */
+    daysAway: number
+  }>
   /**
    * The lineup's projected total.
    *
@@ -93,7 +172,26 @@ export type MyTeamData = {
     unprojected: number
     season: string
     week: number
+    /**
+     * The same lineup totalled under THIS LEAGUE'S scoring.
+     *
+     * Null when the league's scoring settings are unreadable, so the screen can
+     * show one number honestly rather than two numbers that are secretly the
+     * same one.
+     */
+    afTotal: number | null
+    /** How many starters the league-scored total was built from. */
+    afProjected: number
   }>
+  /**
+   * Why the two totals differ, in the league's own terms — the answer to the
+   * button that offers to explain it.
+   */
+  projectionBasis: {
+    /** e.g. "TE gets 1.5 per reception here, not 1." Empty when nothing stands out. */
+    notes: string[]
+    scoringKnown: boolean
+  }
   rosterGrade: UnavailableSection
   liveScore: UnavailableSection
 }
@@ -105,19 +203,54 @@ function inferSlotLabel(position: string | null, index: number): string {
   return p || `SLOT ${index + 1}`
 }
 
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/**
+ * "Sun 4:05p".
+ *
+ * ⚠ THE DAY IS NOT DECORATION. Without it every row on the screen read as a
+ * time of day with no date attached, so a game three months away looked
+ * exactly like a game this weekend — which is precisely how a November
+ * kickoff sat on the roster for weeks without anyone being able to see it.
+ */
 function formatKickoff(d: Date | null): string | null {
   if (!d) return null
   const hours = d.getUTCHours()
   const mins = d.getUTCMinutes()
   const ampm = hours >= 12 ? 'p' : 'a'
   const h12 = hours % 12 === 0 ? 12 : hours % 12
-  return `${h12}:${String(mins).padStart(2, '0')}${ampm}`
+  return `${DAYS[d.getUTCDay()]} ${h12}:${String(mins).padStart(2, '0')}${ampm}`
+}
+
+/**
+ * Statuses that mean "he will not play", as distinct from "he might".
+ *
+ * ⚠ QUESTIONABLE AND DOUBTFUL ARE DELIBERATELY ABSENT. They keep their real
+ * projection, because those players often do play and zeroing them would tell
+ * a manager to bench someone on a designation that means uncertainty, not
+ * absence. Only a declaration of absence produces a zero.
+ */
+const RULED_OUT = ['out', ' ir', 'ir ', 'injured reserve', 'suspend', 'pup', 'nfi', 'did not play']
+
+function isRuledOut(status: string | null): boolean {
+  if (!status) return false
+  const t = ` ${status.trim().toLowerCase()} `
+  if (t.trim() === 'ir') return true
+  return RULED_OUT.some((needle) => t.includes(needle))
 }
 
 async function resolvePlayers(
   ids: string[],
   sport: string,
-  projectionWeek: { season: string; week: number } | null
+  projectionWeek: { season: string; week: number } | null,
+  /** The real-world week to pull games for. Null means we could not resolve one. */
+  week: SportsWeek | null,
+  /**
+   * This league's `scoring_settings`, for re-scoring the vendor's component
+   * line. Null when the league never recorded any — in which case there is no
+   * league-specific number to compute and the screen shows only the generic one.
+   */
+  scoringSettings: Record<string, unknown> | null
 ): Promise<Map<string, LineupPlayer>> {
   const out = new Map<string, LineupPlayer>()
   if (ids.length === 0) return out
@@ -127,36 +260,113 @@ async function resolvePlayers(
     select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
   })
 
-  // One upcoming game per team, so a lineup row can say who the player faces and
-  // when. Pulled once for the whole roster rather than per player.
+  /*
+   * ⚠ SCOPED TO A SEASON AND A WEEK, NOT TO "THE FUTURE".
+   *
+   * This asked for every game after now, ordered by kickoff, and took the first
+   * per team. That is only correct when the schedule table is complete, and it
+   * is not. On production the first matching row was in late NOVEMBER, so every
+   * starter showed a November opponent and the lock counted down 97 days to it.
+   * Nothing looked wrong — real teams, a real kickoff — and with no date on the
+   * row there was nothing to give it away.
+   *
+   * ⚠ AND THE TEAM FILTER WAS RUN IN SQL AGAINST THE WRONG VOCABULARY.
+   * `SportsPlayer.team` is an abbreviation ("KC"); `SportsGame.homeTeam` holds
+   * whatever the provider called it — ESPN writes "Kansas City Chiefs", Rolling
+   * Insights writes the mascot. `homeTeam: { in: ["KC", ...] }` therefore matched
+   * only the minority of rows that happen to store an abbreviation, which is a
+   * silent partial join: some players get a game, some do not, and which is
+   * which depends on who ingested the row.
+   *
+   * So the week is filtered in SQL and the TEAMS are matched in memory through
+   * the normaliser that understands all three spellings. One NFL week is about
+   * sixteen fixtures — and up to four rows each, because the unique key includes
+   * `source` — so this is a small set by construction.
+   */
   const teams = [...new Set(rows.map((r) => r.team).filter(Boolean))] as string[]
-  const games =
-    teams.length > 0
+  const wanted = new Map<string, string>()
+  for (const t of teams) {
+    const norm = normalizeTeamAbbrev(t)
+    if (norm) wanted.set(norm, t)
+  }
+
+  const weekGames =
+    wanted.size > 0 && week
       ? await prisma.sportsGame
           .findMany({
-            where: {
-              sport,
-              startTime: { gte: new Date(Date.now() - 6 * 3600 * 1000) },
-              OR: [{ homeTeam: { in: teams } }, { awayTeam: { in: teams } }],
-            },
+            where: { sport, season: week.season, week: week.week },
             orderBy: { startTime: 'asc' },
             take: 400,
-            select: { homeTeam: true, awayTeam: true, startTime: true },
+            select: {
+              homeTeam: true,
+              awayTeam: true,
+              startTime: true,
+              seasonType: true,
+              venue: true,
+            },
           })
           .catch(() => [])
       : []
 
-  const nextGameFor = new Map<string, { opponent: string; home: boolean; at: Date | null }>()
-  for (const g of games) {
-    for (const [team, opponent, home] of [
-      [g.homeTeam, g.awayTeam, true],
-      [g.awayTeam, g.homeTeam, false],
+  type Candidate = {
+    opponent: string
+    home: boolean
+    at: Date
+    preseason: boolean
+    venue: string | null
+    /** Whether the provider row that produced this knew its season type. */
+    typed: boolean
+  }
+
+  const best = new Map<string, Candidate>()
+
+  /**
+   * Is `next` a better row for this team than what we already have?
+   *
+   * ⚠ THE SAME FIXTURE ARRIVES UP TO FOUR TIMES, ONE PER PROVIDER, AND THEY DO
+   * NOT AGREE. The unique key includes `source`, and `seasonType` is populated
+   * on the Rolling Insights and ESPN rows but null on TheSportsDB's row for the
+   * same game — deliberately, because that provider does not carry the field.
+   * Whichever row happened to sort first would otherwise decide at random
+   * whether a game could be labelled preseason at all.
+   *
+   * Earlier kickoff wins, because that is the one that locks the lineup. On a
+   * tie — which is what duplicate rows for one fixture look like — the row that
+   * knows its season type wins.
+   */
+  function better(next: Candidate, current: Candidate | undefined): boolean {
+    if (!current) return true
+    if (next.at.getTime() !== current.at.getTime()) return next.at < current.at
+    if (next.typed !== current.typed) return next.typed
+    // Same kickoff, same knowledge: prefer the row that carries a venue.
+    return current.venue == null && next.venue != null
+  }
+
+  for (const g of weekGames) {
+    if (!g.startTime) continue
+    const home = normalizeTeamAbbrev(g.homeTeam)
+    const away = normalizeTeamAbbrev(g.awayTeam)
+    for (const [team, opponent, isHome] of [
+      [home, away, true],
+      [away, home, false],
     ] as const) {
-      if (!teams.includes(team)) continue
-      if (nextGameFor.has(team)) continue
-      nextGameFor.set(team, { opponent, home, at: g.startTime })
+      if (!team || !opponent) continue
+      const rosterTeam = wanted.get(team)
+      if (!rosterTeam) continue
+
+      const candidate: Candidate = {
+        opponent,
+        home: isHome,
+        at: g.startTime,
+        preseason: isPreseason(g.seasonType),
+        venue: g.venue ?? null,
+        typed: g.seasonType != null,
+      }
+      if (better(candidate, best.get(rosterTeam))) best.set(rosterTeam, candidate)
     }
   }
+
+  const nextGameFor = best
 
   const injuries = await prisma.sportsInjury
     .findMany({
@@ -180,6 +390,29 @@ async function resolvePlayers(
     if (!r.sleeperId) continue
     const g = r.team ? nextGameFor.get(r.team) : undefined
     const time = formatKickoff(g?.at ?? null)
+    const injuryStatus = injuryByName.get(r.name.toLowerCase()) ?? null
+    const ruledOut = isRuledOut(injuryStatus)
+    const projection = projections.get(r.sleeperId) ?? null
+    const feedProjection = projection?.projectedPoints ?? null
+
+    /*
+     * The league-specific number. `computeLeagueProjectedPoints` returns null
+     * rather than 0 when none of the league's scoring keys matched the stat
+     * line, which is the difference between "this league scores him at nothing"
+     * and "we cannot score this league" — only the second is ever true here.
+     */
+    const leagueScored =
+      scoringSettings && projection?.componentStats
+        ? computeLeagueProjectedPoints(projection.componentStats, scoringSettings)
+        : null
+
+    // Indoors is a fact about the home stadium, so it is resolved from whoever
+    // is hosting — the player's own team when at home, his opponent when away.
+    const hostTeam = g ? (g.home ? r.team : g.opponent) : null
+    const venueInfo = hostTeam
+      ? resolveVenueForTeam({ sport: sport as 'NFL', teamAbbrev: normalizeTeamAbbrev(hostTeam) })
+      : { kind: 'none' as const }
+
     out.set(r.sleeperId, {
       sleeperId: r.sleeperId,
       name: r.name,
@@ -188,8 +421,19 @@ async function resolvePlayers(
       imageUrl: r.imageUrl,
       gameContext: g ? `${r.team} ${g.home ? 'vs' : '@'} ${g.opponent}${time ? ` · ${time}` : ''}` : null,
       kickoff: g?.at ?? null,
-      injuryStatus: injuryByName.get(r.name.toLowerCase()) ?? null,
-      projectedPoints: projections.get(r.sleeperId)?.projectedPoints ?? null,
+      preseason: g?.preseason ?? false,
+      venue: g?.venue ?? null,
+      injuryStatus,
+      ruledOut,
+      /*
+       * A player the league has ruled out scores nothing, and that is a fact we
+       * can stand behind — so it is the one case where a zero replaces the em
+       * dash. Everywhere else null survives, because "we have no projection"
+       * and "we project nothing" are different claims.
+       */
+      projectedPoints: ruledOut ? 0 : feedProjection,
+      afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
+      indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
     })
   }
 
@@ -199,7 +443,11 @@ async function resolvePlayers(
 export async function getMyTeamData(leagueId: string, userId: string): Promise<MyTeamData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true, sport: true },
+    select: {
+      id: true, name: true, platform: true, leagueType: true, sport: true,
+      // `scoring_settings` lives in here — the basis for the league-specific number.
+      settings: true,
+    },
   })
   if (!league) return null
 
@@ -221,6 +469,7 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       available: false as const,
       reason: 'no lineup found to project',
     },
+    projectionBasis: { notes: [], scoringKnown: false },
     rosterGrade: {
       available: false as const,
       reason: 'a roster grade needs projections and positional replacement levels we do not compute yet',
@@ -234,6 +483,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       teamName: true, ownerName: true, wins: true, losses: true, ties: true,
       pointsFor: true, pointsAgainst: true, currentRank: true,
       platformUserId: true, externalId: true,
+      // The manager's own avatar. Already imported, never rendered until now.
+      avatarUrl: true,
     },
   })
 
@@ -249,7 +500,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       team: unknown,
       starters: unknown,
       bench: unknown,
-      reserve: unknown,
+      ir: unknown,
+      taxi: unknown,
       lock: unknown,
     }
   }
@@ -262,6 +514,7 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     data: {
       teamName: myTeamRow.teamName,
       ownerName: myTeamRow.ownerName,
+      managerAvatarUrl: myTeamRow.avatarUrl ?? null,
       // Same rule as screen 2: an all-zero record is an absence, not a result.
       record: anyResults
         ? myTeamRow.ties > 0
@@ -306,7 +559,15 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       available: false as const,
       reason: 'no roster rows imported for your team in this league',
     }
-    return { ...base, team, starters: noRoster, bench: noRoster, reserve: noRoster, lock: noRoster }
+    return {
+      ...base,
+      team,
+      starters: noRoster,
+      bench: noRoster,
+      ir: noRoster,
+      taxi: noRoster,
+      lock: noRoster,
+    }
   }
 
   const pd = (roster.playerData ?? {}) as Record<string, unknown>
@@ -326,10 +587,27 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
    */
   const projectionWeek = await latestProjectionWeek()
 
+  /*
+   * The REAL-WORLD week, which is a different question from the week the
+   * projection feed last wrote. They drift, and conflating them is how a
+   * roster ends up showing week-1 projections beside November opponents.
+   */
+  const sportsWeek = await resolveSportsWeek(sport)
+
+  /*
+   * Null here is a real state, not a failure: plenty of imported leagues never
+   * recorded their scoring. The screen then shows the generic projection alone
+   * and says why there is no league-specific one, rather than printing the
+   * generic number twice under two different labels.
+   */
+  const scoringSettings = extractScoringSettings(league.settings)
+
   const resolved = await resolvePlayers(
     [...new Set([...starterIds, ...allIds, ...reserveIds, ...taxiIds])],
     sport,
-    projectionWeek
+    projectionWeek,
+    sportsWeek,
+    scoringSettings
   )
 
   // Sleeper encodes an unfilled starting slot as "0" — that is the handoff's
@@ -347,8 +625,19 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     }
   })
 
+  /*
+   * ⚠ TAXI WAS MISSING FROM THIS FILTER AND EVERY TAXI PLAYER RENDERED TWICE.
+   * `players` is the whole roster, so the bench is what is left after removing
+   * every other section. Excluding IR but not taxi put taxi players on the
+   * bench AND in the reserve list below it — the same player, twice, in two
+   * places that imply different things about whether he can be started.
+   */
   const starterSet = new Set(starterIds)
-  const benchIds = allIds.filter((id) => !starterSet.has(id) && !reserveIds.includes(id))
+  const reserveSet = new Set(reserveIds)
+  const taxiSet = new Set(taxiIds)
+  const benchIds = allIds.filter(
+    (id) => !starterSet.has(id) && !reserveSet.has(id) && !taxiSet.has(id),
+  )
 
   const kickoffs = starters
     .map((s) => s.player?.kickoff)
@@ -371,19 +660,64 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
         .filter(([, p]) => p != null && p.projectedPoints != null)
         .map(([id, p]) => [
           id,
-          { playerId: id, projectedPoints: p!.projectedPoints as number, name: p!.name, position: p!.position, team: p!.team },
+          {
+            playerId: id,
+            projectedPoints: p!.projectedPoints as number,
+            name: p!.name,
+            position: p!.position,
+            team: p!.team,
+            // summariseLineup only totals points; the component line is not its
+            // business, and passing the roster's copy would imply it was.
+            componentStats: null,
+          },
         ])
     )
   )
 
+  /*
+   * The league-scored total, summed over the same starters.
+   *
+   * ⚠ COUNTED SEPARATELY FROM THE GENERIC TOTAL, NOT ASSUMED TO MATCH IT. A
+   * player can carry a vendor projection and still fail to produce a
+   * league-scored one — that is exactly what happens when a league's scoring
+   * keys do not match the projected stat line. Reusing the generic coverage
+   * count would report a total built from six starters as though it came from
+   * eight.
+   */
+  let afTotal = 0
+  let afProjected = 0
+  for (const id of projectedIds) {
+    const v = resolved.get(id)?.afProjectedPoints
+    if (v == null) continue
+    afTotal += v
+    afProjected += 1
+  }
+
+  const scoringNotes = describeScoringDifferences(scoringSettings)
+
+  /*
+   * Null when the question cannot be answered — no recorded taxi-years limit,
+   * or no season-end snapshots to count against it. The section then shows the
+   * players without a countdown, because a confident "1 year left" that is
+   * wrong is how someone loses a player to a deadline they thought they had.
+   */
+  const tenure = taxiIds.length > 0 ? await getTaxiTenure(leagueId, taxiIds) : null
+
   return {
     ...base,
     team,
+    projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
     projections:
       projectionWeek && projectedIds.length > 0
         ? {
             available: true,
-            data: { ...lineup, season: projectionWeek.season, week: projectionWeek.week },
+            data: {
+              ...lineup,
+              season: projectionWeek.season,
+              week: projectionWeek.week,
+              afTotal: afProjected > 0 ? Math.round(afTotal * 100) / 100 : null,
+              afProjected,
+            },
           }
         : {
             available: false,
@@ -399,21 +733,42 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       benchIds.length > 0
         ? { available: true, data: benchIds.map((id) => resolved.get(id)).filter(Boolean) as LineupPlayer[] }
         : { available: false, reason: 'no bench players recorded on this roster' },
-    reserve:
-      reserveIds.length + taxiIds.length > 0
+    ir:
+      reserveIds.length > 0
         ? {
             available: true,
-            data: [...reserveIds, ...taxiIds]
-              .map((id) => resolved.get(id))
-              .filter(Boolean) as LineupPlayer[],
+            data: reserveIds.map((id) => resolved.get(id)).filter(Boolean) as LineupPlayer[],
           }
-        : { available: false, reason: 'no IR or taxi players on this roster' },
+        : { available: false, reason: 'nobody on injured reserve' },
+    taxi:
+      taxiIds.length > 0
+        ? {
+            available: true,
+            data: taxiIds
+              .map((id) => {
+                const p = resolved.get(id)
+                return p ? { ...p, tenure: tenure?.get(id) ?? null } : null
+              })
+              .filter(Boolean) as Array<LineupPlayer & { tenure: TaxiTenure | null }>,
+          }
+        : { available: false, reason: 'nobody on the taxi squad' },
     lock:
       kickoffs.length > 0
-        ? { available: true, data: { at: kickoffs[0], anyEmptySlot: starters.some((s) => s.empty) } }
+        ? {
+            available: true,
+            data: {
+              at: kickoffs[0],
+              anyEmptySlot: starters.some((s) => s.empty),
+              week: sportsWeek?.week ?? null,
+              season: sportsWeek?.season ?? null,
+              daysAway: Math.round((kickoffs[0].getTime() - Date.now()) / 86_400_000),
+            },
+          }
         : {
             available: false,
-            reason: 'no upcoming game found for your starters, so there is no lock time to count down to',
+            reason: sportsWeek
+              ? `no week ${sportsWeek.week} game found for any of your starters yet`
+              : 'no upcoming game found for your starters, so there is no lock time to count down to',
           },
   }
 }

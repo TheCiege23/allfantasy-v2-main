@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
-import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from './commsEvents'
+import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
 
 /**
  * Mounts the communications drawer (23a/23b) and the support modal (25b) once,
@@ -63,6 +63,7 @@ export function CommsDock({
 }: CommsDockProps) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
+  const [prefill, setPrefill] = useState<string | null>(null)
   const [supportOpen, setSupportOpen] = useState(false)
   const [wide, setWide] = useState(false)
 
@@ -81,8 +82,14 @@ export function CommsDock({
 
   useEffect(() => {
     const openComms = (e: Event) => {
-      const detail = (e as CustomEvent<{ tab?: CommsTab }>).detail
+      const detail = (e as CustomEvent<CommsOpenDetail>).detail
       if (detail?.tab) setTab(detail.tab)
+      /*
+       * Seeds the composer. Held in state rather than passed straight down so a
+       * second open with no prefill clears the first one's question instead of
+       * leaving a stale sentence in the box.
+       */
+      setPrefill(detail?.prefill ?? null)
       setOpen(true)
     }
     const openSupport = () => setSupportOpen(true)
@@ -152,6 +159,7 @@ export function CommsDock({
         chimmyTokenCost={chimmyTokenCost}
         homeSignals={homeSignals}
         initialTab={tab}
+        initialDraft={prefill}
       />
 
       <SupportModal

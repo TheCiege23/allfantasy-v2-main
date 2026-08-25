@@ -385,3 +385,191 @@
 .af-mt-unresolved .af-mt-player-meta {
   color: var(--faint);
 }
+
+/* ── Two projections + lineup share ──────────────────────────────────── */
+/*
+  A three-column block pinned to the right of every roster row, so STD, AF and
+  SHARE line up down the page and can be read as columns rather than as three
+  numbers that happen to sit near each other. Fixed widths, tabular figures:
+  ragged digits in a column are the fastest way to make a comparison unreadable.
+*/
+.af-mt-projpair {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: grid;
+  grid-template-columns: 52px 52px 44px;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.af-mt-projpair .af-mt-proj {
+  margin-left: 0;
+  min-width: 0;
+}
+
+/* The league-scored number is the one that applies to the reader, so it
+   carries the accent and the generic one sits back. */
+.af-mt-proj--af {
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.af-mt-share {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Column headings, aligned to the same grid as the values below them. */
+.af-mt-projhead {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: grid;
+  grid-template-columns: 52px 52px 44px;
+  gap: 4px;
+  text-align: right;
+  font-size: 9.5px;
+  opacity: 0.75;
+}
+.af-mt-projhead > * {
+  text-align: right;
+}
+.af-mt-projhead--af {
+  color: var(--accent-ink);
+  opacity: 1;
+}
+
+/* ── Game context marks ──────────────────────────────────────────────── */
+.af-mt-venue {
+  margin-left: 6px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: help;
+}
+.af-mt-venue[data-indoors='true'] {
+  color: var(--accent-ink);
+}
+.af-mt-venue[data-indoors='false'] {
+  color: var(--muted);
+}
+
+/*
+  ⚠ LOUD ON PURPOSE. An August projection beside an exhibition game describes a
+  series and a seat on the bench, not a fantasy week. The badge is the only
+  thing on the row that says so.
+*/
+.af-mt-pre {
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+}
+
+/* ── Why the two numbers differ ──────────────────────────────────────── */
+.af-mt-basis {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+.af-mt-basis-text {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+.af-mt-basis-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-mt-basis-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.af-mt-basis-cov {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mt-ask {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ── Taxi squad ──────────────────────────────────────────────────────── */
+.af-mt-taxi-years {
+  flex: 0 0 auto;
+  margin-left: 10px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Last year on the taxi squad is a deadline, so it reads as one. */
+.af-mt-taxi-years[data-last='true'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+/* Unknown is quiet — it is our gap, not the manager's problem to fix. */
+.af-mt-taxi-years--none {
+  background: transparent;
+  border-style: dashed;
+  color: var(--faint);
+  font-weight: 500;
+  cursor: help;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+/* The manager's own photo, where the two-letter monogram used to sit. */
+.af-mt-crest--photo {
+  object-fit: cover;
+  padding: 0;
+  border-radius: 12px;
+}
+
+.af-mt-tile--proj .af-mt-tile-value {
+  font-variant-numeric: tabular-nums;
+}
+.af-mt-tile--af .af-mt-tile-value {
+  color: var(--accent-ink);
+}
+.af-mt-tile--af {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 720px) {
+  /* Share is the first thing to go: it is the least load-bearing of the three
+     and the two point totals must stay side by side to be comparable at all. */
+  .af-mt-projpair,
+  .af-mt-projhead {
+    grid-template-columns: 48px 48px;
+  }
+  .af-mt-share,
+  .af-mt-projhead > *:last-child {
+    display: none;
+  }
+  .af-mt-basis {
+    flex-direction: column;
+  }
+}

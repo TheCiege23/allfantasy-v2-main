@@ -18,9 +18,29 @@ export type PlayerProjection = {
   name: string | null
   position: string | null
   team: string | null
+  /**
+   * The per-stat component line the vendor projected — passing yards, receptions,
+   * sacks and so on — as opposed to `projectedPoints`, which is those components
+   * already collapsed under a GENERIC PPR preset.
+   *
+   * ⚠ THIS IS WHAT MAKES A LEAGUE-SPECIFIC NUMBER POSSIBLE. `projectedPoints` is
+   * scored for a league nobody is in. Re-scoring these components under the
+   * league's own `scoring_settings` is the whole difference between "12.4 points
+   * somewhere" and "12.4 points HERE" — and in a TE-premium, 6-point-passing-TD
+   * or IDP league those are not close.
+   *
+   * It sits one level deeper than the rest of this object: the row's `stats`
+   * carries name/position/team at the top and the real stat line at `stats.stats`.
+   */
+  componentStats: Record<string, unknown> | null
 }
 
-type ProjectionStats = { name?: string; position?: string; team?: string }
+type ProjectionStats = {
+  name?: string
+  position?: string
+  team?: string
+  stats?: unknown
+}
 
 function toProjection(row: {
   playerId: string
@@ -28,12 +48,17 @@ function toProjection(row: {
   stats: unknown
 }): PlayerProjection {
   const s = (row.stats ?? {}) as ProjectionStats
+  const inner = s.stats
   return {
     playerId: row.playerId,
     projectedPoints: Number(row.projectedPoints),
     name: s.name ?? null,
     position: s.position ?? null,
     team: s.team ?? null,
+    componentStats:
+      inner && typeof inner === 'object' && !Array.isArray(inner)
+        ? (inner as Record<string, unknown>)
+        : null,
   }
 }
 
