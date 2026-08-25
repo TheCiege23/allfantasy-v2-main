@@ -174,3 +174,52 @@ describe('buildIdpKickerValueMap — with league context, projections drive the 
     }
   })
 })
+
+describe('the value curve is shaped like a market, not like a staircase', () => {
+  it('separates the top three instead of pricing them identically', async () => {
+    /*
+     * THE FLAT TOP. The hand-built ladder put ranks 1, 2 and 3 all at the ceiling, which says
+     * the best linebacker in the league is worth exactly what the third-best is. The real RB
+     * board on the day this was measured ran 10,729 / 10,167 / 8,897 — a 17% drop by the third
+     * name — and the IDP curve now carries that shape.
+     */
+    const { buildIdpKickerValueMap } = await load()
+    const ids = ['lb_stud', 'lb_fill_0', 'lb_fill_1']
+    const map = await buildIdpKickerValueMap(ids, true, { vorpBySleeperId: NAMED_VORP })
+    const [v1, v2, v3] = ids.map((i) => map.get(i)!.value)
+
+    expect(v1).toBeGreaterThan(v2)
+    expect(v2).toBeGreaterThan(v3)
+    // Roughly the measured decay: r2 ~0.883 and r3 ~0.714 of the top.
+    expect(v2 / v1).toBeGreaterThan(0.80)
+    expect(v2 / v1).toBeLessThan(0.95)
+    expect(v3 / v1).toBeLessThan(0.80)
+  })
+
+  it('stops over-pricing depth', async () => {
+    /*
+     * The old rungs valued rank 40 at 32.7% of the top where the market pays 12.4%, and rank
+     * 130 at 9.1% against a measured 1.6%. Depth defenders were the most over-valued assets
+     * on the board and the error grew the further down you looked.
+     */
+    const { buildIdpKickerValueMap, idpTierValueCeiling } = await load()
+    const ceiling = idpTierValueCeiling(true)
+    const map = await buildIdpKickerValueMap(['lb_fill_38'], true, {
+      vorpBySleeperId: NAMED_VORP,
+    })
+    const deep = map.get('lb_fill_38')!.value
+    // lb_fill_38 sits around rank 40 on the VORP board.
+    expect(deep / ceiling).toBeLessThan(0.20)
+    expect(deep / ceiling).toBeGreaterThan(0.05)
+  })
+
+  it('leaves the ceiling exactly where the product put it', async () => {
+    /*
+     * What a top defender is worth against a top receiver is an unvalidated product decision.
+     * Reshaping the curve beneath it must not quietly move it.
+     */
+    const { idpTierValueCeiling } = await load()
+    expect(idpTierValueCeiling(true)).toBe(5500)
+    expect(idpTierValueCeiling(false)).toBe(3500)
+  })
+})

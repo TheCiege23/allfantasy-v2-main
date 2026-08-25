@@ -37,31 +37,73 @@ interface SleeperPlayerInfo {
   search_rank?: number | null
 }
 
-const DYNASTY_IDP_TIERS: { maxRank: number; value: number }[] = [
-  { maxRank: 3, value: 5500 },
-  { maxRank: 8, value: 4200 },
-  { maxRank: 15, value: 3200 },
-  { maxRank: 25, value: 2400 },
-  { maxRank: 40, value: 1800 },
-  { maxRank: 60, value: 1200 },
-  { maxRank: 90, value: 800 },
-  { maxRank: 130, value: 500 },
-  { maxRank: 200, value: 300 },
-  { maxRank: Infinity, value: 150 },
+/**
+ * How value decays down a position board, measured from the market rather than drawn by hand.
+ *
+ * ⚠ THE HAND-BUILT LADDER WAS TOO FLAT EVERYWHERE, NOT JUST AT THE TOP. As shares of the
+ * position-1 value, the old dynasty rungs against the FantasyCalc board measured on
+ * 2026-08-25 (398 players, pooled across QB/RB/WR/TE and normalised per position):
+ *
+ *   rank      3      8     15     25     40     60     90    130
+ *   ladder 1.000  0.764  0.582  0.436  0.327  0.218  0.145  0.091
+ *   market 0.714  0.499  0.343  0.244  0.124  0.066  0.049  0.016
+ *
+ * Every rung over-priced depth, by 2.6x at rank 40 and 5.7x at rank 130. And the top rung was
+ * literally flat — ranks 1, 2 and 3 all at the ceiling — which no market does: the real RB
+ * board that day ran 10,729 / 10,167 / 8,897, a 17% drop by the third name.
+ *
+ * The CEILING is left alone. What a top defender is worth against a top wide receiver is a
+ * product decision nobody has validated and it is not this table's business to move it. The
+ * SHAPE below the ceiling is not a product decision — it is an observable property of how
+ * fantasy markets price scarcity, and it was wrong.
+ *
+ * Pooled across the four offensive positions rather than mapped position-by-position: LB is
+ * not "the RB of defence", and pretending otherwise would smuggle in an arbitrary pairing.
+ */
+const MARKET_DECAY_DYNASTY: ReadonlyArray<{ rank: number; share: number }> = [
+  { rank: 1, share: 1.0 },
+  { rank: 2, share: 0.883 },
+  { rank: 3, share: 0.714 },
+  { rank: 5, share: 0.597 },
+  { rank: 8, share: 0.499 },
+  { rank: 15, share: 0.343 },
+  { rank: 25, share: 0.244 },
+  { rank: 40, share: 0.124 },
+  { rank: 60, share: 0.066 },
+  { rank: 90, share: 0.049 },
+  { rank: 130, share: 0.016 },
 ]
 
-const REDRAFT_IDP_TIERS: { maxRank: number; value: number }[] = [
-  { maxRank: 3, value: 3500 },
-  { maxRank: 8, value: 2800 },
-  { maxRank: 15, value: 2100 },
-  { maxRank: 25, value: 1500 },
-  { maxRank: 40, value: 1000 },
-  { maxRank: 60, value: 650 },
-  { maxRank: 90, value: 400 },
-  { maxRank: 130, value: 250 },
-  { maxRank: 200, value: 150 },
-  { maxRank: Infinity, value: 75 },
+/** Redraft decays harder in the tail — there is no future value holding the bottom up. */
+const MARKET_DECAY_REDRAFT: ReadonlyArray<{ rank: number; share: number }> = [
+  { rank: 1, share: 1.0 },
+  { rank: 2, share: 0.947 },
+  { rank: 3, share: 0.883 },
+  { rank: 5, share: 0.785 },
+  { rank: 8, share: 0.626 },
+  { rank: 15, share: 0.422 },
+  { rank: 25, share: 0.237 },
+  { rank: 40, share: 0.085 },
+  { rank: 60, share: 0.022 },
 ]
+
+/** The ceiling each board is anchored to. Unchanged: this is the product decision. */
+const IDP_CEILING_DYNASTY = 5500
+const IDP_CEILING_REDRAFT = 3500
+
+function decayToTiers(
+  decay: ReadonlyArray<{ rank: number; share: number }>,
+  ceiling: number,
+): { maxRank: number; value: number }[] {
+  const tiers = decay.map((d) => ({ maxRank: d.rank, value: Math.round(ceiling * d.share) }))
+  // Past the measured board the market is thinner than anything observed; hold the floor
+  // rather than extrapolate a curve nobody sampled.
+  tiers.push({ maxRank: Infinity, value: Math.max(1, tiers[tiers.length - 1].value) })
+  return tiers
+}
+
+const DYNASTY_IDP_TIERS = decayToTiers(MARKET_DECAY_DYNASTY, IDP_CEILING_DYNASTY)
+const REDRAFT_IDP_TIERS = decayToTiers(MARKET_DECAY_REDRAFT, IDP_CEILING_REDRAFT)
 
 const DYNASTY_KICKER_TIERS: { maxRank: number; value: number }[] = [
   { maxRank: 3, value: 1200 },
