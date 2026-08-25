@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
@@ -54,6 +55,7 @@ type AnalyzeResult = {
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
   fairnessScore?: number
   confidenceScore?: number
+  percentDiff?: number
   degraded?: boolean
   dataGaps?: string[]
   giveTotal?: number
@@ -237,6 +239,23 @@ export function TradeCenter(props: {
     }
   }, [props.league?.id, giveAssets, getAssets])
 
+  /*
+   * ⚠ A LETTER PER SIDE, OR NO LETTER AT ALL. `projectedLetterFor` returns null
+   * without signal rather than leaving that judgement to this component, so an
+   * unpriced deal shows no badge instead of a C that reads as "even".
+   *
+   * `percentDiff` is signed from the viewer's side, so the opponent's grade is
+   * the mirror of it.
+   */
+  const yourGrade = projectedLetterFor({
+    percentDiff: result?.percentDiff ?? null,
+    hasSignal: Boolean(result) && !noSignal,
+  })
+  const theirGrade = projectedLetterFor({
+    percentDiff: result?.percentDiff != null ? -result.percentDiff : null,
+    hasSignal: Boolean(result) && !noSignal,
+  })
+
   const intel = result?.tradeIntelligence
 
   /*
@@ -413,6 +432,22 @@ export function TradeCenter(props: {
       */}
       {result && !blocked ? (
         <section className="af-tc-verdict">
+          {yourGrade || theirGrade ? (
+            <div className="af-tc-grade-row">
+              {[
+                { label: 'You', letter: yourGrade },
+                { label: props.opponentLabel ?? 'Them', letter: theirGrade },
+              ].map((g) =>
+                g.letter ? (
+                  <div key={g.label} className="af-tc-grade" data-letter={g.letter}>
+                    <span className="af-tc-grade-letter">{g.letter}</span>
+                    <span className="af-tc-grade-for">{g.label}</span>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          ) : null}
+
           <div className="af-tc-labels">
             <strong>{result.labels?.fairnessLabel ?? 'No verdict'}</strong>
             {result.labels?.confidenceLabel ? (

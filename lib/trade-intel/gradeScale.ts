@@ -32,3 +32,49 @@ export function letterFor(avgNetPerSeason: number): GradeLetter {
   if (avgNetPerSeason > -100) return 'D'
   return 'F'
 }
+
+/* ── Projected grades ──────────────────────────────────────────────────────
+ *
+ * ⚠ A PROJECTED GRADE IS NOT A REALIZED ONE AND MUST NOT USE THE BANDS ABOVE.
+ * `GRADE_THRESHOLDS` are `avgNetPerSeason` — points a completed trade actually
+ * produced. A deal a manager is still building has produced nothing, so running
+ * it through `letterFor` would grade a market-value gap on a scale calibrated
+ * for realized fantasy points. The two numbers are not in the same units and the
+ * result would be arbitrary.
+ *
+ * So projections get their own function, in this file rather than beside the UI,
+ * so nobody meets one without the other.
+ */
+
+/** Value gap, as a percentage, inside which a deal reads as even. */
+export const PROJECTED_EVEN_BAND = 10
+export const PROJECTED_STRONG_BAND = 25
+
+/**
+ * A letter for a deal that has not happened yet.
+ *
+ * `percentDiff` is the console's own figure, signed from the VIEWER's side:
+ * positive means they are receiving more value than they send.
+ *
+ * ⚠ RETURNS NULL WITHOUT SIGNAL, AND THAT IS THE POINT. `gradeScale`'s own
+ * header warns that C spans a wide band, so a trade nobody can price lands
+ * mid-C and reads identically to a genuinely even one. Rather than trusting a
+ * caller to remember that, this refuses to produce a letter at all when the
+ * deal could not be priced — a missing badge is unmistakable in a way a C is
+ * not.
+ */
+export function projectedLetterFor(args: {
+  percentDiff: number | null
+  /** False when the deal is unpriced or the analyzer reported it degraded. */
+  hasSignal: boolean
+}): GradeLetter | null {
+  if (!args.hasSignal) return null
+  const d = args.percentDiff
+  if (d == null || !Number.isFinite(d)) return null
+
+  if (d >= PROJECTED_STRONG_BAND) return 'A'
+  if (d >= PROJECTED_EVEN_BAND) return 'B'
+  if (d > -PROJECTED_EVEN_BAND) return 'C'
+  if (d > -PROJECTED_STRONG_BAND) return 'D'
+  return 'F'
+}

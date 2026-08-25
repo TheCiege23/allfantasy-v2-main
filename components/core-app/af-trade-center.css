@@ -576,3 +576,11 @@
   border-color: var(--accent-line);
   color: var(--accent);
 }
+
+/* Grade colours from the handoff. Applied to the letter only — the badge stays
+   neutral so a red F does not shout louder than the verdict it sits beside. */
+.af-tc-grade[data-letter='A'] .af-tc-grade-letter { color: #34d399; }
+.af-tc-grade[data-letter='B'] .af-tc-grade-letter { color: #5eead4; }
+.af-tc-grade[data-letter='C'] .af-tc-grade-letter { color: #fbbf24; }
+.af-tc-grade[data-letter='D'] .af-tc-grade-letter { color: #fb923c; }
+.af-tc-grade[data-letter='F'] .af-tc-grade-letter { color: #fb5b78; }
