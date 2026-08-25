@@ -945,6 +945,10 @@ export default async function AfCorePage({
           id: l.id,
           name: l.name,
           platform: String(l.platform ?? 'manual').toLowerCase(),
+          // Carries the `@global` affordance into the drawer; the broadcast
+          // endpoint re-checks commissioner status against `League.userId`.
+          isCommissioner: Boolean(l.isCommissioner),
+          teamCount: Number((l as { teamCount?: number }).teamCount ?? 0) || 0,
           /*
            * The platform's OWN id for the league, which is what a Sleeper deep
            * link needs. `l.id` is the AllFantasy uuid and 404s off-site; the

@@ -1,6 +1,8 @@
 'use client'
 
 import ThreadPanel from './ThreadPanel'
+import RichMessage from './RichMessage'
+import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-comms.css'
@@ -62,6 +64,15 @@ export type CommsLeague = {
    * one, which is why the hand-off has an in-app fallback.
    */
   platformLeagueId: string | null
+  /**
+   * Commissioner of THIS league. Carries the `@global` affordance: a broadcast
+   * can only target leagues you actually run, and `/api/chat/global-broadcast`
+   * re-checks it server-side — this field decides whether the option is offered
+   * at all, never whether it is allowed.
+   */
+  isCommissioner?: boolean
+  /** Shown in the `@global` league picker so a broadcast names its audience size. */
+  teamCount?: number
 }
 
 export type CommsDrawerProps = {
@@ -565,6 +576,12 @@ type LeagueMessage = {
   author: string
   message: string
   createdAt: string
+  /**
+   * The rich half — GIF, attachments, poll. The API has always returned it; this
+   * panel used to drop it on the floor, so anything sent as a GIF arrived as the
+   * literal text "🎬 GIF".
+   */
+  metadata?: Record<string, unknown> | null
 }
 
 function LeaguePanel({
@@ -605,6 +622,7 @@ function LeaguePanel({
           text?: string | null
           createdAt: string
           authorName?: string | null
+          metadata?: Record<string, unknown> | null
         }>
       }
       setMessages(
@@ -613,6 +631,7 @@ function LeaguePanel({
           author: m.authorName || 'Someone',
           message: m.text ?? '',
           createdAt: m.createdAt,
+          metadata: m.metadata ?? null,
         })),
       )
     } catch (e) {
@@ -631,24 +650,87 @@ function LeaguePanel({
     else setMessages([])
   }, [scopeId, load])
 
-  const send = useCallback(async () => {
-    if (!scopeId || !draft.trim() || sending) return
-    setSending(true)
-    try {
-      const res = await fetch(`/api/app/leagues/${encodeURIComponent(scopeId)}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: draft.trim() }),
-      })
-      if (!res.ok) throw new Error(`Send returned ${res.status}`)
-      setDraft('')
-      await load(scopeId)
-    } catch (e) {
-      setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
-    } finally {
-      setSending(false)
-    }
-  }, [draft, load, scopeId, sending])
+  /*
+   * Maps the composer's payload onto the metadata shape `/api/league/chat`
+   * already stores and `RichMessage` already reads. Kept identical to the
+   * dashboard panel's mapping on purpose — two shapes for one feature is how a
+   * GIF ends up rendering in one surface and not the other.
+   */
+  const sendPayload = useCallback(
+    async (payload: LeagueComposerPayload) => {
+      if (!scopeId || sending) return
+      const text = payload.text.trim()
+      const metadata: Record<string, unknown> = {}
+
+      if (payload.gifUrl || payload.giphyId) {
+        if (payload.gifId) metadata.gifId = payload.gifId
+        if (payload.giphyId) metadata.giphyId = payload.giphyId
+        if (payload.gifUrl) metadata.gifUrl = payload.gifUrl
+        if (payload.previewUrl) metadata.previewUrl = payload.previewUrl
+        if (payload.gifTitle) metadata.gifTitle = payload.gifTitle
+        metadata.gif = {
+          previewUrl: payload.previewUrl ?? payload.gifUrl ?? '',
+          url: payload.gifUrl ?? '',
+          title: payload.gifTitle ?? 'GIF',
+        }
+      }
+
+      if (payload.attachments?.length) {
+        metadata.attachments = payload.attachments.map((a) => ({
+          type: a.type,
+          url: a.url,
+          duration: a.duration,
+          mimeType: a.mimeType,
+        }))
+      }
+
+      if (payload.poll) {
+        metadata.poll = {
+          question: payload.poll.question,
+          options: payload.poll.options.map((t, i) => ({
+            id: `opt-${i}-${Date.now()}`,
+            text: t,
+            votes: [] as string[],
+          })),
+          closeAt: payload.poll.closeAt.toISOString(),
+          allowMultiple: payload.poll.allowMultiple,
+        }
+      }
+
+      /*
+       * A GIF or an image with no words still has to carry SOMETHING as the
+       * message body — the row is text-shaped — but the label is a fallback, not
+       * the content, and `RichMessage` renders the real thing above it.
+       */
+      const displayText =
+        text ||
+        (payload.gifUrl || payload.giphyId ? '🎬 GIF' : '') ||
+        (payload.poll ? `📊 ${payload.poll.question}` : '') ||
+        (payload.attachments?.length ? '📎 Media' : '')
+
+      if (!displayText && Object.keys(metadata).length === 0) return
+
+      setSending(true)
+      try {
+        const res = await fetch(`/api/app/leagues/${encodeURIComponent(scopeId)}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: displayText,
+            ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+          }),
+        })
+        if (!res.ok) throw new Error(`Send returned ${res.status}`)
+        setDraft('')
+        await load(scopeId)
+      } catch (e) {
+        setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
+      } finally {
+        setSending(false)
+      }
+    },
+    [load, scopeId, sending],
+  )
 
   if (!scopeId) {
     return (
@@ -740,30 +822,33 @@ function LeaguePanel({
             <div key={m.id} className="af-cm-msg">
               <span className="af-cm-msg-author">{m.author}</span>
               <p className="af-cm-msg-text">{m.message}</p>
+              <RichMessage metadata={m.metadata} />
             </div>
           ))
         )}
       </div>
 
-      <form
-        className="af-cm-composer"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void send()
-        }}
-      >
-        <input
-          className="af-cm-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Message ${scope?.name ?? 'the league'}…`}
-          aria-label="Message"
-          disabled={sending}
-        />
-        <button type="submit" className="af-cm-send" disabled={sending || !draft.trim()}>
-          {sending ? 'Sending…' : 'Send'}
-        </button>
-      </form>
+      {/*
+        The full composer, not a text input: GIF search, emoji, polls, uploads,
+        @mention autocomplete, @all, and @global for commissioners. All of it
+        already existed in `app/dashboard/components/chat` and was reachable from
+        exactly one surface; the drawer had a bare <input> beside it.
+
+        `commissionerLeagues` is what makes @global offered — the broadcast
+        endpoint re-checks commissioner status against `League.userId`, so this
+        decides what is shown, never what is permitted.
+      */}
+      <ChatComposer
+        leagueId={scopeId}
+        chatType="league"
+        placeholder={`Message ${scope?.name ?? 'the league'}…`}
+        onSend={sendPayload}
+        onAskChimmy={() => setAskChimmy(true)}
+        isCommissioner={Boolean(scope?.isCommissioner)}
+        commissionerLeagues={leagues
+          .filter((l) => l.isCommissioner)
+          .map((l) => ({ id: l.id, name: l.name, teamCount: l.teamCount ?? 0 }))}
+      />
     </div>
   )
 }
