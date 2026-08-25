@@ -50,8 +50,15 @@ function coarseCountdown(toIso: string | null | undefined, fallback: string): st
 
 export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
   if (!data) return null
-  const { firstLock, notice, chimmyBrief, coverage } = data
-  if (!firstLock && !notice && !chimmyBrief && (!coverage || coverage.length === 0)) return null
+  const { firstLock, notice, chimmyBrief } = data
+  /*
+   * Coverage no longer counts toward this guard — it renders at the foot of
+   * the page now (Dash34Coverage). The brief still keeps this band alive in
+   * the quiet case, deliberately: with nothing to report its headline reads
+   * "Nothing is waiting on you", and hiding it would leave a reader unable to
+   * tell "we checked and it is clear" from "we are not looking".
+   */
+  if (!firstLock && !notice && !chimmyBrief) return null
 
   return (
     <div className="af-core af-carry">
@@ -142,18 +149,36 @@ export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
         </section>
       ) : null}
 
-      {coverage && coverage.length > 0 ? (
-        <details className="af-carry-coverage">
-          <summary>What this screen is not watching ({coverage.length})</summary>
-          <ul>
-            {coverage.map((c) => (
-              <li key={c.label}>
-                <strong>{c.label}</strong> — {c.reason}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+    </div>
+  )
+}
+
+/**
+ * What this screen is NOT watching — the same disclosure, moved to the foot of
+ * the page.
+ *
+ * ⚠ IT IS A FOOTNOTE, AND IT WAS SITTING THIRD. Leading a home screen with a
+ * list of everything we cannot see sets the tone of the whole page to apology,
+ * before the reader has seen a single thing the product DOES know. It belongs
+ * after the answers, where someone who has read them and wants to know what
+ * was left out can find it — which is exactly what a collapsed disclosure at
+ * the bottom is for. Nothing about the content changed; only where it sits.
+ */
+export function Dash34Coverage({ data }: { data: Dash34Data | null }) {
+  const coverage = data?.coverage
+  if (!coverage || coverage.length === 0) return null
+  return (
+    <div className="af-core af-carry">
+      <details className="af-carry-coverage">
+        <summary>What this screen is not watching ({coverage.length})</summary>
+        <ul>
+          {coverage.map((c) => (
+            <li key={c.label}>
+              <strong>{c.label}</strong> — {c.reason}
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   )
 }

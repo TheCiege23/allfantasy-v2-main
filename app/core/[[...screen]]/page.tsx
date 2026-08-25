@@ -16,7 +16,7 @@ import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core
 import type { UserLeague } from '@/app/dashboard/types'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
-import { Dash34Carryover } from '@/components/core-app/screens/Dash34Carryover'
+import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
 import { DashScheduleBand } from '@/components/core-app/screens/DashScheduleBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
@@ -1364,6 +1364,13 @@ export default async function AfCorePage({
               commissionerCount={commissionerCount}
               nowLabel={syncAge.stale ? null : syncAge.label}
             />
+            {/*
+              The coverage disclosure, at the foot where a footnote belongs.
+              It used to sit third on the page: leading with everything we
+              cannot see sets the tone to apology before the reader has seen
+              anything the product does know.
+            */}
+            <Dash34Coverage data={dash34} />
           </>
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>

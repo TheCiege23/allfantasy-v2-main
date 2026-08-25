@@ -1490,25 +1490,20 @@ export async function getDash34Data(
    * only worth a look are three different jobs, and summing them is how a queue
    * stops telling you what to do first.
    */
-  if (urgentLeagues.length > 0) {
-    briefLines.push({
-      key: 'urgent',
-      tone: 'bad',
-      text:
-        `${urgentLeagues.length} ${urgentLeagues.length === 1 ? 'league has' : 'leagues have'} ` +
-        `a starter who cannot play: ${urgentLeagues.slice(0, 3).map((l) => l.name).join(', ')}` +
-        `${urgentLeagues.length > 3 ? ` and ${urgentLeagues.length - 3} more` : ''}.`,
-    })
-  }
-  if (draftingLeagues.length > 0) {
-    briefLines.push({
-      key: 'drafting',
-      tone: 'warn',
-      text:
-        `${draftingLeagues.length} ${draftingLeagues.length === 1 ? 'draft is' : 'drafts are'} ` +
-        `on the clock: ${draftingLeagues.slice(0, 3).map((l) => l.name).join(', ')}.`,
-    })
-  }
+  /*
+   * ⚠ THE `urgent` AND `drafting` LINES USED TO LIVE HERE AND NO LONGER DO,
+   * BECAUSE THE PAGE NOW SAYS BOTH THINGS BETTER ELSEWHERE. A starter who
+   * cannot play is the Starters-in-doubt band above this brief, naming the
+   * player and the leagues and the cover on your own bench; a live draft is
+   * the Drafts-on-the-clock band, with pick clocks. Both facts also became
+   * rows in the outstanding-issues queue when that queue was unified.
+   *
+   * So a reader was being told "6 drafts are on the clock" three separate
+   * times on one screen — a band, this sentence, and six queue rows — which
+   * reads as three findings rather than one. What is left here is what nothing
+   * else says: the concentration line, the kickoff, and the count of leagues
+   * carrying a flag that is merely worth a look.
+   */
   /*
    * Only stated when it is NOT already covered by the urgent line — otherwise the
    * same league is counted twice in consecutive sentences and the brief reads as
