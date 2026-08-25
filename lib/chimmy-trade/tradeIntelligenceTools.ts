@@ -51,8 +51,16 @@ export async function resolveTradeRole(
     .catch(() => null)
   let rosterId: string | null = null
   if (season?.id) {
+    /*
+     * ⚠ `ownerId`, NOT `claimedByUserId`. RedraftRoster has no `claimedByUserId`
+     * column — that name belongs to `LeagueTeam`, two lines up. Prisma throws on
+     * the unknown field, the catch below turned it into `null`, and every
+     * non-commissioner therefore resolved to `non_member`, which made
+     * `buildTradeContextForChimmy` return null and took the whole trade
+     * grounding block out of the prompt for ordinary managers.
+     */
     const roster = await prisma.redraftRoster
-      .findFirst({ where: { seasonId: season.id, claimedByUserId: userId }, select: { id: true } })
+      .findFirst({ where: { seasonId: season.id, ownerId: userId }, select: { id: true } })
       .catch(() => null)
     rosterId = roster?.id ?? null
   }

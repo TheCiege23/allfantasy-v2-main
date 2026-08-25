@@ -68,6 +68,7 @@ import { buildKeeperContextForChimmy } from '@/lib/keeper-war-room/keeperChimmyG
 import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBallChimmyGrounding'
 import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-room/guillotineChimmyGrounding'
 import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
+import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import {
   buildChimmyResponseForAssistantMode,
@@ -1861,6 +1862,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${tradeCtx}`
                   : tradeCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * Trades actually sitting in this user's inbox, with the Decision
+               * OS evaluation attached. The adapter above only describes a
+               * proposal it is HANDED an id for, and this route has never had one
+               * to hand it — so "should I accept this trade?" was answered
+               * without the trade.
+               */
+              const pendingTradeCtx = await buildPendingTradeDecisionContext(
+                planInput.leagueId,
+                planInput.userId,
+              )
+              if (pendingTradeCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${pendingTradeCtx}`
+                  : pendingTradeCtx
               }
             } catch { /* non-fatal */ }
           }
