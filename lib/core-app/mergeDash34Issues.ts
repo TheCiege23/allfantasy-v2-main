@@ -48,9 +48,45 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
   const synthesized: CoreIssue[] = []
 
   for (const l of ranked) {
+    /*
+     * ⚠ AN EMPTY SLOT IS ITS OWN ROW, AND IT COMES FIRST. A starter ruled out
+     * might still be active by Sunday; a slot with nobody in it is a
+     * guaranteed zero that has already happened. Both leagues rank 'urgent',
+     * so without a separate row the queue would say "starter who cannot play"
+     * about a league whose real problem is that nobody is in the slot at all.
+     */
+    if ((l.emptyStarters ?? 0) > 0) {
+      const id = `${l.id}:empty-slot`
+      if (!seenIds.has(id)) {
+        const n = l.emptyStarters ?? 0
+        synthesized.push({
+          id,
+          severity: 'bad',
+          glyph: '□',
+          title: `${n} empty starting ${n === 1 ? 'slot' : 'slots'} — ${l.name}`,
+          meta: `${titleCasePlatform(l.platform)} › Lineup · a slot with nobody in it scores zero`,
+          leagueId: l.id,
+          leagueName: l.name,
+          platform: l.platform,
+          deadline: null,
+          action: {
+            label: 'Fill the slot',
+            href: `/core/my-team?league=${encodeURIComponent(l.id)}`,
+            external: false,
+          },
+        })
+      }
+    }
+
     if (l.priority === 'urgent') {
       const id = `${l.id}:starter-out`
-      if (seenIds.has(id)) continue
+      /*
+       * `priority` is 'urgent' for an empty slot too, so this row must confirm
+       * there is actually a flagged starter — otherwise a league whose only
+       * problem is an unfilled slot would be reported as having a player who
+       * cannot play, which is a different and untrue thing.
+       */
+      if (seenIds.has(id) || (l.hurtStarters ?? 0) === 0) continue
       synthesized.push({
         id,
         severity: 'bad',

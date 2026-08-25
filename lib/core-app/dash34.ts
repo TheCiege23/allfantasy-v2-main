@@ -299,8 +299,25 @@ export function imageOf(row: Dash34LeagueRow): string | null {
   return null
 }
 
+/**
+ * ⚠ SLEEPER WRITES "0" INTO A STARTING SLOT IT HAS NO PLAYER FOR. It is a
+ * sentinel, not an id — and `.filter(Boolean)` keeps it, because "0" is a
+ * perfectly good non-empty string. So every empty slot in a lineup was being
+ * carried around as though it were a rostered player: counted in exposure
+ * totals, counted in starter counts, and looked up against the player table
+ * where it quietly resolved to nothing.
+ */
+const EMPTY_SLOT = '0'
+
 function asIds(v: unknown): string[] {
-  return Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))).filter(Boolean) : []
+  return Array.isArray(v)
+    ? v.map((x) => (x == null ? '' : String(x))).filter((x) => Boolean(x) && x !== EMPTY_SLOT)
+    : []
+}
+
+/** How many starting slots this lineup has left unfilled. */
+function countEmptySlots(v: unknown): number {
+  return Array.isArray(v) ? v.filter((x) => String(x ?? '') === EMPTY_SLOT).length : 0
 }
 
 /** Your handle in a league — the platform owner name, never the team's nickname. */
@@ -634,7 +651,14 @@ export async function getDash34Data(
    */
   const rosterByLeague = new Map<
     string,
-    { all: string[]; starters: Set<string>; reserve: Set<string>; taxi: Set<string> }
+    {
+      all: string[]
+      starters: Set<string>
+      reserve: Set<string>
+      taxi: Set<string>
+      /** Starting slots Sleeper holds no player for — a guaranteed zero. */
+      emptyStarters: number
+    }
   >()
   const everyPlayerId = new Set<string>()
   for (const r of rosters) {
@@ -651,6 +675,7 @@ export async function getDash34Data(
         starters: new Set(starters),
         reserve: new Set(reserve),
         taxi: new Set(taxi),
+        emptyStarters: countEmptySlots(pd.starters),
       })
     }
     for (const id of all) everyPlayerId.add(id)
@@ -991,8 +1016,19 @@ export async function getDash34Data(
      * about today — tinting either the same colour is how an urgency signal stops
      * meaning anything.
      */
+    /*
+     * ⚠ AN EMPTY SLOT OUTRANKS AN INJURED STARTER. A player ruled out MIGHT
+     * still be active by Sunday; a slot with nobody in it is a guaranteed
+     * zero, already decided. Both are 'urgent', and the brief names the empty
+     * slots first for the same reason.
+     */
+    const emptyStarters = rosterByLeague.get(row.id)?.emptyStarters ?? 0
     const priority: Dash34League['priority'] =
-      hurt.startingUnavailable > 0 ? 'urgent' : stage === 'drafting' ? 'draft' : null
+      emptyStarters > 0 || hurt.startingUnavailable > 0
+        ? 'urgent'
+        : stage === 'drafting'
+          ? 'draft'
+          : null
 
     const action =
       hurt.total > 0
@@ -1007,6 +1043,8 @@ export async function getDash34Data(
       platform,
       imageUrl: imageOf(row),
       formatLabel: formatLabelOf(row),
+      emptyStarters,
+      hurtStarters: hurt.startingUnavailable,
       sport: row.sport ?? null,
       /*
        * ⚠ `ownerName` IS THE HANDLE; `teamName` IS THE TEAM. The handoff asks for
@@ -1499,6 +1537,29 @@ export async function getDash34Data(
    * stops telling you what to do first.
    */
   /*
+   * Empty starting slots, stated before anything else in the brief. Everything
+   * else here is a risk to weigh; this is points already lost.
+   */
+  const leaguesWithEmptySlots = active.filter(
+    (row) => (rosterByLeague.get(row.id)?.emptyStarters ?? 0) > 0,
+  )
+  if (leaguesWithEmptySlots.length > 0) {
+    const totalEmpty = leaguesWithEmptySlots.reduce(
+      (sum, row) => sum + (rosterByLeague.get(row.id)?.emptyStarters ?? 0),
+      0,
+    )
+    briefLines.unshift({
+      key: 'empty-slots',
+      tone: 'bad',
+      text:
+        `${totalEmpty} starting ${totalEmpty === 1 ? 'slot is' : 'slots are'} empty in ` +
+        `${leaguesWithEmptySlots.length} ${leaguesWithEmptySlots.length === 1 ? 'league' : 'leagues'}: ` +
+        `${leaguesWithEmptySlots.slice(0, 3).map((l) => leagueDisplayName(l.name)).join(', ')}` +
+        `${leaguesWithEmptySlots.length > 3 ? ` and ${leaguesWithEmptySlots.length - 3} more` : ''}.`,
+    })
+  }
+
+  /*
    * ⚠ THE `urgent` AND `drafting` LINES USED TO LIVE HERE AND NO LONGER DO,
    * BECAUSE THE PAGE NOW SAYS BOTH THINGS BETTER ELSEWHERE. A starter who
    * cannot play is the Starters-in-doubt band above this brief, naming the
@@ -1632,7 +1693,14 @@ export async function getDash34Data(
       { label: 'Live scores', reason: 'no weekly scoring is ingested for imported leagues' },
       { label: 'AF projections', reason: 'requires per-league scoring rules and a synced roster' },
       { label: 'Records and standings', reason: 'no league result has been read yet' },
-      { label: 'Empty lineup slots', reason: 'no lineup reader for imported leagues yet' },
+      /*
+       * ⚠ THIS USED TO SAY "no lineup reader for imported leagues yet", WHICH
+       * WAS FALSE. Starters are read per league, and Sleeper marks an unfilled
+       * slot with a sentinel this loader now counts — so empty slots ARE
+       * detected and named. What genuinely is not known is which slot is which
+       * (RB2 versus FLEX), because that needs the league's roster template.
+       */
+      { label: 'Which slot is which', reason: 'roster templates are not read, so a slot has no name' },
       /*
        * ⚠ NARROWED, BECAUSE THE OLD WORDING WAS FALSE. Completed trades ARE
        * ingested and graded every 30 minutes, and the home now renders them —

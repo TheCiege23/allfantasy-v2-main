@@ -58,6 +58,17 @@ export type Dash34League = {
   projection?: { value: string; unit: string } | null
   /** Drives the accent fill on the action and the row border. */
   priority?: 'urgent' | 'draft' | null
+  /**
+   * Starting slots this league's lineup has left unfilled. A guaranteed zero,
+   * and therefore worse than an injured starter who might still play.
+   */
+  emptyStarters?: number
+  /**
+   * Starters in this league carrying a designation that says they cannot
+   * play. Distinct from `emptyStarters`: both make a league urgent, and they
+   * are different problems with different fixes.
+   */
+  hurtStarters?: number
   href: string
   actionLabel?: string
 }
