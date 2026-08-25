@@ -357,6 +357,83 @@
   font-weight: 700;
 }
 
+/*
+ * Players named in an answer. The headshot sits ON TOP of the initials, so a
+ * dead CDN URL (the img hides itself on error) reveals the fallback rather than
+ * a broken-image glyph — a face that fails must degrade to a letter, never to a
+ * placeholder that could be mistaken for the wrong player.
+ */
+.af-cm-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.af-cm-player {
+  /* `relative` is the stack the headshot and the initials share. */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel, transparent);
+  min-width: 0;
+}
+
+.af-cm-player[data-starter='true'] { border-color: var(--accent-line, var(--line)); }
+
+.af-cm-playerimg,
+.af-cm-playerfallback {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.af-cm-playerimg {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  object-fit: cover;
+  z-index: 1;
+  background: var(--bg);
+}
+
+.af-cm-playerfallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  background: var(--line);
+}
+
+.af-cm-playermeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-cm-playername {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-cm-playerpos {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
 .af-cm-cost {
   display: block;
   margin-top: 5px;

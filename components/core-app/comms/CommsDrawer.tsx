@@ -136,11 +136,74 @@ type ChatTurn = {
    * the answer is wrong.
    */
   grounding?: ChimmyGrounding | null
+  /** Players the answer named, with headshots. */
+  players?: ChimmyPlayerCard[] | null
 }
 
 type ChimmyGrounding =
   | { grounded: true; leagueName?: string | null; lastSyncedAt?: string | null }
   | { grounded: false; reason?: string; message?: string }
+
+/**
+ * A player the answer named. `imageUrl` is null whenever no headshot could be
+ * derived — rendered as initials, never as a placeholder image, so a missing
+ * face never reads as a real one.
+ */
+type ChimmyPlayerCard = {
+  playerId: string
+  name: string
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+  isStarter: boolean
+}
+
+function playerInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+function PlayerChips({ players }: { players: ChimmyPlayerCard[] }) {
+  return (
+    <div className="af-cm-players">
+      {players.map((p) => (
+        <span key={p.playerId} className="af-cm-player" data-starter={p.isStarter}>
+          {p.imageUrl ? (
+            /*
+             * A broken CDN URL must degrade to initials rather than a broken-image
+             * glyph, so the element removes itself and reveals the fallback beneath.
+             */
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              className="af-cm-playerimg"
+              src={p.imageUrl}
+              alt=""
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+              }}
+            />
+          ) : null}
+          <span className="af-cm-playerfallback" aria-hidden>
+            {playerInitials(p.name)}
+          </span>
+          <span className="af-cm-playermeta">
+            <span className="af-cm-playername">{p.name}</span>
+            {p.position || p.team ? (
+              <span className="af-cm-playerpos">
+                {[p.position, p.team].filter(Boolean).join(' · ')}
+              </span>
+            ) : null}
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 // ── Chimmy panel ───────────────────────────────────────────────────────
 
@@ -236,7 +299,7 @@ function ChimmyPanel({
           response?: string
           error?: string
           details?: { message?: string }
-          meta?: { leagueGrounding?: ChimmyGrounding }
+          meta?: { leagueGrounding?: ChimmyGrounding; players?: ChimmyPlayerCard[] }
         }
         if (!res.ok) {
           /*
@@ -317,6 +380,7 @@ function ChimmyPanel({
             handoff,
             cost: tokenCost,
             grounding,
+            players: payload.meta?.players ?? null,
           },
         ])
       } catch (e) {
@@ -410,6 +474,10 @@ function ChimmyPanel({
                     Chimmy could not read your league for this answer.
                   </p>
                 )
+              ) : null}
+
+              {t.role === 'chimmy' && t.players?.length ? (
+                <PlayerChips players={t.players} />
               ) : null}
 
               {t.role === 'chimmy' && t.handoff ? (
