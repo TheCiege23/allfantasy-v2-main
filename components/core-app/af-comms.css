@@ -534,6 +534,16 @@
  * Trade card. Reads as an event in the room, not a panel bolted into it, so it
  * keeps the message row's width and only borrows a tint.
  */
+.af-cm-seenby,
+.af-cm-typing-note {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  color: var(--faint);
+  text-align: right;
+}
+
+.af-cm-typing-note { font-style: italic; text-align: left; }
+
 .af-cm-mute {
   margin-left: 6px;
   border: 0;

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { resolvePlatformUser } from "@/lib/platform/current-user"
-import {
-  getLeagueIdFromVirtualRoom,
-  getThreadTypingState,
-  isLeagueVirtualRoom,
-  setThreadTypingState,
-} from "@/lib/chat-core"
+import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
+/*
+ * ⚠ SWAPPED OFF THE IN-MEMORY STORE. `ThreadRealtimeState` keeps typing in
+ * module-level Maps, which on serverless is per-instance: you type on one
+ * instance, the person watching is served by another, and they see nothing. The
+ * route existed and its tests passed while the feature could not work for two
+ * people in two requests. This store is shared.
+ */
+import { clearTyping, markTyping, readTyping } from "@/lib/chat-core/durableTyping"
 import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -41,7 +44,7 @@ export async function GET(
   const allowed = await canAccessThread(threadId, user.appUserId)
   if (!allowed) return NextResponse.json({ error: "Thread not available" }, { status: 403 })
 
-  const typing = getThreadTypingState(threadId, user.appUserId)
+  const typing = await readTyping(threadId, user.appUserId)
   return NextResponse.json({ status: "ok", typing })
 }
 
@@ -63,14 +66,16 @@ export async function POST(
     select: { displayName: true, username: true },
   })
 
-  setThreadTypingState({
-    threadId,
-    userId: user.appUserId,
-    displayName: profile?.displayName ?? null,
-    username: profile?.username ?? null,
-    isTyping,
-  })
+  const name = profile?.displayName || profile?.username || 'Someone'
 
-  const typing = getThreadTypingState(threadId, user.appUserId)
+  if (isTyping) {
+    await markTyping(threadId, { userId: user.appUserId, name })
+  } else {
+    /* Sending clears it immediately; waiting out the TTL would leave the sender
+       shown as still typing after their message had already arrived. */
+    await clearTyping(threadId, user.appUserId)
+  }
+
+  const typing = await readTyping(threadId, user.appUserId)
   return NextResponse.json({ status: "ok", typing })
 }

@@ -7,6 +7,7 @@ import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { MessageTime } from './MessageTime'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { QuotedMessage } from './QuotedMessage'
+import { SeenBy } from './SeenBy'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -70,6 +71,8 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const [invite, setInvite] = useState('')
   const [busy, setBusy] = useState(false)
   const [replyTo, setReplyTo] = useState<PlatformMessage | null>(null)
+  const [typing, setTyping] = useState<Array<{ userId: string; name: string }>>([])
+  const [receipts, setReceipts] = useState<Array<{ userId: string; displayName: string | null; username: string | null; lastReadAt: string | null }>>([])
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const streamRef = useRef<HTMLDivElement | null>(null)
@@ -109,6 +112,21 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load messages.')
       setMessages(data.messages ?? [])
+
+      /*
+       * Both ride the poll the panel already makes rather than adding timers of
+       * their own, and both fail quietly: a missing receipt or a stale typing
+       * row must never take the conversation down with it.
+       */
+      void fetch(`/api/shared/chat/threads/${encodeURIComponent(thread.id)}/typing`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setTyping(Array.isArray(d?.typing) ? d.typing : []))
+        .catch(() => setTyping([]))
+
+      void fetch(`/api/shared/chat/threads/${encodeURIComponent(thread.id)}/read-receipts`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setReceipts(Array.isArray(d?.receipts) ? d.receipts : []))
+        .catch(() => setReceipts([]))
       setHiddenBlocked(data.hiddenBlockedCount ?? 0)
     } catch (e) {
       setMessages([])
@@ -401,6 +419,27 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           (and correctly withholds @all from a one-to-one), and uploads authorise
           against `threadId` instead.
         */}
+        {/*
+          Seen-by, on the LAST message you sent and nowhere else. Marking every
+          message would be a column of noise, and the only one anybody actually
+          wonders about is the most recent thing they said.
+        */}
+        <SeenBy messages={messages} receipts={receipts} />
+
+        {/*
+          ⚠ HONEST ABOUT BEING LATE. Chat refreshes every 4-8s, so this can
+          appear after the message it was announcing. Durable now, so it works
+          across servers at all — but genuinely live typing needs a transport
+          this app does not have.
+        */}
+        {typing.length > 0 ? (
+          <p className="af-cm-typing-note">
+            {typing.length === 1
+              ? `${typing[0].name} is typing…`
+              : `${typing.length} people are typing…`}
+          </p>
+        ) : null}
+
         {replyTo ? (
           <div className="af-cm-replybar">
             <span className="af-cm-replybar-label">Replying to {replyTo.senderName}</span>
