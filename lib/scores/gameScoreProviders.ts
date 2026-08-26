@@ -132,28 +132,96 @@ const NO_CACHE_HEADERS: Record<string, string> = {
   Pragma: 'no-cache',
 }
 
-async function getJson(url: string, headers?: Record<string, string>): Promise<unknown | null> {
-  const attempt = async (): Promise<{ status: number; body: unknown | null }> => {
+/**
+ * Why a provider produced nothing.
+ *
+ * ⚠ "NO GAMES RETURNED" AND "THE PROVIDER REFUSED US" ARE DIFFERENT FACTS, and
+ * this file reported both as the first one. `getJson` collapsed a 429, a 401, a
+ * 500, an empty body and a parse error all into `null`, so every provider below
+ * then said some variant of "no data" — a sentence about the slate, when it was
+ * actually a sentence about our quota or our credentials.
+ *
+ * Not hypothetical: verified 2026-08-25 the CFBD key returns `HTTP 429
+ * {"message":"Monthly call quota exceeded."}`, and `fetchCfbdGames` reported
+ * `no games returned` for it — indistinguishable from a week with no college
+ * football. `/api/cron/import-scores` surfaces that string in
+ * `bySource[...].error` and still answers `ok: true`, so the one place the truth
+ * could have appeared said the wrong thing.
+ */
+export type ProviderFailure = {
+  kind: 'quota' | 'rate_limit' | 'unauthorized' | 'http' | 'network' | 'empty' | 'parse'
+  status: number | null
+  /** Safe to log — carries no URL and no credential. */
+  message: string
+}
+
+type JsonResult = { body: unknown | null; failure: ProviderFailure | null }
+
+function classifyStatus(status: number, body: string): ProviderFailure {
+  if (status === 429) {
+    /* Monthly exhaustion is terminal for the month; ordinary throttling is not.
+       Only the body separates them. */
+    const quota = body.toLowerCase().includes('quota')
+    return {
+      kind: quota ? 'quota' : 'rate_limit',
+      status,
+      message: quota
+        ? 'provider monthly call quota exceeded — this is not a slate with no games'
+        : 'provider rate limited this request',
+    }
+  }
+  if (status === 401 || status === 403) {
+    return { kind: 'unauthorized', status, message: `provider rejected our key (${status})` }
+  }
+  return { kind: 'http', status, message: `provider responded ${status}` }
+}
+
+/**
+ * ⚠ THE 304 HANDLING IS LOAD-BEARING — see the header above and CLAUDE.md: send
+ * no-cache plus a fresh millisecond cache-buster, retry once on a 304, and never
+ * decide anything from the status alone. That is unchanged; only the reporting
+ * of failures is new. A 304 still yields a null body with NO failure, because
+ * under both readings of the 304 dispute it is not an error.
+ */
+async function getJson(url: string, headers?: Record<string, string>): Promise<JsonResult> {
+  const attempt = async (): Promise<{ status: number; result: JsonResult }> => {
     const res = await fetch(cacheBusted(url), {
       cache: 'no-store',
       headers: { ...NO_CACHE_HEADERS, ...(headers ?? {}) },
     })
-    if (res.status === 304) return { status: 304, body: null }
-    if (!res.ok) return { status: res.status, body: null }
+    if (res.status === 304) return { status: 304, result: { body: null, failure: null } }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      return {
+        status: res.status,
+        result: { body: null, failure: classifyStatus(res.status, text) },
+      }
+    }
     const text = await res.text()
-    if (!text.trim()) return { status: res.status, body: null }
-    return { status: res.status, body: JSON.parse(text) as unknown }
+    if (!text.trim()) {
+      return {
+        status: res.status,
+        result: {
+          body: null,
+          failure: { kind: 'empty', status: res.status, message: 'provider returned an empty body' },
+        },
+      }
+    }
+    return { status: res.status, result: { body: JSON.parse(text) as unknown, failure: null } }
   }
 
   try {
     const first = await attempt()
-    if (first.status !== 304) return first.body
+    if (first.status !== 304) return first.result
 
     // Retry once, with a NEW cache-buster (Date.now() has moved on).
     const second = await attempt()
-    return second.body
-  } catch {
-    return null
+    return second.result
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    /* A malformed payload and a dead socket are different problems. */
+    const kind: ProviderFailure['kind'] = /JSON|Unexpected token/i.test(message) ? 'parse' : 'network'
+    return { body: null, failure: { kind, status: null, message: `provider request failed (${kind})` } }
   }
 }
 
@@ -178,6 +246,9 @@ function riCredentials(): { token: string | null; base: string } {
 export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
   const { token, base } = riCredentials()
   if (!token) return { source: 'rolling_insights', games: [], error: 'RSC token not configured' }
+  /* Kept so an empty result can say WHY it is empty rather than implying the
+     provider had nothing to give. */
+  let lastFailure: ProviderFailure | null = null
 
   const byId = new Map<string, ProviderGame>()
   const q = `?RSC_token=${encodeURIComponent(token)}`
@@ -210,9 +281,9 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
   )
 
   for (const endpoint of [`schedule-season/${seasonYearForPath}/NFL`, `live/${liveDate}/NFL`]) {
-    const payload = (await getJson(`${base}/${endpoint}${q}`)) as
-      | { data?: { NFL?: Record<string, unknown>[] } }
-      | null
+    const { body, failure } = await getJson(`${base}/${endpoint}${q}`)
+    if (failure) lastFailure = failure
+    const payload = body as { data?: { NFL?: Record<string, unknown>[] } } | null
     const rows = payload?.data?.NFL
     if (!Array.isArray(rows)) continue
 
@@ -246,7 +317,13 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
     }
   }
 
-  return { source: 'rolling_insights', games: [...byId.values()], error: null }
+  const riGames = [...byId.values()]
+  /* Zero games plus a recorded refusal is a fact about the request, not the slate. */
+  return {
+    source: 'rolling_insights',
+    games: riGames,
+    error: riGames.length === 0 ? (lastFailure?.message ?? null) : null,
+  }
 }
 
 // ── CollegeFootballData (NCAAF) ──────────────────────────────────────────────
@@ -256,12 +333,17 @@ export async function fetchCfbdGames(season: number, week?: number): Promise<Pro
   if (!key) return { source: 'cfbd', games: [], error: 'CFBD key not configured' }
 
   const weekParam = week != null && week > 0 ? `&week=${week}` : ''
-  const rows = (await getJson(
+  const { body, failure } = await getJson(
     `https://api.collegefootballdata.com/games?year=${season}&seasonType=regular${weekParam}`,
     { Authorization: `Bearer ${key}` },
-  )) as Record<string, unknown>[] | null
+  )
+  const rows = body as Record<string, unknown>[] | null
 
-  if (!Array.isArray(rows)) return { source: 'cfbd', games: [], error: 'no games returned' }
+  if (!Array.isArray(rows)) {
+    /* The refusal, when there was one — not "no games", which is a claim about
+       the slate rather than about the request. */
+    return { source: 'cfbd', games: [], error: failure?.message ?? 'no games returned' }
+  }
 
   const games: ProviderGame[] = []
   for (const r of rows) {
@@ -397,6 +479,9 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
   const leagueId = THE_SPORTS_DB_LEAGUE[sport]
   if (!key) return { source: 'thesportsdb', games: [], error: 'API key not configured' }
   if (!leagueId) return { source: 'thesportsdb', games: [], error: `no league id for ${sport}` }
+  /* Kept so an empty result can say WHY it is empty rather than implying the
+     provider had nothing to give. */
+  let lastFailure: ProviderFailure | null = null
 
   const byId = new Map<string, ProviderGame>()
   // Season-wide slate FIRST. eventspastleague/eventsnextleague return only ~15
@@ -404,9 +489,11 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
   // TheSportsDB itself carried 866 for the 2026 season and 1,525 for 2025.
   const seasonYearForCall = new Date().getFullYear()
   for (const season of [seasonYearForCall, seasonYearForCall - 1]) {
-    const payload = (await getJson(
+    const { body, failure } = await getJson(
       `https://www.thesportsdb.com/api/v1/json/${key}/eventsseason.php?id=${leagueId}&s=${season}`,
-    )) as { events?: Record<string, unknown>[] } | null
+    )
+    if (failure) lastFailure = failure
+    const payload = body as { events?: Record<string, unknown>[] } | null
     const rows = payload?.events
     if (!Array.isArray(rows)) continue
     for (const r of rows) {
@@ -438,9 +525,11 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
   }
 
   for (const file of ['eventspastleague', 'eventsnextleague']) {
-    const payload = (await getJson(
+    const { body, failure } = await getJson(
       `https://www.thesportsdb.com/api/v1/json/${key}/${file}.php?id=${leagueId}`,
-    )) as { events?: Record<string, unknown>[] } | null
+    )
+    if (failure) lastFailure = failure
+    const payload = body as { events?: Record<string, unknown>[] } | null
     const rows = payload?.events
     if (!Array.isArray(rows)) continue
 
@@ -469,7 +558,12 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
     }
   }
 
-  return { source: 'thesportsdb', games: [...byId.values()], error: null }
+  const tsdbGames = [...byId.values()]
+  return {
+    source: 'thesportsdb',
+    games: tsdbGames,
+    error: tsdbGames.length === 0 ? (lastFailure?.message ?? null) : null,
+  }
 }
 
 
@@ -492,11 +586,12 @@ export async function fetchEspnGames(sport: 'NFL' | 'NCAAF'): Promise<ProviderRe
   // This module exists solely to feed /api/cron/import-scores, which writes
   // sports_games; every read path goes to that table, not to this file.
   const url = `${ESPN_SITE_API_BASE}/${path}/scoreboard?limit=400` // db-first-exception: score ingestion adapter, not a read path
-  const payload = (await getJson(url)) as { events?: Record<string, unknown>[]; season?: Record<string, unknown> } | null
+  const { body, failure } = await getJson(url)
+  const payload = body as { events?: Record<string, unknown>[]; season?: Record<string, unknown> } | null
 
   const rows = payload?.events
   if (!Array.isArray(rows)) {
-    return { source: 'espn', games: [], error: 'no events in scoreboard payload' }
+    return { source: 'espn', games: [], error: failure?.message ?? 'no events in scoreboard payload' }
   }
 
   const games: ProviderGame[] = []
