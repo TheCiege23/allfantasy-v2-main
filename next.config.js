@@ -18,6 +18,7 @@ const isRailwayRuntime = !!(
 
 const nextConfig = {
   reactStrictMode: true,
+    optimizeFonts: false,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
 
   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
