@@ -4,6 +4,7 @@ import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { loadSnapShares, type SnapShareOutcome } from '@/lib/core-app/snapShare'
 
+import { loadActualWeeklyPoints, type ActualWeekOutcome } from './actualWeeklyPoints'
 import { deriveDefenderRole, type DefenderRoleLine } from './defenderRole'
 import { loadLeagueIdpVorp } from './leagueIdpVorp'
 import { tendencyForTeam, type TeamDefenseTendency } from './teamTendencies'
@@ -41,6 +42,14 @@ export interface DefenseHubDefender {
   value: number | null
   /** Why the numbers above are absent, when they are. Null when they are present. */
   reason: string | null
+  /**
+   * What he actually scored in the last completed week, under THIS league's settings.
+   *
+   * ⚠ NOT INTERCHANGEABLE WITH A ZERO. `no_game` is a bye, an inactive or an un-ingested week;
+   * `unscored` means the league prices none of what he did. Either rendered as 0.0 tells a
+   * manager his starter blanked, which is a different and much more actionable claim.
+   */
+  lastWeek: ActualWeekOutcome | null
 }
 
 export interface DefenseHubSnap {
@@ -117,6 +126,12 @@ function extractRosterPositions(settings: unknown): string[] | null {
   const s = (settings ?? {}) as Record<string, unknown>
   const rawSlots = (s.roster_positions ?? s.rosterPositions ?? null) as unknown
   return Array.isArray(rawSlots) ? rawSlots.map((x) => String(x).toUpperCase()) : null
+}
+
+function extractScoring(settings: unknown): Record<string, unknown> | null {
+  const s = (settings ?? {}) as Record<string, unknown>
+  const raw = (s.scoring_settings ?? s.scoringSettings ?? null) as unknown
+  return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
 }
 
 export interface LoadDefenseHubArgs {
@@ -234,7 +249,16 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
 
   if (myDefenders.length === 0) return EMPTY('no_defenders', notes)
 
-  const [snapMap, logRows] = await Promise.all([
+  /*
+   * The last COMPLETED week, not the one being projected. `projectedFor.week` is one past the
+   * newest game on file, so scoring it would return `no_game` for everybody — the fixtures have
+   * not been played.
+   */
+  const lastCompleted = vorp.projectedFor
+    ? { season: vorp.projectedFor.season, week: vorp.projectedFor.week - 1 }
+    : null
+
+  const [snapMap, logRows, actualMap] = await Promise.all([
     loadSnapShares({
       prisma: args.prisma,
       players: myDefenders.map((d) => ({ sleeperId: d.sleeperId, position: d.position })),
@@ -246,6 +270,15 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
         orderBy: [{ season: 'desc' }, { weekOrRound: 'desc' }],
       })
       .catch(() => [] as Array<{ playerId: string; normalizedStatMap: unknown }>),
+    lastCompleted && lastCompleted.week >= 1
+      ? loadActualWeeklyPoints({
+          prisma: args.prisma,
+          season: lastCompleted.season,
+          week: lastCompleted.week,
+          playerIds: myDefenders.map((d) => d.sleeperId),
+          scoring: extractScoring(league.settings),
+        })
+      : Promise.resolve(new Map<string, ActualWeekOutcome>()),
   ])
 
   const logsByPlayer = new Map<string, unknown[]>()
@@ -278,6 +311,7 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
           : v == null
             ? 'ranked, but replacement level at his position could not be established'
             : null,
+      lastWeek: actualMap.get(d.sleeperId) ?? null,
     }
   })
 

@@ -205,6 +205,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
               <th className="px-4 py-3">Player</th>
               <th className="px-2 py-3">Pos</th>
               <th className="px-2 py-3 text-right text-[#22d3ee]">Proj ↓</th>
+              <th className="px-2 py-3 text-right">Last wk</th>
               <th className="px-2 py-3 text-right">VORP</th>
               <th className="px-2 py-3 text-right">Pos rank</th>
               <th className="px-4 py-3 text-right">Value</th>
@@ -213,7 +214,7 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
           <tbody>
             {data.defenders.map((d) => (
               <tr key={d.sleeperId} className="border-b border-white/[0.04] last:border-0">
-                <td className="px-4 py-3" colSpan={d.reason ? 6 : 1}>
+                <td className="px-4 py-3" colSpan={d.reason ? 7 : 1}>
                   <div className="text-[13px] font-extrabold">{d.name}</div>
                   <div className="font-mono text-[10px] text-[#5d648a]">{d.team ?? '—'}</div>
                   {d.reason && (
@@ -227,6 +228,25 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                     </td>
                     <td className="px-2 py-3 text-right font-mono text-[14px] font-extrabold text-[#34d399]">
                       {d.projection != null ? d.projection.toFixed(1) : <Dash />}
+                    </td>
+                    {/*
+                      A dash with a tooltip, never 0.0. `no_game` is a bye or an un-ingested
+                      week; `unscored` means this league prices none of what he did. Rendering
+                      either as zero tells a manager his starter blanked.
+                    */}
+                    <td
+                      className="px-2 py-3 text-right font-mono text-[12px] text-[#c3c9e6]"
+                      title={
+                        d.lastWeek && !d.lastWeek.scored
+                          ? d.lastWeek.reason === 'no_game'
+                            ? 'no game on file for him that week'
+                            : (d.lastWeek.lineKeys ?? 0) <= 4
+                              ? 'we hold a line for him but none of the stats this league scores'
+                              : 'this league’s scoring prices none of what he did'
+                          : undefined
+                      }
+                    >
+                      {d.lastWeek?.scored ? d.lastWeek.points.toFixed(1) : <Dash />}
                     </td>
                     <td className="px-2 py-3 text-right font-mono text-[12px]">
                       {d.vorp != null ? (
