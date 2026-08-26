@@ -39,7 +39,10 @@ jobs:
       NEXTAUTH_URL: 'http://localhost:3000'
       # Take the same branches inside the build scripts that Railway takes.
       RAILWAY_ENVIRONMENT: 'production'
-      NODE_ENV: 'production'
+      # NODE_ENV is deliberately NOT set here. At job level it makes npm ci skip
+      # devDependencies, and next.config.js requires @next/bundle-analyzer
+      # unconditionally, so the build dies before it starts. next build sets
+      # NODE_ENV=production itself.
 
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +53,15 @@ jobs:
           cache: 'npm'
 
       - name: Install
-        run: npm ci --no-audit --no-fund
+        # --include=dev is explicit: the build needs tailwindcss, autoprefixer
+        # and @next/bundle-analyzer, all devDependencies.
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Confirm the build's dev dependencies are actually present
+        run: |
+          for pkg in @next/bundle-analyzer tailwindcss autoprefixer postcss; do
+            if [ -d "node_modules/$pkg" ]; then echo "present: $pkg"; else echo "MISSING: $pkg"; fi
+          done
 
       - name: Build the way Railway builds
         run: npm run build:railway
