@@ -524,3 +524,89 @@
   color: var(--accent);
   overflow-wrap: anywhere;
 }
+
+/* ── Publish switch ──────────────────────────────────────────────────── */
+
+.af-ch-publish-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-core .af-ch-publish-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 12.5px;
+}
+/*
+ * The quiet variant is for "make private" and "cancel". Making something
+ * private again must never be the harder-looking action, so it is quieter than
+ * the publish button but never disabled-looking.
+ */
+.af-core .af-ch-publish-btn[data-variant='quiet'] {
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+}
+
+.af-ch-publish-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px 16px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--accent-line);
+}
+.af-ch-publish-confirm-t {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.af-ch-publish-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-ch-publish-list li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-ch-publish-list li::before {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 800;
+}
+/* What IS published reads as the warning; what is not is reassurance. */
+.af-ch-publish-list li[data-in='true']::before {
+  content: '\2192';
+  color: var(--warn);
+}
+.af-ch-publish-list li[data-in='false']::before {
+  content: '\00d7';
+  color: var(--faint);
+}
+
+.af-ch-publish-error {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--bad);
+}
+
+@media (max-width: 560px) {
+  .af-core .af-ch-publish-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}

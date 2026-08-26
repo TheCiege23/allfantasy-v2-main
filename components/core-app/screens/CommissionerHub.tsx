@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import '@/components/core-app/af-commish-hub.css'
+import { PublishStandingsToggle } from '@/components/core-app/PublishStandingsToggle'
 import type {
   CommissionerHubResult,
   CommissionerQueueItem,
@@ -226,21 +227,11 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
         </header>
 
         {publicStandings.enabled ? (
-          <>
-            <p className="af-ch-publish-body">
-              This league&apos;s standings are readable by anyone with the link, without an
-              account, and search engines are allowed to index them. Team names are published;
-              manager names are not.
-            </p>
-            <a
-              className="af-ch-publish-link"
-              href={publicStandings.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {publicStandings.url} ↗
-            </a>
-          </>
+          <p className="af-ch-publish-body">
+            This league&apos;s standings are readable by anyone with the link, without an account,
+            and search engines are allowed to index them. Team names are published; manager names
+            are not.
+          </p>
         ) : (
           <p className="af-ch-publish-body">
             {/*
@@ -256,6 +247,18 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
             not publish manager names.
           </p>
         )}
+
+        {/*
+          The switch itself is the one client island on this screen. Access was
+          already decided server-side — this renders only inside the granted
+          branch, and the route re-checks `requireCommissionerRole` regardless,
+          so the component cannot grant what the gate did not.
+        */}
+        <PublishStandingsToggle
+          leagueId={league.id}
+          enabled={publicStandings.enabled}
+          url={publicStandings.url}
+        />
       </section>
 
       <p className="af-ch-footnote">
