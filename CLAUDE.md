@@ -71,7 +71,7 @@ is not a data-API call and matching it reported four test fixtures as violations
 but it is a Phase-5 audit snapshot and is itself incomplete — its
 `clientLocations` for CFBD listed three files; there are six.
 
-**The code does not comply yet, and the guard says so.** A full scan reports 94
+**The code does not comply yet, and the guard says so.** A full scan reports 92
 violations across tracked source (the count drifts — re-run rather than quoting
 this number). Nothing is allowlisted to hide them.
 
@@ -100,8 +100,8 @@ or not at all.
 
 ### Remaining debt, triaged
 
-Twelve lines came from the three providers added on 2026-08-25. Four were
-resolved (below); **eight remain**, all genuine:
+Twelve lines came from the three providers added on 2026-08-25. Six were
+resolved (below); **six remain**, all genuine:
 
 - **Adapters, censused 2026-08-25.** Only one earned an exemption:
   - `lib/api-football.ts` — **allowlisted.** One importer, `app/api/sports/sync`,
@@ -120,10 +120,8 @@ resolved (below); **eight remain**, all genuine:
     modules, but those sit under 20+ app routes including non-admin chat and AI
     paths. Not proven unreachable, so not exempted. Unreachability has to be
     demonstrated, never assumed.
-  - `lib/fantasycalc.ts` (two lines) — **~62 import sites, not the ~30 this file
-    used to claim.** An aliased grep finds 47; the relative-import control finds
-    15 more. Request paths are migrated (see below), but the adapter cannot be
-    allowlisted yet — see `6.5` below.
+  - `lib/fantasycalc-fetch.ts` — **allowlisted, and the clearest worked example
+    of earning it.** See below.
 
 **FantasyCalc, migrated 2026-08-25.** 36 of those sites now read through
 `lib/fantasycalc-db.ts`: 17 request-path routes and 19 serving `lib/*` modules.
@@ -138,18 +136,40 @@ than silently serving nulls. `DevyPlayer.passingYards` had no such fallback,
 which is exactly why that one was fatal and this one is not. Scheduling the sync
 is a quota and latency win, not a correctness prerequisite.
 
-**Six modules are deliberately NOT migrated** — `trade-learning`,
-`comprehensive-trade-learning`, `tradeLearningCapture`, `historical-values`,
-`replay-framework/ingest/ingestSleeperTradesForLeague`, `upstream-apis`. They
-stamp a value *into* a record rather than serving it, and a value read from a
-six-hour-stale cache is not the same claim as the market at the moment a trade
-happened. Decide those one at a time.
+**Only `replay-framework/ingest/ingestSleeperTradesForLeague` still fetches
+live**, and deliberately: it is ingestion by name and nature, the rule permits
+ingestion to call providers, and a replay run wants one deliberate snapshot.
 
-**Allowlisting `lib/fantasycalc.ts` needs a module split, not just the
-migration.** Pure helpers (`findPlayerByName`, `getPickValue`, `getValueTier`,
-`formatValuesForPrompt`) live in the same file as the fetch, so ~45 modules
-still import it legitimately. Separate the pure half from the fetching half
-first; only then is the exemption earned.
+Five modules that *looked* like capture/history were checked individually and
+migrated — `trade-learning`, `comprehensive-trade-learning`, `historical-values`,
+`upstream-apis`, `tradeLearningCapture`. The prior assumption, that they stamp
+point-in-time values and so must not read a cache, was **wrong for all five**:
+four are reached from request paths, and the value they want is explicitly
+current market. `historical-values` says so in its own comment — FantasyCalc is
+the *current* coverage fallback after the Excel historical series misses. Worth
+remembering as a caution: a module's name is not evidence of when it runs.
+
+**The adapter split — copy this shape.** `lib/fantasycalc.ts` could never be
+allowlisted while the fetch sat beside the pure helpers (`findPlayerByName`,
+`getPickValue`, `getValueTier`, the trade-grading maths) that ~45 modules import
+legitimately. The fix was to **invert** the obvious move: rather than repointing
+45 importers, the FETCH moved out to `lib/fantasycalc-fetch.ts`, leaving three
+runtime importers — `lib/fantasycalc-db.ts`, `scripts/sync-fantasycalc-valuations.ts`,
+and `lib/replay-framework/ingest/ingestSleeperTradesForLeague.ts`. That set is
+the exemption, and it came **after** the 36 call-site migrations, which is the
+order that makes an allowlist true rather than asserted.
+
+⚠ **A DB-first read makes the adapter's cache accessor lie.**
+`getValuationCacheAgeMs` reads the fetch module's in-process Map. Any surface
+moved to `getFantasyCalcValuesDbFirst` must switch to `getFantasyCalcCacheAgeMs`
+in `lib/fantasycalc-db.ts`, or it silently reports "unknown age" for data that is
+fresh. `league-rankings-v2` shipped exactly that for one commit; nothing type-checks it.
+
+⚠ **Test mocks rot silently during a migration.** Four suites mocked
+`@/lib/fantasycalc` (or the canonical facade) and stopped intercepting the moment
+the module under test moved to the DB layer — so the real prisma-backed path ran
+inside unit tests. When you move a module across a boundary, grep the test tree
+for mocks of the old one.
 
 ⚠ **A rename sweep must exclude modules that re-export the renamed symbol.**
 `lib/player-valuations/canonicalPlayerValuations.ts` is a re-export facade

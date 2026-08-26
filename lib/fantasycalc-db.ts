@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { FantasyCalcPlayer, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
-import { fetchFantasyCalcValues, buildPlayerValuesForNames } from '@/lib/fantasycalc'
+import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/fantasycalc-fetch'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 const KEY_PREFIX = 'fantasycalc:values:'

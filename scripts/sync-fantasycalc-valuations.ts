@@ -1,4 +1,5 @@
-import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
+import type { FantasyCalcSettings } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/fantasycalc-fetch'
 import { writeFantasyCalcValuesToDb } from '@/lib/fantasycalc-db'
 
 const DEFAULT_SETTINGS: FantasyCalcSettings[] = [

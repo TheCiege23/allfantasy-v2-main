@@ -202,6 +202,27 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/api-football\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
+   * The FantasyCalc adapter, and the clearest worked example of EARNING an
+   * exemption rather than asserting one.
+   *
+   * `lib/fantasycalc.ts` could never be allowlisted: the fetch sat beside the
+   * pure helpers (findPlayerByName, getPickValue, getValueTier, the trade
+   * grading maths) that ~45 modules import legitimately. So the fetch moved out
+   * to this file instead of moving 45 importers — leaving exactly three runtime
+   * importers, all ingestion-shaped:
+   *   - lib/fantasycalc-db.ts        the DB-first layer every request path uses
+   *   - scripts/sync-fantasycalc-valuations.ts
+   *   - lib/replay-framework/ingest/ingestSleeperTradesForLeague.ts
+   *
+   * That set is the exemption. 36 request-path call sites were migrated to
+   * lib/fantasycalc-db.ts first; the allowlist came last, which is the order
+   * that makes it true.
+   *
+   * ⚠ RE-CHECK BY CALLERS, AND WITH A POSITIVE CONTROL. `from '@/lib/x'` alone
+   * is not a census — a relative `./fantasycalc-fetch` import would not appear.
+   */
+  /^lib\/fantasycalc-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
    * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
    * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is
    * everything ABOVE it.

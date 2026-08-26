@@ -49,7 +49,12 @@ export {
   getPlayerValue,
   getTopPlayers,
   getTrendingPlayers,
-  getValuationCacheAgeMs,
+  // getValuationCacheAgeMs is deliberately NOT re-exported here. It moved to
+  // lib/fantasycalc-fetch.ts with the rest of the network surface, and pulling
+  // it through this facade would make every facade consumer an importer of the
+  // fetch module — undoing the split that earned that module its DB-first
+  // exemption. Nothing consumed it via this path. For a DB-backed age, use
+  // getFantasyCalcCacheAgeMs from lib/fantasycalc-db.ts.
   getValueTier,
   letterGradeFromScore,
   processLabel,

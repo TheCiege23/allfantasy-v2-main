@@ -38,9 +38,14 @@ vi.mock('@/lib/sleeper-client', () => ({
 }))
 
 vi.mock('@/lib/fantasycalc', () => ({
-  fetchFantasyCalcValues: mockFetchFantasyCalcValues,
   findPlayerBySleeperId: () => null,
   getPickValue: () => 100,
+}))
+
+// The fetch moved out of the adapter into its own module; mocking @/lib/fantasycalc
+// alone would no longer intercept it.
+vi.mock('@/lib/fantasycalc-fetch', () => ({
+  fetchFantasyCalcValues: mockFetchFantasyCalcValues,
 }))
 
 vi.mock('@/lib/replay-framework/writer', () => ({
