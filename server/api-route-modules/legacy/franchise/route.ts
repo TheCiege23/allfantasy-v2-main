@@ -10,6 +10,11 @@ import {
   refreshTradeSettlement,
 } from '@/lib/franchise/franchiseService'
 import { describeCrossPlatformTrade } from '@/lib/franchise/franchiseLink'
+import { getFantraxLeagues } from '@/lib/league-import/fantrax/fantraxApi'
+import {
+  attachToFranchise,
+  importFantraxLeague,
+} from '@/lib/league-import/fantrax/importFantraxLeague'
 
 /**
  * The cross-platform franchise: one team across two leagues on two platforms.
@@ -75,11 +80,81 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
       role?: 'pro' | 'college'
       status?: 'observed' | 'contradicted'
       basis?: string
+      userSecretId?: string
+      leagueId?: string
+      teamName?: string
+      franchiseName?: string
     }
     try {
       body = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    /*
+     * Step 1 of connecting a league: list what the user owns on Fantrax.
+     *
+     * ⚠ THE SECRET ID IS USED FOR THIS ONE REQUEST AND DISCARDED. It is never
+     * stored, never logged, and never echoed back — not in the response and not
+     * in a failure message. Only the league ids travel onward, and a league id
+     * is not a credential.
+     */
+    if (body.action === 'discover-leagues') {
+      if (!body.userSecretId) {
+        return NextResponse.json({ error: 'userSecretId is required' }, { status: 400 })
+      }
+      const found = await getFantraxLeagues(body.userSecretId)
+      if (!found.ok) {
+        /*
+         * ⚠ A BAD SECRET ID AND AN EMPTY ACCOUNT ARE INDISTINGUISHABLE — Fantrax
+         * answers HTTP 200 {} for both — so the message says so rather than
+         * telling someone with a typo that they own no leagues.
+         */
+        return NextResponse.json({ error: found.failure.message }, { status: 400 })
+      }
+      return NextResponse.json({
+        leagues: found.data,
+        note: 'Pick the league and your team in it. We never store your Secret ID.',
+      })
+    }
+
+    /*
+     * Step 2: import the chosen league and attach it to a franchise.
+     */
+    if (body.action === 'connect-league') {
+      if (!body.leagueId || !body.teamName) {
+        return NextResponse.json({ error: 'leagueId and teamName are required' }, { status: 400 })
+      }
+      if (body.linkId && !(await ownedLink(body.linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+
+      const imported = await importFantraxLeague({
+        leagueId: body.leagueId,
+        teamName: body.teamName,
+        appUserId: auth.userId,
+      })
+      if (!imported.ok) {
+        /* Returning the team list lets the caller re-prompt instead of failing. */
+        return NextResponse.json({ error: imported.error, teams: imported.teams }, { status: 400 })
+      }
+
+      const attached = await attachToFranchise({
+        ownerUserId: auth.userId,
+        franchiseName: body.franchiseName ?? imported.leagueName,
+        linkId: body.linkId ?? null,
+        role: 'college',
+        platform: 'fantrax',
+        leagueId: imported.fantraxLeagueId,
+        teamExternalId: imported.teamName,
+      })
+      if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 })
+
+      return NextResponse.json({
+        linkId: attached.linkId,
+        imported,
+        note: 'This is a snapshot, not a live sync. Re-run the connect to refresh it.',
+      })
     }
 
     if (body.action === 'record-trade') {
@@ -146,7 +221,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
     }
 
     return NextResponse.json(
-      { error: 'Unknown action. Use record-trade, mark-leg or refresh-settlement.' },
+      { error: 'Unknown action. Use discover-leagues, connect-league, record-trade, mark-leg or refresh-settlement.' },
       { status: 400 },
     )
   },

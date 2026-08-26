@@ -114,3 +114,65 @@ describe('the service reports absence rather than an empty team', () => {
     expect(SERVICE).toMatch(/NAMES ARE NOT RESOLVED HERE/)
   })
 })
+
+describe('the connect-a-league flow', () => {
+  const SERVICE_IMPORT = readFileSync(
+    resolve(process.cwd(), 'lib/league-import/fantrax/importFantraxLeague.ts'),
+    'utf8',
+  )
+
+  it('exposes both steps: discover then connect', () => {
+    expect(ROUTE).toContain("action === 'discover-leagues'")
+    expect(ROUTE).toContain("action === 'connect-league'")
+  })
+
+  /**
+   * ⚠ THE SECRET ID IS A CREDENTIAL. It is used for one request and discarded —
+   * never stored, never logged, never echoed back.
+   */
+  it('never persists or echoes the Secret ID', () => {
+    // It must not reach the importer at all.
+    expect(SERVICE_IMPORT).not.toContain('userSecretId')
+    // And no write of it anywhere in the route.
+    // The Secret ID is never written to any store: it appears only as a read
+    // off the request body and as the argument to the discovery call.
+    // A count would be brittle; what matters is it never reaches a write.
+    expect(ROUTE).not.toMatch(/prisma\.[a-zA-Z]+\.(create|update|upsert)[\s\S]{0,150}userSecretId/)
+    expect(ROUTE).toMatch(/never store your Secret ID/i)
+  })
+
+  /**
+   * ⚠ Fantrax answers HTTP 200 {} for BOTH a bad Secret ID and an empty account,
+   * so the flow must not tell a user with a typo that they own no leagues.
+   */
+  it('reports an empty discovery as ambiguous rather than as an empty account', () => {
+    expect(ROUTE).toMatch(/indistinguishable/i)
+  })
+
+  it('connect requires an explicit team and re-prompts with the list on a miss', () => {
+    expect(ROUTE).toContain('leagueId and teamName are required')
+    expect(ROUTE).toMatch(/teams: imported\.teams/)
+  })
+
+  it("the importer refuses to guess which team belongs to the user", () => {
+    expect(SERVICE_IMPORT).toMatch(/REFUSES TO GUESS WHICH TEAM/)
+  })
+
+  /**
+   * ⚠ (platform, leagueId) is unique. Silently re-parenting a league would empty
+   * the franchise it came from.
+   */
+  it('refuses a league already attached to another franchise', () => {
+    expect(SERVICE_IMPORT).toMatch(/already part of another franchise/)
+  })
+
+  it('uses the CFB player map, not NFL', () => {
+    expect(SERVICE_IMPORT).toContain("getFantraxPlayerIds('CFB')")
+    expect(SERVICE_IMPORT).toMatch(/wrong one resolves nothing/)
+  })
+
+  it('aborts when almost nothing resolves, rather than storing anonymous ids', () => {
+    expect(SERVICE_IMPORT).toMatch(/named \/ total < 0\.5|< 0\.5/)
+    expect(SERVICE_IMPORT).toMatch(/signature of the wrong sport map/)
+  })
+})

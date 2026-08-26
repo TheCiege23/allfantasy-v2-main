@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  getFantraxLeagues,
   getFantraxLeagueInfo,
   getFantraxPlayerIds,
   getFantraxTeamRosters,
@@ -24,6 +25,11 @@ function resp(status: number, body: string) {
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+async function loadIsolated() {
+  return import('@/lib/league-import/fantrax/fantraxApi')
+}
+
 
 describe('a 200 carrying an error is not a league', () => {
   it('treats the 200-with-error body as not_found, not as success', async () => {
@@ -150,5 +156,74 @@ describe('joining rosters to the player map', () => {
     const [team] = resolveRosters(rosters, {})
     expect(team.resolved).toBe(0)
     expect(team.total).toBe(2)
+  })
+})
+
+describe('league discovery from a Secret ID', () => {
+  /**
+   * ⚠ THE THIRD FAILURE SHAPE. getLeagueInfo answers 200-with-error for a bad
+   * league id and 400-with-HTML for a miscased one. getLeagues answers
+   * `HTTP 200 {}` for a bad Secret ID — no error object at all. Verified against
+   * the live service with an unknown, a fake and an empty id: all three.
+   *
+   * So an empty result must NOT be reported as "you own no leagues", which would
+   * tell a user with a typo that their account is empty.
+   */
+  it('an empty response is reported as ambiguous, not as an empty account', async () => {
+    const { getFantraxLeagues } = await loadIsolated()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, '{}')))
+    const res = await getFantraxLeagues('probably-wrong')
+
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.failure.message).toMatch(/either the Secret ID is wrong or the account owns no leagues/i)
+    expect(res.failure.message).toMatch(/cannot tell which/i)
+  })
+
+  it('never echoes the Secret ID back in a failure message', async () => {
+    const SECRET = 'my-secret-id-value'
+    const { getFantraxLeagues } = await loadIsolated()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, '{}')))
+    const res = await getFantraxLeagues(SECRET)
+    if (res.ok) return
+    expect(res.failure.message).not.toContain(SECRET)
+  })
+
+  it('requires a Secret ID before making any request', async () => {
+    const spy = vi.fn()
+    vi.stubGlobal('fetch', spy)
+    const { getFantraxLeagues } = await loadIsolated()
+    const res = await getFantraxLeagues('   ')
+    expect(res.ok).toBe(false)
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('parses leagues from the flat, nested and array shapes', async () => {
+    const one = { leagueId: 'abc123', leagueName: 'Cream Bowl', teamIds: ['t1'], teamNames: ['Ciege82'] }
+    for (const body of [
+      JSON.stringify({ k: one }),
+      JSON.stringify({ leagues: [one] }),
+      JSON.stringify([one]),
+    ]) {
+      const { getFantraxLeagues } = await loadIsolated()
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
+      const res = await getFantraxLeagues('ok')
+      expect(res.ok).toBe(true)
+      if (!res.ok) return
+      expect(res.data[0].leagueId).toBe('abc123')
+      expect(res.data[0].teamNames).toEqual(['Ciege82'])
+    }
+  })
+
+  it('drops entries with no league id rather than emitting a blank row', async () => {
+    const { getFantraxLeagues } = await loadIsolated()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, JSON.stringify({
+      a: { leagueId: 'good', leagueName: 'Real' },
+      b: { leagueName: 'No id here' },
+    }))))
+    const res = await getFantraxLeagues('ok')
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.map((l) => l.leagueId)).toEqual(['good'])
   })
 })

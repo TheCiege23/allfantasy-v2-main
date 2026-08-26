@@ -205,6 +205,79 @@ export async function getFantraxPlayerIds(
   return res
 }
 
+/**
+ * Every league a Fantrax user owns, from the Secret ID on their profile page.
+ *
+ * ⚠ THE SECRET ID IS A CREDENTIAL AND IS NEVER PERSISTED OR LOGGED. It is used
+ * for this one request and discarded. Nothing here writes it anywhere, and the
+ * failure messages below deliberately do not echo it.
+ *
+ * ⚠ AND A BAD SECRET ID LOOKS EXACTLY LIKE AN EMPTY ACCOUNT. Verified against
+ * the live service 2026-08-26: an unknown, fake, and empty Secret ID all return
+ *
+ *     HTTP 200  {}
+ *
+ * with no error object — a third failure shape, distinct from the 200-with-error
+ * of getLeagueInfo and the 400-with-HTML of a miscased league id. So an empty
+ * result CANNOT be reported as "you own no leagues": that would tell a user with
+ * a typo that their account is empty. It is reported as genuinely ambiguous.
+ */
+export type FantraxLeagueSummary = {
+  leagueId: string
+  leagueName: string
+  /** The team(s) this user owns in that league, when the API names them. */
+  teamIds: string[]
+  teamNames: string[]
+}
+
+export async function getFantraxLeagues(
+  userSecretId: string,
+): Promise<FantraxResult<FantraxLeagueSummary[]>> {
+  const trimmed = userSecretId.trim()
+  if (!trimmed) {
+    return { ok: false, failure: { kind: 'api_error', message: 'a Fantrax Secret ID is required' } }
+  }
+
+  const res = await fxeaGet<unknown>(`/getLeagues?userSecretId=${encodeURIComponent(trimmed)}`)
+  if (!res.ok) return res
+
+  const body = res.data as Record<string, unknown>
+  const raw = Array.isArray(body)
+    ? body
+    : Array.isArray((body as { leagues?: unknown[] }).leagues)
+      ? ((body as { leagues: unknown[] }).leagues as unknown[])
+      : Object.values(body ?? {})
+
+  const leagues: FantraxLeagueSummary[] = raw
+    .filter((l): l is Record<string, unknown> => typeof l === 'object' && l != null)
+    .map((l) => ({
+      leagueId: String(l.leagueId ?? l.id ?? ''),
+      leagueName: String(l.leagueName ?? l.name ?? 'Unnamed league'),
+      teamIds: toStringArray(l.teamIds ?? l.teamId),
+      teamNames: toStringArray(l.teamNames ?? l.teamName),
+    }))
+    .filter((l) => l.leagueId)
+
+  if (leagues.length === 0) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'not_found',
+        message:
+          'Fantrax returned no leagues. That means either the Secret ID is wrong or the account owns no leagues — the API answers the same way for both, so we cannot tell which. Check the Secret ID on your Fantrax profile page.',
+      },
+    }
+  }
+
+  return { ok: true, data: leagues }
+}
+
+function toStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map(String).filter(Boolean)
+  if (v == null || v === '') return []
+  return [String(v)]
+}
+
 export type ResolvedRoster = {
   teamId: string
   teamName: string
