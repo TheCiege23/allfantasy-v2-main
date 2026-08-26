@@ -80,7 +80,7 @@ age; an age curve on top double-counts the single biggest dynasty factor.
 | Bye collision, both directions | ✅ | `byeCollisionDelta` |
 | Roster crunch / forced drops | ✅ | `rosterShape.ts` |
 | Concentration / fragility | ✅ | `rosterShape.ts` |
-| **Manager positional premium** | ⬜ | needs per-manager trade history by position. `LeagueTradeHistory` is ingestion-progress, NOT trades |
+| **Manager positional premium** | ✅ | `managerPremium.ts` — pooled from `TransactionFact` payloads, surfaced through `buildLeverageNotes`. Log space, and REPORTED never applied |
 
 ## Layer 6 — Contention & horizon
 
@@ -113,7 +113,18 @@ survivor-guillotine · tournament · pirate · king-of-the-hill · **salary cap*
 3. **Third-down role, experience and NFL free agency have no source.** Each is
    named in code at the point it would have been used, so the next person meets
    the reason rather than the absence.
-4. **Manager positional premium needs real trade history.**
-   `LeagueTradeHistory` tracks ingestion progress rather than trades, and
-   `transaction_facts` is empty. `LeagueTradeHistory` is the wrong table and the
-   right one does not exist yet.
+4. ~~**Manager positional premium needs real trade history.**~~ **CLEARED.**
+   `LeagueTradeHistory` really is ingestion progress — but it was the wrong
+   table to be looking at. `TransactionFact` payloads carry `playersInIds`,
+   `playersOutIds` and `pickDetail` PER SIDE, which is the same source
+   `scripts/probe-manager-tendencies.ts` already pools to fill
+   `manager_trade_tendencies` (481 managers, 277 with a ratio). One more
+   dimension off the same rows was all it needed.
+
+   Two rules the factor cannot be built without:
+   - **Log space.** Trades are zero-sum, so an arithmetic mean of ratios makes
+     every manager an overpayer — the tendencies writer measured median 1.56
+     and 224 of 285 managers "high risk" before this was fixed.
+   - **Reported, never applied.** `counterpartyPriceDelta` already moves the
+     price for their roster need. A manager overpays for backs largely BECAUSE
+     they are short at back; applying both counts one shortage twice.

@@ -12,6 +12,8 @@ import {
   tradeDeadlineWeek,
 } from '@/lib/core-app/seasonTimeline'
 import { getDepthRole, depthRoleNote } from './depthChartRole'
+import { loadManagerProfile, managerPremiumNotes } from './managerPremium'
+import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import { readProtections, resolveTribeRelation } from './formatState'
 import { crownValue, dethroneNote } from './kingOfTheHill'
 import {
@@ -431,6 +433,14 @@ export async function buildTradeContextNotes(args: {
     give,
     /* What they are sending you leaves THEIR roster, so it is their outgoing. */
     theirOutgoingNames: get.map((g) => g.name),
+    /*
+     * The unit every historical trade of theirs gets priced in. Read from THIS
+     * league so the ratio is denominated the same way the deal on screen is —
+     * a dynasty habit measured in redraft prices is a fact about the price
+     * list, not about the manager.
+     */
+    isDynasty: Boolean(league.isDynasty),
+    qbFormat: detectQbFormat(league.starters),
   }).catch(() => [])
 
   const { postureNotes, pickNotes } = await buildPostureAndPickNotes({
@@ -1415,6 +1425,8 @@ async function buildLeverageNotes(args: {
   give: Line[]
   /** Players they are sending away, which leaves holes on their side. */
   theirOutgoingNames: string[]
+  isDynasty: boolean
+  qbFormat: 'ONE_QB' | 'SUPERFLEX'
 }): Promise<string[]> {
   const { leagueId, sport, requirements, opponentTeamExternalId, give } = args
   if (!opponentTeamExternalId || give.length === 0) return []
@@ -1486,6 +1498,31 @@ async function buildLeverageNotes(args: {
 
   const who = team.teamName || team.ownerName || 'they'
   const notes: string[] = []
+
+  /*
+   * ── How they have actually traded, layer 5's last factor ──────────────
+   *
+   * Structural leverage (their holes, the waiver wire) says what a position is
+   * worth to them today. This says what they have HISTORICALLY paid for it,
+   * which is a separate fact and the only one on this page that comes from
+   * behaviour. It is reported and never folded into the price — a manager
+   * overpays for backs largely because they are short at back, so applying both
+   * would count the same shortage twice.
+   */
+  const profile = await loadManagerProfile({
+    managerKey: team.platformUserId,
+    isDynasty: args.isDynasty,
+    qbFormat: args.qbFormat,
+  }).catch(() => null)
+  if (profile) {
+    notes.push(
+      ...managerPremiumNotes({
+        who,
+        profile,
+        givePositions: give.map((g) => g.position ?? '').filter(Boolean),
+      }),
+    )
+  }
   for (const g of give) {
     if (!g.position) continue
     const pos = g.position.toUpperCase().trim()
