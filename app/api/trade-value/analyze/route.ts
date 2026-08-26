@@ -9,17 +9,24 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
-import { buildTradeContextNotes } from '@/lib/trade-intel/tradeContextNotes'
+import { buildTradeContextNotes, type TradeContextNotes } from '@/lib/trade-intel/tradeContextNotes'
 
-/** Every note list empty — used on both the no-league and the failure path. */
-const EMPTY_CONTEXT = {
-  byeNotes: [] as string[],
-  needNotes: [] as string[],
-  leverageNotes: [] as string[],
-  postureNotes: [] as string[],
-  pickNotes: [] as string[],
-  scaleNotes: [] as string[],
-  formatNotes: [] as string[],
+/**
+ * Every note list empty — used on both the no-league and the failure path.
+ *
+ * ⚠ NO `contextGap` HERE, DELIBERATELY. Neither path is a fixable fact about
+ * the viewer: one is an analysis with no league at all, the other is a thrown
+ * read. Naming a gap for those would tell a manager to go claim a team when
+ * that was never the problem.
+ */
+const EMPTY_CONTEXT: TradeContextNotes = {
+  byeNotes: [],
+  needNotes: [],
+  leverageNotes: [],
+  postureNotes: [],
+  pickNotes: [],
+  scaleNotes: [],
+  formatNotes: [],
 }
 import {
   compareConsoleVerdictWithCanonicalGrade,
@@ -240,6 +247,20 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
             }).catch(() => EMPTY_CONTEXT)
           : EMPTY_CONTEXT
 
+      /*
+       * ⚠ A LEDGER THAT COULD NOT RUN IS NOT A LEDGER THAT FOUND NOTHING, AND
+       * BOTH RENDER AS NO NOTES. When the viewer's own team could not be
+       * resolved in this league, every note group comes back empty — byes,
+       * roster need, league scale, format rules, all of it — and the screen
+       * would show that as a quiet blank the manager cannot act on. The reason
+       * joins `dataGaps`, which the Trade Center already prints under "what we
+       * couldn't see".
+       */
+      const { contextGap, ...notes } = context
+      const analysis = contextGap
+        ? { ...out, dataGaps: [...(out.dataGaps ?? []), contextGap] }
+        : out
+
       const hasContext =
         context.byeNotes.length > 0 ||
         context.needNotes.length > 0 ||
@@ -249,7 +270,7 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         context.scaleNotes.length > 0 ||
         context.formatNotes.length > 0
 
-      return NextResponse.json(hasContext ? { ...out, ...context } : out)
+      return NextResponse.json(hasContext ? { ...analysis, ...notes } : analysis)
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

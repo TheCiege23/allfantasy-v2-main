@@ -95,6 +95,11 @@ const SEASON_HORIZON = 18
 type Line = { name: string; position: string | null; team: string | null }
 
 export type TradeContextNotes = {
+  /**
+   * Why nothing could be computed, when that is a fixable fact about the
+   * viewer rather than a finding about the deal. Absent when the ledger ran.
+   */
+  contextGap?: string | null
   /** Bye-week collisions this deal creates or fails to relieve. */
   byeNotes: string[]
   /**
@@ -226,14 +231,54 @@ export async function buildTradeContextNotes(args: {
    * The viewer's own roster in this league. Matched through LeagueTeam because
    * `Roster.platformUserId` is the PLATFORM's id for them, not ours — the same
    * two-id-space trap the scoreboard hit.
+   *
+   * ⚠ A CLAIMED TEAM IS NOT GUARANTEED, AND THIS FUNCTION RETURNS EVERYTHING.
+   * Claiming is a deliberate action a manager may never have taken, and until
+   * this fell back, an unclaimed league produced NO notes at all — not just no
+   * leverage: no byes, no roster need, no league scale, no format rules. One
+   * missing `claimedByUserId` silently emptied the entire ledger for that
+   * league, and nothing on screen said why. `buildNativeActiveTrades` already
+   * does this dual lookup for exactly this reason.
    */
-  const team = await prisma.leagueTeam
-    .findFirst({
-      where: { leagueId, claimedByUserId: userId },
-      select: { platformUserId: true, externalId: true },
-    })
-    .catch(() => null)
-  if (!team?.platformUserId) return EMPTY
+  const team = await (async () => {
+    const claimed = await prisma.leagueTeam
+      .findFirst({
+        where: { leagueId, claimedByUserId: userId },
+        select: { platformUserId: true, externalId: true },
+      })
+      .catch(() => null)
+    if (claimed?.platformUserId) return claimed
+
+    /*
+     * The linked Sleeper account. Deliberately second: a claim is an explicit
+     * statement about THIS league, and a linked platform id is an inference
+     * from an id space shared across all of them.
+     */
+    const profile = await prisma.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null)
+    const linked = profile?.sleeperUserId?.trim()
+    if (!linked) return null
+    return prisma.leagueTeam
+      .findFirst({
+        where: { leagueId, platformUserId: linked },
+        select: { platformUserId: true, externalId: true },
+      })
+      .catch(() => null)
+  })()
+  /*
+   * ⚠ AN EMPTY LEDGER AND A LEDGER THAT FOUND NOTHING LOOK IDENTICAL ON SCREEN.
+   * Both render as no notes. Only one of them is something the manager can fix,
+   * so the reason rides back and the analyzer prints it under "what we
+   * couldn't see" rather than leaving a silent blank.
+   */
+  if (!team?.platformUserId) {
+    return {
+      ...EMPTY,
+      contextGap:
+        'which of these teams is yours — claim your team, or link the account you play on, and the league-specific read turns on',
+    }
+  }
 
   const roster = await prisma.roster
     .findFirst({
@@ -241,7 +286,12 @@ export async function buildTradeContextNotes(args: {
       select: { id: true, playerData: true },
     })
     .catch(() => null)
-  if (!roster) return EMPTY
+  if (!roster) {
+    return {
+      ...EMPTY,
+      contextGap: 'your roster in this league, which has not been synced yet',
+    }
+  }
   const rosterRowId = roster.id
 
   /*

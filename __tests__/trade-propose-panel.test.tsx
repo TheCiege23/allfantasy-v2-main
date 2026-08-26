@@ -197,7 +197,8 @@ describe('⚠ never write a row the counterparty cannot open', () => {
      * proposing user id. Resolving it any looser lights up a button the write
      * then refuses.
      */
-    expect(ROSTERS).toContain('rosters.find((r) => r.platformUserId === userId)?.id ?? null')
+    expect(ROSTERS).toContain('rosters.find((r) => r.platformUserId === userId)')
+    expect(ROSTERS).toContain('viewerRosterId: viewerRosterId?.id ?? null')
   })
 
   it('marks a roster reachable only when it belongs to an AllFantasy account', () => {
