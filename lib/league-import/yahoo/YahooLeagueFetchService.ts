@@ -249,6 +249,60 @@ function buildYahooWeekRange(startWeek: number | null, endWeek: number | null): 
   return weeks
 }
 
+/**
+ * Pending (proposed, not yet accepted) trades in one Yahoo league.
+ *
+ * ⚠ EXPORTED FROM HERE RATHER THAN LIFTING THE INTERNALS OUT. The auth context,
+ * the 401-refresh wrapper and the transaction parser are all private to this
+ * module and belong together; exporting three internals so a caller could
+ * reassemble them would leave four places to keep in step instead of one.
+ *
+ * ⚠ READ-ONLY. Yahoo's API can accept and reject trades, but this product does
+ * not hold the scopes to do it and has never asked for them. Callers must not
+ * render accept/reject controls off the back of this — link the manager to
+ * Yahoo, the same see-and-advise boundary the Sleeper path uses.
+ *
+ * Never throws for a missing connection: an unconnected account is a fact to
+ * report, not an error to raise.
+ */
+export async function fetchYahooPendingTrades(
+  userId: string,
+  leagueKey: string,
+): Promise<
+  | { ok: true; trades: YahooImportTransaction[] }
+  | { ok: false; reason: string }
+> {
+  if (!userId?.trim() || !leagueKey?.trim()) {
+    return { ok: false, reason: 'we do not know which Yahoo league this is' }
+  }
+
+  let context: YahooApiFetchContext
+  try {
+    context = await getYahooAuthForUser(userId)
+  } catch {
+    return { ok: false, reason: 'connect your Yahoo account in League Sync to read offers waiting there' }
+  }
+
+  try {
+    const data = await yahooApiFetchJson(
+      `${YAHOO_API_BASE}/league/${leagueKey}/transactions;types=trade;count=100?format=json`,
+      context,
+    )
+    const all = parseYahooTransactions(data)
+    /*
+     * Yahoo's own vocabulary for an open offer. Matched case-insensitively and
+     * against every spelling seen, because a status we do not recognise must
+     * not be silently treated as settled.
+     */
+    const pending = all.filter(
+      (t) => t.type === 'trade' && ['pending', 'proposed'].includes(t.status),
+    )
+    return { ok: true, trades: pending }
+  } catch {
+    return { ok: false, reason: 'Yahoo did not answer for this league' }
+  }
+}
+
 async function getYahooAuthForUser(userId: string): Promise<YahooApiFetchContext> {
   const auth = await (prisma as any).leagueAuth.findUnique({
     where: { userId_platform: { userId, platform: 'yahoo' } },
@@ -760,6 +814,25 @@ function parseYahooTransactions(transactionsData: any): YahooImportTransaction[]
         if (sourceTeamKey) teamKeys.add(sourceTeamKey)
         if (playerId && destinationTeamKey && actionType.includes('add')) adds[playerId] = destinationTeamKey
         if (playerId && sourceTeamKey && actionType === 'drop') drops[playerId] = sourceTeamKey
+
+        /*
+         * ⚠ A TRADE MOVED NOBODY UNTIL THIS LINE. The two rules above match
+         * Yahoo's waiver vocabulary — `add`, `drop`, `add/drop` — and a trade
+         * leg carries `type: "trade"`, which contains neither. So every trade
+         * this importer has ever read arrived with `adds` and `drops` empty:
+         * the two team keys were recorded and WHICH PLAYER WENT WHICH WAY was
+         * dropped on the floor.
+         *
+         * Keyed on the pair of team keys rather than on the type string, so it
+         * holds however Yahoo spells the leg. A movement with a source AND a
+         * destination is a transfer between two rosters by construction; a
+         * waiver add has no source team and a drop has no destination, so
+         * neither can reach this branch and the rules above stay authoritative.
+         */
+        if (playerId && sourceTeamKey && destinationTeamKey) {
+          adds[playerId] = destinationTeamKey
+          drops[playerId] = sourceTeamKey
+        }
       }
 
       return {

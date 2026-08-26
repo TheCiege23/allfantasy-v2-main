@@ -71,7 +71,12 @@ export interface PendingProviderTrade {
   assetsReceived: PendingTradeAsset[]
   /** Always true — AF cannot act on provider-side trades. */
   readOnly: true
-  provider: 'sleeper'
+  /**
+   * Which platform the offer is sitting on. Widened when Yahoo joined: a Yahoo
+   * offer labelled `'sleeper'` would send the manager to the wrong site to
+   * answer it, which is a worse failure than not showing it at all.
+   */
+  provider: 'sleeper' | 'yahoo'
 }
 
 type SleeperRosterRow = { roster_id?: number; owner_id?: string }

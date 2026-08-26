@@ -13,6 +13,7 @@ import {
   type PendingTradeAsset,
   type PendingTradeScan,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { scanPendingYahooTrades } from '@/lib/provider-trades/scanPendingYahooTrades'
 
 export const dynamic = 'force-dynamic'
 
@@ -213,6 +214,50 @@ export async function GET(req: NextRequest) {
 
   if (!sleeperLeagueId) {
     const activeTrades = await buildNativeActiveTrades(leagueId, userId)
+    const platform = String(league.platform ?? 'manual').toLowerCase()
+
+    /*
+     * ── Yahoo ────────────────────────────────────────────────────────────
+     *
+     * The second platform whose open offers we can read. It goes through the
+     * league-import module's own auth and parser rather than a second Yahoo
+     * client, so the 401-refresh path is the one already in production.
+     *
+     * ⚠ NO DIRECTION IS CLAIMED. Yahoo's transactions payload does not name a
+     * proposer, so every offer is shown as incoming. Guessing would render a
+     * manager's own outgoing offer backwards, which reads as a plausible trade
+     * rather than as a bug.
+     */
+    if (platform === 'yahoo' && league.platformLeagueId) {
+      const scan = await scanPendingYahooTrades({
+        leagueId,
+        platformLeagueId: league.platformLeagueId,
+        userId,
+      }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
+
+      return NextResponse.json({
+        tradeBlock: [] as LeagueTradeBlockPanelItem[],
+        activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades)],
+        activeCount: activeTrades.length + scan.trades.length,
+        source: 'yahoo' as const,
+        leagueName: league.name ?? 'League',
+        providerPendingCount: scan.trades.length,
+        providerLeagueUrl: `https://football.fantasysports.yahoo.com/f1/${encodeURIComponent(
+          league.platformLeagueId.split('.l.')[1] ?? league.platformLeagueId,
+        )}`,
+        pending: {
+          scanned: scan.scanned,
+          reason: scan.reason,
+          platform: 'yahoo' as const,
+          leagueUrl: `https://football.fantasysports.yahoo.com/f1/${encodeURIComponent(
+            league.platformLeagueId.split('.l.')[1] ?? league.platformLeagueId,
+          )}`,
+          weeksUnanswered: 0,
+        },
+        pendingOffers: builderOffers(scan.trades),
+      })
+    }
+
     return NextResponse.json({
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
       activeTrades,
@@ -226,8 +271,8 @@ export async function GET(req: NextRequest) {
        */
       pending: {
         scanned: false,
-        reason: `pending offers are only readable on Sleeper today — this league is on ${String(league.platform ?? 'another platform')}`,
-        platform: String(league.platform ?? 'manual').toLowerCase(),
+        reason: `we do not read pending offers on ${platform} yet — Sleeper and Yahoo are the two we can`,
+        platform,
         leagueUrl: null as string | null,
         weeksUnanswered: 0,
       },

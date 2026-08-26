@@ -132,16 +132,20 @@ describe('⚠ an empty list is not an answer on its own', () => {
 })
 
 describe('⚠ the route reports the scan, not just its result', () => {
-  it('returns a pending envelope on BOTH branches', () => {
-    // The non-Sleeper branch needs one too — otherwise a Yahoo league has no
-    // way to say "we never looked" and renders as an empty inbox.
-    expect(ROUTE.split('pending: {').length - 1).toBe(2)
+  it('returns a pending envelope on EVERY branch', () => {
+    /*
+     * Three now: Sleeper, Yahoo, and everything else. Every one of them needs
+     * an envelope — a branch without one has no way to say "we never looked"
+     * and renders as an empty inbox instead.
+     */
+    expect(ROUTE.split('pending: {').length - 1).toBe(3)
     expect(ROUTE).toContain('scanned: pendingScan.scanned')
     expect(ROUTE).toContain('pendingOffers: builderOffers(providerPending)')
   })
 
-  it('says which platform it could not read, rather than saying nothing', () => {
-    expect(ROUTE).toContain('pending offers are only readable on Sleeper today')
+  it('says which platform it could not read, and which two it can', () => {
+    expect(ROUTE).toContain('we do not read pending offers on ${platform} yet')
+    expect(ROUTE).toContain('Sleeper and Yahoo are the two we can')
   })
 
   it('distinguishes an unlinked account from a provider outage', () => {
