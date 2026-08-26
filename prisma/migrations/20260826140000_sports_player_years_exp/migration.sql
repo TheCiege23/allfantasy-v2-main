@@ -1,0 +1,25 @@
+-- Seasons of NFL experience, on the canonical player row.
+--
+-- WHY THIS COLUMN HAS TO EXIST
+-- `lib/sleeper/SleeperPlayerSeedService.ts` has always parsed Sleeper's
+-- `years_exp` into its `SeededPlayer` type and then dropped it at the write,
+-- because there was nowhere to put it. The value ledger recorded the
+-- consequence honestly rather than papering over it: "experience / rookie year"
+-- sat at 🛑 in LEDGER-FACTORS.md, and `trajectory.ts` exported an
+-- EXPERIENCE_GAP constant naming the reason at the point the factor would have
+-- been used.
+--
+-- WHY NOT INFER IT
+-- The obvious shortcut is "no prior season on file, therefore a rookie." That
+-- labels every player we simply failed to match as a rookie — the most
+-- confident possible wrong answer about the one class of asset dynasty managers
+-- pay the biggest premium for. The feed carries the number; store the number.
+--
+-- WHY NULLABLE, AND WHY 0 IS NOT THE DEFAULT
+-- 0 means "has not played an NFL snap". NULL means "we do not know". A default
+-- of 0 would make those indistinguishable in exactly the direction that does
+-- damage. Every reader must treat null as unknown.
+--
+-- IF NOT EXISTS because this column was applied to production by hand before
+-- this migration was written, so the file has to be safe to replay.
+ALTER TABLE "SportsPlayer" ADD COLUMN IF NOT EXISTS "yearsExp" INTEGER;

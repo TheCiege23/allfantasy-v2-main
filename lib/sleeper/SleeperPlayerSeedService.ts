@@ -237,6 +237,17 @@ export async function seedSleeperPlayers(input: {
     position: player.position,
     team: player.team,
     age: player.age,
+    /*
+     * ⚠ PARSED SINCE THIS SERVICE WAS WRITTEN, WRITTEN ONLY NOW. `years_exp`
+     * has always been read off Sleeper's feed into `SeededPlayer` and then
+     * dropped at the write, because `SportsPlayer` had no column for it. The
+     * value ledger carried "experience / rookie year" as blocked for that
+     * reason, with the gap named in `trajectory.ts` rather than guessed at.
+     *
+     * `toFiniteNumber` returns null for a missing field, so a player Sleeper
+     * has no experience figure for stays null rather than becoming a rookie.
+     */
+    yearsExp: player.yearsExp,
     height: player.height,
     weight: player.weight,
     college: player.college,

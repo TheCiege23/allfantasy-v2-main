@@ -332,6 +332,11 @@ model SportsPlayer {
   teamId     String?
   number     Int?
   age        Int?
+  /// Seasons of NFL experience. 0 is a rookie; NULL is "we do not know", and the
+  /// two must never be conflated — a missing value read as 0 labels every
+  /// unmatched player a rookie, which is the most confident possible wrong
+  /// answer about the class of asset dynasty managers pay the biggest premium for.
+  yearsExp   Int?
   height     String?
   weight     String?
   college    String?

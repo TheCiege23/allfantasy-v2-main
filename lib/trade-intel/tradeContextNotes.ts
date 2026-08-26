@@ -12,6 +12,7 @@ import {
   tradeDeadlineWeek,
 } from '@/lib/core-app/seasonTimeline'
 import { getDepthRole, depthRoleNote } from './depthChartRole'
+import { experienceNote, loadExperience } from './trajectory'
 import { loadManagerProfile, managerPremiumNotes } from './managerPremium'
 import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import { readProtections, resolveTribeRelation } from './formatState'
@@ -437,6 +438,17 @@ export async function buildTradeContextNotes(args: {
    * assumes.
    */
   const needNotes: string[] = []
+
+  /*
+   * One read for every incoming player, rather than one per player inside the
+   * loop below. Experience is a single column lookup and the loop already makes
+   * a depth-chart call each time round.
+   */
+  const experience = await loadExperience({
+    names: get.map((g) => g.name),
+    sport: league.sport ?? 'NFL',
+  }).catch(() => new Map())
+
   for (const g of get) {
     const role = await getDepthRole({
       playerName: g.name,
@@ -446,6 +458,15 @@ export async function buildTradeContextNotes(args: {
     }).catch(() => null)
     const rn = depthRoleNote({ playerName: g.name, role })
     if (rn) needNotes.push(rn)
+
+    /*
+     * A rookie arriving is worth saying out loud: the price you are paying is a
+     * projection rather than a record. Nothing is repriced on it — the dynasty
+     * market already carries rookie hype, and an adjustment here would
+     * double-count it the way an age curve would.
+     */
+    const en = experienceNote(g.name, experience.get(g.name.toLowerCase()) ?? null)
+    if (en) needNotes.push(en)
   }
 
   for (const g of get) {

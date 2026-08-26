@@ -40,7 +40,7 @@ Legend: ✅ done · 🔨 partial · ⬜ not started · 🛑 blocked, reason stat
 | **Targets per game** | ✅ | `loadUsage`. NOT target share — no team denominator is stored |
 | **Run / pass role** | ✅ | `loadUsage` → `runShare`, from carries against targets |
 | Third-down role | 🛑 | box scores carry totals, not down-and-distance splits. Would be a guess dressed as a role |
-| Experience / rookie year | 🛑 | `years_exp` lives only in `SportsDataCache`. Inferring rookie status from a missing prior season would label every unmatched player a rookie |
+| Experience / rookie year | ✅ | `trajectory.ts` → `loadExperience`. `SportsPlayer.yearsExp` now exists and the Sleeper seed writes it. 0 is a rookie, NULL is unknown, and only the rookie case speaks |
 | Recent form / streaks | 🔨 | data present, not surfaced as a trade note |
 | Prior seasons | 🔨 | `PlayerSeasonStats` present, not surfaced |
 | College production | 🛑 | devy/C2C — see the separate handoff. Needs a scale decision first |
@@ -110,9 +110,16 @@ survivor-guillotine · tournament · pirate · king-of-the-hill · **salary cap*
 2. **Injury history has no writer.** `InjuryReportRecord` is shaped for history
    and nothing fills it. Current status is upserted in place, so durability is
    unanswerable until something records the past.
-3. **Third-down role, experience and NFL free agency have no source.** Each is
-   named in code at the point it would have been used, so the next person meets
-   the reason rather than the absence.
+3. **Third-down role and NFL free agency have no source.** Each is named in
+   code at the point it would have been used, so the next person meets the
+   reason rather than the absence.
+
+   ~~Experience~~ **CLEARED.** It was never missing from the feed, only from the
+   write: Sleeper sends `years_exp` and `SleeperPlayerSeedService` has always
+   parsed it into `SeededPlayer` — there was no column, so it was dropped at the
+   `createMany`. `SportsPlayer.yearsExp` exists now. Until the seed re-runs the
+   column is null for every row, and null must read as unknown rather than as a
+   rookie.
 4. ~~**Manager positional premium needs real trade history.**~~ **CLEARED.**
    `LeagueTradeHistory` really is ingestion progress — but it was the wrong
    table to be looking at. `TransactionFact` payloads carry `playersInIds`,
