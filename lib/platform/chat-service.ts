@@ -414,6 +414,13 @@ export async function getPlatformThreadMessages(
       return {
         id: msg.id,
         threadId,
+        /*
+         * ⚠ RETURNED, NOT JUST STORED. League chat shipped replies with the
+         * write half working and the read mapper silently dropping the link, so
+         * every reply came back indistinguishable from an ordinary message.
+         * Same file shape, same trap — both mappers here carry it.
+         */
+        parentMessageId: msg.parentMessageId ?? null,
         senderUserId: msg.senderUserId || null,
         senderName:
           msg.sender?.displayName ||
@@ -484,6 +491,13 @@ export async function searchPlatformThreadMessages(
       return {
         id: msg.id,
         threadId,
+        /*
+         * ⚠ RETURNED, NOT JUST STORED. League chat shipped replies with the
+         * write half working and the read mapper silently dropping the link, so
+         * every reply came back indistinguishable from an ordinary message.
+         * Same file shape, same trap — both mappers here carry it.
+         */
+        parentMessageId: msg.parentMessageId ?? null,
         senderUserId: msg.senderUserId || null,
         senderName:
           msg.sender?.displayName ||
@@ -695,6 +709,8 @@ export async function createPlatformThreadMessage(
    * no way to stay private.
    */
   visibility?: { visibleToUserId?: string | null; messageSubtype?: string | null },
+  /** Set when this message answers another one in the same thread. */
+  parentMessageId?: string | null,
 ): Promise<PlatformChatMessage | null> {
   const content = String(body || '').trim()
   if (!content) return null
@@ -715,6 +731,7 @@ export async function createPlatformThreadMessage(
           messageType,
           body: content,
           metadata: metadata ?? undefined,
+          ...(parentMessageId ? { parentMessageId } : {}),
           ...(visibility?.visibleToUserId
             ? {
                 isPrivate: true,

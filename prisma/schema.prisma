@@ -12222,6 +12222,10 @@ model PlatformChatThreadMember {
 model PlatformChatMessage {
   id                String             @id @default(uuid())
   threadId          String
+  /// Set when this message answers another one in the same thread. Mirrors
+  /// `LeagueChatMessage.parentMessageId`; no FK, so removing a parent leaves its
+  /// replies standing rather than cascading a conversation away.
+  parentMessageId   String?
   senderUserId      String?
   messageType       String             @default("text")
   body              String
@@ -12239,6 +12243,7 @@ model PlatformChatMessage {
   @@index([threadId, createdAt])
   @@index([senderUserId, createdAt])
   @@index([globalBroadcastId])
+  @@index([parentMessageId])
   @@map("platform_chat_messages")
 }
 

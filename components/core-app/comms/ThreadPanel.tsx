@@ -6,6 +6,7 @@ import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { MessageTime } from './MessageTime'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
+import { QuotedMessage } from './QuotedMessage'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -44,6 +45,8 @@ export type PlatformThread = {
 
 type PlatformMessage = {
   id: string
+  /** Set when this message answers another one in the thread. */
+  parentMessageId?: string | null
   senderUserId: string | null
   senderName: string
   senderUsername?: string | null
@@ -60,6 +63,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const [hiddenBlocked, setHiddenBlocked] = useState(0)
   const [invite, setInvite] = useState('')
   const [busy, setBusy] = useState(false)
+  const [replyTo, setReplyTo] = useState<PlatformMessage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const streamRef = useRef<HTMLDivElement | null>(null)
@@ -127,6 +131,8 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const open = useCallback(
     (thread: PlatformThread) => {
       setOpenThread(thread)
+      /* A reply target belongs to one thread; it must not follow you into another. */
+      setReplyTo(null)
       setMessages([])
       setHiddenBlocked(0)
       void loadMessages(thread)
@@ -199,6 +205,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             body: JSON.stringify({
               body: displayText,
               ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+              ...(replyTo ? { parentMessageId: replyTo.id } : {}),
             }),
           },
         )
@@ -218,6 +225,8 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             text: displayText,
           })
         }
+        /* Only once it actually sent — a failed reply keeps its target. */
+        setReplyTo(null)
         await loadMessages(openThread)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Message not sent.')
@@ -225,7 +234,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         setBusy(false)
       }
     },
-    [openThread, busy, loadMessages],
+    [openThread, busy, loadMessages, replyTo],
   )
 
   const start = useCallback(async () => {
@@ -270,7 +279,10 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         <div className="af-cm-privacy">{privacy}</div>
 
         <div className="af-cm-threadhead">
-          <button type="button" className="af-cm-back" onClick={() => setOpenThread(null)}>
+          <button type="button" className="af-cm-back" onClick={() => {
+              setOpenThread(null)
+              setReplyTo(null)
+            }}>
             ‹ All {label}
           </button>
           <span className="af-cm-threadtitle">
@@ -287,16 +299,43 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
               </p>
             </div>
           ) : (
-            messages.map((m) => (
-              <div key={m.id} className="af-cm-msg">
-                <span className="af-cm-msg-head">
-                  <span className="af-cm-msg-author">{m.senderName}</span>
-                  <MessageTime value={m.createdAt} />
-                </span>
-                <span className="af-cm-msg-text">{censorProfanity(m.body)}</span>
-                <RichMessage metadata={m.metadata} />
-              </div>
-            ))
+            messages.map((m) => {
+              const parent = m.parentMessageId
+                ? messages.find((x) => x.id === m.parentMessageId)
+                : undefined
+              return (
+                <div key={m.id} className="af-cm-msg" id={`af-cm-msg-${m.id}`}>
+                  {m.parentMessageId ? (
+                    <QuotedMessage
+                      author={parent?.senderName ?? null}
+                      text={parent ? censorProfanity(parent.body) : null}
+                      onJump={
+                        parent
+                          ? () =>
+                              document
+                                .getElementById(`af-cm-msg-${parent.id}`)
+                                ?.scrollIntoView({ block: 'center' })
+                          : undefined
+                      }
+                    />
+                  ) : null}
+                  <span className="af-cm-msg-head">
+                    <span className="af-cm-msg-author">{m.senderName}</span>
+                    <MessageTime value={m.createdAt} />
+                    <button
+                      type="button"
+                      className="af-cm-reply-btn"
+                      onClick={() => setReplyTo(m)}
+                      aria-label={`Reply to ${m.senderName}`}
+                    >
+                      Reply
+                    </button>
+                  </span>
+                  <span className="af-cm-msg-text">{censorProfanity(m.body)}</span>
+                  <RichMessage metadata={m.metadata} />
+                </div>
+              )
+            })
           )}
           {hiddenBlocked > 0 ? (
             /* Say it rather than leaving a silent gap in the transcript. */
@@ -314,6 +353,21 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           (and correctly withholds @all from a one-to-one), and uploads authorise
           against `threadId` instead.
         */}
+        {replyTo ? (
+          <div className="af-cm-replybar">
+            <span className="af-cm-replybar-label">Replying to {replyTo.senderName}</span>
+            <span className="af-cm-replybar-text">{censorProfanity(replyTo.body)}</span>
+            <button
+              type="button"
+              className="af-cm-replybar-x"
+              onClick={() => setReplyTo(null)}
+              aria-label="Cancel reply"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+
         <ChatComposer
           leagueId=""
           threadId={openThread.id}

@@ -412,6 +412,13 @@ export async function POST(
     wantsPrivateChimmy
       ? { visibleToUserId: user.appUserId, messageSubtype: 'chimmy_private' }
       : undefined,
+    /*
+     * `parentMessageId` has been parsed off the body at the top of this handler
+     * the whole time and used only by the league and bracket branches — the
+     * platform-thread branch dropped it, because until now there was no column
+     * to put it in.
+     */
+    parentMessageId,
   )
 
   if (!created) {
