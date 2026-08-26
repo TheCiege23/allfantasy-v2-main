@@ -48,14 +48,76 @@ The intended architecture is that application code reads from Postgres and only
 ingestion/sync modules call a provider. `scripts/check-db-first-api-boundary.mjs`
 enforces this.
 
-**Every provider is now monitored**, Rolling Insights included (added 2026-08-22,
-PR #584 — it was the last one missing, and the most exposed, because RI passes
-`RSC_token` as a query parameter, so a direct call from a request path leaks a
-credential into any URL that gets logged).
+**The monitored-host list is NOT a census of our providers — check it before you
+assume a provider is watched.** `DATA_API_HOST_PATTERNS` at the top of the guard
+is the only authority; a provider absent from it is invisible to the guard no
+matter how heavily it is used.
 
-**But the code does not comply yet, and the guard says so.** A full scan reports
-~111 violations across tracked source — roughly half Rolling Insights, half the
-providers that were already monitored. Nothing is allowlisted to hide them.
+Rolling Insights was added 2026-08-22 (PR #584) and described at the time as "the
+last one missing". That was wrong. RI genuinely is the most exposed — it passes
+`RSC_token` as a query parameter, so a direct call from a request path leaks a
+credential into any URL that gets logged — but it was not the last. CollegeFootballData
+(`api.collegefootballdata.com`) was never on the list at all, and it is the **sole**
+NCAAF source behind the whole devy/college stack; it was added 2026-08-25.
+
+`api-sports.io`, `api.fantasycalc.com` and `api.openweathermap.org` were added
+the same day for the same reason. Two things about `api-sports.io`: it is a
+**different vendor** from `api.sportsdata.io`, which was already listed — that
+near-collision is how it stayed invisible — and `media.api-sports.io` is
+deliberately **excluded**, because an image CDN URL consumed as an `<img src>`
+is not a data-API call and matching it reported four test fixtures as violations.
+
+`lib/sports-data-gateway/inventory.ts` is the closest thing to a provider census,
+but it is a Phase-5 audit snapshot and is itself incomplete — its
+`clientLocations` for CFBD listed three files; there are six.
+
+**The code does not comply yet, and the guard says so.** A full scan reports 100
+violations across tracked source (the count drifts — re-run rather than quoting
+this number). Nothing is allowlisted to hide them.
+
+### CFBD is the worked example of what compliance looks like
+
+CFBD is at **zero** violations, and it got there by moving surfaces rather than
+by allowlisting them. The shape is worth copying:
+
+- `lib/cfb-player-data.ts` is the **adapter** — every export is a live fetch. It
+  is allowlisted, but only because its sole runtime importer is the ingestion
+  module. That exemption is conditional: `grep -rn "from '@/lib/cfb-player-data'"`
+  must show ingestion plus `import type` lines and nothing else.
+- `lib/devy-classification.ts` is the **ingestion** layer, writing `DevyPlayer`.
+- `lib/devy/devyPlayerReads.ts` is the **DB-first read** layer that request paths
+  use. `/api/market-alerts` and `/api/legacy/cfb-players` go through it.
+- The ingestion runs on a schedule from `/api/cron/import-players`, bounded by
+  the shared run budget, in `devyPool` → `devyStats` → `devyIntel` phases.
+
+**The scheduled writer is the part that is easy to skip and fatal to skip.**
+`ingestCFBDStats` existed for months with no scheduled caller, so the DevyPlayer
+stat columns were never kept current in production — which is precisely why
+`/api/market-alerts` fetched CFBD live instead of reading them. Pointing a
+surface at a table nothing refreshes is worse than the live call it replaced: it
+fails silently and looks correct. Migrate the read and wire the writer together,
+or not at all.
+
+### Remaining debt, triaged
+
+The 12 lines from the three providers added on 2026-08-25 are all genuine. They
+fall into two groups:
+
+- **Adapters with request-path callers** — `lib/fantasycalc.ts` (~30 direct
+  importers, many under `app/api/`), `lib/api-football.ts`, `lib/api-sports.ts`,
+  `lib/openweathermap.ts`, `lib/world-cup/apiSportsWorldCup.ts`,
+  `lib/brackets/providers/index.ts`. These must NOT be allowlisted the way
+  `lib/cfb-player-data.ts` was — that exemption was earned by first moving the
+  callers off them. FantasyCalc already has a DB-first path
+  (`lib/fantasycalc-db.ts`, fed by `scripts/sync-fantasycalc-valuations.ts`); the
+  work is migrating callers to it, which is a project of its own and has not
+  been done.
+- **Non-request paths that the existing patterns miss by naming only** —
+  `scripts/compare-player-apis.ts` (hand-run comparison tool),
+  `lib/admin-dashboard/SystemHealthResolver.ts` (health probe),
+  `app/api/start-sit/weather.route.js` (a `.route.js`, not a Next route),
+  `lib/weather/weatherService.ts` (geocoding). Each is a per-file judgement call,
+  so none were waved through in bulk.
 
 Treat both contracts' "the app never calls the vendor" line as the **target**
 architecture, not a description of current state.

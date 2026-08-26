@@ -47,6 +47,46 @@ export interface DevyPlayerValue {
 
 const CFBD_BASE = 'https://api.collegefootballdata.com'
 
+/**
+ * Statuses that are NEVER a legitimately empty result.
+ *
+ * Every fetcher below answers `!response.ok` with `return []`, which makes
+ * "your key is out of quota" indistinguishable from "this team has no players".
+ * That is not hypothetical: on 2026-08-25 the key was returning
+ * `429 {"message":"Monthly call quota exceeded."}` for every endpoint, and the
+ * roster ingest reported `playersUpserted: 0, errors: 0` — a clean, healthy-
+ * looking zero for a provider that was answering nothing at all. The devy pool
+ * had been quietly filling with nothing on that basis.
+ *
+ * 401/403 (bad or revoked key) and 429 (quota/rate) all mean "we did not get an
+ * answer". Throwing lets the per-team try/catch in lib/devy-classification.ts
+ * record a real error, so the cron's summary says what happened. A 404 or a
+ * genuine empty array still falls through to the existing `[]`, because those
+ * really can mean no data.
+ *
+ * Deliberately never includes the response body or URL in the message — the
+ * CFBD key travels in an Authorization header, but the query string can carry
+ * identifying params and this string reaches logs.
+ */
+const CFBD_NEVER_EMPTY_STATUSES = new Set([401, 403, 429])
+
+export class CfbdUnavailableError extends Error {
+  constructor(public readonly status: number) {
+    super(
+      status === 429
+        ? 'CFBD refused the request: quota or rate limit exceeded (HTTP 429)'
+        : `CFBD refused the request: credential rejected (HTTP ${status})`,
+    )
+    this.name = 'CfbdUnavailableError'
+  }
+}
+
+function assertCfbdAvailable(response: { status: number; ok: boolean }): void {
+  if (!response.ok && CFBD_NEVER_EMPTY_STATUSES.has(response.status)) {
+    throw new CfbdUnavailableError(response.status)
+  }
+}
+
 function getClassYearString(year: number | null): string {
   switch (year) {
     case 1: return 'FR'
@@ -148,6 +188,7 @@ export async function searchCFBPlayers(searchTerm: string): Promise<CFBPlayer[]>
       }
     )
 
+    assertCfbdAvailable(response)
     if (!response.ok) {
       console.error('CFBD player search failed:', response.status)
       return []
@@ -174,6 +215,9 @@ export async function searchCFBPlayers(searchTerm: string): Promise<CFBPlayer[]>
       }
     })
   } catch (error) {
+    // A quota/credential refusal is not "no data" — let it out so the caller
+    // records a real error instead of an empty, healthy-looking result.
+    if (error instanceof CfbdUnavailableError) throw error
     console.error('CFBD player search error:', error)
     return []
   }
@@ -194,6 +238,7 @@ export async function getCFBPlayerStats(year: number, team?: string): Promise<CF
       },
     })
 
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -240,6 +285,9 @@ export async function getCFBPlayerStats(year: number, team?: string): Promise<CF
 
     return Array.from(playerMap.values())
   } catch (error) {
+    // A quota/credential refusal is not "no data" — let it out so the caller
+    // records a real error instead of an empty, healthy-looking result.
+    if (error instanceof CfbdUnavailableError) throw error
     console.error('CFBD stats error:', error)
     return []
   }
@@ -276,6 +324,7 @@ export async function getCFBDraftPicks(year: number, college?: string): Promise<
       },
     })
 
+    assertCfbdAvailable(response)
     if (!response.ok) {
       console.error('[CFBD] Draft picks fetch failed:', response.status)
       return []
@@ -298,6 +347,9 @@ export async function getCFBDraftPicks(year: number, college?: string): Promise<
       weight: p.weight || null,
     }))
   } catch (error) {
+    // A quota/credential refusal is not "no data" — let it out so the caller
+    // records a real error instead of an empty, healthy-looking result.
+    if (error instanceof CfbdUnavailableError) throw error
     console.error('[CFBD] Draft picks error:', String(error))
     return []
   }
@@ -319,6 +371,7 @@ export async function getCFBTeamRoster(team: string, year?: number): Promise<CFB
       }
     )
 
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -348,6 +401,9 @@ export async function getCFBTeamRoster(team: string, year?: number): Promise<CFB
         }
       })
   } catch (error) {
+    // A quota/credential refusal is not "no data" — let it out so the caller
+    // records a real error instead of an empty, healthy-looking result.
+    if (error instanceof CfbdUnavailableError) throw error
     console.error('CFBD roster error:', error)
     return []
   }
@@ -489,6 +545,11 @@ async function getCachedOrFetch<T>(cacheKey: string, ttlMs: number, fetcher: () 
     }
     return data
   } catch (err) {
+    // Same reason as the fetchers above: a quota/credential refusal must not be
+    // laundered into `null` and read downstream as "this endpoint has nothing".
+    // Nothing is written to the cache on this path, so a refusal never poisons
+    // the cached value either.
+    if (err instanceof CfbdUnavailableError) throw err
     console.error(`[CFBD Cache] Fetch failed for ${cacheKey}:`, err)
     return null
   }
@@ -537,6 +598,7 @@ export async function getCFBRecruits(year: number, team?: string, position?: str
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
 
+    assertCfbdAvailable(response)
     if (!response.ok) {
       console.error('[CFBD] Recruiting fetch failed:', response.status)
       return []
@@ -584,6 +646,7 @@ export async function getCFBTeamRecruitingRankings(year: number, team?: string):
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -627,6 +690,7 @@ export async function getCFBTransferPortal(year: number): Promise<CFBTransferPor
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
 
+    assertCfbdAvailable(response)
     if (!response.ok) {
       console.error('[CFBD] Transfer portal fetch failed:', response.status)
       return []
@@ -686,6 +750,7 @@ export async function getCFBReturningProduction(year: number, team?: string): Pr
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -741,6 +806,7 @@ export async function getCFBPlayerUsage(year: number, team?: string, position?: 
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -790,6 +856,7 @@ export async function getCFBPlayerPPA(year: number, team?: string, position?: st
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -842,6 +909,7 @@ export async function getCFBSPRatings(year: number, team?: string): Promise<CFBT
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -889,6 +957,7 @@ export async function getCFBPlayerWEPAPassing(year: number, team?: string): Prom
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()
@@ -920,6 +989,7 @@ export async function getCFBPlayerWEPARushing(year: number, team?: string): Prom
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
     })
+    assertCfbdAvailable(response)
     if (!response.ok) return []
 
     const data = await response.json()

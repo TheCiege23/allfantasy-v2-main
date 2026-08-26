@@ -12,6 +12,7 @@
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { CFBD_ENV_VARS, hasCfbdApiKey } from '@/lib/cfbd-env'
+import { CfbdUnavailableError } from '@/lib/cfb-player-data'
 import { ingestCFBDRosters, TOP_CFB_TEAMS } from '@/lib/devy-classification'
 import { rotateForFairness, type RunBudget } from '@/lib/cron/runBudget'
 
@@ -41,6 +42,20 @@ export function devyPoolRefreshCacheKey(season: number): string {
   return `devy_pool_refresh:${season}`
 }
 
+/**
+ * The schools this cron fire is responsible for.
+ *
+ * Exported so the stat refresh runs against the SAME slice as the roster
+ * refresh in the same fire: a school's roster rows are upserted and then have
+ * their stat line attached moments later, in one pass. Two independently
+ * rotated slices would drift apart and leave every school seeded on one fire
+ * and statted on another.
+ */
+export function currentDevyTeamSlice(): string[] {
+  return rotateForFairness(TOP_CFB_TEAMS, CRON_PERIOD_MS / DEVY_POOL_TEAMS_PER_RUN)
+    .slice(0, DEVY_POOL_TEAMS_PER_RUN)
+}
+
 export async function refreshDevyPoolSlice(budget: RunBudget): Promise<DevyPoolRefreshSummary> {
   if (!hasCfbdApiKey()) {
     // getCFBTeamRoster silently returns [] without a key, which would report
@@ -60,13 +75,35 @@ export async function refreshDevyPoolSlice(budget: RunBudget): Promise<DevyPoolR
   // of CRON_PERIOD_MS / TEAMS_PER_RUN advances the window by a FULL slice each
   // cron fire — consecutive fires cover disjoint slices instead of re-treading
   // 7 of 8 teams (full coverage in 7 fires, not 49).
-  const slice = rotateForFairness(TOP_CFB_TEAMS, CRON_PERIOD_MS / DEVY_POOL_TEAMS_PER_RUN)
-    .slice(0, DEVY_POOL_TEAMS_PER_RUN)
+  const slice = currentDevyTeamSlice()
 
-  const result = await ingestCFBDRosters(undefined, {
-    teams: slice,
-    shouldStop: () => budget.exhausted(),
-  })
+  let result: Awaited<ReturnType<typeof ingestCFBDRosters>>
+  try {
+    result = await ingestCFBDRosters(undefined, {
+      teams: slice,
+      shouldStop: () => budget.exhausted(),
+    })
+  } catch (err) {
+    // Provider refused us outright — out of quota, or the key is dead. This is
+    // the same class of outcome as "no key configured", so it gets the same
+    // labeled-absence treatment rather than an exception that reads as a bug in
+    // this phase. Reported as `skipped` so the cron summary says WHY nothing was
+    // written, instead of the clean `upserted: 0, errors: 0` this used to print
+    // while CFBD was answering 429 to every single request.
+    if (err instanceof CfbdUnavailableError) {
+      console.error(`[devy-pool-refresh] provider unavailable: ${err.message}`)
+      return {
+        season: null,
+        teamsAttempted: 0,
+        teamsProcessed: 0,
+        teamsTotal: TOP_CFB_TEAMS.length,
+        playersUpserted: 0,
+        skipped: err.message,
+        errors: 0,
+      }
+    }
+    throw err
+  }
 
   // Durable coverage record: which season, which schools, which positions.
   // Merged per run so `teamsCovered` converges on TOP_CFB_TEAMS.length and a

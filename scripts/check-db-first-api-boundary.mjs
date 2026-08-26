@@ -30,6 +30,38 @@ const DATA_API_HOST_PATTERNS = [
   // Covers every subdomain seen in this repo: rest.datafeeds., datafeeds., accounts., auth.,
   // api., and the bare domain.
   /(^|\.)rolling-insights\.com$/i,
+  // CollegeFootballData. Rolling Insights was described as "the last provider missing" when it
+  // was added in #584; that was wrong — CFBD was never on this list at all, and it is the SOLE
+  // NCAAF source behind the entire devy/college stack (15 endpoints across 6 files). Nothing
+  // else prices, ranks or rosters a college player, so an outage on a request path has no
+  // fallback to degrade to.
+  //
+  // Adding it reports ONE file: lib/cfb-player-data.ts, reached from app/api/market-alerts and
+  // server/api-route-modules/legacy/cfb-players — both request paths, both fetching CFBD live
+  // with only a 6-hour in-process Map for cover. That is a real pre-existing violation and it is
+  // left reported on purpose. The other five call sites were already covered: workers/providers/
+  // and scores/gameScoreProviders.ts by existing allowlist entries, the two scripts/ by the
+  // import|refresh pattern, and lib/stats/cfbdPlayerStats.ts by the entry added below.
+  /(^|\.)api\.collegefootballdata\.com$/i,
+  // api-sports.io. NOT the same vendor as `api.sportsdata.io` above, despite the
+  // names — that near-collision is how this one stayed off the list while its
+  // lookalike was monitored. Seen as `v3.football.api-sports.io` and
+  // `v1.american-football.api-sports.io`.
+  //
+  // `media.api-sports.io` is EXCLUDED. It is the image CDN, not the data API: a
+  // headshot or crest URL carries no key, returns no data to cache, and is
+  // consumed as an <img src> rather than fetched. Matching the bare domain
+  // reported five such lines — four of them string literals in test fixtures —
+  // which is exactly the noise that buries real findings.
+  /^(?!media\.)([a-z0-9-]+\.)*api-sports\.io$/i,
+  // FantasyCalc — the player-value source behind trade grading, rankings and
+  // the trade finder. A DB-first path already exists (`lib/fantasycalc-db.ts`,
+  // fed by `scripts/sync-fantasycalc-valuations.ts`), but most callers still go
+  // to the vendor directly, so this reports real debt rather than a clean slate.
+  /(^|\.)api\.fantasycalc\.com$/i,
+  // OpenWeatherMap. Weather rather than sport, but it is a rate-limited keyed
+  // vendor on the same request paths and the rule is the same.
+  /(^|\.)api\.openweathermap\.org$/i,
 ];
 
 /**
@@ -114,6 +146,37 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/sports-live-scores-service\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^lib\/scores\/gameScoreProviders\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * Third file in the same category as the two above, and added for the same reason: it IS the
+   * ingestion module, and the `lib/.*(ingest|sync)` pattern misses it only because the directory
+   * is `stats/` and the file is named after the provider rather than the verb.
+   *
+   * Checked by CALLERS, not by name, per the warning above. `lib/stats/cfbdPlayerStats.ts`
+   * exports `syncCfbdPlayerStatsToDb` and is imported from exactly two places in tracked source:
+   * `app/api/cron/import-stat-lines/route.ts` (a cron, itself already allowed) and
+   * `__tests__/cfbd-idp-scoring.test.ts`. No request path reaches it.
+   *
+   * ⚠ Not a blanket exemption for `lib/stats/`. Listed by exact filename so a new module dropped
+   * beside it is still caught.
+   */
+  /^lib\/stats\/cfbdPlayerStats\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The CollegeFootballData adapter. Every export is a live CFBD fetch and
+   * nothing else — same profile as lib/workers/providers/, listed by filename
+   * because of where it happens to sit.
+   *
+   * EARNED, NOT ASSUMED. When CFBD joined the host list this file was a real
+   * violation: `/api/market-alerts` and `/api/legacy/cfb-players` imported it on
+   * the request path. Both now read Postgres through `lib/devy/devyPlayerReads.ts`,
+   * and the only remaining runtime importer is `lib/devy-classification.ts` — the
+   * ingestion module, which is what an adapter is for. The two route files keep a
+   * TYPE-only import, which is erased at compile and carries no fetch.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. The exemption is valid only while no request
+   * path imports it for a value. `grep -rn "from '@/lib/cfb-player-data'"` should
+   * show ingestion plus `import type` lines and nothing else.
+   */
+  /^lib\/cfb-player-data\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
    * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is

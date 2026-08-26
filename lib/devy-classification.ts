@@ -232,12 +232,30 @@ export async function ingestCFBDRosters(
   return { ingested, rosterYear: year, teamsProcessed, errors }
 }
 
-export async function ingestCFBDStats(season?: number): Promise<{ updated: number; errors: string[] }> {
+/**
+ * Stat ingestion for the DevyPlayer pool.
+ *
+ * The `teams` / `shouldStop` options mirror ingestCFBDRosters and exist for the
+ * same reason: this now runs inside the import-players cron's shared 240s
+ * budget, which means it must cover a ROTATING SLICE and stop cleanly between
+ * teams rather than a fixed `TOP_CFB_TEAMS.slice(0, 25)` that could neither
+ * finish nor reach schools 26-49. That hardcoded 25 was also why the back half
+ * of TOP_CFB_TEAMS had never had a stat line written for it by any caller.
+ *
+ * `teamsProcessed` is returned (rosters already did) so the caller can record
+ * real coverage instead of assuming the slice it asked for is the slice that ran.
+ */
+export async function ingestCFBDStats(
+  season?: number,
+  options?: { teams?: readonly string[]; shouldStop?: () => boolean },
+): Promise<{ updated: number; teamsProcessed: string[]; errors: string[] }> {
   const year = season || new Date().getFullYear() - 1
   let updated = 0
   const errors: string[] = []
+  const teamsProcessed: string[] = []
 
-  for (const team of TOP_CFB_TEAMS.slice(0, 25)) {
+  for (const team of options?.teams ?? TOP_CFB_TEAMS.slice(0, 25)) {
+    if (options?.shouldStop?.()) break
     try {
       const stats = await getCFBPlayerStats(year, team)
 
@@ -296,13 +314,14 @@ export async function ingestCFBDStats(season?: number): Promise<{ updated: numbe
         }
       }
 
+      teamsProcessed.push(team)
       await new Promise(r => setTimeout(r, 200))
     } catch (err: any) {
       errors.push(`Team ${team} stats failed: ${err.message?.slice(0, 100)}`)
     }
   }
 
-  return { updated, errors }
+  return { updated, teamsProcessed, errors }
 }
 
 function normalizePosition(pos: string): string {

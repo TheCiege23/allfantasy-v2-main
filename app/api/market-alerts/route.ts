@@ -3,8 +3,6 @@ import { type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
 import { prisma } from '@/lib/prisma'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
-import { getCFBPlayerStats } from '@/lib/cfb-player-data'
-import { hasCfbdApiKey } from '@/lib/cfbd-env'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import type { MarketSignal, MarketAlert, MarketAlertResponse } from '@/lib/types/market-alerts'
 
@@ -24,44 +22,36 @@ const openai = getOpenAIRouteClient()
 let narrativeCache: { data: Map<string, { headline: string; reasoning: string }>; ts: number } | null = null
 const NARRATIVE_CACHE_TTL = 1000 * 60 * 15
 
-let cfbdStatsCache: { data: Map<string, { passingYards: number; passingTDs: number; rushingYards: number; rushingTDs: number; receivingYards: number; receivingTDs: number; receptions: number }>; ts: number } | null = null
-const CFBD_CACHE_TTL = 1000 * 60 * 60 * 6
-
-async function fetchCFBDStatsForDevyPlayers(schools: string[]): Promise<Map<string, { passingYards: number; passingTDs: number; rushingYards: number; rushingTDs: number; receivingYards: number; receivingTDs: number; receptions: number }>> {
-  if (cfbdStatsCache && Date.now() - cfbdStatsCache.ts < CFBD_CACHE_TTL) {
-    return cfbdStatsCache.data
+/**
+ * Season stat line for one devy row, read straight off the row.
+ *
+ * This replaced a live CFBD fetch loop — up to 30 sequential vendor round-trips
+ * on the request path, behind a 6-hour in-process Map that every serverless
+ * instance held separately and lost on recycle. The columns are written by the
+ * `devyStats` phase of /api/cron/import-players.
+ *
+ * `statSeason == null` means the stat phase has not reached this player's
+ * school yet. Returning undefined keeps that distinct from a real line of
+ * zeroes, so the caller omits the stat tags instead of asserting the player
+ * produced nothing.
+ */
+function statLineFromRow(dp: {
+  statSeason: number | null
+  passingYards: number | null; passingTDs: number | null
+  rushingYards: number | null; rushingTDs: number | null
+  receivingYards: number | null; receivingTDs: number | null
+  receptions: number | null
+}): CFBDStatLine | undefined {
+  if (dp.statSeason == null) return undefined
+  return {
+    passingYards: dp.passingYards ?? 0,
+    passingTDs: dp.passingTDs ?? 0,
+    rushingYards: dp.rushingYards ?? 0,
+    rushingTDs: dp.rushingTDs ?? 0,
+    receivingYards: dp.receivingYards ?? 0,
+    receivingTDs: dp.receivingTDs ?? 0,
+    receptions: dp.receptions ?? 0,
   }
-
-  const statsMap = new Map<string, { passingYards: number; passingTDs: number; rushingYards: number; rushingTDs: number; receivingYards: number; receivingTDs: number; receptions: number }>()
-
-  if (!hasCfbdApiKey()) return statsMap
-
-  const season = new Date().getFullYear() - 1
-  const uniqueSchools = [...new Set(schools)].slice(0, 30)
-
-  for (const school of uniqueSchools) {
-    try {
-      const stats = await getCFBPlayerStats(season, school)
-      for (const s of stats) {
-        if (!s.playerName) continue
-        const key = s.playerName.toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim()
-        statsMap.set(key, {
-          passingYards: s.passingYards,
-          passingTDs: s.passingTDs,
-          rushingYards: s.rushingYards,
-          rushingTDs: s.rushingTDs,
-          receivingYards: s.receivingYards,
-          receivingTDs: s.receivingTDs,
-          receptions: s.receptions,
-        })
-      }
-      await new Promise(r => setTimeout(r, 100))
-    } catch {
-    }
-  }
-
-  cfbdStatsCache = { data: statsMap, ts: Date.now() }
-  return statsMap
 }
 
 function computeNFLSignal(p: FantasyCalcPlayer): { signal: MarketSignal; strength: number; tags: string[] } {
@@ -386,16 +376,8 @@ export async function GET(req: Request) {
           orderBy: { name: 'asc' },
         })
 
-        const schools = [...new Set(devyPlayers.map(dp => dp.school).filter(Boolean))]
-        let cfbdStatsMap = new Map<string, CFBDStatLine>()
-        try {
-          cfbdStatsMap = await fetchCFBDStatsForDevyPlayers(schools)
-        } catch {
-        }
-
         for (const dp of devyPlayers) {
-          const normalizedName = dp.name.toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim()
-          const playerCfbdStats = cfbdStatsMap.get(normalizedName)
+          const playerCfbdStats = statLineFromRow(dp)
 
           const { signal, strength, tags, projectedRound, volatility } = computeDevySignal(dp, playerCfbdStats)
 
