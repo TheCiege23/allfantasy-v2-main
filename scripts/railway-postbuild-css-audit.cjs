@@ -5,6 +5,9 @@
  * root layout, so a missing stylesheet can be told apart from a missing manifest
  * entry without guessing from the served HTML.
  *
+ * Also prints the opening bytes of a prerendered App Router document, which
+ * distinguishes a build-time shell failure from a request-time streaming one.
+ *
  * Never fails the build.
  */
 'use strict'
@@ -12,11 +15,23 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+const TAILWIND_MARKER = '--tw-border-spacing-x'
+
 function safe(fn, fallback) {
   try {
     return fn()
   } catch {
     return fallback
+  }
+}
+
+function walkForHtml(dir, out, budget) {
+  if (out.length >= budget) return
+  for (const entry of safe(() => fs.readdirSync(dir, { withFileTypes: true }), [])) {
+    if (out.length >= budget) return
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) walkForHtml(full, out, budget)
+    else if (entry.name.endsWith('.html')) out.push(full)
   }
 }
 
@@ -28,35 +43,62 @@ function main() {
   console.log('[css-audit] distDir=%s exists=%s', distDir, fs.existsSync(dist))
 
   const globals = path.join(cwd, 'app', 'globals.css')
-  console.log('[css-audit] app/globals.css bytes=%s', safe(() => fs.statSync(globals).size, 'MISSING'))
+  const globalsSrc = safe(() => fs.readFileSync(globals, 'utf8'), '')
+  console.log(
+    '[css-audit] app/globals.css bytes=%s hasTailwindDirective=%s hasTwMarker=%s',
+    globalsSrc.length || 'MISSING',
+    globalsSrc.includes('@tailwind'),
+    globalsSrc.includes(TAILWIND_MARKER),
+  )
 
   const cssDir = path.join(dist, 'static', 'css')
   const cssFiles = safe(() => fs.readdirSync(cssDir), [])
-  console.log('[css-audit] emitted %d css chunk(s) in %s/static/css:', cssFiles.length, distDir)
+  let total = 0
+  let markerChunks = 0
   for (const f of cssFiles) {
-    console.log('[css-audit]   %s  %s bytes', f, safe(() => fs.statSync(path.join(cssDir, f)).size, '?'))
+    const p = path.join(cssDir, f)
+    const size = safe(() => fs.statSync(p).size, 0)
+    total += size
+    const body = safe(() => fs.readFileSync(p, 'utf8'), '')
+    const hasMarker = body.includes(TAILWIND_MARKER)
+    if (hasMarker) {
+      markerChunks++
+      console.log('[css-audit]   TAILWIND-MARKER in %s (%s bytes)', f, size)
+    }
+  }
+  console.log(
+    '[css-audit] %d css chunk(s), %d total bytes, %d carry the tailwind marker',
+    cssFiles.length,
+    total,
+    markerChunks,
+  )
+
+  const manifest = safe(
+    () => JSON.parse(fs.readFileSync(path.join(dist, 'app-build-manifest.json'), 'utf8')),
+    null,
+  )
+  if (manifest) {
+    const pages = manifest.pages || {}
+    for (const key of ['/layout', '/page']) {
+      const entry = pages[key]
+      if (!entry) {
+        console.log('[css-audit]   %s -> ABSENT', key)
+        continue
+      }
+      console.log('[css-audit]   %s -> %s', key, JSON.stringify(entry))
+    }
+  } else {
+    console.log('[css-audit] app-build-manifest.json UNREADABLE')
   }
 
-  const manifestPath = path.join(dist, 'app-build-manifest.json')
-  const manifest = safe(() => JSON.parse(fs.readFileSync(manifestPath, 'utf8')), null)
-  if (!manifest) {
-    console.log('[css-audit] app-build-manifest.json UNREADABLE at %s', manifestPath)
-    return
+  // Build-time vs request-time shell: look at a prerendered document.
+  const htmls = []
+  walkForHtml(path.join(dist, 'server', 'app'), htmls, 3)
+  console.log('[css-audit] prerendered html files sampled: %d', htmls.length)
+  for (const h of htmls) {
+    const head = safe(() => fs.readFileSync(h, 'utf8').slice(0, 150), '<unreadable>')
+    console.log('[css-audit]   %s :: %s', path.relative(dist, h), JSON.stringify(head))
   }
-  const pages = manifest.pages || {}
-  const keys = Object.keys(pages)
-  console.log('[css-audit] app-build-manifest entries=%d', keys.length)
-  for (const key of ['/layout', '/page', '/not-found']) {
-    const entry = pages[key]
-    if (!entry) {
-      console.log('[css-audit]   %s -> ABSENT', key)
-      continue
-    }
-    const css = entry.filter((f) => String(f).endsWith('.css'))
-    console.log('[css-audit]   %s -> %d files, %d css: %s', key, entry.length, css.length, JSON.stringify(css))
-  }
-  const anyCss = keys.filter((k) => (pages[k] || []).some((f) => String(f).endsWith('.css')))
-  console.log('[css-audit] entries carrying ANY css: %d (%s)', anyCss.length, JSON.stringify(anyCss.slice(0, 8)))
 }
 
 try {
