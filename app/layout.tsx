@@ -140,6 +140,36 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       >
 
         {/*
+          THE BUILD IS NOT EMITTING THE ROOT LAYOUT'S STYLESHEET. `import
+          './globals.css'` is at the top of this file, but no CSS chunk for /layout
+          reaches the page: only the two small route sheets load, so `--bg` and
+          `--text` are never defined, and <body> collapses to height 0 with all of
+          its content present and invisible. That is the exact failure
+          scripts/railway-tailwind-prebuild.cjs describes in its own header —
+          "app-build-manifest.json lists no CSS for /layout, and every page is
+          completely unstyled" — still happening.
+
+          public/railway-styles.css is that same compiled Tailwind, rewritten by the
+          prebuild on every deploy, served, and never referenced by anything.
+          Pointing at it here is what puts the theme back on the page.
+
+          RENDERED FROM THE TREE ON PURPOSE. scripts/railway-next-start.cjs used to
+          inject this link into <head> from outside React, and the comment left
+          behind there records how that went: a <head> child React never rendered is
+          a hydration mismatch, #418 escalates to #423, the document is torn down and
+          the page goes blank. Rendering it here means the server HTML and the client
+          tree agree about it.
+
+          Same-origin, which is why it survives to the output. The Google Fonts links
+          that used to sit a few lines below did not survive; the same-origin
+          <link rel="preload"> in this subtree does.
+
+          THIS IS A WORKAROUND, and it should not outlive the bug. When the layout's
+          CSS chunk is emitted properly this line comes out.
+        */}
+        <link rel="stylesheet" href="/railway-styles.css" />
+
+        {/*
           The core-app design handoff's two typefaces. Every .af-core surface
           asks for Archivo and JetBrains Mono by name, and nothing was loading
           them, so all of it fell through to system-ui and generic monospace —
