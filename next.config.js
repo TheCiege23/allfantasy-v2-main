@@ -67,6 +67,44 @@ const nextConfig = {
       config.cache = false;
     }
 
+    // Temporary, opt-in via AF_CSS_DEBUG=1. The root layout's stylesheet does not
+    // reach the page and no emitted asset anywhere in the build contains Tailwind's
+    // output, so this asks webpack directly whether it has the module at all.
+    if (process.env.AF_CSS_DEBUG === '1') {
+      config.plugins = config.plugins || [];
+      config.plugins.push({
+        apply(compiler) {
+          compiler.hooks.done.tap('AfCssDebug', (stats) => {
+            try {
+              const compilation = stats.compilation;
+              const matches = [];
+              for (const mod of compilation.modules) {
+                const resource =
+                  mod.resource || (typeof mod.identifier === 'function' ? mod.identifier() : '');
+                const text = String(resource || '');
+                if (text.includes('globals.css')) matches.push(text.slice(-140));
+              }
+              const cssAssets = Object.keys(compilation.assets).filter((a) => a.endsWith('.css'));
+              console.log(
+                '[af-css-debug] isServer=%s modulesMatchingGlobalsCss=%d %s',
+                isServer,
+                matches.length,
+                JSON.stringify(matches.slice(0, 6)),
+              );
+              console.log(
+                '[af-css-debug] isServer=%s cssAssets=%d %s',
+                isServer,
+                cssAssets.length,
+                JSON.stringify(cssAssets.slice(0, 12)),
+              );
+            } catch (err) {
+              console.log('[af-css-debug] failed (non-fatal):', err && err.message);
+            }
+          });
+        },
+      });
+    }
+
     config.ignoreWarnings = [
       ...(config.ignoreWarnings || []),
       {
