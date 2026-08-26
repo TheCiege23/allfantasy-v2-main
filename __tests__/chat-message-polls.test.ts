@@ -17,6 +17,7 @@ describe('readViewerPoll', () => {
       closesAt: null,
       closedByHand: false,
       allowMultiple: false,
+      anonymous: false,
     })
   })
 

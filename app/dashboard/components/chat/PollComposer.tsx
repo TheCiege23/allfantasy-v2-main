@@ -23,6 +23,7 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
   const [question, setQuestion] = useState(initial?.question ?? '')
   const [options, setOptions] = useState<string[]>(initial?.options?.length ? initial.options : ['', ''])
   const [allowMultiple, setAllowMultiple] = useState(initial?.allowMultiple ?? false)
+  const [anonymous, setAnonymous] = useState(initial?.anonymous ?? false)
   const [closeAt, setCloseAt] = useState(initial?.closeAt ?? defaultClose)
   const [activeDur, setActiveDur] = useState('24h')
 
@@ -40,6 +41,7 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
       options: opts,
       closeAt,
       allowMultiple,
+      anonymous,
     })
   }
 
@@ -101,6 +103,15 @@ export function PollComposer({ initial, onCreatePoll, onCancel }: PollComposerPr
             className="rounded border-white/20 bg-white/10"
           />
           Allow multiple answers
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-[11px] text-white/55">
+          <input
+            type="checkbox"
+            checked={anonymous}
+            onChange={(e) => setAnonymous(e.target.checked)}
+            className="rounded border-white/20 bg-white/10"
+          />
+          Hide who voted
         </label>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] text-white/35">Closes in:</span>

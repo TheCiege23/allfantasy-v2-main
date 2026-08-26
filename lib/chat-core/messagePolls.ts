@@ -42,6 +42,8 @@ export type ViewerPoll = {
    * behaved as single-choice, silently discarding the setting its author picked.
    */
   allowMultiple: boolean
+  /** Voter identities are redacted server-side; only counts are knowable. */
+  anonymous: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -102,6 +104,7 @@ export function readViewerPoll(
     closesAt,
     closedByHand: raw.closed === true,
     allowMultiple: raw.allowMultiple === true,
+    anonymous: raw.anonymous === true,
   }
 }
 
@@ -165,4 +168,51 @@ export function votePollLocally(poll: ViewerPoll, optionId: string): ViewerPoll 
 export function pollShare(option: ViewerPollOption, totalVotes: number): number {
   if (totalVotes <= 0) return 0
   return Math.round((option.count / totalVotes) * 100)
+}
+
+/**
+ * Strip voter identities from an anonymous poll before it leaves the server.
+ *
+ * ⚠ ANONYMITY HAS TO BE A REDACTION, NOT A RENDERING CHOICE. A league poll
+ * stores `options[].votes` as an array of user ids, and the whole metadata blob
+ * is handed to the client. Marking a poll anonymous and simply not drawing the
+ * names would ship every voter's id to every member's browser, where it is one
+ * devtools tab away — which is not anonymity, it is the appearance of it.
+ *
+ * ⚠ THE VIEWER'S OWN ID SURVIVES, and that is not a leak: they already know how
+ * they voted, and it is what lets the UI keep showing their choice and let them
+ * change it. Everyone else becomes a distinct placeholder, so the COUNT is
+ * preserved exactly while the identities are gone.
+ *
+ * The server keeps the real ids in the database, because preventing a second
+ * vote requires knowing who has already voted. Anonymity here is about what
+ * other members can see, not about the record.
+ */
+export function redactAnonymousPollVotes(
+  metadata: unknown,
+  viewerUserId: string | null | undefined,
+): unknown {
+  if (!isRecord(metadata) || !isRecord(metadata.poll)) return metadata
+  const poll = metadata.poll
+  if (poll.anonymous !== true || !Array.isArray(poll.options)) return metadata
+
+  const options = poll.options.map((entry, optionIndex) => {
+    if (!isRecord(entry)) return entry
+    const votes = Array.isArray(entry.votes)
+      ? entry.votes.filter((v): v is string => typeof v === 'string')
+      : []
+
+    return {
+      ...entry,
+      votes: votes.map((id, i) =>
+        /*
+         * Distinct per position so nothing downstream can collapse two voters
+         * into one and undercount the result.
+         */
+        id === viewerUserId ? id : `anon:${optionIndex}:${i}`,
+      ),
+    }
+  })
+
+  return { ...metadata, poll: { ...poll, options } }
 }

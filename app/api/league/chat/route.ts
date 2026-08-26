@@ -16,6 +16,7 @@ import { processDevyLeagueChatInput } from '@/lib/devy/devyChimmyLeagueChat'
 import { processC2cLeagueChatInput } from '@/lib/c2c/c2cChimmyLeagueChat'
 import { isChimmyPrivateMessage, parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
+import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -203,7 +204,14 @@ export async function GET(req: NextRequest) {
         body: message.body,
         createdAt: message.createdAt,
         messageType: message.messageType ?? 'text',
-        metadata: message.metadata ?? null,
+        /*
+         * Anonymous polls are redacted HERE, on the way out. The ids stay in
+         * the database because refusing a second vote means knowing who has
+         * already voted; what changes is what other members can see.
+         */
+        metadata: (redactAnonymousPollVotes(message.metadata ?? null, userId) ?? null) as
+          | Record<string, unknown>
+          | null,
       })
     ),
   })

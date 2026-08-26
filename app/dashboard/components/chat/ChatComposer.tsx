@@ -25,7 +25,7 @@ export type LeagueComposerPayload = {
     duration?: number
     mimeType?: string
   }>
-  poll?: { question: string; options: string[]; closeAt: Date; allowMultiple: boolean }
+  poll?: { question: string; options: string[]; closeAt: Date; allowMultiple: boolean; anonymous?: boolean }
 }
 
 type ChatComposerProps = {

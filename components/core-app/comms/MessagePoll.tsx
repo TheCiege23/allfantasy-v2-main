@@ -59,6 +59,12 @@ export function MessagePoll({
           : `${poll.totalVotes} vote${poll.totalVotes === 1 ? '' : 's'}`}
         {poll.allowMultiple ? ' · pick as many as you like' : null}
         {/*
+          Said BEFORE anyone votes, not after. "Your name will not be attached"
+          changes whether somebody answers honestly, and learning it afterwards
+          is no use to them.
+        */}
+        {poll.anonymous ? ' · votes are anonymous' : null}
+        {/*
           The deadline the composer has always collected and nothing ever showed.
           Said plainly either way: a poll that has quietly stopped accepting
           votes while still looking tappable is worse than one marked closed.

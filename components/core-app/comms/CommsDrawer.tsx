@@ -935,6 +935,7 @@ function LeaguePanel({
           })),
           closeAt: payload.poll.closeAt.toISOString(),
           allowMultiple: payload.poll.allowMultiple,
+          anonymous: Boolean(payload.poll.anonymous),
         }
       }
 
