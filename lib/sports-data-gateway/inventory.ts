@@ -60,14 +60,36 @@ export const PROVIDER_INVENTORY: ProviderInventoryRecord[] = [
     provider: 'cfbd',
     sports: ['NCAAF'],
     capabilities: ['college_players', 'teams', 'schedules', 'games', 'statistics'],
-    status: 'configured_not_verified',
-    clientLocations: ['lib/cfb-player-data.ts', 'scripts/import-ncaaf-players-cfbd.ts', 'scripts/refresh-ncaaf-pool-cfbd.ts'],
-    directConsumers: ['NCAAF draft pool', 'devy-classification'],
-    requiredEnvironmentVariables: ['CFBD_API_KEY'],
+    // Verified by a real request on 2026-08-25 — and the request was REFUSED.
+    // The credential is valid; the account is out of monthly quota. `partial`
+    // rather than a connected status, because the integration is wired end to
+    // end but currently returns nothing.
+    status: 'partial',
+    // All SIX call sites. This list previously named three, which is how the
+    // guard's monitored-host gap went unnoticed for as long as it did — the
+    // census under-reported the surface it was meant to describe.
+    clientLocations: [
+      'lib/cfb-player-data.ts',
+      'lib/stats/cfbdPlayerStats.ts',
+      'lib/workers/providers/cfbd.ts',
+      'lib/scores/gameScoreProviders.ts',
+      'scripts/import-ncaaf-players-cfbd.ts',
+      'scripts/refresh-ncaaf-pool-cfbd.ts',
+    ],
+    // Request paths now read Postgres via lib/devy/devyPlayerReads.ts; the
+    // vendor is reached only from ingestion.
+    directConsumers: ['devy-classification (ingestion)', 'cron/import-players', 'cron/import-stat-lines'],
+    requiredEnvironmentVariables: ['CFBD_API_KEY', 'CFBD_KEY', 'COLLEGE_FOOTBALL_DATA_API_KEY'],
     authenticationMethod: 'api_key (bearer)',
-    rateLimitKnown: false,
-    lastVerifiedAt: null,
-    evidence: ['CFBD_API_KEY PRESENT in non-prod env'],
+    // A monthly call quota exists and has been hit. The per-second limit is
+    // still unknown.
+    rateLimitKnown: true,
+    lastVerifiedAt: '2026-08-25',
+    evidence: [
+      'Key PRESENT in non-prod env; all three env spellings hold the SAME key',
+      'GET /roster?team=LSU&year=2025 -> HTTP 429 {"message":"Monthly call quota exceeded."}',
+      'Sole NCAAF source: no fallback provider carries college players',
+    ],
   },
   {
     provider: 'thesportsdb',
