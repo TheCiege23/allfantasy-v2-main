@@ -17,34 +17,6 @@
     "productivity"
   ],
   "lang": "en",
-  "prefer_related_applications": false,
-  "related_applications": [
-    {
-      "platform": "play",
-      "id": "ai.allfantasy.app",
-      "url": "https://play.google.com/store/apps/details?id=ai.allfantasy.app"
-    }
-  ],
-  "share_target": {
-    "action": "/share",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url",
-      "files": [
-        {
-          "name": "files",
-          "accept": [
-            "text/plain",
-            "application/json",
-            "image/*"
-          ]
-        }
-      ]
-    }
-  },
   "icons": [
     {
       "src": "/icons/icon-72.png",
