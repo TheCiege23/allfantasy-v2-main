@@ -12,12 +12,6 @@ import { ModeToggle } from "@/components/theme/ModeToggle"
 import { ThemeProvider } from "@/components/theme/ThemeProvider"
 
 const require = createRequire(import.meta.url)
-const railwayStartHelpers = require("../scripts/railway-next-start.cjs") as {
-  restoreDocumentShellIfNeeded: (
-    html: string,
-    req: { headers: { cookie?: string } }
-  ) => { html: string; changed: boolean }
-}
 
 vi.mock("next-auth/react", () => ({
   SessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -476,54 +470,37 @@ describe("root language provider layout", () => {
     expect(nextConfigSource).toContain("const railwayDistDir")
     expect(nextConfigSource).toContain("RAILWAY_GIT_COMMIT_SHA")
     expect(nextConfigSource).toContain("isRailwayRuntime ? railwayDistDir : '.next'")
-    expect(railwayStartSource).not.toContain("proxyRequest")
-    expect(railwayStartSource).not.toContain("patchIfRailwayDroppedDocumentShell")
-    expect(railwayStartSource).not.toContain("ensureBodyBoundary")
-    expect(railwayStartSource).not.toContain("ensureRailwayStylesLink")
-    expect(railwayStartSource).not.toContain("AF_NEXT_DIST_DIR")
     expect(layoutSource).not.toContain('id="af-railway-styles"')
     expect(layoutSource).not.toContain("data-af-railway-styles")
     expect(layoutSource).not.toContain("RAILWAY_GIT_COMMIT_SHA")
+
+    // The start script starts Next and nothing else. It used to run Next on
+    // PORT+1 behind a proxy that wrapped shell-less HTML in a hand-built
+    // <html>/<body>, which React could not hydrate: #418 escalated to #423 and
+    // the client re-render tore the document down, so every page flashed and
+    // then went blank. Anything that rewrites HTML here brings that back.
     expect(railwayStartSource).toContain("'start'")
     expect(railwayStartSource).toContain("'-H'")
-    expect(railwayStartSource).toContain("'0.0.0.0'")
-    expect(railwayStartSource).toContain("'127.0.0.1'")
-    expect(railwayStartSource).toContain("restoreDocumentShellIfNeeded")
-    expect(railwayStartSource).toContain("parseCookieHeader")
-    expect(railwayStartSource).toContain("'af_lang'")
-    expect(railwayStartSource).toContain("'af_mode'")
-    expect(railwayStartSource).toContain('href="/railway-styles.css"')
-    expect(railwayStartSource).toContain("x-af-railway-proxy")
-    expect(railwayStartSource).toContain("x-af-railway-shell-normalized")
-    expect(railwayStartSource).toContain("delete headers['accept-encoding']")
-    expect(railwayStartSource).toContain("content-length")
-    expect(railwayStartSource).not.toContain("/api/af-railway-health")
-    expect(railwayStartSource).not.toContain("af-body-start")
+    expect(railwayStartSource).not.toContain("createServer")
+    expect(railwayStartSource).not.toContain("restoreDocumentShellIfNeeded")
+    expect(railwayStartSource).not.toContain("x-af-railway-proxy")
+    expect(railwayStartSource).not.toContain("x-af-railway-shell-normalized")
+    expect(railwayStartSource).not.toContain("<!DOCTYPE html>")
+    expect(railwayStartSource).not.toContain('href="/railway-styles.css"')
+    expect(railwayStartSource).not.toContain("delete headers['accept-encoding']")
     expect(railwayStartSource).not.toContain("useLanguage")
   })
 
-  it("normalizes Railway HTML fragments without touching valid documents", () => {
-    const fragment =
-      '<meta charSet="utf-8"/><title>AllFantasy</title><div id="root">Loaded</div></body></html>'
-    const normalized = railwayStartHelpers.restoreDocumentShellIfNeeded(fragment, {
-      headers: { cookie: "af_lang=es; af_mode=legacy" },
-    })
-
-    expect(normalized.changed).toBe(true)
-    expect(normalized.html).toMatch(/^<!DOCTYPE html><html lang="es" data-lang="es" data-mode="legacy"/)
-    expect(normalized.html).toContain('<head><link rel="stylesheet" href="/railway-styles.css"/>')
-    expect(normalized.html).toContain(
-      '<body class="antialiased min-h-screen mode-readable" style="background:var(--bg);color:var(--text)">'
-    )
-    expect((normalized.html.match(/<html/g) ?? []).length).toBe(1)
-    expect((normalized.html.match(/<body/g) ?? []).length).toBe(1)
-    expect(normalized.html).toContain('</body></html>')
-
-    const validDocument = '<!DOCTYPE html><html lang="en"><head></head><body>Loaded</body></html>'
-    const untouched = railwayStartHelpers.restoreDocumentShellIfNeeded(validDocument, {
-      headers: {},
-    })
-    expect(untouched).toEqual({ html: validDocument, changed: false })
+  it("serves Next's HTML unmodified", () => {
+    // A document that arrives without a shell must be fixed in the render, not
+    // patched in transit. Fabricating <html>/<body> the server never rendered is
+    // a hydration mismatch at the document root, and the page ends up blank
+    // rather than merely unstyled.
+    expect(railwayStartSource).not.toMatch(/http\.createServer|createServer\(/)
+    expect(railwayStartSource).not.toContain("upstreamRes")
+    expect(railwayStartSource).not.toContain("<body")
+    expect(railwayStartSource).not.toContain("<html")
+    expect(railwayStartSource).not.toContain("</head>")
   })
 
   it("cleans stale Railway build artifacts before Next builds", () => {
