@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
@@ -428,8 +429,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             rather than replacing it with an amber error UI.
           */}
           <ErrorBoundaryClient fallback={null}>
-            {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
-            <SafeGlobalChrome fbAppId={fbAppId} />
+            {/*
+              MetaPixelPageViewTracker calls useSearchParams(). A client component
+              that reads the search params de-opts everything above it up to the
+              nearest Suspense boundary, and this is the ROOT layout — with no
+              boundary, that is the whole document, so the server stopped emitting
+              <!DOCTYPE html>, <html>, <head> and <body> on every App Router route.
+              Pages Router (/500) was unaffected, which is why the two disagreed.
+
+              The boundary keeps the de-opt inside these two widgets instead of
+              taking the document shell with it.
+            */}
+            <Suspense fallback={null}>
+              {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
+              <SafeGlobalChrome fbAppId={fbAppId} />
+            </Suspense>
           </ErrorBoundaryClient>
 
           {/* Music widgets deferred until Spotify Web Playback SDK is integrated.
