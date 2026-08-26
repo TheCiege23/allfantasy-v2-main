@@ -20,6 +20,21 @@ import type { PrismaClient } from '@prisma/client'
  * The defenders are the reason this matters most: 28,780 of the rows are DB, LB or DL — a third
  * of the table, more DB rows than TE rows — and they are the only cross-positional market signal
  * we hold for IDP at all. `PlayerValueSnapshot`, the trade-value board, contains ZERO defenders.
+ *
+ * ⚠ THE BOARD IS ONE OVERALL RANKING, AND AN EARLIER NOTE HERE CLAIMED OTHERWISE. It looked like
+ * positional and overall scales were mixed, because DL bottoms out at 6.6 and LB at 8.1 while
+ * Jalen Ramsey sits at 383. Inspecting a single snapshot settles it: 791 players from 1.54 to
+ * 699.8 with 18 duplicate values, offence and defence interleaved — Chase 1.54, Bijan 2.5,
+ * Parsons 6.6, Hunter 6.7, Watt 8.1, Lamb 9.52, Bonitto 10, Josh Allen 21.5. Elite defenders go
+ * early on an IDP board and aging corners go late. That is the ranking working, not two scales.
+ *
+ * What IS mixed is snapshots and scoring variants, and both bite:
+ *
+ *   - Snapshots run s2026w18 through w35 and the old ones are badly stale — Austin Ekeler is 11
+ *     in w18 and 157.6 in w35. Reading any snapshot but the freshest prices a player off a board
+ *     the market left behind, which is why the ordering below is not negotiable.
+ *   - Each snapshot carries one row per scoring variant, and they disagree by more than rounding:
+ *     Ekeler is 157.6 AND 345 in the same source and snapshot. Pass `scoring` when it matters.
  */
 
 /** The row we return, always keyed by the Sleeper id the caller asked about. */
@@ -196,6 +211,7 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
   const bySportsPlayerId = new Map<string, string>()
   const bySlug = new Map<string, string>()
   const byName = new Map<string, string | null>() // null marks an ambiguous key
+  const byBareName = new Map<string, string | null>() // name without position, same null rule
   const names: string[] = []
 
   for (const [sleeperId, p] of player) {
@@ -206,6 +222,18 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
     const key = `${normalizeAdpName(p.name)}|${group(p.position)}`
     // Two of OUR players normalising to one key means we cannot tell them apart either.
     byName.set(key, byName.has(key) ? null : sleeperId)
+
+    /*
+     * ⚠ THE FEEDS DISAGREE ABOUT POSITION, AND IT KILLS THE PLAYERS THAT MATTER MOST. We list
+     * Micah Parsons at LB; the ADP board lists him at DL. Both the slug and the name+position
+     * key therefore miss, and the most valuable IDP asset in the game resolves to nothing.
+     *
+     * So there is a name-only fallback — but a deliberately narrow one. It applies only when the
+     * name identifies exactly ONE player on our side AND exactly one on theirs. Same-name players
+     * are real, and a looser rule would hand a manager a stranger's draft position.
+     */
+    const bare = normalizeAdpName(p.name)
+    byBareName.set(bare, byBareName.has(bare) ? null : sleeperId)
     if (p.name) names.push(p.name)
   }
 
@@ -224,14 +252,30 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
           playerId: { in: [...bySportsPlayerId.keys(), ...bySlug.keys()] },
           ...formatWhere,
         },
-        orderBy: { createdAt: 'desc' },
+        /*
+         * ⚠ `createdAt` ALONE IS NOT A TOTAL ORDER HERE, AND THE TIE IS NOT COSMETIC. A player
+         * carries one row per scoring variant per snapshot, and the variants disagree loudly —
+         * Austin Ekeler is 157.6 and 345 in the SAME source and snapshot. Ordering on the
+         * timestamp alone leaves the pick to the planner, so the same call can return either
+         * number on different days. `adp asc` makes the choice deterministic; `scoring` on the
+         * result says which board it came from, and a caller that cares passes `scoring` in.
+         */
+        orderBy: [{ createdAt: 'desc' }, { adp: 'asc' }],
         select: { playerId: true, playerName: true, adp: true, position: true, format: true, scoring: true, source: true },
       })
       .catch(() => []),
     args.prisma.adpDataRecord
       .findMany({
         where: { sport: args.sport, playerName: { in: names }, ...formatWhere },
-        orderBy: { createdAt: 'desc' },
+        /*
+         * ⚠ `createdAt` ALONE IS NOT A TOTAL ORDER HERE, AND THE TIE IS NOT COSMETIC. A player
+         * carries one row per scoring variant per snapshot, and the variants disagree loudly —
+         * Austin Ekeler is 157.6 and 345 in the SAME source and snapshot. Ordering on the
+         * timestamp alone leaves the pick to the planner, so the same call can return either
+         * number on different days. `adp asc` makes the choice deterministic; `scoring` on the
+         * result says which board it came from, and a caller that cares passes `scoring` in.
+         */
+        orderBy: [{ createdAt: 'desc' }, { adp: 'asc' }],
         select: { playerId: true, playerName: true, adp: true, position: true, format: true, scoring: true, source: true },
       })
       .catch(() => []),
@@ -265,6 +309,23 @@ export async function loadAdpBySleeperId(args: LoadAdpArgs): Promise<Map<string,
   for (const row of named) {
     const key = `${normalizeAdpName(row.playerName)}|${group(row.position)}`
     take(row, byName.get(key) ?? null, 'name')
+  }
+
+  /*
+   * Position-disagreement pass. Only names that are unique on BOTH sides are eligible, so a
+   * shared name never resolves here — it simply stays unresolved, which is the honest outcome.
+   */
+  const adpPlayersByBareName = new Map<string, Set<string>>()
+  for (const row of named) {
+    const bare = normalizeAdpName(row.playerName)
+    const set = adpPlayersByBareName.get(bare) ?? new Set<string>()
+    set.add(row.playerId)
+    adpPlayersByBareName.set(bare, set)
+  }
+  for (const row of named) {
+    const bare = normalizeAdpName(row.playerName)
+    if ((adpPlayersByBareName.get(bare)?.size ?? 0) !== 1) continue
+    take(row, byBareName.get(bare) ?? null, 'name')
   }
 
   return out

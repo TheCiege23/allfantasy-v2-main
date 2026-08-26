@@ -199,6 +199,40 @@ describe('loadAdpBySleeperId — what it refuses', () => {
     expect(res.get('111')?.adp).toBe(443.7)
   })
 
+  it('matches on name alone when the two feeds disagree about position', async () => {
+    /*
+     * THE CASE THIS RECOVERS. We list Micah Parsons at LB; the ADP board lists him at DL. Both
+     * the slug and the name+position key miss, so the most valuable IDP asset in the game
+     * resolved to nothing at all until the fallback existed.
+     */
+    const res = await loadAdpBySleeperId({
+      prisma: fakePrisma(
+        [player({ sleeperId: '44', name: 'Micah Parsons', position: 'LB', team: 'DAL' })],
+        [row({ playerId: 'NFL:micah-parsons:DL:DAL', playerName: 'Micah Parsons', position: 'DL', adp: 6.6 })],
+      ),
+      sport: 'NFL',
+      sleeperIds: ['44'],
+    })
+    expect(res.get('44')?.adp).toBe(6.6)
+    expect(res.get('44')?.via).toBe('name')
+  })
+
+  it('will not use the fallback when the name is not unique on THEIR side either', async () => {
+    // Unique for us, two players for them — so the name does not identify anybody.
+    const res = await loadAdpBySleeperId({
+      prisma: fakePrisma(
+        [player({ sleeperId: '55', name: 'Mike Williams', position: 'LB', team: 'NYJ' })],
+        [
+          row({ playerId: 'NFL:mike-williams:WR:NYJ', playerName: 'Mike Williams', position: 'WR', adp: 40 }),
+          row({ playerId: 'NFL:mike-williams:DL:BUF', playerName: 'Mike Williams', position: 'DL', adp: 300 }),
+        ],
+      ),
+      sport: 'NFL',
+      sleeperIds: ['55'],
+    })
+    expect(res.size).toBe(0)
+  })
+
   it('returns nothing rather than throwing when the player is unknown to us', async () => {
     const res = await loadAdpBySleeperId({ prisma: fakePrisma([], []), sport: 'NFL', sleeperIds: ['999'] })
     expect(res.size).toBe(0)
