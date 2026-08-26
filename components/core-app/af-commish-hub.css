@@ -490,3 +490,37 @@
     padding: 40px 20px;
   }
 }
+
+/* ── Public standings ────────────────────────────────────────────────── */
+
+.af-core .af-ch-publish[data-on='true'] {
+  border-color: var(--accent-line);
+}
+.af-ch-section-note[data-on='true'] {
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-ch-publish-body {
+  margin: 0;
+  max-width: 74ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-ch-publish-body code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.9em;
+  color: var(--text2);
+  overflow-wrap: anywhere;
+}
+.af-ch-publish-link {
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}

@@ -108,7 +108,17 @@ export function Tools({ data }: ToolsProps) {
             <h2 className="af-tl-heading">{group.heading}</h2>
             <p className="af-tl-groupnote">{group.note}</p>
           </div>
-          <div className="af-tl-grid">
+          {/*
+            38a·11 gives the deadline-bound group a wider 3-up card and the
+            reference groups a denser 4-up. Emphasis by size: the cards with a
+            clock on them should be the ones that read first.
+
+            ⚠ THE DESIGN DROPS `share` AND `account` AND THIS KEEPS THEM. Career
+            Share has no other entry point in the product — deleting its group to
+            match a mock orphans the screen behind it. Emphasis does not require
+            deletion, so they stay as the denser rows.
+          */}
+          <div className="af-tl-grid" data-density={group.id === 'decide' ? 'wide' : 'dense'}>
             {group.tools.map((tool) => (
               <Card key={tool.id} tool={tool} />
             ))}

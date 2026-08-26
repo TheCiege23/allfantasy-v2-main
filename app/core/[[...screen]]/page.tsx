@@ -67,6 +67,8 @@ import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import Standings from '@/components/core-app/screens/Standings'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import LeagueSync from '@/components/core-app/screens/LeagueSync'
+import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
@@ -140,6 +142,8 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   /* 38a·7 — league points-for board. Separate key from `rankings`, which is the
      cross-app XP ladder and measures something else entirely. */
   standings: 'standings',
+  /* 38a·10 — per-league sync detail. */
+  sync: 'sync',
 }
 
 /**
@@ -179,6 +183,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   bracket: { title: 'Bracket Challenge', description: 'Fill a bracket and track it against the field.' },
   live: { title: 'Live Scores', description: 'Live scores across every sport, scored against your rosters.' },
   standings: { title: 'Standings', description: 'This league ranked by points scored, not by record.' },
+  sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
 }
 
 export async function generateMetadata({
@@ -498,6 +503,11 @@ export default async function AfCorePage({
       ? await getLeagueCareer(selectedLeagueId, userId).catch(() => null)
       : null
 
+  const leagueSync =
+    activeKey === 'sync' && selectedLeagueId
+      ? await getLeagueSync(selectedLeagueId, userId).catch(() => null)
+      : null
+
   const standings =
     activeKey === 'standings' && selectedLeagueId
       ? await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
@@ -799,15 +809,41 @@ export default async function AfCorePage({
    * or a matchup, where "who should I flex" is asked about the thing on screen.
    * Cross-league screens overlay instead: there is no single place to lose.
    */
-  const dockable =
-    selectedLeagueId != null &&
-    (activeKey === 'my-team' ||
-      activeKey === 'matchup' ||
-      activeKey === 'trades' ||
-      activeKey === 'waivers' ||
-      activeKey === 'draft-hq' ||
-      activeKey === 'war-room' ||
-      activeKey === 'home')
+  /*
+   * Which screens dock the Chimmy drawer beside the content instead of over it.
+   *
+   * The rule is whether there is ONE thing on screen to ask about. A roster, a
+   * matchup, a standings table, this league's season — all have a subject, so
+   * the drawer sits beside it and you can read both. Cross-league screens
+   * overlay, because there is no single place to lose your position in.
+   *
+   * ⚠ THE 38a TABS WERE ALL MISSING FROM THIS LIST. Standings, Season Outlook,
+   * League Career, Your Week, Commissioner and Sync are every bit as
+   * league-scoped as My Team, and asking Chimmy about the table you are looking
+   * at was covering that table up.
+   *
+   * `live` stays OFF deliberately: it carries a league id only to mark which
+   * tie-ins are this league's, and the slate itself is every sport across every
+   * league — there is no single subject to dock against.
+   */
+  const DOCKABLE_KEYS: CoreNavKey[] = [
+    'home',
+    'my-team',
+    'matchup',
+    'trades',
+    'waivers',
+    'draft-hq',
+    'war-room',
+    'week',
+    'standings',
+    'season-outlook',
+    'career',
+    'commissioner',
+    'notifications',
+    'sync',
+  ]
+
+  const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
 
   return (
     <AfCoreShell
@@ -1038,6 +1074,20 @@ export default async function AfCorePage({
               {selectedLeagueId
                 ? 'We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.'
                 : 'Pick a league you commission from the rail. Health, disputes and settings all belong to one league.'}
+            </p>
+          </div>
+        )
+      ) : activeKey === 'sync' ? (
+        leagueSync ? (
+          <LeagueSync data={leagueSync} manageHref="/leagues/sync" />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Sync
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              Pick a league from the rail to see what we read for it and when. To connect a platform
+              or re-sync everything, use <a href="/leagues/sync">Manage connections</a>.
             </p>
           </div>
         )

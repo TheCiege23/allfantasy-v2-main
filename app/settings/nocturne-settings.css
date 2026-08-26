@@ -36,6 +36,10 @@
   --ns-accent: #9184d9;
   --ns-accent-bright: #b5abfc;
   --ns-accent-deep: #5d5294;
+  /* 38a·12 — the one semantic colour this palette lacked. Needed for a nav
+     badge that reports a state the user probably did not intend (notifications
+     entirely off); the accent would read as decoration rather than a flag. */
+  --ns-warn: #e0a83c;
 
   /* ── Remap the app theme vars the sections consume ────────────────── */
   --bg: var(--ns-bg);
@@ -318,4 +322,51 @@
 
 @media (prefers-reduced-motion: reduce) {
   .nocturne-settings * { transition: none !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   38a·12 — status badges in the nav.
+
+   The handoff turns this sidebar into a card grid; what it is really doing
+   is surfacing each setting's STATE without making you open it. That part
+   ships here. The grid does not, because this chrome has translated labels
+   and a working search filter and the mock has neither.
+
+   Every badge is derived from real profile state — see settingsNavBadges.ts.
+   There is no placeholder branch, so a badge appearing always means
+   something.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.nocturne-settings .ns-nav-badge {
+  flex: none;
+  /*
+   * ⚠ FIXED 16px, MATCHING THE ROW'S ICON — NOT PADDING PLUS LINE-HEIGHT.
+   * Sized by its own text the badge came out taller than the row's content, so
+   * the two rows that carry one stood 3px proud of the six that do not and the
+   * nav read as misaligned. A badge must never change the height of the row it
+   * sits in.
+   */
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A state the user probably did not choose on purpose. */
+.nocturne-settings .ns-nav-badge[data-tone='warn'] {
+  background: color-mix(in srgb, var(--ns-warn) 18%, transparent);
+  color: var(--ns-warn);
+}
+
+/* A plain count — informational, never an alarm. */
+.nocturne-settings .ns-nav-badge[data-tone='count'] {
+  background: color-mix(in srgb, var(--ns-text) 9%, transparent);
+  color: var(--ns-muted-2);
 }

@@ -64,7 +64,8 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
     )
   }
 
-  const { league, role, tiles, queue, queueEmptyReason, settings, access, unread, disputes } = data
+  const { league, role, tiles, queue, queueEmptyReason, settings, access, unread, disputes, publicStandings } =
+    data
 
   return (
     <div className="af-ch">
@@ -214,6 +215,48 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
           ) : null}
         </section>
       </div>
+
+      {/* ── Public standings ────────────────────────────────────────── */}
+      <section className="af-card af-ch-section af-ch-publish" data-on={publicStandings.enabled}>
+        <header className="af-ch-section-head">
+          <h2 className="af-label">Public standings</h2>
+          <span className="af-ch-section-note" data-on={publicStandings.enabled}>
+            {publicStandings.enabled ? 'Published' : 'Private'}
+          </span>
+        </header>
+
+        {publicStandings.enabled ? (
+          <>
+            <p className="af-ch-publish-body">
+              This league&apos;s standings are readable by anyone with the link, without an
+              account, and search engines are allowed to index them. Team names are published;
+              manager names are not.
+            </p>
+            <a
+              className="af-ch-publish-link"
+              href={publicStandings.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {publicStandings.url} ↗
+            </a>
+          </>
+        ) : (
+          <p className="af-ch-publish-body">
+            {/*
+              ⚠ THE COPY STATES WHAT PUBLISHING ACTUALLY DOES, NOT THAT IT IS A
+              FEATURE. League and team names are user-authored and often
+              personal; a commissioner turning this on is publishing twelve
+              people's writing, and should be told that in the same sentence as
+              the offer.
+            */}
+            Off. Turning this on gives this league a public page at{' '}
+            <code>{publicStandings.url}</code> — readable without an account and indexable by
+            search engines. It publishes the league name, team names, records and points. It does
+            not publish manager names.
+          </p>
+        )}
+      </section>
 
       <p className="af-ch-footnote">
         AllFantasy only reads this league. Settings and rulings are applied on{' '}

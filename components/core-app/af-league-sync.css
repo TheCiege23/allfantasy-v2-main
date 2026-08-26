@@ -1,0 +1,351 @@
+/*
+ * AF Core — League Sync (38a·10).
+ *
+ * Scoped under `.af-sy`, inside `.af-core`. Rules colliding with an
+ * `.af-core X` primitive carry the prefix — bare classes are (0,1,0) and lose
+ * to (0,2,0) regardless of source order.
+ */
+
+.af-sy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-sy-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-sy-title-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-wrap: wrap;
+}
+.af-sy-title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.af-sy-status {
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+.af-sy-status[data-status='ok'] {
+  background: var(--good-soft);
+  border: 1px solid var(--good);
+  color: var(--good);
+}
+.af-sy-status[data-status='attention'] {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+.af-sy-status[data-status='never'] {
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+}
+.af-sy-sub {
+  margin: 0;
+  max-width: 66ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Blocked ─────────────────────────────────────────────────────────── */
+
+.af-sy-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 26px 22px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-sy-blocked-mark {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--faint);
+}
+.af-sy-blocked p {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Alerts ──────────────────────────────────────────────────────────── */
+
+.af-sy-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px 17px;
+  border-radius: 13px;
+}
+.af-sy-alert[data-tone='bad'] {
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+}
+.af-sy-alert[data-tone='warn'] {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+}
+.af-sy-alert[data-tone='bad'] .af-label {
+  color: var(--bad);
+}
+.af-sy-alert[data-tone='warn'] .af-label {
+  color: var(--warn);
+}
+.af-sy-alert p {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-core .af-sy-alert-cta {
+  align-self: flex-start;
+  margin-top: 4px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+/* ── Connection card ─────────────────────────────────────────────────── */
+
+.af-sy-conn {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-sy-conn-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.af-sy-platform {
+  flex: none;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+.af-sy-conn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-sy-conn-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-sy-conn-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.af-sy-conn-read {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  text-align: right;
+  flex: 0 1 auto;
+}
+.af-sy-conn-read .af-label {
+  color: var(--faint);
+}
+.af-sy-conn-when {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.af-sy-conn-coarse {
+  max-width: 34ch;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+/* ── Data rows ───────────────────────────────────────────────────────── */
+
+.af-sy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-sy-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-sy-panel-head h2 {
+  margin: 0;
+  color: var(--text2);
+}
+.af-sy-panel-note {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-sy-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.af-sy-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-sy-row:last-child {
+  border-bottom: none;
+}
+.af-sy-row-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--chip);
+  color: var(--muted);
+}
+.af-sy-row[data-kind='fresh'] .af-sy-row-mark {
+  background: var(--good-soft);
+  color: var(--good);
+}
+/* Live is its own state, not a better "fresh" — it means updating right now. */
+.af-sy-row[data-kind='live'] .af-sy-row-mark {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-sy-row[data-kind='stale'] .af-sy-row-mark {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-sy-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-sy-row-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.af-sy-row-note {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.af-sy-row-state {
+  flex: none;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--muted);
+}
+.af-sy-row[data-kind='fresh'] .af-sy-row-state {
+  color: var(--good);
+}
+.af-sy-row[data-kind='live'] .af-sy-row-state {
+  color: var(--bad);
+}
+.af-sy-row[data-kind='stale'] .af-sy-row-state {
+  color: var(--warn);
+}
+/*
+ * "Not synced, by design" must not read as a failure. It is the same muted
+ * treatment as an absent row on purpose — the difference is carried by the
+ * words, and colouring it amber would make a deliberate promise look broken.
+ */
+.af-sy-row[data-kind='by-design'] .af-sy-row-state,
+.af-sy-row[data-kind='never'] .af-sy-row-state {
+  color: var(--faint);
+}
+
+.af-sy-foot {
+  margin: 0;
+  max-width: 78ch;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+.af-sy-foot a {
+  color: var(--accent);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .af-sy-title {
+    font-size: 23px;
+  }
+  .af-sy-conn {
+    gap: 14px;
+  }
+  .af-sy-conn-read {
+    align-items: flex-start;
+    text-align: left;
+    flex-basis: 100%;
+  }
+  .af-sy-conn-coarse {
+    max-width: none;
+  }
+  /*
+   * The state column and a two-line label do not coexist at 390px. Stacked, the
+   * state sits under its own row rather than squeezing the label to two words.
+   */
+  .af-sy-row {
+    flex-wrap: wrap;
+  }
+  .af-sy-row-state {
+    flex-basis: 100%;
+    text-align: left;
+    padding-left: 39px;
+  }
+  .af-core .af-sy-alert-cta {
+    align-self: stretch;
+    justify-content: center;
+  }
+}

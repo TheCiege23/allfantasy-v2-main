@@ -1,9 +1,9 @@
 {
-  "id": "/app",
+  "id": "/core",
   "name": "AllFantasy.ai",
   "short_name": "AllFantasy",
-  "description": "AI-powered fantasy sports — trade analyzer, draft assistant, waiver AI, and more.",
-  "start_url": "/app",
+  "description": "AI-powered fantasy sports \u2014 trade analyzer, draft assistant, waiver AI, and more.",
+  "start_url": "/core",
   "scope": "/",
   "display": "standalone",
   "dir": "ltr",
@@ -11,7 +11,11 @@
   "background_color": "#020617",
   "theme_color": "#06b6d4",
   "iarc_rating_id": "e1f4d9f6-9f8f-4a4a-9d7f-0b3f8d5e9b40",
-  "categories": ["sports", "games", "productivity"],
+  "categories": [
+    "sports",
+    "games",
+    "productivity"
+  ],
   "lang": "en",
   "prefer_related_applications": false,
   "related_applications": [
@@ -32,7 +36,11 @@
       "files": [
         {
           "name": "files",
-          "accept": ["text/plain", "application/json", "image/*"]
+          "accept": [
+            "text/plain",
+            "application/json",
+            "image/*"
+          ]
         }
       ]
     }
@@ -107,8 +115,9 @@
   ],
   "shortcuts": [
     {
-      "name": "My Leagues",
-      "url": "/app/home",
+      "name": "My leagues",
+      "short_name": "Leagues",
+      "url": "/core",
       "icons": [
         {
           "src": "/icons/icon-96.png",
@@ -119,8 +128,9 @@
       ]
     },
     {
-      "name": "Trade Analyzer",
-      "url": "/trade-analyzer",
+      "name": "Your week",
+      "short_name": "Week",
+      "url": "/core/week",
       "icons": [
         {
           "src": "/icons/icon-96.png",
@@ -131,8 +141,22 @@
       ]
     },
     {
-      "name": "Waiver Wire AI",
-      "url": "/waiver-wire",
+      "name": "Live scores",
+      "short_name": "Live",
+      "url": "/core/live",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Waivers",
+      "short_name": "Waivers",
+      "url": "/core/waivers",
       "icons": [
         {
           "src": "/icons/icon-96.png",

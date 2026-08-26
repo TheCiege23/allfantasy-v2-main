@@ -104,6 +104,15 @@ export type CommissionerHubData = {
   unread: boolean
   /** Disputes, stated rather than silently absent. See DISPUTES_REASON. */
   disputes: UnavailableSection
+  /**
+   * Whether this league's standings are published at `/standings/{id}`.
+   *
+   * ⚠ SHOWN ONLY TO PEOPLE WHO CAN CHANGE IT. It sits on this screen and
+   * nowhere else because publishing a league's names to the open web is a
+   * commissioner decision, and the person who made it is the person who should
+   * be reminded it is still on.
+   */
+  publicStandings: { enabled: boolean; url: string }
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
@@ -419,6 +428,17 @@ export async function getCommissionerHub(input: {
     access,
     unread,
     disputes: { available: false, reason: DISPUTES_REASON },
+    publicStandings: {
+      /*
+       * Read from the same `League.settings` key the public page checks, so the
+       * two can never disagree about whether a league is published.
+       */
+      enabled:
+        Boolean(league?.settings) &&
+        typeof league?.settings === 'object' &&
+        (league.settings as Record<string, unknown>).publicStandings === true,
+      url: `/standings/${leagueId}`,
+    },
   }
 }
 

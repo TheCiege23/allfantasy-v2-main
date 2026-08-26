@@ -218,3 +218,24 @@
   line-height: 1.6;
   color: var(--text2);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   38a·11 — density by group. The deadline-bound group gets wider cards so
+   it reads first; the reference groups pack tighter. Both still collapse
+   to one column on a phone, where any multi-column card grid is a lie.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.af-core .af-tl-grid[data-density='wide'] {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.af-core .af-tl-grid[data-density='dense'] {
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
+}
+
+@media (max-width: 560px) {
+  .af-core .af-tl-grid[data-density='wide'],
+  .af-core .af-tl-grid[data-density='dense'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

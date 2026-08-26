@@ -73,6 +73,10 @@ export type CoreNavKey =
    * thing that happens to share the English word.
    */
   | 'standings'
+  /* 38a·10 — per-league sync. The account-wide /leagues/sync page keeps connect,
+     OAuth and add-league; this answers "is THIS league current", which that page
+     structurally cannot. */
+  | 'sync'
 
 type NavItem = {
   key: CoreNavKey
@@ -341,6 +345,18 @@ function navItems(props: AfCoreShellProps): NavItem[] {
           ? { text: String(props.notificationCount), tone: 'count' }
           : undefined,
     },
+    /*
+     * League-scoped only. Without a league this is the account-wide connections
+     * page's job, and the nav sends you there rather than to an empty shell.
+     */
+    {
+      key: 'sync',
+      label: 'Sync',
+      glyph: '↻',
+      href: props.selectedLeagueId
+        ? `/core/sync?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/leagues/sync',
+    },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: '/core/tools' },
   ]
 }
@@ -364,7 +380,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   },
   { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
   { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
-  { id: 'manage', heading: 'Manage', keys: ['commissioner', 'notifications', 'tools'] },
+  { id: 'manage', heading: 'Manage', keys: ['commissioner', 'notifications', 'sync', 'tools'] },
 ]
 
 function navSections(props: AfCoreShellProps): NavSection[] {
