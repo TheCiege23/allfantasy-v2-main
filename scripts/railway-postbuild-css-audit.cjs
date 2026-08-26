@@ -108,6 +108,31 @@ function main() {
     console.log('[css-audit] app-build-manifest.json UNREADABLE')
   }
 
+  // Does the compiled server output contain the root layout at all?
+  // 'mode-readable' and 'scroll-smooth' appear only in app/layout.tsx's
+  // <body>/<html> classNames, so their presence is direct evidence the root
+  // layout was compiled, independent of any module-graph inference.
+  const MARKERS = ['mode-readable', 'scroll-smooth', 'globals.css', '--tw-border-spacing-x']
+  const found = Object.create(null)
+  for (const m of MARKERS) found[m] = []
+  ;(function scanServer(dir, depth) {
+    if (depth > 8) return
+    for (const entry of safe(() => fs.readdirSync(dir, { withFileTypes: true }), [])) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) scanServer(full, depth + 1)
+      else if (/\.(js|json)$/.test(entry.name)) {
+        const body = safe(() => fs.readFileSync(full, 'utf8'), '')
+        if (!body) continue
+        for (const m of MARKERS) {
+          if (found[m].length < 4 && body.includes(m)) found[m].push(path.relative(dist, full))
+        }
+      }
+    }
+  })(path.join(dist, 'server'), 0)
+  for (const m of MARKERS) {
+    console.log('[css-audit] server output containing %s -> %d %s', m, found[m].length, JSON.stringify(found[m]))
+  }
+
   // Build-time vs request-time shell: look at a prerendered document.
   const htmls = []
   walkForHtml(path.join(dist, 'server', 'app'), htmls, 3)
