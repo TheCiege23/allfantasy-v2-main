@@ -16,6 +16,7 @@ import { getByeWeeks } from './byeWeeks'
 import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
+import { myRosterCandidates } from './myRoster'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -649,23 +650,11 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
   }
 
   /*
-   * Roster.platformUserId is always set; LeagueTeam.platformUserId is not, so it
-   * is one candidate among several rather than the key.
-   *
-   * ⚠ `userId` IS IN THIS LIST BECAUSE Roster.platformUserId SOMETIMES HOLDS OUR
-   * OWN User UUID, NOT THE PLATFORM'S ID. Measured on production: with only the
-   * first two candidates, 38 of 106 claimed teams joined to a roster and just 11
-   * had a lineup — so My Team rendered "no roster imported" to roughly two thirds
-   * of the people it was built for, over rosters that were sitting right there.
-   * Adding this candidate takes it to 93 joined / 51 with lineups and matches more
-   * than one roster for exactly ZERO teams, so it widens recall without ever
-   * risking showing someone another manager's team.
+   * The candidate rule lives in `myRoster.ts` — the Defense Hub needs the same join, and this
+   * one is delicate enough that a second copy would drift into rendering "no roster imported"
+   * over rosters that are sitting right there. See that file for what each candidate buys.
    */
-  const candidates = [
-    myTeamRow.platformUserId,
-    myTeamRow.externalId,
-    userId,
-  ].filter(Boolean) as string[]
+  const candidates = myRosterCandidates(myTeamRow, userId)
   const roster =
     candidates.length > 0
       ? await prisma.roster.findFirst({
