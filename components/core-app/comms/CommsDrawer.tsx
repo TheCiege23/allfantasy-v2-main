@@ -1199,6 +1199,8 @@ function LeaguePanel({
       */}
       <ChatComposer
         leagueId={scopeId}
+        /* `#` offers these by name alongside players, matched on the client. */
+        autocompleteLeagues={leagues.map((l) => ({ id: l.id, name: l.name }))}
         chatType="league"
         placeholder={`Message ${scope?.name ?? 'the league'}…`}
         onSend={sendPayload}
