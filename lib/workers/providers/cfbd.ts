@@ -1,8 +1,8 @@
 import type { ApiFetchParams, ApiProvider } from '@/lib/workers/api-config'
+import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
 import { toApiChainSport } from '@/lib/workers/api-config'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
 
-const CFBD_BASE_URL = 'https://api.collegefootballdata.com'
 
 function currentSeason(): string {
   return String(new Date().getFullYear())

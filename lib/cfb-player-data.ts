@@ -1,5 +1,6 @@
 // CFB Player Data - Integrates with CollegeFootballData.com API for devy player info
 import { prisma } from '@/lib/prisma'
+import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
 
 export interface CFBPlayer {
@@ -45,7 +46,7 @@ export interface DevyPlayerValue {
   notes: string | null
 }
 
-const CFBD_BASE = 'https://api.collegefootballdata.com'
+const CFBD_BASE = CFBD_BASE_URL
 
 /**
  * Statuses that are NEVER a legitimately empty result.

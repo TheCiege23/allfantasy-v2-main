@@ -12,6 +12,7 @@
  */
 
 import fs from 'node:fs'
+import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
 
 // ── env load (manual; no dotenv dependency) ──────────────────────────────
 for (const f of ['.env', '.env.local']) {
@@ -31,7 +32,7 @@ const APPLY = process.argv.includes('--apply')
 const yearArg = process.argv[process.argv.indexOf('--year') + 1]
 const SEASON = /^\d{4}$/.test(yearArg ?? '') ? yearArg : '2025'
 
-const CFBD_BASE = 'https://api.collegefootballdata.com'
+const CFBD_BASE = CFBD_BASE_URL
 const FANTASY_POSITIONS = new Set(['QB', 'RB', 'FB', 'WR', 'TE', 'K', 'PK', 'ATH'])
 // Canonicalize CFBD synonyms to the fantasy positions used in configs/ncaaf.ts.
 const POSITION_MAP: Record<string, string> = { FB: 'RB', PK: 'K' }

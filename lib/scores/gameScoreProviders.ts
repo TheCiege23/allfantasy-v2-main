@@ -1,4 +1,5 @@
 import 'server-only'
+import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 /**
@@ -257,7 +258,7 @@ export async function fetchCfbdGames(season: number, week?: number): Promise<Pro
 
   const weekParam = week != null && week > 0 ? `&week=${week}` : ''
   const rows = (await getJson(
-    `https://api.collegefootballdata.com/games?year=${season}&seasonType=regular${weekParam}`,
+    `${CFBD_BASE_URL}/games?year=${season}&seasonType=regular${weekParam}`,
     { Authorization: `Bearer ${key}` },
   )) as Record<string, unknown>[] | null
 

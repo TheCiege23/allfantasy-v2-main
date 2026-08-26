@@ -67,11 +67,19 @@ near-collision is how it stayed invisible — and `media.api-sports.io` is
 deliberately **excluded**, because an image CDN URL consumed as an `<img src>`
 is not a data-API call and matching it reported four test fixtures as violations.
 
+**One CFBD base URL.** All six literals now come from `lib/cfbd-base-url.ts` —
+a definition site holding the constant and nothing else. `CFBD_BASE_URL` was
+added to `DATA_API_IDENTIFIERS` in the SAME commit, because hoisting a provider
+URL into a shared constant otherwise removes the last `https://` literal from
+every consumer at once and silently retires the check for all of them. The
+mechanism was verified rather than assumed: a throwaway non-allowlisted file
+importing the constant was flagged as expected, then deleted.
+
 `lib/sports-data-gateway/inventory.ts` is the closest thing to a provider census,
 but it is a Phase-5 audit snapshot and is itself incomplete — its
 `clientLocations` for CFBD listed three files; there are six.
 
-**The code does not comply yet, and the guard says so.** A full scan reports 92
+**The code does not comply yet, and the guard says so.** A full scan reports 85
 violations across tracked source (the count drifts — re-run rather than quoting
 this number). Nothing is allowlisted to hide them.
 
@@ -100,26 +108,35 @@ or not at all.
 
 ### Remaining debt, triaged
 
-Twelve lines came from the three providers added on 2026-08-25. Six were
-resolved (below); **six remain**, all genuine:
+Twelve lines came from the three providers added on 2026-08-25. Nine are now
+resolved (below); **three remain**, and none of them yields to a split — each
+needs a genuine DB-first layer:
 
-- **Adapters, censused 2026-08-25.** Only one earned an exemption:
+- `lib/api-sports.ts` — moving the fetch out does NOT help. The fetch module's
+  importers would still include `lib/sports-router.ts`, which takes live
+  `fetchAPISportsStandings` / `fetchAPISportsPlayerStatistics` on read paths that
+  AI enrichment and the survivor pipeline reach. Needs a DB-first layer for
+  standings and player stats.
+  ⚠ Note `sports-router` imports it as `./api-sports` — a RELATIVE path a
+  `from '@/lib/api-sports'` search does not find. Do not allowlist it by analogy
+  to `lib/api-football.ts`; the two look alike and are not alike.
+- `lib/world-cup/apiSportsWorldCup.ts` — the world-cup stack has its own sync
+  services; the work is routing live surfaces through them. Reachability was
+  never proven either way (20+ app routes sit above it).
+- `lib/brackets/providers/index.ts` — a provider REGISTRY, not a client: the
+  URLs are configuration handed to `HttpProvider`, which does the fetching. A
+  split moves nothing. Needs bracket schedule/live-score caching.
+
+**Adapters, censused 2026-08-25** — how each was settled:
   - `lib/api-football.ts` — **allowlisted.** One importer, `app/api/sports/sync`,
     POST-only behind `requireAdminOrBearer`, taking `sync*ToDb` writers only.
-  - `lib/api-sports.ts` — **stays reported, and do not add it by analogy to the
-    line above.** `lib/sports-router.ts` imports it as `./api-sports` — a
-    RELATIVE path that a `from '@/lib/api-sports'` search does not find — and
-    takes live `fetchAPISportsStandings` / `fetchAPISportsPlayerStatistics`,
-    which AI enrichment and the survivor pipeline reach.
-  - `lib/openweathermap.ts` — reached from `/api/sports/weather` and, through
-    `lib/weather/weatherService.ts` and `lib/weather/venueResolver.ts`, from six
-    more request paths.
-  - `lib/brackets/providers/index.ts` — three `app/api/bracket/*` importers, one
-    of which (`/api/bracket/providers`) is a plain read endpoint.
-  - `lib/world-cup/apiSportsWorldCup.ts` — consumed only by sibling `lib/world-cup/*`
-    modules, but those sit under 20+ app routes including non-admin chat and AI
-    paths. Not proven unreachable, so not exempted. Unreachability has to be
-    demonstrated, never assumed.
+  - `lib/openweathermap.ts` — **resolved by the same inverted split.** The
+    fetchers moved to `lib/weather/openWeatherFetch.ts` (allowlisted); the venue
+    coordinate tables, `getVenueForTeam` and `isTeamDome` stayed, so
+    `/api/sports/weather` and the other importers were untouched. Two callers
+    remain, both provider/caching layers — and the census only found the second
+    (`nflRedraftProductionProviderWiring`) because it checked **dynamic**
+    imports; it reaches the fetch via `await import(...)`.
   - `lib/fantasycalc-fetch.ts` — **allowlisted, and the clearest worked example
     of earning it.** See below.
 
@@ -183,9 +200,10 @@ caught them.
   `lib/sports-router.ts`, which would have made `lib/api-sports.ts` look
   ingestion-only and earned it an exemption it does not deserve. Always also
   grep for `'./x'`, `'../x'` and `require(`.
-- **A service, not an adapter** — `lib/trade-intel/marketValueService.ts:31`
-  calls FantasyCalc directly rather than going through `lib/fantasycalc.ts`, so
-  migrating the adapter's callers would miss it. It needs its own move.
+- **A service, not an adapter** — `lib/trade-intel/marketValueService.ts`
+  called FantasyCalc directly rather than through the adapter, so migrating the
+  adapter's callers stepped straight past it. **Resolved** with its own move to
+  `getFantasyCalcValuesDbFirst`.
 - **Non-request paths.** Resolved individually, never in bulk:
   - `scripts/compare-player-apis.ts` — hand-run (absent from package.json and
     CI). `compare` joined the scripts verb list next to `audit`, for the reason
@@ -203,10 +221,14 @@ caught them.
     (`chimmy`, `injuries`, `leagues`, `matchups`, `roster`), each superseded by
     a live directory route; they trip no guard and were left for a deliberate
     dead-code pass.
-  - `lib/weather/weatherService.ts:806` — **stays reported.** It is imported by
-    six request paths, so it is real debt, not a naming accident. The call
-    geocodes an address to lat/lon, and a geocode never changes, which makes it
-    an unusually good candidate for a durable cache.
+  - `lib/weather/weatherService.ts` (geocode) — **resolved.** A geocode is
+    immutable, so it is now a durable `sportsDataCache` entry with the vendor
+    call isolated in `lib/weather/openWeatherGeocode.ts` (allowlisted).
+    **Only successes are cached**: writing a miss would turn one transient
+    outage into a year of "this address has no coordinates".
+    Worth recording that this was first written as a `db-first-exception:`
+    marker and corrected — a permanent read-through cache is not temporary debt
+    with a migration plan, and using the marker there blunts it for everyone.
 
 **On `db-first-exception:` for health probes.** The rule above calls the marker
 temporary, and a health probe is permanent. The probe is the recognised standing

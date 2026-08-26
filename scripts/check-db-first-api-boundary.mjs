@@ -80,6 +80,12 @@ const DATA_API_IDENTIFIERS = [
   'ESPN_SITE_API_BASE',
   'THE_SPORTS_DB_V1_JSON_BASE',
   'THE_SPORTS_DB_V2_JSON_BASE',
+  // Added in the SAME commit that consolidated six hardcoded CFBD literals onto
+  // `lib/cfbd-base-url.ts`. Without this entry that consolidation would have
+  // removed the last `https://` literal from all six files at once and retired
+  // the check for every one of them — the exact failure this list exists to
+  // prevent, described in the block comment above.
+  'CFBD_BASE_URL',
 ];
 
 /**
@@ -99,6 +105,9 @@ const DATA_API_IDENTIFIERS = [
 const HOST_DEFINITION_FILES = [
   /^lib\/providers\/espnUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^lib\/providers\/theSportsDbUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  // Contains the CFBD base URL and nothing else — no fetch, no key, no client.
+  // A definition site, per the first category described above.
+  /^lib\/cfbd-base-url\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^scripts\/check-db-first-api-boundary\.mjs$/i,
 ];
 
@@ -222,6 +231,40 @@ const ALLOWED_PATH_PATTERNS = [
    * is not a census — a relative `./fantasycalc-fetch` import would not appear.
    */
   /^lib\/fantasycalc-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The OpenWeatherMap geocoding call, isolated behind a durable cache.
+   *
+   * Its sole importer is `geocodeOpenWeather` in lib/weather/weatherService.ts,
+   * which reads `sportsDataCache` first and writes the result back — the same
+   * DB-first-reader-over-allowlisted-fetcher shape as fantasycalc-fetch above.
+   *
+   * A geocode is immutable (an address does not move), so after the first
+   * lookup this vendor call never runs again for that address. Only SUCCESSES
+   * are cached: writing a miss would turn one transient outage into a year of
+   * "this address has no coordinates".
+   *
+   * Deliberately NOT a `db-first-exception:` marker. That is for temporary debt
+   * with a migration plan, plus the standing health-probe case; a permanent
+   * read-through cache is neither, and using the marker here would blunt it.
+   */
+  /^lib\/weather\/openWeatherGeocode\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The OpenWeatherMap data calls, split out of `lib/openweathermap.ts` for the
+   * same reason the FantasyCalc fetch was split out of its adapter: the module
+   * also holds the venue coordinate tables, `getVenueForTeam` and `isTeamDome`,
+   * which request paths such as `/api/sports/weather` import legitimately and
+   * which touch no network.
+   *
+   * Moving the FETCH rather than those importers leaves two callers, both
+   * provider/caching layers rather than routes:
+   *   - lib/weather/weatherService.ts   the weatherCache-backed reader
+   *   - lib/nfl-provider/nflRedraftProductionProviderWiring.ts
+   *
+   * ⚠ The census that found those two only worked because it also checked
+   * DYNAMIC imports — the provider orchestrator reaches it via
+   * `await import(...)`, which a plain `from '...'` grep does not see.
+   */
+  /^lib\/weather\/openWeatherFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
    * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is
