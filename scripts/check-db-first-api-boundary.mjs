@@ -120,7 +120,14 @@ const ALLOWED_PATH_PATTERNS = [
    * never a request path. scripts/audit-playoff-provider-data.ts documents itself as read-only,
    * writes nothing, and is invoked by hand (absent from package.json and CI).
    */
-  /^scripts\/.*(audit|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
+  /*
+   * `compare` joins for the same reason as `audit`, one line down: a comparison
+   * tool exists to hold what a provider says against what we stored, which it
+   * cannot do without calling the provider. scripts/compare-player-apis.ts is
+   * hand-run — absent from package.json and from CI — and a script is never a
+   * request path.
+   */
+  /^scripts\/.*(audit|compare|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
   /^lib\/.*(ingest|ingestion|sync)/i,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,

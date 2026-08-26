@@ -71,7 +71,7 @@ is not a data-API call and matching it reported four test fixtures as violations
 but it is a Phase-5 audit snapshot and is itself incomplete — its
 `clientLocations` for CFBD listed three files; there are six.
 
-**The code does not comply yet, and the guard says so.** A full scan reports 100
+**The code does not comply yet, and the guard says so.** A full scan reports 95
 violations across tracked source (the count drifts — re-run rather than quoting
 this number). Nothing is allowlisted to hide them.
 
@@ -100,24 +100,52 @@ or not at all.
 
 ### Remaining debt, triaged
 
-The 12 lines from the three providers added on 2026-08-25 are all genuine. They
-fall into two groups:
+Twelve lines came from the three providers added on 2026-08-25. Three were
+resolved (below); **nine remain**, all genuine:
 
-- **Adapters with request-path callers** — `lib/fantasycalc.ts` (~30 direct
-  importers, many under `app/api/`), `lib/api-football.ts`, `lib/api-sports.ts`,
-  `lib/openweathermap.ts`, `lib/world-cup/apiSportsWorldCup.ts`,
-  `lib/brackets/providers/index.ts`. These must NOT be allowlisted the way
-  `lib/cfb-player-data.ts` was — that exemption was earned by first moving the
-  callers off them. FantasyCalc already has a DB-first path
-  (`lib/fantasycalc-db.ts`, fed by `scripts/sync-fantasycalc-valuations.ts`); the
-  work is migrating callers to it, which is a project of its own and has not
-  been done.
-- **Non-request paths that the existing patterns miss by naming only** —
-  `scripts/compare-player-apis.ts` (hand-run comparison tool),
-  `lib/admin-dashboard/SystemHealthResolver.ts` (health probe),
-  `app/api/start-sit/weather.route.js` (a `.route.js`, not a Next route),
-  `lib/weather/weatherService.ts` (geocoding). Each is a per-file judgement call,
-  so none were waved through in bulk.
+- **Adapters with request-path callers** — `lib/fantasycalc.ts` (two lines; ~30
+  direct importers, many under `app/api/`), `lib/api-football.ts`,
+  `lib/api-sports.ts`, `lib/openweathermap.ts`,
+  `lib/world-cup/apiSportsWorldCup.ts`, `lib/brackets/providers/index.ts`. These
+  must NOT be allowlisted the way `lib/cfb-player-data.ts` was — that exemption
+  was earned by first moving the callers off them. FantasyCalc already has a
+  DB-first path (`lib/fantasycalc-db.ts`, fed by
+  `scripts/sync-fantasycalc-valuations.ts`); the work is migrating callers to
+  it, which is a project of its own and has not been done.
+  ⚠ **Confirm that sync is actually scheduled before pointing anything at
+  `fantasycalc-db`.** `ingestCFBDStats` was written, correct, and had no
+  scheduled caller for months; the same mistake here would be silent.
+- **A service, not an adapter** — `lib/trade-intel/marketValueService.ts:31`
+  calls FantasyCalc directly rather than going through `lib/fantasycalc.ts`, so
+  migrating the adapter's callers would miss it. It needs its own move.
+- **Non-request paths.** Resolved individually, never in bulk:
+  - `scripts/compare-player-apis.ts` — hand-run (absent from package.json and
+    CI). `compare` joined the scripts verb list next to `audit`, for the reason
+    already written there: a comparison tool cannot compare without calling.
+  - `lib/admin-dashboard/SystemHealthResolver.ts` — marked
+    `db-first-exception: live provider health probe`, which is what its sleeper,
+    yahoo and espn entries already carried. FantasyCalc only lacked the marker
+    because FantasyCalc was not monitored until today. Line-scoped on purpose:
+    allowlisting the file would exempt any future non-probe call in it too.
+  - `app/api/start-sit/weather.route.js` — **deleted, not exempted.** It was
+    dead: nothing imported it, its own header declared its path as
+    `weather/route.js`, and that path now holds a `route.ts` using
+    `lib/weather/weatherService`. Next.js does not route a `X.route.js` sitting
+    beside the directory. Five identical strays remain in `app/api/start-sit/`
+    (`chimmy`, `injuries`, `leagues`, `matchups`, `roster`), each superseded by
+    a live directory route; they trip no guard and were left for a deliberate
+    dead-code pass.
+  - `lib/weather/weatherService.ts:806` — **stays reported.** It is imported by
+    six request paths, so it is real debt, not a naming accident. The call
+    geocodes an address to lat/lon, and a geocode never changes, which makes it
+    an unusually good candidate for a durable cache.
+
+**On `db-first-exception:` for health probes.** The rule above calls the marker
+temporary, and a health probe is permanent. The probe is the recognised standing
+exception: checking whether a provider is up is the one job that *cannot* be done
+by reading Postgres, and the convention predates this note in
+`SystemHealthResolver.ts`. That is the only permanent use. Everything else the
+marker touches still needs a migration plan.
 
 Treat both contracts' "the app never calls the vendor" line as the **target**
 architecture, not a description of current state.

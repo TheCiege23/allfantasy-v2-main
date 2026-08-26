@@ -15,7 +15,7 @@ const ENDPOINTS: Record<string, string> = {
   yahoo: "https://fantasysports.yahooapis.com", // db-first-exception: live provider health probe
   mfl: "https://api.myfantasyleague.com/2024/export",
   fantrax: "https://www.fantrax.com",
-  fantasycalc: "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=1&numTeams=12&ppr=1",
+  fantasycalc: "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=1&numTeams=12&ppr=1", // db-first-exception: live provider health probe
   thesportsdb: `https://www.thesportsdb.com/api/v1/json/${getTheSportsDbApiKeyOrFallback('123')}/all_leagues.php`,
   theaudiodb: `https://www.theaudiodb.com/api/v1/json/${getTheAudioDbApiKeyOrFallback('2')}/album.php?i=112024`,
   espn: `${ESPN_SITE_API_BASE}/football/nfl/scoreboard`, // db-first-exception: live provider health probe
