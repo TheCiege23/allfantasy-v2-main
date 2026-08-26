@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import crypto from 'crypto';
 import {
+  checkYahooRedirectUri,
   getYahooRedirectUri,
   getYahooStateCookieDomain,
   sanitizeYahooReturnTo,
@@ -26,6 +27,20 @@ export async function GET(request: NextRequest) {
   }
 
   const redirectUri = getYahooRedirectUri(`${request.nextUrl.origin}/api/league/yahoo/callback`);
+
+  /*
+   * ⚠ CHECKED BEFORE THE ROUND TRIP, BECAUSE YAHOO'S REFUSAL LOOKS LIKE YAHOO'S
+   * FAULT. A redirect_uri Yahoo has not registered comes back as
+   * `invalid_request / invalid redirect uri` on Yahoo's own error page — the
+   * manager sees a Yahoo failure, the product looks innocent, and nothing in our
+   * logs records that we sent a URI that could never have worked.
+   */
+  const redirectCheck = checkYahooRedirectUri(redirectUri, request.nextUrl.origin);
+  if (!redirectCheck.ok) {
+    console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason);
+    return NextResponse.redirect(new URL('/leagues?error=yahoo_redirect_uri', request.url));
+  }
+
   const state = crypto.randomBytes(16).toString('hex');
 
   const params = new URLSearchParams({
