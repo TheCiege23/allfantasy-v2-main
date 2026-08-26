@@ -90,6 +90,47 @@ export type WeekMatchup = {
   href: string
 }
 
+/** One matchup in the focused league that the user is NOT playing in. */
+export type LeagueSideline = {
+  a: { rosterId: number; name: string | null; projected: number | null }
+  b: { rosterId: number; name: string | null; projected: number | null }
+  /** Probability side A wins. Null when either side is unprojectable. */
+  aWinProbability: number | null
+}
+
+/**
+ * One league's own week — the hero matchup plus the rest of that league's
+ * board.
+ *
+ * ⚠ THE SIDELINE GAMES WERE ALWAYS COMPUTED AND ALWAYS DISCARDED. `pairRows`
+ * pairs every matchup in the week and the cross-league loop drops any pair the
+ * user is not in (`if (!aIsMine && !bIsMine) continue`). That is correct for a
+ * board about your nine leagues and wrong for a screen about one league, where
+ * the other five games are half the story.
+ */
+export type LeagueWeekBoard = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  season: number
+  week: number
+  /** Your own matchup. Null when you have no game this week (bye, or unmatched). */
+  yours: WeekMatchup | null
+  /** Every other matchup in the league this week. */
+  sidelines: LeagueSideline[]
+  /**
+   * All-time head-to-head against THIS week's opponent, from every season on
+   * file. Null when they have never met before — which is a real answer for a
+   * first-season league and not the same as 0-0.
+   */
+  rivalry: {
+    wins: number
+    losses: number
+    meetings: number
+    averageMargin: number
+  } | null
+}
+
 export type WeekBoard = {
   season: number | null
   week: number | null
@@ -107,6 +148,11 @@ export type WeekBoard = {
   }
   /** Leagues of the user's that carry no schedule for this week at all. */
   withoutSchedule: number
+  /**
+   * The focused league's own board, when the caller asked for one. Keyed off
+   * `focusLeagueId` so a cross-league render pays nothing for it.
+   */
+  leagueBoard: LeagueWeekBoard | null
 }
 
 export type RivalryCard = {
@@ -381,7 +427,16 @@ function pairRows(rows: MatchupRow[]): Pairing[] {
 
 // ── 24a — Your Week ────────────────────────────────────────────────────
 
-export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Promise<WeekBoard> {
+export async function getWeekBoard(
+  userId: string,
+  leagues: LeagueInput[],
+  /**
+   * The league being rendered on its own, when there is one. Only this league's
+   * sideline games and rivalry are computed — doing it for every league would
+   * pay for sixty boards to show one.
+   */
+  focusLeagueId?: string | null,
+): Promise<WeekBoard> {
   const empty: WeekBoard = {
     season: null,
     week: null,
@@ -390,6 +445,7 @@ export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Prom
     unprojected: [],
     model: { basis: 'No completed weeks are on file yet, so nothing here is projected.', sampleSize: 0 },
     withoutSchedule: leagues.length,
+    leagueBoard: null,
   }
 
   const history = await readHistory(userId, leagues).catch(() => null)
@@ -464,9 +520,114 @@ export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Prom
   coinFlips.sort((a, b) => Math.abs(a.projection!.margin) - Math.abs(b.projection!.margin))
   leaning.sort((a, b) => Math.abs(b.projection!.margin) - Math.abs(a.projection!.margin))
 
+  /*
+   * ── The focused league's own board ──────────────────────────────────
+   *
+   * Built from `thisWeek`, the same pairing the loop above just walked, so the
+   * hero here and the card on the cross-league board cannot disagree about who
+   * is playing whom.
+   */
+  let leagueBoard: LeagueWeekBoard | null = null
+
+  if (focusLeagueId) {
+    const pid = leagues.find((l) => l.id === focusLeagueId)?.platformLeagueId ?? null
+    const meta = pid ? leagueByPlatformId.get(pid) : null
+
+    if (pid && meta) {
+      const leaguePairs = thisWeek.filter((p) => p.leagueId === pid)
+
+      const yours =
+        [...coinFlips, ...leaning, ...unprojected].find((c) => c.leagueId === meta.id) ?? null
+
+      const projectedOf = (rosterId: number): number | null =>
+        profiles.get(`${pid}:${rosterId}`)?.mu ?? null
+
+      const sidelines: LeagueSideline[] = leaguePairs
+        .filter(
+          (p) =>
+            !myRosters.has(`${pid}:${p.a.rosterId}`) && !myRosters.has(`${pid}:${p.b.rosterId}`),
+        )
+        .map((p) => {
+          const aProfile = profiles.get(`${pid}:${p.a.rosterId}`)
+          const bProfile = profiles.get(`${pid}:${p.b.rosterId}`)
+          const aWinProbability =
+            aProfile && bProfile
+              ? normalCdf(
+                  (aProfile.mu - bProfile.mu) /
+                    Math.sqrt(aProfile.sigma ** 2 + bProfile.sigma ** 2),
+                )
+              : null
+          return {
+            a: {
+              rosterId: p.a.rosterId,
+              name: rosterNames.get(`${pid}:${p.a.rosterId}`) ?? null,
+              projected: projectedOf(p.a.rosterId),
+            },
+            b: {
+              rosterId: p.b.rosterId,
+              name: rosterNames.get(`${pid}:${p.b.rosterId}`) ?? null,
+              projected: projectedOf(p.b.rosterId),
+            },
+            aWinProbability,
+          }
+        })
+        // Closest first — the game most likely to move the table is the one
+        // worth glancing at, same ordering rule the coin-flip list uses.
+        .sort((x, y) => {
+          const dx = x.aWinProbability == null ? 1 : Math.abs(0.5 - x.aWinProbability)
+          const dy = y.aWinProbability == null ? 1 : Math.abs(0.5 - y.aWinProbability)
+          return dx - dy
+        })
+
+      /*
+       * All-time record against this week's opponent, out of every season
+       * already in `history.rows`. Computed here rather than by calling
+       * getRivalryRadar, which would re-read the whole history for one number.
+       */
+      let rivalry: LeagueWeekBoard['rivalry'] = null
+      if (yours) {
+        const oppRosterId = yours.opponent.rosterId
+        let wins = 0
+        let losses = 0
+        let marginSum = 0
+        let meetings = 0
+        for (const pair of pairRows(history.rows.filter((r) => r.leagueId === pid))) {
+          const aMine = myRosters.has(`${pid}:${pair.a.rosterId}`)
+          const bMine = myRosters.has(`${pid}:${pair.b.rosterId}`)
+          if (!aMine && !bMine) continue
+          const you = aMine ? pair.a : pair.b
+          const them = aMine ? pair.b : pair.a
+          if (them.rosterId !== oppRosterId) continue
+          // Only games actually played count as meetings; a scheduled fixture is
+          // not a head-to-head result.
+          if (!isScored(you) && !isScored(them)) continue
+          meetings += 1
+          marginSum += you.pointsFor - them.pointsFor
+          if (you.pointsFor > them.pointsFor) wins += 1
+          else losses += 1
+        }
+        if (meetings > 0) {
+          rivalry = { wins, losses, meetings, averageMargin: marginSum / meetings }
+        }
+      }
+
+      leagueBoard = {
+        leagueId: meta.id,
+        leagueName: meta.name,
+        platform: meta.platform,
+        season: latest.season,
+        week: latest.week,
+        yours,
+        sidelines,
+        rivalry,
+      }
+    }
+  }
+
   return {
     season: latest.season,
     week: latest.week,
+    leagueBoard,
     coinFlips,
     leaning,
     unprojected,

@@ -1,0 +1,318 @@
+/*
+ * AF Core — League Career (38a·6).
+ *
+ * Scoped under `.af-lc`, inside `.af-core`. Sibling to af-career.css, which
+ * styles the cross-league trophy room — different screen, different question,
+ * separate sheet so no rule needs a "which career?" qualifier.
+ */
+
+.af-lc {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1160px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-lc-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-lc-title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.af-lc-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-lc-sub a,
+.af-lc-blocked-alt a {
+  color: var(--accent);
+}
+
+/* ── Unavailable (the normal path for most leagues) ──────────────────── */
+
+.af-lc-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 28px 24px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-lc-blocked-mark {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--faint);
+}
+.af-lc-blocked-body {
+  margin: 0;
+  max-width: 64ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.af-lc-blocked-alt {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+}
+
+/* ── Identity banner ─────────────────────────────────────────────────── */
+
+.af-lc-banner {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--chimmy);
+  border: 1px solid var(--accent-line);
+}
+.af-lc-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.af-lc-stat-v {
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.af-lc-stat .af-label {
+  color: var(--faint);
+}
+.af-lc-stat-s {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.af-lc-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Grades ──────────────────────────────────────────────────────────── */
+
+.af-lc-grades {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-lc-grade {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-lc-grade .af-label {
+  color: var(--faint);
+}
+.af-lc-grade-letter {
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.af-lc-grade[data-band='good'] {
+  border-color: var(--good-soft);
+}
+.af-lc-grade[data-band='good'] .af-lc-grade-letter {
+  color: var(--good);
+}
+.af-lc-grade[data-band='mid'] .af-lc-grade-letter {
+  color: var(--warn);
+}
+.af-lc-grade[data-band='bad'] .af-lc-grade-letter {
+  color: var(--bad);
+}
+/* The withheld letter is a dash and reads as absent, never as a middling C. */
+.af-lc-grade[data-missing='true'] .af-lc-grade-letter {
+  color: var(--faint);
+}
+.af-lc-grade-sample {
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.af-lc-grade-why {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-lc-grade[data-missing='true'] .af-lc-grade-why {
+  color: var(--faint);
+}
+
+/* ── Panels ──────────────────────────────────────────────────────────── */
+
+.af-lc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-lc-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-lc-panel-head h2 {
+  margin: 0;
+  color: var(--text2);
+}
+.af-lc-panel-note {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.af-lc-panel-why {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* ── Season bars ─────────────────────────────────────────────────────── */
+
+.af-lc-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.af-lc-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 44px;
+  min-width: 44px;
+}
+.af-lc-bar-track {
+  width: 100%;
+  height: 104px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 7px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-lc-bar-fill {
+  width: 100%;
+  border-radius: 7px 7px 0 0;
+  background: var(--line2);
+  /* A 0% season still shows a sliver — a bar of literally nothing reads as a
+     missing season rather than a winless one. */
+  min-height: 4px;
+}
+.af-lc-bar-fill[data-best='true'] {
+  background: var(--accent);
+}
+.af-lc-bar-year {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-lc-bar-rec {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Rival ───────────────────────────────────────────────────────────── */
+
+.af-lc-rival {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-lc-rival-name {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.af-lc-rival-rec {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--bad);
+  font-variant-numeric: tabular-nums;
+}
+.af-lc-rival-note {
+  margin: 0;
+  flex: 1 1 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .af-lc-banner {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .af-lc-grades {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .af-lc-title {
+    font-size: 23px;
+  }
+  .af-lc-banner {
+    padding: 16px;
+  }
+  .af-lc-stat-v {
+    font-size: 22px;
+  }
+  .af-lc-grade-letter {
+    font-size: 32px;
+  }
+  .af-lc-blocked {
+    flex-direction: column;
+    gap: 8px;
+    padding: 22px 18px;
+  }
+  .af-lc-bar {
+    flex: 0 0 40px;
+    min-width: 40px;
+  }
+  .af-lc-bar-track {
+    height: 84px;
+  }
+}

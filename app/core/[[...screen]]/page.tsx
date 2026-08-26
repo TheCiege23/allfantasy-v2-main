@@ -42,6 +42,8 @@ import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
+import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
+import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
 import { toShareCard } from '@/lib/core-app/shareCard'
 import { Rankings } from '@/components/core-app/screens/Rankings'
 import { RankingsFaq } from '@/components/core-app/screens/RankingsFaq'
@@ -55,6 +57,7 @@ import { getWeekAll } from '@/lib/core-app/weekAll'
 import YourWeek from '@/components/core-app/screens/YourWeek'
 import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
+import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
@@ -62,6 +65,8 @@ import LiveScores from '@/components/core-app/screens/LiveScores'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
+import Standings from '@/components/core-app/screens/Standings'
+import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
@@ -132,6 +137,9 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
    * and stays the signed-out, indexable one.
    */
   live: 'live',
+  /* 38a·7 — league points-for board. Separate key from `rankings`, which is the
+     cross-app XP ladder and measures something else entirely. */
+  standings: 'standings',
 }
 
 /**
@@ -159,6 +167,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
   portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
   career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
+  // (league-scoped career shares this key; the title is accurate either way)
   rankings: { title: 'Rankings', description: 'Your AF level, XP and where you sit on the ladder.' },
   commissioner: { title: 'Commissioner', description: 'League health, disputes and settings.' },
   tools: { title: 'Tools', description: 'Everything you can decide or understand about a league.' },
@@ -169,6 +178,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   discord: { title: 'Discord bridge', description: 'Connect a league to a Discord channel.' },
   bracket: { title: 'Bracket Challenge', description: 'Fill a bracket and track it against the field.' },
   live: { title: 'Live Scores', description: 'Live scores across every sport, scored against your rosters.' },
+  standings: { title: 'Standings', description: 'This league ranked by points scored, not by record.' },
 }
 
 export async function generateMetadata({
@@ -474,6 +484,25 @@ export default async function AfCorePage({
         }).catch(() => null)
       : null
 
+  /*
+   * 38a·7 — the league's points-for board. Reads WeeklyMatchup through the
+   * shared frontier rule and refuses to rank a season nobody has played, rather
+   * than publishing twelve teams tied on zero.
+   */
+  /*
+   * 38a·6 — your record inside ONE league. Only when a league is held; the
+   * cross-league trophy room is what `/core/career` renders without one.
+   */
+  const leagueCareer =
+    activeKey === 'career' && selectedLeagueId && sp.view !== 'share'
+      ? await getLeagueCareer(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  const standings =
+    activeKey === 'standings' && selectedLeagueId
+      ? await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
+      : null
+
   const now = new Date()
 
   /*
@@ -522,7 +551,10 @@ export default async function AfCorePage({
 
   const weekBoard =
     activeKey === 'week' && !rivalriesView
-      ? await getWeekBoard(userId, weekLeagues).catch(() => null)
+      ? // 38a·3 — the focused league gets its own board (hero + the league's
+        // other matchups). Passing null keeps the cross-league board exactly as
+        // it was and pays nothing for the extra pairing.
+        await getWeekBoard(userId, weekLeagues, selectedLeagueId).catch(() => null)
       : null
 
   const rivalries = rivalriesView
@@ -962,7 +994,17 @@ export default async function AfCorePage({
             </div>
           )
         ) : weekBoard ? (
-          <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+          /*
+           * 38a·3. A league in the rail renders that league's own week; without
+           * one the cross-league board is what you get. `leagueBoard` is null
+           * unless a focus league was asked for AND found, so this falls back
+           * rather than rendering an empty hero.
+           */
+          weekBoard.leagueBoard ? (
+            <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" />
+          ) : (
+            <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+          )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
@@ -995,6 +1037,21 @@ export default async function AfCorePage({
               {selectedLeagueId
                 ? 'We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.'
                 : 'Pick a league you commission from the rail. Health, disputes and settings all belong to one league.'}
+            </p>
+          </div>
+        )
+      ) : activeKey === 'standings' ? (
+        standings ? (
+          <Standings data={standings} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Standings
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              {selectedLeagueId
+                ? 'We could not read this league’s weekly results just now. This is a read failure on our side, not a season with no games in it.'
+                : 'Pick a league from the rail. Points-for only means something inside one league — two leagues with different scoring settings produce numbers that cannot be compared.'}
             </p>
           </div>
         )
@@ -1140,7 +1197,14 @@ export default async function AfCorePage({
           </div>
         )
       ) : activeKey === 'career' ? (
-        career ? (
+        /*
+         * 38a·6. A league in the rail renders that league's own career; without
+         * one, the cross-league trophy room. `?view=share` still belongs to the
+         * share card, which is cross-league by nature.
+         */
+        leagueCareer ? (
+          <LeagueCareer data={leagueCareer} allLeaguesHref="/core/career" />
+        ) : career ? (
           <Career
             data={career}
             view={typeof sp.view === 'string' ? sp.view : null}

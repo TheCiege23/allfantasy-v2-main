@@ -67,6 +67,12 @@ export type CoreNavKey =
    * suite is replacing.
    */
   | 'live'
+  /*
+   * 38a·7. NOT 'rankings' — that key is the cross-app XP ladder. This is the
+   * league's points-for board, which is a different measurement of a different
+   * thing that happens to share the English word.
+   */
+  | 'standings'
 
 type NavItem = {
   key: CoreNavKey
@@ -262,6 +268,19 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     },
     // 26b — replaces the dashboard entry that pointed at /af-legacy?tab=pulse.
     // 38a scopes it to one league's full standings table when a league is held.
+    /*
+     * League points-for board. League-scoped only — a cross-league points total
+     * is not a thing, because two leagues' scoring settings make their point
+     * values incomparable.
+     */
+    {
+      key: 'standings',
+      label: 'Standings',
+      glyph: '≡',
+      href: props.selectedLeagueId
+        ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
+        : '/core/standings',
+    },
     {
       key: 'season-outlook',
       label: 'Season Outlook',
@@ -343,7 +362,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
     heading: 'This league',
     keys: ['my-team', 'matchup', 'waivers', 'trades', 'players', 'draft-hq', 'war-room'],
   },
-  { id: 'now', heading: 'This week', keys: ['week', 'live', 'season-outlook'] },
+  { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
   { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
   { id: 'manage', heading: 'Manage', keys: ['commissioner', 'notifications', 'tools'] },
 ]

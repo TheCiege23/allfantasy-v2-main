@@ -1,0 +1,379 @@
+/*
+ * AF Core — Your Week, league-scoped (38a·3).
+ *
+ * Sibling to af-week.css, not an extension: that file styles a cross-league
+ * board of many small cards, this one styles a single hero plus a sideline
+ * grid. Sharing would put a "which of the two?" qualifier on every rule.
+ *
+ * Scoped under `.af-wl`, inside `.af-core`. Anything colliding with an
+ * `.af-core X` base rule carries the prefix — a bare class is (0,1,0) and loses
+ * to (0,2,0) regardless of source order.
+ */
+
+.af-wl {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1160px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-wl-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-wl-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-wl-title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.af-wl-week {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-wl-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-wl-sub a {
+  color: var(--accent);
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+
+.af-wl-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--chimmy);
+  border: 1px solid var(--accent-line);
+}
+.af-wl-hero[data-empty='true'] {
+  background: var(--surface);
+  border-color: var(--line);
+  gap: 7px;
+}
+.af-wl-hero-why {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-wl-hero-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+.af-wl-side {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.af-wl-side:last-child {
+  text-align: right;
+  align-items: flex-end;
+}
+.af-wl-side .af-label {
+  color: var(--faint);
+}
+.af-wl-side[data-you='true'] .af-label {
+  color: var(--accent);
+}
+.af-wl-side-name {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.af-wl-side-proj {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text2);
+}
+.af-wl-side[data-you='true'] .af-wl-side-proj {
+  color: var(--text);
+}
+
+.af-wl-vs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+.af-wl-vs-mark {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-wl-margin {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.af-wl-margin[data-dir='up'] {
+  color: var(--good);
+}
+.af-wl-margin[data-dir='down'] {
+  color: var(--bad);
+}
+
+.af-wl-prob {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-wl-prob .af-label {
+  flex: none;
+  color: var(--faint);
+}
+.af-wl-prob-bar {
+  flex: 1 1 200px;
+  height: 8px;
+  border-radius: 5px;
+  background: var(--chip);
+  overflow: hidden;
+  display: block;
+}
+.af-wl-prob-you {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.af-wl-prob-v {
+  flex: none;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.af-wl-prob-why {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+.af-wl-rivalry {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-wl-rivalry[data-tone='up'] {
+  border-color: var(--good-soft);
+}
+.af-wl-rivalry[data-tone='down'] {
+  border-color: var(--bad-soft);
+}
+.af-wl-rivalry .af-label {
+  flex: none;
+  color: var(--faint);
+}
+.af-wl-rivalry-rec {
+  flex: none;
+  font-size: 17px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.af-wl-rivalry[data-tone='up'] .af-wl-rivalry-rec {
+  color: var(--good);
+}
+.af-wl-rivalry[data-tone='down'] .af-wl-rivalry-rec {
+  color: var(--bad);
+}
+.af-wl-rivalry[data-tone='none'] .af-wl-rivalry-rec {
+  color: var(--faint);
+}
+.af-wl-rivalry-note {
+  margin: 0;
+  flex: 1 1 260px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Prefixed: `.af-core .af-btn` is (0,2,0) with min-height 36px. */
+.af-core .af-wl-hero-cta {
+  align-self: flex-start;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+}
+
+/* ── The rest of the league ──────────────────────────────────────────── */
+
+.af-wl-rest {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-wl-rest-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-wl-rest-head h2 {
+  margin: 0;
+  color: var(--text2);
+}
+.af-wl-rest-note {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.af-wl-rest-why {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
+.af-wl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+.af-wl-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 15px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-wl-card-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.af-wl-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The projected winner is the one you read first; the other is context. */
+.af-wl-card-row[data-lead='true'] .af-wl-card-name {
+  color: var(--text);
+  font-weight: 800;
+}
+.af-wl-card-proj {
+  flex: none;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.af-wl-card-row[data-lead='true'] .af-wl-card-proj {
+  color: var(--text2);
+}
+.af-wl-card-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-wl-card-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--line2);
+}
+.af-wl-card-why {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 620px) {
+  .af-wl-title {
+    font-size: 23px;
+  }
+  .af-wl-hero {
+    padding: 16px;
+    gap: 14px;
+  }
+  /*
+   * The three-column hero does not survive 390px — two team names and a centre
+   * column leave about 90px each. Stacked, each side keeps its full name and
+   * the versus marker becomes a divider between them.
+   */
+  .af-wl-hero-sides {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .af-wl-side:last-child {
+    text-align: left;
+    align-items: flex-start;
+  }
+  .af-wl-side {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    justify-content: space-between;
+  }
+  .af-wl-side .af-label {
+    flex: none;
+  }
+  .af-wl-side-name {
+    flex: 1 1 auto;
+  }
+  .af-wl-side-proj {
+    font-size: 22px;
+    flex: none;
+  }
+  .af-wl-vs {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .af-core .af-wl-hero-cta {
+    align-self: stretch;
+    justify-content: center;
+  }
+  .af-wl-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
