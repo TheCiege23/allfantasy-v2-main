@@ -39,7 +39,20 @@ export type LeagueRoster = {
 
 export type LeagueRostersData = {
   rosters: LeagueRoster[]
+  /**
+   * The roster a proposal may be sent FROM — the engine's own predicate, and
+   * null on every imported league.
+   */
   viewerRosterId: string | null
+  /**
+   * The roster that is the viewer's TEAM on screen. Resolved the way the rest
+   * of the league surfaces resolve identity, so it is present on imports too.
+   *
+   * ⚠ USE THIS ONE FOR "WHICH TEAM IS MINE" AND THE OTHER FOR "CAN I SEND
+   * THIS". Filtering a counterparty list by `viewerRosterId` filters nothing on
+   * an import and offers the manager their own team to trade with.
+   */
+  viewerTeamRosterId: string | null
 }
 
 export type LeagueRostersState = 'idle' | 'loading' | 'failed'
@@ -64,6 +77,7 @@ export function useLeagueRosters(
       setData({
         rosters: Array.isArray(j.rosters) ? j.rosters : [],
         viewerRosterId: j.viewerRosterId ?? null,
+        viewerTeamRosterId: j.viewerTeamRosterId ?? null,
       })
       setState('idle')
     } catch {

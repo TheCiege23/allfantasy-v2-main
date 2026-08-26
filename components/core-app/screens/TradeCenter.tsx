@@ -203,11 +203,18 @@ export function TradeCenter(props: {
     props.league?.id ?? null,
     picking !== null || giveAssets.length + getAssets.length > 0,
   )
+  /*
+   * ⚠ IDENTITY, NOT THE PROPOSE GATE. `viewerRosterId` is the engine's strict
+   * predicate and is null on every imported league, so filtering "everyone but
+   * me" by it filters nothing — and the manager gets offered their own team as
+   * a trade partner. `viewerTeamRosterId` is who they are on screen, which is
+   * the question being asked here.
+   */
   const myRoster =
-    rosterData?.rosters.find((r) => r.rosterId === rosterData.viewerRosterId) ?? null
+    rosterData?.rosters.find((r) => r.rosterId === rosterData.viewerTeamRosterId) ?? null
   const partnerRoster = rosterData?.rosters.find((r) => r.rosterId === partnerRosterId) ?? null
   const otherRosters = (rosterData?.rosters ?? []).filter(
-    (r) => r.rosterId !== rosterData?.viewerRosterId,
+    (r) => r.rosterId !== rosterData?.viewerTeamRosterId,
   )
   const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
 

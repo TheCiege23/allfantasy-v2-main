@@ -170,13 +170,47 @@ export async function GET(
   )
 
   /*
-   * ⚠ THE SAME PREDICATE THE ENGINE ENFORCES, NOT A LOOSER ONE.
-   * `createAfLeagueTrade` throws unless `proposer.platformUserId` equals the
-   * proposing user id. Resolving the viewer's roster any other way — by claimed
-   * team, by linked Sleeper id — would light up a Propose button that the write
-   * then refuses, which is the failure mode worth avoiding most.
+   * ⚠ TWO DIFFERENT QUESTIONS, AND ANSWERING BOTH WITH ONE FIELD IS A BUG.
+   *
+   * `viewerRosterId` — CAN I PROPOSE FROM THIS ROSTER. `createAfLeagueTrade`
+   * throws unless `proposer.platformUserId` equals the proposing user id, so
+   * this uses that exact equality and nothing looser. Anything looser lights up
+   * a Propose button the write then refuses.
+   *
+   * `viewerTeamRosterId` — WHICH TEAM IS MINE ON SCREEN. On an imported league
+   * `Roster.platformUserId` holds the SLEEPER user id, so the strict predicate
+   * above is null for every imported league in the product. A UI that filtered
+   * "everyone but me" by it filtered nothing, and offered the manager their own
+   * team as a trade partner. This resolves identity the way the rest of the
+   * league surfaces do — claimed LeagueTeam first, then the linked Sleeper id.
+   *
+   * They are deliberately separate fields. Collapsing them either breaks the
+   * counterparty list on imports or breaks the propose gate on natives.
    */
-  const viewerRosterId = rosters.find((r) => r.platformUserId === userId)?.id ?? null
+  const viewerRosterId = rosters.find((r) => r.platformUserId === userId) ?? null
 
-  return NextResponse.json({ rosters: result, viewerRosterId })
+  const identityIds = await (async () => {
+    const ids = new Set<string>([userId])
+    const claimed = await prisma.leagueTeam
+      .findFirst({
+        where: { leagueId, claimedByUserId: userId },
+        select: { platformUserId: true },
+      })
+      .catch(() => null)
+    if (claimed?.platformUserId) ids.add(claimed.platformUserId)
+    const profile = await prisma.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null)
+    if (profile?.sleeperUserId) ids.add(profile.sleeperUserId)
+    return ids
+  })()
+
+  const viewerTeamRosterId =
+    viewerRosterId?.id ?? rosters.find((r) => identityIds.has(r.platformUserId))?.id ?? null
+
+  return NextResponse.json({
+    rosters: result,
+    viewerRosterId: viewerRosterId?.id ?? null,
+    viewerTeamRosterId,
+  })
 }

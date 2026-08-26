@@ -359,3 +359,44 @@ describe('⚠ naming the other side is what turns the counterparty layer on', ()
     expect(PICKER).toContain('props.rosterKnown ? (')
   })
 })
+
+describe('⚠ two questions about the viewer, and one field cannot answer both', () => {
+  const ROSTERS = readFileSync(
+    resolve(process.cwd(), 'app/api/leagues/[leagueId]/trades/rosters/route.ts'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+  const PANEL = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeProposePanel.tsx'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+
+  it('returns them as separate fields', () => {
+    /*
+     * `viewerRosterId` answers "can I propose from this roster" and is the
+     * engine's exact equality. `viewerTeamRosterId` answers "which team is mine
+     * on screen" and resolves the way every other league surface does.
+     */
+    expect(ROSTERS).toContain('viewerRosterId: viewerRosterId?.id ?? null')
+    expect(ROSTERS).toContain('viewerTeamRosterId,')
+  })
+
+  it('⚠ the strict predicate is null on every imported league, so identity cannot use it', () => {
+    /*
+     * On an import `Roster.platformUserId` holds the SLEEPER user id, so
+     * `platformUserId === userId` never holds. Filtering "everyone but me" by
+     * it filtered NOTHING and offered the manager their own team to trade with.
+     */
+    expect(SRC).toContain('r.rosterId !== rosterData?.viewerTeamRosterId')
+    expect(SRC).not.toContain('r.rosterId !== rosterData?.viewerRosterId')
+  })
+
+  it('resolves identity the way the rest of the league surfaces do', () => {
+    expect(ROSTERS).toContain('claimedByUserId: userId')
+    expect(ROSTERS).toContain('sleeperUserId: true')
+  })
+
+  it('keeps the propose gate on the strict one', () => {
+    // Anything looser lights up a Propose button createAfLeagueTrade refuses.
+    expect(PANEL).toContain('const myRosterId = props.viewerRosterId')
+  })
+})
