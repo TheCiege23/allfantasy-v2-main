@@ -394,19 +394,12 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
             </>
           ) : idpLeagueUi ? (
             <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
-              <IDPMatchupView
-                leagueId={league.id}
-                yourTeamName="Your team"
-                oppTeamName="Opponent"
-                week={week}
-                sport={resolved}
-                yourOffenseIds={[]}
-                oppOffenseIds={[]}
-                yourDefenseIds={['4040', '4041', '4042']}
-                oppDefenseIds={['4043', '4044', '4045']}
-                players={players}
-                live
-              />
+              {/*
+                The team names, the rosters and the scoreboard all come from the league now. This
+                previously passed the literal ids ['4040','4041','4042'] against
+                ['4043','4044','4045'] with the names "Your team" and "Opponent".
+              */}
+              <IDPMatchupView leagueId={league.id} sport={resolved} live />
             </div>
           ) : null}
         </main>

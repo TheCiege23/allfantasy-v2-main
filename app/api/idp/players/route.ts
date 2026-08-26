@@ -8,6 +8,7 @@ import { isIdpPosition } from '@/lib/idp-kicker-values'
 import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/idp/idpRouteHelpers'
 import { prisma } from '@/lib/prisma'
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
+import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,8 +56,21 @@ export async function GET(req: NextRequest) {
    * render and not an error. Answering it with a 404 would make "this page isn't for you" look
    * to the client like a failed request.
    */
-  if ((searchParams?.get('view') ?? '').toLowerCase() === 'defense-hub') {
+  const view = (searchParams?.get('view') ?? '').toLowerCase()
+  if (view === 'defense-hub') {
     const payload = await loadDefenseHub({ prisma, leagueId, userId })
+    return NextResponse.json(payload)
+  }
+  if (view === 'idp-matchup') {
+    const seasonParam = Number(searchParams?.get('season'))
+    const weekParam = Number(searchParams?.get('week'))
+    const payload = await loadIdpMatchup({
+      prisma,
+      leagueId,
+      userId,
+      season: Number.isFinite(seasonParam) && seasonParam > 0 ? seasonParam : undefined,
+      week: Number.isFinite(weekParam) && weekParam > 0 ? weekParam : undefined,
+    })
     return NextResponse.json(payload)
   }
 
