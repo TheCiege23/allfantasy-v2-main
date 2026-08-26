@@ -712,6 +712,29 @@
  * Presence. Deliberately small and low-contrast: it is ambient context, not a
  * roster, and it must not read as a scoreboard of who is paying attention.
  */
+.af-cm-draft-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 1px 7px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.af-cm-draft-toggle[data-on='true'] {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-cm-draft-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .af-cm-presence {
   display: flex;
   flex-wrap: wrap;

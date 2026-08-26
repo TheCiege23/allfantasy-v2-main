@@ -629,6 +629,7 @@ function LeaguePanel({
   const [replyTo, setReplyTo] = useState<LeagueMessage | null>(null)
   const [pins, setPins] = useState<PinnedRef[]>([])
   const [pinBusy, setPinBusy] = useState(false)
+  const [includeDraft, setIncludeDraft] = useState(false)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -652,7 +653,9 @@ function LeaguePanel({
     if (!quiet) setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40`)
+      const res = await fetch(
+        `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${includeDraft ? '&includeDraft=1' : ''}`,
+      )
       if (!res.ok) throw new Error(`Chat returned ${res.status}`)
       /*
        * Wire shape is /api/league/chat's toClientMessage (reached via the
@@ -695,7 +698,8 @@ function LeaguePanel({
     } finally {
       if (!quiet) setLoading(false)
     }
-  }, [])
+    /* Flipping the draft-room view has to re-fetch, so it belongs in here. */
+  }, [includeDraft])
 
   const loadPins = useCallback(async (leagueId: string) => {
     try {
@@ -1071,6 +1075,21 @@ function LeaguePanel({
           @chimmy — ask the league&apos;s AI, publicly
         </button>
         <PresenceStrip viewers={presence} />
+        {/*
+          The draft room already mirrors its messages into this league's chat;
+          until now nothing read them. This is a view preference, not a league
+          setting — one reader turning it on does not change what anybody else
+          sees.
+        */}
+        <button
+          type="button"
+          className="af-cm-draft-toggle"
+          data-on={includeDraft}
+          onClick={() => setIncludeDraft((v) => !v)}
+          aria-pressed={includeDraft}
+        >
+          {includeDraft ? 'Hide draft room' : 'Show draft room'}
+        </button>
       </div>
 
       <PinnedBoard

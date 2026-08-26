@@ -128,7 +128,17 @@ export async function GET(req: NextRequest) {
   }
 
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '50'), 100)
-  const messages = await getLeagueChatMessages(leagueId, { limit, requestingUserId: userId })
+  /*
+   * A VIEW preference, not a stored setting. The draft room already mirrors its
+   * messages here; this decides whether the reader sees them, and it is a query
+   * parameter precisely so it needs no per-league storage and no migration.
+   */
+  const includeDraftRoom = req.nextUrl.searchParams?.get('includeDraft') === '1'
+  const messages = await getLeagueChatMessages(leagueId, {
+    limit,
+    requestingUserId: userId,
+    includeDraftRoom,
+  })
   /*
    * ⚠ A PIN IS STORED AS A CHAT ROW WHOSE BODY IS JSON. `/pin` writes a
    * `type: 'pin'` LeagueChatMessage carrying `{ messageId, snippet }`, and this
