@@ -102,7 +102,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // (returns null when there is no session). Wrapped in try/catch so a
   // NextAuth misconfiguration cannot crash the document shell.
   let initialSession: Session | null = null;
-  try {
+  // AF_SKIP_SESSION_PRELOAD=1 removes this call entirely. It is wrapped in a
+  // try/catch below, and a try/catch around a dynamic Next API also swallows
+  // Next's own internal control-flow exceptions — which would discard the
+  // layout's render rather than surfacing an error. It runs before either
+  // return path, so the minimal-layout bisect still went through it. Temporary.
+  if (process.env.AF_SKIP_SESSION_PRELOAD !== '1') try {
     const [{ getServerSession }, { authOptions }] = await Promise.all([
       import('next-auth'),
       import('@/lib/auth'),
