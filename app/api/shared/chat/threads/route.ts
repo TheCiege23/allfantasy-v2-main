@@ -1,13 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ensureMatchupThreadsForUser } from '@/lib/chat-core/matchupThreads'
 import { resolvePlatformUser } from '@/lib/platform/current-user'
 import { createPlatformThread, getPlatformChatThreads } from '@/lib/platform/chat-service'
 import { resolveConversationSafetyForUser } from '@/lib/moderation'
 import { prisma } from '@/lib/prisma'
 
+/**
+ * The season and week matchup rooms should be created for.
+ *
+ * Returns null rather than guessing: creating rooms for the wrong week would
+ * put two people in a conversation about a game they are not playing.
+ */
+async function getNflStateForMatchupRooms(): Promise<{ season: number; week: number } | null> {
+  try {
+    const { getNflState } = await import('@/lib/sleeper-client')
+    const state = await getNflState()
+    const season = Number(state?.season)
+    const week = Number(state?.week)
+    if (!Number.isFinite(season) || !Number.isFinite(week) || week < 1) return null
+    return { season, week }
+  } catch {
+    return null
+  }
+}
+
 export async function GET() {
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ status: 'ok', threads: [] })
+  }
+
+  /*
+   * Make sure this week's matchup rooms exist before listing. Folded into the
+   * read the drawer already makes rather than given a cron: it is idempotent
+   * through its own index, and it never throws.
+   *
+   * The week comes from the NFL state the app already tracks; a wrong week would
+   * silently create rooms nobody is playing in.
+   */
+  const state = await getNflStateForMatchupRooms()
+  if (state) {
+    await ensureMatchupThreadsForUser(user.appUserId, state)
   }
 
   const threads = await getPlatformChatThreads(user.appUserId)
