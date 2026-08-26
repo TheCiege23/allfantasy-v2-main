@@ -1,8 +1,8 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "builder": "NIXPACKS",
+    "buildCommand": "npx prisma generate && npm run build:railway"
   },
   "deploy": {
     "startCommand": "PORT=8080 node scripts/railway-next-start.cjs",
