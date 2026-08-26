@@ -71,7 +71,7 @@ is not a data-API call and matching it reported four test fixtures as violations
 but it is a Phase-5 audit snapshot and is itself incomplete — its
 `clientLocations` for CFBD listed three files; there are six.
 
-**The code does not comply yet, and the guard says so.** A full scan reports 95
+**The code does not comply yet, and the guard says so.** A full scan reports 94
 violations across tracked source (the count drifts — re-run rather than quoting
 this number). Nothing is allowlisted to hide them.
 
@@ -100,21 +100,38 @@ or not at all.
 
 ### Remaining debt, triaged
 
-Twelve lines came from the three providers added on 2026-08-25. Three were
-resolved (below); **nine remain**, all genuine:
+Twelve lines came from the three providers added on 2026-08-25. Four were
+resolved (below); **eight remain**, all genuine:
 
-- **Adapters with request-path callers** — `lib/fantasycalc.ts` (two lines; ~30
-  direct importers, many under `app/api/`), `lib/api-football.ts`,
-  `lib/api-sports.ts`, `lib/openweathermap.ts`,
-  `lib/world-cup/apiSportsWorldCup.ts`, `lib/brackets/providers/index.ts`. These
-  must NOT be allowlisted the way `lib/cfb-player-data.ts` was — that exemption
-  was earned by first moving the callers off them. FantasyCalc already has a
-  DB-first path (`lib/fantasycalc-db.ts`, fed by
-  `scripts/sync-fantasycalc-valuations.ts`); the work is migrating callers to
-  it, which is a project of its own and has not been done.
-  ⚠ **Confirm that sync is actually scheduled before pointing anything at
-  `fantasycalc-db`.** `ingestCFBDStats` was written, correct, and had no
-  scheduled caller for months; the same mistake here would be silent.
+- **Adapters, censused 2026-08-25.** Only one earned an exemption:
+  - `lib/api-football.ts` — **allowlisted.** One importer, `app/api/sports/sync`,
+    POST-only behind `requireAdminOrBearer`, taking `sync*ToDb` writers only.
+  - `lib/api-sports.ts` — **stays reported, and do not add it by analogy to the
+    line above.** `lib/sports-router.ts` imports it as `./api-sports` — a
+    RELATIVE path that a `from '@/lib/api-sports'` search does not find — and
+    takes live `fetchAPISportsStandings` / `fetchAPISportsPlayerStatistics`,
+    which AI enrichment and the survivor pipeline reach.
+  - `lib/openweathermap.ts` — reached from `/api/sports/weather` and, through
+    `lib/weather/weatherService.ts` and `lib/weather/venueResolver.ts`, from six
+    more request paths.
+  - `lib/brackets/providers/index.ts` — three `app/api/bracket/*` importers, one
+    of which (`/api/bracket/providers`) is a plain read endpoint.
+  - `lib/world-cup/apiSportsWorldCup.ts` — consumed only by sibling `lib/world-cup/*`
+    modules, but those sit under 20+ app routes including non-admin chat and AI
+    paths. Not proven unreachable, so not exempted. Unreachability has to be
+    demonstrated, never assumed.
+  - `lib/fantasycalc.ts` (two lines) — ~30 direct importers, many under
+    `app/api/`. A DB-first path exists (`lib/fantasycalc-db.ts`, fed by
+    `scripts/sync-fantasycalc-valuations.ts`); migrating callers to it is a
+    project of its own and has not been done.
+    ⚠ **Confirm that sync is actually scheduled before pointing anything at
+    `fantasycalc-db`.** `ingestCFBDStats` was written, correct, and had no
+    scheduled caller for months; the same mistake here would be silent.
+
+  **Census these with a positive control.** A `from '@/lib/x'` grep alone missed
+  `lib/sports-router.ts`, which would have made `lib/api-sports.ts` look
+  ingestion-only and earned it an exemption it does not deserve. Always also
+  grep for `'./x'`, `'../x'` and `require(`.
 - **A service, not an adapter** — `lib/trade-intel/marketValueService.ts:31`
   calls FantasyCalc directly rather than going through `lib/fantasycalc.ts`, so
   migrating the adapter's callers would miss it. It needs its own move.

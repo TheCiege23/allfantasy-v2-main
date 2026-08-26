@@ -185,6 +185,23 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/cfb-player-data\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
+   * The API-Football adapter. Earned the same way CFBD did, and checked the same
+   * way — by its callers.
+   *
+   * It has exactly ONE importer in tracked source: `app/api/sports/sync/route.ts`,
+   * which is POST-only, gated behind `requireAdminOrBearer`, and imports nothing
+   * from here but `sync*ToDb` writers plus the two diagnostics helpers. That is an
+   * ingestion trigger that happens to be reachable over HTTP, not a read path.
+   *
+   * ⚠ Its sibling `lib/api-sports.ts` is NOT here and must not be added by
+   * analogy — the two look alike and are not alike. `lib/sports-router.ts`
+   * imports it as `./api-sports` (a RELATIVE path, invisible to a
+   * `from '@/lib/api-sports'` search) and pulls live `fetchAPISportsStandings` /
+   * `fetchAPISportsPlayerStatistics`, which AI enrichment and the survivor
+   * pipeline reach. That is a genuine read path.
+   */
+  /^lib\/api-football\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
    * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
    * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is
    * everything ABOVE it.
