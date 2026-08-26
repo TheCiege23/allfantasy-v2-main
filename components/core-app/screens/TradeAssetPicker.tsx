@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { RosterPick } from '@/components/core-app/screens/useLeagueRosters'
 
 /**
  * The asset picker behind "+ Add asset" on the Trade Center.
@@ -18,7 +19,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type PickedAsset =
   | { kind: 'player'; playerId: string | null; name: string; position: string | null; team: string | null; value: number | null; sportHint?: string }
-  | { kind: 'pick'; year: number; round: number; label: string }
+  /**
+   * `pickId` is present only when the pick came off a real roster. A hand-typed
+   * year and round can be priced but never proposed — the trade engine matches a
+   * pick by its stored id, so there is nothing for an offer to point at.
+   */
+  | {
+      kind: 'pick'
+      year: number
+      round: number
+      label: string
+      pickId?: string | null
+      itemType?: 'rookie_pick' | 'future_pick'
+    }
   | { kind: 'faab'; amount: number }
 
 type SearchRow = {
@@ -40,6 +53,16 @@ export function TradeAssetPicker(props: {
   onClose: () => void
   /** Restricts search when the league is single-sport. */
   sport?: string | null
+  /**
+   * The picks actually held by the roster this side is sending from, when we
+   * know whose roster it is. Empty means we do not know — which is a different
+   * thing from "they hold none", and the copy below keeps them apart.
+   */
+  rosterPicks?: RosterPick[]
+  /** Whose picks these are, for the label. */
+  rosterLabel?: string | null
+  /** True once a counterparty is chosen, so "we do not know" can be said precisely. */
+  rosterKnown?: boolean
 }) {
   const [tab, setTab] = useState<'player' | 'pick' | 'faab'>('player')
   const [query, setQuery] = useState('')
@@ -154,6 +177,47 @@ export function TradeAssetPicker(props: {
 
       {tab === 'pick' ? (
         <div className="af-tc-picker-fields">
+          {/*
+            ⚠ REAL PICKS FIRST, WHEN THERE ARE ANY. A pick chosen from the roster
+            carries the id the trade engine matches on, so it can be both priced
+            AND proposed. Everything below it is analysis-only, and says so.
+          */}
+          {(props.rosterPicks ?? []).length > 0 ? (
+            <>
+              <span className="af-label">
+                {props.rosterLabel ? `${props.rosterLabel}'s picks` : 'Picks on this roster'}
+              </span>
+              {(props.rosterPicks ?? []).map((p) => (
+                <button
+                  key={p.pickId}
+                  type="button"
+                  className="af-tc-row af-tc-row--button"
+                  onClick={() =>
+                    props.onPick({
+                      kind: 'pick',
+                      year: p.season ?? new Date().getFullYear(),
+                      round: p.round ?? 1,
+                      label: p.label,
+                      pickId: p.pickId,
+                      itemType: p.itemType,
+                    })
+                  }
+                >
+                  <span className="af-tc-row-body">
+                    <span className="af-tc-row-name">{p.label}</span>
+                    <span className="af-tc-row-sub">On the roster — can be proposed</span>
+                  </span>
+                </button>
+              ))}
+            </>
+          ) : props.rosterKnown ? (
+            <p className="af-tc-row-sub">
+              No picks with an id on this roster. A pick can still be added below for the verdict,
+              but it cannot be sent as part of an offer.
+            </p>
+          ) : null}
+
+          <span className="af-label">Add a pick by hand</span>
           <label className="af-tc-field">
             <span className="af-label">Year</span>
             <input
@@ -197,7 +261,8 @@ export function TradeAssetPicker(props: {
           */}
           <p className="af-tc-row-sub">
             Where in the round it lands is projected from the sending team&rsquo;s record, so there
-            is nothing to enter here.
+            is nothing to enter here. A pick added this way is priced but not proposable &mdash;
+            the league only recognises a pick it already has on a roster.
           </p>
         </div>
       ) : null}

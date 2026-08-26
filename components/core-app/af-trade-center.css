@@ -807,3 +807,63 @@
     width: 100%;
   }
 }
+
+/* ── Counterparty ────────────────────────────────────────────────────── */
+
+/*
+ * Sits between the inbox and the builder because that is where the decision
+ * belongs: you know who you are dealing with before you start moving assets,
+ * and the verdict below is a different verdict once this is set.
+ */
+.af-tc-partner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-partner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-tc-partner-chip {
+  cursor: pointer;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text2);
+}
+.af-tc-partner-chip[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* A control that reads as prose, for an offer to switch to someone reachable. */
+.af-tc-linklike {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .af-tc-partner-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-tc-partner-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .af-tc-partner-chip {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+}

@@ -309,3 +309,53 @@ describe('phase 2 — mobile and drafts', () => {
     expect(SRC).toContain('`af-trade-draft:${props.league.id}`')
   })
 })
+
+describe('⚠ naming the other side is what turns the counterparty layer on', () => {
+  const ROSTERS = readFileSync(
+    resolve(process.cwd(), 'app/api/leagues/[leagueId]/trades/rosters/route.ts'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+  const PICKER = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeAssetPicker.tsx'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+
+  it('sends the opponent id, without which buildTradeContextNotes returns no leverage at all', () => {
+    /*
+     * `buildLeverageNotes` bails on `if (!opponentTeamExternalId) return []`.
+     * Their roster holes, the waiver wire they would replace from, and how they
+     * have historically paid for the position all sit behind that one id — so
+     * an anonymous "Their team" column silently discards half the ledger.
+     */
+    expect(SRC).toContain('opponentTeamExternalId: partnerRoster?.teamExternalId ?? null')
+  })
+
+  it('⚠ uses LeagueTeam.externalId, not a roster id and not a user id', () => {
+    // An id from the wrong space returns no opponent rather than an error: the
+    // notes simply never appear and nothing says why.
+    expect(ROSTERS).toContain('externalIdByPlatformId')
+    expect(SRC).toContain('NOT A ROSTER ID AND NOT A USER')
+  })
+
+  it('clears the verdict when the counterparty changes', () => {
+    // The score on screen was computed against the previous manager's roster.
+    expect(SRC).toContain('The verdict belonged to the previous counterparty.')
+  })
+
+  it('gives each column the picks its OWN roster holds', () => {
+    // Passing the wrong side's would offer a manager a pick they do not hold,
+    // and the engine would refuse it on send.
+    expect(SRC).toContain("side.side === 'give' ? myRoster?.picks ?? [] : partnerRoster?.picks ?? []")
+  })
+
+  it('offers real picks above the hand-typed fallback, and labels which is which', () => {
+    expect(PICKER).toContain('On the roster — can be proposed')
+    expect(PICKER).toContain('priced but not proposable')
+  })
+
+  it('never claims a roster holds no picks when we do not know whose roster it is', () => {
+    // "No picks on this roster" and "we do not know which roster" are different
+    // facts, and only the first is safe to print.
+    expect(PICKER).toContain('props.rosterKnown ? (')
+  })
+})

@@ -25,6 +25,8 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8').repl
 const PANEL = read('components/core-app/screens/TradeProposePanel.tsx')
 const CENTER = read('components/core-app/screens/TradeCenter.tsx')
 const ROSTERS = read('app/api/leagues/[leagueId]/trades/rosters/route.ts')
+const HOOK = read('components/core-app/screens/useLeagueRosters.ts')
+const VALIDATOR = read('lib/league-trade-engine/tradeValidationService.ts')
 const DISPATCH = read('app/api/leagues/[leagueId]/[section]/route.ts')
 
 const MINE = [
@@ -122,16 +124,53 @@ describe('⚠ the board and the proposable deal are different sets', () => {
     ])
   })
 
-  it('⚠ blocks picks, because the builder has no pick id to prove ownership', () => {
-    // The engine validates a pick by its id against the sending roster's own
-    // pick list. A year and a round is not that, and inventing a reference
-    // would be a claim we cannot back.
+  it('sends a pick that came off the roster, with its real id', () => {
+    /*
+     * The picker now offers the picks the roster actually holds, carrying the
+     * same key `validateTradeAssets` matches on. Those can be proposed.
+     */
+    const { assets, blocked } = run(
+      [
+        {
+          kind: 'pick',
+          year: 2027,
+          round: 1,
+          label: '2027 round 1',
+          pickId: 'pk-abc',
+          itemType: 'future_pick',
+        },
+      ],
+      [],
+    )
+    expect(blocked).toEqual([])
+    expect(assets).toEqual([
+      {
+        itemType: 'future_pick',
+        itemReference: 'pk-abc',
+        fromRosterId: 'r-mine',
+        toRosterId: 'r-theirs',
+      },
+    ])
+  })
+
+  it('⚠ still blocks a hand-typed pick, because nothing can be matched to it', () => {
+    // A year and a round is not an id, and inventing a reference would be a
+    // claim we cannot back — the league only recognises a pick it already holds.
     const { assets, blocked } = run(
       [{ kind: 'pick', year: 2027, round: 1, label: '2027 round 1' }],
       [],
     )
     expect(assets).toEqual([])
-    expect(blocked[0]).toContain('picks can be analysed here but not proposed yet')
+    expect(blocked[0]).toContain('typed by hand')
+  })
+
+  it('⚠ the picker and the engine read pick ids through ONE function', () => {
+    // Two copies of this parsing would drift apart the first time a platform
+    // spelled a key differently, and the UI would offer a pick the engine then
+    // refused.
+    expect(VALIDATOR).toContain('export function listProposablePicks')
+    expect(ROSTERS).toContain('listProposablePicks(r.playerData)')
+    expect(VALIDATOR).toContain('listProposablePicks(from.playerData).some((p) => p.pickId === ref)')
   })
 
   it('⚠ a blocked asset poisons the whole proposal, not just itself', () => {
@@ -204,10 +243,24 @@ describe('⚠ no new API route, and the panel earns its request', () => {
     expect(DISPATCH).toContain("'trades': () => import('../trades/handler')")
   })
 
-  it('does not fetch until there is something to propose', () => {
-    // Enriching every roster in the league is an expensive read, and there is
-    // nothing to send until the board has an asset on it.
-    expect(PANEL).toContain('if (!leagueId || !hasDeal || data != null')
+  it('does not fetch until the manager starts building', () => {
+    // Enriching every roster in the league is an expensive read, and a manager
+    // who only reads the verdict never needs it.
+    expect(HOOK).toContain('if (!leagueId || !enabled || data != null')
+  })
+
+  it('⚠ reads the rosters ONCE for the whole screen', () => {
+    // The picker, the counterparty selector and this panel all want the same
+    // answer; three fetches would triple an expensive read for one screen.
+    expect(PANEL).not.toContain('/trades/rosters')
+    expect(CENTER).toContain('useLeagueRosters(')
+  })
+
+  it('⚠ has one counterparty selection, not two that can disagree', () => {
+    // A second picker here could name a different manager from the one the
+    // verdict was computed against.
+    expect(PANEL).toContain('ONE COUNTERPARTY SELECTION FOR THE WHOLE SCREEN')
+    expect(PANEL).toContain('props.partnerRosterId')
   })
 
   it('sits after the verdict, not beside the builder', () => {

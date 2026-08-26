@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
+import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
@@ -152,6 +153,21 @@ export function TradeCenter(props: {
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   const [draftNote, setDraftNote] = useState<string | null>(null)
 
+  /*
+   * ── Who you are trading with ──────────────────────────────────────────
+   *
+   * ⚠ THE COUNTERPARTY LAYER IS DEAD WITHOUT THIS. `buildTradeContextNotes`
+   * returns no leverage notes at all unless it is handed an
+   * `opponentTeamExternalId` — their roster holes, the waiver wire they would
+   * replace from, and how they have historically paid for the position all sit
+   * behind that one id. An anonymous "Their team" column silently discards half
+   * the ledger.
+   *
+   * It also names the picks each side can actually send, which is what makes a
+   * pick proposable rather than only priceable.
+   */
+  const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
+
   /** Prices the engine resolved, keyed by name, merged onto what was added. */
   const pricedBy = useMemo(() => {
     const m = new Map<string, number | null>()
@@ -181,6 +197,19 @@ export function TradeCenter(props: {
 
   const give = toLines(giveAssets)
   const get = toLines(getAssets)
+
+  /* Only once they start building — see the hook's own note on why it is lazy. */
+  const { data: rosterData } = useLeagueRosters(
+    props.league?.id ?? null,
+    picking !== null || giveAssets.length + getAssets.length > 0,
+  )
+  const myRoster =
+    rosterData?.rosters.find((r) => r.rosterId === rosterData.viewerRosterId) ?? null
+  const partnerRoster = rosterData?.rosters.find((r) => r.rosterId === partnerRosterId) ?? null
+  const otherRosters = (rosterData?.rosters ?? []).filter(
+    (r) => r.rosterId !== rosterData?.viewerRosterId,
+  )
+  const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
 
   const addAsset = useCallback(
     (side: 'give' | 'get', asset: PickedAsset) => {
@@ -260,6 +289,14 @@ export function TradeCenter(props: {
            */
           strategy: 'neutral',
           teamContext: 'my_team',
+          /*
+           * ⚠ THIS IS `LeagueTeam.externalId`, NOT A ROSTER ID AND NOT A USER
+           * ID. The analyzer resolves the counterparty through LeagueTeam, and
+           * an id from the wrong space returns no opponent rather than an
+           * error — the leverage notes simply never appear and nothing says
+           * why.
+           */
+          opponentTeamExternalId: partnerRoster?.teamExternalId ?? null,
           sideGive: giveAssets.map(toInput),
           sideGet: getAssets.map(toInput),
         }),
@@ -277,7 +314,7 @@ export function TradeCenter(props: {
     } finally {
       setBusy(false)
     }
-  }, [props.league?.id, giveAssets, getAssets])
+  }, [props.league?.id, giveAssets, getAssets, partnerRoster?.teamExternalId])
 
   /*
    * ⚠ A LETTER PER SIDE, OR NO LETTER AT ALL. `projectedLetterFor` returns null
@@ -456,12 +493,46 @@ export function TradeCenter(props: {
       */}
       <TradeInbox leagueId={props.league?.id ?? null} onLoad={loadOffer} />
 
+      {/*
+        Naming the other side is not decoration. It is what turns on the whole
+        counterparty half of the ledger, and what lets each column offer the
+        picks that roster actually holds.
+      */}
+      {otherRosters.length > 0 ? (
+        <div className="af-tc-partner">
+          <span className="af-label">Trading with</span>
+          <div className="af-tc-partner-chips">
+            {otherRosters.map((r) => (
+              <button
+                key={r.rosterId}
+                type="button"
+                className="af-tc-chip af-tc-partner-chip"
+                data-on={partnerRosterId === r.rosterId}
+                onClick={() => {
+                  setPartnerRosterId((prev) => (prev === r.rosterId ? null : r.rosterId))
+                  /* The verdict belonged to the previous counterparty. */
+                  setResult(null)
+                }}
+              >
+                {r.ownerName ?? 'Another manager'}
+              </button>
+            ))}
+          </div>
+          {partnerRoster ? null : (
+            <p className="af-tc-row-sub">
+              Pick a team and the verdict gains their side of it &mdash; what they are short of,
+              what the waiver wire would cost them, and how they have paid for the position before.
+            </p>
+          )}
+        </div>
+      ) : null}
+
       <div className="af-tc-builder">
         {([
           { side: 'give' as const, label: 'Your team', handle: '@you', isYou: true, lines: give },
           {
             side: 'get' as const,
-            label: props.opponentLabel ?? 'Their team',
+            label: theirLabel,
             handle: '',
             isYou: false,
             lines: get,
@@ -512,6 +583,16 @@ export function TradeCenter(props: {
                 sport={null}
                 onClose={() => setPicking(null)}
                 onPick={(a) => addAsset(side.side, a)}
+                /*
+                  Each column sends from its OWN roster, so each gets its own
+                  picks. Passing the wrong side's would offer a manager a pick
+                  they do not hold and the engine would refuse it on send.
+                */
+                rosterPicks={
+                  side.side === 'give' ? myRoster?.picks ?? [] : partnerRoster?.picks ?? []
+                }
+                rosterLabel={side.side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
+                rosterKnown={Boolean(side.side === 'give' ? myRoster : partnerRoster)}
               />
             ) : (
               <button
@@ -680,6 +761,10 @@ export function TradeCenter(props: {
         leagueId={props.league?.id ?? null}
         give={giveAssets}
         get={getAssets}
+        rosters={rosterData?.rosters ?? null}
+        viewerRosterId={rosterData?.viewerRosterId ?? null}
+        partnerRosterId={partnerRosterId}
+        onChoosePartner={setPartnerRosterId}
       />
 
       <TradeFinderPanel leagueId={props.league?.id ?? null} />
