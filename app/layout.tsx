@@ -167,7 +167,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           THIS IS A WORKAROUND, and it should not outlive the bug. When the layout's
           CSS chunk is emitted properly this line comes out.
         */}
-        <link rel="stylesheet" href="/railway-styles.css" />
+        {/*
+          `precedence` is not decoration. In the React build the App Router ships, a
+          <link rel="stylesheet"> is only treated as a stylesheet RESOURCE — hoisted
+          into <head> and emitted — when it carries one. Without it React drops the
+          element on the floor: measured after #658 shipped, this exact link with no
+          precedence never reached the served HTML at all. It is also why the Google
+          Fonts links that used to live below here disappeared. The two sheets Next
+          emits itself both come out carrying data-precedence="next".
+        */}
+        <link rel="stylesheet" href="/railway-styles.css" precedence="default" />
 
         {/*
           The core-app design handoff's two typefaces. Every .af-core surface
