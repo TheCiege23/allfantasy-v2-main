@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { PlayerImage } from '@/app/components/PlayerImage'
+import type { RosterWeekPayload } from '@/lib/idp-projections/rosterWeekPoints'
 import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
 import { resolvePlayerName } from '@/lib/hooks/useSleeperPlayers'
 import { IDPPlayerCard } from './IDPPlayerCard'
@@ -9,8 +10,6 @@ import { IDPPlayerModal } from './IDPPlayerModal'
 import {
   isOffensivePosition,
   isIdpDefensivePosition,
-  mockOffensePoints,
-  mockIdpPoints,
 } from './idpPositionUtils'
 import { useIdpContractsMap, useRedraftRosterId, mockContractUi } from '@/app/idp/hooks/useIdpTeamCap'
 import type { IdpContractChip } from './IDPPlayerCard'
@@ -33,6 +32,7 @@ function OffensePlayerCard({
   players,
   playersLoading,
   week,
+  weekPoints,
   onOpen,
 }: {
   playerId: string
@@ -40,12 +40,18 @@ function OffensePlayerCard({
   players: PlayerMap
   playersLoading: boolean
   week: number
+  weekPoints: RosterWeekPayload | null
   onOpen: () => void
 }) {
   const resolved = resolvePlayerName(playerId, players)
   const label = playersLoading ? `Player ${playerId.slice(-4)}` : resolved.name
   const pos = resolved.position || '—'
-  const { pts, proj } = mockOffensePoints(playerId, week)
+  /*
+   * Was `mockOffensePoints(playerId, week)` — a hash of the id. Real points arrive as a prop and
+   * an absence renders as a dash, because a zero here says the player was held scoreless.
+   */
+  const outcome = weekPoints?.points?.[playerId]
+  const pts = outcome?.scored ? outcome.points : null
   const p = players[playerId]
   return (
     <button
@@ -74,8 +80,24 @@ function OffensePlayerCard({
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-lg font-bold text-[color:var(--idp-offense)]">{pts}</p>
-          <p className="text-[10px] text-white/35">proj {proj}</p>
+          {/*
+            A dash, not 0.0 — `no_game` is a bye or an un-ingested week, `unscored` means the
+            line we hold carries nothing this league prices. There is no projection line any
+            more: the old one printed `mockOffensePoints`, and no offensive projection is wired
+            to this surface.
+          */}
+          <p
+            className="text-lg font-bold text-[color:var(--idp-offense)]"
+            title={
+              outcome && !outcome.scored
+                ? outcome.reason === 'no_game'
+                  ? 'no game on file for him that week'
+                  : 'we hold a line for him but none of the stats this league scores'
+                : undefined
+            }
+          >
+            {pts != null ? pts.toFixed(1) : <span className="text-white/25">—</span>}
+          </p>
         </div>
       </div>
     </button>
@@ -137,6 +159,20 @@ export function IDPTeamDashboard({
   const [offBenchOpen, setOffBenchOpen] = useState(false)
   const [defBenchOpen, setDefBenchOpen] = useState(false)
   const [isNarrow, setIsNarrow] = useState(false)
+  const [weekPoints, setWeekPoints] = useState<RosterWeekPayload | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setWeekPoints(null)
+    fetch(`/api/idp/players?leagueId=${encodeURIComponent(leagueId)}&view=roster-week`)
+      .then(async (r) => (r.ok ? ((await r.json()) as RosterWeekPayload) : null))
+      .then((p) => alive && setWeekPoints(p))
+      .catch(() => alive && setWeekPoints(null))
+    return () => {
+      alive = false
+    }
+  }, [leagueId])
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)')
     const fn = () => setIsNarrow(mq.matches)
@@ -145,15 +181,30 @@ export function IDPTeamDashboard({
     return () => mq.removeEventListener('change', fn)
   }, [])
 
-  const { startersOff, startersDef, benchOff, benchDef, offTotal, defTotal } = useMemo(() => {
+  const { startersOff, startersDef, benchOff, benchDef, offTotal, defTotal, pricedStarters, totalStarters } = useMemo(() => {
     const so = partitionIds(starterIds, players)
     const bo = partitionIds(benchIds, players)
+    /*
+     * ⚠ THE BENCH DOES NOT SCORE, AND IT WAS BEING COUNTED AT 15%. The previous version added
+     * every benched player's (hashed) points to the team total multiplied by 0.15 — a weighting
+     * with no meaning in any format. A team's points are its STARTERS'. Bench players are listed
+     * for context and contribute nothing.
+     *
+     * Totals count only what we could actually price, and `pricedStarters` reports how much that
+     * was, so a partial total is never mistaken for a complete one.
+     */
     let offPts = 0
     let defPts = 0
-    for (const id of so.off) offPts += mockOffensePoints(id, week).pts
-    for (const id of so.def) defPts += mockIdpPoints(id, week).pts
-    for (const id of bo.off) offPts += mockOffensePoints(id, week).pts * 0.15
-    for (const id of bo.def) defPts += mockIdpPoints(id, week).pts * 0.15
+    let priced = 0
+    const add = (id: string, into: 'off' | 'def') => {
+      const o = weekPoints?.points?.[id]
+      if (!o?.scored) return
+      priced++
+      if (into === 'off') offPts += o.points
+      else defPts += o.points
+    }
+    for (const id of so.off) add(id, 'off')
+    for (const id of so.def) add(id, 'def')
     return {
       startersOff: so.off,
       startersDef: so.def,
@@ -161,8 +212,10 @@ export function IDPTeamDashboard({
       benchDef: bo.def,
       offTotal: Math.round(offPts * 10) / 10,
       defTotal: Math.round(defPts * 10) / 10,
+      pricedStarters: priced,
+      totalStarters: so.off.length + so.def.length,
     }
-  }, [starterIds, benchIds, players, week])
+  }, [starterIds, benchIds, players, weekPoints])
 
   const total = Math.round((offTotal + defTotal) * 10) / 10
   const offPct = total > 0 ? Math.round((offTotal / total) * 100) : 50
@@ -196,6 +249,21 @@ export function IDPTeamDashboard({
           <span className="text-[color:var(--idp-defense)]">DEFENSE: {defTotal} pts</span>
           <span className="mx-2 text-white/25">=</span>
           <span className="text-[color:var(--idp-combined)]">TOTAL: {total} pts</span>
+          {/*
+            ⚠ A PARTIAL TOTAL MUST NOT READ AS A COMPLETE ONE. These are the starters we could
+            price from the stat lines we hold — for defensive backs especially, our coverage is
+            often snaps-only — so the denominator travels with the number instead of leaving a
+            reader to assume every starter is in it.
+          */}
+          {weekPoints?.scored && pricedStarters < totalStarters ? (
+            <span className="text-white/35">
+              {pricedStarters}/{totalStarters} starters priced
+              {weekPoints.week ? ` · wk ${weekPoints.week}` : ''}
+            </span>
+          ) : null}
+          {weekPoints && !weekPoints.scored && weekPoints.reason ? (
+            <span className="text-amber-200/70">{weekPoints.reason}</span>
+          ) : null}
         </p>
         <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 md:max-w-md">
           <div
@@ -229,6 +297,7 @@ export function IDPTeamDashboard({
                 <div className="space-y-1.5">
                   {startersOff.map((id) => (
                     <OffensePlayerCard
+                      weekPoints={weekPoints}
                       key={id}
                       playerId={id}
                       sport={sport}
@@ -250,6 +319,7 @@ export function IDPTeamDashboard({
                   <div className="space-y-1 border-t border-white/[0.06] p-2">
                     {benchOff.map((id) => (
                       <OffensePlayerCard
+                        weekPoints={weekPoints}
                         key={id}
                         playerId={id}
                         sport={sport}

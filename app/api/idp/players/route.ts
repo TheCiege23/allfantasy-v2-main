@@ -9,6 +9,7 @@ import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/id
 import { prisma } from '@/lib/prisma'
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
 import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
+import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,10 @@ export async function GET(req: NextRequest) {
   const view = (searchParams?.get('view') ?? '').toLowerCase()
   if (view === 'defense-hub') {
     const payload = await loadDefenseHub({ prisma, leagueId, userId })
+    return NextResponse.json(payload)
+  }
+  if (view === 'roster-week') {
+    const payload = await loadRosterWeekPoints({ prisma, leagueId, userId })
     return NextResponse.json(payload)
   }
   if (view === 'idp-matchup') {
