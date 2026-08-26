@@ -1,0 +1,82 @@
+# Does this app build correctly on a Linux runner that is not Railway's?
+#
+# Railway's build loses the root layout: app-build-manifest.json lists no CSS
+# for /layout, nothing in the output carries Tailwind's marker, and every App
+# Router route is served with no <!DOCTYPE html>, <html>, <head> or <body>. The
+# same commit built on Windows is correct, and an official node:20 Docker image
+# on Railway produced the same broken bundle as Nixpacks — so the builder image
+# is ruled out, but Railway's build infrastructure is not.
+#
+# This runs Railway's own build command on a GitHub-hosted Ubuntu runner and
+# prints the same audit. It splits the remaining question in two:
+#   - correct here  -> Railway's builder is at fault; build elsewhere and ship
+#                      the artifact, and the hosting bill does not have to change
+#   - broken here   -> Next 14.2.35 on Linux at this route count is at fault,
+#                      and the fix is a Next version change rather than a host
+#
+# Manual trigger, plus a run on push so the answer arrives without waiting.
+name: build-env-check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-env-check.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # The build must not reach a real database. instrumentation.ts throws in
+      # production when these are unset, and this guard is the codebase's own
+      # signal for "this is a build, not a serving process".
+      DISABLE_INSTRUMENTATION_DURING_BUILD: '1'
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/db?schema=public'
+      DIRECT_URL: 'postgresql://user:pass@localhost:5432/db?schema=public'
+      NEXTAUTH_SECRET: 'build-only-not-a-real-secret'
+      NEXTAUTH_URL: 'http://localhost:3000'
+      # Take the same branches inside the build scripts that Railway takes.
+      RAILWAY_ENVIRONMENT: 'production'
+      NODE_ENV: 'production'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the way Railway builds
+        run: npm run build:railway
+
+      - name: Report what the build emitted for the root layout
+        if: always()
+        run: |
+          node -e "
+          const fs=require('fs'),path=require('path');
+          const d=process.env.AF_NEXT_DIST_DIR || '.next';
+          if(!fs.existsSync(d)){console.log('NO DIST DIR', d);process.exit(0)}
+          const m=JSON.parse(fs.readFileSync(path.join(d,'app-build-manifest.json'),'utf8'));
+          for(const k of ['/layout','/page']){
+            const e=m.pages[k]||[];
+            const c=e.filter(f=>f.endsWith('.css'));
+            console.log(k,'->',e.length,'files,',c.length,'css');
+          }
+          const cssDir=path.join(d,'static','css');
+          const files=fs.existsSync(cssDir)?fs.readdirSync(cssDir):[];
+          let total=0,marked=[];
+          for(const f of files){
+            const p=path.join(cssDir,f), s=fs.statSync(p).size;
+            total+=s;
+            if(fs.readFileSync(p,'utf8').includes('--tw-border-spacing-x')) marked.push(f+' ('+s+'b)');
+          }
+          console.log('css chunks:',files.length,'total bytes:',total);
+          console.log('TAILWIND-MARKED CHUNKS:',marked.length,JSON.stringify(marked.slice(0,3)));
+          console.log(marked.length>0 ? 'VERDICT: BUILD IS CORRECT HERE' : 'VERDICT: BUILD IS BROKEN HERE');
+          "
