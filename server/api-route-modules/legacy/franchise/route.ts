@@ -10,6 +10,7 @@ import {
   refreshTradeSettlement,
 } from '@/lib/franchise/franchiseService'
 import { describeCrossPlatformTrade } from '@/lib/franchise/franchiseLink'
+import { loadCollegeBoardForFranchise } from '@/lib/franchise/franchiseBoard'
 import { getFantraxLeagues } from '@/lib/league-import/fantrax/fantraxApi'
 import {
   attachToFranchise,
@@ -59,8 +60,16 @@ export const GET = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fran
     const detail = await loadFranchiseDetail(linkId)
     if (!detail) return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
 
+    /*
+     * The college board priced for THIS franchise: a pro-side hole lifts a
+     * college asset at that position, but only if he arrives before it closes.
+     * Null when either half cannot be read, never a neutral board.
+     */
+    const collegeBoard = await loadCollegeBoardForFranchise(linkId).catch(() => null)
+
     return NextResponse.json({
       ...detail,
+      collegeBoard,
       note: 'AllFantasy cannot execute a trade on either platform. Both halves are carried out by hand and tracked here.',
     })
   },

@@ -176,3 +176,51 @@ describe('the connect-a-league flow', () => {
     expect(SERVICE_IMPORT).toMatch(/signature of the wrong sport map/)
   })
 })
+
+/**
+ * ⚠ THE JOIN THAT LOOKS RIGHT AND IS WRONG BY DESIGN. The Sleeper sync documents
+ * its identity contract in applySleeperLeagueSync.ts:
+ *
+ *   "LeagueTeam.platformUserId retains the RAW Sleeper manager id, while
+ *    Roster.platformUserId may hold the RESOLVED AllFantasy AppUser id (when the
+ *    manager is linked) — the raw Sleeper manager id always remains in
+ *    Roster.playerData.source_manager_id."
+ *
+ * So joining the two platformUserId columns finds every UNLINKED manager and
+ * silently misses every LINKED one. Measured on a real league: 11 of 12 joined
+ * and the twelfth looked orphaned — it was simply the only manager with an
+ * account. It gets WORSE as more managers link, so a passing spot-check proves
+ * nothing.
+ */
+describe('roster lookup honours the sync identity contract', () => {
+  const LOOKUP = readFileSync(resolve(process.cwd(), 'lib/franchise/rosterLookup.ts'), 'utf8')
+  const BOARD = readFileSync(resolve(process.cwd(), 'lib/franchise/franchiseBoard.ts'), 'utf8')
+
+  it('prefers source_manager_id, the key the contract guarantees', () => {
+    expect(LOOKUP).toContain('source_manager_id')
+    expect(LOOKUP).toMatch(/ORDER BY[\s\S]{0,120}source_manager_id/)
+  })
+
+  it('still falls back to platformUserId for unlinked managers and legacy rows', () => {
+    expect(LOOKUP).toMatch(/OR "platformUserId" =/)
+  })
+
+  it('reports which key matched, so the contract in play is visible', () => {
+    expect(LOOKUP).toContain('matchedBy')
+  })
+
+  /**
+   * ⚠ The regression guard. If either caller goes back to the naive join, every
+   * manager with an AllFantasy account silently loses their roster.
+   */
+  it('neither franchise caller joins the two platformUserId columns directly', () => {
+    for (const src of [SERVICE, BOARD]) {
+      expect(src).not.toMatch(/roster\.findFirst\([\s\S]{0,160}platformUserId:\s*team/)
+      expect(src).toContain('findRosterForTeam')
+    }
+  })
+
+  it('an absent player array is null, not an empty roster', () => {
+    expect(LOOKUP).toMatch(/distinct from an\s*\*?\s*empty roster/)
+  })
+})

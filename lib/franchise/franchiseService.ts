@@ -24,6 +24,7 @@ import {
   type Settlement,
   type TradeLeg,
 } from './franchiseLink'
+import { findRosterForTeam, rosterPlayerIds } from './rosterLookup'
 
 /** One side's roster, however that platform stores it. */
 export type FranchiseSideRoster = {
@@ -125,15 +126,14 @@ export async function loadFranchiseDetail(linkId: string): Promise<FranchiseDeta
         })
       : null
 
+    /* Contract-aware lookup: Roster.platformUserId holds the AF user id for a
+       LINKED manager, so joining it to LeagueTeam.platformUserId misses exactly
+       the managers who have accounts. See rosterLookup.ts. */
     const roster = team?.platformUserId
-      ? await prisma.roster.findFirst({
-          where: { leagueId: m.leagueId, platformUserId: team.platformUserId },
-          select: { playerData: true },
-        })
+      ? await findRosterForTeam(m.leagueId, team.platformUserId)
       : null
 
-    const pd = (roster?.playerData ?? null) as { players?: unknown[] } | null
-    const ids = Array.isArray(pd?.players) ? (pd?.players as unknown[]) : null
+    const ids = roster ? rosterPlayerIds(roster.playerData) : null
 
     sides.push({
       role,
