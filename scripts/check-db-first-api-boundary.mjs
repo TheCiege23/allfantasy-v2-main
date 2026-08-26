@@ -266,6 +266,62 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/weather\/openWeatherFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
+   * The api-sports.io adapter. Allowlisted on a FULL caller census — every
+   * import form, aliased, relative and dynamic:
+   *   crons            app/api/cron/import-{schedules,scores,standings}
+   *   admin ingestion  app/api/sports/sync, legacy/identity-sync (both POST-gated)
+   *   ingestion        lib/ncaaf-provider/legacyApiSportsIngestion.ts (dynamic)
+   *   orchestrator     lib/nfl-provider/nflRedraftProductionProviderWiring.ts (dynamic)
+   *   worker provider  lib/workers/providers/api-sports.ts
+   *   script           scripts/audit-api-sports-player-stats.ts
+   *   DB-FIRST ROUTER  lib/sports-router.ts
+   *
+   * That last one is why this took a second look. `lib/sports-router.ts` was
+   * cited as the reason api-sports could never be exempted — it imports the
+   * adapter RELATIVELY (`./api-sports`) and takes live standings and player
+   * stats. But `getSportsData` is itself DB-first: in-memory cache, then
+   * `sportsDataCache`, then `tryNFLFromDb`, and only then the provider chain,
+   * writing what it fetches back. It is the same read-through shape as
+   * `getFantasyCalcValuesDbFirst`, so the provider call is the cache MISS path,
+   * not a request-path read.
+   *
+   * ⚠ Re-check with dynamic imports included. Four of the callers above are
+   * `await import(...)` and appear in no `from '...'` grep.
+   */
+  /^lib\/api-sports\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The World Cup api-sports client. Nothing that reads reaches its fetch:
+   *   sync         lib/world-cup/worldCupSyncService.ts, worldCupLiveScoreSyncService
+   *   diagnostics  lib/world-cup/worldCupDiagnosticsService.ts
+   *   probes       app/api/admin/ai/provider-health, AdminProviderHealthService
+   *   admin sync   app/api/admin/world-cup/scores/sync-live
+   *
+   * The two surfaces that looked like read paths are not: `/api/sports/injuries`
+   * reads rows written by `worldCupDataSyncService` (its own comment says so),
+   * and the world-cup catch-all imports only `WorldCupProviderConfigError`, an
+   * error class. `worldCupDataProvider.ts` is a provider INTERFACE with zero
+   * prisma — it is not a DB-first layer, so the chain had to be walked to its
+   * ends rather than stopped there.
+   */
+  /^lib\/world-cup\/apiSportsWorldCup\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The bracket provider REGISTRY — configuration, not a client. It contains no
+   * `fetch`; it builds `HttpProvider` configs, and that class does the calling
+   * from `baseUrl + endpoint`, so the actual request has no URL literal at all.
+   *
+   * Three importers: two POST ingestion workers (`bracket/workers/auto-import`,
+   * `bracket/workers/live-ingest`, both writing through prisma) and
+   * `/api/bracket/providers`, which returns capabilities and a score — a
+   * capability probe, the same standing exception as the health probes in
+   * SystemHealthResolver.
+   *
+   * ⚠ KNOWN BLIND SPOT, recorded rather than hidden: because HttpProvider is
+   * config-driven, the guard cannot see bracket provider calls wherever they
+   * originate. This registry is the one place a human can read which hosts the
+   * bracket stack talks to. Do not add new provider hosts anywhere else.
+   */
+  /^lib\/brackets\/providers\/index\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
    * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
    * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is
    * everything ABOVE it.

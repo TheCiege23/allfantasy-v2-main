@@ -79,7 +79,7 @@ importing the constant was flagged as expected, then deleted.
 but it is a Phase-5 audit snapshot and is itself incomplete — its
 `clientLocations` for CFBD listed three files; there are six.
 
-**The code does not comply yet, and the guard says so.** A full scan reports 85
+**The code does not comply yet, and the guard says so.** A full scan reports 81
 violations across tracked source (the count drifts — re-run rather than quoting
 this number). Nothing is allowlisted to hide them.
 
@@ -108,24 +108,43 @@ or not at all.
 
 ### Remaining debt, triaged
 
-Twelve lines came from the three providers added on 2026-08-25. Nine are now
-resolved (below); **three remain**, and none of them yields to a split — each
-needs a genuine DB-first layer:
+All twelve lines from the three providers added on 2026-08-25 are now resolved.
 
-- `lib/api-sports.ts` — moving the fetch out does NOT help. The fetch module's
-  importers would still include `lib/sports-router.ts`, which takes live
-  `fetchAPISportsStandings` / `fetchAPISportsPlayerStatistics` on read paths that
-  AI enrichment and the survivor pipeline reach. Needs a DB-first layer for
-  standings and player stats.
-  ⚠ Note `sports-router` imports it as `./api-sports` — a RELATIVE path a
-  `from '@/lib/api-sports'` search does not find. Do not allowlist it by analogy
-  to `lib/api-football.ts`; the two look alike and are not alike.
-- `lib/world-cup/apiSportsWorldCup.ts` — the world-cup stack has its own sync
-  services; the work is routing live surfaces through them. Reachability was
-  never proven either way (20+ app routes sit above it).
-- `lib/brackets/providers/index.ts` — a provider REGISTRY, not a client: the
-  URLs are configuration handed to `HttpProvider`, which does the fetching. A
-  split moves nothing. Needs bracket schedule/live-score caching.
+**The last three were resolved by CENSUS, not by new code — and this file
+previously said the opposite.** It asserted that `api-sports`,
+`apiSportsWorldCup` and `brackets/providers` each needed a real DB-first layer
+and that "none yields to a split". That was wrong, and wrong in an instructive
+way: the claim rested on tracing one or two importers and inferring the rest.
+
+What the full census actually found:
+
+- `lib/api-sports.ts` — the stated blocker was `lib/sports-router.ts` taking
+  live standings and player stats. But `getSportsData` is itself DB-first:
+  in-memory cache → `sportsDataCache` → `tryNFLFromDb` → provider chain, writing
+  back what it fetches. The provider call is the cache-MISS path, exactly like
+  `getFantasyCalcValuesDbFirst`. Every other importer is a cron, an admin-gated
+  POST, a worker, a script, or the provider orchestrator.
+- `lib/world-cup/apiSportsWorldCup.ts` — every consumer is a sync service,
+  diagnostics, or a provider-health probe. The two surfaces that LOOKED like
+  read paths are not: `/api/sports/injuries` reads rows written by
+  `worldCupDataSyncService`, and the world-cup catch-all imports only an error
+  class. Note `worldCupDataProvider.ts` is a provider INTERFACE with zero
+  prisma — it is not a DB-first layer, so the chain has to be walked past it.
+- `lib/brackets/providers/index.ts` — configuration, not a client: no `fetch`
+  anywhere in it. Two POST ingestion workers and one capability probe.
+
+⚠ **A known blind spot, recorded rather than papered over.** `HttpProvider` in
+`lib/brackets/providers/` builds its URL from `baseUrl + endpoint` passed as
+config, so bracket provider calls carry no `https://` literal and the guard
+cannot see them at all. The registry is the one place a human can read which
+hosts the bracket stack talks to. Do not introduce provider hosts elsewhere in
+that stack.
+
+**The lesson worth keeping:** four separate times this session, a caller census
+that used only `from '@/lib/x'` gave the wrong answer — missing relative imports
+(`./api-sports`), dynamic imports (`await import(...)`), re-export facades, and
+test mocks. Always check all four forms before concluding anything about who
+reaches a module.
 
 **Adapters, censused 2026-08-25** — how each was settled:
   - `lib/api-football.ts` — **allowlisted.** One importer, `app/api/sports/sync`,
