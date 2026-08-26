@@ -227,7 +227,15 @@ async function handle(req: NextRequest) {
         const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
         sleeperRows = await refreshSleeperPlayerRows({
           sport: 'NFL',
-          limit: 400,
+          /*
+           * Sized against how long a full pass takes, not picked round. Sleeper
+           * lists roughly 11.4k NFL players and this cron fires every 6 hours,
+           * so 1,500 a run is four passes a day and a complete sweep inside two
+           * — where 400 would have taken a week. The writes are serial single
+           * updates, so 1,500 is a few tens of seconds, and the budget check
+           * between rows is what actually bounds it if the run is already late.
+           */
+          limit: 1500,
           isExhausted: () => budget.exhausted(),
         })
       } catch (sleeperErr) {
