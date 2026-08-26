@@ -105,6 +105,15 @@ export async function getLeagueChatMessages(
     const base = {
       id: m.id,
       threadId: `league:${leagueId}`,
+      /*
+       * ⚠ THIS WAS STORED AND DROPPED ON READ. `LeagueChatMessage.parentMessageId`
+       * is a real indexed column, `PlatformChatMessage` has always declared the
+       * field ("if set, this message is a reply to another message"), and the
+       * write path accepts it — but this mapper never put it in the row it
+       * returns, so every reply came back to the client looking like an ordinary
+       * message and no surface could render what it was answering.
+       */
+      parentMessageId: (m as { parentMessageId?: string | null }).parentMessageId ?? null,
       channelSource: src,
       senderUserId: m.user?.id ?? null,
       senderName: discordAuthorName || m.user?.displayName || m.user?.email || 'User',

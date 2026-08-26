@@ -57,6 +57,7 @@ function createdAtToUnixMs(createdAt: string): number {
 
 function toClientMessage(message: {
   id: string
+  parentMessageId?: string | null
   senderUserId?: string | null
   senderName: string | null
   senderAvatarUrl: string | null
@@ -70,6 +71,7 @@ function toClientMessage(message: {
   const createdMs = createdAtToUnixMs(message.createdAt)
   return {
     id: message.id,
+    parentMessageId: message.parentMessageId ?? null,
     authorId: message.senderUserId ?? '',
     authorName,
     authorAvatarUrl,
@@ -173,6 +175,7 @@ export async function GET(req: NextRequest) {
     messages: filteredMessages.map((message) =>
       toClientMessage({
         id: message.id,
+        parentMessageId: message.parentMessageId ?? null,
         senderUserId: message.senderUserId ?? null,
         senderName: message.senderName ?? null,
         senderAvatarUrl: message.senderAvatarUrl ?? null,
@@ -361,10 +364,21 @@ export async function POST(req: NextRequest) {
     '[Media]'
 
   const mentionInfo = parseAtMentions(message)
+  /*
+   * The column and the service option have both existed the whole time; this
+   * route simply never read the field off the body, so a reply sent from the
+   * comms drawer was stored as a top-level message.
+   */
+  const parentMessageId =
+    typeof body?.parentMessageId === 'string' && body.parentMessageId.trim().length > 0
+      ? body.parentMessageId.trim()
+      : undefined
+
   const created = await createLeagueChatMessage(leagueId, userId, bodyText, {
     metadata: finalMetadata,
     messageSubtype: mentionInfo.hasAll ? 'at_all' : null,
     mentionedUserIds: mentionInfo.userMentions,
+    parentMessageId,
   })
   if (!created) {
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })

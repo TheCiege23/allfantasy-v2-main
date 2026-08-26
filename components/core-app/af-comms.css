@@ -809,6 +809,115 @@
   gap: 3px;
 }
 
+/*
+ * Quoted replies. The quote is one line and clipped: a quote that can grow
+ * taller than the reply beneath it turns a narrow drawer into a hall of mirrors.
+ */
+.af-cm-quote {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+.af-cm-quote-jump { cursor: pointer; }
+
+.af-cm-quote-jump:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.af-cm-quote-bar {
+  flex: 0 0 2px;
+  border-radius: 2px;
+  background: var(--line, rgba(255, 255, 255, 0.18));
+}
+
+.af-cm-quote-body {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-cm-quote-who { font-weight: 700; white-space: nowrap; }
+
+.af-cm-quote-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-cm-quote-missing { font-style: italic; }
+
+.af-cm-reply-btn {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 9.5px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+/* Revealed on hover or focus so it is not furniture on every row. */
+.af-cm-msg:hover .af-cm-reply-btn,
+.af-cm-reply-btn:focus-visible { opacity: 1; }
+
+@media (hover: none) {
+  /* No hover to reveal it on a touch screen. */
+  .af-cm-reply-btn { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-cm-reply-btn { transition: none; }
+}
+
+.af-cm-replybar {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--accent);
+  background: var(--surface-sunk, rgba(255, 255, 255, 0.04));
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-cm-replybar-label { font-weight: 700; white-space: nowrap; color: var(--accent); }
+
+.af-cm-replybar-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-cm-replybar-x {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.af-cm-replybar-x:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .af-cm-msg-head {
   display: flex;
   align-items: baseline;

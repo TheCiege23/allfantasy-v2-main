@@ -6,6 +6,7 @@ import LeagueActivityFeed from './LeagueActivityFeed'
 import { MessageTime } from './MessageTime'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { MessageReactions } from './MessageReactions'
+import { QuotedMessage } from './QuotedMessage'
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
@@ -580,6 +581,8 @@ function ChimmyPanel({
 
 type LeagueMessage = {
   id: string
+  /** Set when this message answers another one. */
+  parentMessageId: string | null
   /** Needed to tell whether the viewer may close a poll they posted. */
   authorId: string | null
   author: string
@@ -620,8 +623,20 @@ function LeaguePanel({
   const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
   const [reactionBusy, setReactionBusy] = useState<string | null>(null)
   const [voteBusy, setVoteBusy] = useState<string | null>(null)
+  const [replyTo, setReplyTo] = useState<LeagueMessage | null>(null)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
+
+  /*
+   * Parents are looked up among the messages already loaded. The panel holds the
+   * most recent 40, so a reply to something older finds nothing here — which
+   * `QuotedMessage` states rather than rendering an empty quote.
+   */
+  const byId = useMemo(() => {
+    const map = new Map<string, LeagueMessage>()
+    for (const m of messages) map.set(m.id, m)
+    return map
+  }, [messages])
 
   /*
    * `quiet` exists for polling. Without it every tick would flip the loading flag
@@ -647,6 +662,7 @@ function LeaguePanel({
           id: string
           text?: string | null
           createdAt: string
+          parentMessageId?: string | null
           authorId?: string | null
           authorName?: string | null
           metadata?: Record<string, unknown> | null
@@ -657,6 +673,7 @@ function LeaguePanel({
       setMessages(
         (data.messages ?? []).map((m) => ({
           id: m.id,
+          parentMessageId: typeof m.parentMessageId === 'string' ? m.parentMessageId : null,
           authorId: typeof m.authorId === 'string' && m.authorId ? m.authorId : null,
           author: m.authorName || 'Someone',
           message: m.text ?? '',
@@ -682,6 +699,7 @@ function LeaguePanel({
       setPresence([])
     }
     setReactionOverride({})
+    setReplyTo(null)
   }, [scopeId, load])
 
   /*
@@ -864,6 +882,7 @@ function LeaguePanel({
           body: JSON.stringify({
             message: displayText,
             ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+            ...(replyTo ? { parentMessageId: replyTo.id } : {}),
           }),
         })
         if (!res.ok) throw new Error(`Send returned ${res.status}`)
@@ -882,6 +901,8 @@ function LeaguePanel({
           })
         }
         setDraft('')
+        /* Only after it actually sent — a failed reply keeps its target. */
+        setReplyTo(null)
         await load(scopeId)
       } catch (e) {
         setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
@@ -889,7 +910,7 @@ function LeaguePanel({
         setSending(false)
       }
     },
-    [load, scopeId, sending],
+    [load, scopeId, sending, replyTo],
   )
 
   if (!scopeId) {
@@ -991,10 +1012,32 @@ function LeaguePanel({
           </div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className="af-cm-msg">
+            <div key={m.id} className="af-cm-msg" id={`af-cm-msg-${m.id}`}>
+              {m.parentMessageId ? (
+                <QuotedMessage
+                  author={byId.get(m.parentMessageId)?.author ?? null}
+                  text={byId.get(m.parentMessageId)?.message ?? null}
+                  onJump={
+                    byId.has(m.parentMessageId)
+                      ? () =>
+                          document
+                            .getElementById(`af-cm-msg-${m.parentMessageId}`)
+                            ?.scrollIntoView({ block: 'center' })
+                      : undefined
+                  }
+                />
+              ) : null}
               <span className="af-cm-msg-head">
                 <span className="af-cm-msg-author">{m.author}</span>
                 <MessageTime value={m.createdAt} />
+                <button
+                  type="button"
+                  className="af-cm-reply-btn"
+                  onClick={() => setReplyTo(m)}
+                  aria-label={`Reply to ${m.author}`}
+                >
+                  Reply
+                </button>
               </span>
               <p className="af-cm-msg-text">{m.message}</p>
               <RichMessage
@@ -1027,6 +1070,27 @@ function LeaguePanel({
           ))
         )}
       </div>
+
+      {/*
+        What this message will be answering. Shown right above the composer,
+        because a reply target you cannot see is one you forget you set — and
+        the next thing typed then lands as an answer to something the writer had
+        stopped thinking about.
+      */}
+      {replyTo ? (
+        <div className="af-cm-replybar">
+          <span className="af-cm-replybar-label">Replying to {replyTo.author}</span>
+          <span className="af-cm-replybar-text">{replyTo.message}</span>
+          <button
+            type="button"
+            className="af-cm-replybar-x"
+            onClick={() => setReplyTo(null)}
+            aria-label="Cancel reply"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       {/*
         The full composer, not a text input: GIF search, emoji, polls, uploads,
