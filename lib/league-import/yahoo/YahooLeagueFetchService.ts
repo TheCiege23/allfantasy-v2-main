@@ -284,8 +284,18 @@ export async function fetchYahooPendingTrades(
   }
 
   try {
+    /*
+     * ⚠ `League.platformLeagueId` IS NOT GUARANTEED TO BE A LEAGUE KEY. The
+     * importer accepts a bare id, a full key, or a pasted URL, and
+     * `fetchYahooLeagueForImport` resolves whatever it was given through this
+     * same lookup before using it. Skipping that here meant a league stored as
+     * `1361311` built the URL `/league/1361311/transactions`, which Yahoo
+     * rejects — and the catch below would have reported "Yahoo did not answer",
+     * blaming the provider for our own malformed request.
+     */
+    const resolved = await resolveYahooLeagueLookup(leagueKey, context)
     const data = await yahooApiFetchJson(
-      `${YAHOO_API_BASE}/league/${leagueKey}/transactions;types=trade;count=100?format=json`,
+      `${YAHOO_API_BASE}/league/${resolved.leagueKey}/transactions;types=trade;count=100?format=json`,
       context,
     )
     const all = parseYahooTransactions(data)

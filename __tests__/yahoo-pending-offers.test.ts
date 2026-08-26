@@ -117,6 +117,20 @@ describe('⚠ what the Yahoo scan refuses to claim', () => {
   })
 })
 
+describe('⚠ platformLeagueId is not guaranteed to be a league key', () => {
+  it('resolves whatever shape it was stored in, the way the import path does', () => {
+    /*
+     * The importer accepts a bare id, a full key, or a pasted URL. A league
+     * stored as `1361311` would have built `/league/1361311/transactions`,
+     * which Yahoo rejects — and the catch would have reported "Yahoo did not
+     * answer", blaming the provider for our own malformed request.
+     */
+    expect(FETCH).toContain('IS NOT GUARANTEED TO BE A LEAGUE KEY')
+    expect(FETCH).toContain('const resolved = await resolveYahooLeagueLookup(leagueKey, context)')
+    expect(FETCH).toContain('/league/${resolved.leagueKey}/transactions')
+  })
+})
+
 describe('⚠ a Yahoo offer must not be labelled Sleeper', () => {
   it('widened the provider tag rather than reusing the wrong one', () => {
     // A Yahoo offer tagged 'sleeper' sends the manager to the wrong site to
