@@ -18,6 +18,26 @@ const isRailwayRuntime = !!(
 
 const nextConfig = {
   reactStrictMode: true,
+
+  // Next's built-in Google Fonts optimizer rewrites the rendered HTML to hoist and
+  // inline <link> tags pointing at fonts.googleapis.com into <head>. The root layout
+  // places those links INSIDE <body> on purpose (see the comment in app/layout.tsx
+  // about stylesheet ordering), and the optimizer mangles the document trying to move
+  // them: the <link> is stripped from the output and <!DOCTYPE>/<html>/<head>/<body>
+  // go with it.
+  //
+  // Measured on production 2026-08-26: every App Router route served 54KB of HTML
+  // beginning at `<meta charSet="utf-8"/>` with no document shell, while /500 — the
+  // one Pages Router route, which has no Google Fonts link — was emitted correctly.
+  // The browser then falls into quirks mode and synthesises a bare <body> without the
+  // `mode-readable` class or the inline background/color that define --bg/--text, so
+  // the content renders invisibly; the same shell mismatch fails hydration with an
+  // AggregateError. Net effect: a blank white page on every route.
+  //
+  // Disabling the optimizer leaves the links exactly where the layout puts them. The
+  // fonts still load from Google, just not inlined at build time.
+  optimizeFonts: false,
+
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
 
   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
