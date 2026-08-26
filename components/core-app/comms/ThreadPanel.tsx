@@ -5,6 +5,7 @@ import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { MessageTime } from './MessageTime'
+import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -292,7 +293,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
                   <span className="af-cm-msg-author">{m.senderName}</span>
                   <MessageTime value={m.createdAt} />
                 </span>
-                <span className="af-cm-msg-text">{m.body}</span>
+                <span className="af-cm-msg-text">{censorProfanity(m.body)}</span>
                 <RichMessage metadata={m.metadata} />
               </div>
             ))

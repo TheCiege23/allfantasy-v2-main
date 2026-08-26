@@ -7,6 +7,7 @@ import { MessageTime } from './MessageTime'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { MessageReactions } from './MessageReactions'
 import { QuotedMessage } from './QuotedMessage'
+import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
@@ -1016,7 +1017,11 @@ function LeaguePanel({
               {m.parentMessageId ? (
                 <QuotedMessage
                   author={byId.get(m.parentMessageId)?.author ?? null}
-                  text={byId.get(m.parentMessageId)?.message ?? null}
+                  text={
+                    byId.has(m.parentMessageId)
+                      ? censorProfanity(byId.get(m.parentMessageId)?.message ?? '')
+                      : null
+                  }
                   onJump={
                     byId.has(m.parentMessageId)
                       ? () =>
@@ -1039,7 +1044,7 @@ function LeaguePanel({
                   Reply
                 </button>
               </span>
-              <p className="af-cm-msg-text">{m.message}</p>
+              <p className="af-cm-msg-text">{censorProfanity(m.message)}</p>
               <RichMessage
                 metadata={m.metadata}
                 viewerUserId={viewerUserId}
@@ -1080,7 +1085,7 @@ function LeaguePanel({
       {replyTo ? (
         <div className="af-cm-replybar">
           <span className="af-cm-replybar-label">Replying to {replyTo.author}</span>
-          <span className="af-cm-replybar-text">{replyTo.message}</span>
+          <span className="af-cm-replybar-text">{censorProfanity(replyTo.message)}</span>
           <button
             type="button"
             className="af-cm-replybar-x"
