@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { loadSideProjections, winProbabilityFor } from './matchupProjections'
 
@@ -124,11 +125,31 @@ export async function getMatchupData(
     },
   })
 
-  const latest = await prisma.weeklyMatchup.findFirst({
-    where: { leagueId: platformLeagueId, ...(weekParam ? { week: weekParam } : {}) },
-    orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }],
-    select: { week: true, seasonYear: true },
-  })
+  /*
+   * ⚠ WAS `orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }]`, WHICH NAMED THE
+   * WEEK-18 OPPONENT AS THIS WEEK'S. The Sleeper sync bootstraps all eighteen
+   * weeks as 0-0 rows before a single game is played, so the newest week on file
+   * in August is week 18 of a season nobody has started. The screen was not
+   * empty and threw nothing — it confidently showed the wrong opponent.
+   *
+   * The writer-side fix (77d4df751) repaired the modules that WRITE this table
+   * and touched no reader. `resolveCurrentWeekForLeague` is the shared rule:
+   * within the latest season, the earliest week still holding an unscored row.
+   */
+  const resolved = weekParam
+    ? await prisma.weeklyMatchup
+        .findFirst({
+          where: { leagueId: platformLeagueId, week: weekParam },
+          orderBy: { seasonYear: 'desc' },
+          select: { week: true, seasonYear: true },
+        })
+        .then((r) => (r ? { week: r.week, season: r.seasonYear } : null))
+        .catch(() => null)
+    : await resolveCurrentWeekForLeague(platformLeagueId).then((r) =>
+        r ? { week: r.week, season: r.season } : null,
+      )
+
+  const latest = resolved ? { week: resolved.week, seasonYear: resolved.season } : null
 
   if (!latest) {
     const noWeek = {

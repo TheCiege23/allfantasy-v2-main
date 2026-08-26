@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { isScored, resolveCurrentWeekFrom } from './currentWeek'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -306,27 +307,18 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    * every week is scored the season is over, and the last one is the honest
    * answer.
    */
-  let season = 0
-  for (const r of rows) season = Math.max(season, r.seasonYear)
-
-  const seasonRows = rows.filter((r) => r.seasonYear === season)
-  let firstUnplayed: number | null = null
-  let lastWeek = 0
-  for (const r of seasonRows) {
-    lastWeek = Math.max(lastWeek, r.week)
-    if (r.pointsFor > 0 || r.pointsAgainst > 0) continue
-    if (firstUnplayed == null || r.week < firstUnplayed) firstUnplayed = r.week
-  }
-
-  const latest: { season: number; week: number } | null =
-    seasonRows.length > 0 ? { season, week: firstUnplayed ?? lastWeek } : null
+  /*
+   * The rule above now lives in `lib/core-app/currentWeek.ts`. It was written
+   * here first and stayed here, which is exactly why matchup.ts, weekAll.ts and
+   * todayStrip.ts each kept their own `max(week)` version — the correct
+   * derivation was one function call away and not importable.
+   */
+  const resolved = resolveCurrentWeekFrom(rows)
+  const latest: { season: number; week: number } | null = resolved
+    ? { season: resolved.season, week: resolved.week }
+    : null
 
   return { rows, leagueByPlatformId, myRosters, rosterNames, latest }
-}
-
-/** A row counts as played once either side has put up a point. */
-function isScored(r: MatchupRow): boolean {
-  return r.pointsFor > 0 || r.pointsAgainst > 0
 }
 
 /** Per-roster scoring history, keyed "platformLeagueId:rosterId". */

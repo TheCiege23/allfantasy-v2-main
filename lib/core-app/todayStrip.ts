@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentWeekForLeagues } from './currentWeek'
 import type { SectionState } from './leagueHome'
 
 /**
@@ -146,16 +147,28 @@ async function resolveRecord(
    * league-id spaces. Measured: 0 rows match on `id`, and joining on it returns
    * an empty set with no error. Same hazard `weekAll.ts` documents.
    */
-  const latest = await prisma.weeklyMatchup
-    .findFirst({
-      where: { leagueId: { in: platformIds } },
-      orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }],
-      select: { seasonYear: true, week: true },
-    })
-    .catch(() => null)
+  /*
+   * ⚠ THE WEEK IS THE EARLIEST UNSCORED ONE, NOT `max(week)` — see
+   * lib/core-app/currentWeek.ts. The schedule is written as 0-0 rows before the
+   * season starts, so the newest week on file is week 18 in August.
+   */
+  const resolvedWeek = await resolveCurrentWeekForLeagues(platformIds)
 
-  if (!latest) {
+  if (!resolvedWeek) {
     return { available: false, reason: 'no matchup has been scored for your leagues yet' }
+  }
+
+  const latest = { seasonYear: resolvedWeek.season, week: resolvedWeek.week }
+
+  /*
+   * Nothing played yet this season is a different answer from "we have no data".
+   * Without this the strip renders a row of 0-0 games as today's scores.
+   */
+  if (resolvedWeek.scoredWeeks === 0) {
+    return {
+      available: false,
+      reason: `no week has been scored yet in ${resolvedWeek.season} — the schedule is on file but nothing has been played`,
+    }
   }
 
   const season = currentSeasonOf(now)

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentWeekForLeagues } from './currentWeek'
 
 /**
  * Your week, across every league — read from WeeklyMatchup.
@@ -73,15 +74,19 @@ export async function getWeekAll(
 
   /*
    * Latest season/week actually present, rather than "now". The clock is 2026 and
-   * every row is 2025 — asking for the current week returns nothing and reads as
-   * a bug rather than as an empty season.
+   * every row may still be 2025 — asking for the current week returns nothing and
+   * reads as a bug rather than as an empty season.
+   *
+   * ⚠ AND NOT `max(week)` WITHIN THAT SEASON. This file is named in
+   * weekBoard.ts's own warning as the reader that gets it wrong: the Sleeper
+   * sync writes the whole schedule as 0-0 rows up front, so the newest week on
+   * file is week 18 before anybody has played. That is why this screen read "no
+   * scored matchups" all season — it was looking at an unplayed week and
+   * correctly finding nothing in it.
    */
-  const latest = await prisma.weeklyMatchup.findFirst({
-    where: { leagueId: { in: platformIds } },
-    orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }],
-    select: { seasonYear: true, week: true },
-  })
-  if (!latest) return empty
+  const resolved = await resolveCurrentWeekForLeagues(platformIds)
+  if (!resolved) return empty
+  const latest = { seasonYear: resolved.season, week: resolved.week }
 
   const [matchups, myTeams] = await Promise.all([
     prisma.weeklyMatchup.findMany({
