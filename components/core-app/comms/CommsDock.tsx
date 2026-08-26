@@ -43,6 +43,12 @@ export type CommsDockProps = {
    * rule that a badge with nothing behind it is an invented notification.
    */
   unread?: number
+  /**
+   * Messages that NAME you. Badged differently from ordinary unread on purpose:
+   * a mention needs a reply, and collapsing the two is how a badge becomes noise
+   * that people clear without reading.
+   */
+  mentions?: number
 }
 
 /*
@@ -60,6 +66,7 @@ export function CommsDock({
   dockable = false,
   supportEmail = null,
   unread = 0,
+  mentions = 0,
 }: CommsDockProps) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
@@ -125,7 +132,13 @@ export function CommsDock({
           type="button"
           className="af-cm-launch"
           onClick={() => setOpen(true)}
-          aria-label={unread > 0 ? `Open communications (${unread} unread)` : 'Open communications'}
+          aria-label={
+            mentions > 0
+              ? `Open communications (${mentions} mention${mentions === 1 ? '' : 's'}, ${unread} unread)`
+              : unread > 0
+                ? `Open communications (${unread} unread)`
+                : 'Open communications'
+          }
         >
           {/*
             Founder direction, verbatim: "the chat is supposed to be a bubble".
@@ -146,7 +159,18 @@ export function CommsDock({
           >
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
           </svg>
-          {unread > 0 ? <span className="af-cm-launchdot">{unread}</span> : null}
+          {/*
+            One badge, two voices. A mention turns it accent-coloured and marks
+            it with an @; ordinary unread stays quiet. Two separate badges on one
+            small bubble would be unreadable, and the louder state is the one
+            worth the pixels.
+          */}
+          {unread > 0 ? (
+            <span className="af-cm-launchdot" data-kind={mentions > 0 ? 'mention' : 'unread'}>
+              {mentions > 0 ? '@' : ''}
+              {unread}
+            </span>
+          ) : null}
         </button>
       ) : null}
 

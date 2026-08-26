@@ -41,6 +41,12 @@ export type PlatformThread = {
   lastMessageAt: string
   unreadCount: number
   memberCount: number
+  /**
+   * Already returned by the threads endpoint and never declared here, so the
+   * drawer could not have rendered a control even though the column, the
+   * endpoint and the semantics all existed.
+   */
+  isMuted?: boolean
 }
 
 type PlatformMessage = {
@@ -237,6 +243,37 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
     [openThread, busy, loadMessages, replyTo],
   )
 
+  /*
+   * Mute. This stops being a nicety the moment trade cards start landing
+   * automatically: an unmutable stream of generated messages is how you teach
+   * somebody to switch notifications off for the whole app instead.
+   */
+  const toggleMute = useCallback(async () => {
+    if (!openThread || busy) return
+    const next = !openThread.isMuted
+    setBusy(true)
+    try {
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/mute`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ muted: next }),
+        },
+      )
+      if (!res.ok) throw new Error(`server said ${res.status}`)
+      /* Optimism is safe here: the only state is a boolean we just set. */
+      setOpenThread({ ...openThread, isMuted: next })
+      setThreads((prev) =>
+        prev ? prev.map((t) => (t.id === openThread.id ? { ...t, isMuted: next } : t)) : prev,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? `Could not change mute — ${e.message}.` : 'Could not change mute.')
+    } finally {
+      setBusy(false)
+    }
+  }, [openThread, busy])
+
   const start = useCallback(async () => {
     const names = invite
       .split(',')
@@ -287,6 +324,17 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           </button>
           <span className="af-cm-threadtitle">
             {openThread.title || `${openThread.memberCount} people`}
+            <button
+              type="button"
+              className="af-cm-mute"
+              data-on={Boolean(openThread.isMuted)}
+              disabled={busy}
+              onClick={() => void toggleMute()}
+              aria-pressed={Boolean(openThread.isMuted)}
+              title={openThread.isMuted ? 'Muted — tap to unmute' : 'Mute this conversation'}
+            >
+              {openThread.isMuted ? '🔕' : '🔔'}
+            </button>
           </span>
         </div>
 

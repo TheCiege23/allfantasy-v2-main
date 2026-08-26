@@ -23,6 +23,7 @@ import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
+import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
@@ -574,6 +575,14 @@ export default async function AfCorePage({
       : null
 
   /*
+   * The launcher badge, on EVERY /core screen rather than only home — the dock
+   * is mounted in the shell, so a count that only existed on the dashboard would
+   * blink out the moment somebody navigated. Degrades to zeroes on failure
+   * rather than failing the page.
+   */
+  const chatUnread = await getChatUnread(userId)
+
+  /*
    * ONE URGENCY VOICE. dash34's brief states urgent facts — "N leagues have a
    * starter who cannot play", "N drafts are on the clock" — that
    * deriveOutstandingIssues cannot detect (its only live detectors are
@@ -966,7 +975,12 @@ export default async function AfCorePage({
          * shell's launcher replaced. Without this the badge would simply have
          * disappeared when that bubble was removed.
          */
-        unread: dash34?.chatUnread ?? 0,
+        /*
+         * Was `dash34?.chatUnread`, which nothing anywhere ever computed — the
+         * badge had been hardcoded to zero since it was written.
+         */
+        unread: chatUnread.total,
+        mentions: chatUnread.mentions,
         /*
          * The home's own claims, handed to the assistant the user opens FROM
          * those claims. Derived from the same dash34 facts that feed the brief
