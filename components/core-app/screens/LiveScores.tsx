@@ -160,16 +160,29 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
           and the count is the answer to "is anything on?" — hiding it removes
           the answer.
         */}
+        {/*
+          ⚠ A TABLIST WHOSE TABS CONTROL NOTHING IS A LIE TO A SCREEN READER.
+          These shipped as role="tab" with no aria-controls and no tabpanel,
+          which announces "tab 3 of 7" and then gives the user nothing to move
+          into. They genuinely do swap the slate below, so the slate is the
+          panel and the wiring says so.
+        */}
         <div className="af-live-sports" role="tablist" aria-label="Sport">
           {data.counts.map((c) => (
             <button
               key={c.sport}
               type="button"
               role="tab"
+              id={`af-live-tab-${c.sport}`}
               className="af-live-sport"
               data-active={c.sport === sport}
               data-quiet={c.liveCount === 0}
               aria-selected={c.sport === sport}
+              aria-controls="af-live-slate"
+              /* Only the selected tab is in the tab order; arrow keys are the
+                 expected way through a tablist, and seven tab stops for a
+                 filter is worse than one. */
+              tabIndex={c.sport === sport ? 0 : -1}
               onClick={() => pickSport(c.sport)}
             >
               {c.label}
@@ -181,10 +194,18 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
 
       {/* ── Slate + impact ──────────────────────────────────────────── */}
       <div className="af-live-grid">
-        <section className="af-live-slate" aria-label={`${activeSportLabel} games`}>
-          <p className="af-label af-live-slate-head">
+        <section
+          className="af-live-slate"
+          id="af-live-slate"
+          role="tabpanel"
+          aria-labelledby={`af-live-tab-${data.sport}`}
+          /* Focusable so a keyboard user can actually land in the panel their
+             tab points at; -1 keeps it out of the sequential tab order. */
+          tabIndex={-1}
+        >
+          <h2 className="af-label af-live-slate-head">
             {activeSportLabel} · sorted by leagues affected
-          </p>
+          </h2>
 
           {data.games.length === 0 ? (
             <EmptySlate scope={scope} hasRosterData={data.hasRosterData} loadFailed={data.loadFailed} />
@@ -197,7 +218,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
 
         <aside className="af-live-side" aria-label="Your live impact">
           <div className="af-live-impact">
-            <p className="af-label">Your live impact</p>
+            <h2 className="af-label">Your live impact</h2>
             {data.hasRosterData ? (
               <>
                 <p className="af-live-impact-total">
@@ -234,7 +255,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
 
           {data.impact.biggestMover ? (
             <div className="af-live-card">
-              <p className="af-label">Biggest mover</p>
+              <h2 className="af-label">Biggest mover</h2>
               <div className="af-live-mover">
                 <MiniPlayerImg
                   sleeperId={null}
@@ -257,7 +278,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
 
           {data.impact.upNext.length > 0 ? (
             <div className="af-live-card">
-              <p className="af-label">Up next for you</p>
+              <h2 className="af-label">Up next for you</h2>
               <ul className="af-live-next">
                 {data.impact.upNext.map((u, i) => (
                   <li key={`${u.playerName}-${i}`}>

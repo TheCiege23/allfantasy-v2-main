@@ -109,7 +109,7 @@ export function Standings({ data }: StandingsProps) {
 
       {/* ── Projection ──────────────────────────────────────────────── */}
       <section className="af-st-projection" data-missing={!projection.available}>
-        <p className="af-label">Projected final points</p>
+        <h2 className="af-label">Projected final points</h2>
         {projection.available ? (
           <>
             <p className="af-st-proj-v">
@@ -129,7 +129,7 @@ export function Standings({ data }: StandingsProps) {
       <div className="af-st-split">
         {/* ── Rank trend ────────────────────────────────────────────── */}
         <section className="af-st-panel">
-          <p className="af-label">Rank by week</p>
+          <h2 className="af-label">Rank by week</h2>
           {trend.length > 1 ? (
             <RankTrend trend={trend} teamCount={teams.length} />
           ) : (
@@ -142,7 +142,7 @@ export function Standings({ data }: StandingsProps) {
 
         {/* ── Recent weeks ──────────────────────────────────────────── */}
         <section className="af-st-panel">
-          <p className="af-label">Your recent weeks</p>
+          <h2 className="af-label">Your recent weeks</h2>
           {recent.length > 0 ? (
             <ul className="af-st-recent">
               {recent.map((r) => (

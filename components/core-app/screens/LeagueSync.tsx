@@ -108,7 +108,7 @@ export function LeagueSync({ data, manageHref }: LeagueSyncProps) {
       ) : null}
 
       {/* ── Connection ──────────────────────────────────────────────── */}
-      <section className="af-sy-conn">
+      <section className="af-sy-conn" aria-label="Platform connection">
         <div className="af-sy-conn-main">
           <span className="af-sy-platform af-platform" data-platform={league.platform}>
             {league.platform.toUpperCase()}

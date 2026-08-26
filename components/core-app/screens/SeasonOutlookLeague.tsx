@@ -131,7 +131,7 @@ export function SeasonOutlookLeague({ league, swing, basis }: SeasonOutlookLeagu
       {swing ? (
         <section className="af-sol-clinch">
           <header className="af-sol-clinch-head">
-            <p className="af-label">How you clinch</p>
+            <h2 className="af-label">How you clinch</h2>
             <span className="af-sol-clinch-note">
               Week {swing.week}
               {swing.opponentName ? ` · vs ${swing.opponentName}` : ''}
@@ -187,7 +187,7 @@ export function SeasonOutlookLeague({ league, swing, basis }: SeasonOutlookLeagu
         </section>
       ) : (
         <section className="af-sol-clinch" data-empty="true">
-          <p className="af-label">How you clinch</p>
+          <h2 className="af-label">How you clinch</h2>
           <p className="af-sol-clinch-why">
             {league.weeksRemaining === 0
               ? 'The regular season is over in this league — there is nothing left to clinch.'

@@ -50,7 +50,7 @@ export function YourWeekLeague({ board, allWeeksHref }: YourWeekLeagueProps) {
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
       {yours ? (
-        <section className="af-wl-hero">
+        <section className="af-wl-hero" aria-label="Your matchup">
           <div className="af-wl-hero-sides">
             <div className="af-wl-side" data-you="true">
               <span className="af-label">You</span>
@@ -140,7 +140,7 @@ export function YourWeekLeague({ board, allWeeksHref }: YourWeekLeagueProps) {
         </section>
       ) : (
         <section className="af-wl-hero" data-empty="true">
-          <p className="af-label">Your matchup</p>
+          <h2 className="af-label">Your matchup</h2>
           <p className="af-wl-hero-why">
             You have no game on file in week {board.week}. That is either a bye or a week whose
             schedule has not synced — the rest of the league&apos;s board is below either way.

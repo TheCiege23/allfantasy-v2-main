@@ -269,6 +269,61 @@ describe('league career withholds what the warehouse cannot support', () => {
   })
 })
 
+describe('accessibility of the new screens', () => {
+  const SCREENS = [
+    'LiveScores',
+    'Standings',
+    'SeasonOutlookLeague',
+    'YourWeekLeague',
+    'LeagueCareer',
+    'LeagueSync',
+    'CommissionerHub',
+  ]
+
+  /*
+   * `role="tab"` without `aria-controls` announces "tab 3 of 7" and then offers
+   * the user nothing to move into. If a screen declares tabs, they must point at
+   * a real tabpanel.
+   */
+  it('every role="tab" points at a tabpanel that exists', () => {
+    for (const name of SCREENS) {
+      const src = code(`components/core-app/screens/${name}.tsx`)
+      if (!src.includes('role="tab"')) continue
+
+      const controls = [...src.matchAll(/aria-controls="([^"]+)"/g)].map((m) => m[1])
+      expect(controls.length, `${name} declares tabs without aria-controls`).toBeGreaterThan(0)
+      expect(src, `${name} has no tabpanel for its tabs`).toContain('role="tabpanel"')
+
+      for (const id of new Set(controls)) {
+        expect(src, `${name}: nothing carries id="${id}"`).toContain(`id="${id}"`)
+      }
+    }
+  })
+
+  /*
+   * Section titles were `<p className="af-label">` — styled like headings,
+   * navigated like body text, so a screen-reader user moving by heading skipped
+   * every section on the page.
+   */
+  it('screens with sections expose them as headings', () => {
+    for (const name of SCREENS) {
+      const src = code(`components/core-app/screens/${name}.tsx`)
+      const sections = (src.match(/<section/g) ?? []).length
+      if (sections < 2) continue
+      const headings = (src.match(/<h[23]/g) ?? []).length
+      expect(headings, `${name} has ${sections} sections but ${headings} headings`).toBeGreaterThan(0)
+    }
+  })
+
+  it('af-label headings carry no margin, so flex gap is the only spacing', () => {
+    // `<h2>` brings the UA's margin with it and af-core.css has no reset; every
+    // one of these sits in a flex column with its own gap, where margin
+    // double-counts.
+    const core = read('components/core-app/af-core.css')
+    expect(core).toMatch(/h2\.af-label/)
+  })
+})
+
 describe('every nav item resolves to a real screen', () => {
   /*
    * The "this screen has not been built yet" panel shipped in a primary nav slot
