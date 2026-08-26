@@ -8,6 +8,7 @@
  * recomputes the snapshot. Returns null when data is missing so the shadow skips. Injectable for tests.
  */
 import { prisma } from '@/lib/prisma'
+import { loadAdpBySleeperId } from '@/lib/adp/resolveAdp'
 import type { TradeValueSnapshot } from '@/lib/trade-value/types'
 import type { TradeRosterFacts, TradeSettingsFacts, TradeWorldInput } from './world'
 
@@ -136,17 +137,30 @@ export interface AdpRecordRow {
   position: string | null
 }
 
-export async function loadAdpRecords(sport: string, playerIds: string[]): Promise<AdpRecordRow[]> {
+/**
+ * ⚠ THIS RETURNED AN EMPTY ARRAY FOR EVERY CALL EVER MADE TO IT.
+ *
+ * It equality-joined `AdpDataRecord.playerId` against the SLEEPER ids its callers pass. That
+ * column holds `NFL:brian-thomas:WR:JAX` slugs and `SportsPlayer.id` uuids — never a Sleeper id
+ * — so the `in` clause matched nothing, across all 94,116 rows. The caller treats an empty
+ * result as "no ADP on file for these players", so the failure was invisible.
+ *
+ * `loadAdpBySleeperId` owns the id translation now. The rows come back keyed by the id the
+ * CALLER passed, because `resolveTradeEnrichment` indexes them as `adpByPlayerId[r.playerId]`
+ * and then looks that map up by its own ids — returning the ADP table's own key here would
+ * rebuild the same silent miss one layer up.
+ */
+export async function loadAdpRecords(
+  sport: string,
+  playerIds: string[],
+  format?: string | null,
+): Promise<AdpRecordRow[]> {
   const clean = Array.from(new Set(playerIds.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
-  const rows = await prisma.adpDataRecord.findMany({
-    where: { playerId: { in: clean }, sport },
-    orderBy: { createdAt: 'desc' },
-    select: { playerId: true, adp: true, position: true },
-  })
-  return rows.map((row: { playerId: string; adp: number | null; position: string | null }) => ({
-    playerId: row.playerId,
-    adp: row.adp ?? null,
-    position: row.position ?? null,
+  const resolved = await loadAdpBySleeperId({ prisma, sport, sleeperIds: clean, format })
+  return [...resolved.values()].map((r) => ({
+    playerId: r.sleeperId,
+    adp: r.adp,
+    position: r.position,
   }))
 }

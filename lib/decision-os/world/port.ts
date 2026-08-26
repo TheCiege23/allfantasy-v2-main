@@ -8,6 +8,7 @@
  * repair via `prisma.redraftRoster.update`).
  */
 import { prisma } from '@/lib/prisma'
+import { loadAdpBySleeperId } from '@/lib/adp/resolveAdp'
 import type {
   RawAdpRow,
   RawInjuryContextRow,
@@ -571,14 +572,30 @@ export async function loadInjuryContextRows(
  * Slice limit: 200 unique ids max (same as other enrichment ports).
  * NO writes, NO live provider calls, NO cache warming.
  */
+/**
+ * ⚠ THE `in` CLAUSE HERE NEVER MATCHED A ROW. `AdpDataRecord.playerId` holds
+ * `NFL:brian-thomas:WR:JAX` slugs and `SportsPlayer.id` uuids; callers pass Sleeper ids. All
+ * 94,116 rows were unreachable, and the empty result read as "no ADP on file".
+ *
+ * `loadAdpBySleeperId` translates the ids; this then re-queries by the ADP table's own key to
+ * keep the richer columns (spread, confidence, provider count) that the resolver does not carry,
+ * and maps the result back into Sleeper-id space so the caller's lookups land.
+ */
 export async function loadAdpRows(
   sport: string,
   ids: string[],
+  format?: string | null,
 ): Promise<RawAdpRow[]> {
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
+
+  const resolved = await loadAdpBySleeperId({ prisma, sport, sleeperIds: clean, format })
+  if (resolved.size === 0) return []
+  const sleeperByAdpId = new Map<string, string>()
+  for (const r of resolved.values()) sleeperByAdpId.set(r.adpPlayerId, r.sleeperId)
+
   const rows = await prisma.adpDataRecord.findMany({
-    where: { playerId: { in: clean }, sport },
+    where: { playerId: { in: [...sleeperByAdpId.keys()] }, sport },
     orderBy: { createdAt: 'desc' },
     select: {
       playerId: true,
@@ -609,7 +626,8 @@ export async function loadAdpRows(
     source: string
     createdAt: Date
   }) => ({
-    playerId: row.playerId,
+    // Back into the caller's id space — it looks these up by the ids it handed us.
+    playerId: sleeperByAdpId.get(row.playerId) ?? row.playerId,
     adp: row.adp,
     adpChange: row.adpChange ?? null,
     adpSpread: row.adpSpread ?? null,
