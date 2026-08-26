@@ -213,6 +213,21 @@ const nextConfig = {
   },
 
   experimental: {
+    // Next 14.2 compiles the client and server passes in parallel build workers.
+    // On Railway (Linux) that build loses the root layout: app-build-manifest.json
+    // lists zero CSS for /layout, app/globals.css never enters the module graph,
+    // and the served document has no <!DOCTYPE html>, <html>, <head> or <body> —
+    // the layout is absent from the RSC tree entirely, so every page renders
+    // unstyled and then fails to hydrate.
+    //
+    // The same commit built locally is correct: /layout carries its two
+    // stylesheets, the 775KB Tailwind chunk is emitted, and the document has its
+    // shell. The difference is the build, not the code. This repo already carries
+    // scripts/patch-manifest-race.cjs for a concurrent manifest write race in the
+    // pages manifest; this is the same failure one manifest over.
+    //
+    // Serialising the compilations costs build time and nothing else.
+    webpackBuildWorker: false,
     instrumentationHook: process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1',
     outputFileTracingIncludes: {
       "/api/**": ["./data/**"],
