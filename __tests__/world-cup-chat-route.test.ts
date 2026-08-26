@@ -36,6 +36,12 @@ vi.mock("@/lib/world-cup/worldCupNotifications", () => ({
 
 vi.mock("@/lib/world-cup/worldCupChimmyPrivateReply", () => ({
   generateWorldCupChimmyPrivateReply: generateChimmyReplyMock,
+  ChimmyTokenSpendFailedError: class ChimmyTokenSpendFailedError extends Error {
+    constructor(message?: string) {
+      super(message)
+      this.name = "ChimmyTokenSpendFailedError"
+    }
+  },
 }))
 
 vi.mock("@/lib/platform/chat-service", () => ({
@@ -62,6 +68,32 @@ vi.mock("@/lib/prisma", () => ({
     worldCupBracketParticipant: {
       findMany: findManyParticipantsMock,
     },
+    // Token fallback gate (prepareWorldCupAiTokenFallback -> TokenSpendService).
+    // Seed sync + a zero balance, so a non-entitled user gets the 402 path.
+    tokenPackage: { upsert: vi.fn().mockResolvedValue({}) },
+    tokenRefundRule: { upsert: vi.fn().mockResolvedValue({}) },
+    tokenSpendRule: {
+      upsert: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn().mockResolvedValue({
+        code: "world_cup_ai_chimmy_coaching",
+        featureLabel: "World Cup Chimmy coaching",
+        tokenCost: 1,
+        requiresConfirmation: true,
+        isActive: true,
+      }),
+    },
+    userTokenBalance: {
+      upsert: vi.fn().mockResolvedValue({
+        balance: 0,
+        lifetimePurchased: 0,
+        lifetimeSpent: 0,
+        lifetimeRefunded: 0,
+        updatedAt: new Date("2026-06-01T12:00:00.000Z"),
+      }),
+    },
+    // EntitlementResolver.resolveSnapshot
+    userSubscription: { findMany: vi.fn().mockResolvedValue([]) },
+    adminSubscriptionGrant: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }))
 
@@ -107,6 +139,11 @@ describe("World Cup pool chat route", () => {
       conversationId: "chimmy:user-1:world-cup:c1",
       provider: "openai",
       model: "gpt-test",
+      billingDecision: {
+        shouldChargeToken: true,
+        reason: "llm_required",
+        displayHint: "1 token used · AI coaching answer",
+      },
     })
     createPlatformThreadMock.mockResolvedValue({
       id: "thread-1",
