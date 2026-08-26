@@ -212,11 +212,27 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     if (better) best.set(r.sleeperId, { name: r.name, team: r.team, position: r.position })
   }
 
+  /*
+   * ⚠ NOT EVERY ROSTER ENTRY IS A SLEEPER ID. A second importer writes name-encoded pseudo-ids
+   * of the form `name:Brian Thomas Jr.:WR:JAX`, which never join to a player row. Those players
+   * cannot be shown — but dropping them without saying so is how a manager comes to believe we
+   * lost half his roster, so they are counted and reported.
+   */
+  const unresolved = myIds.filter((id) => !best.has(id)).length
+
   const myDefenders = myIds
     .map((id) => ({ sleeperId: id, ...(best.get(id) ?? { name: id, team: null, position: null }) }))
     .filter((p) => isIdpPosition(p.position))
 
-  if (myDefenders.length === 0) return EMPTY('no_defenders', [NO_CAP_NOTE])
+  const notes = [NO_CAP_NOTE]
+  if (unresolved > 0) {
+    notes.push(
+      `${unresolved} roster ${unresolved === 1 ? 'entry is' : 'entries are'} stored in an id ` +
+        'space we cannot resolve to a player, so they are not shown here.',
+    )
+  }
+
+  if (myDefenders.length === 0) return EMPTY('no_defenders', notes)
 
   const [snapMap, logRows] = await Promise.all([
     loadSnapShares({
@@ -308,6 +324,6 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     snaps,
     roles,
     tendencies,
-    notes: [NO_CAP_NOTE, TENDENCY_NOTE],
+    notes: [...notes, TENDENCY_NOTE],
   }
 }
