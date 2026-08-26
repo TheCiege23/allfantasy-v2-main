@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { getPlayerValuesForNames, FantasyCalcSettings } from '@/lib/fantasycalc'
+import { FantasyCalcSettings } from '@/lib/fantasycalc'
+import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/sleeper-client'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
@@ -281,8 +282,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade-ideas", tool: "L
     }
     
     const [userValuesMap, otherValuesMap] = await Promise.all([
-      getPlayerValuesForNames(userPlayerNames.slice(0, 30), fcSettings).catch(() => new Map()),
-      getPlayerValuesForNames(allOtherPlayerNames.slice(0, 100), fcSettings).catch(() => new Map())
+      getPlayerValuesForNamesDbFirst(userPlayerNames.slice(0, 30), fcSettings).catch(() => new Map()),
+      getPlayerValuesForNamesDbFirst(allOtherPlayerNames.slice(0, 100), fcSettings).catch(() => new Map())
     ])
     
     // Convert Maps to plain objects with lowercase keys

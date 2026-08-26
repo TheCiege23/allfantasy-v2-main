@@ -17,7 +17,8 @@ import {
   type SleeperRoster,
   type SleeperUser,
 } from '@/lib/sleeper-client'
-import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/fantasycalc'
+import { findPlayerByName } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { calculateDynastyScore, findPlayerTier } from '@/lib/dynasty-tiers'
 import { fetchPlayerNewsFromGrok, getManagerProfiles } from '@/lib/ai-gm-intelligence'
 import { analyzeUserTradingProfile } from '@/lib/smart-trade-recommendations'
@@ -488,7 +489,7 @@ export async function POST(request: NextRequest) {
 
     const [allPlayers, fantasyCalcValues, decisionContext, managerProfiles] = await Promise.all([
       fetchSleeperPlayersForSport(apiSport),
-      fetchFantasyCalcValues({
+      getFantasyCalcValuesDbFirst({
         isDynasty,
         numQbs: isSuperFlex ? 2 : 1,
         numTeams: totalTeams,

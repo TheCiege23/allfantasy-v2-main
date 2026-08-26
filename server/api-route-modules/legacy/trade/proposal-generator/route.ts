@@ -4,7 +4,7 @@ import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, pricePick, PricedAsset, ValuationContext, PickInput } from '@/lib/hybrid-valuation'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getCachedDNA } from '@/lib/manager-dna'
 import { getCachedOpponentProfile, formatOpponentForPrompt } from '@/lib/opponent-tendencies'
 import { z } from 'zod'
@@ -298,7 +298,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
     const today = new Date().toISOString().split('T')[0]
     let fcPlayers: any[] | undefined
     try {
-      fcPlayers = await fetchFantasyCalcValues({
+      fcPlayers = await getFantasyCalcValuesDbFirst({
         isDynasty: format === 'dynasty',
         numQbs: isSuperFlex ? 2 : 1,
         numTeams: 12,

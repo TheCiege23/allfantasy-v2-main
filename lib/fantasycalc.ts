@@ -492,19 +492,25 @@ export interface PlayerValueLookup {
   combinedValue: number;
 }
 
-export async function getPlayerValuesForNames(
-  names: string[],
-  settings: FantasyCalcSettings = { isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 }
-): Promise<Map<string, PlayerValueLookup>> {
+/**
+ * The PURE half of getPlayerValuesForNames — name lookup and shaping, no fetch.
+ *
+ * Extracted so `lib/fantasycalc-db.ts` can offer a DB-first variant without
+ * importing back into this module's fetch path, which would be circular
+ * (fantasycalc-db already imports fantasycalc). Request paths should use
+ * `getPlayerValuesForNamesDbFirst` from there; this stays exported for the
+ * non-request callers that still assemble their own player list.
+ */
+export function buildPlayerValuesForNames(
+  players: FantasyCalcPlayer[],
+  names: string[]
+): Map<string, PlayerValueLookup> {
   const result = new Map<string, PlayerValueLookup>();
-  
-  try {
-    const players = await fetchFantasyCalcValues(settings);
-    
-    for (const name of names) {
-      const player = findPlayerByName(players, name);
-      if (player) {
-        result.set(name.toLowerCase(), {
+
+  for (const name of names) {
+    const player = findPlayerByName(players, name);
+    if (player) {
+      result.set(name.toLowerCase(), {
           name: player.player.name,
           value: player.value,
           rank: player.overallRank,
@@ -523,15 +529,36 @@ export async function getPlayerValuesForNames(
           maybeAdp: player.maybeAdp ?? null,
           maybeTradeFrequency: player.maybeTradeFrequency ?? null,
           volatility: player.maybeMovingStandardDeviationAdjusted ?? null,
-          combinedValue: player.combinedValue,
-        });
-      }
+        combinedValue: player.combinedValue,
+      });
     }
+  }
+
+  return result;
+}
+
+/**
+ * Fetching wrapper, kept for non-request callers.
+ *
+ * Request paths must use `getPlayerValuesForNamesDbFirst` from
+ * `lib/fantasycalc-db.ts` instead — this one goes straight to the vendor.
+ *
+ * The swallow-and-return-empty behaviour is preserved deliberately rather than
+ * "fixed" in passing: several callers treat an empty map as "no values known"
+ * and render around it. Making it throw here would change those surfaces in a
+ * commit that is supposed to be a move, not a behaviour change.
+ */
+export async function getPlayerValuesForNames(
+  names: string[],
+  settings: FantasyCalcSettings = { isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 }
+): Promise<Map<string, PlayerValueLookup>> {
+  try {
+    const players = await fetchFantasyCalcValues(settings);
+    return buildPlayerValuesForNames(players, names);
   } catch (error) {
     console.error('Failed to fetch FantasyCalc values:', error);
+    return new Map<string, PlayerValueLookup>();
   }
-  
-  return result;
 }
 
 export function formatValuesForPrompt(

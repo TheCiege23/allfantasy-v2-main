@@ -7,7 +7,8 @@ import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { evaluateTrade, formatEvaluationForAI, TradeAsset as TierTradeAsset, LeagueSettings, detectIDPFromRosterPositions, detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
-import { getPlayerValuesForNames, formatValuesForPrompt, FantasyCalcSettings, calculateTradeBalance, getPickValue } from '@/lib/fantasycalc'
+import { formatValuesForPrompt, FantasyCalcSettings, calculateTradeBalance, getPickValue } from '@/lib/fantasycalc'
+import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { buildTradeHubIntelBlock, parseTradeIntelBlockMeta } from '@/lib/trade-engine/trade-analyzer-intel'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
 import {
@@ -1973,7 +1974,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const [sportsDb, espnStats, fantasyCalcMap, playerNews] = await Promise.all([
       lookupSportsDbPlayers({ sport, names: involvedNames }),
       lookupEspnPlayerStats({ sport, names: involvedNames }),
-      sport === 'nfl' ? getPlayerValuesForNames(involvedNames, calcSettings) : Promise.resolve(new Map()),
+      sport === 'nfl' ? getPlayerValuesForNamesDbFirst(involvedNames, calcSettings) : Promise.resolve(new Map()),
       fetchPlayerNewsFromGrok(involvedNames, sport).catch((err) => {
         console.error('Player news fetch failed:', err);
         return [] as Array<{ playerName: string; sentiment: string; news: string[]; buzz: string }>;

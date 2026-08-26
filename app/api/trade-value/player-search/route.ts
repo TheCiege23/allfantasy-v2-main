@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { searchPlayers } from '@/lib/data/players'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
-let fcCache: { players: Awaited<ReturnType<typeof fetchFantasyCalcValues>>; at: number } | null = null
+let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
 
 async function searchNflFantasyCalc(q: string) {
   const now = Date.now()
   if (!fcCache || now - fcCache.at > FC_TTL) {
-    const fresh = await fetchFantasyCalcValues({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 })
+    const fresh = await getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 })
     fcCache = { players: fresh, at: now }
   }
   const normalize = (s: string) =>

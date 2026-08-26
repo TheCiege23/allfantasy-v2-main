@@ -5,7 +5,7 @@ import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { prisma } from '@/lib/prisma'
 import { preferencesToPrompt } from '@/lib/trade-quiz-data'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getComprehensiveLearningContext } from '@/lib/comprehensive-trade-learning'
 import { getPreAnalysisStatus } from '@/lib/trade-pre-analysis'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
@@ -470,7 +470,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/league-analyze",
         const recSetting = Number(scoringSettings.rec ?? 1)
         const fcPpr: 0 | 0.5 | 1 = recSetting >= 1 ? 1 : recSetting >= 0.5 ? 0.5 : 0
 
-        fcPlayers = await fetchFantasyCalcValues({
+        fcPlayers = await getFantasyCalcValuesDbFirst({
           isDynasty: fcIsDynasty,
           numQbs: fcNumQbs,
           numTeams: fcNumTeams,
