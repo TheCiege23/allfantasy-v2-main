@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
+import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
@@ -669,6 +670,17 @@ export function TradeCenter(props: {
           ) : null}
         </section>
       ) : null}
+
+      {/*
+        The proposal sits AFTER the verdict, not beside the builder. Sending a
+        deal is the last thing you do, and putting the button next to the assets
+        invites sending one before it has been priced.
+      */}
+      <TradeProposePanel
+        leagueId={props.league?.id ?? null}
+        give={giveAssets}
+        get={getAssets}
+      />
 
       <TradeFinderPanel leagueId={props.league?.id ?? null} />
 

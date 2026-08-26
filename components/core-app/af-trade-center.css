@@ -763,3 +763,47 @@
     min-height: 44px;
   }
 }
+
+/* ── Propose ─────────────────────────────────────────────────────────── */
+
+/*
+ * Bordered in the accent rather than filled: this is the one panel on the page
+ * that writes something, and it should read as consequential without shouting
+ * over the verdict above it.
+ */
+.af-tc-propose {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-tc-propose-partners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-tc-propose-partner {
+  cursor: pointer;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text2);
+}
+.af-tc-propose-partner[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .af-tc-propose-partner {
+    min-height: 44px;
+  }
+  .af-tc-propose .af-btn {
+    min-height: 44px;
+    width: 100%;
+  }
+}
