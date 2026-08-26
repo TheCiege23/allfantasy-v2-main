@@ -17,6 +17,7 @@ import { processC2cLeagueChatInput } from '@/lib/c2c/c2cChimmyLeagueChat'
 import { isChimmyPrivateMessage, parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
 import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
+import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -173,6 +174,14 @@ export async function GET(req: NextRequest) {
    * load because presence failed would be a worse product than a chat with no
    * presence strip.
    */
+  /*
+   * Card any trades that arrived since the last look. Folded into the read the
+   * drawer already makes rather than given a cron or a route: it throttles
+   * itself to one scan every five minutes per league, never throws, and its
+   * first run for a league posts nothing at all.
+   */
+  await syncTradeCardsForLeague(leagueId)
+
   const presenceScope = { kind: 'league' as const, id: leagueId }
   await markViewingChat(presenceScope, {
     userId,

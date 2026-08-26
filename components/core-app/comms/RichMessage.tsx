@@ -16,12 +16,23 @@
 
 import { readViewerPoll } from '@/lib/chat-core/messagePolls'
 import { MessagePoll } from './MessagePoll'
+import { TradeCardView } from './TradeCardView'
 
 export type RichMetadata = Record<string, unknown> | null | undefined
 
 type Gif = { previewUrl: string; url: string; title: string }
 type Attachment = { type: string; url: string; mimeType?: string; duration?: number }
 type Poll = { question: string; options: Array<{ id: string; text: string; votes: string[] }> }
+type TradeAsset = { id: string; name: string | null; position?: string | null; team?: string | null }
+type TradeCard = {
+  manager: string
+  gave: TradeAsset[]
+  got: TradeAsset[]
+  picksGave: number
+  picksGot: number
+  season: number | null
+  week: number | null
+}
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
@@ -96,6 +107,44 @@ export function readPoll(meta: RichMetadata): Poll | null {
  * The rich half of a message. Returns null when there is nothing beyond text, so
  * an ordinary message renders exactly as it did before.
  */
+function readTradeCard(meta: RichMetadata): TradeCard | null {
+  if (!meta || typeof meta !== 'object') return null
+  const raw = (meta as Record<string, unknown>).tradeCard
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const t = raw as Record<string, unknown>
+
+  const side = (v: unknown): TradeAsset[] => {
+    if (!Array.isArray(v)) return []
+    const out: TradeAsset[] = []
+    for (const entry of v) {
+      if (!entry || typeof entry !== 'object') continue
+      const e = entry as Record<string, unknown>
+      const id = str(e.id)
+      if (!id) continue
+      out.push({
+        id,
+        name: str(e.name),
+        position: str(e.position),
+        team: str(e.team),
+      })
+    }
+    return out
+  }
+
+  const manager = str(t.manager)
+  if (!manager) return null
+
+  return {
+    manager,
+    gave: side(t.gave),
+    got: side(t.got),
+    picksGave: typeof t.picksGave === 'number' ? t.picksGave : 0,
+    picksGot: typeof t.picksGot === 'number' ? t.picksGot : 0,
+    season: typeof t.season === 'number' ? t.season : null,
+    week: typeof t.week === 'number' ? t.week : null,
+  }
+}
+
 export function RichMessage({
   metadata,
   viewerUserId,
@@ -116,8 +165,9 @@ export function RichMessage({
   const gif = readGif(metadata)
   const attachments = readAttachments(metadata)
   const poll = readPoll(metadata)
+  const trade = readTradeCard(metadata)
   const viewerPoll = onVote ? readViewerPoll(metadata, viewerUserId ?? null) : null
-  if (!gif && attachments.length === 0 && !poll) return null
+  if (!gif && attachments.length === 0 && !poll && !trade) return null
 
   return (
     <div className="af-cm-rich">
@@ -145,6 +195,8 @@ export function RichMessage({
         }
         return null
       })}
+
+      {trade ? <TradeCardView card={trade} /> : null}
 
       {viewerPoll && onVote ? (
         <MessagePoll poll={viewerPoll} onVote={onVote} onClose={onClosePoll} />
