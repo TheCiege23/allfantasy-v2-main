@@ -3,7 +3,7 @@ import { resolvePlatformUser } from "@/lib/platform/current-user"
 import { getPlatformThreadMessages } from "@/lib/platform/chat-service"
 import { bracketMessagesToPlatform } from "@/lib/chat-core/league-message-proxy"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from "@/lib/league-access"
 import { getLeagueChatMessages } from "@/lib/league-chat/LeagueChatMessageService"
 import { prisma } from "@/lib/prisma"
 
@@ -56,11 +56,29 @@ export async function GET(
       return NextResponse.json({ status: "ok", pinned })
     }
 
-    const canAccessMainLeague = await canAccessLeagueDraft(leagueId, user.appUserId)
+    /*
+     * ⚠ SAME WRONG PREDICATE THE REACTION ROUTE HAD. `canAccessLeagueDraft`
+     * needs a Roster row or a CLAIMED LeagueTeam; production has 1,078 league
+     * teams and 94 claimed. `/api/league/chat` admits anyone
+     * `resolveLeagueAccess` recognises, so most members could read a thread and
+     * be refused the moment they pinned in it.
+     */
+    const canAccessMainLeague = (await resolveLeagueAccess(leagueId, user.appUserId)) != null
     if (!canAccessMainLeague) return NextResponse.json({ error: "Not a member" }, { status: 403 })
 
-    const all = await getLeagueChatMessages(leagueId, { limit: 100, requestingUserId: user.appUserId })
-    const pinned = all.filter((m) => m.messageType === "pin")
+    /*
+     * ⚠ THIS USED TO TAKE THE LAST 100 MESSAGES OF EVERY TYPE AND FILTER FOR
+     * PINS AFTERWARDS, so a pin older than the hundred most recent messages
+     * silently disappeared from the board. Production already holds 157
+     * draft-pick rows in league chat, which is most of that window on its own.
+     * `messageTypeIn` filters in SQL, so the board holds pins and not whatever
+     * happens to be recent.
+     */
+    const pinned = await getLeagueChatMessages(leagueId, {
+      limit: 100,
+      requestingUserId: user.appUserId,
+      messageTypeIn: ["pin"],
+    })
     return NextResponse.json({ status: "ok", pinned })
   }
   const all = await getPlatformThreadMessages(user.appUserId, threadId, 100)

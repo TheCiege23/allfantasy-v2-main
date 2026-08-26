@@ -129,9 +129,20 @@ export async function GET(req: NextRequest) {
 
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '50'), 100)
   const messages = await getLeagueChatMessages(leagueId, { limit, requestingUserId: userId })
+  /*
+   * ⚠ A PIN IS STORED AS A CHAT ROW WHOSE BODY IS JSON. `/pin` writes a
+   * `type: 'pin'` LeagueChatMessage carrying `{ messageId, snippet }`, and this
+   * GET has never filtered by type — so the moment anything could pin, every
+   * pin would also render in the stream as a line of raw JSON. Production has
+   * no pin rows yet, which is the only reason this is not already visible.
+   *
+   * The pinned board reads them through `/pinned`; the transcript should not.
+   */
+  const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
+
   const filteredMessages =
     bigBrotherLeague && selectedBbChannel
-      ? messages.filter((message) => {
+      ? withoutPins.filter((message) => {
           const metadata =
             message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata)
               ? (message.metadata as Record<string, unknown>)
@@ -139,7 +150,7 @@ export async function GET(req: NextRequest) {
           const channel = readBbChannelKeyFromMetadata(metadata) ?? 'main'
           return channel === selectedBbChannel
         })
-      : messages
+      : withoutPins
 
   /*
    * Presence beacon. Folded into the poll the drawer already makes rather than

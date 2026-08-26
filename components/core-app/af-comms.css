@@ -918,6 +918,83 @@
   outline-offset: 1px;
 }
 
+/*
+ * Pinned board. Collapsed by default and gone entirely when empty: it sits
+ * above the conversation in a narrow drawer, and an expanded list of a dozen
+ * pins pushes the thing people opened the drawer for off the screen.
+ */
+.af-cm-pins {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.af-cm-pins-head {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.af-cm-pins-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.af-cm-pins-list {
+  margin: 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.af-cm-pin {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.af-cm-pin-jump {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.af-cm-pin-x {
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.af-cm-pin-x:disabled { opacity: 0.5; cursor: default; }
+
+.af-cm-pin-jump:focus-visible,
+.af-cm-pin-x:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .af-cm-msg-head {
   display: flex;
   align-items: baseline;

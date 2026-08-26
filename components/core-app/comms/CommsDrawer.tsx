@@ -8,6 +8,8 @@ import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { MessageReactions } from './MessageReactions'
 import { QuotedMessage } from './QuotedMessage'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
+import { PinnedBoard } from './PinnedBoard'
+import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
@@ -625,6 +627,8 @@ function LeaguePanel({
   const [reactionBusy, setReactionBusy] = useState<string | null>(null)
   const [voteBusy, setVoteBusy] = useState<string | null>(null)
   const [replyTo, setReplyTo] = useState<LeagueMessage | null>(null)
+  const [pins, setPins] = useState<PinnedRef[]>([])
+  const [pinBusy, setPinBusy] = useState(false)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -693,6 +697,19 @@ function LeaguePanel({
     }
   }, [])
 
+  const loadPins = useCallback(async (leagueId: string) => {
+    try {
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(`league:${leagueId}`)}/pinned`,
+      )
+      if (!res.ok) return
+      const data = (await res.json().catch(() => ({}))) as { pinned?: unknown }
+      setPins(readPinnedRefs(data.pinned))
+    } catch {
+      /* A board that failed to load is not worth an error over a working chat. */
+    }
+  }, [])
+
   useEffect(() => {
     if (scopeId) void load(scopeId)
     else {
@@ -701,7 +718,9 @@ function LeaguePanel({
     }
     setReactionOverride({})
     setReplyTo(null)
-  }, [scopeId, load])
+    setPins([])
+    if (scopeId) void loadPins(scopeId)
+  }, [scopeId, load, loadPins])
 
   /*
    * Near-realtime. League chat had the same problem as the DM panel: it loaded
@@ -793,6 +812,59 @@ function LeaguePanel({
       }
     },
     [scopeId, voteBusy, load],
+  )
+
+  /*
+   * The pin, unpin and pinned routes have all had a league branch the whole
+   * time and no caller anywhere. Their gate was the same wrong one the reaction
+   * route had, fixed alongside this.
+   */
+  const pinMessage = useCallback(
+    async (messageId: string) => {
+      if (!scopeId || pinBusy) return
+      setPinBusy(true)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/pin`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ messageId }),
+          },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await loadPins(scopeId)
+      } catch (e) {
+        setError(e instanceof Error ? `Could not pin that — ${e.message}.` : 'Could not pin that.')
+      } finally {
+        setPinBusy(false)
+      }
+    },
+    [scopeId, pinBusy, loadPins],
+  )
+
+  const unpinMessage = useCallback(
+    async (pinMessageId: string) => {
+      if (!scopeId || pinBusy) return
+      setPinBusy(true)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/unpin`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ pinMessageId }),
+          },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await loadPins(scopeId)
+      } catch (e) {
+        setError(e instanceof Error ? `Could not unpin that — ${e.message}.` : 'Could not unpin that.')
+      } finally {
+        setPinBusy(false)
+      }
+    },
+    [scopeId, pinBusy, loadPins],
   )
 
   const closePoll = useCallback(
@@ -1001,6 +1073,15 @@ function LeaguePanel({
         <PresenceStrip viewers={presence} />
       </div>
 
+      <PinnedBoard
+        pins={pins}
+        busy={pinBusy}
+        onUnpin={(pinId) => void unpinMessage(pinId)}
+        onJump={(messageId) =>
+          document.getElementById(`af-cm-msg-${messageId}`)?.scrollIntoView({ block: 'center' })
+        }
+      />
+
       <div className="af-cm-thread">
         {loading ? (
           <p className="af-cm-loading">Loading {scope?.name ?? 'league'} chat…</p>
@@ -1042,6 +1123,15 @@ function LeaguePanel({
                   aria-label={`Reply to ${m.author}`}
                 >
                   Reply
+                </button>
+                <button
+                  type="button"
+                  className="af-cm-reply-btn"
+                  disabled={pinBusy}
+                  onClick={() => void pinMessage(m.id)}
+                  aria-label={`Pin the message from ${m.author}`}
+                >
+                  Pin
                 </button>
               </span>
               <p className="af-cm-msg-text">{censorProfanity(m.message)}</p>
