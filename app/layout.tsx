@@ -125,6 +125,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const gaMeasurementId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
   const metaPixelId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
   const fbAppId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
+  // Bisect for the missing document shell. Next serves every App Router route
+  // without <!DOCTYPE html>, <html>, <head> or <body> while /500 (Pages Router)
+  // is correct, so React is not flushing its preamble. Everything else has been
+  // ruled out by experiment: the fonts optimizer, the Node version, the Tailwind
+  // prebuild, the loader cache, the dist dir and next.config in isolation.
+  //
+  // AF_MINIMAL_LAYOUT=1 renders the smallest possible root document. If the shell
+  // comes back, the cause is inside this subtree and can be narrowed from here.
+  // If it does not, the cause is outside the layout entirely. Temporary.
+  if (process.env.AF_MINIMAL_LAYOUT === '1') {
+    return (
+      <html lang={htmlLang} data-mode={htmlMode} className="scroll-smooth" suppressHydrationWarning>
+        <body className="antialiased min-h-screen mode-readable">
+          <link rel="stylesheet" href="/railway-styles.css" precedence="default" />
+          {children}
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html
       lang={htmlLang}
