@@ -125,6 +125,40 @@ const nextConfig = {
                 JSON.stringify(rootLayoutish.slice(0, 3)),
               );
 
+              // Every module whose file is named layout.tsx, so the root layout can be
+              // told apart from the nested /app one by full path.
+              const layoutFiles = [];
+              let rootEntry = null;
+              for (const mod of compilation.modules) {
+                const res = String(mod.resource || '');
+                if (res.endsWith('layout.tsx')) layoutFiles.push(res);
+                const id = typeof mod.identifier === 'function' ? String(mod.identifier()) : '';
+                if (!rootEntry && id.includes('name=app%2Flayout&') && id.includes('page=%2Flayout')) {
+                  rootEntry = mod;
+                }
+              }
+              console.log(
+                '[af-css-debug] isServer=%s layoutTsxModules=%d %s',
+                isServer,
+                layoutFiles.length,
+                JSON.stringify(layoutFiles.slice(0, 8)),
+              );
+
+              if (rootEntry) {
+                const id = String(rootEntry.identifier());
+                console.log('[af-css-debug] ROOT ENTRY id(first 300)=%s', id.slice(0, 300));
+                let src = '';
+                try {
+                  const os = rootEntry.originalSource && rootEntry.originalSource();
+                  src = os ? String(os.source()).slice(0, 700) : '(no originalSource)';
+                } catch (e) {
+                  src = '(source threw: ' + (e && e.message) + ')';
+                }
+                console.log('[af-css-debug] ROOT ENTRY source(first 700)=%s', JSON.stringify(src));
+              } else {
+                console.log('[af-css-debug] ROOT ENTRY not found in this compilation');
+              }
+
               const cssModules = [];
               const layoutModules = [];
               for (const mod of compilation.modules) {
