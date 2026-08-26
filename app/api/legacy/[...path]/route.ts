@@ -61,6 +61,7 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["espn-import"], load: () => import('@/server/api-route-modules/legacy/espn-import/route') },
   { pattern: ["fantrax"], load: () => import('@/server/api-route-modules/legacy/fantrax/route') },
   { pattern: ["feedback"], load: () => import('@/server/api-route-modules/legacy/feedback/route') },
+  { pattern: ["franchise"], load: () => import('@/server/api-route-modules/legacy/franchise/route') },
   { pattern: ["identity"], load: () => import('@/server/api-route-modules/legacy/identity/route') },
   { pattern: ["identity-sync"], load: () => import('@/server/api-route-modules/legacy/identity-sync/route') },
   { pattern: ["import"], load: () => import('@/server/api-route-modules/legacy/import/route') },
