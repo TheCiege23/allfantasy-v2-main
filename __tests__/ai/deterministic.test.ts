@@ -29,6 +29,13 @@ vi.mock('@/lib/fantasycalc', () => ({
   getValueTier: (value: number) => value >= 5000 ? 'high' : 'mid',
 }))
 
+
+// These modules read through the DB-first layer now, so mocking only the
+// adapter stopped intercepting and the real prisma-backed path ran.
+vi.mock('@/lib/fantasycalc-db', () => ({
+  getFantasyCalcValuesDbFirst: fetchFantasyCalcValuesMock,
+}))
+
 vi.mock('@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService', () => ({
   getEnrichedNewsFeed: getEnrichedNewsFeedMock,
 }))

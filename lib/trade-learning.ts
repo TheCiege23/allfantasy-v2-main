@@ -1,12 +1,7 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
-import {
-  fetchFantasyCalcValues,
-  findPlayerBySleeperId,
-  findPlayerByName,
-  getPickValue,
-  FantasyCalcPlayer
-} from './fantasycalc';
+import { findPlayerBySleeperId, findPlayerByName, getPickValue, FantasyCalcPlayer } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { resolveCurrentTradeLearningSeason } from './trade-engine/season-resolver';
 
 interface TradePlayer {
@@ -66,7 +61,7 @@ export async function analyzeHistoricalTrade(
     const isDynasty = trade.leagueFormat === 'dynasty' || trade.leagueFormat === 'keeper';
     const numQbs = trade.isSuperFlex ? 2 : 1;
 
-    const fantasyCalcPlayers = await fetchFantasyCalcValues({
+    const fantasyCalcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty,
       numQbs: numQbs as 1 | 2,
       numTeams: 12,

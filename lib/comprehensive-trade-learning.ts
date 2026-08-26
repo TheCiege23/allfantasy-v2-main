@@ -1,11 +1,6 @@
 import { prisma } from './prisma';
-import { 
-  fetchFantasyCalcValues, 
-  findPlayerBySleeperId, 
-  findPlayerByName,
-  getPickValue,
-  FantasyCalcPlayer 
-} from './fantasycalc';
+import { findPlayerBySleeperId, findPlayerByName, getPickValue, FantasyCalcPlayer } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   getAgeCurveWithCliffs,
@@ -58,7 +53,7 @@ async function getCachedFantasyCalcValues(isDynasty: boolean, numQbs: 1 | 2): Pr
     return cached.data;
   }
   
-  const data = await fetchFantasyCalcValues({
+  const data = await getFantasyCalcValuesDbFirst({
     isDynasty,
     numQbs,
     numTeams: 12,

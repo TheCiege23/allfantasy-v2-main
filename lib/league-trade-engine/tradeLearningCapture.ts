@@ -16,7 +16,8 @@
 import type { League } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
-import { fetchFantasyCalcValues, findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/trade-engine'
 import { getCalibratedWeights, calibrateAcceptProbability } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } from '@/lib/trade-engine/trade-event-logger'
@@ -149,7 +150,7 @@ export async function captureLiveTradeOffer(input: {
     const { isSuperFlex, isTEP } = resolveLeagueScoringContext(input.league)
     const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
 
-    const fcPlayers = await fetchFantasyCalcValues({
+    const fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty: true, // matches the existing hardcoded convention in every hypothetical-evaluation tool (see the ADR)
       numQbs: isSuperFlex ? 2 : 1,
       numTeams: rosterCount > 0 ? rosterCount : 12,

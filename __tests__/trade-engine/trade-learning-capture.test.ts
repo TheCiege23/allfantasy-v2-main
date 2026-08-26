@@ -41,6 +41,20 @@ vi.mock('@/lib/fantasycalc', async () => {
   }
 })
 
+/**
+ * tradeLearningCapture reads values through the DB-first layer now, so mocking
+ * only the adapter above stopped intercepting anything — the eight failures
+ * here were the mock missing its target, not the capture logic changing.
+ * Both are backed by the same fn so the test still controls one player list.
+ */
+vi.mock('@/lib/fantasycalc-db', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/fantasycalc-db')>('@/lib/fantasycalc-db')
+  return {
+    ...actual,
+    getFantasyCalcValuesDbFirst: mockFetchFantasyCalcValues,
+  }
+})
+
 vi.mock('@/lib/trade-engine/trade-event-logger', async () => {
   const actual = await vi.importActual<typeof import('@/lib/trade-engine/trade-event-logger')>(
     '@/lib/trade-engine/trade-event-logger',

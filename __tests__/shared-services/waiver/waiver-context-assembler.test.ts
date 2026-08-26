@@ -30,6 +30,14 @@ vi.mock('@/lib/player-valuations/canonicalPlayerValuations', async () => {
   const actual = await vi.importActual<typeof import('@/lib/player-valuations/canonicalPlayerValuations')>('@/lib/player-valuations/canonicalPlayerValuations')
   return { ...actual, fetchFantasyCalcValues: mockFetchFantasyCalcValues }
 })
+// WaiverContextAssembler used to reach the fetcher THROUGH the canonical facade
+// mocked just above; it now reads the DB-first layer directly, so that mock no
+// longer intercepts and the real prisma-backed path ran. Same fn backs both, so
+// the test still controls a single player list.
+vi.mock('@/lib/fantasycalc-db', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/fantasycalc-db')>('@/lib/fantasycalc-db')
+  return { ...actual, getFantasyCalcValuesDbFirst: mockFetchFantasyCalcValues }
+})
 vi.mock('@/lib/shared-services/player-identity', () => ({ resolvePlayers: mockResolvePlayers }))
 
 import { buildWaiverDecisionContext } from '@/lib/shared-services/waiver/WaiverContextAssembler'

@@ -117,6 +117,16 @@ export async function fetchFantasyCalcPlayerDirectory(): Promise<FantasyCalcPlay
   return data;
 }
 
+/**
+ * Age of THIS MODULE'S in-process cache — not of the DB snapshot.
+ *
+ * ⚠ If the surface asking has moved to `getFantasyCalcValuesDbFirst`, this is
+ * the wrong function and will answer `null` forever, because the DB-first path
+ * never populates the Map below. Use `getFantasyCalcCacheAgeMs` from
+ * `lib/fantasycalc-db.ts` instead. `league-rankings-v2` shipped exactly that bug
+ * for the length of one commit: a freshness readout reporting "unknown" for data
+ * that was fresh, with no type error to catch it.
+ */
 export function getValuationCacheAgeMs(settings: FantasyCalcSettings): number | null {
   const cacheKey = getCacheKey(settings);
   const cached = cache.get(cacheKey);
