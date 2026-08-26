@@ -68,6 +68,25 @@ const MIN_RAILWAY_CSS_BYTES = 100_000;
  */
 const allowStaleFallback = process.env.AF_ALLOW_STALE_RAILWAY_CSS === '1';
 
+/**
+ * Escape hatch for comparing Railway against the Vercel build path.
+ *
+ * This script is the single largest difference between the two: Vercel skips it
+ * (isLinuxProdBuild requires !VERCEL), so there app/globals.css still holds
+ * @tailwind directives and webpack's tailwindcss plugin compiles it. On Railway
+ * it runs, and webpack sees already-compiled CSS with autoprefixer only.
+ *
+ * The root layout's stylesheet is missing from Railway builds and present on
+ * Vercel, so setting this to '1' runs Railway through Vercel's CSS path and
+ * says whether that difference is the cause.
+ */
+if (process.env.AF_SKIP_TAILWIND_PREBUILD === '1') {
+  console.log(
+    '[railway-prebuild] AF_SKIP_TAILWIND_PREBUILD=1 — skipping; app/globals.css keeps its @tailwind directives (Vercel path).',
+  );
+  process.exit(0);
+}
+
 if (!isRailway && !isLinuxProdBuild) {
   console.log('[railway-prebuild] Not a Railway/Linux prod build — skipping Tailwind CLI prebuild.');
   process.exit(0);
