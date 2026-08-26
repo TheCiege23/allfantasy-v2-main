@@ -84,6 +84,47 @@ const nextConfig = {
                 const text = String(resource || '');
                 if (text.includes('globals.css')) matches.push(text.slice(-140));
               }
+              // Compilation-level failures nothing has inspected yet. A css-loader or
+              // postcss error on a 776KB file would explain a module that never
+              // appears in the graph.
+              const errs = (compilation.errors || []).map((e) => String(e && (e.message || e)).slice(0, 300));
+              const warns = (compilation.warnings || []).map((w) => String(w && (w.message || w)).slice(0, 200));
+              console.log(
+                '[af-css-debug] name=%s isServer=%s errors=%d warnings=%d',
+                compilation.name || '(unnamed)',
+                isServer,
+                errs.length,
+                warns.length,
+              );
+              for (const e of errs.slice(0, 4)) console.log('[af-css-debug]   ERROR: %s', e);
+              for (const w of warns.slice(0, 4)) console.log('[af-css-debug]   WARN: %s', w);
+
+              // Broad sweep: anything mentioning globals, and how the root layout is
+              // actually identified (next-app-loader / private-next-app-dir forms).
+              const anyGlobals = [];
+              const rootLayoutish = [];
+              for (const mod of compilation.modules) {
+                const raw =
+                  mod.resource || (typeof mod.identifier === 'function' ? mod.identifier() : '');
+                const text = String(raw || '');
+                if (text.includes('globals')) anyGlobals.push(text.slice(-160));
+                if (text.includes('private-next-app-dir') || text.includes('next-app-loader')) {
+                  rootLayoutish.push(text.slice(-160));
+                }
+              }
+              console.log(
+                '[af-css-debug] isServer=%s anyModuleMentioningGlobals=%d %s',
+                isServer,
+                anyGlobals.length,
+                JSON.stringify(anyGlobals.slice(0, 6)),
+              );
+              console.log(
+                '[af-css-debug] isServer=%s appLoaderModules=%d %s',
+                isServer,
+                rootLayoutish.length,
+                JSON.stringify(rootLayoutish.slice(0, 3)),
+              );
+
               const cssModules = [];
               const layoutModules = [];
               for (const mod of compilation.modules) {
