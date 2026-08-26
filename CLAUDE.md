@@ -120,13 +120,44 @@ resolved (below); **eight remain**, all genuine:
     modules, but those sit under 20+ app routes including non-admin chat and AI
     paths. Not proven unreachable, so not exempted. Unreachability has to be
     demonstrated, never assumed.
-  - `lib/fantasycalc.ts` (two lines) — ~30 direct importers, many under
-    `app/api/`. A DB-first path exists (`lib/fantasycalc-db.ts`, fed by
-    `scripts/sync-fantasycalc-valuations.ts`); migrating callers to it is a
-    project of its own and has not been done.
-    ⚠ **Confirm that sync is actually scheduled before pointing anything at
-    `fantasycalc-db`.** `ingestCFBDStats` was written, correct, and had no
-    scheduled caller for months; the same mistake here would be silent.
+  - `lib/fantasycalc.ts` (two lines) — **~62 import sites, not the ~30 this file
+    used to claim.** An aliased grep finds 47; the relative-import control finds
+    15 more. Request paths are migrated (see below), but the adapter cannot be
+    allowlisted yet — see `6.5` below.
+
+**FantasyCalc, migrated 2026-08-25.** 36 of those sites now read through
+`lib/fantasycalc-db.ts`: 17 request-path routes and 19 serving `lib/*` modules.
+
+`scripts/sync-fantasycalc-valuations.ts` is **not** scheduled — it is an npm
+script only, and the one cron that mentions FantasyCalc
+(`/api/cron/adp-refresh`) writes a dated value series, not the
+`fantasycalc:values:*` key. **This does not block anything**, and the contrast
+with `ingestCFBDStats` is the point: `getFantasyCalcValuesDbFirst` is
+read-through and self-populating, so a cold cache costs one live fetch rather
+than silently serving nulls. `DevyPlayer.passingYards` had no such fallback,
+which is exactly why that one was fatal and this one is not. Scheduling the sync
+is a quota and latency win, not a correctness prerequisite.
+
+**Six modules are deliberately NOT migrated** — `trade-learning`,
+`comprehensive-trade-learning`, `tradeLearningCapture`, `historical-values`,
+`replay-framework/ingest/ingestSleeperTradesForLeague`, `upstream-apis`. They
+stamp a value *into* a record rather than serving it, and a value read from a
+six-hour-stale cache is not the same claim as the market at the moment a trade
+happened. Decide those one at a time.
+
+**Allowlisting `lib/fantasycalc.ts` needs a module split, not just the
+migration.** Pure helpers (`findPlayerByName`, `getPickValue`, `getValueTier`,
+`formatValuesForPrompt`) live in the same file as the fetch, so ~45 modules
+still import it legitimately. Separate the pure half from the fetching half
+first; only then is the exemption earned.
+
+⚠ **A rename sweep must exclude modules that re-export the renamed symbol.**
+`lib/player-valuations/canonicalPlayerValuations.ts` is a re-export facade
+(`export const fetchFantasyCalcValues = …`); a blanket rename rewrote the name
+it *publishes* rather than migrating a caller, and
+`lib/shared-services/waiver/WaiverContextAssembler.ts` imports the fetcher
+*through* that facade. The grep census read clean on both — only the typecheck
+caught them.
 
   **Census these with a positive control.** A `from '@/lib/x'` grep alone missed
   `lib/sports-router.ts`, which would have made `lib/api-sports.ts` look
