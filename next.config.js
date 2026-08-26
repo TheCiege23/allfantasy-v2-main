@@ -84,6 +84,27 @@ const nextConfig = {
                 const text = String(resource || '');
                 if (text.includes('globals.css')) matches.push(text.slice(-140));
               }
+              const cssModules = [];
+              const layoutModules = [];
+              for (const mod of compilation.modules) {
+                const resource =
+                  mod.resource || (typeof mod.identifier === 'function' ? mod.identifier() : '');
+                const text = String(resource || '');
+                if (/\.css(\?|$)/.test(text)) cssModules.push(text.split('/').slice(-2).join('/'));
+                if (text.includes('app/layout.')) layoutModules.push(text.slice(-100));
+              }
+              console.log(
+                '[af-css-debug] isServer=%s cssModulesInGraph=%d %s',
+                isServer,
+                cssModules.length,
+                JSON.stringify(cssModules.slice(0, 40)),
+              );
+              console.log(
+                '[af-css-debug] isServer=%s ROOT LAYOUT modules=%d %s',
+                isServer,
+                layoutModules.length,
+                JSON.stringify(layoutModules.slice(0, 6)),
+              );
               const cssAssets = Object.keys(compilation.assets).filter((a) => a.endsWith('.css'));
               console.log(
                 '[af-css-debug] isServer=%s modulesMatchingGlobalsCss=%d %s',
