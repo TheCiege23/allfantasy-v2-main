@@ -51,6 +51,23 @@ function main() {
     globalsSrc.includes(TAILWIND_MARKER),
   )
 
+  // Tailwind's output is not in static/css. Scan the whole dist tree so an
+  // inlined-into-JS or oddly-placed chunk cannot hide.
+  const everywhere = []
+  ;(function walkAll(dir, depth) {
+    if (depth > 6 || everywhere.length > 40) return
+    for (const entry of safe(() => fs.readdirSync(dir, { withFileTypes: true }), [])) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walkAll(full, depth + 1)
+      else if (/\.(css|js)$/.test(entry.name)) {
+        const body = safe(() => fs.readFileSync(full, 'utf8'), '')
+        if (body.includes(TAILWIND_MARKER)) everywhere.push(path.relative(dist, full))
+      }
+    }
+  })(dist, 0)
+  console.log('[css-audit] files ANYWHERE in dist carrying the tailwind marker: %d %s',
+    everywhere.length, JSON.stringify(everywhere.slice(0, 10)))
+
   const cssDir = path.join(dist, 'static', 'css')
   const cssFiles = safe(() => fs.readdirSync(cssDir), [])
   let total = 0
