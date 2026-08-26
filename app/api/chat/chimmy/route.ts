@@ -72,6 +72,7 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
+import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
@@ -1980,6 +1981,22 @@ ${tradeHistoryCtx}`
 
 ${standingsCtx}`
                   : standingsCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * Rivalry history. "Am I any good against him?" is the question
+               * league members ask each other most, and it was the one Chimmy
+               * could not answer: the aggregation behind this has three live
+               * callers and the chat route referenced none of them.
+               */
+              const h2h = await buildHeadToHeadGrounding(planInput.leagueId)
+              if (h2h) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${h2h.text}`
+                  : h2h.text
               }
             } catch { /* non-fatal */ }
             try {
