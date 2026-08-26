@@ -28,6 +28,33 @@
 
 export const FANTRAX_FXEA_BASE = 'https://www.fantrax.com/fxea/general'
 
+/**
+ * The complete endpoint list, read off the official docs 2026-08-26.
+ *
+ * ⚠ THERE IS NO TRANSACTIONS OR TRADES ENDPOINT. The word does not appear in the
+ * documentation at all, so trade history is available only from the league CSV
+ * export. Roster state IS available per period via `getTeamRosters&period=N`,
+ * so moves can be DERIVED by diffing consecutive periods — that is the only
+ * route to trade data from the API.
+ *
+ * ⚠ AND `getAdp?sport=NCAAF` EXISTS. It returns real average-draft-position for
+ * college players, which is the market-shaped signal `DevyPlayer.devyAdp` has
+ * always been null for. See lib/trade-intel/devyOutlook.ts, which states that no
+ * market prices college players — true of everything we held, and not true of
+ * this endpoint.
+ */
+export const FANTRAX_ENDPOINTS = [
+  'getAdp',
+  'getPlayerIds',
+  'getLeagues',
+  'getLeagueInfo',
+  'getDraftPicks',
+  'getDraftResults',
+  'getTeamRosters',
+  'getStandings',
+  'getMatchupScores',
+] as const
+
 /** Fantrax's own sport codes. 'CFB' and 'NCAAF' are the same 16,886-row map. */
 export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL'
 
