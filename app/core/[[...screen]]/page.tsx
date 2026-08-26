@@ -57,6 +57,7 @@ import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import LiveScores from '@/components/core-app/screens/LiveScores'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
@@ -539,12 +540,22 @@ export default async function AfCorePage({
             platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
             settings: (l as { settings?: unknown }).settings ?? null,
           })),
+          selectedLeagueId,
         ).catch(() => null)
       : null
 
   const notifications =
     activeKey === 'notifications'
-      ? await getNotificationsCenter({ userId, issues, now }).catch(() => null)
+      ? await getNotificationsCenter({
+          userId,
+          issues,
+          now,
+          // 38a filters the feed to the league in the rail. Scoped in the
+          // loader, not the screen: counts and the unread total are derived
+          // from the rows, so filtering afterwards would show one league's
+          // rows under the whole account's numbers.
+          leagueId: selectedLeagueId,
+        }).catch(() => null)
       : null
 
   /*
@@ -1003,7 +1014,21 @@ export default async function AfCorePage({
         )
       ) : activeKey === 'season-outlook' ? (
         outlook ? (
-          <SeasonOutlook data={outlook} />
+          /*
+           * 38a·5 — one league's full field when a league is held, the
+           * cross-league board when it is not. Same key, same loader, same
+           * simulation: the league view renders the per-team numbers the
+           * cross-league table collapses into a single row.
+           */
+          selectedLeagueId && outlook.leagues.some((l) => l.leagueId === selectedLeagueId) ? (
+            <SeasonOutlookLeague
+              league={outlook.leagues.find((l) => l.leagueId === selectedLeagueId)!}
+              swing={outlook.swingByLeague[selectedLeagueId] ?? null}
+              basis={outlook.basis}
+            />
+          ) : (
+            <SeasonOutlook data={outlook} />
+          )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

@@ -121,6 +121,27 @@ export type SwingMatchup = {
   ifLose: number
   /** ifWin − ifLose, in points of playoff probability. */
   swing: number
+  /**
+   * True when winning this game puts you in the field in essentially every run.
+   * "Win and you are in" is a much stronger statement than a percentage, and it
+   * is only made when the simulation actually supports it.
+   */
+  clinchOnWin: boolean
+  /**
+   * Teams whose absence from the field most raises your own odds *in the runs
+   * where you lose this game* — the specific help you need, named.
+   *
+   * ⚠ THIS IS A CONDITIONAL PROBABILITY, NOT A STANDINGS-ADJACENCY GUESS. It is
+   * P(you make it | this team misses) − P(you make it), measured across the
+   * lose-branch runs. The team directly above you in the table is often NOT the
+   * one that helps you most, because seeding depends on points for as well as
+   * record — so reading the standings and naming a neighbour would be a
+   * plausible answer that is frequently the wrong one.
+   *
+   * Empty when no rival clears the lift threshold, which is itself meaningful:
+   * it means no single result rescues you and the copy says so.
+   */
+  helpIfLose: string[]
 }
 
 export type SeasonOutlook = {
@@ -137,6 +158,15 @@ export type SeasonOutlook = {
   }
   /** The single matchup that swings the most playoff probability. */
   weekThatMatters: SwingMatchup | null
+  /**
+   * Every league's own swing game, keyed by league id.
+   *
+   * ⚠ THESE WERE ALWAYS COMPUTED AND THROWN AWAY. The branch simulations run
+   * per league and only the largest survived into `weekThatMatters`; the
+   * league-scoped Season Outlook needs the one for the league you are looking
+   * at, which was being discarded a line after it was calculated.
+   */
+  swingByLeague: Record<string, SwingMatchup>
   /** Ranked, three at most. Where attention is worth spending. */
   priorities: Array<{ leagueName: string; reason: string; href: string }>
   basis: string
@@ -209,6 +239,17 @@ function simulate(
   playoffTeams: number,
   iterations: number,
   seed: number,
+  /**
+   * Called once per simulated season with that run's playoff field.
+   *
+   * Additive and optional so every existing caller is untouched. It exists so
+   * the clinch scenario can ask a question the tally cannot answer: not "how
+   * often do I make it", but "how often do I make it *in the runs where a
+   * particular rival misses*". That conditional is what turns "you need help"
+   * into "you need Thunderbolts to lose", and it costs one extra callback per
+   * run rather than a second set of simulations.
+   */
+  onRun?: (field: Set<number>) => void,
 ): Map<number, { playoff: number; title: number }> {
   const tally = new Map<number, { playoff: number; title: number }>()
   for (const t of teams) tally.set(t.rosterId, { playoff: 0, title: 0 })
@@ -248,6 +289,7 @@ function simulate(
 
     const field = seeded.slice(0, playoffTeams)
     for (const id of field) tally.get(id)!.playoff += 1
+    if (onRun) onRun(new Set(field))
 
     // Single elimination over the seeded field.
     let bracket = [...field]
@@ -333,9 +375,52 @@ function describeWhatDecidesIt(
   return `You need ${weeksRemaining === 1 ? 'this one' : `most of the last ${weeksRemaining}`}, and help — currently outside the top ${playoffTeams}.`
 }
 
+/**
+ * The per-team condition shown in the league-scoped standings table.
+ *
+ * ⚠ SEPARATE FROM `describeWhatDecidesIt` BECAUSE THE VOICE IS DIFFERENT, NOT
+ * BECAUSE THE LOGIC IS. That one is second-person and about the reader ("Win
+ * once in three"); this is third-person and about eleven other people. Reusing
+ * it would have printed "you are in" beside another manager's name.
+ *
+ * Same contract though: a condition, never a status word. "Eliminated with a
+ * loss this week" tells you what to watch; "Out of contention" does not.
+ */
+export function describeTeamOutlook(
+  team: OutlookTeam,
+  weeksRemaining: number,
+  playoffTeams: number,
+): string {
+  if (!team.modelled) return 'Too few completed weeks to model'
+  if (weeksRemaining === 0) {
+    return team.playoffPct >= 99 ? 'In the field' : 'Season over, missed out'
+  }
+  if (team.playoffPct >= 99) return 'Clinched — playing for seeding'
+  if (team.playoffPct <= 1) return 'Eliminated in all but a rounding error'
+  if (team.playoffPct >= 85) return `In barring a collapse over the last ${weeksRemaining}`
+  if (team.playoffPct >= 60) {
+    const need = Math.max(1, Math.ceil(weeksRemaining / 3))
+    return `Win ${need} of the last ${weeksRemaining}`
+  }
+  if (team.playoffPct >= 30) {
+    const need = Math.max(1, Math.ceil(weeksRemaining / 2))
+    return `Needs ${need} of ${weeksRemaining}, and some help`
+  }
+  if (team.playoffPct >= 5) return `Must win out and get help`
+  return `Alive, barely — outside the top ${playoffTeams}`
+}
+
 export async function getSeasonOutlook(
   userId: string,
   leagues: LeagueInput[],
+  /**
+   * The league the caller is rendering, when it is rendering one.
+   *
+   * Optional and additive: the cross-league board passes nothing and gets
+   * exactly what it got before. The league-scoped view passes its league so the
+   * swing branch is guaranteed to be computed for it.
+   */
+  focusLeagueId?: string | null,
 ): Promise<SeasonOutlook> {
   /*
    * ⚠ `basis` REPORTS THE ITERATIONS ACTUALLY RUN, NOT THE TARGET. It used to
@@ -358,6 +443,7 @@ export async function getSeasonOutlook(
     leagues: [],
     summary: { makingPlayoffs: 0, clinched: 0, onTheBubble: 0, bestTitle: null },
     weekThatMatters: null,
+    swingByLeague: {},
     priorities: [],
     basis: describeBasis(ITERATIONS),
     withheld: [],
@@ -621,6 +707,7 @@ export async function getSeasonOutlook(
    * extra sims per league rather than two per remaining game.
    */
   let weekThatMatters: SwingMatchup | null = null
+  const swingByLeague: Record<string, SwingMatchup> = {}
 
   /*
    * ⚠ ONLY CONTESTED LEAGUES GET THE BRANCH SIMS, AND AT MOST `SWING_CANDIDATES`
@@ -635,6 +722,22 @@ export async function getSeasonOutlook(
     .filter((l) => l.you != null && l.weeksRemaining > 0 && l.you.playoffPct > 2 && l.you.playoffPct < 98)
     .sort((a, b) => Math.abs(50 - a.you!.playoffPct) - Math.abs(50 - b.you!.playoffPct))
     .slice(0, SWING_CANDIDATES)
+
+  /*
+   * ⚠ THE LEAGUE BEING LOOKED AT ALWAYS GETS ITS BRANCH SIMS, EVEN IF IT IS NOT
+   * ONE OF THE EIGHT MOST CONTESTED. The cap above exists so a sixty-league
+   * account does not pay for a hundred and twenty extra simulations to answer a
+   * question that is meaningless in most of them. But on the league-scoped
+   * screen the whole page is about ONE league, and silently omitting its swing
+   * card because eight other leagues were closer to a coin flip would leave a
+   * hole with no explanation. Two extra sims for the league on screen.
+   */
+  if (focusLeagueId && !contested.some((l) => l.leagueId === focusLeagueId)) {
+    const focus = out.find(
+      (l) => l.leagueId === focusLeagueId && l.you != null && l.weeksRemaining > 0,
+    )
+    if (focus) contested.push(focus)
+  }
 
   for (const league of contested) {
     if (!league.you || league.weeksRemaining === 0) continue
@@ -718,23 +821,88 @@ export async function getSeasonOutlook(
     )
 
     const winTally = simulate(winStates, rest, league.playoffTeams, BRANCH_ITERATIONS, seed || 1)
-    const loseTally = simulate(loseStates, rest, league.playoffTeams, BRANCH_ITERATIONS, seed || 1)
+
+    /*
+     * The lose branch is observed run-by-run so the "what help do I need"
+     * question can be answered from the same simulation rather than a second
+     * one. `meInAndRivalOut` counts, for each rival, the runs where they missed
+     * the field AND you made it; `rivalOut` counts the runs where they missed
+     * at all. The ratio is P(you in | they miss).
+     */
+    let loseRunsMeIn = 0
+    const rivalOut = new Map<number, number>()
+    const rivalOutMeIn = new Map<number, number>()
+
+    const loseTally = simulate(
+      loseStates,
+      rest,
+      league.playoffTeams,
+      BRANCH_ITERATIONS,
+      seed || 1,
+      (field) => {
+        const meIn = field.has(mineRow.rosterId)
+        if (meIn) loseRunsMeIn += 1
+        for (const t of league.teams) {
+          if (t.rosterId === mineRow.rosterId) continue
+          if (field.has(t.rosterId)) continue
+          rivalOut.set(t.rosterId, (rivalOut.get(t.rosterId) ?? 0) + 1)
+          if (meIn) rivalOutMeIn.set(t.rosterId, (rivalOutMeIn.get(t.rosterId) ?? 0) + 1)
+        }
+      },
+    )
 
     const ifWin = ((winTally.get(mineRow.rosterId)?.playoff ?? 0) / BRANCH_ITERATIONS) * 100
     const ifLose = ((loseTally.get(mineRow.rosterId)?.playoff ?? 0) / BRANCH_ITERATIONS) * 100
     const swing = ifWin - ifLose
     void before
 
+    /*
+     * Rank rivals by how much their absence lifts your odds. The two thresholds
+     * are both about not naming a team on noise:
+     *
+     *   - MIN_SAMPLE: a rival who misses in 40 of 2,000 runs gives a ratio
+     *     computed off 40 samples, which swings wildly between page loads.
+     *   - MIN_LIFT: below a few points the "help" is indistinguishable from the
+     *     run-to-run variance of the simulation itself.
+     *
+     * When nothing clears both, `helpIfLose` is empty and the screen says no
+     * single result saves you — which is the honest answer, not a missing one.
+     */
+    const MIN_SAMPLE = 200
+    const MIN_LIFT = 4
+    const baseline = (loseRunsMeIn / BRANCH_ITERATIONS) * 100
+
+    const helpIfLose = league.teams
+      .filter((t) => t.rosterId !== mineRow.rosterId)
+      .flatMap((t) => {
+        const out = rivalOut.get(t.rosterId) ?? 0
+        if (out < MIN_SAMPLE) return []
+        const conditional = ((rivalOutMeIn.get(t.rosterId) ?? 0) / out) * 100
+        const lift = conditional - baseline
+        if (lift < MIN_LIFT) return []
+        return [{ name: t.name ?? nameByRoster.get(`${pid}:${t.rosterId}`) ?? null, lift }]
+      })
+      .filter((r): r is { name: string; lift: number } => Boolean(r.name))
+      .sort((a, b) => b.lift - a.lift)
+      .slice(0, 2)
+      .map((r) => r.name)
+
+    const thisSwing: SwingMatchup = {
+      leagueId: league.leagueId,
+      leagueName: league.leagueName,
+      week: nextWeek,
+      opponentName: nameByRoster.get(`${pid}:${oppRow.rosterId}`) ?? null,
+      ifWin,
+      ifLose,
+      swing,
+      clinchOnWin: ifWin >= 99,
+      helpIfLose,
+    }
+
+    swingByLeague[league.leagueId] = thisSwing
+
     if (!weekThatMatters || swing > weekThatMatters.swing) {
-      weekThatMatters = {
-        leagueId: league.leagueId,
-        leagueName: league.leagueName,
-        week: nextWeek,
-        opponentName: nameByRoster.get(`${pid}:${oppRow.rosterId}`) ?? null,
-        ifWin,
-        ifLose,
-        swing,
-      }
+      weekThatMatters = thisSwing
     }
   }
 
@@ -763,6 +931,7 @@ export async function getSeasonOutlook(
     leagues: out,
     summary,
     weekThatMatters,
+    swingByLeague,
     priorities,
     basis: describeBasis(runIterations),
     withheld,

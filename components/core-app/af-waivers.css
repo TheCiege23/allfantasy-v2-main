@@ -188,3 +188,28 @@
     gap: 2px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   38a·1 — the two intelligence panels, mounted on this tab for the first
+   time. Both bring their own internal styling; these rules only place them
+   in the column and give the browse link a real target size.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.af-core .af-wv-ai {
+  display: block;
+}
+
+.af-core .af-wv-browse {
+  align-self: flex-start;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+}
+
+@media (max-width: 560px) {
+  .af-core .af-wv-browse {
+    align-self: stretch;
+    justify-content: center;
+  }
+}
