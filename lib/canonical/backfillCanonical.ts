@@ -81,32 +81,14 @@ const IDENTITY_MAP_PROVIDERS: Array<[key: string, provider: string]> = [
   ['clearSportsId', 'clearsports'],
 ]
 
-interface SourcePlayer {
-  id: string
-  name: string
-  sport: string
-  position: string | null
-  team: string | null
-  externalId: string
-  source: string
-  sleeperId: string | null
-  imageUrl: string | null
-  height: string | null
-  weight: string | null
-  status: string | null
-  fetchedAt: Date
-  expiresAt: Date | null
-}
-
-/** Prefer the most complete, most recently fetched source row when several collapse together. */
-function pickBestSourceRow(rows: SourcePlayer[]): SourcePlayer {
-  return [...rows].sort((a, b) => {
-    const score = (r: SourcePlayer) =>
-      (r.imageUrl ? 4 : 0) + (r.position ? 2 : 0) + (r.team ? 1 : 0)
-    const diff = score(b) - score(a)
-    return diff !== 0 ? diff : b.fetchedAt.getTime() - a.fetchedAt.getTime()
-  })[0]!
-}
+/*
+ * The row ranking moved to `sourceRowRanking.ts` so a maintenance script can
+ * reach it without importing this module's Prisma client and `@/` alias chain.
+ * Imported for use here and re-exported, because this is where readers already
+ * expect to find it.
+ */
+import { pickBestSourceRow, type SourcePlayer } from './sourceRowRanking'
+export { pickBestSourceRow, type SourcePlayer }
 
 /**
  * Strip a redundant `<provider><sep>` prefix from a source row's `externalId`.
