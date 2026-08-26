@@ -10,7 +10,8 @@ import {
   SleeperUser,
   SleeperPlayoffBracket,
 } from '../sleeper-client'
-import { fetchFantasyCalcValues, FantasyCalcPlayer, FantasyCalcSettings, getValuationCacheAgeMs } from '../fantasycalc'
+import { FantasyCalcPlayer, FantasyCalcSettings, getValuationCacheAgeMs } from '../fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { prisma } from '../prisma'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'
@@ -2864,7 +2865,7 @@ export async function computeLeagueRankingsV2(
   const [rosters, users, fcPlayers, ldiData, playoffBracket, sleeperPlayersRaw, leagueDrafts, weightConfig] = await Promise.all([
     getLeagueRosters(leagueId),
     getLeagueUsers(leagueId),
-    fetchFantasyCalcValues(fcSettings),
+    getFantasyCalcValuesDbFirst(fcSettings),
     fetchLdiForLeague(leagueId),
     phase === 'post_season' ? getPlayoffBracket(leagueId) : Promise.resolve([]),
     getAllPlayers().catch(() => null),

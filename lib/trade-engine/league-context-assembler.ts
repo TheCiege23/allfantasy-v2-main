@@ -1,7 +1,7 @@
 import { prisma } from '../prisma'
 import { pricePlayer, type ValuationContext } from '../hybrid-valuation'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '../player-analytics'
-import { fetchFantasyCalcValues } from '../fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { buildManagerProfile, type ManagerTendencyProfile } from './manager-tendency-engine'
 import {
   computeNeedsSurplus,
@@ -313,7 +313,7 @@ export async function buildLeagueDecisionContext(
   let fcPlayers: any[] = []
   const leaguePpr = scoringType === 'PPR' ? 1 : scoringType === 'Half PPR' ? 0.5 : 0
   try {
-    fcPlayers = await fetchFantasyCalcValues({
+    fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty: leagueSettings2.type === 2,
       numQbs: isSF ? 2 : 1,
       numTeams,

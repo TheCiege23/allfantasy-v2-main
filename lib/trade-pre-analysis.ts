@@ -1,10 +1,7 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
-import { 
-  fetchFantasyCalcValues, 
-  findPlayerByName,
-  FantasyCalcPlayer 
-} from './fantasycalc';
+import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { 
   findPlayerTier, 
   ALL_TIERED_PLAYERS 
@@ -921,7 +918,7 @@ export async function runPreAnalysis(
       legacyUser && r.owner_id === legacyUser.sleeperUserId
     );
     
-    const fcValues = await fetchFantasyCalcValues({
+    const fcValues = await getFantasyCalcValuesDbFirst({
       isDynasty: leagueSettings.isDynasty,
       numQbs: leagueSettings.isSuperFlex ? 2 : 1,
       numTeams: leagueSettings.teamCount,

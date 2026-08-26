@@ -16,7 +16,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveChimmyIntentRoute } from '@/lib/ai/chimmyIntentRouter'
 import { DEFAULT_WORLD_CUP_SCORING } from '@/lib/world-cup/worldCupBracketBuilder'
-import { fetchFantasyCalcValues, findPlayerByName, getValueTier } from '@/lib/fantasycalc'
+import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
 import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
@@ -334,7 +335,7 @@ async function buildFantasyCalcValueAnswer(message: string): Promise<string | nu
   const isSuperflex = /\bsuperflex|\bsf\b|2qb|two qb/i.test(message)
 
   try {
-    const values = await fetchFantasyCalcValues({
+    const values = await getFantasyCalcValuesDbFirst({
       isDynasty,
       numQbs: isSuperflex ? 2 : 1,
       numTeams: 12,

@@ -11,10 +11,8 @@
 import { prisma } from '@/lib/prisma';
 import { findMultiADP } from '@/lib/multi-platform-adp';
 import { normalizePlayerName } from '@/lib/team-abbrev';
-import {
-  getPlayerValuesForNames,
-  type FantasyCalcSettings,
-} from '@/lib/fantasycalc';
+import { type FantasyCalcSettings } from '@/lib/fantasycalc';
+import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db';
 import type {
   ResolvedPlayerStats,
   HistoricalSeasonRow,
@@ -284,7 +282,7 @@ async function resolveProjection(
   const normalized = playerName.trim();
   if (!normalized) return null;
 
-  const map = await getPlayerValuesForNames([normalized], settings);
+  const map = await getPlayerValuesForNamesDbFirst([normalized], settings);
   const key = normalized.toLowerCase();
   const lookup = map.get(key) ?? map.get(playerName) ?? null;
   if (!lookup) return null;

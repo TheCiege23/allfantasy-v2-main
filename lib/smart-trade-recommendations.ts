@@ -1,9 +1,6 @@
 import { prisma } from './prisma';
-import { 
-  fetchFantasyCalcValues, 
-  findPlayerByName,
-  FantasyCalcPlayer 
-} from './fantasycalc';
+import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   findPlayerTier,
@@ -311,7 +308,7 @@ export async function generateSmartRecommendations(
   }
 
   const marketInsights = await getMarketInsights();
-  const fcValues = await fetchFantasyCalcValues({
+  const fcValues = await getFantasyCalcValuesDbFirst({
     isDynasty: options.isDynasty,
     numQbs: options.isSuperFlex ? 2 : 1,
     numTeams: 12,

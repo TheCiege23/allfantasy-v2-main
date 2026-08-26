@@ -7,7 +7,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { readCache, writeCache } from '@/lib/enrichment-cache'
-import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/fantasycalc'
+import { findPlayerByName } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getPlayerAnalytics } from '@/lib/player-analytics'
 import {
   getAgeCurve,
@@ -68,7 +69,7 @@ async function gatherDataBundle(
 
   // Parallel data fetch — all sources are optional
   const [fcValuesResult, analyticsResult, newsResult] = await Promise.allSettled([
-    fetchFantasyCalcValues({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 }),
+    getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 }),
     getPlayerAnalytics(playerName).catch(() => null),
     prisma.sportsNews.findMany({
       where: {

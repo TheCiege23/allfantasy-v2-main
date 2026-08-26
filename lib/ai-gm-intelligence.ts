@@ -1,12 +1,8 @@
 import { prisma } from './prisma';
 import { X_SEARCH_ALLOWED_HANDLES } from '@/lib/news/beatReporterHandles'
 import { xaiChatJson, parseTextFromXaiChatCompletion } from './xai-client';
-import { 
-  fetchFantasyCalcValues, 
-  findPlayerByName,
-  getPickValue,
-  FantasyCalcPlayer 
-} from './fantasycalc';
+import { findPlayerByName, getPickValue, FantasyCalcPlayer } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
   calculateDynastyScore,
   findPlayerTier,
@@ -528,7 +524,7 @@ export async function buildComprehensiveTradeContext(
     ...otherParties.flatMap(op => op.players.map(p => p.name)),
   ];
 
-  const fcValues = await fetchFantasyCalcValues({
+  const fcValues = await getFantasyCalcValuesDbFirst({
     isDynasty: leagueSettings.isDynasty,
     numQbs: leagueSettings.isSuperFlex ? 2 : 1,
     numTeams: leagueSettings.teamCount,

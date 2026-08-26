@@ -1,6 +1,7 @@
 import { prisma } from '../prisma'
 import { Prisma } from '@prisma/client'
-import { fetchFantasyCalcValues, FantasyCalcPlayer } from '../fantasycalc'
+import { FantasyCalcPlayer } from '../fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
 export type DriftSeverity = 'ok' | 'info' | 'warn' | 'critical'
@@ -510,7 +511,7 @@ async function computeInputDrift(
 
   for (const config of settingsConfigs) {
     try {
-      const players = await fetchFantasyCalcValues({
+      const players = await getFantasyCalcValuesDbFirst({
         isDynasty: config.isDynasty,
         numQbs: config.numQbs as 1 | 2,
         numTeams: config.numTeams,

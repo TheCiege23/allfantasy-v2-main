@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/fantasycalc'
+import { findPlayerByName } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { fetchNewsContext, fetchRollingInsights } from '@/lib/upstream-apis'
 import type { TradeDecisionContextV1 } from './trade-decision-context'
 import {
@@ -20,7 +21,7 @@ type SportsDataCacheRecord = Awaited<ReturnType<PrismaLike['sportsDataCache']['f
 export interface TradeAnalyzerIntelDeps {
   fetchNewsContext: typeof fetchNewsContext
   fetchRollingInsights: typeof fetchRollingInsights
-  fetchFantasyCalcValues: typeof fetchFantasyCalcValues
+  getFantasyCalcValuesDbFirst: typeof getFantasyCalcValuesDbFirst
   findPlayerByName: typeof findPlayerByName
   findLatestRookieClass: () => Promise<RookieClassRecord>
   findTopRookieRankings: () => Promise<RookieRankingRecord>
@@ -30,7 +31,7 @@ export interface TradeAnalyzerIntelDeps {
 const defaultDeps: TradeAnalyzerIntelDeps = {
   fetchNewsContext,
   fetchRollingInsights,
-  fetchFantasyCalcValues,
+  getFantasyCalcValuesDbFirst,
   findPlayerByName,
   findLatestRookieClass: () =>
     prisma.rookieClass.findFirst({
@@ -278,7 +279,7 @@ export async function buildTradeHubIntelBlock(
       )
       .catch(() => null),
     deps
-      .fetchFantasyCalcValues({
+      .getFantasyCalcValuesDbFirst({
         isDynasty: true,
         numQbs: input.isSuperflex ? 2 : 1,
         numTeams: normalizedNumTeams,

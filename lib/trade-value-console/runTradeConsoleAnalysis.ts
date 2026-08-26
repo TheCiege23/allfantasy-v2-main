@@ -3,7 +3,8 @@
 import type { SportsPlayerRecord } from '@prisma/client'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
-import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import {
   pricePlayer,
   pricePick,
@@ -429,7 +430,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
 
   const pprNfl = pprForNflFromLeagueContext(leagueNormCtx, leagueRow)
   const asOf = new Date().toISOString().slice(0, 10)
-  const fcPlayers = await fetchFantasyCalcValues({
+  const fcPlayers = await getFantasyCalcValuesDbFirst({
     isDynasty: true,
     numQbs: isSuperFlex ? 2 : 1,
     numTeams: leagueSize,

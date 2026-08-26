@@ -1,5 +1,6 @@
 import { getHistoricalPlayerValue, getHistoricalPickValueWeighted } from './historical-values';
-import { fetchFantasyCalcValues, findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { pickValue } from './pick-valuation';
 import { computePlayerVorp as computePlayerVorpEngine, computePickVorp as computePickVorpEngine, LeagueRosterConfig } from './vorp-engine';
 import { isIdpPosition, isKickerPosition } from './idp-kicker-values';
@@ -71,7 +72,7 @@ async function getFantasyCalcPlayers(ctx: ValuationContext): Promise<FantasyCalc
   }
 
   try {
-    const players = await fetchFantasyCalcValues({
+    const players = await getFantasyCalcValuesDbFirst({
       isDynasty: ctx.isDynasty ?? true,
       numQbs: ctx.isSuperFlex ? 2 : 1,
       numTeams: ctx.numTeams ?? 12,
@@ -591,7 +592,7 @@ export async function computeDualModeTradeDelta(
 
   let fcPlayers: FantasyCalcPlayer[] = [];
   try {
-    fcPlayers = await fetchFantasyCalcValues({
+    fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty: leagueContext?.isDynasty ?? true,
       numQbs: isSuperFlex ? 2 : 1,
       numTeams: leagueContext?.numTeams ?? 12,

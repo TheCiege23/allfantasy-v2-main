@@ -20,8 +20,9 @@
 
 import { SleeperRoster, SleeperLeague, SleeperPlayer, getAllPlayers, getLeagueType } from './sleeper-client'
 import { parseSleeperRosterPositions } from './trade-engine/sleeper-converter'
-import { fetchFantasyCalcValues, findPlayerByName, FantasyCalcPlayer } from './fantasycalc'
+import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc'
 
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF'
 const SKILL_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE']
 
@@ -351,7 +352,7 @@ export async function buildLeagueDecisionContext(
   const isDynasty = leagueFormat === 'dynasty'
   let fcPlayers: FantasyCalcPlayer[] = []
   try {
-    fcPlayers = await fetchFantasyCalcValues({
+    fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty,
       numQbs: isSF ? 2 : 1,
       numTeams: league.total_rosters || 12,
