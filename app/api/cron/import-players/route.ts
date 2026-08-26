@@ -204,6 +204,40 @@ async function handle(req: NextRequest) {
     //
     // Bounded to a few of the stalest leagues per run and fully swallowed:
     // profiling is enrichment and must never fail the player import it rides on.
+    /*
+     * ── Sleeper player rows ───────────────────────────────────────────────
+     *
+     * ⚠ THE SEED SERVICE THAT WRITES THESE HAS NO CALLER. `SleeperPlayerSeedService`
+     * is complete, correct and unreachable — no route, no cron, no script — so the
+     * Sleeper-sourced `SportsPlayer` rows have never had a maintained refresh. That
+     * is not an oversight to fix by calling it: its shape is `deleteMany` then
+     * `createMany`, which on a live product means deleting every Sleeper player row
+     * and rebuilding it, and there is no safe moment for that. `refreshSleeperPlayerRows`
+     * upserts instead, and matches on `sleeperId` so it updates whichever externalId
+     * format a row already carries rather than creating a second one.
+     *
+     * A phase, not the job: bounded per run, stalest first, and dropped whole when
+     * the budget is gone.
+     */
+    let sleeperRows: unknown = { skipped: true }
+    if (!dryRun && wantsNfl && budget.exhausted()) {
+      deferredPhases.push('sleeperRows')
+    } else if (!dryRun && wantsNfl) {
+      try {
+        const { refreshSleeperPlayerRows } = await import('@/lib/sleeper/refreshSleeperPlayerRows')
+        sleeperRows = await refreshSleeperPlayerRows({
+          sport: 'NFL',
+          limit: 400,
+          isExhausted: () => budget.exhausted(),
+        })
+      } catch (sleeperErr) {
+        /* Enrichment must never fail the import it rides on. */
+        sleeperRows = {
+          error: sleeperErr instanceof Error ? sleeperErr.message.slice(0, 160) : 'sleeper row refresh failed',
+        }
+      }
+    }
+
     let psychProfiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
     // Last phase, so it is the first to be dropped — and the cheapest to drop, since
     // refreshStaleLeagueProfiles already drains stalest-first and simply resumes next run.
@@ -229,6 +263,7 @@ async function handle(req: NextRequest) {
       budgetElapsedMs: budget.elapsedMs(),
       devyPool,
       devyIntel,
+      sleeperRows,
       psychProfiles,
       sports: result.sports,
       identity,
