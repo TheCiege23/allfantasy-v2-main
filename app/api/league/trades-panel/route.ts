@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { LeagueTradeBlockPanelItem, LeagueTradeHistoryItem, LeagueTradeAsset } from '@/components/league/types'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
@@ -209,6 +210,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
 
+  /*
+   * The manager's saved draft for this league, if the table is there.
+   *
+   * ⚠ A MISSING TABLE IS A NULL, NOT A 500. The migration is applied by hand on
+   * this project, so this code can land before the column does — and the Trade
+   * Center falls back to the browser when it gets null. Letting the read throw
+   * would take the whole panel down over a scratchpad.
+   */
+  const draft = await prisma.tradeDraft
+    .findUnique({
+      where: { userId_leagueId: { userId, leagueId } },
+      select: { payload: true, updatedAt: true },
+    })
+    .catch(() => null)
+
   const sleeperLeagueId =
     league.platform === 'sleeper' && league.platformLeagueId ? league.platformLeagueId : null
 
@@ -236,6 +252,7 @@ export async function GET(req: NextRequest) {
       }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
 
       return NextResponse.json({
+        draft,
         tradeBlock: [] as LeagueTradeBlockPanelItem[],
         activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades)],
         activeCount: activeTrades.length + scan.trades.length,
@@ -259,6 +276,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
+      draft,
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
       activeTrades,
       activeCount: activeTrades.length,
@@ -384,6 +402,7 @@ export async function GET(req: NextRequest) {
     : null
 
   return NextResponse.json({
+    draft,
     tradeBlock,
     activeTrades,
     activeCount: activeTrades.length,
@@ -409,4 +428,70 @@ export async function GET(req: NextRequest) {
     },
     pendingOffers: builderOffers(providerPending),
   })
+}
+
+/**
+ * Save or clear the manager's trade draft for this league.
+ *
+ * ⚠ NO NEW API ROUTE. This is a second method on the endpoint the Trade Center
+ * already calls, not a new path — the repo sits at the platform's route ceiling
+ * and a scratchpad is not worth one. It is league-scoped and reuses the same
+ * membership gate as the GET above, because a draft belongs to a league the
+ * manager is actually in.
+ *
+ * ⚠ AN EMPTY DEAL DELETES RATHER THAN STORING NOTHING. "Save" on an empty board
+ * is how a manager clears a draft, and a row holding two empty arrays would
+ * restore as a deal with nothing in it — which reads as "your draft was lost"
+ * rather than "there is no draft".
+ */
+export async function POST(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  const member = await prisma.league.findFirst({
+    where: {
+      id: leagueId,
+      OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+    },
+    select: { id: true },
+  })
+  if (!member) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+
+  const body = (await req.json().catch(() => ({}))) as {
+    give?: unknown[]
+    get?: unknown[]
+  }
+  const give = Array.isArray(body.give) ? body.give : []
+  const get = Array.isArray(body.get) ? body.get : []
+
+  try {
+    if (give.length === 0 && get.length === 0) {
+      await prisma.tradeDraft
+        .delete({ where: { userId_leagueId: { userId, leagueId } } })
+        .catch(() => null)
+      return NextResponse.json({ ok: true, cleared: true })
+    }
+
+    /* A cap, so a scratchpad cannot become a payload. */
+    const payload = toPrismaJsonInput({ give: give.slice(0, 24), get: get.slice(0, 24) })
+    const saved = await prisma.tradeDraft.upsert({
+      where: { userId_leagueId: { userId, leagueId } },
+      create: { userId, leagueId, payload },
+      update: { payload },
+      select: { updatedAt: true },
+    })
+    return NextResponse.json({ ok: true, updatedAt: saved.updatedAt })
+  } catch (err) {
+    /*
+     * The table may not exist yet — the migration is applied by hand here. Say
+     * that plainly so the client falls back to the browser and TELLS the
+     * manager, rather than reporting a save that did not happen.
+     */
+    console.error('[trades-panel] draft save failed', { leagueId, err })
+    return NextResponse.json({ error: 'Draft could not be saved to your account.' }, { status: 503 })
+  }
 }

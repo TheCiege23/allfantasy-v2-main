@@ -1893,6 +1893,29 @@ model LegacyFeedback {
   @@index([createdAt])
 }
 
+/// A trade the manager is part-way through building, kept so it survives a
+/// refresh and follows them to another device.
+///
+/// One per (user, league) on purpose: the Trade Center builds one deal at a
+/// time, and a list of drafts is a different feature with a different UI. The
+/// unique constraint is what makes "save" idempotent rather than accumulating.
+///
+/// `payload` holds the picked assets verbatim — players, picks and FAAB in the
+/// shape the builder uses. It is deliberately NOT normalised into rows: a draft
+/// is a scratchpad, nothing joins to it, and giving it a schema would mean
+/// migrating every time the builder learns a new asset class.
+model TradeDraft {
+  id        String   @id @default(uuid())
+  userId    String
+  leagueId  String
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, leagueId])
+  @@index([userId])
+}
+
 model YahooConnection {
   id             String        @id @default(uuid())
   yahooUserId    String        @unique

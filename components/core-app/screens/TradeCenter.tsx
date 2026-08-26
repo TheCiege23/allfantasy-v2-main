@@ -343,51 +343,111 @@ export function TradeCenter(props: {
   /*
    * ── Draft persistence ──────────────────────────────────────────
    *
-   * ⚠ DEVICE-LOCAL, AND THE UI SAYS SO. No table exists for trade drafts and no
-   * JSON column on any user row is a sensible home — stuffing one into, say,
-   * `dashboardOnboarding` would confuse the next person to read it far more than
-   * it would help here. So a draft lives in this browser and the banner tells
-   * the manager that, because "Save draft" with no qualifier implies it will be
-   * on their phone later and it will not.
+   * ⚠ THE ACCOUNT FIRST, THE BROWSER AS A FALLBACK, AND THE BANNER SAYS WHICH
+   * ONE IT GOT. `TradeDraft` is a real table now, so a deal built on a phone can
+   * be picked up on a laptop. But the migration is applied by hand on this
+   * project, so the server save can legitimately fail — and when it does the
+   * draft still has to go somewhere, with the manager told it went to this
+   * browser only. "Saved" with no qualifier implies it will be on their phone
+   * later, and half the time it would not be.
    *
-   * A real table is the right end state; this is the version that ships without
-   * a production migration.
+   * ⚠ BOTH ARE ALWAYS WRITTEN. Writing only to whichever one succeeded would
+   * mean a manager who saved while offline and then came back online silently
+   * loses the newer copy to a stale server row.
    */
   const draftKey = props.league?.id ? `af-trade-draft:${props.league.id}` : null
 
-  const saveDraft = useCallback(() => {
-    if (!draftKey) return
+  const saveDraft = useCallback(async () => {
+    const leagueId = props.league?.id
+    if (!draftKey || !leagueId) return
+
+    let local = false
     try {
       window.localStorage.setItem(
         draftKey,
         JSON.stringify({ give: giveAssets, get: getAssets, at: Date.now() }),
       )
-      setDraftNote('Saved on this device.')
+      local = true
     } catch {
-      /* Private browsing and full quotas both throw. Say so rather than
-         silently doing nothing, which reads as success. */
-      setDraftNote('This browser would not store the draft.')
+      /* Private browsing and full quotas both throw. */
     }
-  }, [draftKey, giveAssets, getAssets])
 
-  const restoreDraft = useCallback(() => {
-    if (!draftKey) return
+    let remote = false
+    try {
+      const r = await fetch(
+        `/api/league/trades-panel?leagueId=${encodeURIComponent(leagueId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ give: giveAssets, get: getAssets }),
+        },
+      )
+      remote = r.ok
+    } catch {
+      /* Offline is a fallback, not a failure. */
+    }
+
+    setDraftNote(
+      remote
+        ? 'Saved to your account — it will be here on your other devices.'
+        : local
+          ? 'Saved on this device only. We could not reach your account, so it will not follow you.'
+          : 'Nothing could store this draft — not your account, and not this browser.',
+    )
+  }, [draftKey, giveAssets, getAssets, props.league?.id])
+
+  const applyDraft = useCallback((give: unknown, get: unknown, note: string) => {
+    setGiveAssets(Array.isArray(give) ? (give as PickedAsset[]) : [])
+    setGetAssets(Array.isArray(get) ? (get as PickedAsset[]) : [])
+    /* A restored deal is not an analysed one. */
+    setResult(null)
+    setDraftNote(note)
+  }, [])
+
+  const restoreDraft = useCallback(async () => {
+    const leagueId = props.league?.id
+    if (!draftKey || !leagueId) return
+
+    /*
+     * ⚠ THE ACCOUNT WINS WHEN BOTH EXIST, and that is a choice rather than an
+     * accident: the account copy is the one reachable from anywhere, so
+     * preferring the browser would strand a manager on one machine. The browser
+     * is consulted only when the account has nothing.
+     */
+    try {
+      const r = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(leagueId)}`)
+      const j = (await r.json().catch(() => ({}))) as {
+        draft?: { payload?: { give?: unknown; get?: unknown } } | null
+      }
+      const payload = j?.draft?.payload
+      if (payload && (Array.isArray(payload.give) || Array.isArray(payload.get))) {
+        applyDraft(
+          payload.give,
+          payload.get,
+          'Draft restored from your account — analyse it again to get a verdict.',
+        )
+        return
+      }
+    } catch {
+      /* Fall through to the browser copy. */
+    }
+
     try {
       const raw = window.localStorage.getItem(draftKey)
       if (!raw) {
-        setDraftNote('No saved draft for this league on this device.')
+        setDraftNote('No saved draft for this league, on your account or in this browser.')
         return
       }
       const parsed = JSON.parse(raw) as { give?: PickedAsset[]; get?: PickedAsset[] }
-      setGiveAssets(Array.isArray(parsed.give) ? parsed.give : [])
-      setGetAssets(Array.isArray(parsed.get) ? parsed.get : [])
-      /* A restored deal is not an analysed one. */
-      setResult(null)
-      setDraftNote('Draft restored — analyse it again to get a verdict.')
+      applyDraft(
+        parsed.give,
+        parsed.get,
+        'Draft restored from this browser — analyse it again to get a verdict.',
+      )
     } catch {
       setDraftNote('That saved draft could not be read.')
     }
-  }, [draftKey])
+  }, [draftKey, props.league?.id, applyDraft])
 
   const intel = result?.tradeIntelligence
 
@@ -484,9 +544,9 @@ export function TradeCenter(props: {
 
       {draftKey ? (
         <div className="af-tc-draft">
-          <span>Drafts are kept in this browser only — they will not follow you to another device.</span>
+          <span>Saved drafts go to your account, so a deal you start on a phone is here on a laptop.</span>
           <span className="af-tc-spacer" />
-          <button type="button" className="af-btn af-btn--ghost" onClick={restoreDraft}>
+          <button type="button" className="af-btn af-btn--ghost" onClick={() => void restoreDraft()}>
             Restore draft
           </button>
           {draftNote ? <span className="af-tc-row-sub">{draftNote}</span> : null}
@@ -792,7 +852,7 @@ export function TradeCenter(props: {
         <button
           type="button"
           className="af-btn af-btn--ghost"
-          onClick={saveDraft}
+          onClick={() => void saveDraft()}
           disabled={!draftKey || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           Save draft

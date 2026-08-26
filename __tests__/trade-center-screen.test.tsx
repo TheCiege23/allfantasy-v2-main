@@ -281,20 +281,24 @@ describe('phase 2 — mobile and drafts', () => {
     expect(CSS).toContain('env(safe-area-inset-bottom')
   })
 
-  it('⚠ a draft is device-local and the UI says so', () => {
+  it('⚠ a draft says which copy it got', () => {
     /*
-     * "Save draft" with no qualifier implies it will be on their phone later,
-     * and it will not. No table exists and no JSON column on a user row is a
-     * sensible home — reusing one would confuse the next reader more than it
-     * helps here.
+     * Phase 2 shipped this device-local, with the banner saying so, because no
+     * table existed. `TradeDraft` exists now and the account copy is preferred
+     * — but the rule that made the original honest is the one that survives:
+     * "Saved" with no qualifier implies it will be on their phone later, and
+     * when the account is unreachable it will not be.
      */
-    expect(SRC).toContain('DEVICE-LOCAL, AND THE UI SAYS SO')
-    expect(SRC).toContain('will not follow you to another device')
+    expect(SRC).toContain('THE ACCOUNT FIRST, THE BROWSER AS A FALLBACK')
+    expect(SRC).toContain('Saved to your account')
+    expect(SRC).toContain('Saved on this device only')
   })
 
   it('⚠ says when the browser refused, rather than failing silently', () => {
     // Private browsing and full quotas both throw, and silence reads as success.
-    expect(SRC).toContain('would not store the draft')
+    // Private browsing and full quotas both throw, and so does being offline.
+    // Neither may report a save that did not happen.
+    expect(SRC).toContain('Nothing could store this draft')
   })
 
   it('⚠ clears the verdict when a draft is restored', () => {
