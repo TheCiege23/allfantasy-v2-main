@@ -53,6 +53,7 @@
  */
 
 import { computeDraftProjection, type DraftProjectionConfidence } from '@/lib/devy-model'
+import { draftRateFor } from '@/lib/devy/draftRates.generated'
 
 /**
  * The scale tag. Deliberately not the string 'fantasycalc', and carried on every
@@ -95,13 +96,24 @@ export type DevyOutlook = {
   /** The discount applied for the wait. Null when the horizon is unknown. */
   timeDiscount: number | null
   /**
-   * ⚠ ALWAYS NULL TODAY, and that is a finding rather than a stub. Zero NFL
-   * transitions have ever been recorded, so this cannot be estimated from
-   * anything we hold.
+   * P(this recruit is selected in the NFL draft), from measured history.
+   *
+   * ⚠ NULL UNTIL THE BACKFILL RUNS, and that is a finding rather than a stub —
+   * the devy table holds only forward-looking cohorts, so no outcome has been
+   * observed. It becomes a real number for any player whose (position, stars)
+   * cell the backfill fills, with no code change here.
+   *
+   * ⚠ AND IT MEANS "DRAFTED", NOT "FANTASY RELEVANT". Day-three picks routinely
+   * never score. Do not rename it to imply otherwise.
    */
   pReachesRelevance: number | null
   /** Why pReachesRelevance is what it is. */
-  calibration: 'never-observed'
+  calibration: 'never-observed' | 'measured-drafted-rate'
+  /**
+   * How many recruits backed that rate. Null when uncalibrated — a rate without
+   * its sample size is not reportable.
+   */
+  pSampleSize: number | null
   /** Scouting signals that contributed. */
   present: string[]
   /** Scouting signals we had no value for — named, never defaulted. */
@@ -121,6 +133,8 @@ export const DEVY_GAPS = {
     'devy ADP is empty for every player on file, so the one market-shaped signal the scouting model expects is missing',
   unknownHorizon:
     'we do not know which year he becomes draft-eligible, so no discount for the wait is applied',
+  uncalibratedP:
+    'the chance he is drafted at all is not estimated — no historical cohort has been measured yet, so there is nothing to fit it to',
 } as const
 
 /**
@@ -137,11 +151,40 @@ export function projectDevyOutlook(args: {
   currentSeason: number
   /** Named in the sentence when we have it. */
   name?: string | null
+  /**
+   * For the draft-rate lookup. Read off `player` when not passed, so existing
+   * callers keep working and gain the probability for free once rates land.
+   */
+  position?: string | null
+  recruitingStars?: number | null
 }): DevyOutlook {
   const { player, draftEligibleYear, currentSeason } = args
   const projection = computeDraftProjection(player)
 
-  const gaps: string[] = [DEVY_GAPS.noMarket, DEVY_GAPS.noTransitionData]
+  /*
+   * ⚠ THE ONE BRIDGE THAT IS ALLOWED, and only because it goes through a real
+   * observable event. We do not price a college player against an NFL market —
+   * nothing prices college players. We report how often recruits of his profile
+   * have actually BEEN DRAFTED, which is a fact about history rather than a
+   * conversion between scales.
+   *
+   * Null today for everyone: the generated table is an empty placeholder until
+   * scripts/devy-draft-rate-backfill.ts runs. When it does, this lights up with
+   * no change here.
+   */
+  const duck = (player ?? {}) as Record<string, unknown>
+  const position = args.position ?? (typeof duck.position === 'string' ? duck.position : null)
+  const stars =
+    args.recruitingStars ??
+    (typeof duck.recruitingStars === 'number' ? duck.recruitingStars : null)
+  const rateCell = position ? draftRateFor(position, stars) : null
+  const pReachesRelevance = rateCell?.rate ?? null
+  const pSampleSize = rateCell?.recruits ?? null
+  const calibration: DevyOutlook['calibration'] =
+    rateCell == null ? 'never-observed' : 'measured-drafted-rate'
+
+  const gaps: string[] = [DEVY_GAPS.noMarket]
+  if (rateCell == null) gaps.push(DEVY_GAPS.uncalibratedP)
   if (projection.missing.includes('devyAdp')) gaps.push(DEVY_GAPS.noAdp)
 
   const who = args.name ? args.name : 'this player'
@@ -165,8 +208,9 @@ export function projectDevyOutlook(args: {
       confidence: null,
       horizonYears,
       timeDiscount,
-      pReachesRelevance: null,
-      calibration: 'never-observed',
+      pReachesRelevance,
+      calibration,
+      pSampleSize,
       present: projection.present,
       missing: projection.missing,
       gaps,
@@ -185,8 +229,9 @@ export function projectDevyOutlook(args: {
       confidence: projection.confidence,
       horizonYears: null,
       timeDiscount: null,
-      pReachesRelevance: null,
-      calibration: 'never-observed',
+      pReachesRelevance,
+      calibration,
+      pSampleSize,
       present: projection.present,
       missing: projection.missing,
       gaps: [...gaps, DEVY_GAPS.unknownHorizon],
@@ -208,8 +253,9 @@ export function projectDevyOutlook(args: {
     confidence: projection.confidence,
     horizonYears,
     timeDiscount,
-    pReachesRelevance: null,
-    calibration: 'never-observed',
+    pReachesRelevance,
+    calibration,
+    pSampleSize,
     present: projection.present,
     missing: projection.missing,
     gaps,

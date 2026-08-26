@@ -40,15 +40,45 @@ describe('projectDevyOutlook', () => {
     expect(out.scale).not.toBe('fantasycalc')
   })
 
-  it('never estimates the chance he reaches the NFL, because it has never been observed', () => {
+  /**
+   * ⚠ The draft-rate table is an empty placeholder until
+   * scripts/devy-draft-rate-backfill.ts runs — blocked on the CFBD monthly
+   * quota. So the bridge is wired but yields nothing, and null is the honest
+   * answer for every player today.
+   */
+  it('does not estimate the chance he is drafted while no cohort has been measured', () => {
     const out = projectDevyOutlook({
       player: BLUE_CHIP,
       draftEligibleYear: 2027,
       currentSeason: SEASON,
+      position: 'WR',
+      recruitingStars: 5,
     })
     expect(out.pReachesRelevance).toBeNull()
+    expect(out.pSampleSize).toBeNull()
     expect(out.calibration).toBe('never-observed')
-    expect(out.gaps.join(' ')).toMatch(/has ever been recorded reaching the NFL/)
+    expect(out.gaps.join(' ')).toMatch(/no historical cohort has been measured/)
+  })
+
+  it('reads position and stars off the player when not passed explicitly', () => {
+    // Proves the lookup runs for existing callers too, rather than silently
+    // skipping because two arguments were not threaded through.
+    const out = projectDevyOutlook({
+      player: { ...BLUE_CHIP, position: 'WR', recruitingStars: 5 },
+      draftEligibleYear: 2027,
+      currentSeason: SEASON,
+    })
+    expect(out.calibration).toBe('never-observed')
+    expect(out.pReachesRelevance).toBeNull()
+  })
+
+  it('the placeholder table is empty and declares itself unmeasured', async () => {
+    const { DRAFT_RATES, DRAFT_RATE_PROVENANCE, draftRateFor } = await import(
+      '@/lib/devy/draftRates.generated'
+    )
+    expect(DRAFT_RATES).toEqual([])
+    expect(DRAFT_RATE_PROVENANCE.measured).toBe(false)
+    expect(draftRateFor('WR', 5)).toBeNull()
   })
 
   it('always names the missing market, so a score is never mistaken for a price', () => {

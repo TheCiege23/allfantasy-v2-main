@@ -262,6 +262,8 @@ export const DRAFT_RATE_PROVENANCE = {
   totalRecruits: ${totalRecruits},
   totalDrafted: ${totalDrafted},
   overallRate: ${overall.toFixed(6)},
+  /** True: these rates came from a completed backfill, not the placeholder. */
+  measured: true,
 } as const
 
 export const DRAFT_RATES: DraftRateCell[] = ${JSON.stringify(
