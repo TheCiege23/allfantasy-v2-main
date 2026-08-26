@@ -48,6 +48,16 @@ export type PlayerFinderProps = {
   detail: PlayerDetail | null
   leagueCount: number
   /**
+   * The league held in the rail, when there is one (38a·4).
+   *
+   * ⚠ IT PROMOTES AND MARKS, IT DOES NOT FILTER. The handoff scopes this screen
+   * to "in THIS league", but a player's whole value on a Sunday is that you can
+   * see every league he is in at once — hiding the other eight to honour the
+   * scoping would remove the reason the screen exists. So the held league sorts
+   * to the top and is labelled; the rest stay below it.
+   */
+  selectedLeagueId?: string | null
+  /**
    * False on the public `/players/{slug}` surface when nobody is signed in.
    *
    * ⚠ THIS CHANGES WHY A SECTION IS EMPTY, WHICH IS THE WHOLE POINT. The
@@ -133,6 +143,7 @@ export function PlayerFinder({
   matches,
   detail,
   leagueCount,
+  selectedLeagueId = null,
   signedIn = true,
 }: PlayerFinderProps) {
   /*
@@ -340,11 +351,26 @@ export function PlayerFinder({
               <section className="af-pf-block af-pf-impact">
                 <h3 className="af-label">What this means for your teams</h3>
                 <ul className="af-pf-impact-list">
-                  {detail.impact.data.map((im) => (
+                  {[...detail.impact.data]
+                    /*
+                     * The held league first, then the loader's own ordering
+                     * (starters first, by size of the drop-off). A stable sort
+                     * keeps that ordering intact underneath the promotion
+                     * instead of reshuffling the urgent leagues.
+                     */
+                    .sort((a, b) =>
+                      a.leagueId === selectedLeagueId
+                        ? -1
+                        : b.leagueId === selectedLeagueId
+                          ? 1
+                          : 0,
+                    )
+                    .map((im) => (
                     <li
                       key={im.leagueId}
                       className="af-pf-impact-row"
                       data-starting={im.isStarting}
+                      data-held={im.leagueId === selectedLeagueId}
                     >
                       <div className="af-pf-impact-head">
                         {/*
@@ -355,6 +381,11 @@ export function PlayerFinder({
                         */}
                         <span className="af-pf-impact-platform">{im.platform.toUpperCase()}</span>
                         <span className="af-pf-league-name">{im.leagueName}</span>
+                        {/* Marks the league you arrived from, so the promoted
+                            row is explained rather than mysteriously first. */}
+                        {im.leagueId === selectedLeagueId ? (
+                          <span className="af-pf-impact-held af-label">This league</span>
+                        ) : null}
                         {/*
                           The EXACT slot when we resolved it ("SUPER_FLEX"),
                           otherwise the coarse one. Showing SUPER_FLEX is what

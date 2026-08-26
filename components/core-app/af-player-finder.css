@@ -947,3 +947,21 @@
     font-size: 22px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   38a·4 — the league held in the rail, promoted to the top of the impact
+   list and marked. It is a promotion, not a filter: a player's value on a
+   Sunday is seeing every league at once, so the rest stay below.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.af-core .af-pf-impact-row[data-held='true'] {
+  border-color: var(--accent-line);
+}
+
+.af-core .af-pf-impact-held {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  white-space: nowrap;
+}

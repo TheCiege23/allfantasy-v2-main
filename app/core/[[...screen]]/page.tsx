@@ -971,6 +971,7 @@ export default async function AfCorePage({
           matches={playerMatches}
           detail={playerDetail}
           leagueCount={playedLeagues.length}
+          selectedLeagueId={selectedLeagueId}
         />
       ) : activeKey === 'week' ? (
         /*
