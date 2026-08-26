@@ -325,7 +325,7 @@ export async function POST(req: NextRequest) {
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
-    const replyText = await generateChimmyPrivateReply(message, leagueId)
+    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId })
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },

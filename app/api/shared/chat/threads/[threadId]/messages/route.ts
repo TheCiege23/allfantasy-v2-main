@@ -5,6 +5,7 @@ import {
   createSystemMessage,
   getPlatformThreadMessages,
 } from '@/lib/platform/chat-service'
+import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import {
   isLeagueVirtualRoom,
@@ -389,12 +390,28 @@ export async function POST(
     }
   }
 
+  /*
+   * ⚠ @chimmy WORKED IN LEAGUE CHAT AND NOWHERE ELSE. `/api/league/chat` has
+   * handled it since it was written; this route — the one DMs and huddles
+   * actually post through — only ever produced an AI reply for draft-intel
+   * threads, so asking Chimmy anything in a DM posted the words "@chimmy ..."
+   * into the room and got silence back.
+   *
+   * Both halves are stored private to the asker, matching league chat. In a
+   * huddle a visible question with a private answer reads as though Chimmy
+   * ignored somebody.
+   */
+  const wantsPrivateChimmy = isChimmyPrompt && !draftIntelThread.isDraftIntel
+
   const created = await createPlatformThreadMessage(
     user.appUserId,
     threadId,
     message,
     messageType,
     metadata,
+    wantsPrivateChimmy
+      ? { visibleToUserId: user.appUserId, messageSubtype: 'chimmy_private' }
+      : undefined,
   )
 
   if (!created) {
@@ -402,6 +419,31 @@ export async function POST(
   }
 
   let aiReply: PlatformChatMessage | null = null
+
+  if (wantsPrivateChimmy) {
+    /*
+     * A DM has no league, so this reply is ungrounded — and the generator is
+     * told so rather than left to guess, because a model that does not know it
+     * is missing the data is the one that fills the gap in confidently.
+     */
+    const replyText = await generateChimmyPrivateReply(message, {
+      leagueId: draftIntelThread.leagueId ?? null,
+      userId: user.appUserId,
+    }).catch(
+      () =>
+        "I could not reach the AI just now. Try again in a moment, or open the Chimmy panel on a league page.",
+    )
+
+    aiReply = await createSystemMessage(
+      threadId,
+      'text',
+      replyText,
+      { chimmyResponse: true, chimmyPrivateReply: true, privateReplyToMessageId: created.id },
+      { visibleToUserId: user.appUserId, messageSubtype: 'chimmy_private' },
+    )
+
+    return NextResponse.json({ status: 'ok', message: created, aiReply })
+  }
   if (draftIntelThread.isDraftIntel && draftIntelThread.leagueId) {
     const state = await publishDraftIntelState({
       leagueId: draftIntelThread.leagueId,

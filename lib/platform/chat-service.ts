@@ -687,6 +687,14 @@ export async function createPlatformThreadMessage(
   body: string,
   messageType = 'text',
   metadata?: Record<string, unknown> | null,
+  /*
+   * Set to hide the row from everyone but one member. The columns have always
+   * existed and the read path has always honoured them
+   * (`isPrivate: false OR visibleToUserId = me`); nothing had ever written
+   * them on a platform thread, so a private @chimmy exchange in a huddle had
+   * no way to stay private.
+   */
+  visibility?: { visibleToUserId?: string | null; messageSubtype?: string | null },
 ): Promise<PlatformChatMessage | null> {
   const content = String(body || '').trim()
   if (!content) return null
@@ -707,6 +715,13 @@ export async function createPlatformThreadMessage(
           messageType,
           body: content,
           metadata: metadata ?? undefined,
+          ...(visibility?.visibleToUserId
+            ? {
+                isPrivate: true,
+                visibleToUserId: visibility.visibleToUserId,
+                messageSubtype: visibility.messageSubtype ?? null,
+              }
+            : {}),
         },
         include: {
           sender: {
@@ -866,6 +881,8 @@ export async function createSystemMessage(
   messageType: string,
   body: string,
   metadata?: Record<string, unknown> | null,
+  /** As above: set to keep a system reply visible to one member only. */
+  visibility?: { visibleToUserId?: string | null; messageSubtype?: string | null },
 ): Promise<PlatformChatMessage | null> {
   const content = String(body || '').trim()
   if (!content) return null
@@ -877,6 +894,13 @@ export async function createSystemMessage(
         messageType: messageType || 'text',
         body: content,
         metadata: metadata ?? undefined,
+        ...(visibility?.visibleToUserId
+          ? {
+              isPrivate: true,
+              visibleToUserId: visibility.visibleToUserId,
+              messageSubtype: visibility.messageSubtype ?? null,
+            }
+          : {}),
       },
     })
     await (prisma as any).platformChatThread.update({
