@@ -30,6 +30,24 @@ async function main() {
   const dry = await recalculateFromCompletedTrades(prisma, { sinceSeason, dryRun: true })
   console.log(JSON.stringify({ mode: 'DRY-RUN', ...dry }, null, 2))
 
+  /*
+   * ⚠ AN EMPTY RESULT IS NOT A FAILED CHECK, AND SAYING SO SENDS THE READER HUNTING. Run against
+   * a database with no chart values, every trade is skipped, `medianAdjustment` is null and the
+   * centring test is vacuously unsatisfied — reporting that as "the population is not centred"
+   * blames the estimator for what is really a missing input. Found by running this against the
+   * non-prod database, which holds 120 trades and zero `PlayerValueSnapshot` rows.
+   */
+  if (dry.published === 0) {
+    const why =
+      dry.tradesUsed === 0
+        ? 'no trade could be priced — usually PlayerValueSnapshot is empty for the chosen format'
+        : `${dry.tradesUsed} trades priced, but no player reached the sample threshold`
+    console.log(`
+NOTHING TO PUBLISH: ${why}.`)
+    if (write) console.log('Nothing written — there is no value to write, which is not a failure.')
+    return
+  }
+
   const median = dry.medianAdjustment
   const centred = median != null && Math.abs(median) <= CENTRING_TOLERANCE
   console.log(
@@ -41,7 +59,11 @@ async function main() {
     return
   }
   if (!centred) {
-    console.error('\nREFUSING TO WRITE: the adjustment population is not centred on zero.')
+    console.error(
+      `
+REFUSING TO WRITE: ${dry.published} players would publish but their adjustments centre on ` +
+        `${median?.toFixed(1)}%, not 0. Trades are zero-sum, so that is estimator bias, not a market.`,
+    )
     process.exitCode = 1
     return
   }
