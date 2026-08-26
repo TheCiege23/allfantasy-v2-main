@@ -1014,10 +1014,33 @@ export async function runFullDevySync(season?: number): Promise<DevySyncResult> 
   }
 }
 
+/**
+ * Candidate devy players, selected and ordered on SCOUTING EVIDENCE.
+ *
+ * ⚠ `minValue` FILTERS ON `devyValue`, WHICH IS NOT A VALUATION — it is
+ * `calculateQuickDevyValue(position, classYear)`, a lookup with no
+ * player-specific input, and it is 0 for 1,455 of 1,718 rows. Measured on prod
+ * 2026-08-25, the board's `minValue: 3000` meant:
+ *
+ *     556 players WITH a real scouting projection were EXCLUDED
+ *     256 players with a projection got through
+ *       7 players with NO evidence at all were INCLUDED
+ *
+ * So the board could not see most of the class, and the eight of the top twelve
+ * prospects sitting at devyValue 0 were never candidates at all. Prefer
+ * `requireProjection` / `minProjection`, which select on the signal that has
+ * evidence behind it. `minValue` is kept only so an existing caller does not
+ * break, and should not be used in new code.
+ */
 export async function getEligibleDevyPlayers(opts?: {
   position?: string
   limit?: number
+  /** @deprecated Filters on the fabricated devyValue. Use minProjection. */
   minValue?: number
+  /** Floor on `draftProjectionScore`, the evidenced signal. */
+  minProjection?: number
+  /** Drop players with no scouting projection at all rather than ranking them. */
+  requireProjection?: boolean
   draftEligibleYear?: number
   draftStatus?: DraftStatus
 }): Promise<any[]> {
@@ -1028,12 +1051,22 @@ export async function getEligibleDevyPlayers(opts?: {
   }
   if (opts?.position) where.position = opts.position
   if (opts?.minValue) where.devyValue = { gte: opts.minValue }
+  if (opts?.minProjection != null) {
+    where.draftProjectionScore = { gte: opts.minProjection }
+  } else if (opts?.requireProjection) {
+    where.draftProjectionScore = { not: null }
+  }
   if (opts?.draftEligibleYear) where.draftEligibleYear = opts.draftEligibleYear
   if (opts?.draftStatus) where.draftStatus = opts.draftStatus
 
   return prisma.devyPlayer.findMany({
     where,
-    orderBy: { devyValue: 'desc' },
+    /*
+     * ⚠ NULLS LAST IS EXPLICIT. Postgres orders NULLS FIRST on DESC, so without
+     * this every unscored player would head the board — the exact inversion this
+     * change exists to remove.
+     */
+    orderBy: { draftProjectionScore: { sort: 'desc', nulls: 'last' } },
     take: opts?.limit || 100,
   })
 }

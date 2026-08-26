@@ -55,6 +55,8 @@ export type DevyBoardInput = {
 }
 
 export type DevyBoardEntry = {
+  /** Carried through so a caller can join back to its own rows by id. */
+  id?: string
   name: string
   position: string | null
   school: string | null
@@ -150,6 +152,7 @@ export function buildDevyValueBoard(
   const entries: DevyBoardEntry[] = withOutlook.map(({ player, outlook }) => {
     const devyRank = rankByName.get(keyFor(player)) ?? null
     return {
+      id: player.id,
       name: player.name,
       position: player.position,
       school: player.school,
