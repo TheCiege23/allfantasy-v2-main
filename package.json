@@ -25,7 +25,7 @@
     "test:e2e:staging": "playwright test e2e/g8-team-defense-browser.spec.ts --project=chromium --reporter=line",
     "prebuild": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs",
     "build": "node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build",
-    "build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && node scripts/railway-loader-cache-purge.cjs && node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build && node scripts/railway-patch-app-build-manifest.cjs && node scripts/railway-postbuild-css-audit.cjs",
+    "build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && node scripts/railway-loader-cache-purge.cjs && node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build && node scripts/railway-postbuild-css-audit.cjs",
     "clean:next:prod": "node scripts/clean-next-prod-out.cjs",
     "build:clean": "node scripts/clean-next-prod-out.cjs && node scripts/vercel-next-build.cjs",
     "build:clean:dotnext": "node scripts/clean-next-prod-out.cjs && node scripts/run-prod-build-dotnext.cjs",

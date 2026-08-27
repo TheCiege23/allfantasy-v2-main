@@ -37,6 +37,7 @@ import {
 } from "@/lib/api-sports"
 import { prisma } from "@/lib/prisma"
 import { fetchGamesForSport, type ProviderGame } from "@/lib/scores/gameScoreProviders"
+import { createRunBudget } from "@/lib/cron/runBudget"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -57,6 +58,23 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
 const GATE_SECONDS = 90
+
+/*
+ * ⚠ THIS ROUTE HUNG UNTIL THE CALLER GAVE UP, EVERY SINGLE TICK.
+ *
+ * Measured from the fast-tier log 2026-08-27: `/api/cron/import-scores` FAILED with
+ * "timed out after 150000ms" on every attempt from 11:52 to 12:24, so the run was
+ * reported as a systemic failure and ESPN game rows went 2h27m stale on a job that
+ * is supposed to run every two minutes.
+ *
+ * `maxDuration = 120` did not save it because the host at the time did not enforce
+ * it. A bound the handler owns does.
+ *
+ * 100s sits under both the 120s maxDuration and the loop's 150s client timeout, and
+ * leaves headroom to serialise the response. Deferred rows are counted and reported;
+ * the next tick is two minutes away and picks up where this one stopped.
+ */
+const RUN_BUDGET_MS = 100_000
 
 type Sport = "NFL" | "NCAAF"
 
@@ -103,16 +121,111 @@ const GAME_TTL_MS = 6 * 60 * 60 * 1000
  * that arrives from two feeds is corroboration, not a conflict, and collapsing
  * them would hide a disagreement.
  */
+/**
+ * True when nothing a reader would SEE has moved.
+ *
+ * `raw` is deliberately not compared. It is the verbatim provider payload and
+ * routinely carries a per-response timestamp, so diffing it would mark every row
+ * changed and defeat the whole point. The cost is that a raw-only change is not
+ * persisted until a visible field moves too — acceptable, because nothing reads
+ * `raw` to render a score.
+ */
+function unchanged(prev: {
+  homeTeam: string
+  awayTeam: string
+  homeScore: number | null
+  awayScore: number | null
+  status: string | null
+  startTime: Date | null
+  week: number | null
+  seasonType: string | null
+  season: number | null
+}, next: ProviderGame): boolean {
+  return (
+    prev.homeTeam === next.homeTeam &&
+    prev.awayTeam === next.awayTeam &&
+    prev.homeScore === next.homeScore &&
+    prev.awayScore === next.awayScore &&
+    prev.status === next.status &&
+    (prev.startTime?.getTime() ?? null) === (next.startTime?.getTime() ?? null) &&
+    prev.week === next.week &&
+    prev.seasonType === next.seasonType &&
+    prev.season === next.season
+  )
+}
+
+/**
+ * Upsert on (sport, externalId, source) — the table's own unique key — so each
+ * provider keeps its own row for a game rather than fighting over one. A score
+ * that arrives from two feeds is corroboration, not a conflict, and collapsing
+ * them would hide a disagreement.
+ *
+ * ⚠ THE SEQUENTIAL UPSERTS WERE THE COST, AND ALMOST ALL OF THEM WROTE NOTHING NEW.
+ * TheSportsDB "carries the season-wide slate", so a two-minute tick was re-upserting
+ * an entire season per source per sport — NCAAF alone is 866 events — one row at a
+ * time. Between two ticks a handful of in-progress games change and the rest are
+ * byte-identical. That is what walked the handler past 150s.
+ *
+ * Rows whose visible fields did not move now get their freshness bumped by ONE
+ * `updateMany` instead of N upserts.
+ *
+ * 🛑 THE FRESHNESS BUMP IS NOT OPTIONAL. Skipping unchanged rows entirely would stop
+ * `max("fetchedAt")` advancing, and every freshness probe keyed on it would report
+ * this job dead while it ran perfectly — the exact false-negative this repo has
+ * already been burned by. They are still touched, just in one statement.
+ */
 async function persistGames(
   sport: string,
   source: string,
   games: ProviderGame[],
-): Promise<number> {
-  let written = 0
+  opts?: { budgetMs?: number },
+): Promise<{ written: number; refreshed: number; deferred: number }> {
+  const result = { written: 0, refreshed: 0, deferred: 0 }
+  if (games.length === 0) return result
+
   const now = new Date()
   const expiresAt = new Date(now.getTime() + GAME_TTL_MS)
+  const startedAt = Date.now()
+  const budgetMs = opts?.budgetMs ?? Number.POSITIVE_INFINITY
 
+  const existing = await prisma.sportsGame.findMany({
+    where: { sport, source, externalId: { in: games.map((g) => g.externalId) } },
+    select: {
+      externalId: true,
+      homeTeam: true,
+      awayTeam: true,
+      homeScore: true,
+      awayScore: true,
+      status: true,
+      startTime: true,
+      week: true,
+      seasonType: true,
+      season: true,
+    },
+  })
+  const byId = new Map(existing.map((r) => [r.externalId, r]))
+
+  const stale: string[] = []
+  const moved: ProviderGame[] = []
   for (const g of games) {
+    const prev = byId.get(g.externalId)
+    if (prev && unchanged(prev, g)) stale.push(g.externalId)
+    else moved.push(g)
+  }
+
+  if (stale.length > 0) {
+    const bumped = await prisma.sportsGame.updateMany({
+      where: { sport, source, externalId: { in: stale } },
+      data: { fetchedAt: now, expiresAt },
+    })
+    result.refreshed = bumped.count
+  }
+
+  for (const g of moved) {
+    if (Date.now() - startedAt >= budgetMs) {
+      result.deferred += 1
+      continue
+    }
     try {
       const data = {
         homeTeam: g.homeTeam,
@@ -141,15 +254,16 @@ async function persistGames(
         update: data,
         create: { sport, externalId: g.externalId, source, ...data },
       })
-      written += 1
+      result.written += 1
     } catch (e) {
       console.warn(`[cron/import-scores] upsert failed ${source}/${g.externalId}:`, e)
     }
   }
-  return written
+
+  return result
 }
 
-async function runOneSport(url: URL, sport: Sport) {
+async function runOneSport(url: URL, sport: Sport, budget: ReturnType<typeof createRunBudget>) {
   const season = url.searchParams.get("season") ?? undefined
   const force = url.searchParams.get("force") === "true"
 
@@ -185,15 +299,30 @@ async function runOneSport(url: URL, sport: Sport) {
       toWeek(url.searchParams.get("week")),
     )
 
-    const bySource: Record<string, { fetched: number; written: number; error: string | null }> = {}
+    const bySource: Record<
+      string,
+      { fetched: number; written: number; refreshed: number; deferred?: number; error: string | null }
+    > = {}
     for (const attempt of attempts) {
-      const written = await persistGames(sport, attempt.source, attempt.games)
+      // Headroom below the run budget so the response still serialises.
+      const r = await persistGames(sport, attempt.source, attempt.games, {
+        budgetMs: Math.max(0, budget.remainingMs() - 10_000),
+      })
       bySource[attempt.source] = {
         fetched: attempt.games.length,
-        written,
+        written: r.written,
+        refreshed: r.refreshed,
+        ...(r.deferred > 0 ? { deferred: r.deferred } : {}),
         error: attempt.error,
       }
-      count += written
+      /*
+       * `synced` counts rows CONFIRMED FRESH, not merely rewritten. Now that an
+       * unchanged row is bumped rather than re-upserted, a healthy quiet tick
+       * writes almost nothing -- and reporting 0 would make `rowsWritten` in the
+       * SyncJobRun telemetry look like a job that did nothing, which is exactly
+       * the signal used to spot a dead cron.
+       */
+      count += r.written + r.refreshed
     }
 
     return {
@@ -257,9 +386,25 @@ async function handle(req: NextRequest) {
   const results = await withSyncJobRun(
     { jobName: "cron-import-scores", jobScope: sports.join(","), trigger: "cron" },
     async () => {
+      const budget = createRunBudget(RUN_BUDGET_MS)
       const acc: Array<Awaited<ReturnType<typeof runOneSport>>> = []
       for (const sport of sports) {
-        acc.push(await runOneSport(url, sport))
+        /*
+         * ⚠ CHECKED BETWEEN SPORTS, so a slow NFL can never starve NCAAF into a
+         * client timeout. Skipping is reported, not silent -- a sport that is
+         * quietly never reached looks identical to one with no games.
+         */
+        if (budget.exhausted()) {
+          acc.push({
+            ok: true,
+            gated: false,
+            sport,
+            skipped: "run budget exhausted before this sport was reached",
+            durationMs: 0,
+          } as unknown as Awaited<ReturnType<typeof runOneSport>>)
+          continue
+        }
+        acc.push(await runOneSport(url, sport, budget))
       }
       return acc
     },

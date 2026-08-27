@@ -338,6 +338,23 @@ const SPORTS_KEYWORDS = [
   'nhl', 'hockey', 'soccer', 'futbol', 'fútbol', 'ncaab', 'ncaaf',
   'world cup', 'fifa', 'mundial', 'bracket', 'pool', 'champion', 'knockout',
   'group stage', 'leaderboard', 'commissioner',
+  /*
+   * ⚠ ADDED AFTER A PLAIN SPORTS QUESTION WAS SILENTLY DEFLECTED. "is there any
+   * preseason games today?" matched NOTHING above — there was no `game`, no
+   * `season`, no `schedule`, no `score` — so it never reached a provider and
+   * came back as the generic "I can help with trades, waivers..." blurb, which
+   * reads exactly like Chimmy ignoring you. Same shape as the `injuries` gap
+   * already documented a few lines up; the list was the problem both times.
+   *
+   * The asymmetry that matters: a FALSE POSITIVE here costs one model call. A
+   * FALSE NEGATIVE costs a user who now believes the assistant is broken. This
+   * list should stay deliberately generous, and anything resembling a sports or
+   * league noun belongs in it.
+   */
+  'game', 'season', 'schedule', 'score', 'week', 'team', 'stat', 'news',
+  'kickoff', 'snap', 'target', 'yard', 'touchdown', 'sleeper', 'espn', 'yahoo',
+  'opponent', 'starter', 'sunday', 'monday', 'thursday', 'coach', 'depth chart',
+  'sportsbook', 'odds', 'spread', 'over/under', 'preseason', 'postseason',
 ]
 
 function hasSportsContent(text: string, hasImage: boolean): boolean {
@@ -1199,12 +1216,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const domainInput = [message, ...conversation.map((turn) => turn.content)].join(' ')
   if (!hasSportsContent(domainInput, hasImage)) {
+    /*
+     * ⚠ THIS DEFLECTION USED TO BE INDISTINGUISHABLE FROM AN ANSWER. It replied
+     * "I'm Chimmy, your fantasy sports assistant. I can help with trades,
+     * waivers..." — which, to somebody who just asked a real question, reads as
+     * being ignored rather than being filtered. It has to SAY that it did not
+     * run, and say what would get through, or a gap in the keyword list looks
+     * like a broken product.
+     */
     return NextResponse.json({
       response:
-        "I'm Chimmy, your fantasy sports assistant. I can help with trades, waivers, matchups, and lineup strategy.",
+        "That didn't look like a fantasy sports question to me, so I didn't run it — no tokens were spent. Try naming a player, team, league or week and I'll take another go.",
       sessionId,
       meta: {
-        confidencePct: 100,
+        /*
+         * ⚠ NOT 100. This used to claim total confidence about a non-answer,
+         * which is the same class of lie as a trade grade with no data behind
+         * it. Nothing was evaluated, so there is no confidence to report.
+         */
+        confidencePct: 0,
+        /** Nothing was charged — the spend happens far below this return. */
+        free: true,
         providerStatus: {
           openai: 'skipped',
           deepseek: 'skipped',
@@ -1213,9 +1245,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         recommendedTool: 'none',
         dataSources: [],
         responseStructure: {
-          shortAnswer: 'I can help with fantasy sports questions only.',
-          recommendedAction: 'Share your fantasy question and league context.',
-          caveats: ['Off-topic requests are redirected to fantasy guidance.'],
+          shortAnswer: 'That did not look like a fantasy sports question.',
+          recommendedAction: 'Name a player, team, league or week and ask again.',
+          caveats: ['This was filtered before any model ran; nothing was charged.'],
         },
       },
     })

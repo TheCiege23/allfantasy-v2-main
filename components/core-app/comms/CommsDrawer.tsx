@@ -354,7 +354,17 @@ function ChimmyPanel({
           response?: string
           error?: string
           details?: { message?: string }
-          meta?: { leagueGrounding?: ChimmyGrounding; players?: ChimmyPlayerCard[] }
+          meta?: {
+            leagueGrounding?: ChimmyGrounding
+            players?: ChimmyPlayerCard[]
+            /** Answered without spending anything — do not print a price on it. */
+            free?: boolean
+            /**
+             * What the server ACTUALLY charged. Present only on the path that
+             * spends; the deterministic, usage and off-topic paths never set it.
+             */
+            tokenSpend?: { tokenCost?: number }
+          }
         }
         if (!res.ok) {
           /*
@@ -426,7 +436,18 @@ function ChimmyPanel({
             text: answer,
             isPublic: publicMode,
             handoff,
-            cost: tokenCost,
+            /*
+             * ⚠ WAS UNCONDITIONAL — any 200 got the price label, taken from a
+             * prop rather than from what happened. FOUR paths in that route
+             * answer for free: the off-topic deflection, the deterministic
+             * answer, the league-data-usage answer, and the empty-message
+             * prompt. All of them were being billed 10 tokens on screen.
+             *
+             * Now it prints what the server says it spent, and nothing when it
+             * spent nothing. `tokenCost` remains only as the composer's
+             * "an answer costs this much" estimate, which is a different claim.
+             */
+            cost: payload.meta?.tokenSpend?.tokenCost ?? null,
             grounding,
             players: payload.meta?.players ?? null,
           },
