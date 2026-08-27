@@ -44,11 +44,33 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * getLeagueInfo does not report a sport and the two id spaces do not overlap.
    */
   { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
-  // mfl: real adapter, but no credential-entry UI exists anywhere for the API key a private league needs.
+  /*
+   * mfl: real adapter and a real fetch service, still not selectable, and the
+   * reason is unchanged — `MflLeagueFetchService` reads an API key off
+   * `LeagueAuth` and there is nowhere in the product to put one. The storage
+   * exists (`LeagueAuth.apiKey`, and `/api/league/auth` already encrypts it);
+   * the entry UI does not. Until a key can be saved, discovery
+   * (`fetchMflUserLeagues`) has nothing to authenticate with and a private
+   * league cannot be read at all.
+   */
   { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: false, supportedSports: ['NFL'] },
-  // fleaflicker: real adapter, but no confirmed reachable path in the main import flow (only an
-  // orphaned, unlinked page) — see the G61 doc for what's unresolved.
-  { provider: 'fleaflicker', label: 'Fleaflicker', available: false, supportedSports: ['NFL'] },
+  /*
+   * fleaflicker: FLIPPED 2026-08-27 with the missing piece built, not to unblock
+   * anything. The blocker was never the adapter — it was that no field in the
+   * main import flow accepted a Fleaflicker league id, so the only path in was
+   * an orphaned page nothing linked to.
+   *
+   * ⚠ IT NEEDS NO CREDENTIAL AT ALL, which is what makes it the cheapest of the
+   * six. `fetchFleaflickerLeagueForImport(sourceId)` takes one argument and
+   * calls a public JSON API — no OAuth, no cookie, no key. Verified end to end
+   * against a real league before this flag moved: league 206154 fetched and
+   * normalised to "Jackpot Dynasty League", 16 teams, NFL, 2026.
+   *
+   * No discovery: listing someone's leagues would need an account identifier
+   * Fleaflicker does not expose publicly, so the flow takes a league id the
+   * same way ESPN does.
+   */
+  { provider: 'fleaflicker', label: 'Fleaflicker', available: true, supportedSports: ['NFL'] },
 ];
 
 export function getImportProviderLabel(provider: ImportProvider): string {

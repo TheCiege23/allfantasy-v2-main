@@ -161,6 +161,17 @@ const FIELD_BY_PROVIDER: Partial<
     placeholder: 'v2kzedypmm8jp61b, or paste the league URL',
     help: 'The ID is the code in your league URL — fantrax.com/fantasy/league/THIS-PART/home. Paste either. We will show you the teams so you can pick yours. Never your Fantrax password or Secret ID.',
   },
+  /*
+   * ⚠ THE ONLY PROVIDER HERE THAT ASKS FOR NOTHING BUT A NUMBER. Fleaflicker's
+   * JSON API is public, so there is no account to connect, no cookie to paste
+   * and no key to find — which is worth saying, because every other tile on
+   * this screen has taught the user to expect a setup step first.
+   */
+  fleaflicker: {
+    label: 'Fleaflicker league ID',
+    placeholder: '206154, or paste the league URL',
+    help: 'The number in your league URL — fleaflicker.com/nfl/leagues/THIS-PART. Nothing to connect first: Fleaflicker publishes league data, so we read it without an account.',
+  },
 }
 
 /**
@@ -174,12 +185,18 @@ const FIELD_BY_PROVIDER: Partial<
  */
 const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   fantrax: 'League ID · pick your team',
+  /* No account, no cookie, no key — the only tile here that needs nothing first. */
+  fleaflicker: 'League ID · nothing to connect',
 }
 
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
+  /*
+   * Still true, and still the whole reason. `MflLeagueFetchService` reads the
+   * key off `LeagueAuth` — the column exists and `/api/league/auth` already
+   * encrypts one — but no screen in the product asks for it.
+   */
   mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
-  fleaflicker: 'No connected path from this flow yet.',
 }
 
 /**
