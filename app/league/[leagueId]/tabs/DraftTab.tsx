@@ -496,7 +496,17 @@ export function DraftTab({
   return (
     <div className={isLeagueHome ? 'space-y-4' : 'space-y-4 p-5'}>
       {ncaafBetaInfo ? <NcaafBetaDataBanner info={ncaafBetaInfo} /> : null}
-      {idpLeagueUi ? <IDPDraftFilters /> : null}
+      {/*
+        ⚠ UNMOUNTED DELIBERATELY — THIS RENDERED A FABRICATED BOARD TO PEOPLE MID-DRAFT.
+        `IDPDraftFilters` takes no props and has no data source. It listed three invented
+        players ("Elite LB · BUF", "Edge DE · DAL", "Box S · KC") with hashed salaries and
+        projections, against a hardcoded $42.5M of cap room, on the draft tab of every IDP
+        league. Its cap half cannot be wired at all: the salary, contract and cap tables have
+        zero rows in production, which is the same reason the Defense Hub refuses to print cap
+        columns. Showing nothing is better than showing that. The component is left in the tree
+        as a design mock; wiring a real board is tracked separately.
+      */}
+      {null}
       {showInvite ? (
         <section
           className="rounded-2xl border border-white/[0.08] bg-[#0c0c1e] p-4"
