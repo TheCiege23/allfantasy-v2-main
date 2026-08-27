@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   detectStatFamily,
+  findPlayerInText,
   leadersFromEvents,
   type StatFamily,
+  type StatLeader,
 } from '@/lib/live/playerStatLeaders'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 
@@ -131,6 +133,54 @@ describe('leadersFromEvents', () => {
 
   it('is empty for an empty feed, which is not the same as nobody scoring', () => {
     expect(leadersFromEvents([], TD)).toEqual([])
+  })
+
+  it('finds the player a question is about, matched against the feed', () => {
+    const lead = (playerName: string, playerId = playerName): StatLeader => ({
+      playerId,
+      playerName,
+      team: null,
+      total: 1,
+      stats: ['rushing_touchdowns'],
+    })
+
+    const roster = [lead('Josh Allen'), lead('Jalen Hurts'), lead('Bijan Robinson')]
+
+    expect(findPlayerInText(roster, 'how many TDs did Josh Allen have today?')?.playerName).toBe(
+      'Josh Allen',
+    )
+    /* Surname alone is fine while it is unambiguous in this window. */
+    expect(findPlayerInText(roster, 'TDs for Hurts today')?.playerName).toBe('Jalen Hurts')
+    /* Nobody named — the caller must refuse rather than pick the leader. */
+    expect(findPlayerInText(roster, 'how many TDs today?')).toBeNull()
+    /* Two names is a comparison, not a lookup. */
+    expect(findPlayerInText(roster, 'Josh Allen or Jalen Hurts?')).toBeNull()
+  })
+
+  /*
+   * ⚠ ON AN NFL SUNDAY "Allen" IS SEVERAL PEOPLE. Picking one produces a
+   * confident, precise, wrong answer about the wrong player — worse than
+   * refusing, because nothing about it looks like a guess.
+   */
+  it('refuses a surname two players in the window share', () => {
+    const roster: StatLeader[] = [
+      { playerId: '1', playerName: 'Josh Allen', team: 'BUF', total: 2, stats: ['x'] },
+      { playerId: '2', playerName: 'Keenan Allen', team: 'CHI', total: 1, stats: ['x'] },
+    ]
+
+    expect(findPlayerInText(roster, 'how many TDs did Allen have?')).toBeNull()
+    /* The full name still resolves — the ambiguity is only in the surname. */
+    expect(findPlayerInText(roster, 'how many TDs did Keenan Allen have?')?.playerId).toBe('2')
+  })
+
+  it('does not match a surname buried inside another word', () => {
+    const roster: StatLeader[] = [
+      { playerId: '1', playerName: 'Amon-Ra St. Brown', team: 'DET', total: 1, stats: ['x'] },
+    ]
+
+    /* "Brown" as a word matches; "Browns" the team must not. */
+    expect(findPlayerInText(roster, 'TDs for Brown today')?.playerId).toBe('1')
+    expect(findPlayerInText(roster, 'how did the Browns do today')).toBeNull()
   })
 
   it('survives malformed rows without dropping the good ones', () => {

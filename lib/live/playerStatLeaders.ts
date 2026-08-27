@@ -108,6 +108,37 @@ export function leadersFromEvents(events: LiveEvent[], family: StatFamily): Stat
   return leaders
 }
 
+/**
+ * The player a question is about, found by checking the FEED against the text.
+ *
+ * ⚠ INVERTED ON PURPOSE. Pulling a name out of free text needs entity
+ * recognition and gets "Josh Allen have today" wrong in a dozen ways. The feed
+ * holds at most a couple of hundred events and therefore a small, known set of
+ * names — so asking "does the question contain any of THESE names" is both
+ * exact and cheap.
+ *
+ * Full name first. A surname alone is accepted only when exactly one player in
+ * the window carries it: on an NFL Sunday "Allen" is several people, and
+ * guessing which one produces a confident answer about the wrong player.
+ */
+export function findPlayerInText(leaders: StatLeader[], message: string): StatLeader | null {
+  const text = message.toLowerCase()
+
+  const full = leaders.filter((l) => l.playerName && text.includes(l.playerName.toLowerCase()))
+  if (full.length === 1) return full[0]
+  /* Two full names in one question is a comparison, not a lookup. */
+  if (full.length > 1) return null
+
+  const bySurname = leaders.filter((l) => {
+    const parts = l.playerName.trim().split(/\s+/)
+    const surname = parts[parts.length - 1]?.toLowerCase()
+    if (!surname || surname.length < 3) return false
+    return new RegExp(`\\b${surname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text)
+  })
+
+  return bySurname.length === 1 ? bySurname[0] : null
+}
+
 /** Which stat family a question is asking about, or null if it is not one. */
 export function detectStatFamily(message: string): StatFamily | null {
   if (/\b(td|tds|touchdown|touchdowns)\b/i.test(message)) return 'touchdowns'
