@@ -539,4 +539,24 @@ html[data-mode='af'] .af-core {
   /* Slot 0 is the comms launcher. Each slot above it clears the last. */
   --af-fab-slot-1: calc(var(--af-fab-inset) + var(--af-fab-size) + var(--af-fab-gap));
   --af-fab-slot-2: calc(var(--af-fab-slot-1) + 60px + var(--af-fab-gap));
+/*
+ * 38a — section titles that are headings, not styled paragraphs.
+ *
+ * Several screens used `<p class="af-label">` for a section's title: it looked
+ * right and navigated like body text, so a screen-reader user moving by heading
+ * skipped every section on the page. They are `<h2 class="af-label">` now.
+ *
+ * ⚠ THE MARGIN RESET IS NOT COSMETIC. af-core.css defines no heading rules and
+ * carries no global reset, so a bare `<h2>` brings the UA's `margin: .83em 0`
+ * with it — and every one of these sits in a flex column with its own `gap`,
+ * where any margin double-counts. `<p>` had the same problem with `1em`; this
+ * is the first time both are zero and the gap is the only spacing.
+ *
+ * Scoped to headings that ALSO carry .af-label, which is a pattern introduced
+ * by this suite — no existing `.af-label` span or paragraph is affected.
+ */
+.af-core h1.af-label,
+.af-core h2.af-label,
+.af-core h3.af-label {
+  margin: 0;
 }

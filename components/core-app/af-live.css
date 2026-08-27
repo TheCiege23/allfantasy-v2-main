@@ -1,0 +1,673 @@
+/*
+ * AF Core — Live Scores (38a·2).
+ *
+ * Scoped under `.af-live`, which only ever renders inside `.af-core`, so every
+ * token here resolves from af-core.css. Nothing in this file defines a colour:
+ * a literal would break the light mode clamp the moment someone switches, and
+ * every value the design asks for already exists as a token.
+ */
+
+.af-live {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  /* The design's fluid page width. Wider than this and the two-column grid
+     stops reading as a pair of columns. */
+  max-width: 1320px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-live-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 64ch;
+}
+.af-live-title {
+  font-size: 30px;
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+.af-live-lede {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Control bar ─────────────────────────────────────────────────────── */
+
+.af-live-bar {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+.af-live-bar-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.af-live-bar-name {
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.af-live-scope {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  border-radius: 11px;
+}
+.af-live-scope-btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 11.5px;
+}
+.af-live-scope-btn[data-active='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+.af-live-scope-btn:focus-visible,
+.af-live-sport:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.af-live-freshness {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.af-live-freshness[data-live='true'] {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.af-live-refreshing {
+  opacity: 0.7;
+}
+
+.af-live-pulse {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  animation: af-live-pulse 2s ease-in-out infinite;
+}
+@keyframes af-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.af-live-sports {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 18px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.af-live-sport {
+  appearance: none;
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+  border-radius: 20px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+/* A sport with nothing on stays listed and is simply quieter. Removing it would
+   delete the answer to "is anything on?". */
+.af-live-sport[data-quiet='true'] {
+  color: var(--faint);
+}
+.af-live-sport[data-active='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.af-live-sport-count {
+  padding: 3px 6px;
+  border-radius: 10px;
+  background: var(--chip-line);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.af-live-sport[data-active='true'] .af-live-sport-count {
+  background: color-mix(in srgb, var(--accent-ink) 18%, transparent);
+}
+
+/* ── Grid ────────────────────────────────────────────────────────────── */
+
+.af-live-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+.af-live-slate {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.af-live-slate-head {
+  color: var(--faint);
+}
+.af-live-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 14px;
+}
+
+/* ── Game card ───────────────────────────────────────────────────────── */
+
+.af-live-game {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  /*
+   * ⚠ LOAD-BEARING, NOT AN OPTIMISATION. Every number in this card changes
+   * under a 20-second poll. `contain: layout` keeps a re-render inside the card
+   * instead of letting a longer stat line reflow the cards beneath it while
+   * someone is reading them.
+   */
+  contain: layout;
+}
+.af-live-game[data-live='true'] {
+  border-color: var(--accent-line);
+}
+
+.af-live-game-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-live-tag {
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: var(--chip);
+  color: var(--muted);
+}
+.af-live-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 10px;
+  font-weight: 700;
+}
+.af-live-clock[data-idle='true'] {
+  background: var(--chip);
+  color: var(--faint);
+}
+
+.af-live-teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+.af-live-at {
+  color: var(--faint);
+  font-size: 13px;
+  font-weight: 900;
+}
+.af-live-side-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.af-live-side-team[data-align='end'] {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.af-live-team-mark {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--chip);
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.af-live-team-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-live-team-name {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-team-record {
+  font-size: 10px;
+  color: var(--faint);
+}
+.af-live-team-score {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--muted);
+  /* Tabular so a 7 → 14 does not shift the name beside it. */
+  font-variant-numeric: tabular-nums;
+}
+.af-live-team-score[data-leading='true'] {
+  color: var(--text);
+}
+
+.af-live-wp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 20px;
+}
+.af-live-wp .af-label {
+  color: var(--muted);
+  flex: none;
+}
+.af-live-wp-bar {
+  flex: 1 1 auto;
+  height: 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  background: var(--chip);
+}
+.af-live-wp-away {
+  background: var(--accent);
+}
+.af-live-wp-home {
+  background: var(--line2);
+}
+.af-live-wp-label {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.af-live-wp-why {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-live-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+  /* Reserved even when empty so an arriving leader does not grow the card. */
+  min-height: 40px;
+}
+.af-live-top .af-label {
+  color: var(--faint);
+  flex: none;
+}
+.af-live-top-name {
+  font-weight: 700;
+  font-size: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-top-line {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+  text-align: right;
+}
+.af-live-top-why {
+  font-size: 11px;
+  color: var(--faint);
+  flex: 1 1 auto;
+}
+
+.af-live-tieins {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.af-live-tieins-head {
+  color: var(--accent);
+}
+.af-live-tieins ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-live-tiein {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-live-tiein-tag {
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+}
+.af-live-tiein[data-starter='true'] .af-live-tiein-tag {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+/* The league you are holding in the rail, marked. Everything else on this
+   screen is cross-league, so without this the row you came for is anonymous. */
+.af-live-tiein[data-selected='true'] .af-live-tiein-tag {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.af-live-tiein-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--faint);
+}
+.af-live-tiein[data-starter='true'] .af-live-tiein-name {
+  color: var(--text2);
+}
+.af-live-tiein-pos {
+  color: var(--faint);
+  font-weight: 500;
+}
+.af-live-tiein-pts {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+/* A bench player scoring is a different fact from a starter scoring. */
+.af-live-tiein[data-starter='true'] .af-live-tiein-pts {
+  color: var(--good);
+}
+
+/* ── Side column ─────────────────────────────────────────────────────── */
+
+.af-live-impact,
+.af-live-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-live-impact {
+  background: var(--chimmy);
+  border-color: var(--accent-line);
+}
+.af-live-impact-total {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-live-impact-total .af-num {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--good);
+  font-variant-numeric: tabular-nums;
+}
+.af-live-impact-total[data-missing='true'] .af-num {
+  color: var(--faint);
+}
+.af-live-impact-total span:last-child {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.af-live-impact-sub {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.af-live-mover {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.af-live-mover-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-live-mover-name {
+  font-weight: 800;
+  font-size: 13px;
+}
+.af-live-mover-line {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.af-live-mover-leagues {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-live-next {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.af-live-next li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.af-live-next-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+}
+.af-live-next-time {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.af-live-note {
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ── Empty states ────────────────────────────────────────────────────── */
+
+.af-live-empty {
+  padding: 32px 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.af-live-empty[data-tone='bad'] {
+  border-color: var(--bad-soft);
+}
+.af-live-empty-title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 15px;
+}
+.af-live-empty[data-tone='bad'] .af-live-empty-title {
+  color: var(--bad);
+}
+.af-live-empty-body {
+  margin: 8px auto 0;
+  max-width: 46ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .af-live-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-live-side {
+    position: static;
+  }
+}
+
+@media (max-width: 620px) {
+  .af-live-title {
+    font-size: 24px;
+  }
+  .af-live-bar-top {
+    padding: 12px 14px;
+  }
+  .af-live-bar-name {
+    /* The screen's own h1 says "Live Scores" three rows above. On a phone the
+       repeat is the first thing to go. */
+    display: none;
+  }
+  .af-live-freshness {
+    margin-left: 0;
+  }
+  .af-live-sports {
+    padding: 12px 14px;
+  }
+  .af-live-game {
+    padding: 14px;
+    gap: 12px;
+  }
+  /*
+   * The three-column team row does not survive 390px — the names truncate to
+   * nothing between two 38px marks and a 26px score. Stacked, each side keeps
+   * its full name and the scores still line up on the right.
+   */
+  .af-live-teams {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .af-live-side-team[data-align='end'] {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-live-at {
+    display: none;
+  }
+  .af-live-side-team {
+    justify-content: space-between;
+  }
+  .af-live-wp {
+    flex-wrap: wrap;
+  }
+  .af-live-wp-bar {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .af-live-top {
+    flex-wrap: wrap;
+    gap: 6px 11px;
+  }
+  .af-live-top-line {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-live-pulse {
+    animation: none;
+  }
+}

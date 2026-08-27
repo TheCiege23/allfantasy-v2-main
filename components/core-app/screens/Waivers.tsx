@@ -1,6 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import '@/components/core-app/af-waivers.css'
+import { WaiverIntel } from '@/components/decide/WaiverIntel'
+import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
 import type { WaiversData } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 
@@ -154,29 +157,68 @@ export function Waivers({ data }: WaiversProps) {
               <span className="af-wv-rule-why">{data.processTime.reason}</span>
             )}
           </li>
+          <li>
+            <span className="af-wv-rule-key">Tiebreak</span>
+            {data.tiebreak.available ? (
+              <span className="af-wv-rule-value">{data.tiebreak.data}</span>
+            ) : (
+              <span className="af-wv-rule-why">{data.tiebreak.reason}</span>
+            )}
+          </li>
+          <li>
+            <span className="af-wv-rule-key">Claim limits</span>
+            {data.claimLimits.available ? (
+              <span className="af-wv-rule-value">{data.claimLimits.data}</span>
+            ) : (
+              <span className="af-wv-rule-why">{data.claimLimits.reason}</span>
+            )}
+          </li>
         </ul>
       </section>
 
-      {/* ── Suggested claims ────────────────────────────────────────── */}
-      <section className="af-card af-wv-section">
-        <header className="af-wv-section-head">
-          <h2 className="af-label">Suggested claims</h2>
-          <span className="af-wv-section-note">Ranked by confidence, not by hype</span>
-        </header>
+      {/*
+        ── Waiver intelligence ──────────────────────────────────────────
 
-        {/*
-          The ranked list the handoff shows, withheld. A confidence score and a
-          dollar bid are the two most directly actionable numbers on this screen —
-          someone spends real budget on them — so they are the last things that
-          should ever be estimated from nothing.
-        */}
-        <div className="af-wv-empty">
-          <div className="af-wv-empty-mark af-num" aria-hidden>
-            —
-          </div>
-          <p className="af-wv-empty-text">{data.suggestedClaims.reason}</p>
-        </div>
+        ⚠ THIS SCREEN USED TO WITHHOLD SUGGESTED CLAIMS ENTIRELY, AND THE THING
+        THAT COMPUTES THEM WAS ALREADY BUILT. `WaiverIntel` reads
+        /api/league/waiver-intel — every winning claim in this league's history,
+        plus market-value-anchored suggestions tagged against your roster holes —
+        and it was mounted nowhere near this tab. The withheld panel was correct
+        about the principle (never invent a bid) and wrong about the facts (a
+        real one exists).
+
+        It handles its own unsupported-platform and no-data states, returning
+        null or an explicit empty rather than a fabricated bid, so mounting it
+        does not weaken the honesty rule the withheld panel was protecting.
+      */}
+      <WaiverIntel leagueId={data.league.id} />
+
+      {/*
+        ── Chimmy's recommendations ─────────────────────────────────────
+
+        Plan-gated at the route, not here: the panel renders its own locked
+        state from the API's response rather than this screen deciding who may
+        see it. A client-side entitlement check is a suggestion, not a gate.
+      */}
+      <section className="af-wv-ai">
+        <AIWaiverRecommendationsPanel leagueId={data.league.id} />
       </section>
+
+      {/*
+        The full free-agent board is a screen, not a panel — search, position and
+        status filters, roster context and a claim flow. It already exists at
+        /waiver-wire and is wired to the claim service, so this links to it
+        rather than standing up a second player browser that would drift from
+        the first.
+
+        ⚠ `leagueId`, NOT `league`. Every /core screen takes `?league=`; this
+        route reads `searchParams.get("leagueId")` and renders "No league
+        selected" for anything else. Written as `?league=` first, which sent
+        someone from a working waivers tab to an empty page.
+      */}
+      <Link className="af-btn af-wv-browse" href={`/waiver-wire?leagueId=${encodeURIComponent(data.league.id)}`}>
+        Browse every available player
+      </Link>
 
       <p className="af-wv-footnote">
         Claims are made on {data.league.platform === 'manual' ? 'your platform' : data.league.platform}.

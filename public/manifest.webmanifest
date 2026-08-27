@@ -1,5 +1,5 @@
 {
-  "id": "/app",
+  "id": "/core",
   "name": "AllFantasy.ai",
   "short_name": "AllFantasy",
   "description": "AI-powered fantasy sports \u2014 trade analyzer, draft assistant, waiver AI, and more.",
@@ -86,8 +86,9 @@
       ]
     },
     {
-      "name": "Trade Analyzer",
-      "url": "/trade-analyzer",
+      "name": "Your week",
+      "short_name": "Week",
+      "url": "/core/week",
       "icons": [
         {
           "src": "/icons/icon-96.png",
@@ -98,8 +99,22 @@
       ]
     },
     {
-      "name": "Waiver Wire AI",
-      "url": "/waiver-wire",
+      "name": "Live scores",
+      "short_name": "Live",
+      "url": "/core/live",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Waivers",
+      "short_name": "Waivers",
+      "url": "/core/waivers",
       "icons": [
         {
           "src": "/icons/icon-96.png",

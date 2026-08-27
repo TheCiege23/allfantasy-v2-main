@@ -1,0 +1,181 @@
+/*
+ * Public league standings — `/standings/{leagueId}`.
+ *
+ * ⚠ SELF-CONTAINED ON PURPOSE, AND NOT SCOPED UNDER `.af-core`. This is the one
+ * page in the suite a signed-out stranger can reach, and it must render
+ * correctly with none of the app shell's context around it. Pulling in
+ * af-core.css would drag a dashboard's worth of chrome onto a page that is one
+ * table, and would make its appearance depend on a theme class nobody has set.
+ *
+ * It commits to a single light look rather than following the viewer's theme:
+ * a shared standings link is most often opened on someone else's phone, and a
+ * page that renders differently depending on their OS setting is a page that
+ * looks broken to whoever sent it. Both colours are painted explicitly so it
+ * never inherits a host background.
+ */
+
+.ps {
+  --ps-bg: #ffffff;
+  --ps-surface: #f7f8fc;
+  --ps-line: #e3e6f0;
+  --ps-text: #0d1024;
+  --ps-muted: #5a6180;
+  --ps-faint: #868ca8;
+  --ps-accent: #0b6d80;
+
+  box-sizing: border-box;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 20px 72px;
+  background: var(--ps-bg);
+  color: var(--ps-text);
+  font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ps *,
+.ps *::before,
+.ps *::after {
+  box-sizing: border-box;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.ps-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--ps-line);
+}
+.ps-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ps-accent);
+}
+.ps-title {
+  margin: 0;
+  font-size: clamp(26px, 5vw, 34px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+.ps-sub {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ps-muted);
+}
+
+/* ── Table ───────────────────────────────────────────────────────────── */
+
+.ps-tablewrap {
+  margin-top: 22px;
+  border: 1px solid var(--ps-line);
+  border-radius: 14px;
+  background: var(--ps-bg);
+  /* Five columns do not compress below ~520px; the table scrolls inside its own
+     box so the page body never scrolls sideways on a phone. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.ps-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ps-caption {
+  padding: 16px 18px 0;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ps-faint);
+}
+.ps-table thead th {
+  padding: 14px 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ps-faint);
+  border-bottom: 1px solid var(--ps-line);
+  white-space: nowrap;
+}
+.ps-table tbody th,
+.ps-table tbody td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--ps-line);
+  vertical-align: middle;
+}
+.ps-table tbody tr:last-child th,
+.ps-table tbody tr:last-child td {
+  border-bottom: none;
+}
+/* The top row is the answer most people opened the link for. */
+.ps-table tbody tr:first-child {
+  background: var(--ps-surface);
+}
+.ps-table tbody tr:first-child .ps-name {
+  font-weight: 800;
+}
+
+.ps-rankcol {
+  width: 44px;
+  color: var(--ps-faint);
+  font-weight: 700;
+}
+.ps-name {
+  text-align: left;
+  font-weight: 600;
+  /* League team names are user-authored and occasionally very long; wrapping is
+     better than an ellipsis on the one column people came to read. */
+  overflow-wrap: anywhere;
+}
+.ps-n {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * ⚠ THE HEADER NEEDS ITS OWN RULE. `.ps-table thead th` is specificity (0,1,2)
+ * and sets `text-align: left`; a bare `.ps-n` is (0,1,0) and loses, so the
+ * numeric COLUMN HEADINGS sat left while their values sat right and the three
+ * number columns read as misaligned.
+ */
+.ps-table thead th.ps-n {
+  text-align: right;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.ps-foot {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ps-faint);
+}
+.ps-foot p {
+  margin: 0;
+}
+.ps-foot a {
+  color: var(--ps-accent);
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .ps {
+    padding: 28px 14px 56px;
+  }
+  .ps-table {
+    font-size: 13px;
+  }
+}

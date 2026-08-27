@@ -49,7 +49,12 @@
     ".next-dev-local/types/**/*.ts",
     ".next-playwright-3101/types/**/*.ts",
     ".next-dev-visuals/types/**/*.ts",
-    ".next-dev-21a/types/**/*.ts"
+    ".next-dev-21a/types/**/*.ts",
+    ".next-dev-handoff/types/**/*.ts",
+    ".next-build-check/types/**/*.ts",
+    ".next-dev-visuals-b2/types/**/*.ts",
+    ".next-localrepro/types/**/*.ts",
+    ".next-railwaysim/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

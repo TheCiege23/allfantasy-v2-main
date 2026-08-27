@@ -23,10 +23,15 @@ export const viewport = {
   viewportFit: 'cover' as const,
 };
 
-const useExperimentalManifest = process.env.NEXT_PUBLIC_PWA_EXPERIMENTAL_MANIFEST === '1';
-const metadataManifestPath = useExperimentalManifest
-  ? '/manifest.experimental.webmanifest'
-  : '/manifest.webmanifest';
+/*
+ * ⚠ THE EXPERIMENTAL BRANCH POINTED AT A FILE THAT HAS NEVER EXISTED. Setting
+ * NEXT_PUBLIC_PWA_EXPERIMENTAL_MANIFEST=1 swapped this to
+ * `/manifest.experimental.webmanifest`, which is not in `public/`, is generated
+ * by no build step, and is referenced nowhere else in the repo — so the flag's
+ * only effect was to 404 the manifest link and make the app uninstallable as a
+ * PWA. Removed rather than repaired: there is no second manifest to point at.
+ */
+const metadataManifestPath = '/manifest.webmanifest';
 export const metadata: Metadata = {
   ...buildSeoMeta({
     title: 'AllFantasy – Fantasy Sports Tools Powered by Chimmy',

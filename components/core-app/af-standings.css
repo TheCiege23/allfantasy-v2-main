@@ -1,0 +1,421 @@
+/*
+ * AF Core — Standings, this league's points-for board (38a·7).
+ *
+ * Scoped under `.af-st`, inside `.af-core`. Rules that collide with an
+ * `.af-core X` base rule carry the same prefix, because a bare class is
+ * specificity (0,1,0) and loses to (0,2,0) whatever the source order.
+ */
+
+.af-st {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1200px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-st-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-st-title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.af-st-sub {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Refusal state ───────────────────────────────────────────────────── */
+
+/*
+ * Deliberately not styled as an error. Nothing has gone wrong when a league has
+ * not played yet — red would say something broke, and the sentence inside says
+ * the opposite.
+ */
+.af-st-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 28px 24px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-st-blocked-mark {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--faint);
+}
+.af-st-blocked-body {
+  margin: 0;
+  max-width: 64ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-st-noteam {
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Tiles ───────────────────────────────────────────────────────────── */
+
+.af-st-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-st-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 17px 18px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-st-tile-v {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.af-st-tile .af-label {
+  color: var(--faint);
+}
+.af-st-tile-s {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.af-st-move {
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 800;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.af-st-move[data-dir='up'] {
+  color: var(--good);
+}
+.af-st-move[data-dir='down'] {
+  color: var(--bad);
+}
+.af-st-move[data-dir='flat'],
+.af-st-move[data-dir='none'] {
+  color: var(--faint);
+}
+
+/* ── Projection ──────────────────────────────────────────────────────── */
+
+.af-st-projection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--chimmy);
+  border: 1px solid var(--accent-line);
+}
+.af-st-projection[data-missing='true'] {
+  background: var(--surface);
+  border-color: var(--line);
+}
+.af-st-projection .af-label {
+  color: var(--accent);
+}
+.af-st-projection[data-missing='true'] .af-label {
+  color: var(--faint);
+}
+.af-st-proj-v {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-st-proj-v > .af-num:first-child {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.af-st-proj-range {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.af-st-proj-basis,
+.af-st-proj-why {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-st-proj-why {
+  color: var(--faint);
+}
+
+/* ── Panels ──────────────────────────────────────────────────────────── */
+
+.af-st-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.af-st-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-st-panel .af-label {
+  color: var(--faint);
+}
+.af-st-panel-why {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* ── Rank trend ──────────────────────────────────────────────────────── */
+
+.af-st-trend {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-st-trend-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.af-st-trend-area {
+  fill: var(--accent-soft);
+  stroke: none;
+}
+.af-st-trend-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.af-st-trend-dot {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.af-st-trend-cap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-st-trend-cap span:nth-child(2) {
+  flex: 1 1 auto;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ── Recent weeks ────────────────────────────────────────────────────── */
+
+.af-st-recent {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-st-recent li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 62px 44px;
+  align-items: baseline;
+  gap: 10px;
+}
+.af-st-recent-w {
+  color: var(--faint);
+}
+.af-st-recent-p {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.af-st-recent-d {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.af-st-recent-d[data-dir='up'] {
+  color: var(--good);
+}
+.af-st-recent-d[data-dir='down'] {
+  color: var(--bad);
+}
+.af-st-recent-r {
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Board ───────────────────────────────────────────────────────────── */
+
+.af-st-tablewrap {
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  /* Five columns do not compress below ~620px; the table scrolls inside its own
+     box so the page body never scrolls sideways. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.af-st-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.af-st-caption {
+  padding: 15px 18px 0;
+  text-align: left;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+.af-st-table thead th {
+  padding: 13px 14px;
+  text-align: left;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.af-st-table tbody th,
+.af-st-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.af-st-table tbody tr:last-child th,
+.af-st-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.af-st-table tbody th {
+  text-align: left;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.af-st-table tbody tr[data-you='true'] {
+  background: var(--accent-soft);
+}
+.af-st-rank {
+  width: 22px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.af-st-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-st-you {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-st-n {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-st-foot {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.af-st-foot a {
+  color: var(--accent);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 1000px) {
+  .af-st-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .af-st-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .af-st-title {
+    font-size: 23px;
+  }
+  .af-st-tiles {
+    gap: 10px;
+  }
+  .af-st-tile {
+    padding: 14px;
+  }
+  .af-st-tile-v {
+    font-size: 23px;
+  }
+  .af-st-blocked {
+    flex-direction: column;
+    gap: 8px;
+    padding: 22px 18px;
+  }
+  .af-st-proj-v > .af-num:first-child {
+    font-size: 25px;
+  }
+}

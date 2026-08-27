@@ -94,3 +94,81 @@ export async function resolveCurrentWeekForLeague(
   }
   return resolveCurrentWeek([platformLeagueId])
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Pure, in-memory variants.
+ *
+ * The two functions above answer the same question from the database. These
+ * answer it from rows a caller has ALREADY fetched, which is what the
+ * standings surfaces need: they read the season anyway, and deriving the week
+ * from exactly the rows being rendered means the two can never disagree.
+ *
+ * `scoredWeeks` is the load-bearing one. A freshly synced league carries a
+ * whole season of 0-0 rows, so "how many weeks have actually been played" is
+ * the difference between a real table and twelve teams tied on zero in
+ * arbitrary order. leagueStandings.ts and publicStandings.ts both refuse to
+ * render when it is 0.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** The shape any caller can supply — a subset of a `WeeklyMatchup` row. */
+export type WeekScoreRow = {
+  seasonYear: number
+  week: number
+  pointsFor: number
+  pointsAgainst: number
+}
+
+export type ResolvedWeek = {
+  season: number
+  week: number
+  /**
+   * True when every week in the season carries a score — the regular season is
+   * done and `week` is the last one played rather than the next one to play.
+   */
+  seasonComplete: boolean
+  /** Weeks in this season with at least one scored row. Zero means nothing has
+   *  been played yet, which is the case a ranking must refuse to rank. */
+  scoredWeeks: number
+}
+
+/** A row counts as played once either side has put up a point. */
+export function isScored(r: { pointsFor: number; pointsAgainst: number }): boolean {
+  return r.pointsFor > 0 || r.pointsAgainst > 0
+}
+
+/**
+ * Resolve from rows already in memory.
+ *
+ * Preferred when the caller has fetched the season anyway — it costs nothing
+ * extra and keeps the "which week" answer derived from exactly the rows being
+ * rendered, so the two can never disagree.
+ */
+export function resolveCurrentWeekFrom(rows: WeekScoreRow[]): ResolvedWeek | null {
+  if (rows.length === 0) return null
+
+  let season = 0
+  for (const r of rows) season = Math.max(season, r.seasonYear)
+
+  const seasonRows = rows.filter((r) => r.seasonYear === season)
+  if (seasonRows.length === 0) return null
+
+  let firstUnplayed: number | null = null
+  let lastWeek = 0
+  const scored = new Set<number>()
+
+  for (const r of seasonRows) {
+    lastWeek = Math.max(lastWeek, r.week)
+    if (isScored(r)) {
+      scored.add(r.week)
+      continue
+    }
+    if (firstUnplayed == null || r.week < firstUnplayed) firstUnplayed = r.week
+  }
+
+  return {
+    season,
+    week: firstUnplayed ?? lastWeek,
+    seasonComplete: firstUnplayed == null,
+    scoredWeeks: scored.size,
+  }
+}

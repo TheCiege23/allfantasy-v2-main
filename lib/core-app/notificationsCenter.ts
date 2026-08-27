@@ -35,6 +35,7 @@ export type NotificationFilter =
   | 'mentions'
   | 'lineups'
   | 'drafts'
+  | 'commissioner'
 
 export type NotificationRow = {
   id: string
@@ -63,6 +64,16 @@ export type NotificationsCenterData = {
   unread: number
   /** What the phone would have shown, and what it held back. */
   push: PushSelection
+  /** The league this feed is scoped to, or null for the account-wide feed. */
+  leagueId: string | null
+  /**
+   * Whether a mention could ever appear here.
+   *
+   * False for a league with no Discord bridge: platform chat is never read, so
+   * there is no other source a mention could come from. The screen omits the
+   * chip entirely rather than showing one that is permanently empty.
+   */
+  mentionsAvailable: boolean
 }
 
 // ── Push selection ─────────────────────────────────────────────────────
@@ -206,6 +217,15 @@ function verbFor(kind: NotificationFilter): string {
 /** Classify a stored notification, or a derived issue, into a filter chip. */
 function classify(text: string): NotificationFilter {
   const t = text.toLowerCase()
+  /*
+   * ⚠ COMMISSIONER IS TESTED FIRST AND THAT ORDER IS LOAD-BEARING. "Commissioner
+   * confirmed the trade deadline" contains the word "trade" and was classified
+   * as a trade notification — filed under a chip where a manager looks for
+   * offers, not for league announcements.
+   */
+  if (/commissioner|league rule|league setting|deadline confirmed|scoring chang/.test(t)) {
+    return 'commissioner'
+  }
   if (/trade/.test(t)) return 'trades'
   if (/waiver|faab|claim/.test(t)) return 'waivers'
   if (/mention|@|chat|message/.test(t)) return 'mentions'
@@ -226,8 +246,17 @@ export async function getNotificationsCenter(input: {
   /** From deriveOutstandingIssues — the shared urgency engine. */
   issues: CoreIssue[]
   now?: Date
+  /**
+   * Scope every tier to one league. Null keeps the cross-league feed.
+   *
+   * Filtering here rather than in the screen is deliberate: `counts` and
+   * `unread` are computed from the rows, so filtering after the fact would show
+   * one league's rows under the whole account's numbers.
+   */
+  leagueId?: string | null
 }): Promise<NotificationsCenterData> {
   const now = input.now ?? new Date()
+  const scope = input.leagueId ?? null
 
   /*
    * ⚠ THE ACT-TODAY TIER IS DERIVED, NOT STORED. PlatformNotification rows are a
@@ -265,7 +294,7 @@ export async function getNotificationsCenter(input: {
 
   const stored = await prisma.platformNotification
     .findMany({
-      where: { userId: input.userId },
+      where: scope ? { userId: input.userId, leagueId: scope } : { userId: input.userId },
       orderBy: { createdAt: 'desc' },
       take: 60,
       select: {
@@ -310,7 +339,16 @@ export async function getNotificationsCenter(input: {
     }
   })
 
-  const all = [...actToday, ...rest]
+  /*
+   * The derived tier is filtered in memory because it comes from `issues`, which
+   * the caller already holds for the whole account. The stored tier is filtered
+   * in the query above instead — `take: 60` runs before any predicate, so
+   * filtering it here would return whichever slice of this league happened to
+   * fall inside the account's newest sixty rows.
+   */
+  const scopedActToday = scope ? actToday.filter((r) => r.leagueId === scope) : actToday
+
+  const all = [...scopedActToday, ...rest]
   const counts: Record<NotificationFilter, number> = {
     all: all.length,
     trades: all.filter((r) => r.kind === 'trades').length,
@@ -318,13 +356,29 @@ export async function getNotificationsCenter(input: {
     mentions: all.filter((r) => r.kind === 'mentions').length,
     lineups: all.filter((r) => r.kind === 'lineups').length,
     drafts: all.filter((r) => r.kind === 'drafts').length,
+    commissioner: all.filter((r) => r.kind === 'commissioner').length,
   }
 
+  /*
+   * ⚠ THE MENTIONS CHIP CANNOT BE FED FROM PLATFORM CHAT, AND SAYING SO IS THE
+   * POINT. League chat is never read, synced or stored — that is a stated
+   * product promise, repeated on the Sync screen — so the only real source of a
+   * mention is a configured Discord bridge. Shipping the chip regardless would
+   * contradict the promise one tab away and give a filter that can never fill.
+   */
+  const mentionsSource = scope
+    ? await prisma.discordLeagueChannel
+        .findFirst({ where: { leagueId: scope }, select: { id: true } })
+        .catch(() => null)
+    : null
+
   return {
-    actToday,
+    actToday: scopedActToday,
     rest,
     counts,
-    unread: rest.filter((r) => !r.read).length + actToday.length,
+    unread: rest.filter((r) => !r.read).length + scopedActToday.length,
     push: selectPushNotifications(input.issues, now),
+    leagueId: scope,
+    mentionsAvailable: scope ? mentionsSource != null : true,
   }
 }

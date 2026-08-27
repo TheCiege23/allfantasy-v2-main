@@ -56,6 +56,8 @@ import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
+import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
+import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
 import { toShareCard } from '@/lib/core-app/shareCard'
 import { Rankings } from '@/components/core-app/screens/Rankings'
 import { RankingsFaq } from '@/components/core-app/screens/RankingsFaq'
@@ -74,8 +76,18 @@ import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
 import YourWeek from '@/components/core-app/screens/YourWeek'
 import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
+import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
+import LiveScores from '@/components/core-app/screens/LiveScores'
+import { getLivePageData } from '@/lib/live/liveScoresPage'
+import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
+import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
+import Standings from '@/components/core-app/screens/Standings'
+import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import LeagueSync from '@/components/core-app/screens/LeagueSync'
+import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
@@ -140,6 +152,79 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
    * additional routes against Vercel's 2048 ceiling.
    */
   bracket: 'tools',
+  /*
+   * 38a — the live slate inside the shell. Another segment on the same
+   * catch-all, so it costs zero routes; the public `/live` page is untouched
+   * and stays the signed-out, indexable one.
+   */
+  live: 'live',
+  /* 38a·7 — league points-for board. Separate key from `rankings`, which is the
+     cross-app XP ladder and measures something else entirely. */
+  standings: 'standings',
+  /* 38a·10 — per-league sync detail. */
+  sync: 'sync',
+}
+
+/**
+ * Per-tab titles and descriptions.
+ *
+ * ⚠ THE ROOT LAYOUT DECLARES `robots: { index: true, follow: true }` AND EVERY
+ * SCREEN HERE INHERITED IT. Nothing was ever actually indexed — /core redirects
+ * an anonymous request to /login, so a crawler never sees a page — but the
+ * markup was telling search engines to index a signed-in dashboard, which is
+ * the wrong instruction to be shipping either way. `generateMetadata` below
+ * overrides it for the whole catch-all.
+ *
+ * The titles are not an SEO play; they are what a browser tab, a bookmark and a
+ * pasted link say. Nineteen screens that all read "AllFantasy" is unusable once
+ * more than two tabs are open, which is the normal state for this product.
+ */
+const TAB_META: Record<string, { title: string; description: string }> = {
+  '': { title: 'Your leagues', description: 'Every league you play, ordered by what needs you first.' },
+  players: { title: 'Player Finder', description: 'Search any player and see what they are worth in your leagues.' },
+  'my-team': { title: 'My team', description: 'Your lineup, slots and lock times for one league.' },
+  matchup: { title: 'Matchup', description: 'This week head to head, scored against your league rules.' },
+  trades: { title: 'Trades', description: 'Trade offers and grades, priced against one league.' },
+  waivers: { title: 'Waivers', description: 'Targets, bids and claim order for this league.' },
+  'war-room': { title: 'War Room', description: 'The live draft board, clock and queue.' },
+  'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
+  portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
+  career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
+  // (league-scoped career shares this key; the title is accurate either way)
+  rankings: { title: 'Rankings', description: 'Your AF level, XP and where you sit on the ladder.' },
+  commissioner: { title: 'Commissioner', description: 'League health, disputes and settings.' },
+  tools: { title: 'Tools', description: 'Everything you can decide or understand about a league.' },
+  week: { title: 'Your week', description: 'Every matchup this week, ordered by what needs a decision.' },
+  'season-outlook': { title: 'Season Outlook', description: 'Playoff odds, title odds and what decides your season.' },
+  share: { title: 'Career Share', description: 'A shareable card of your fantasy career.' },
+  notifications: { title: 'Notifications', description: 'Trades, waivers, lineups and commissioner alerts.' },
+  discord: { title: 'Discord bridge', description: 'Connect a league to a Discord channel.' },
+  bracket: { title: 'Bracket Challenge', description: 'Fill a bracket and track it against the field.' },
+  live: { title: 'Live Scores', description: 'Live scores across every sport, scored against your rosters.' },
+  standings: { title: 'Standings', description: 'This league ranked by points scored, not by record.' },
+  sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ screen?: string[] }>
+}) {
+  const { screen } = await params
+  const segment = (screen?.[0] ?? '').toLowerCase()
+  const meta = TAB_META[segment]
+
+  return {
+    title: meta ? `${meta.title} · AllFantasy` : 'AllFantasy',
+    description: meta?.description,
+    /*
+     * Signed-in surface. `noindex` is the honest instruction and `nofollow`
+     * stops a crawler that somehow reaches one of these from walking the whole
+     * league graph. The public player pages every player name here links to are
+     * the surfaces that are meant to rank — this one never is.
+     */
+    robots: { index: false, follow: false, nocache: true },
+  }
 }
 
 function titleCase(slug: string): string {
@@ -439,6 +524,51 @@ export default async function AfCorePage({
       ? await getWarRoomData(selectedLeagueId, userId).catch(() => null)
       : null
 
+  /*
+   * 38a·2 — the live slate.
+   *
+   * ⚠ NULL USER IS A SUPPORTED INPUT AND MUST STAY ONE. `getLivePageData` takes
+   * a nullable userId and simply returns no roster tie-ins; the screen then says
+   * so instead of rendering an empty panel. Passing a non-null id here is fine
+   * because /core is behind the session gate, but the loader's contract is what
+   * lets the same data layer serve the public /live page.
+   *
+   * `scope` and `sport` are read from the URL so a shared link lands on the same
+   * slate the sender was looking at; the client takes over from there.
+   */
+  const liveScores =
+    activeKey === 'live'
+      ? await getLivePageData({
+          userId,
+          sport: typeof sp.sport === 'string' ? sp.sport : 'NFL',
+          scope: sp.scope === 'all' ? 'all' : 'my',
+        }).catch(() => null)
+      : null
+
+  /*
+   * 38a·7 — the league's points-for board. Reads WeeklyMatchup through the
+   * shared frontier rule and refuses to rank a season nobody has played, rather
+   * than publishing twelve teams tied on zero.
+   */
+  /*
+   * 38a·6 — your record inside ONE league. Only when a league is held; the
+   * cross-league trophy room is what `/core/career` renders without one.
+   */
+  const leagueCareer =
+    activeKey === 'career' && selectedLeagueId && sp.view !== 'share'
+      ? await getLeagueCareer(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  const leagueSync =
+    activeKey === 'sync' && selectedLeagueId
+      ? await getLeagueSync(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  const standings =
+    activeKey === 'standings' && selectedLeagueId
+      ? await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
+      : null
+
   const now = new Date()
 
   /*
@@ -467,7 +597,10 @@ export default async function AfCorePage({
 
   const weekBoard =
     activeKey === 'week' && !rivalriesView
-      ? await getWeekBoard(userId, weekLeagues).catch(() => null)
+      ? // 38a·3 — the focused league gets its own board (hero + the league's
+        // other matchups). Passing null keeps the cross-league board exactly as
+        // it was and pays nothing for the extra pairing.
+        await getWeekBoard(userId, weekLeagues, selectedLeagueId).catch(() => null)
       : null
 
   const rivalries = rivalriesView
@@ -485,12 +618,22 @@ export default async function AfCorePage({
             platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
             settings: (l as { settings?: unknown }).settings ?? null,
           })),
+          selectedLeagueId,
         ).catch(() => null)
       : null
 
   const notifications =
     activeKey === 'notifications'
-      ? await getNotificationsCenter({ userId, issues: derivedIssues, now }).catch(() => null)
+      ? await getNotificationsCenter({
+          userId,
+          issues: derivedIssues,
+          now,
+          // 38a filters the feed to the league in the rail. Scoped in the
+          // loader, not the screen: counts and the unread total are derived
+          // from the rows, so filtering afterwards would show one league's
+          // rows under the whole account's numbers.
+          leagueId: selectedLeagueId,
+        }).catch(() => null)
       : null
 
   /*
@@ -594,6 +737,30 @@ export default async function AfCorePage({
    * screen, so the merge is the identity everywhere else.
    */
   const issues = mergeDash34Issues(derivedIssues, dash34)
+
+  /*
+   * ── 38a·9 Commissioner Hub ─────────────────────────────────────────
+   *
+   * ⚠ THIS KEY HAD NO RENDER BRANCH AND FELL THROUGH TO "has not been built
+   * yet". It is a real screen now, and the gate that decides whether you see it
+   * runs inside `getCommissionerHub`, server-side, before any league figure is
+   * read — not in the component, and not in the browser.
+   *
+   * The issue list is passed in rather than re-derived so the queue on this
+   * screen and the badge in the nav cannot disagree about what "needs
+   * attention" means. It is computed above, and this call deliberately sits
+   * after it: reading `issues` any earlier is a temporal-dead-zone crash,
+   * not merely a stale list.
+   */
+  const commissionerHub =
+    activeKey === 'commissioner' && segment !== 'discord' && selectedLeagueId
+      ? await getCommissionerHub({
+          leagueId: selectedLeagueId,
+          userId,
+          issues: issues.filter((i) => i.leagueId === selectedLeagueId),
+          now,
+        }).catch(() => null)
+      : null
 
   /*
    * The 3a home panels — the same loader set app/dashboard/page.tsx ran before
@@ -929,15 +1096,41 @@ export default async function AfCorePage({
    * or a matchup, where "who should I flex" is asked about the thing on screen.
    * Cross-league screens overlay instead: there is no single place to lose.
    */
-  const dockable =
-    selectedLeagueId != null &&
-    (activeKey === 'my-team' ||
-      activeKey === 'matchup' ||
-      activeKey === 'trades' ||
-      activeKey === 'waivers' ||
-      activeKey === 'draft-hq' ||
-      activeKey === 'war-room' ||
-      activeKey === 'home')
+  /*
+   * Which screens dock the Chimmy drawer beside the content instead of over it.
+   *
+   * The rule is whether there is ONE thing on screen to ask about. A roster, a
+   * matchup, a standings table, this league's season — all have a subject, so
+   * the drawer sits beside it and you can read both. Cross-league screens
+   * overlay, because there is no single place to lose your position in.
+   *
+   * ⚠ THE 38a TABS WERE ALL MISSING FROM THIS LIST. Standings, Season Outlook,
+   * League Career, Your Week, Commissioner and Sync are every bit as
+   * league-scoped as My Team, and asking Chimmy about the table you are looking
+   * at was covering that table up.
+   *
+   * `live` stays OFF deliberately: it carries a league id only to mark which
+   * tie-ins are this league's, and the slate itself is every sport across every
+   * league — there is no single subject to dock against.
+   */
+  const DOCKABLE_KEYS: CoreNavKey[] = [
+    'home',
+    'my-team',
+    'matchup',
+    'trades',
+    'waivers',
+    'draft-hq',
+    'war-room',
+    'week',
+    'standings',
+    'season-outlook',
+    'career',
+    'commissioner',
+    'notifications',
+    'sync',
+  ]
+
+  const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
 
   return (
     <AfCoreShell
@@ -950,6 +1143,14 @@ export default async function AfCorePage({
       commissionerCount={commissionerCount}
       notificationCount={unreadNotifications}
       profile={shellProfile}
+      /*
+       * Only populated on the Live screen itself — the count comes from the
+       * payload we already loaded there. Reading the slate on every /core page
+       * to decorate one nav badge would put a provider call in front of every
+       * screen in the product, which is exactly the cost the per-screen loader
+       * pattern above exists to avoid.
+       */
+      liveGameCount={liveScores?.games.filter((g) => g.isLive).length ?? null}
       comms={{
         leagues: playedLeagues.slice(0, 12).map((l) => ({
           id: l.id,
@@ -1142,6 +1343,7 @@ export default async function AfCorePage({
           matches={playerMatches}
           detail={playerDetail}
           leagueCount={playedLeagues.length}
+          selectedLeagueId={selectedLeagueId}
         />
       ) : activeKey === 'week' ? (
         /*
@@ -1165,7 +1367,17 @@ export default async function AfCorePage({
             </div>
           )
         ) : weekBoard ? (
-          <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+          /*
+           * 38a·3. A league in the rail renders that league's own week; without
+           * one the cross-league board is what you get. `leagueBoard` is null
+           * unless a focus league was asked for AND found, so this falls back
+           * rather than rendering an empty hero.
+           */
+          weekBoard.leagueBoard ? (
+            <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" />
+          ) : (
+            <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+          )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
@@ -1177,9 +1389,90 @@ export default async function AfCorePage({
             </p>
           </div>
         )
+      ) : activeKey === 'commissioner' ? (
+        /*
+         * 38a·9. `segment === 'discord'` also maps to this nav key and is
+         * handled above, so this branch is only ever the hub itself.
+         *
+         * ⚠ THE SCREEN DECIDES NOTHING ABOUT ACCESS. `getCommissionerHub`
+         * already returned either the data or a denial, server-side; the
+         * component renders whichever it was handed. There is no client-side
+         * role check to bypass because there is no client-side role check.
+         */
+        commissionerHub ? (
+          <CommissionerHub data={commissionerHub} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Commissioner
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              {selectedLeagueId
+                ? 'We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.'
+                : 'Pick a league you commission from the rail. Health, disputes and settings all belong to one league.'}
+            </p>
+          </div>
+        )
+      ) : activeKey === 'sync' ? (
+        leagueSync ? (
+          <LeagueSync data={leagueSync} manageHref="/leagues/sync" />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Sync
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              Pick a league from the rail to see what we read for it and when. To connect a platform
+              or re-sync everything, use <a href="/leagues/sync">Manage connections</a>.
+            </p>
+          </div>
+        )
+      ) : activeKey === 'standings' ? (
+        standings ? (
+          <Standings data={standings} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Standings
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              {selectedLeagueId
+                ? 'We could not read this league’s weekly results just now. This is a read failure on our side, not a season with no games in it.'
+                : 'Pick a league from the rail. Points-for only means something inside one league — two leagues with different scoring settings produce numbers that cannot be compared.'}
+            </p>
+          </div>
+        )
+      ) : activeKey === 'live' ? (
+        liveScores ? (
+          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Live Scores
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read the slate just now. This is a read failure on our side, not a day
+              with no games on — your players may well be playing.
+            </p>
+          </div>
+        )
       ) : activeKey === 'season-outlook' ? (
         outlook ? (
-          <SeasonOutlook data={outlook} />
+          /*
+           * 38a·5 — one league's full field when a league is held, the
+           * cross-league board when it is not. Same key, same loader, same
+           * simulation: the league view renders the per-team numbers the
+           * cross-league table collapses into a single row.
+           */
+          selectedLeagueId && outlook.leagues.some((l) => l.leagueId === selectedLeagueId) ? (
+            <SeasonOutlookLeague
+              league={outlook.leagues.find((l) => l.leagueId === selectedLeagueId)!}
+              swing={outlook.swingByLeague[selectedLeagueId] ?? null}
+              basis={outlook.basis}
+            />
+          ) : (
+            <SeasonOutlook data={outlook} />
+          )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
@@ -1291,7 +1584,14 @@ export default async function AfCorePage({
           </div>
         )
       ) : activeKey === 'career' ? (
-        career ? (
+        /*
+         * 38a·6. A league in the rail renders that league's own career; without
+         * one, the cross-league trophy room. `?view=share` still belongs to the
+         * share card, which is cross-league by nature.
+         */
+        leagueCareer ? (
+          <LeagueCareer data={leagueCareer} allLeaguesHref="/core/career" />
+        ) : career ? (
           <Career
             data={career}
             view={typeof sp.view === 'string' ? sp.view : null}

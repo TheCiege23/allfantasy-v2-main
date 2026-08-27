@@ -39,10 +39,28 @@ const FILTERS: Array<{ id: NotificationFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'trades', label: 'Trades' },
   { id: 'waivers', label: 'Waivers' },
-  { id: 'mentions', label: 'Mentions' },
   { id: 'lineups', label: 'Lineups' },
+  { id: 'mentions', label: 'Mentions' },
+  // 38a gives commissioner announcements their own chip. Before this they
+  // classified as 'all' and sat unfindable among everything else — or worse, as
+  // 'trades', because "commissioner confirmed the trade deadline" matches on
+  // the word trade.
+  { id: 'commissioner', label: 'Commissioner' },
   { id: 'drafts', label: 'Drafts' },
 ]
+
+/**
+ * The chips this account can actually fill.
+ *
+ * ⚠ MENTIONS IS DROPPED WHEN NOTHING COULD EVER PRODUCE ONE. On a league with no
+ * Discord bridge there is no mention source at all — platform chat is never
+ * read, synced or stored, which the Sync tab states as a product promise one tab
+ * away. A chip that is structurally always zero is worse than no chip: it reads
+ * as "nobody mentioned you" rather than "we do not look".
+ */
+function visibleFilters(mentionsAvailable: boolean): Array<{ id: NotificationFilter; label: string }> {
+  return mentionsAvailable ? FILTERS : FILTERS.filter((f) => f.id !== 'mentions')
+}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -157,8 +175,10 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           <h1 className="af-display af-nt-title">Notifications</h1>
           <p className="af-nt-sub">
             {unread > 0
-              ? `${unread} waiting. The ones with a clock on them are at the top.`
-              : 'Nothing is waiting on you.'}
+              ? `${unread} waiting${data.leagueId ? ' in this league' : ''}. The ones with a clock on them are at the top.`
+              : data.leagueId
+                ? 'Nothing is waiting on you in this league.'
+                : 'Nothing is waiting on you.'}
           </p>
         </div>
         <button
@@ -173,7 +193,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
 
       {/* Live counts, straight off the loader. */}
       <div className="af-nt-filters" role="tablist" aria-label="Filter notifications">
-        {FILTERS.map((f) => (
+        {visibleFilters(data.mentionsAvailable).map((f) => (
           <button
             key={f.id}
             type="button"
@@ -214,7 +234,9 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
         ) : (
           <p className="af-nt-empty">
             {filter === 'all'
-              ? 'No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.'
+              ? data.leagueId
+                ? 'No notifications on file for this league. This is a log of things that happened — an empty one means nothing has here, not that we stopped watching.'
+                : 'No notifications on file. This is a log of things that happened — an empty one means nothing has, not that we stopped watching.'
               : `Nothing under ${FILTERS.find((f) => f.id === filter)!.label}.`}
           </p>
         )}

@@ -1,0 +1,368 @@
+/*
+ * AF Core — Season Outlook, league-scoped (38a·5).
+ *
+ * Sibling to af-season-outlook.css rather than an extension of it: that file
+ * styles a cross-league table where each league is one row, this one styles a
+ * single league's full field. Sharing a stylesheet between them would mean
+ * every rule needed a qualifier saying which of the two it meant.
+ *
+ * Scoped under `.af-sol`, inside `.af-core`. Rules that collide with an
+ * `.af-core X` base rule are prefixed to match its specificity — a bare class is
+ * (0,1,0) and loses to (0,2,0) regardless of source order.
+ */
+
+.af-sol {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1200px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-sol-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-sol-title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.af-sol-sub {
+  margin: 0;
+  max-width: 66ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Tiles ───────────────────────────────────────────────────────────── */
+
+.af-sol-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-sol-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 17px 18px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-sol-tile-v {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.af-sol-tile[data-band='high'] .af-sol-tile-v {
+  color: var(--good);
+}
+.af-sol-tile[data-band='mid'] .af-sol-tile-v {
+  color: var(--warn);
+}
+.af-sol-tile[data-band='low'] .af-sol-tile-v {
+  color: var(--bad);
+}
+.af-sol-tile .af-label {
+  color: var(--faint);
+}
+.af-sol-tile-s {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* The basis is never a tooltip. A simulated number that does not say what
+   produced it is indistinguishable from a guess. */
+.af-sol-basis {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* ── Clinch ──────────────────────────────────────────────────────────── */
+
+.af-sol-clinch {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--chimmy);
+  border: 1px solid var(--accent-line);
+}
+.af-sol-clinch[data-empty='true'] {
+  background: var(--surface);
+  border-color: var(--line);
+  gap: 7px;
+}
+.af-sol-clinch-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-sol-clinch-head .af-label {
+  color: var(--accent);
+}
+.af-sol-clinch-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-sol-clinch-why {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-sol-branches {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-sol-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px 16px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-sol-branch[data-tone='good'] {
+  border-color: var(--good-soft);
+}
+.af-sol-branch[data-tone='bad'] {
+  border-color: var(--bad-soft);
+}
+.af-sol-branch[data-tone='accent'] {
+  border-color: var(--accent-line);
+}
+.af-sol-branch .af-label {
+  color: var(--faint);
+}
+.af-sol-branch-v {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.af-sol-branch[data-tone='good'] .af-sol-branch-v {
+  color: var(--good);
+}
+.af-sol-branch[data-tone='bad'] .af-sol-branch-v {
+  color: var(--bad);
+}
+.af-sol-branch[data-tone='accent'] .af-sol-branch-v {
+  color: var(--accent);
+}
+.af-sol-branch-b {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Prefixed: `.af-core .af-btn` is (0,2,0) and would otherwise win. */
+.af-core .af-sol-clinch-cta {
+  align-self: flex-start;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+}
+
+/* ── Standings ───────────────────────────────────────────────────────── */
+
+.af-sol-tablewrap {
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  /* The table has six columns and does not compress below ~720px. It scrolls
+     inside its own box so the page body never scrolls sideways. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.af-sol-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.af-sol-caption {
+  padding: 15px 18px 0;
+  text-align: left;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+.af-sol-table thead th {
+  padding: 13px 14px;
+  text-align: left;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.af-sol-table tbody th,
+.af-sol-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.af-sol-table tbody tr:last-child th,
+.af-sol-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.af-sol-table tbody th {
+  text-align: left;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+/*
+ * The playoff cut, drawn as a line under the last team in the field.
+ *
+ * ⚠ A BOUNDARY, NOT A COLOURED BLOCK. Shading the top six green says "these
+ * teams are good"; a line says "these six are in and these six are not", which
+ * is the actual fact and the one a manager is looking for.
+ */
+.af-sol-table tbody tr[data-cut='true'] th,
+.af-sol-table tbody tr[data-cut='true'] td {
+  border-bottom: 2px solid var(--accent-line);
+}
+.af-sol-table tbody tr[data-you='true'] {
+  background: var(--accent-soft);
+}
+.af-sol-seed {
+  width: 22px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.af-sol-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-sol-you {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-sol-n {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.af-sol-pct {
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.af-sol-pct[data-band='high'] {
+  color: var(--good);
+}
+.af-sol-pct[data-band='mid'] {
+  color: var(--warn);
+}
+.af-sol-pct[data-band='low'] {
+  color: var(--bad);
+}
+/* Not modelled — visually distinct from 0%, which would read as eliminated. */
+.af-sol-pct[data-band='none'] {
+  color: var(--faint);
+}
+.af-sol-decides {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+  min-width: 200px;
+}
+.af-sol-table tbody tr[data-you='true'] .af-sol-decides {
+  color: var(--text2);
+}
+
+/* ── Empty + foot ────────────────────────────────────────────────────── */
+
+.af-sol-empty {
+  padding: 26px 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-sol-empty-t {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+.af-sol-empty-b {
+  margin: 7px 0 0;
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-sol-foot {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 1000px) {
+  .af-sol-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .af-sol-branches {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .af-sol-title {
+    font-size: 23px;
+  }
+  .af-sol-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .af-sol-tile {
+    padding: 14px;
+  }
+  .af-sol-tile-v {
+    font-size: 24px;
+  }
+  .af-sol-clinch {
+    padding: 15px;
+  }
+  .af-core .af-sol-clinch-cta {
+    align-self: stretch;
+    justify-content: center;
+  }
+  .af-sol-clinch-note {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
