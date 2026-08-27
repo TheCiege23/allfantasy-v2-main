@@ -124,7 +124,7 @@ type Phase =
   | { k: 'attest'; sourceId: string; message: string }
   | { k: 'preview'; sourceId: string; leagueName: string; attested: boolean }
   | { k: 'committing'; sourceId: string }
-  | { k: 'done'; leagueId: string; leagueName: string; backfilled: boolean; sourceId: string; existed: boolean; attested: boolean }
+  | { k: 'done'; leagueId: string; leagueName: string; backfilled: boolean; sourceId: string; existed: boolean; skipped: boolean; attested: boolean }
 
 const FIELD_BY_PROVIDER: Partial<
   Record<ImportProvider, { label: string; placeholder: string; help: string }>
@@ -580,6 +580,7 @@ export function ImportV4({
            already-completed import and returned it untouched. */
         existed?: boolean
         league_existed?: boolean
+        skipped?: boolean
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -597,6 +598,9 @@ export function ImportV4({
         sourceId,
         attested,
         existed: Boolean(data?.existed ?? data?.league_existed),
+        /* Only a short-circuited run means "nothing was re-read". A forced re-import
+           still reports existed:true, because the league does still exist. */
+        skipped: Boolean(data?.skipped),
       })
     },
     [provider]
@@ -1398,7 +1402,7 @@ export function ImportV4({
             import, which is how a run that changed nothing got reported as success.
             Say which happened, and offer the only action that changes the answer.
           */}
-          {phase.existed ? (
+          {phase.skipped ? (
             <p className="af-im-field-help">
               This league was already imported, so nothing was re-read and nothing was
               overwritten. Re-import if it is missing data or has not appeared on your
@@ -1411,7 +1415,7 @@ export function ImportV4({
                 Open your league
               </Link>
             ) : null}
-            {phase.existed ? (
+            {phase.skipped ? (
               <button
                 type="button"
                 className="af-btn af-btn--ghost"
