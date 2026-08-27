@@ -327,6 +327,10 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* Fantrax Secret ID: stored via the same encrypted `leagueAuth` row every other
+     provider uses, never held in component state after it is saved. */
+  const [fxSecret, setFxSecret] = useState('')
+  const [fxSaving, setFxSaving] = useState(false)
 
   const selectable = isImportProviderAvailable(provider)
   // Provider display name comes from the shared config, never a local literal — the same
@@ -863,6 +867,72 @@ export function ImportV4({
         {/* ── Step 2: the provider's own field ──────────────────────── */}
         {selectable && phase.k !== 'done' ? (
           <div className="af-im-field-block">
+            {/*
+              ── Fantrax: connect once, then there is nothing to type.
+              A league id is public and says nothing about who is asking, which is why
+              that path has to follow up with "which team is yours". A Secret ID is the
+              one thing Fantrax offers that identifies a PERSON, so `getLeagues` returns
+              the caller's leagues AND the teams they own in them — no league id, no
+              season, no sport, no team picker.
+              It posts to the SAME /api/league/auth every other provider's credentials
+              use (platform `fantrax`, encrypted `apiKey`), so nothing new stores it and
+              it never rides in an import request body.
+            */}
+            {provider === 'fantrax' ? (
+              <div className="af-im-field">
+                <span className="af-label">Fantrax Secret ID</span>
+                <input
+                  type="password"
+                  placeholder="paste your Secret ID"
+                  value={fxSecret}
+                  autoComplete="off"
+                  onChange={(e) => setFxSecret(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="af-btn af-btn--ghost"
+                  disabled={fxSaving || phase.k === 'discovering'}
+                  onClick={() => {
+                    const secret = fxSecret.trim()
+                    if (!secret) {
+                      setError('Paste your Fantrax Secret ID first.')
+                      return
+                    }
+                    setError(null)
+                    setFxSaving(true)
+                    void (async () => {
+                      try {
+                        const res = await fetch('/api/league/auth', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ platform: 'fantrax', apiKey: secret }),
+                        })
+                        if (!res.ok) {
+                          const body = (await res.json().catch(() => null)) as { error?: string } | null
+                          setError(body?.error || 'That Secret ID could not be saved.')
+                          return
+                        }
+                        // Cleared on success: it is a credential, and it is stored now.
+                        setFxSecret('')
+                        await runDiscover('')
+                      } catch {
+                        setError('Could not reach the server to save that Secret ID.')
+                      } finally {
+                        setFxSaving(false)
+                      }
+                    })()
+                  }}
+                >
+                  {fxSaving ? 'Connecting…' : 'Connect Fantrax and list my leagues'}
+                </button>
+                <span className="af-im-field-help">
+                  Fantrax → Settings → API Access. Read-only, and it is stored encrypted. With it
+                  connected we can name your leagues and your team without you typing either. Prefer
+                  not to? Paste a league ID below instead.
+                </span>
+              </div>
+            ) : null}
+
             {field ? (
               <label className="af-im-field">
                 <span className="af-label">{field.label}</span>

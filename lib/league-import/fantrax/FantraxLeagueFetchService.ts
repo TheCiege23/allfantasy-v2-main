@@ -300,6 +300,45 @@ function resolveTeamId(teamLabel: string, teamMap: Map<string, string>): string 
   return teamMap.get(normalized) ?? null
 }
 
+/**
+ * Does this caller's own Fantrax account hold that team in that league?
+ *
+ * The Secret ID is the only thing Fantrax offers that identifies a PERSON —
+ * `getLeagues` is the one endpoint keyed on it, and it names the teams the holder
+ * owns. Everything else in this integration is keyed on a league id (public) or a
+ * team name (a display string, not an identity).
+ *
+ * ⚠ FAILS CLOSED, DELIBERATELY. No stored credential, an API failure, a thrown
+ * import — every one returns false, which leaves the ownership guard in
+ * `importFantraxLeague` exactly as strict as it was. This can only ever GRANT
+ * ownership on a positive answer from Fantrax itself, never assume it.
+ */
+async function callerOwnsFantraxTeam(
+  userId: string,
+  leagueId: string,
+  teamName: string,
+): Promise<boolean> {
+  try {
+    const { getDecryptedAuth } = await import('@/lib/league-sync-core')
+    const auth = await getDecryptedAuth(userId, 'fantrax')
+    const secretId = auth?.apiKey?.trim()
+    if (!secretId) return false
+
+    const { getFantraxLeagues } = await import('./fantraxApi')
+    const res = await getFantraxLeagues(secretId)
+    if (!res.ok) return false
+
+    const wanted = teamName.trim().toLowerCase()
+    return res.data.some(
+      (league) =>
+        league.leagueId === leagueId &&
+        league.teamNames.some((name) => name.trim().toLowerCase() === wanted),
+    )
+  } catch {
+    return false
+  }
+}
+
 export async function fetchFantraxLeagueForImport(
   userId: string,
   sourceInput: string
@@ -321,11 +360,17 @@ export async function fetchFantraxLeagueForImport(
    * decides ownership; this does not bypass it.
    */
   if (lookup.nativeLeague) {
+    const ownershipVerified = await callerOwnsFantraxTeam(
+      userId,
+      lookup.nativeLeague.leagueId,
+      lookup.nativeLeague.teamName,
+    )
     const { importFantraxLeague } = await import('./importFantraxLeague')
     const outcome = await importFantraxLeague({
       leagueId: lookup.nativeLeague.leagueId,
       teamName: lookup.nativeLeague.teamName,
       appUserId: userId,
+      ownershipVerified,
     })
     if (!outcome.ok) {
       throw new FantraxImportLeagueNotFoundError(outcome.error)

@@ -226,9 +226,10 @@ export async function discoverProviderLeagues(
   }
 
   const trimmed = accountIdentifier?.trim();
-  // Yahoo reads the CONNECTED Yahoo account (OAuth) and Sleeper falls back to
-  // the caller's own linked Sleeper account — neither needs an identifier.
-  if (!trimmed && provider !== 'yahoo' && provider !== 'sleeper') {
+  // Yahoo reads the CONNECTED Yahoo account (OAuth), Sleeper falls back to the
+  // caller's own linked Sleeper account, and Fantrax reads the stored Secret ID —
+  // none of the three needs an identifier typed here.
+  if (!trimmed && provider !== 'yahoo' && provider !== 'sleeper' && provider !== 'fantrax') {
     return { ok: false, error: 'Account identifier is required.' };
   }
 

@@ -136,6 +136,79 @@ export async function POST(req: NextRequest) {
    * then grades trades against those players.
    */
   if (provider === 'fantrax') {
+    /*
+     * ── SECRET ID FIRST, when the caller has stored one.
+     *
+     * The league-id flow below asks for a league and then asks which team is theirs,
+     * because a league id is public and says nothing about who is asking. A Secret ID
+     * is the one thing Fantrax offers that identifies a PERSON: `getLeagues` is keyed
+     * on it and names the teams the holder owns. So with one stored we can list their
+     * leagues AND already know their team — no league id, no season, no sport, and no
+     * "which team is yours" step.
+     *
+     * It is read from the same encrypted `leagueAuth` row every other provider uses
+     * (`apiKey`, platform `fantrax`), never from the request body — a credential does
+     * not belong in an import box, which is what the note below is about.
+     */
+    if (!accountIdentifier) {
+      const { getDecryptedAuth } = await import('@/lib/league-sync-core')
+      const stored = await getDecryptedAuth(auth.userId, 'fantrax').catch(() => null)
+      const secretId = stored?.apiKey?.trim()
+      if (!secretId) {
+        return NextResponse.json(
+          {
+            error:
+              'Connect Fantrax once with your Secret ID to list your leagues, or paste a league ID here instead.',
+          },
+          { status: 400 },
+        )
+      }
+
+      const { getFantraxLeagues } = await import('@/lib/league-import/fantrax/fantraxApi')
+      const mine = await getFantraxLeagues(secretId)
+      if (!mine.ok) {
+        return NextResponse.json(
+          { error: mine.failure.message },
+          { status: mine.failure.kind === 'not_found' ? 404 : 502 },
+        )
+      }
+      /* ⚠ An empty answer is NOT "you own no leagues" -- getLeagues returns 200 {} for a
+         mistyped Secret ID too, which is why fantraxApi documents it as ambiguous. Saying
+         "no leagues" to someone with a typo would send them looking in the wrong place. */
+      if (mine.data.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Fantrax returned nothing for that Secret ID. Check the ID is right — an empty answer here does not prove the account has no leagues.',
+          },
+          { status: 502 },
+        )
+      }
+
+      return NextResponse.json({
+        provider,
+        sport: null,
+        season: null,
+        account: {
+          providerUserId: null,
+          accountIdentifier: 'connected-fantrax-account',
+          displayName: 'Your Fantrax account',
+        },
+        /* Same `fantrax-league:<id>|<team>` contract the league-id path emits, so preview,
+           commit and importFantraxLeague need no changes -- the difference is only that the
+           team came from Fantrax instead of from a person clicking. */
+        leagues: mine.data.map((league) => ({
+          sourceId: league.teamNames[0]
+            ? `fantrax-league:${league.leagueId}|${league.teamNames[0]}`
+            : `fantrax-league:${league.leagueId}`,
+          name: league.leagueName,
+          sport: null,
+          season: null,
+          totalTeams: null,
+        })),
+      })
+    }
+
     const leagueId = parseFantraxLeagueId(accountIdentifier)
     if (!leagueId) {
       return NextResponse.json(
