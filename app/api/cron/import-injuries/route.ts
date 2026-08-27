@@ -168,7 +168,28 @@ async function runOneSport(url: URL, sport: Sport) {
      */
     const noCoverage = !sources.rollingInsights && !sources.espn
     const unchangedOnly = result.notModified && !sources.espn
-    const failed = !noCoverage && !unchangedOnly && result.written === 0 && espn.written === 0
+
+    /*
+     * A PROVIDER THAT ANSWERS 200 WITH ZERO ROWS IS NOT A FAILING PROVIDER.
+     *
+     * Measured 2026-08-27: ESPN returns HTTP 200 and `injuries: []` for college basketball,
+     * because the season starts in November and nobody is hurt yet. Treating that as a failure
+     * meant this route 500'd for NCAAB and would keep doing so for three months — the exact
+     * "red light that can never go green" this file already refuses to ship elsewhere.
+     *
+     * ⚠ THIS MUST NOT WEAKEN THE GUARD THAT CAUGHT THE 17-DAY OUTAGE. That outage was API-Sports
+     * returning a plan-restriction PAYLOAD, which lands in `errors` — so the discriminator is
+     * whether a provider ERRORED, not whether rows arrived. Errors still fail. Rows fetched but
+     * none written still fails, because that is a write bug. Only a clean, silent, error-free zero
+     * from every configured provider is allowed through, and it is reported explicitly rather than
+     * blending into a green.
+     */
+    const providerErrored = result.errors.length > 0 || espn.errors.length > 0
+    const cleanEmpty =
+      !providerErrored && result.fetched === 0 && espn.fetched === 0 && !result.notModified
+
+    const failed =
+      !noCoverage && !unchangedOnly && !cleanEmpty && result.written === 0 && espn.written === 0
 
     const providerLabel = noCoverage
       ? "none"
@@ -183,6 +204,9 @@ async function runOneSport(url: URL, sport: Sport) {
         season: season ?? "current",
         source: providerLabel,
         providerCoverage: noCoverage ? "none" : "partial_or_full",
+        /** Every configured provider answered 200 with zero rows and no error — an out-of-season
+         *  feed, not an outage. Surfaced so it is legible rather than an unexplained green. */
+        providerReturnedEmpty: cleanEmpty || undefined,
         /** RI answered 304 through the retry: unchanged-or-empty, existing rows untouched. */
         rollingInsightsNotModified: result.notModified || undefined,
         synced: result.written + espn.written,
