@@ -76,6 +76,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, provider: string): Prom
   ])
 }
 
+/**
+ * Move `preferred` to the front of the chain, keeping every other provider in
+ * its configured relative order behind it.
+ *
+ * A preference is IGNORED when that provider is not in the configured order.
+ * `AI_PROVIDER_ORDER` stays the single allowlist: a provider removed for a dead
+ * key or unpaid balance must stay removed, and a stale task mapping must not be
+ * able to put it back into rotation.
+ */
+export function applyPreferredProvider(
+  order: ProviderName[],
+  preferred: ProviderName | null | undefined,
+): ProviderName[] {
+  if (!preferred || !order.includes(preferred)) return order
+  return [preferred, ...order.filter((p) => p !== preferred)]
+}
+
 export function getProviderOrder(): ProviderName[] {
   const env = process.env.AI_PROVIDER_ORDER?.trim()
   if (!env) return DEFAULT_PROVIDER_ORDER
@@ -276,8 +293,10 @@ async function callOpenAIStream(args: StreamCallArgs): Promise<RouterResult> {
 // ─── xAI adapter ─────────────────────────────────────────────────────────────
 
 async function callXaiText(args: TextCallArgs): Promise<RouterResult> {
+  const model = resolveXaiModel(args.profile ?? 'standard')
   const result = await xaiChatJson({
     messages: args.messages,
+    model,
     maxTokens: args.maxTokens,
     temperature: args.temperature,
     skipCache: args.skipCache ?? true,
@@ -289,17 +308,19 @@ async function callXaiText(args: TextCallArgs): Promise<RouterResult> {
   if (!text) {
     throw Object.assign(new Error('xAI returned no content'), { status: 200 })
   }
-  const model = (result.json as { model?: string })?.model ?? 'grok-2-latest'
-  return { ok: true, text, model, provider: 'xai', tokensUsed: 0 }
+  const echoedModel = (result.json as { model?: string })?.model ?? model
+  return { ok: true, text, model: echoedModel, provider: 'xai', tokensUsed: 0 }
 }
 
 // ─── DeepSeek adapter ─────────────────────────────────────────────────────────
 
 async function callDeepSeekText(args: TextCallArgs): Promise<RouterResult> {
   const { system, userContent } = extractSystemAndUser(args.messages)
+  const model = resolveDeepSeekModel(args.profile ?? 'standard')
   const result = await deepseekChat({
     prompt: userContent,
     systemPrompt: system,
+    model,
     maxTokens: args.maxTokens,
     temperature: args.temperature,
   })
@@ -309,7 +330,7 @@ async function callDeepSeekText(args: TextCallArgs): Promise<RouterResult> {
   return {
     ok: true,
     text: result.content,
-    model: result.model ?? 'deepseek-chat',
+    model: result.model ?? model,
     provider: 'deepseek',
     tokensUsed: 0,
   }
@@ -353,12 +374,18 @@ export async function routeTextCall(args: {
   skipCache?: boolean
   preferredAnthropicModel?: string
   profile?: ProviderProfile
+  /**
+   * Provider to try FIRST for this call, from task routing. Ignored unless it
+   * is already in AI_PROVIDER_ORDER; the rest of the chain is preserved as
+   * fallback, so a preferred provider being down degrades rather than fails.
+   */
+  preferredProvider?: ProviderName | null
 }): Promise<RouterResult> {
   // NOTE: the spend guard is NOT here. It lives in the provider clients this router delegates to
   // (`lib/openai-client`, `lib/xai-client`, `lib/deepseek-client`) — the point where a request
   // actually leaves. Guarding the router instead would refuse callers that inject or mock a client
   // and would therefore never have spent anything.
-  const order = getProviderOrder()
+  const order = applyPreferredProvider(getProviderOrder(), args.preferredProvider)
   const attempts: string[] = []
 
   for (const provider of order) {
@@ -387,9 +414,11 @@ export async function routeStreamCall(args: {
   image?: RouterImage | null
   preferredAnthropicModel?: string
   profile?: ProviderProfile
+  /** See routeTextCall — provider tried first, ignored unless in AI_PROVIDER_ORDER. */
+  preferredProvider?: ProviderName | null
   onText: (delta: string, snapshot: string) => void
 }): Promise<RouterResult> {
-  const order = getProviderOrder()
+  const order = applyPreferredProvider(getProviderOrder(), args.preferredProvider)
   const attempts: string[] = []
 
   for (const provider of order) {
