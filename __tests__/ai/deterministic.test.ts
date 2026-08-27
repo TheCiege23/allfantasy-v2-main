@@ -60,6 +60,7 @@ import {
   detectScheduleQuestion,
   checkScheduleContextAvailable,
   tryDeterministicAnswer,
+  tryDeterministicAnswerDetailed,
   DETERMINISTIC_SOURCE,
 } from '@/lib/ai/deterministic'
 
@@ -436,6 +437,40 @@ describe('tryDeterministicAnswer', () => {
 
     expect(result).toContain('Josh Allen')
     expect(result).toMatch(/leader|leads|most/i)
+  })
+
+  /*
+   * ⚠ THE BIT THAT LETS A DEAD END BECOME A QUESTION SOMEBODY ELSE CAN ANSWER.
+   * Both kinds used to come back as a bare string, so a caller holding "I have
+   * no data" could not tell it apart from "here is the data" — and every
+   * unanswerable sports question stopped there. Only a refusal may be looked up
+   * elsewhere; an answer we can serve from our own rows must always win.
+   */
+  it('marks a data-backed reply as an answer and a no-data reply as a refusal', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([play({ value: 2 })])
+    const grounded = await tryDeterministicAnswerDetailed('how many TDs did Josh Allen have today?')
+    expect(grounded?.kind).toBe('answer')
+    expect(grounded?.text).toContain('Josh Allen')
+
+    readPlayByPlayFeedMock.mockResolvedValue([])
+    const empty = await tryDeterministicAnswerDetailed('who hit the most HRs in the majors today?')
+    expect(empty?.kind).toBe('refusal')
+    expect(empty?.text).toContain("I don't have reliable data")
+  })
+
+  it('still returns null for a question it has no shortcut for', async () => {
+    mockCount.mockResolvedValue(0)
+    expect(await tryDeterministicAnswerDetailed('tell me a joke about punters')).toBeNull()
+  })
+
+  /* The string wrapper must stay behaviourally identical for its 4 callers. */
+  it('keeps the string wrapper agreeing with the detailed result', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([])
+    const question = 'who hit the most HRs in the majors today?'
+
+    expect(await tryDeterministicAnswer(question)).toBe(
+      (await tryDeterministicAnswerDetailed(question))?.text,
+    )
   })
 
   it('returns refusal (not null) when DB errors on schedule question (fail-safe)', async () => {

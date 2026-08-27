@@ -11,7 +11,7 @@ import {
   isOffensivePosition,
   isIdpDefensivePosition,
 } from './idpPositionUtils'
-import { useIdpContractsMap, useRedraftRosterId, mockContractUi } from '@/app/idp/hooks/useIdpTeamCap'
+import { useIdpContractsMap, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
 import type { IdpContractChip } from './IDPPlayerCard'
 
 function partitionIds(ids: string[], players: PlayerMap) {
@@ -147,11 +147,19 @@ export function IDPTeamDashboard({
         contractChip,
       }
     }
-    const m = mockContractUi(playerId)
+    /*
+     * ⚠ NO CONTRACT MEANS NO CHIP, NOT AN INVENTED ONE. This fell back to
+     * `mockContractUi(playerId)` — a hash of the id — and stamped every player with a salary,
+     * a years-remaining and an ACTIVE badge. It fired for everyone: all six cap tables are
+     * empty in production, so `contractsByPlayer` is always {}.
+     *
+     * `IDPPlayerCard` already renders the money row only when both figures are present, so
+     * returning undefined removes the whole chip rather than leaving a gap.
+     */
     return {
-      salaryM: m.salaryM,
-      yearsRemaining: m.yearsRemaining,
-      contractChip: 'ACTIVE' as const,
+      salaryM: undefined,
+      yearsRemaining: undefined,
+      contractChip: undefined,
     }
   }
 

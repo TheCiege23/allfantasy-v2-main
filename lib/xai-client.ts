@@ -354,6 +354,19 @@ export async function xaiResponsesJson(opts: {
   reasoning?: { effort?: "low" | "medium" | "high"; summary?: "auto" | "concise" | "detailed" }
   skipCache?: boolean
 }): Promise<XaiResponsesJsonResult> {
+  /*
+   * ⚠ THIS BOUNDARY WAS UNGUARDED. `xaiChatJson` has asserted the kill switch
+   * since the guard landed, but the Responses API — the newer path, and the ONLY
+   * one that carries the `x_search` / `web_search` tools — did not. Search calls
+   * are the most expensive shape we make and they were leaving regardless of
+   * `AI_FEATURES_ENABLED`. The guard's own note says to put it where the request
+   * actually departs, precisely so a new caller cannot forget; this is that
+   * place.
+   *
+   * Deliberately OUTSIDE the cache wrapper, matching `xaiChatJson`: the switch
+   * is meant to be authoritative the moment it is flipped, not after a TTL.
+   */
+  assertAiSpendAllowed('xai-client.xaiResponsesJson')
   if (opts.skipCache) return _xaiResponsesJsonUncached(opts)
   const key = cacheKey('xai-responses', opts.messages, opts.model, opts.temperature)
   return cachedFetch(key, 1800, () => _xaiResponsesJsonUncached(opts))

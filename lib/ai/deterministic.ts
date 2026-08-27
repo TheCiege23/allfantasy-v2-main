@@ -669,9 +669,23 @@ function buildUnsupportedLiveWorldCupAnswer(locale?: string): string {
 }
 
 /**
+ * A deterministic outcome, and CRUCIALLY which kind it is.
+ *
+ * ⚠ THE TWO USED TO BE INDISTINGUISHABLE, and that is why an unanswerable
+ * question dead-ended. Both an answer and a refusal came back as a bare string,
+ * so the route returned either one verbatim and nothing downstream could tell
+ * "here is the data" from "we hold no data". A refusal is a statement about our
+ * STORAGE, not about the world — someone else may still be able to answer it,
+ * and the caller can only try if it knows which one it is holding.
+ */
+export type DeterministicResult =
+  | { kind: 'answer'; text: string }
+  | { kind: 'refusal'; text: string }
+
+/**
  * Check whether the message can be answered deterministically.
  *
- * Returns the deterministic answer string, or null if the pipeline should run.
+ * Returns the deterministic result, or null if the pipeline should run.
  *
  * Current shortcuts:
  * 1. Schedule question with no schedule data in the DB →
@@ -680,22 +694,33 @@ function buildUnsupportedLiveWorldCupAnswer(locale?: string): string {
  * @param message  The user's message.
  * @param locale   The user's selected locale (af_lang cookie value). Defaults to 'en'.
  */
-export async function tryDeterministicAnswer(message: string, locale?: string): Promise<string | null> {
+export async function tryDeterministicAnswerDetailed(
+  message: string,
+  locale?: string,
+): Promise<DeterministicResult | null> {
+  const answer = (text: string): DeterministicResult => ({ kind: 'answer', text })
+  const refusal = (text: string): DeterministicResult => ({ kind: 'refusal', text })
   const safeLocale = resolveLanguage(locale)
   const intentRoute = resolveChimmyIntentRoute(message)
   if (/\bwhen\s+(does|is|do).*\bworld\s*cup\b.*\b(start|begin|kick\s*off)|\bworld\s*cup\b.*\b(start|begin|kick\s*off)\b/i.test(message)) {
-    return buildWorldCupStartAnswer(safeLocale)
+    /*
+     * Alone among these builders this one is async AND nullable, and its null
+     * ends the whole function rather than falling through to the next check —
+     * which is what the bare `return` used to express. Kept exactly.
+     */
+    const worldCupStart = await buildWorldCupStartAnswer(safeLocale)
+    return worldCupStart === null ? null : answer(worldCupStart)
   }
   const teamResult = await buildTeamResultAnswer(message)
-  if (teamResult) return teamResult
+  if (teamResult) return answer(teamResult)
   const fantasyCalcValue = await buildFantasyCalcValueAnswer(message)
-  if (fantasyCalcValue) return fantasyCalcValue
+  if (fantasyCalcValue) return answer(fantasyCalcValue)
   const weather = await buildCachedWeatherAnswer(message, safeLocale)
-  if (weather) return weather
+  if (weather) return answer(weather)
   const injuries = await buildCachedInjuryAnswer(message, safeLocale)
-  if (injuries) return injuries
+  if (injuries) return answer(injuries)
   const news = await buildCachedNewsAnswer(message, safeLocale)
-  if (news) return news
+  if (news) return answer(news)
   /*
    * Try to ANSWER the stat question before refusing it. The refusal below is
    * correct when there is no play-by-play in the window, and was previously the
@@ -703,30 +728,44 @@ export async function tryDeterministicAnswer(message: string, locale?: string): 
    * the fallback, never the other way round.
    */
   const statLeaders = await buildStatLeaderAnswer(message, safeLocale)
-  if (statLeaders) return statLeaders
+  if (statLeaders) return answer(statLeaders)
   /* One named player, before the blanket refusal that used to swallow these. */
   const playerStat = await buildPlayerStatAnswer(message, safeLocale)
-  if (playerStat) return playerStat
+  if (playerStat) return answer(playerStat)
   const unsupportedStatEvent = buildUnsupportedStatEventAnswer(message, safeLocale)
-  if (unsupportedStatEvent) return unsupportedStatEvent
+  if (unsupportedStatEvent) return refusal(unsupportedStatEvent)
   /* Forward-looking first: the cached path below only knows about today. */
   const upcoming = await buildUpcomingGamesAnswer(message)
-  if (upcoming) return upcoming
+  if (upcoming) return answer(upcoming)
   const cachedGames = await buildCachedGamesAnswer(message)
-  if (cachedGames) return cachedGames
+  if (cachedGames) return answer(cachedGames)
   if (intentRoute.category === 'world_cup_scoring') {
-    return buildWorldCupScoringAnswer(safeLocale)
+    return answer(buildWorldCupScoringAnswer(safeLocale))
   }
   if (intentRoute.category === 'unsupported_live_data') {
-    return buildUnsupportedLiveWorldCupAnswer(safeLocale)
+    return refusal(buildUnsupportedLiveWorldCupAnswer(safeLocale))
   }
   if (detectScheduleQuestion(message)) {
     const hasContext = await checkScheduleContextAvailable()
     if (!hasContext) {
-      return SCHEDULE_REFUSAL_BY_LOCALE[safeLocale] ?? SCHEDULE_REFUSAL_BY_LOCALE.en
+      return refusal(SCHEDULE_REFUSAL_BY_LOCALE[safeLocale] ?? SCHEDULE_REFUSAL_BY_LOCALE.en)
     }
   }
   return null
+}
+
+/**
+ * The string-only view, kept because every existing caller and test wants it.
+ *
+ * New callers that can DO something about a refusal — ask a live-search path,
+ * say — should use `tryDeterministicAnswerDetailed` instead; this signature
+ * throws away the one bit that makes that possible.
+ */
+export async function tryDeterministicAnswer(
+  message: string,
+  locale?: string,
+): Promise<string | null> {
+  return (await tryDeterministicAnswerDetailed(message, locale))?.text ?? null
 }
 
 /** Metadata marker for deterministic responses. */

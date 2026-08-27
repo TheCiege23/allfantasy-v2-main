@@ -17,6 +17,17 @@ export type ChimmyFeatureFlags = {
    * becomes the default for anybody.
    */
   toolLoop: boolean
+  /**
+   * When we hold NO data for a sports question, ask live search instead of
+   * dead-ending on the refusal.
+   *
+   * Off by default. The refusals are the most trustworthy thing in this route,
+   * and this is the only path that answers past one — so it is gated on
+   * citations at the provider boundary AND on this switch, and it never touches
+   * league questions. Turning it on trades a guaranteed-honest non-answer for a
+   * sourced one; that is a product decision, not a default.
+   */
+  liveSearchFallback: boolean
 }
 
 const DEFAULT_FLAGS: ChimmyFeatureFlags = {
@@ -28,6 +39,7 @@ const DEFAULT_FLAGS: ChimmyFeatureFlags = {
   voicePreview: false,
   aiKpiEvents: true,
   toolLoop: false,
+  liveSearchFallback: false,
 }
 
 function parseBoolean(raw: string | undefined, fallback: boolean): boolean {
@@ -53,5 +65,9 @@ export function getChimmyFeatureFlags(): ChimmyFeatureFlags {
     voicePreview: readFlagValue('CHIMMY_VOICE_PREVIEW_ENABLED', DEFAULT_FLAGS.voicePreview),
     aiKpiEvents: readFlagValue('CHIMMY_AI_KPI_EVENTS_ENABLED', DEFAULT_FLAGS.aiKpiEvents),
     toolLoop: readFlagValue('CHIMMY_TOOL_LOOP_ENABLED', DEFAULT_FLAGS.toolLoop),
+    liveSearchFallback: readFlagValue(
+      'CHIMMY_LIVE_SEARCH_FALLBACK_ENABLED',
+      DEFAULT_FLAGS.liveSearchFallback,
+    ),
   }
 }

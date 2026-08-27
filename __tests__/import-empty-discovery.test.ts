@@ -103,3 +103,40 @@ describe('⚠ the connected banner stops promising leagues it does not have', ()
     expect(FILE).toContain('THIS SAID "YOUR LEAGUES ARE LISTED BELOW" WHETHER OR NOT ANY WERE')
   })
 })
+
+describe('⚠ the server records what Yahoo returned', () => {
+  const ROUTE = readFileSync(
+    resolve(process.cwd(), 'app/api/leagues/import/discover/route.ts'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+
+  it('logs both counts, so the two causes are distinguishable', () => {
+    /*
+     * "Yahoo returned nothing" and "the sport filter dropped everything it
+     * returned" produced identical observations — an empty screen and a silent
+     * server — and they have completely different fixes.
+     */
+    expect(ROUTE).toContain('yahoo_returned=%d')
+    expect(ROUTE).toContain('after_%s_filter=%d')
+    expect(ROUTE).toContain('leagues.length')
+    expect(ROUTE).toContain('filtered.length')
+  })
+
+  it('logs counts and a sport, never league keys or a credential', () => {
+    /*
+     * A league key is the user's data and a token must never reach a log line.
+     * The user id is truncated for the same reason: enough to correlate two
+     * requests, not enough to be an identifier on its own.
+     */
+    expect(ROUTE).toContain('auth.userId.slice(0, 8)')
+    const logLine = ROUTE.slice(ROUTE.indexOf('[Yahoo discovery]'))
+    const call = logLine.slice(0, logLine.indexOf(')\n'))
+    expect(call).not.toContain('leagueKey')
+    expect(call).not.toContain('accessToken')
+  })
+
+  it('says why logging on every call is safe here', () => {
+    // A fixed-size fact, not a payload — it cannot grow with the account.
+    expect(ROUTE).toContain('AN EMPTY YAHOO LIST WAS INVISIBLE FROM BOTH SIDES')
+  })
+})

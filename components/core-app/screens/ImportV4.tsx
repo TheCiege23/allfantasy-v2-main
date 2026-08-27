@@ -34,6 +34,7 @@ import {
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 
 /**
  * Import & connect — the "landing, auth & import" handoff, wired to the real job.
@@ -262,6 +263,7 @@ function emptyDiscoveryMessage(provider: ImportProvider): string {
   return 'The lookup worked, but no NFL leagues came back for that account.'
 }
 
+
 /**
  * Per-league outcome of a bulk run, in the user's terms. "Already imported" is a
  * success state, not a failure — the league is present and was not overwritten.
@@ -457,7 +459,25 @@ export function ImportV4({
          * Only for yahoo: Sleeper and ESPN failures are genuinely actionable on this
          * screen (wrong username, expired ESPN cookie), so those still surface.
          */
-        if (provider === 'yahoo' && needsConnectionSetup(message)) {
+        /*
+         * ⚠ AND NOT WHEN WE HAVE JUST COME BACK FROM YAHOO. Without that guard
+         * this is a loop, and it is the loop that was reported as "I press
+         * connect yahoo and nothing happens":
+         *
+         *   press Connect → discovery fails → this redirects to Yahoo → Yahoo
+         *   already holds consent so it returns immediately → /import renders
+         *   with ?success=yahoo_connected → identical screen → press again.
+         *
+         * Production request logs showed the whole circuit: a 502 from
+         * /api/leagues/import/discover, then 307s through /api/auth/yahoo and
+         * /api/league/yahoo/callback, then /import, repeating. A real error,
+         * reported eight times, and never once rendered — because the redirect
+         * fired before anything could be shown.
+         *
+         * Once they are back with a connection in hand, the honest move is to
+         * show what Yahoo said and let them choose.
+         */
+        if (provider === 'yahoo' && needsConnectionSetup(message) && !yahooConnected) {
           window.location.href = YAHOO_CONNECT_HREF
           return
         }
@@ -485,7 +505,7 @@ export function ImportV4({
       if (found.length === 0) setError(emptyDiscoveryMessage(provider))
       setPhase({ k: 'idle' })
     },
-    [provider]
+    [provider, yahooConnected]
   )
 
   /*
@@ -1088,6 +1108,37 @@ export function ImportV4({
                   Yahoo lists leagues from the account you connect — there is no username to enter.
                   You will be sent to Yahoo to approve read-only access.
                 </p>
+                {/*
+                  ⚠ A SECOND WAY IN, BECAUSE THE FIRST ONE CAN FAIL AND USED TO BE
+                  THE ONLY ONE OFFERED. Yahoo was the single provider on this screen
+                  with no way to name a league directly, so when the account-wide
+                  list came back refused there was nothing else to try — the tile
+                  was a dead end with a working path sitting unused behind it.
+
+                  Deliberately secondary. Connecting is still the good path: it
+                  names every league at once and asks nothing of the user. This is
+                  for when that path is the broken one.
+                */}
+                <span className="af-label af-im-yahoo-alt">Or paste one league ID</span>
+                <input
+                  type="text"
+                  placeholder="123456, or paste the league URL"
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return
+                    e.preventDefault()
+                    const typed = account.trim()
+                    if (typed) void runPreview(toYahooLeagueKey(typed))
+                    else void runDiscover('')
+                  }}
+                />
+                <span className="af-im-field-help">
+                  The number in your league&rsquo;s address —
+                  football.fantasysports.yahoo.com/f1/<strong>123456</strong>/2. Paste the number or
+                  the whole link. This asks Yahoo for that one league instead of for all of them, so
+                  it still works when the list above does not. Read as an NFL league.
+                </span>
               </div>
             )}
 
@@ -1096,19 +1147,34 @@ export function ImportV4({
               className="af-btn af-im-submit"
               disabled={phase.k === 'discovering' || phase.k === 'previewing'}
               onClick={() => {
-                if (canDiscover) void runDiscover(account.trim())
-                else if (account.trim()) void runPreview(account.trim())
+                const typed = account.trim()
+                /*
+                  ⚠ A TYPED YAHOO LEAGUE ID MUST BYPASS DISCOVERY, NOT FEED IT.
+                  Yahoo supports discovery, so `canDiscover` is true and this used
+                  to run the account-wide lookup unconditionally — which would
+                  ignore what was typed and fail in exactly the way the person was
+                  typing to get around.
+                */
+                if (usesConnectedAccount && typed) {
+                  void runPreview(toYahooLeagueKey(typed))
+                  return
+                }
+                if (canDiscover) void runDiscover(typed)
+                else if (typed) void runPreview(typed)
                 else setError('Enter a league ID to continue.')
               }}
             >
               {/*
                 "Find my leagues" only makes sense when there is something to
-                search from. Yahoo supports discovery but takes no identifier, so
-                the same label there would promise a search of something never
-                entered.
+                search from. Yahoo supports discovery but normally takes no
+                identifier, so the same label there would promise a search of
+                something never entered — unless a league ID has been typed, in
+                which case that is precisely what the button will do.
               */}
               {usesConnectedAccount
-                ? 'Connect Yahoo'
+                ? account.trim()
+                  ? 'Import this league'
+                  : 'Connect Yahoo'
                 : canDiscover
                   ? 'Find my leagues'
                   : 'Connect'}

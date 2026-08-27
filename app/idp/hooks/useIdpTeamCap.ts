@@ -160,15 +160,15 @@ export function useIdpContractsMap(leagueId: string, rosterId: string | null) {
   return { byPlayerId, loading }
 }
 
-/** Deterministic mock contract row for UI when cap API has no row. */
-export function mockContractUi(playerId: string) {
-  let h = 0
-  for (let i = 0; i < playerId.length; i++) h = (h + playerId.charCodeAt(i) * (i + 1)) % 9973
-  const salary = 1 + (h % 350) / 10
-  const yearsRemaining = 1 + (h % 4)
-  return {
-    salaryM: Math.round(salary * 10) / 10,
-    yearsRemaining,
-    status: 'active' as const,
-  }
-}
+/*
+ * ⚠ `mockContractUi` WAS HERE AND IS DELETED. IT HASHED THE PLAYER ID INTO A SALARY.
+ *
+ * Its docstring called it a fallback "when cap API has no row", which sounded like an edge case.
+ * It was the only path: IDPSalaryRecord, IDPCapConfig, IDPDeadMoney, IDPCapTransaction,
+ * IDPCapProjection and IdpLeagueConfig all hold 0 rows in production, so `useIdpContractsMap`
+ * always resolves to {} and every salary, years-remaining and dead-money figure any IDP surface
+ * has ever shown was invented from the id.
+ *
+ * Callers now render an absence instead. Do not reintroduce a fallback here — a contract is a
+ * number a league agreed to, and there is no defensible way to guess one.
+ */

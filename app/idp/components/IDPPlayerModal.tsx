@@ -17,7 +17,6 @@ import {
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
 import type { IdpPlayerCardPayload } from '@/lib/idp-projections/idpPlayerCard'
 import type { IdpSalaryRecordJson } from '@/app/idp/hooks/useIdpTeamCap'
-import { mockContractUi } from '@/app/idp/hooks/useIdpTeamCap'
 import type { DefenderEvaluation } from '@/lib/idp/ai/idpCapChimmy'
 
 export type IDPPlayerModalProps = {
@@ -97,19 +96,30 @@ export function IDPPlayerModal({
   const [aiNarrative, setAiNarrative] = useState<string | null>(null)
   const { handleApiResponse } = useAfSubGate('commissioner_idp_analysis')
 
-  const mock = mockContractUi(playerId)
-  const contract = contractProp
-  const salaryM = contract?.salary ?? mock.salaryM
-  const yearsRem = contract?.yearsRemaining ?? mock.yearsRemaining
+  /*
+   * ⚠ NO FALLBACK CONTRACT. THE ONE THAT WAS HERE PRINTED A SALARY NOBODY HAD AGREED TO.
+   * `mockContractUi(playerId)` hashed the id into a salary and a years-remaining, and this panel
+   * fell back to it whenever the real record was null. The record is ALWAYS null: all six cap
+   * tables are empty in production — IDPSalaryRecord, IDPCapConfig, IDPDeadMoney,
+   * IDPCapTransaction, IDPCapProjection and IdpLeagueConfig each hold 0 rows — so every contract
+   * ever shown on this screen was invented, down to the dead-money figure.
+   *
+   * Every value below is now null without a record, and the panel renders an absence instead of
+   * a number. The Defense Hub already refuses to print cap columns for exactly this reason; this
+   * makes the two agree rather than having one surface invent what the other declines to show.
+   */
+  const contract = contractProp ?? null
+  const salaryM = contract?.salary ?? null
+  const yearsRem = contract?.yearsRemaining ?? null
   const startYear = contract?.contractStartYear ?? new Date().getFullYear()
-  const totalRemainingValue = salaryM * yearsRem
+  const totalRemainingValue = salaryM != null && yearsRem != null ? salaryM * yearsRem : null
   const cutPenalty =
     contract?.cutPenaltyCurrent ??
     (contract
       ? contract.salary + contract.salary * 0.25 * Math.max(0, contract.yearsRemaining - 1)
-      : mock.salaryM * 1.25)
-  const expiresYear = startYear + yearsRem - 1
-  const isExpiring = yearsRem <= 1
+      : null)
+  const expiresYear = yearsRem != null ? startYear + yearsRem - 1 : null
+  const isExpiring = yearsRem != null && yearsRem <= 1
   const isTagged = contract?.isFranchiseTagged || contract?.status === 'franchise_tagged'
 
   const [cutOpen, setCutOpen] = useState(false)
@@ -120,7 +130,7 @@ export function IDPPlayerModal({
   const [capActionError, setCapActionError] = useState<string | null>(null)
 
   const extensionBoost = contract?.extensionBoostPct ?? 0.1
-  const newSalaryPreview = salaryM * (1 + extensionBoost * extendYears)
+  const newSalaryPreview = salaryM != null ? salaryM * (1 + extensionBoost * extendYears) : null
 
   const runCapPatch = async (body: Record<string, unknown>) => {
     if (!rosterId) {
@@ -353,26 +363,41 @@ export function IDPPlayerModal({
             <h4 className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--cap-contract)]/90">
               Contract
             </h4>
-            <div className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-sm text-white/85">
-              <p>
-                <span className="text-white/45">Salary:</span>{' '}
-                <span className="font-semibold text-white">${salaryM.toFixed(1)}M</span> / year
+            {contract && salaryM != null && yearsRem != null ? (
+              <div className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-sm text-white/85">
+                <p>
+                  <span className="text-white/45">Salary:</span>{' '}
+                  <span className="font-semibold text-white">${salaryM.toFixed(1)}M</span> / year
+                </p>
+                <p>
+                  <span className="text-white/45">Years remaining:</span> {yearsRem}
+                </p>
+                <p>
+                  <span className="text-white/45">Contract expires:</span> {expiresYear}
+                </p>
+                {totalRemainingValue != null ? (
+                  <p>
+                    <span className="text-white/45">Total remaining value:</span>{' '}
+                    <span className="font-semibold">${totalRemainingValue.toFixed(1)}M</span>
+                  </p>
+                ) : null}
+                {cutPenalty != null ? (
+                  <p>
+                    <span className="text-white/45">Cut penalty (dead money):</span>{' '}
+                    <span className="text-[color:var(--cap-dead)]">${cutPenalty.toFixed(1)}M</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p
+                className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-xs leading-relaxed text-white/40"
+                data-testid="idp-contract-absent"
+              >
+                No contract on file for this player. Salary cap is not set up for this league —
+                nothing has written a salary, contract or dead-money row — so there is no figure to
+                show here.
               </p>
-              <p>
-                <span className="text-white/45">Years remaining:</span> {yearsRem}
-              </p>
-              <p>
-                <span className="text-white/45">Contract expires:</span> {expiresYear}
-              </p>
-              <p>
-                <span className="text-white/45">Total remaining value:</span>{' '}
-                <span className="font-semibold">${totalRemainingValue.toFixed(1)}M</span>
-              </p>
-              <p>
-                <span className="text-white/45">Cut penalty (dead money):</span>{' '}
-                <span className="text-[color:var(--cap-dead)]">${cutPenalty.toFixed(1)}M</span>
-              </p>
-            </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {isExpiring ? (
                 <span className="rounded-full border border-[color:var(--cap-amber)]/40 bg-[color:var(--cap-amber)]/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
@@ -522,7 +547,8 @@ export function IDPPlayerModal({
             <DialogTitle>Confirm cut</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-white/75">
-            Cutting {name} will create ~${cutPenalty.toFixed(1)}M in dead money. Are you sure?
+            Cutting {name} will create ~$
+            {cutPenalty != null ? cutPenalty.toFixed(1) : '—'}M in dead money. Are you sure?
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <button
@@ -573,7 +599,9 @@ export function IDPPlayerModal({
             ))}
           </div>
           <p className="text-[11px] text-white/50">
-            New salary preview (approx): ${newSalaryPreview.toFixed(2)}M / yr · Cap impact follows league rules.
+            New salary preview (approx): $
+            {newSalaryPreview != null ? newSalaryPreview.toFixed(2) : '—'}M / yr · Cap impact follows
+            league rules.
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <button

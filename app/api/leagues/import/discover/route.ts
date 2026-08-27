@@ -31,6 +31,36 @@ function normalizeSport(raw: unknown): string {
   return trimmed || 'nfl'
 }
 
+/**
+ * What Yahoo's refusal actually means, in the user's terms.
+ *
+ * ⚠ THE STATUS WAS BEING THROWN AWAY, AND IT IS THE WHOLE DIAGNOSIS. Every
+ * rejection collapsed into one sentence — "Yahoo rejected the league list
+ * request. Reconnect Yahoo in League Sync and try again." — so a token that had
+ * expired and an approval that never included fantasy read access produced
+ * identical output, on a screen with no way to tell them apart and a log line
+ * that recorded neither.
+ *
+ * 403 is the one worth naming outright: it is what Yahoo returns when the app
+ * holds a valid token for an account that never granted Fantasy Sports read, and
+ * the fix is a specific checkbox at approval time, not a generic "try again".
+ *
+ * The status only — never Yahoo's response body, which can echo request context.
+ */
+function yahooRejectionMessage(status: number): string {
+  if (status === 401) {
+    return 'Yahoo would not accept the saved authorisation for your account. Reconnect Yahoo and try again.'
+  }
+  if (status === 403) {
+    return (
+      'Yahoo refused to share your leagues with AllFantasy. That is the Fantasy Sports ' +
+      'read permission missing from the approval — reconnect Yahoo and make sure you ' +
+      'approve fantasy access when it asks.'
+    )
+  }
+  return `Yahoo rejected the league list request (HTTP ${status}). Reconnect Yahoo and try again.`
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireVerifiedUser()
   if (!auth.ok) {
@@ -79,6 +109,24 @@ export async function POST(req: NextRequest) {
           (league) => !league.sport || league.sport.toLowerCase() === sport,
         )
         .sort((a, b) => (b.season ?? 0) - (a.season ?? 0))
+      /*
+       * ⚠ AN EMPTY YAHOO LIST WAS INVISIBLE FROM BOTH SIDES. The screen showed
+       * nothing and the server recorded nothing, so "Yahoo returned no leagues"
+       * and "the sport filter dropped every league it returned" were the same
+       * observation — and they have completely different fixes. Two counts
+       * separate them.
+       *
+       * Counts and a sport, nothing else: league keys are the user's data and a
+       * token must never reach a log line. Safe to log the count on every call
+       * because it is a fixed-size fact, not a payload.
+       */
+      console.log(
+        '[Yahoo discovery] user=%s yahoo_returned=%d after_%s_filter=%d',
+        auth.userId.slice(0, 8),
+        leagues.length,
+        sport,
+        filtered.length,
+      )
       return NextResponse.json({
         provider,
         sport,
@@ -101,11 +149,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 400 })
       }
       if (error instanceof YahooApiResponseError) {
+        /*
+         * Logged as an error with the status attached, because this is the line
+         * that was missing while a manager pressed Connect Yahoo eight times: the
+         * 502s were in the request log with no message beside them, so the
+         * failure was real, repeated, and unattributable.
+         */
+        console.error(
+          '[Yahoo discovery] user=%s REJECTED yahoo_status=%d',
+          auth.userId.slice(0, 8),
+          error.status,
+        )
         return NextResponse.json(
-          {
-            error:
-              'Yahoo rejected the league list request. Reconnect Yahoo in League Sync and try again.',
-          },
+          { error: yahooRejectionMessage(error.status), yahooStatus: error.status },
           { status: 502 },
         )
       }
