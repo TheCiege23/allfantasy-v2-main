@@ -539,6 +539,7 @@ html[data-mode='af'] .af-core {
   /* Slot 0 is the comms launcher. Each slot above it clears the last. */
   --af-fab-slot-1: calc(var(--af-fab-inset) + var(--af-fab-size) + var(--af-fab-gap));
   --af-fab-slot-2: calc(var(--af-fab-slot-1) + 60px + var(--af-fab-gap));
+}
 /*
  * 38a — section titles that are headings, not styled paragraphs.
  *
