@@ -15,8 +15,10 @@ import { prisma } from '@/lib/prisma'
 import {
   getFantraxLeagueInfo,
   getFantraxPlayerIds,
+  getFantraxStandings,
   getFantraxTeamRosters,
   resolveRosters,
+  type FantraxStandingRow,
   type ResolvedRoster,
 } from './fantraxApi'
 
@@ -48,8 +50,9 @@ export async function importFantraxLeague(args: {
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message }
 
-  const [rosters, cfb, nfl] = await Promise.all([
+  const [rosters, standings, cfb, nfl] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
+    getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
   ])
@@ -150,7 +153,7 @@ export async function importFantraxLeague(args: {
     roster: resolved.flatMap((r) =>
       r.players.map((pl) => ({ ...pl, teamName: r.teamName })),
     ) as unknown as object,
-    standings: summarise(resolved) as unknown as object,
+    standings: summarise(resolved, standings.ok ? standings.data : null) as unknown as object,
   }
 
   const row = await prisma.fantraxLeague.upsert({
@@ -177,12 +180,40 @@ export async function importFantraxLeague(args: {
   }
 }
 
-function summarise(resolved: ResolvedRoster[]) {
-  return resolved.map((r) => ({
-    team: r.teamName,
-    rosterCount: r.total,
-    namedCount: r.resolved,
-  }))
+/**
+ * The standings row per team, as the snapshot column stores it.
+ *
+ * ⚠ RANK USED TO BE ARRAY POSITION. This function returned only roster counts,
+ * so the reader numbered teams 1..N in whatever order `getTeamRosters` happened
+ * to return them and reported 0-0 records — a table that looks authoritative,
+ * disagrees with the league, and is indistinguishable from a correct preseason
+ * one until week one. Fantrax publishes the real thing on `getStandings`.
+ *
+ * ⚠ AND WHEN STANDINGS COULD NOT BE READ, RANK IS NULL RATHER THAN A GUESS. A
+ * missing table should read as missing; inventing an order is what this is
+ * fixing.
+ */
+function summarise(resolved: ResolvedRoster[], standings: FantraxStandingRow[] | null) {
+  const byName = new Map(
+    (standings ?? []).map((row) => [row.teamName.trim().toLowerCase(), row]),
+  )
+  return resolved.map((r) => {
+    const row = byName.get(r.teamName.trim().toLowerCase()) ?? null
+    return {
+      team: r.teamName,
+      rosterCount: r.total,
+      namedCount: r.resolved,
+      rank: row?.rank ?? null,
+      wins: row?.wins ?? null,
+      losses: row?.losses ?? null,
+      ties: row?.ties ?? null,
+      pointsFor: row?.pointsFor ?? null,
+      /* Fantrax reports no points-against, and a zero would read as a real one. */
+      pointsAgainst: null,
+      /* The durable id, so a team rename does not create a new team. */
+      fantraxTeamId: row?.teamId ?? null,
+    }
+  })
 }
 
 /**

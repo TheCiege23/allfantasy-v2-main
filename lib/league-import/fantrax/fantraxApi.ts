@@ -328,6 +328,72 @@ export function resolveRosters(
   })
 }
 
+export type FantraxStandingRow = {
+  teamId: string
+  teamName: string
+  rank: number | null
+  wins: number
+  losses: number
+  ties: number
+  pointsFor: number
+  winPercentage: number | null
+  gamesBack: number | null
+}
+
+/**
+ * Real standings, straight from Fantrax.
+ *
+ * ⚠ WITHOUT THIS THE RANK IS ARRAY POSITION. `getTeamRosters` returns teams in
+ * whatever order it likes, and numbering that order 1..N produces a standings
+ * table that looks authoritative and disagrees with the league — measured on a
+ * real league, Fantrax ranked Connor0488 first and the roster order ranked
+ * Scorescotty first. Records were hardcoded to 0-0 on top of that, which is
+ * indistinguishable from a correct preseason table right up until week one.
+ *
+ * ⚠ THE RECORD ARRIVES AS ONE STRING, `"W-L-T"`, in a field called `points`.
+ * Reading it as a number gives NaN; reading `winPercentage` instead loses the
+ * count. It is split here so nothing downstream has to know that.
+ */
+export async function getFantraxStandings(
+  leagueId: string,
+): Promise<FantraxResult<FantraxStandingRow[]>> {
+  const res = await fxeaGet<unknown>(`/getStandings?leagueId=${encodeURIComponent(leagueId)}`)
+  if (!res.ok) return res
+
+  /* Documented as a bare array; tolerate a wrapper rather than reading nothing. */
+  const body = res.data as { standings?: unknown[] } | unknown[]
+  const rows = Array.isArray(body) ? body : Array.isArray(body?.standings) ? body.standings : null
+  if (!rows || rows.length === 0) {
+    return {
+      ok: false,
+      failure: { kind: 'api_error', message: 'Fantrax returned no standings for this league' },
+    }
+  }
+
+  return {
+    ok: true,
+    data: rows.map((raw) => {
+      const row = (raw ?? {}) as Record<string, unknown>
+      const [w, l, t] = String(row.points ?? '').split('-')
+      const num = (v: unknown) => {
+        const n = Number(v)
+        return Number.isFinite(n) ? n : 0
+      }
+      return {
+        teamId: String(row.teamId ?? ''),
+        teamName: String(row.teamName ?? ''),
+        rank: Number.isFinite(Number(row.rank)) ? Number(row.rank) : null,
+        wins: num(w),
+        losses: num(l),
+        ties: num(t),
+        pointsFor: num(row.totalPointsFor),
+        winPercentage: Number.isFinite(Number(row.winPercentage)) ? Number(row.winPercentage) : null,
+        gamesBack: Number.isFinite(Number(row.gamesBack)) ? Number(row.gamesBack) : null,
+      }
+    }),
+  }
+}
+
 /**
  * Pull a Fantrax league id out of whatever the user pasted.
  *

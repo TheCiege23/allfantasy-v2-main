@@ -4,6 +4,7 @@ import {
   getFantraxLeagues,
   getFantraxLeagueInfo,
   getFantraxPlayerIds,
+  getFantraxStandings,
   getFantraxTeamRosters,
   resolveRosters,
 } from '@/lib/league-import/fantrax/fantraxApi'
@@ -225,5 +226,69 @@ describe('league discovery from a Secret ID', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) return
     expect(res.data.map((l) => l.leagueId)).toEqual(['good'])
+  })
+})
+
+
+/**
+ * ⚠ THE RANK WAS ARRAY POSITION UNTIL THIS ENDPOINT WAS WIRED UP. `getStandings`
+ * was in the documented endpoint list and never called, so teams were numbered
+ * 1..N in whatever order `getTeamRosters` returned them and every record was
+ * hardcoded 0-0. Measured on a real league: Fantrax ranks Connor0488 first and
+ * roster order ranked Scorescotty first — the table looked authoritative and
+ * disagreed with the league it described.
+ *
+ * The bodies below are the live shape, captured 2026-08-27.
+ */
+const STANDINGS_BODY = JSON.stringify([
+  { teamName: 'Connor0488', totalPointsFor: 0.0, teamId: 'i28mu4homm8jp61f', gamesBack: 0.0, rank: 1, points: '0-0-0', winPercentage: 0.0 },
+  { teamName: 'loganhall', totalPointsFor: 812.5, teamId: '08i745zzmm8jp61f', gamesBack: 1.0, rank: 2, points: '9-4-1', winPercentage: 0.679 },
+])
+
+describe('standings', () => {
+  it('reads the real rank rather than the order teams arrived in', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, STANDINGS_BODY)))
+    const res = await getFantraxStandings('abc')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.map((r) => [r.teamName, r.rank])).toEqual([
+      ['Connor0488', 1],
+      ['loganhall', 2],
+    ])
+  })
+
+  /**
+   * ⚠ THE RECORD ARRIVES AS ONE STRING IN A FIELD CALLED `points`. Reading it as
+   * a number gives NaN; reading `winPercentage` instead loses the count.
+   */
+  it('splits the "W-L-T" string out of the field called points', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, STANDINGS_BODY)))
+    const res = await getFantraxStandings('abc')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data[1]).toMatchObject({ wins: 9, losses: 4, ties: 1, pointsFor: 812.5 })
+  })
+
+  /** The durable id, so a team rename does not create a new team. */
+  it("keeps Fantrax's own team id", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, STANDINGS_BODY)))
+    const res = await getFantraxStandings('abc')
+    expect(res.ok && res.data[0].teamId).toBe('i28mu4homm8jp61f')
+  })
+
+  it('reports an empty table as a failure rather than as a league with no teams', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, '[]')))
+    const res = await getFantraxStandings('abc')
+    expect(res.ok).toBe(false)
+  })
+
+  /** Same 200-carrying-an-error trap as every other endpoint. */
+  it('treats a 200 error body as a failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, NOT_FOUND_BODY)))
+    const res = await getFantraxStandings('nope')
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.failure.kind).toBe('not_found')
   })
 })

@@ -436,7 +436,14 @@ export async function fetchFantraxLeagueForImport(
       wins: asNumber(standing?.wins, 0) ?? 0,
       losses: asNumber(standing?.losses, 0) ?? 0,
       ties: asNumber(standing?.ties, 0) ?? 0,
-      rank: asNumber(standing?.rank, index + 1),
+      /*
+       * ⚠ NO INVENTED RANK. This was `index + 1`, so a league with no standings
+       * got a table numbered by whatever order the rosters arrived in — which
+       * looks authoritative and disagrees with the league. Real standings come
+       * from Fantrax's getStandings; when they are missing this stays null and
+       * the adapter reports the coverage as partial rather than full.
+       */
+      rank: asNumber(standing?.rank, null),
       pointsFor: asNumber(standing?.pointsFor, 0) ?? 0,
       pointsAgainst: asNumber(standing?.pointsAgainst, null),
       faabRemaining: null,
