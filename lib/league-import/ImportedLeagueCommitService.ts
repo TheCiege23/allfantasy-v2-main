@@ -507,7 +507,27 @@ export async function persistImportedLeagueFromNormalization(
         where: { leagueId: league.id, platformUserId: selfManagerId, claimedByUserId: null },
         data: { claimedByUserId: userId },
       })
-      if (claimed.count === 0) {
+      /*
+       * ⚠ ZERO IS NOT FAILURE. A second claim path (`importerSourceManagerId`, f56a8407e)
+       * runs INSIDE the bootstrap above and takes the team first, so by the time this
+       * update runs there is legitimately nothing left unclaimed. Filtering on
+       * `claimedByUserId: null` counted that success as zero and logged an alarming
+       * warning about a claim that had already worked — confirmed on production, where
+       * the row read `fantrax-team:ciege82=fantrax-user:Ciege82[claimed]` while this
+       * warned the league would never appear.
+       *
+       * Ask the only question that matters: is the marker's team held by THIS user?
+       */
+      const alreadyMine =
+        claimed.count === 0
+          ? await (prisma as any).leagueTeam
+              .count({
+                where: { leagueId: league.id, platformUserId: selfManagerId, claimedByUserId: userId },
+              })
+              .catch(() => 0)
+          : 0
+
+      if (claimed.count === 0 && alreadyMine === 0) {
         /*
          * ⚠ THE COUNT ALONE COULD NOT SAY WHY, and there are two very different causes:
          * the rows carry a different `platformUserId` than the marker, or the team is
@@ -531,8 +551,18 @@ export async function persistImportedLeagueFromNormalization(
               `${String(t.externalId ?? '?')}=${String(t.platformUserId ?? 'null')}${t.claimedByUserId ? '[claimed]' : ''}`,
           )
           .join(' ')
+        /* Distinguishes the two remaining causes by name: the marker matched a row held
+           by SOMEONE ELSE (a real conflict a user must resolve), or matched nothing at
+           all (an id-space mismatch, a bug on our side). */
+        const heldByOther = (actual as Array<Record<string, unknown>>).some(
+          (t) => t.platformUserId === selfManagerId && t.claimedByUserId && t.claimedByUserId !== userId,
+        )
         console.warn(
-          `[ImportedLeagueCommitService] ${provider}: self manager "${selfManagerId}" matched no unclaimed LeagueTeam on ${league.id} — the league will not appear on Portfolio. Actual rows: ${shape || '(none)'}`,
+          `[ImportedLeagueCommitService] ${provider}: self manager "${selfManagerId}" on ${league.id} — ${
+            heldByOther
+              ? 'that team is CLAIMED BY A DIFFERENT ACCOUNT, so it will not appear on Portfolio for this account'
+              : 'matched no LeagueTeam at all (id-space mismatch)'
+          }. Actual rows: ${shape || '(none)'}`,
         )
       }
     }
