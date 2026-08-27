@@ -193,20 +193,24 @@ concept, gate it on a league that actually has an `IDPCapConfig` and show an
 empty state otherwise. Do not ship a page whose default sort cannot be computed.
 
 ### Snap share tracker
-**Can be real** as a share with its denominator, per the computation in `playerFinder.ts`.
+**`SnapShareTracker` has been DELETED, so do not look for it.** Build the panel
+from `DefenseHubPayload.snaps`, which already carries the honest shape.
 
-**Cannot be real in its current shape.** `SnapShareTracker` takes
-`{ last: number; thisWeek: number; trend }` — a week-over-week delta. Today is
-**2026-08-25**; the season opens **September 3**. There is no "this week" to
-compare against, and there will not be until Week 2. Either:
+The component could not be fed without inventing its inputs. It took
+`{ last: number; thisWeek: number; trend }` — a week-over-week delta with both
+numbers required and no absent state. Two things block that:
 
-- render the season-to-date share with its game count now, and add the delta
-  once two weeks of the current season exist; or
-- have the component accept a `trend: null` state and render "—, first week"
-  rather than computing a delta against a previous season.
+- **The delta.** A trend needs two points from the SAME season. `DefenseHubSnap.trend`
+  is therefore permanently `null` until a second week of the current season
+  exists; comparing an opening week against last year's finale would report a
+  change across an offseason of roster and scheme turnover as though it were form.
+- **The denominator.** A share needs the team's defensive snap total for the same
+  game, and no feed we ingest carries one. `DefenseHubSnap.share` is nullable and
+  `basis` says whether what we do have is offensive or defensive snaps.
 
-The existing subtitle — "Snap data may have a 24–48h delay for some games" — is
-honest and worth keeping.
+So render `share` with its `games` count and show `reason` where `share` is null.
+The old subtitle — "Snap data may have a 24–48h delay for some games" — is honest
+and worth keeping.
 
 ### Defender role cards
 **Resolved — and `DefenderRoleCard` has been DELETED, so do not look for it.**
@@ -227,14 +231,21 @@ cannot be told from a zero. It is rendered by the Defense Hub and by the player
 modal; build on it rather than on a new label.
 
 ### Matchup difficulty board
-**Downgrade it to a tendencies board.** The opponent is real (`SportsGame` — but
-read `docs`/the schema first: there are four rows per fixture, and display names
-and abbreviations both appear). The opponent's offensive tendencies are real,
-from the JSON above.
+**`MatchupDifficultyBoard` has been DELETED, so do not look for it. Build a
+tendencies board instead.** The opponent is real (`SportsGame` — but read
+`docs`/the schema first: there are four rows per fixture, and display names and
+abbreviations both appear). The opponent's offensive tendencies are real, from
+the JSON above, and reach you as `DefenseHubPayload.tendencies`.
 
-The easy/avg/tough *grade* is not supported: those features did not improve
-projection accuracy, so a grade would assert predictive power we measured and
-did not find. Show the tendencies and let the manager grade it.
+The component required `grade: 'easy' | 'avg' | 'tough'` on every row, with no
+way to decline — so any caller had to invent one. That grade is not supported:
+those features did not improve projection accuracy, so printing one would assert
+predictive power we measured and did not find. Measured over 5,291 out-of-sample
+player-weeks, grading tendencies did WORSE than leaving them out, which is why
+neither the hub nor the player card emits a matchup grade anywhere.
+
+Show the tendencies as facts about how a defence has been played, and let the
+manager grade it.
 
 ---
 
