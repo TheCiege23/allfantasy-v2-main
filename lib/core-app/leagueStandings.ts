@@ -206,6 +206,25 @@ async function loadSeasonHistory(leagueId: string, userId: string): Promise<Seas
 
   if (facts.length === 0) return []
 
+  /*
+   * ⚠ AN UNPLAYED SEASON IS NOT A PAST SEASON. The ESPN backfill writes a
+   * SeasonStandingFact for every team whether or not the season finished — its
+   * `isFinished` gate gates `persistStandings`, and the fact upsert sits OUTSIDE it.
+   * So a league that has not kicked off yields a full set of 0-0 rows, and this
+   * screen printed the CURRENT season under "Past seasons" with every team ranked
+   * first. Observed on a live ESPN league.
+   *
+   * Filtered on the data rather than on a flag, because the flag is on the writer and
+   * the rows are already in the database: a season where no team has a win, a loss, a
+   * tie or a point has not been played, whatever the provider said about it.
+   */
+  const playedSeasons = new Set<number>()
+  for (const f of facts) {
+    if (f.wins > 0 || f.losses > 0 || f.ties > 0 || f.pointsFor > 0) playedSeasons.add(f.season)
+  }
+  const played = facts.filter((f) => playedSeasons.has(f.season))
+  if (played.length === 0) return []
+
   const nameByKey = new Map<string, string>()
   for (const t of teams) {
     const label = t.teamName?.trim() || t.ownerName?.trim()
@@ -213,7 +232,7 @@ async function loadSeasonHistory(leagueId: string, userId: string): Promise<Seas
   }
   const yours = new Set(mine.map((t) => t.externalId).filter(Boolean) as string[])
 
-  return facts.map((f) => ({
+  return played.map((f) => ({
     season: f.season,
     teamKey: f.teamId,
     name: nameByKey.get(f.teamId) ?? null,

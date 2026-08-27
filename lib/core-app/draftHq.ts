@@ -135,18 +135,46 @@ async function loadImportedDraftPicks(
      pick-in-round, and labelling from it prints every round identically. */
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
 
-  /* DraftFact stores only a provider player id. Names come from SportsPlayer, which is
-     where this codebase resolves Sleeper ids. Coverage is not total, so an unmatched id
-     is SAID to be unmatched rather than hidden — dropping the pick would misreport the
-     draft. */
-  const players = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: rows.map((r) => r.playerId) } },
-    select: { sleeperId: true, name: true, position: true, team: true },
-  })
+  /*
+   * ⚠ THE PLAYER ID IS THE PROVIDER'S, AND ONLY SLEEPER'S RESOLVES VIA SportsPlayer.
+   *
+   * This first shipped joining `SportsPlayer.sleeperId`, which can never match an ESPN
+   * league — its draft facts carry ESPN player ids, and `SportsPlayer` has no ESPN
+   * source at all. Every pick rendered as "Unmatched player 2577417" on a live ESPN
+   * league, which reads as broken rather than as unmapped.
+   *
+   * `PlayerProviderIdentity` is the table built for exactly this: provider +
+   * providerPlayerId -> displayName. It is tried first and covers every provider;
+   * SportsPlayer stays as the Sleeper-shaped fallback, and is the only one of the two
+   * that carries position and team.
+   */
+  const playerIds = rows.map((r) => r.playerId)
+  const [identities, players] = await Promise.all([
+    prisma.playerProviderIdentity
+      .findMany({
+        where: { providerPlayerId: { in: playerIds } },
+        select: { providerPlayerId: true, displayName: true },
+      })
+      .catch(() => []),
+    prisma.sportsPlayer
+      .findMany({
+        where: { sleeperId: { in: playerIds } },
+        select: { sleeperId: true, name: true, position: true, team: true },
+      })
+      .catch(() => []),
+  ])
+
   const byPlayerId = new Map<string, { name: string; position: string | null; team: string | null }>()
   for (const p of players) {
     if (p.sleeperId && !byPlayerId.has(p.sleeperId)) {
       byPlayerId.set(p.sleeperId, { name: p.name, position: p.position, team: p.team })
+    }
+  }
+  /* Identity rows carry a name but no position or team — filled only where SportsPlayer
+     did not already answer, so a Sleeper pick keeps its richer row. */
+  for (const i of identities) {
+    if (i.displayName && !byPlayerId.has(i.providerPlayerId)) {
+      byPlayerId.set(i.providerPlayerId, { name: i.displayName, position: null, team: null })
     }
   }
 
@@ -154,15 +182,32 @@ async function loadImportedDraftPicks(
     available: true,
     data: rows.map((r) => {
       const hit = byPlayerId.get(r.playerId)
-      const inRound = teamCount > 0 ? r.pickNumber - (r.round - 1) * teamCount : 0
+      /*
+       * ⚠ `pickNumber` DOES NOT MEAN THE SAME THING ACROSS PROVIDERS. Sleeper writes
+       * `pick_no`, an OVERALL pick; ESPN writes the pick WITHIN the round. Assuming
+       * overall printed six consecutive picks as "Pick 4" on a live ESPN league,
+       * because the derived pick-in-round went negative and fell to the raw value.
+       *
+       * Decided from the numbers rather than from the provider name: if subtracting the
+       * completed rounds lands inside the round, it was an overall pick; if the value
+       * already sits inside a round, it was a pick-in-round. Neither fits, and the
+       * label says only what is known.
+       */
+      const derived = teamCount > 0 ? r.pickNumber - (r.round - 1) * teamCount : 0
+      const inRound =
+        teamCount > 0 && derived >= 1 && derived <= teamCount
+          ? derived
+          : teamCount > 0 && r.pickNumber >= 1 && r.pickNumber <= teamCount
+            ? r.pickNumber
+            : 0
       return {
-        overall: r.pickNumber,
+        overall: inRound > 0 && teamCount > 0 ? (r.round - 1) * teamCount + inRound : r.pickNumber,
         round: r.round,
         label:
           inRound > 0
             ? `${r.round}.${String(inRound).padStart(2, '0')}`
-            : `Pick ${r.pickNumber}`,
-        playerName: hit?.name ?? `Unmatched player ${r.playerId}`,
+            : `Round ${r.round}`,
+        playerName: hit?.name ?? `Player ${r.playerId} (not yet mapped)`,
         position: hit?.position ?? '—',
         team: hit?.team ?? null,
       }
