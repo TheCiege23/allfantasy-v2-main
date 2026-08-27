@@ -802,7 +802,14 @@ async function buildCollegePlayersData(
     }).catch(() => []),
     prisma.devyPlayer.findMany({
       where: { sport: { in: sports } },
-      orderBy: [{ c2cPointsSeason: 'desc' }, { devyValue: 'desc' }],
+      /*
+       * BOTH keys here were dead. `c2cPointsSeason` has 0 populated rows in
+       * production, so the sort fell straight through to `devyValue`, which is
+       * 0 for 72% of the pool — leaving this a effectively arbitrary 20 players.
+       * The two sibling queries above already fall back to draftProjectionScore;
+       * this one now matches them.
+       */
+      orderBy: [{ c2cPointsSeason: 'desc' }, { draftProjectionScore: 'desc' }],
       take: 20,
     }).catch(() => []),
   ])
