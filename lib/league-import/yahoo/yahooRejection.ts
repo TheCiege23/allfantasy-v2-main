@@ -27,9 +27,13 @@ export function describeYahooRejection(status: number): string {
   }
   if (status === 403) {
     return (
-      'Yahoo refused this request: the AllFantasy app is not authorised for Fantasy Sports. ' +
-      'That is a permission on the app itself, in Yahoo’s developer console — ' +
-      'reconnecting your account will not change it, so there is nothing to retry here yet.'
+      'Yahoo will not share fantasy data with this connection. Two things cause that, and ' +
+      'the second is the likelier one if you have already checked the first: the app needs ' +
+      'Fantasy Sports read permission in Yahoo’s developer console, AND your approval has to ' +
+      'have been given AFTER that permission was added. Yahoo records what an app may see at ' +
+      'the moment you approve it and keeps that until you remove the app under your Yahoo ' +
+      'account settings — reconnecting on its own reuses the old approval. Remove AllFantasy ' +
+      'there, then connect again.'
     )
   }
   if (status === 404) {

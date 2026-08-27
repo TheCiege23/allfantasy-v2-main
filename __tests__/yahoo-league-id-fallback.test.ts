@@ -90,18 +90,28 @@ describe('⚠ the redirect loop', () => {
 })
 
 describe('⚠ Yahoo status is the diagnosis, and it was discarded', () => {
-  it('names a 403 as an app permission, and says retrying will not help', () => {
+  it('names BOTH causes of a 403, in the order they need checking', () => {
     /*
-     * Measured against the real account on 2026-08-27: a valid, freshly issued
-     * token, and Yahoo still answered "This application is not authorized to
-     * perform this action" to BOTH the account-wide list and a single named
-     * league. Yahoo is refusing the app, so "reconnect and try again" sends
-     * someone round a loop they have already been round.
+     * ⚠ THE FIRST VERSION OF THIS MESSAGE WAS WRONG, AND WRONG IN THE EXPENSIVE
+     * DIRECTION: it said reconnecting would not help, so it steered people away
+     * from the fix.
+     *
+     * Yahoo's OAuth2 takes no `scope` parameter — the authorize request accepts
+     * client_id, redirect_uri, response_type, state and language, and nothing
+     * else. Permissions come entirely from the app registration AS IT STOOD WHEN
+     * THE USER APPROVED, and that approval survives until it is removed in Yahoo
+     * account settings. So an app can hold Fantasy Sports read and still be
+     * refused, forever, on an approval granted before the permission existed —
+     * which is exactly what was measured on 2026-08-27: a token issued at
+     * 22:36:31, refused two seconds later.
      */
     const m = describeYahooRejection(403)
-    expect(m).toContain('not authorised for Fantasy Sports')
+    expect(m).toContain('Fantasy Sports read permission')
     expect(m).toContain('developer console')
-    expect(m).toMatch(/will not change it|nothing to retry/)
+    /* The stale-approval half is the one that was missing. */
+    expect(m).toContain('at the moment you approve')
+    expect(m).toContain('remove the app under your Yahoo account settings')
+    expect(m).toContain('reuses the old approval')
   })
 
   it('keeps 401 as the one that IS worth reconnecting', () => {
