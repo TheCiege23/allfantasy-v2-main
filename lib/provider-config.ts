@@ -160,7 +160,10 @@ export function getXaiConfigFromEnv(): XaiProviderConfig | null {
   const apiKey = resolveFirstEnv(XAI_KEY_KEYS)
   if (!apiKey.value) return null
   const baseUrl = normalizeXaiBaseUrl(resolveFirstEnv(XAI_BASE_URL_KEYS).value)
-  const model = resolveFirstEnv(XAI_MODEL_KEYS).value || 'grok-2-latest'
+  // `grok-2-latest` was the fallback here until 2026-08-27; that family is
+  // retired and the id 400s. Keep this in step with XAI_DEFAULTS in
+  // lib/ai/providerProfiles.ts.
+  const model = resolveFirstEnv(XAI_MODEL_KEYS).value || 'grok-4.5'
   return {
     apiKey: apiKey.value,
     baseUrl,

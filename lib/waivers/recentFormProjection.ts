@@ -64,38 +64,44 @@ export async function projectFromRecentForm(args: {
     })
     .catch(() => [] as Array<{ playerId: string; weekOrRound: number; normalizedStatMap: unknown }>)
 
-  const byPlayer = new Map<string, unknown[]>()
+  /*
+   * ⚠ THE WINDOW COUNTS SCOREABLE GAMES, NOT ROWS, AND CAPPING ROWS FIRST SILENTLY LOST PLAYERS.
+   * Most players carry stat rows this league prices at nothing — a snaps-only line, a
+   * special-teams appearance. Taking the six most recent ROWS and scoring afterwards let those
+   * consume the window, so a player with plenty of real games could arrive with fewer than the
+   * minimum and be dropped. Measured on a live league: 199 startable free agents have two or more
+   * scoreable games and this returned 144 of them.
+   *
+   * A game the league prices at nothing is skipped rather than counted as a zero — that is the
+   * league declining to score a line, not the player producing nothing.
+   */
+  const minGames = args.minGames ?? MIN_FORM_GAMES
+  const scoredByPlayer = new Map<string, number[]>()
+
   for (const r of rows) {
-    const arr = byPlayer.get(r.playerId) ?? []
-    if (arr.length >= WINDOW) continue
-    arr.push(r.normalizedStatMap)
-    byPlayer.set(r.playerId, arr)
+    const taken = scoredByPlayer.get(r.playerId) ?? []
+    if (taken.length >= WINDOW) continue
+    const scored = computeLeagueProjectedPoints(
+      r.normalizedStatMap as Record<string, unknown>,
+      args.scoring,
+    )
+    if (!scored) continue
+    taken.push(scored.points)
+    scoredByPlayer.set(r.playerId, taken)
   }
 
-  const minGames = args.minGames ?? MIN_FORM_GAMES
-
-  for (const [playerId, lines] of byPlayer) {
+  for (const [playerId, points] of scoredByPlayer) {
+    if (points.length < minGames) continue
     let weighted = 0
     let weight = 0
-    let games = 0
-
-    lines.forEach((line, index) => {
-      const scored = computeLeagueProjectedPoints(line as Record<string, unknown>, args.scoring)
-      /*
-       * A game this league prices at nothing is SKIPPED, not counted as a zero. A defender's line
-       * in an offence-only league scores nothing because the league does not price it, which says
-       * nothing about the player — averaging that in as a zero would drag every estimate down.
-       */
-      if (!scored) return
-      // index 0 is the most recent game, so weight decays as index grows.
+    points.forEach((value, index) => {
+      // index 0 is the most recent scoreable game, so weight decays as index grows.
       const w = Math.pow(0.5, index / HALF_LIFE)
-      weighted += scored.points * w
+      weighted += value * w
       weight += w
-      games += 1
     })
-
-    if (games < minGames || weight <= 0) continue
-    out.set(playerId, { points: Math.round((weighted / weight) * 100) / 100, games })
+    if (weight <= 0) continue
+    out.set(playerId, { points: Math.round((weighted / weight) * 100) / 100, games: points.length })
   }
 
   return out

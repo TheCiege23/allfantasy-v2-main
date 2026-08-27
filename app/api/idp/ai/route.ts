@@ -124,7 +124,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    switch (action) {
+    // Widened back to `Action` on purpose. The `!== 'ai_prefs'` guard above
+    // narrows `action` to that single member, which makes every other case
+    // below provably unreachable — 18 TS2678 errors for handlers that are
+    // deliberately parked, not broken. Deleting them would discard the
+    // implementations the comment above commits to re-enabling one at a time.
+    // The guard still returns 503 first, so runtime behaviour is unchanged.
+    switch (action as Action) {
       case 'start_sit': {
         const managerId = typeof body.managerId === 'string' ? body.managerId : userId
         if (managerId !== userId) {

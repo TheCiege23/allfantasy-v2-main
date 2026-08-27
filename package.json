@@ -35,6 +35,8 @@
     "start": "next start",
     "start:railway": "node scripts/railway-next-start.cjs",
     "lint": "next lint",
+    "ai:smoke": "node scripts/ai-smoke.mjs",
+    "ai:models": "node scripts/ai-smoke.mjs --models",
     "postinstall": "node scripts/prisma-generate-postinstall.cjs && node scripts/patch-manifest-race.cjs",
     "prisma:generate": "node scripts/prisma-generate-postinstall.cjs",
     "typecheck": "node --max-old-space-size=8192 ./node_modules/typescript/lib/tsc.js --noEmit",
