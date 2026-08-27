@@ -39,7 +39,14 @@ import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
  * to the screen so the page says what it is not showing instead of implying it
  * has nothing to say.
  *
- * ⚠ "LIVE" vs "HISTORY" IS `hasUnifiedRecord`, NOT A NEW FLAG. The handoff's
+ * ⚠ "LIVE" vs "HISTORY" IS `isLegacyBoardItem`, AND IT HAD TO BECOME A REAL FLAG.
+ * This previously read `hasUnifiedRecord`, which two producers emit `false` for —
+ * the AF Legacy board (history) and any Sleeper league not yet linked to a unified
+ * record (frequently in season). Active leagues were being greyed out as history.
+ * The distinction the handoff wanted is real; the field it was read from was not
+ * specific enough to carry it. Original note follows.
+ *
+ * (was) "LIVE" vs "HISTORY" IS `hasUnifiedRecord`, NOT A NEW FLAG. The handoff's
  * Live / "+ history" toggle and its "543 past seasons" footer are the same split
  * the 34a rail already makes: `hasUnifiedRecord === false` marks an AF Legacy
  * board row — a career-import season snapshot, not a league you play. That is
@@ -91,7 +98,11 @@ export type MyLeaguesData = {
   notice: { title: string; body: string; href?: string | null; label?: string | null } | null
 }
 
-type RawRow = Dash34LeagueRow & { season?: number | string | null }
+type RawRow = Dash34LeagueRow & {
+  season?: number | string | null
+  /** Set by exactly one producer — the AF Legacy board. The live/history discriminator. */
+  isLegacyBoardItem?: boolean | null
+}
 
 function seasonOf(row: RawRow): string | null {
   const s = row.season
@@ -142,13 +153,25 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
   const rows = (payload?.leagues ?? []) as unknown as RawRow[]
 
   /*
-   * ⚠ `hasUnifiedRecord !== false`, NOT `=== true`. The field is optional on
-   * native rows, where `undefined` means "this is a real league" rather than
-   * "unknown". `=== true` would drop every AllFantasy-native league from the
-   * screen, which is the inverse of the bug this filter exists to fix.
+   * ⚠ THIS USED TO SPLIT ON `hasUnifiedRecord`, AND THAT FIELD IS AMBIGUOUS.
+   *
+   * Two producers in get-dashboard-league-list.ts emit `hasUnifiedRecord: false`:
+   * the AF Legacy board, which really is history, and the live Sleeper mapper,
+   * where it is `Boolean(unifiedLeagueId)` and means only "not linked to a unified
+   * record yet". An in-season league that simply has not been linked is not
+   * history, but it was landing here and rendering greyed-out at the bottom of the
+   * screen. Reported with names: Peach Bowl, KBFL, Yellow Buffalo Dynasty, World
+   * Football League — all active.
+   *
+   * `isLegacyBoardItem` is set by exactly one producer, so it cannot be ambiguous
+   * the way a derived join-presence flag is.
+   *
+   * ⚠ Still `!== true`, NOT `=== false`: the field is absent on native and
+   * tournament rows, and `=== false` would drop every one of them from the screen —
+   * the same inverse-bug the previous comment here was guarding against.
    */
-  const played = rows.filter((r) => r.hasUnifiedRecord !== false)
-  const legacy = rows.filter((r) => r.hasUnifiedRecord === false)
+  const played = rows.filter((r) => r.isLegacyBoardItem !== true)
+  const legacy = rows.filter((r) => r.isLegacyBoardItem === true)
 
   const dash = await getDash34Data(userId, played as Dash34LeagueRow[], now).catch(() => null)
 

@@ -240,6 +240,21 @@ export async function getLegacyLeagueBoardItems(legacyUserId: string): Promise<u
       navigationLeagueId: null,
       unifiedLeagueId: null,
       hasUnifiedRecord: false,
+      /*
+       * ⚠ THE ONLY THING THAT MAKES A ROW *HISTORY*, and it has to be explicit.
+       *
+       * `hasUnifiedRecord: false` is emitted by TWO producers: this one, which is the
+       * AF Legacy board and IS historical, and the live Sleeper mapper below, where it
+       * means only "not linked to a unified league record yet" — a league that is very
+       * often in season right now. My Leagues split live from history on that single
+       * field, so active leagues were rendered greyed-out under history. Reported with
+       * names: Peach Bowl, KBFL, Yellow Buffalo Dynasty, World Football League.
+       *
+       * Additive on purpose. `hasUnifiedRecord` keeps meaning exactly what it says and
+       * every other consumer of it is untouched; what changes is that "is this history"
+       * is now answered by a field that only history sets.
+       */
+      isLegacyBoardItem: true,
       isCommissioner: lg.isCommissioner,
       userRole: lg.isCommissioner ? 'commissioner' : 'imported',
       isPaid: false,
