@@ -4,23 +4,33 @@
 
 import { prisma } from '@/lib/prisma'
 import { isIdpPosition, normalizeIdpPosition } from '@/lib/idp-kicker-values'
+import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 
-/** Every player id appearing on any roster in the league (offense + defense). */
+/**
+ * Every player id appearing on any roster in the league (offense + defense).
+ *
+ * ⚠ THIS RETURNED AN EMPTY SET FOR EVERY LEAGUE IN PRODUCTION. It guarded on
+ * `Array.isArray(playerData)` and skipped anything else — but **0 of 1,094 roster rows are
+ * arrays**; they are all objects of the form `{ players: string[], starters: [...], taxi: [...] }`.
+ * So the guard skipped every row and the function reported that nobody in any league rosters
+ * anybody.
+ *
+ * The visible symptom was in the caller: `/api/idp/players` defaults to `pool=waiver`, which
+ * excludes rostered players by subtracting this set. Subtracting nothing means the waiver pool
+ * has been listing players who are already on a roster — as free agents — for every league.
+ * It looked like a working feature because a full list of names is exactly what a working
+ * waiver pool renders.
+ *
+ * Parsing now goes through `rosterPlayerIds`, which is also what the Defense Hub and My Team
+ * use, so a future change to the blob shape breaks one place instead of three.
+ */
 export async function getRosteredPlayerIdsInLeague(leagueId: string): Promise<Set<string>> {
   const rows = await prisma.roster.findMany({
     where: { leagueId },
     select: { playerData: true },
   })
   const set = new Set<string>()
-  for (const r of rows) {
-    if (!Array.isArray(r.playerData)) continue
-    for (const raw of r.playerData) {
-      if (!raw || typeof raw !== 'object') continue
-      const o = raw as Record<string, unknown>
-      const pid = String(o.playerId ?? o.id ?? o.sleeperPlayerId ?? '')
-      if (pid) set.add(pid)
-    }
-  }
+  for (const r of rows) for (const id of rosterPlayerIds(r.playerData)) set.add(id)
   return set
 }
 

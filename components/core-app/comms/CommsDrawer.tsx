@@ -3,7 +3,16 @@
 import ThreadPanel from './ThreadPanel'
 import RichMessage from './RichMessage'
 import LeagueActivityFeed from './LeagueActivityFeed'
+import { MessageTime } from './MessageTime'
+import { PresenceStrip, type PresentViewer } from './PresenceStrip'
+import { MessageReactions } from './MessageReactions'
+import { QuotedMessage } from './QuotedMessage'
+import { censorProfanity } from '@/lib/chat-core/censorProfanity'
+import { PinnedBoard } from './PinnedBoard'
+import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
+import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
+import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -575,6 +584,10 @@ function ChimmyPanel({
 
 type LeagueMessage = {
   id: string
+  /** Set when this message answers another one. */
+  parentMessageId: string | null
+  /** Needed to tell whether the viewer may close a poll they posted. */
+  authorId: string | null
   author: string
   message: string
   createdAt: string
@@ -603,14 +616,46 @@ function LeaguePanel({
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [askChimmy, setAskChimmy] = useState(false)
+  const [presence, setPresence] = useState<PresentViewer[]>([])
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null)
+  /*
+   * In-flight reaction toggles win over whatever the server last said. Without
+   * this the 4-8s poll would land mid-request and snap the chip back to its old
+   * state, then forward again a tick later.
+   */
+  const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
+  const [reactionBusy, setReactionBusy] = useState<string | null>(null)
+  const [voteBusy, setVoteBusy] = useState<string | null>(null)
+  const [replyTo, setReplyTo] = useState<LeagueMessage | null>(null)
+  const [pins, setPins] = useState<PinnedRef[]>([])
+  const [pinBusy, setPinBusy] = useState(false)
+  const [includeDraft, setIncludeDraft] = useState(false)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
-  const load = useCallback(async (leagueId: string) => {
-    setLoading(true)
+  /*
+   * Parents are looked up among the messages already loaded. The panel holds the
+   * most recent 40, so a reply to something older finds nothing here — which
+   * `QuotedMessage` states rather than rendering an empty quote.
+   */
+  const byId = useMemo(() => {
+    const map = new Map<string, LeagueMessage>()
+    for (const m of messages) map.set(m.id, m)
+    return map
+  }, [messages])
+
+  /*
+   * `quiet` exists for polling. Without it every tick would flip the loading flag
+   * and flash "Loading league chat…" over a conversation the reader is already
+   * looking at, several times a minute.
+   */
+  const load = useCallback(async (leagueId: string, quiet = false) => {
+    if (!quiet) setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40`)
+      const res = await fetch(
+        `/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40${includeDraft ? '&includeDraft=1' : ''}`,
+      )
       if (!res.ok) throw new Error(`Chat returned ${res.status}`)
       /*
        * Wire shape is /api/league/chat's toClientMessage (reached via the
@@ -619,17 +664,25 @@ function LeaguePanel({
        * wrongly pointed at (and 403'd every fantasy league).
        */
       const data = (await res.json()) as {
+        viewerUserId?: string | null
+        presence?: PresentViewer[]
         messages?: Array<{
           id: string
           text?: string | null
           createdAt: string
+          parentMessageId?: string | null
+          authorId?: string | null
           authorName?: string | null
           metadata?: Record<string, unknown> | null
         }>
       }
+      setPresence(Array.isArray(data.presence) ? data.presence : [])
+      setViewerUserId(typeof data.viewerUserId === 'string' ? data.viewerUserId : null)
       setMessages(
         (data.messages ?? []).map((m) => ({
           id: m.id,
+          parentMessageId: typeof m.parentMessageId === 'string' ? m.parentMessageId : null,
+          authorId: typeof m.authorId === 'string' && m.authorId ? m.authorId : null,
           author: m.authorName || 'Someone',
           message: m.text ?? '',
           createdAt: m.createdAt,
@@ -643,14 +696,200 @@ function LeaguePanel({
           : "Could not load this league's chat.",
       )
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
+    }
+    /* Flipping the draft-room view has to re-fetch, so it belongs in here. */
+  }, [includeDraft])
+
+  const loadPins = useCallback(async (leagueId: string) => {
+    try {
+      const res = await fetch(
+        `/api/shared/chat/threads/${encodeURIComponent(`league:${leagueId}`)}/pinned`,
+      )
+      if (!res.ok) return
+      const data = (await res.json().catch(() => ({}))) as { pinned?: unknown }
+      setPins(readPinnedRefs(data.pinned))
+    } catch {
+      /* A board that failed to load is not worth an error over a working chat. */
     }
   }, [])
 
   useEffect(() => {
     if (scopeId) void load(scopeId)
-    else setMessages([])
-  }, [scopeId, load])
+    else {
+      setMessages([])
+      setPresence([])
+    }
+    setReactionOverride({})
+    setReplyTo(null)
+    setPins([])
+    if (scopeId) void loadPins(scopeId)
+  }, [scopeId, load, loadPins])
+
+  /*
+   * Near-realtime. League chat had the same problem as the DM panel: it loaded
+   * once when you picked a league and never again, so a reply arrived only if you
+   * switched leagues and back.
+   */
+  useChatPolling({
+    refresh: () => (scopeId ? load(scopeId, true) : Promise.resolve()),
+    enabled: Boolean(scopeId),
+    active: sending,
+  })
+
+  /*
+   * Reactions. The POST and DELETE behind this have been written, access-checked
+   * and live for a long time with no caller anywhere in the app; for a fantasy
+   * league they store into `LeagueChatMessage.metadata.reactions`, which is the
+   * same metadata this panel already renders GIFs and polls from.
+   *
+   * ⚠ The endpoint gates on `canAccessLeagueDraft`, which is NOT the predicate
+   * the chat GET used to let this reader in. If those two ever disagree, a
+   * member can read the thread and get a 403 reacting to it — so a failure says
+   * so plainly and puts the chip back, rather than leaving a tap that silently
+   * did nothing.
+   */
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string, current: ViewerReaction[]) => {
+      if (!scopeId || reactionBusy) return
+
+      const next = toggleReactionLocally(current, emoji)
+      const adding = next.some((r) => r.emoji === emoji && r.mine)
+
+      setReactionOverride((prev) => ({ ...prev, [messageId]: next }))
+      setReactionBusy(messageId)
+
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/messages/${encodeURIComponent(messageId)}/reactions`,
+          {
+            method: adding ? 'POST' : 'DELETE',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ emoji }),
+          },
+        )
+        if (!res.ok) {
+          throw new Error(res.status === 403 ? 'you cannot react in this league' : `server said ${res.status}`)
+        }
+        await load(scopeId, true)
+      } catch (e) {
+        setError(
+          e instanceof Error ? `Reaction did not save — ${e.message}.` : 'Reaction did not save.',
+        )
+      } finally {
+        /* Server state wins from here, right or wrong — the override was only
+           ever meant to cover the round trip. */
+        setReactionOverride((prev) => {
+          const rest = { ...prev }
+          delete rest[messageId]
+          return rest
+        })
+        setReactionBusy(null)
+      }
+    },
+    [scopeId, reactionBusy, load],
+  )
+
+  /*
+   * Poll voting. The vote route had no league branch at all until now, so a poll
+   * posted in league chat could be rendered and never answered.
+   */
+  const votePoll = useCallback(
+    async (messageId: string, optionId: string) => {
+      if (!scopeId || voteBusy) return
+      setVoteBusy(messageId)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/messages/${encodeURIComponent(messageId)}/vote`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ optionId }),
+          },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await load(scopeId, true)
+      } catch (e) {
+        setError(e instanceof Error ? `Vote did not save — ${e.message}.` : 'Vote did not save.')
+      } finally {
+        setVoteBusy(null)
+      }
+    },
+    [scopeId, voteBusy, load],
+  )
+
+  /*
+   * The pin, unpin and pinned routes have all had a league branch the whole
+   * time and no caller anywhere. Their gate was the same wrong one the reaction
+   * route had, fixed alongside this.
+   */
+  const pinMessage = useCallback(
+    async (messageId: string) => {
+      if (!scopeId || pinBusy) return
+      setPinBusy(true)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/pin`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ messageId }),
+          },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await loadPins(scopeId)
+      } catch (e) {
+        setError(e instanceof Error ? `Could not pin that — ${e.message}.` : 'Could not pin that.')
+      } finally {
+        setPinBusy(false)
+      }
+    },
+    [scopeId, pinBusy, loadPins],
+  )
+
+  const unpinMessage = useCallback(
+    async (pinMessageId: string) => {
+      if (!scopeId || pinBusy) return
+      setPinBusy(true)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/unpin`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ pinMessageId }),
+          },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await loadPins(scopeId)
+      } catch (e) {
+        setError(e instanceof Error ? `Could not unpin that — ${e.message}.` : 'Could not unpin that.')
+      } finally {
+        setPinBusy(false)
+      }
+    },
+    [scopeId, pinBusy, loadPins],
+  )
+
+  const closePoll = useCallback(
+    async (messageId: string) => {
+      if (!scopeId || voteBusy) return
+      setVoteBusy(messageId)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/messages/${encodeURIComponent(messageId)}/close-poll`,
+          { method: 'POST' },
+        )
+        if (!res.ok) throw new Error(`server said ${res.status}`)
+        await load(scopeId, true)
+      } catch (e) {
+        setError(e instanceof Error ? `Could not close the poll — ${e.message}.` : 'Could not close the poll.')
+      } finally {
+        setVoteBusy(null)
+      }
+    },
+    [scopeId, voteBusy, load],
+  )
 
   /*
    * Maps the composer's payload onto the metadata shape `/api/league/chat`
@@ -696,6 +935,7 @@ function LeaguePanel({
           })),
           closeAt: payload.poll.closeAt.toISOString(),
           allowMultiple: payload.poll.allowMultiple,
+          anonymous: Boolean(payload.poll.anonymous),
         }
       }
 
@@ -720,6 +960,7 @@ function LeaguePanel({
           body: JSON.stringify({
             message: displayText,
             ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+            ...(replyTo ? { parentMessageId: replyTo.id } : {}),
           }),
         })
         if (!res.ok) throw new Error(`Send returned ${res.status}`)
@@ -738,6 +979,8 @@ function LeaguePanel({
           })
         }
         setDraft('')
+        /* Only after it actually sent — a failed reply keeps its target. */
+        setReplyTo(null)
         await load(scopeId)
       } catch (e) {
         setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
@@ -745,7 +988,7 @@ function LeaguePanel({
         setSending(false)
       }
     },
-    [load, scopeId, sending],
+    [load, scopeId, sending, replyTo],
   )
 
   if (!scopeId) {
@@ -832,7 +1075,32 @@ function LeaguePanel({
         <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
           @chimmy — ask the league&apos;s AI, publicly
         </button>
+        <PresenceStrip viewers={presence} />
+        {/*
+          The draft room already mirrors its messages into this league's chat;
+          until now nothing read them. This is a view preference, not a league
+          setting — one reader turning it on does not change what anybody else
+          sees.
+        */}
+        <button
+          type="button"
+          className="af-cm-draft-toggle"
+          data-on={includeDraft}
+          onClick={() => setIncludeDraft((v) => !v)}
+          aria-pressed={includeDraft}
+        >
+          {includeDraft ? 'Hide draft room' : 'Show draft room'}
+        </button>
       </div>
+
+      <PinnedBoard
+        pins={pins}
+        busy={pinBusy}
+        onUnpin={(pinId) => void unpinMessage(pinId)}
+        onJump={(messageId) =>
+          document.getElementById(`af-cm-msg-${messageId}`)?.scrollIntoView({ block: 'center' })
+        }
+      />
 
       <div className="af-cm-thread">
         {loading ? (
@@ -846,14 +1114,98 @@ function LeaguePanel({
           </div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className="af-cm-msg">
-              <span className="af-cm-msg-author">{m.author}</span>
-              <p className="af-cm-msg-text">{m.message}</p>
-              <RichMessage metadata={m.metadata} />
+            <div key={m.id} className="af-cm-msg" id={`af-cm-msg-${m.id}`}>
+              {m.parentMessageId ? (
+                <QuotedMessage
+                  author={byId.get(m.parentMessageId)?.author ?? null}
+                  text={
+                    byId.has(m.parentMessageId)
+                      ? censorProfanity(byId.get(m.parentMessageId)?.message ?? '')
+                      : null
+                  }
+                  onJump={
+                    byId.has(m.parentMessageId)
+                      ? () =>
+                          document
+                            .getElementById(`af-cm-msg-${m.parentMessageId}`)
+                            ?.scrollIntoView({ block: 'center' })
+                      : undefined
+                  }
+                />
+              ) : null}
+              <span className="af-cm-msg-head">
+                <span className="af-cm-msg-author">{m.author}</span>
+                <MessageTime value={m.createdAt} />
+                <button
+                  type="button"
+                  className="af-cm-reply-btn"
+                  onClick={() => setReplyTo(m)}
+                  aria-label={`Reply to ${m.author}`}
+                >
+                  Reply
+                </button>
+                <button
+                  type="button"
+                  className="af-cm-reply-btn"
+                  disabled={pinBusy}
+                  onClick={() => void pinMessage(m.id)}
+                  aria-label={`Pin the message from ${m.author}`}
+                >
+                  Pin
+                </button>
+              </span>
+              <p className="af-cm-msg-text">{censorProfanity(m.message)}</p>
+              <RichMessage
+                metadata={m.metadata}
+                viewerUserId={viewerUserId}
+                onVote={(optionId) => void votePoll(m.id, optionId)}
+                onClosePoll={
+                  /*
+                   * Only offered to the author or a commissioner. The server
+                   * checks the same thing — this just avoids showing a control
+                   * that would be refused.
+                   */
+                  (viewerUserId && m.authorId === viewerUserId) || scope?.isCommissioner
+                    ? () => void closePoll(m.id)
+                    : undefined
+                }
+              />
+              <MessageReactions
+                reactions={reactionOverride[m.id] ?? readReactions(m.metadata, viewerUserId)}
+                disabled={reactionBusy === m.id}
+                onToggle={(emoji) =>
+                  void toggleReaction(
+                    m.id,
+                    emoji,
+                    reactionOverride[m.id] ?? readReactions(m.metadata, viewerUserId),
+                  )
+                }
+              />
             </div>
           ))
         )}
       </div>
+
+      {/*
+        What this message will be answering. Shown right above the composer,
+        because a reply target you cannot see is one you forget you set — and
+        the next thing typed then lands as an answer to something the writer had
+        stopped thinking about.
+      */}
+      {replyTo ? (
+        <div className="af-cm-replybar">
+          <span className="af-cm-replybar-label">Replying to {replyTo.author}</span>
+          <span className="af-cm-replybar-text">{censorProfanity(replyTo.message)}</span>
+          <button
+            type="button"
+            className="af-cm-replybar-x"
+            onClick={() => setReplyTo(null)}
+            aria-label="Cancel reply"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       {/*
         The full composer, not a text input: GIF search, emoji, polls, uploads,
@@ -867,6 +1219,8 @@ function LeaguePanel({
       */}
       <ChatComposer
         leagueId={scopeId}
+        /* `#` offers these by name alongside players, matched on the client. */
+        autocompleteLeagues={leagues.map((l) => ({ id: l.id, name: l.name }))}
         chatType="league"
         placeholder={`Message ${scope?.name ?? 'the league'}…`}
         onSend={sendPayload}

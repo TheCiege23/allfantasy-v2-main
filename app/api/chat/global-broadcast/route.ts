@@ -24,12 +24,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No leagues selected' }, { status: 400 })
   }
 
+  /*
+   * ⚠ THIS IS NARROWER THAN THE PICKER THAT FEEDS IT, AND THE GAP WAS SILENT.
+   * Ownership (`League.userId`) is only one of the ways this codebase calls
+   * somebody a commissioner — `LeagueTeam.isCommissioner` / `isCoCommissioner`
+   * and a redraft `COMMISSIONER` role both count elsewhere, and the composer's
+   * league picker offers all of them. Selecting three leagues and owning one
+   * therefore sent to one and reported success, so a commissioner believed a
+   * draft reminder had reached three leagues when two never saw it.
+   *
+   * The permitted set is deliberately NOT widened here — who may address every
+   * member of a league is a product decision, not a consistency cleanup. What
+   * changes is that the skipped leagues are now named in the response instead of
+   * disappearing.
+   */
   const leagues = await prisma.league.findMany({
     where: { id: { in: selectedLeagueIds }, userId },
     select: { id: true, name: true },
   })
+  const permittedIds = new Set(leagues.map((l) => l.id))
+  const skippedLeagueIds = selectedLeagueIds.filter((id) => !permittedIds.has(id))
+
   if (leagues.length === 0) {
-    return NextResponse.json({ error: 'No leagues you commission' }, { status: 403 })
+    return NextResponse.json(
+      {
+        error: 'No leagues you commission',
+        skippedLeagueIds,
+      },
+      { status: 403 },
+    )
   }
 
   const broadcastId = randomUUID()
@@ -85,6 +108,11 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     sentToLeagues: createdCount,
+    /*
+     * Named, not just counted. "Sent to 1 league" after picking three is a
+     * number the sender has to notice and then cannot explain.
+     */
+    skippedLeagueIds,
     broadcastId,
   })
 }

@@ -25,7 +25,7 @@ export type LeagueComposerPayload = {
     duration?: number
     mimeType?: string
   }>
-  poll?: { question: string; options: string[]; closeAt: Date; allowMultiple: boolean }
+  poll?: { question: string; options: string[]; closeAt: Date; allowMultiple: boolean; anonymous?: boolean }
 }
 
 type ChatComposerProps = {
@@ -53,6 +53,14 @@ type ChatComposerProps = {
   isCommissioner?: boolean
   commissionerLeagues?: { id: string; name: string; teamCount: number }[]
   currentUserId?: string
+  /**
+   * The writer's own leagues, offered by the `#` autocomplete alongside player
+   * names. Matched on the client — the list is already here, and a round trip to
+   * filter a dozen names the browser is holding would be silly.
+   */
+  autocompleteLeagues?: { id: string; name: string }[]
+  /** Narrows the player catalog when the surface knows which sport it is about. */
+  sport?: string | null
 }
 
 type Picker = 'gif' | 'emoji' | 'poll' | null
@@ -71,6 +79,8 @@ export function ChatComposer({
   isCommissioner = false,
   commissionerLeagues = [],
   currentUserId,
+  autocompleteLeagues,
+  sport,
 }: ChatComposerProps) {
   const [text, setText] = useState('')
   const appliedPrefillKey = useRef<string | null>(null)
@@ -84,12 +94,14 @@ export function ChatComposer({
   const [globalModalOpen, setGlobalModalOpen] = useState(false)
   const [cursorPos, setCursorPos] = useState(0)
 
-  const { suggestions: mentionSuggestions } = useMentionAutocomplete({
+  const { suggestions: mentionSuggestions, trigger: mentionTrigger } = useMentionAutocomplete({
     text,
     cursorPos,
     leagueId,
     chatType,
     isCommissioner,
+    leagues: autocompleteLeagues,
+    sport,
   })
 
   const showBbChimmySuggest = Boolean(bbSuggest?.options?.length)
@@ -113,7 +125,15 @@ export function ChatComposer({
         })
         return
       }
-      const newBefore = before.replace(/@\w*$/, s.value)
+      /*
+       * Replace whatever opened the list. A `#` suggestion matched a query that
+       * may contain spaces, so the pattern has to cover the same span the hook
+       * matched — replacing only `#\w*` would leave half a player's name behind.
+       */
+      const newBefore =
+        mentionTrigger === '#'
+          ? before.replace(/#[\w']*(?: [\w']*){0,2}$/, s.value)
+          : before.replace(/@\w*$/, s.value)
       setText(newBefore + after)
       queueMicrotask(() => {
         const p = newBefore.length
@@ -122,7 +142,7 @@ export function ChatComposer({
         setCursorPos(p)
       })
     },
-    [cursorPos, text]
+    [cursorPos, text, mentionTrigger]
   )
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)

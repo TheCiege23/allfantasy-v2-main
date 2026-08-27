@@ -2,6 +2,8 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getEligibleDevyPlayers } from '@/lib/devy-classification'
+import { buildDevyValueBoard } from '@/lib/devy/devyValueBoard'
+import { DEVY_FIRST_PICK_VALUE } from '@/lib/trade-intel/devyTradeValue'
 import { computeAllDevyIntelMetrics, computeDevyFinalScore, computeAvailabilityPctV2 } from '@/lib/devy-intel'
 import { prisma } from '@/lib/prisma'
 
@@ -29,7 +31,7 @@ interface DevyPlayerResult {
   name: string
   position: string
   school: string
-  tier: 'Tier 1' | 'Tier 2' | 'Sleeper'
+  tier: 'Tier 1' | 'Tier 2' | 'Sleeper' | 'Unranked'
   draftValue: number
   availabilityPct: number
   whyBullets: string[]
@@ -99,10 +101,47 @@ function computeRiskBand(player: any): 'LOW' | 'MEDIUM' | 'HIGH' {
   return 'HIGH'
 }
 
+/**
+ * @deprecated Tiers on `devyValue`, which is a position-and-class-year lookup
+ * with no player-specific input and is 0 for most of the pool — so it tiered
+ * 1,455 players we know nothing about as "Sleeper" and put a freshman QB above
+ * Jeremiah Smith. Use `honestTier`. Kept only for the hardcoded fallback board
+ * below, whose entries carry hand-written values rather than DB rows.
+ */
 function assignTier(devyValue: number): 'Tier 1' | 'Tier 2' | 'Sleeper' {
   if (devyValue >= 7000) return 'Tier 1'
   if (devyValue >= 4000) return 'Tier 2'
   return 'Sleeper'
+}
+
+/**
+ * Tier from position on the evidenced board.
+ *
+ * ⚠ BANDS ARE PRESENTATION. Nothing multiplies by them; they only choose the
+ * word next to a rank the manager can also see.
+ *
+ * ⚠ AND AN UNRANKED PLAYER IS NOT A SLEEPER. "Sleeper" is a scouting opinion —
+ * a player you believe in before the market does. Applying it to someone we hold
+ * no evidence on states an opinion we do not have.
+ */
+function honestTier(devyRank: number | null): 'Tier 1' | 'Tier 2' | 'Sleeper' | 'Unranked' {
+  if (devyRank == null) return 'Unranked'
+  if (devyRank <= 36) return 'Tier 1'
+  if (devyRank <= 84) return 'Tier 2'
+  return 'Sleeper'
+}
+
+/**
+ * Devy points onto the 0-100 scale this board's UI already renders (it uses the
+ * number directly as a progress-bar width).
+ *
+ * The top devy asset anchors at DEVY_FIRST_PICK_VALUE, so this is a presentation
+ * rescale of one scale — not a conversion between scales, which is the thing
+ * lib/trade-intel/devyOutlook.ts refuses to do.
+ */
+function honestDraftValue(devyPoints: number | null): number {
+  if (devyPoints == null) return 0
+  return Math.max(1, Math.round((devyPoints / DEVY_FIRST_PICK_VALUE) * 100))
 }
 
 function assignNeedMatch(position: string, biggestNeed: string, secondaryNeed: string): 'Strong' | 'Medium' | 'Low' {
@@ -170,9 +209,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
     if (hasDBData) {
       dataSource = 'hybrid'
 
-      const needPlayers = await getEligibleDevyPlayers({ position: biggestNeed, limit: 10, minValue: 3000 })
-      const secondaryPlayers = await getEligibleDevyPlayers({ position: secondaryNeed, limit: 5, minValue: 3000 })
-      const otherPlayers = await getEligibleDevyPlayers({ limit: 10, minValue: 5000 })
+      /*
+       * ⚠ SELECTED ON SCOUTING PROJECTION, NOT ON devyValue. The previous
+       * `minValue: 3000` filtered on a position-and-class-year lookup that is 0
+       * for 1,455 of 1,718 rows. Measured on prod 2026-08-25 it excluded 556
+       * players WHO HAVE a real projection while letting 7 with no evidence in,
+       * and eight of the top twelve prospects in the database were never
+       * candidates at all.
+       */
+      const needPlayers = await getEligibleDevyPlayers({ position: biggestNeed, limit: 10, requireProjection: true })
+      const secondaryPlayers = await getEligibleDevyPlayers({ position: secondaryNeed, limit: 5, requireProjection: true })
+      const otherPlayers = await getEligibleDevyPlayers({ limit: 10, requireProjection: true })
 
       const allCandidates = [...needPlayers, ...secondaryPlayers, ...otherPlayers.filter(p =>
         !needPlayers.find(n => n.id === p.id) && !secondaryPlayers.find(s => s.id === p.id)
@@ -180,7 +227,33 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
 
       const safeCandidates = allCandidates.filter(p => p.graduatedToNFL !== true && p.devyEligible !== false)
 
+
       const finalScoreOpts = { biggestNeed, secondaryNeed, isSF, isTEP, totalTeams, pickNumber }
+
+      /*
+       * ⚠ RANKED AGAINST THE WHOLE EVIDENCED CLASS, NOT THE SHORTLIST. Ranking
+       * only the handful of candidates would make each of them a top-of-board
+       * asset by construction, which is how a shortlist of depth pieces reads as
+       * a class of blue chips. ~800 rows, one query.
+       */
+      const boardPool = await getEligibleDevyPlayers({ requireProjection: true, limit: 2000 })
+      const honestBoard = buildDevyValueBoard(
+        boardPool.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          position: p.position,
+          school: p.school,
+          draftEligibleYear: p.draftEligibleYear,
+          classYear: p.classYear,
+          draftProjectionScore: p.draftProjectionScore,
+          recruitingComposite: p.recruitingComposite,
+          breakoutAge: p.breakoutAge,
+          projectedDraftRound: p.projectedDraftRound,
+          devyAdp: p.devyAdp,
+        })),
+        new Date().getFullYear(),
+      )
+      const boardById = new Map(honestBoard.entries.map((e) => [e.id, e]))
 
       safeCandidates.sort((a, b) => {
         // Unscorable players sort last rather than comparing against null.
@@ -197,10 +270,10 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
           name: p.name,
           position: p.position,
           school: p.school,
-          tier: assignTier(p.devyValue),
-          draftValue: Math.round(p.devyValue / 100),
+          tier: honestTier(boardById.get(p.id)?.devyRank ?? null),
+          draftValue: honestDraftValue(boardById.get(p.id)?.value.value ?? null),
           availabilityPct: computeAvailabilityPctV2(p, pickNumber, totalTeams),
-          whyBullets: generateWhyBullets(p, biggestNeed, teamDirection),
+          whyBullets: generateWhyBullets(p, biggestNeed, teamDirection, boardById.get(p.id)?.devyRank ?? null),
           needMatch: assignNeedMatch(p.position, biggestNeed, secondaryNeed),
           classYear: p.classYear,
           conference: p.conference,
@@ -261,9 +334,16 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
         fallbacks = safeCandidates.slice(6, 9).map(toResult)
 
         const topProspects = safeCandidates.slice(0, pickNumber - 1)
+        /*
+         * ⚠ The chance a prospect is GONE before your pick, which is the
+         * complement of his availability — not `devyValue / 100`, which made a
+         * freshman QB an 84% certainty and every unscored player a 0%.
+         * computeAvailabilityPctV2 already reads the evidenced projection and
+         * returns a neutral 50 when there is nothing to infer from.
+         */
         projectedPicksAhead = topProspects.map(p => ({
           name: p.name,
-          pct: Math.min(95, Math.round(p.devyValue / 100)),
+          pct: Math.min(95, Math.max(5, 100 - computeAvailabilityPctV2(p, pickNumber, totalTeams))),
         }))
 
         updateReasons = [
@@ -337,14 +417,23 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
   }
 })
 
-function generateWhyBullets(player: any, biggestNeed: string, teamDirection: string): string[] {
+/**
+ * ⚠ THE CLAIM HAS TO COME FROM THE EVIDENCE. These bullets used to read
+ * `devyValue >= 7000` to say "Elite prospect with top-tier dynasty value", which
+ * meant every freshman quarterback in the country was told to the manager as
+ * elite — 6000 x 1.4 clears 7000 on its own — while a genuinely elite junior
+ * receiver did not. Board rank says it from what we actually measured, and when
+ * he is unranked it says nothing at all rather than guessing in either
+ * direction.
+ */
+function generateWhyBullets(player: any, biggestNeed: string, teamDirection: string, devyRank: number | null = null): string[] {
   const bullets: string[] = []
   const pos = player.position
 
   if (pos === biggestNeed) bullets.push(`Fills your biggest roster need at ${pos}`)
   if (player.classYear && player.classYear <= 2) bullets.push('Young prospect with years of college production ahead')
-  if (player.devyValue >= 7000) bullets.push('Elite prospect with top-tier dynasty value')
-  else if (player.devyValue >= 5000) bullets.push('Strong prospect with solid production profile')
+  if (devyRank != null && devyRank <= 12) bullets.push(`Top-12 prospect on the class board (#${devyRank})`)
+  else if (devyRank != null && devyRank <= 36) bullets.push(`Top-36 prospect on the class board (#${devyRank})`)
 
   if (pos === 'QB' && player.passingYards && player.passingYards > 2000) bullets.push(`${player.passingYards} passing yards show pro-ready arm`)
   if (pos === 'RB' && player.rushingYards && player.rushingYards > 800) bullets.push(`${player.rushingYards} rushing yards demonstrate workhorse ability`)
@@ -375,17 +464,67 @@ async function loadVerificationData(): Promise<DevyVerificationData> {
     }),
     prisma.devyPlayer.findMany({
       where: { devyEligible: true, graduatedToNFL: false, league: 'NCAA' },
-      select: { name: true, position: true, school: true, devyValue: true },
-      orderBy: { devyValue: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        position: true,
+        school: true,
+        draftProjectionScore: true,
+        draftEligibleYear: true,
+        classYear: true,
+        recruitingComposite: true,
+        breakoutAge: true,
+        projectedDraftRound: true,
+        devyAdp: true,
+      },
+      /*
+       * ⚠ Ordered on the evidenced projection, not devyValue. This list backfills
+       * the board when the model names a player we cannot verify, so ordering it
+       * by a position-and-class-year lookup filled the gaps with freshman
+       * quarterbacks.
+       *
+       * NULLS LAST is explicit — Postgres orders NULLS FIRST on DESC.
+       */
+      orderBy: { draftProjectionScore: { sort: 'desc', nulls: 'last' } },
       take: 200,
     }),
   ])
+
+  /*
+   * ⚠ Priced on the same board the main path uses, so a backfilled player and a
+   * primary one cannot carry numbers from two different scales. `eligibles` is
+   * already the top 200 by projection, so an entry's position in it IS its rank
+   * among evidenced players.
+   */
+  const backfillBoard = buildDevyValueBoard(
+    eligibles.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      position: p.position,
+      school: p.school,
+      draftEligibleYear: p.draftEligibleYear,
+      classYear: p.classYear,
+      draftProjectionScore: p.draftProjectionScore,
+      recruitingComposite: p.recruitingComposite,
+      breakoutAge: p.breakoutAge,
+      projectedDraftRound: p.projectedDraftRound,
+      devyAdp: p.devyAdp,
+    })),
+    new Date().getFullYear(),
+  )
 
   return {
     eligibleNames: new Set(eligibles.map(p => normalizeName(p.name))),
     graduateNames: new Set(graduates.map(p => normalizeName(p.name))),
     graduateList: graduates.slice(0, 50).map(p => `${p.name} (${p.nflTeam || 'NFL'})`).join(', '),
-    backfillPlayers: eligibles,
+    backfillPlayers: backfillBoard.entries.map((e) => ({
+      name: e.name,
+      position: e.position,
+      school: e.school,
+      devyRank: e.devyRank,
+      devyPoints: e.value.value,
+      draftProjectionScore: e.outlook.score,
+    })),
   }
 }
 
@@ -425,15 +564,16 @@ function verifyAndBackfill(
         const aMatch = a.position === biggestNeed ? 2 : a.position === secondaryNeed ? 1 : 0
         const bMatch = b.position === biggestNeed ? 2 : b.position === secondaryNeed ? 1 : 0
         if (bMatch !== aMatch) return bMatch - aMatch
-        return (b.devyValue || 0) - (a.devyValue || 0)
+        /* Evidenced projection breaks the tie, not the position lookup. */
+        return (b.devyPoints || 0) - (a.devyPoints || 0)
       })
       .slice(0, needed)
       .map(p => ({
         name: p.name,
         position: p.position,
         school: p.school,
-        tier: assignTier(p.devyValue || 0),
-        draftValue: Math.round((p.devyValue || 0) / 100),
+        tier: honestTier(p.devyRank),
+        draftValue: honestDraftValue(p.devyPoints),
         availabilityPct: 50,
         whyBullets: ['Database-verified college prospect', `${p.position} with strong production`],
         needMatch: p.position === biggestNeed ? 'Strong' as const : p.position === secondaryNeed ? 'Medium' as const : 'Low' as const,
@@ -453,8 +593,10 @@ function verifyAndBackfill(
         name: p.name,
         position: p.position,
         school: p.school,
-        tier: 'Sleeper' as const,
-        draftValue: Math.round((p.devyValue || 0) / 100),
+        /* Ranked players keep their real band; unranked ones say so rather
+           than being called a Sleeper, which is a scouting opinion. */
+        tier: honestTier(p.devyRank),
+        draftValue: honestDraftValue(p.devyPoints),
         availabilityPct: 70,
         whyBullets: ['Database-verified college prospect', 'Sleeper value pick'],
         needMatch: 'Low' as const,

@@ -1,0 +1,869 @@
+/*
+ * AF Core — Trade Center (36a).
+ *
+ * Tokens are the handoff's, scoped under `.af-tc` so they cannot leak into the
+ * rest of /core. Where the design's literal matches an existing core token the
+ * core token is used instead, so a future theme change moves both together.
+ */
+
+.af-tc {
+  --tc-violet: #a78bfa;
+  --tc-orange: #fb923c;
+  --tc-good: #34d399;
+  --tc-warn: #fbbf24;
+  --tc-bad: #fb5b78;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-tc-head h1 {
+  margin: 4px 0 6px;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-tc-lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── League context bar ──────────────────────────────────────────────── */
+
+.af-tc-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-context-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-context-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-tc-spacer {
+  flex: 1 1 auto;
+}
+.af-tc-chip {
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  font-size: 11.5px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.af-tc-chip--deadline {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+  color: var(--tc-warn);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+}
+
+/* ── Asset legend ────────────────────────────────────────────────────── */
+
+.af-tc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-legend-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-right: 2px;
+}
+.af-tc-asset-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  font-size: 12px;
+  color: var(--text2);
+}
+.af-tc-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #04050c;
+}
+
+/* ── Banners ─────────────────────────────────────────────────────────── */
+
+.af-tc-banner {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+/*
+ * The blocked banner leads the page. It is not styled like the note cards on
+ * purpose — a format that forbids this trade is a correctness statement, not
+ * another piece of advice.
+ */
+.af-tc-banner--blocked {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.07);
+}
+.af-tc-banner-glyph {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  background: rgba(251, 191, 36, 0.18);
+  color: var(--tc-warn);
+}
+.af-tc-banner-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-banner p {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+/* ── Trade builder ───────────────────────────────────────────────────── */
+
+.af-tc-builder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.af-tc-team {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-tc-team-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-tc-team-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-team-handle {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.af-tc-you {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.af-tc-sends {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tc-bad);
+}
+.af-tc-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-tc-row-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.af-tc-row-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tc-row-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+/*
+ * ⚠ AN UNPRICED ASSET RENDERS AN EM DASH, NEVER A ZERO. Half the point of the
+ * unpriced-exposure work is that a defender we cannot price must not read as
+ * worthless.
+ */
+.af-tc-row-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.af-tc-row-value[data-unpriced='true'] {
+  color: var(--faint);
+}
+.af-tc-remove {
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.af-tc-remove:hover {
+  color: var(--tc-bad);
+}
+.af-tc-add {
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  padding: 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.af-tc-add:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-tc-total {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-tc-total b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Verdict ─────────────────────────────────────────────────────────── */
+
+.af-tc-verdict {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-tc-grade-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.af-tc-grade {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+}
+.af-tc-grade-letter {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+}
+.af-tc-grade-for {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-tc-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-tc-dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+.af-tc-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.af-tc-conf {
+  color: var(--muted);
+}
+/*
+ * ⚠ THE NO-SIGNAL CALLOUT. gradeScale.ts warns that C spans a wide band, so a
+ * trade we know nothing about lands mid-C and looks identical to a genuinely
+ * even one. A letter never renders without this or the confidence label beside
+ * it.
+ */
+.af-tc-nosignal {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 91, 120, 0.4);
+  background: rgba(251, 91, 120, 0.08);
+  color: #ffd7de;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.af-tc-gaps {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Note groups ─────────────────────────────────────────────────────── */
+
+/*
+ * ⚠ VISUALLY SEPARATE FROM THE VERDICT, ALWAYS. These are additive context and
+ * must never read as part of the score — that separation is product logic, not
+ * decoration.
+ */
+.af-tc-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+.af-tc-note {
+  padding: 13px 15px;
+  border-radius: 13px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af-tc-note-title {
+  margin: 0 0 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-tc-note p {
+  margin: 0 0 5px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-tc-note p:last-child {
+  margin-bottom: 0;
+}
+
+.af-tc-note[data-tone='scale'] { border-color: var(--accent-line); background: var(--accent-soft); }
+.af-tc-note[data-tone='scale'] .af-tc-note-title { color: var(--accent); }
+.af-tc-note[data-tone='posture'] .af-tc-note-title { color: var(--muted); }
+.af-tc-note[data-tone='pick'] { border-color: rgba(251, 146, 60, 0.3); background: rgba(251, 146, 60, 0.06); }
+.af-tc-note[data-tone='pick'] .af-tc-note-title { color: var(--tc-orange); }
+.af-tc-note[data-tone='leverage'] { border-color: rgba(167, 139, 250, 0.3); background: rgba(167, 139, 250, 0.06); }
+.af-tc-note[data-tone='leverage'] .af-tc-note-title { color: var(--tc-violet); }
+.af-tc-note[data-tone='need'] { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.06); }
+.af-tc-note[data-tone='need'] .af-tc-note-title { color: var(--tc-good); }
+.af-tc-note[data-tone='bye'] { border-color: rgba(251, 91, 120, 0.3); background: rgba(251, 91, 120, 0.06); }
+.af-tc-note[data-tone='bye'] .af-tc-note-title { color: var(--tc-bad); }
+
+/* ── Decision OS ─────────────────────────────────────────────────────── */
+
+.af-tc-dos {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-tc-why {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.af-tc-pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.af-tc-pair {
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-tc-pair-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-tc-pair-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  margin-top: 2px;
+}
+.af-tc-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-tc-list--warn li {
+  color: #ffe6b8;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.af-tc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.af-tc-caption {
+  flex: 1 1 240px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-tc-head h1 { font-size: 26px; }
+  .af-tc-builder,
+  .af-tc-notes { grid-template-columns: 1fr; }
+}
+
+/* ── Asset picker ────────────────────────────────────────────────────── */
+
+.af-tc-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+.af-tc-picker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-tc-picker-tab {
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 4px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tc-picker-tab[data-on='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-tc-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.af-tc-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.af-tc-picker-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.af-tc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 92px;
+}
+/* A search result is a button but must read as a row, not a control. */
+.af-tc-row--button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.af-tc-row--button:hover {
+  border-color: var(--accent-line);
+}
+
+/* A secondary action that must not compete with Analyze. */
+.af-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--line2);
+  color: var(--text2);
+}
+.af-btn--ghost:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+/* Grade colours from the handoff. Applied to the letter only — the badge stays
+   neutral so a red F does not shout louder than the verdict it sits beside. */
+.af-tc-grade[data-letter='A'] .af-tc-grade-letter { color: #34d399; }
+.af-tc-grade[data-letter='B'] .af-tc-grade-letter { color: #5eead4; }
+.af-tc-grade[data-letter='C'] .af-tc-grade-letter { color: #fbbf24; }
+.af-tc-grade[data-letter='D'] .af-tc-grade-letter { color: #fb923c; }
+.af-tc-grade[data-letter='F'] .af-tc-grade-letter { color: #fb5b78; }
+
+/* ── Mobile treatment ────────────────────────────────────────────────────
+ *
+ * ⚠ NO BOTTOM TAB BAR HERE, DELIBERATELY. The design shows one, but /core has
+ * no bottom nav on any other screen — adding it to this one alone would make
+ * the Trade Center look like a different app the moment a user navigated away.
+ * That belongs to core chrome, not to a single tab.
+ *
+ * What IS screen-local and does belong here: the action bar sticking, the chip
+ * rows scrolling instead of wrapping into a wall, and touch targets that clear
+ * 44px.
+ */
+
+@media (max-width: 720px) {
+  /*
+   * Chip rows scroll rather than wrap. Six asset pills wrapping on a 390px
+   * screen becomes four lines of legend above the thing the page is for.
+   */
+  .af-tc-legend,
+  .af-tc-context {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-tc-legend::-webkit-scrollbar,
+  .af-tc-context::-webkit-scrollbar {
+    display: none;
+  }
+  .af-tc-asset-pill,
+  .af-tc-chip {
+    flex: 0 0 auto;
+  }
+  /* The spacer collapses in a scroller — it would otherwise eat the row. */
+  .af-tc-context .af-tc-spacer {
+    display: none;
+  }
+
+  /*
+   * The action row sticks to the bottom of the viewport. It carries the only
+   * two controls that end the task, and on a long page they are otherwise a
+   * scroll away from wherever the manager is reading.
+   */
+  .af-tc-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    margin: 0 -16px -16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--line2);
+  }
+  /* The caption is the first thing to go — it is context, not a control. */
+  .af-tc-caption {
+    display: none;
+  }
+  .af-tc-actions .af-btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  /* 44px minimum touch rows, matching the rest of /core. */
+  .af-tc-row,
+  .af-tc-add,
+  .af-tc-picker-tab {
+    min-height: 44px;
+  }
+  .af-tc-remove {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ── Draft banner ────────────────────────────────────────────────────── */
+
+.af-tc-draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  border: 1px dashed var(--line2);
+  background: var(--surface2);
+  font-size: 12.5px;
+  color: var(--text2);
+}
+
+/* ── Inbox & Sent ────────────────────────────────────────────────────── */
+
+/*
+ * Two columns that mirror the builder's grid, so the page reads as one
+ * surface rather than a panel bolted above another panel. The note about
+ * AF-native proposals spans both, because it is about the league, not a side.
+ */
+.af-tc-inbox {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.af-tc-inbox-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-tc-inbox-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.af-tc-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.af-tc-offer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-tc-offer-partner {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-offer-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+/*
+ * "You send" is already the builder's red label; the receiving column gets the
+ * accent so the two directions are separable at a glance without reading.
+ */
+.af-tc-offer-sides > div:last-child .af-tc-sends {
+  color: var(--accent);
+}
+.af-tc-offer-asset {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-tc-offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-tc-offer-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+}
+.af-tc-offer-link:hover,
+.af-tc-offer-link:focus-visible {
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .af-tc-inbox {
+    grid-template-columns: 1fr;
+  }
+  /* The two sides of an offer stay side by side — that pairing IS the trade. */
+  .af-tc-offer-actions .af-btn {
+    min-height: 44px;
+  }
+}
+
+/* ── Propose ─────────────────────────────────────────────────────────── */
+
+/*
+ * Bordered in the accent rather than filled: this is the one panel on the page
+ * that writes something, and it should read as consequential without shouting
+ * over the verdict above it.
+ */
+.af-tc-propose {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-tc-propose-partners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-tc-propose-partner {
+  cursor: pointer;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text2);
+}
+.af-tc-propose-partner[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .af-tc-propose-partner {
+    min-height: 44px;
+  }
+  .af-tc-propose .af-btn {
+    min-height: 44px;
+    width: 100%;
+  }
+}
+
+/* ── Counterparty ────────────────────────────────────────────────────── */
+
+/*
+ * Sits between the inbox and the builder because that is where the decision
+ * belongs: you know who you are dealing with before you start moving assets,
+ * and the verdict below is a different verdict once this is set.
+ */
+.af-tc-partner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-partner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-tc-partner-chip {
+  cursor: pointer;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text2);
+}
+.af-tc-partner-chip[data-on='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* A control that reads as prose, for an offer to switch to someone reachable. */
+.af-tc-linklike {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .af-tc-partner-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-tc-partner-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .af-tc-partner-chip {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+}

@@ -43,15 +43,20 @@ function readEnvFile(file) {
   return out
 }
 
+/** Resolve everything a SQL-running script needs. */
 /**
- * Resolve everything a prod-SQL script needs.
  * @param {string} fromDir directory to start the upward search from (pass `__dirname`)
+ * @param {{ envFiles?: string[] }} [options] env files to read, later ones winning. Defaults to
+ *   `.env` then `.env.local`, which in this repo means PRODUCTION. Pass `['.env.test']` to
+ *   rehearse a migration somewhere safe first — the point of naming them is that a script
+ *   cannot reach production by forgetting an argument, only by asking for the default.
  */
-function resolveTarget(fromDir) {
+function resolveTarget(fromDir, options = {}) {
   const mainTree = findMainTree(fromDir)
-  const env = {
-    ...readEnvFile(path.join(mainTree, '.env')),
-    ...readEnvFile(path.join(mainTree, '.env.local')),
+  const files = options.envFiles && options.envFiles.length ? options.envFiles : ['.env', '.env.local']
+  const env = {}
+  for (const file of files) {
+    Object.assign(env, readEnvFile(path.join(mainTree, file)))
   }
   const url = env.DIRECT_URL || env.DATABASE_URL
   if (!url) throw new Error('No DIRECT_URL or DATABASE_URL in the primary checkout env files')
@@ -80,11 +85,23 @@ async function recordMigration(client, migrationSqlPath, migrationName) {
     .createHash('sha256')
     .update(fs.readFileSync(migrationSqlPath))
     .digest('hex')
+  /*
+   * ⚠ `ON CONFLICT DO NOTHING` DOES NOT DEDUPE HERE, and used to be what this did.
+   * `_prisma_migrations` has no unique constraint on `migration_name` — only the id
+   * primary key, and the id is a fresh uuid every call — so there is never a conflict
+   * to do nothing about, and re-running an "idempotent" apply script inserted a SECOND
+   * bookkeeping row for the same migration. Caught by re-running an apply against the
+   * test database and watching the recorded count go from 1 to 2.
+   *
+   * `WHERE NOT EXISTS` is the check that actually holds.
+   */
   await client.query(
     `INSERT INTO "_prisma_migrations"
        (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
-     VALUES (gen_random_uuid()::text, $1, now(), $2, NULL, NULL, now(), 1)
-     ON CONFLICT DO NOTHING`,
+     SELECT gen_random_uuid()::text, $1::text, now(), $2::text, NULL, NULL, now(), 1
+     WHERE NOT EXISTS (
+       SELECT 1 FROM "_prisma_migrations" WHERE migration_name = $2::text
+     )`,
     [checksum, migrationName],
   )
   return checksum

@@ -91,10 +91,29 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
           state: schedule.some((week) => week.matchups.length > 0) ? 'partial' : 'missing',
           note: 'Playoff structure is inferred from playoff matchup flags when present in uploaded schedule data.',
         },
-        currentStandings: {
-          state: history.standings.length > 0 ? 'full' : 'missing',
-          count: history.standings.length,
-        },
+        /*
+         * ⚠ "FULL" USED TO MEAN "THERE ARE ROWS", and rows always existed — one
+         * per team, with a rank the mapper filled in from array position and a
+         * record that defaulted to zero. That reads as a complete standings
+         * table and is indistinguishable from a correct preseason one. It is
+         * full only when every row carries a rank Fantrax actually published.
+         */
+        currentStandings: (() => {
+          const ranked = raw.teams.filter((team) => team.rank != null).length
+          return {
+            state:
+              history.standings.length === 0
+                ? ('missing' as const)
+                : ranked === raw.teams.length
+                  ? ('full' as const)
+                  : ('partial' as const),
+            count: history.standings.length,
+            note:
+              history.standings.length > 0 && ranked !== raw.teams.length
+                ? 'Fantrax did not publish standings for this league, so team order is not a real ranking.'
+                : null,
+          }
+        })(),
         currentSchedule: {
           state: schedule.length > 0 ? 'partial' : 'missing',
           count: schedule.length,

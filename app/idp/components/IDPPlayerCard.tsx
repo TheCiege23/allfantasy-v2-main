@@ -2,7 +2,6 @@
 
 import { PlayerImage } from '@/app/components/PlayerImage'
 import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
-import { mockIdpPoints, mockStatPills, idpRoleLabel } from './idpPositionUtils'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
 
 const PILL_STYLES: Record<string, string> = {
@@ -22,6 +21,18 @@ export type IdpContractChip =
   | 'TAGGED'
   | 'DEAD_CAP'
 
+/** A defender's box-score line. Every field optional: absent means unknown, never zero. */
+export type IdpStatLine = {
+  soloTackles?: number | null
+  assistedTackles?: number | null
+  sacks?: number | null
+  interceptions?: number | null
+  passDeflections?: number | null
+  forcedFumbles?: number | null
+  fumbleRecoveries?: number | null
+  defensiveTDs?: number | null
+}
+
 export type IDPPlayerCardProps = {
   playerId: string
   name: string
@@ -38,6 +49,28 @@ export type IDPPlayerCardProps = {
   salaryM?: number
   yearsRemaining?: number
   contractChip?: IdpContractChip
+  /*
+   * ⚠ EVERYTHING BELOW WAS INVENTED INSIDE THIS COMPONENT UNTIL NOW, AND RENDERED BESIDE THE
+   * PLAYER'S REAL NAME. Points and projection came from `mockIdpPoints`, a hash of the player
+   * id. Every stat pill came from `mockStatPills`, another hash. The role label came from
+   * `idpRoleLabel`, which summed the id's character codes and picked one of four archetypes.
+   * Snap share was `40 + (playerId.charCodeAt(0) % 55)`.
+   *
+   * Worst of all, injury status was `playerId.endsWith('0') ? 'OUT' : endsWith('1') ? 'QUEST'`
+   * — a red OUT badge, on a tenth of all defenders, decided by the last digit of an id. That is
+   * not a cosmetic bug: a manager who benches a healthy starter on it loses a real week.
+   *
+   * They are props now. A parent that has the data passes it; a parent that does not passes
+   * nothing and the card shows an absence, which is the true answer.
+   */
+  points?: number | null
+  projection?: number | null
+  statLine?: IdpStatLine | null
+  /** 0–100. */
+  snapSharePct?: number | null
+  /** As the provider states it — 'OUT', 'QUESTIONABLE', … Never derived from the id. */
+  injuryStatus?: string | null
+  onBye?: boolean
 }
 
 export function IDPPlayerCard({
@@ -55,34 +88,40 @@ export function IDPPlayerCard({
   salaryM,
   yearsRemaining,
   contractChip = 'ACTIVE',
+  points = null,
+  projection = null,
+  statLine = null,
+  snapSharePct = null,
+  injuryStatus = null,
+  onBye = false,
 }: IDPPlayerCardProps) {
-  const { pts, proj } = mockIdpPoints(playerId, week)
-  const stats = mockStatPills(playerId)
-  const role = idpRoleLabel(playerId)
-  const snapShare = 40 + (Math.abs(playerId.charCodeAt(0) ?? 0) % 55)
-  const injured = playerId.endsWith('0') ? 'OUT' : playerId.endsWith('1') ? 'QUEST' : null
-  const bye = false
-  const lowSnap = snapShare < 50
-
-  const pills: { label: string; val: number | string; key: keyof ReturnType<typeof mockStatPills> }[] = [
-    { label: 'SOLO', val: stats.soloTackles, key: 'soloTackles' },
-    { label: 'AST', val: stats.assistedTackles, key: 'assistedTackles' },
-    { label: 'SACK', val: stats.sacks, key: 'sacks' },
-    { label: 'INT', val: stats.interceptions, key: 'interceptions' },
-    { label: 'PD', val: stats.passDeflections, key: 'passDeflections' },
-    { label: 'FF', val: stats.forcedFumbles, key: 'forcedFumbles' },
-    { label: 'FR', val: stats.fumbleRecoveries, key: 'fumbleRecoveries' },
+  /*
+   * A pill renders only for a stat we actually hold. A defender who genuinely recorded nothing
+   * shows no pills, which is the same thing the box score says — and an unknown line shows no
+   * pills either, which is why the absence is never dressed up as a row of zeros.
+   */
+  const candidates: Array<{ label: string; val: number | null | undefined }> = [
+    { label: 'SOLO', val: statLine?.soloTackles },
+    { label: 'AST', val: statLine?.assistedTackles },
+    { label: 'SACK', val: statLine?.sacks },
+    { label: 'INT', val: statLine?.interceptions },
+    { label: 'PD', val: statLine?.passDeflections },
+    { label: 'FF', val: statLine?.forcedFumbles },
+    { label: 'FR', val: statLine?.fumbleRecoveries },
+    { label: 'TD', val: statLine?.defensiveTDs },
   ]
-  if (stats.defensiveTDs > 0) {
-    pills.push({ label: 'TD', val: stats.defensiveTDs, key: 'defensiveTDs' })
-  }
+  const pills = candidates.filter(
+    (p): p is { label: string; val: number } => typeof p.val === 'number' && p.val > 0,
+  )
 
-  const pillPoints = (p: (typeof pills)[0]) => {
+  const pillPoints = (p: { label: string; val: number }) => {
     const weights: Record<string, number> = { SOLO: 1.2, SACK: 3, INT: 4, FF: 2, FR: 2, TD: 6 }
-    return (weights[p.label] ?? 0.5) * Number(p.val)
+    return (weights[p.label] ?? 0.5) * p.val
   }
-  const sorted = [...pills].sort((a, b) => pillPoints(b) - pillPoints(a))
-  const displayPills = sorted.slice(0, maxPills)
+  const displayPills = [...pills].sort((a, b) => pillPoints(b) - pillPoints(a)).slice(0, maxPills)
+
+  // A low-snap warning needs a snap count. Without one there is nothing to warn about.
+  const lowSnap = snapSharePct != null && snapSharePct < 50
 
   const p = players[playerId]
 
@@ -130,7 +169,15 @@ export function IDPPlayerCard({
           <p className="text-[10px] text-white/45">
             {team ?? '—'} · {position}
           </p>
-          <p className="text-[9px] text-white/35">{role}</p>
+          {/*
+            The line that used to hold an archetype ("Run Stopper", "Edge Rusher") derived from
+            the character codes of the player id. A real archetype needs per-snap role splits,
+            which no provider we ingest carries — so this shows the snap share, which we do hold,
+            and nothing at all when we do not.
+          */}
+          {snapSharePct != null ? (
+            <p className="text-[9px] text-white/35">{Math.round(snapSharePct)}% of snaps</p>
+          ) : null}
           <div className="mt-1 flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
             {displayPills.map((pill) => (
               <span
@@ -164,11 +211,13 @@ export function IDPPlayerCard({
           ) : null}
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-lg font-bold text-[color:var(--idp-defense)]">{pts}</p>
+          <p className="text-lg font-bold text-[color:var(--idp-defense)]">
+            {points != null ? points.toFixed(1) : <span className="text-white/25">—</span>}
+          </p>
           <div className="text-[10px] text-white/35 inline-flex justify-end">
             <span className="mr-0.5">proj</span>
             <ProjectionDisplay
-              projection={proj}
+              projection={projection ?? undefined}
               suffix=""
               pointsClassName="text-[10px] text-white/35"
               afCrestProps={{
@@ -184,12 +233,12 @@ export function IDPPlayerCard({
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1">
-        {injured ? (
+        {injuryStatus ? (
           <span className="rounded bg-red-950/50 px-1.5 py-0.5 text-[9px] text-red-200">
-            🔴 {injured}
+            🔴 {injuryStatus}
           </span>
         ) : null}
-        {bye ? <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-white/50">⚫ BYE</span> : null}
+        {onBye ? <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-white/50">⚫ BYE</span> : null}
         {lowSnap ? (
           <span className="rounded bg-amber-950/40 px-1.5 py-0.5 text-[9px] text-amber-200">⚠ LOW SNAP</span>
         ) : null}

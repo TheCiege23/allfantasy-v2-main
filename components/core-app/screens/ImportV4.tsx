@@ -148,27 +148,36 @@ const FIELD_BY_PROVIDER: Partial<
     help: 'Connect ESPN once under Settings → Connected Accounts, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
   },
   /*
-   * ⚠ FANTRAX TAKES A SNAPSHOT ID, NOT A LEAGUE ID, AND THE DIFFERENCE IS THE
-   * WHOLE PROVIDER. Fantrax web leagues are not publicly readable, so there is
-   * nothing to fetch from a league URL — `fetchFantraxLeagueForImport` reads a
-   * CSV snapshot uploaded here first and stamped with the uploader's account.
-   * This entry exists ahead of the availability flag deliberately: the reason
-   * the flag is still false is that selecting Fantrax used to render no field
-   * at all, so the field has to land WITH the flip, not after it.
+   * ⚠ THIS IS A LEAGUE ID, NOT A SNAPSHOT ID — the provider changed shape under
+   * this entry. Fantrax has a real read API (`fxea`), so a league is readable
+   * from the id in its URL and the CSV export is no longer the only way in.
+   *
+   * ⚠ AND IT IS NOT THE SECRET ID. Fantrax also issues a per-user Secret ID that
+   * would list every league someone is in — it is a credential, it is never
+   * asked for here, and discovery works from the public league id instead.
    */
   fantrax: {
-    label: 'Fantrax snapshot',
-    placeholder: 'snapshot id, or username|2025|League Name',
-    help: 'Upload your Fantrax CSV export first — the snapshot id it returns goes here. Fantrax leagues cannot be read from a league ID; nothing there is public.',
+    label: 'Fantrax league ID',
+    placeholder: 'v2kzedypmm8jp61b, or paste the league URL',
+    help: 'The ID is the code in your league URL — fantrax.com/fantasy/league/THIS-PART/home. Paste either. We will show you the teams so you can pick yours. Never your Fantrax password or Secret ID.',
   },
+}
+
+/**
+ * What the tile promises, where the generic line would be wrong.
+ *
+ * ⚠ "FINDS YOUR LEAGUES AUTOMATICALLY" IS THE DEFAULT FOR ANY PROVIDER WITH
+ * DISCOVERY, AND FOR FANTRAX IT IS FALSE. Fantrax discovery cannot enumerate an
+ * account without the Secret ID, which is a credential — it takes a league id
+ * and lists that league's teams. Sleeper and Yahoo really do find leagues on
+ * their own, so they keep the generic line.
+ */
+const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
+  fantrax: 'League ID · pick your team',
 }
 
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  // Uploads DO work and DO attribute to the uploader — that bug is fixed. What
-  // is missing is a proven upload-then-import run, which is the bar the
-  // availability guard sets. Say that, not something already untrue.
-  fantrax: 'Upload works; turning a snapshot into a league is not switched on yet.',
   mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
   fleaflicker: 'No connected path from this flow yet.',
 }
@@ -325,6 +334,14 @@ export function ImportV4({
   const providerLabel = getImportProviderLabel(provider)
   const field = FIELD_BY_PROVIDER[provider]
   const canDiscover = supportsImportProviderDiscovery(provider)
+  /*
+   * ⚠ FANTRAX'S DISCOVERED ROWS ARE TEAMS IN ONE LEAGUE, NOT LEAGUES, so every
+   * affordance that assumes "these are independent things you might want several
+   * of" is wrong here: the tick boxes, the Import-all button and the "Leagues we
+   * found" heading. Picking two teams would import the same league twice, once
+   * attributed to someone else.
+   */
+  const rowsAreTeams = provider === 'fantrax'
   // Yahoo has no identifier at all; Sleeper falls back to the linked account.
   const usesConnectedAccount = provider === 'yahoo'
 
@@ -813,9 +830,10 @@ export function ImportV4({
                 </span>
                 <span className="af-im-provider-meta">
                   {available
-                    ? supportsImportProviderDiscovery(opt.provider)
-                      ? 'Finds your leagues automatically'
-                      : 'League ID · read-only'
+                    ? PROVIDER_TAGLINE[opt.provider] ??
+                      (supportsImportProviderDiscovery(opt.provider)
+                        ? 'Finds your leagues automatically'
+                        : 'League ID · read-only')
                     : BLOCKED_REASON[opt.provider] ?? 'Not connectable yet.'}
                 </span>
                 <span className="af-im-provider-sports af-num">
@@ -827,12 +845,14 @@ export function ImportV4({
         </div>
 
         {/*
-          The Fantrax tile is disabled and says why, which leaves a reader with a
-          fact and no action. Uploading a snapshot is the one Fantrax thing that
-          does work today, so the door to it is here rather than nowhere. Not
-          rendered once the uploader is already on screen.
+          ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
+          Fantrax work removed the only pointer to the CSV uploader. The upload
+          is still the second way in — an export carries seasons the live API
+          does not expose, and a league the fxea API will not serve has nowhere
+          else to go — so the door stays. It is hidden only when the uploader is
+          already on screen, which is what it was really guarding.
         */}
-        {defaultProvider !== 'fantrax' && !isImportProviderAvailable('fantrax') ? (
+        {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
           <p className="af-im-fx-link">
             <a href="/import?provider=fantrax">
               Have a Fantrax CSV export? Bank it now →
@@ -951,21 +971,25 @@ export function ImportV4({
       </section>
 
       {/*
-        ⚠ REACHABLE WITHOUT BEING SELECTABLE, AND THAT IS THE POINT. The Fantrax
-        tile stays disabled while `available` is false, so it cannot be clicked —
-        but uploading a snapshot is not importing one, and the upload half works
-        today. `/import?provider=fantrax` opens it so history can be banked now
-        and imported the moment the flag flips, with no re-upload. Anything that
-        made the tile itself clickable would be claiming the import works.
+        The CSV upload stays, as the second way in rather than the only one.
+        Importing now runs from a league id, but an export still carries seasons
+        the live API does not expose, and a league whose id will not read (a
+        format the fxea API does not serve) has nowhere else to go.
       */}
-      {defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
+      {provider === 'fantrax' || defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
 
       {/* ── Discovered leagues ──────────────────────────────────────── */}
       {leagues.length > 0 && phase.k !== 'done' ? (
         <section className="af-im-card">
           <header className="af-im-result-head">
             <h2 className="af-label">
-              {accountLabel ? `Leagues for ${accountLabel}` : 'Leagues we found'}
+              {rowsAreTeams
+                ? accountLabel
+                  ? `Which team is yours in ${accountLabel}?`
+                  : 'Which team is yours?'
+                : accountLabel
+                  ? `Leagues for ${accountLabel}`
+                  : 'Leagues we found'}
             </h2>
             <span className="af-chip af-num">{leagues.length}</span>
           </header>
@@ -974,7 +998,7 @@ export function ImportV4({
             Import all. Only worth offering when there is more than one, and hidden
             once a single import has taken over the screen.
           */}
-          {leagues.length > 1 ? (
+          {leagues.length > 1 && !rowsAreTeams ? (
             <div className="af-im-bulk">
               {/*
                 ⚠ THE LABEL COUNTS WHAT IS TICKED, NOT WHAT WAS FOUND (4d build
@@ -1024,7 +1048,9 @@ export function ImportV4({
                 <li
                   key={l.sourceId}
                   className="af-im-league"
-                  data-picked={!excluded[l.sourceId] && leagues.length > 1 ? 'true' : undefined}
+                  data-picked={
+                    !excluded[l.sourceId] && leagues.length > 1 && !rowsAreTeams ? 'true' : undefined
+                  }
                 >
                   {/*
                     Only offered when there is more than one league — a lone
@@ -1032,7 +1058,7 @@ export function ImportV4({
                     would imply the single "Import" button below it might not
                     apply to it.
                   */}
-                  {leagues.length > 1 ? (
+                  {leagues.length > 1 && !rowsAreTeams ? (
                     <input
                       type="checkbox"
                       className="af-im-league-check"
@@ -1124,7 +1150,7 @@ export function ImportV4({
                       disabled={busy || bulkRunning}
                       onClick={() => void runPreview(l.sourceId)}
                     >
-                      {busy ? 'Reading…' : 'Import'}
+                      {busy ? 'Reading…' : rowsAreTeams ? 'This is my team' : 'Import'}
                     </button>
                   )}
                 </li>

@@ -6,6 +6,10 @@ import { isIdpLeague } from '@/lib/idp'
 import { getAllPlayers, type SleeperPlayer } from '@/lib/sleeper-client'
 import { isIdpPosition } from '@/lib/idp-kicker-values'
 import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/idp/idpRouteHelpers'
+import { prisma } from '@/lib/prisma'
+import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
+import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
+import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +45,39 @@ export async function GET(req: NextRequest) {
 
   const allowed = await canAccessLeagueDraft(leagueId, userId)
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  /*
+   * The Defense Hub payload rides on this route rather than a new one: the route budget is at
+   * its ceiling, and this endpoint already resolves exactly the auth and league scoping the hub
+   * needs.
+   *
+   * ⚠ IT RETURNS BEFORE THE `isIdpLeague` GUARD BELOW, DELIBERATELY. That guard 404s a
+   * non-IDP league, which is right for a player pool — there is no pool to serve. The hub has
+   * something to say about that league: that it does not roster defenders, which is a state to
+   * render and not an error. Answering it with a 404 would make "this page isn't for you" look
+   * to the client like a failed request.
+   */
+  const view = (searchParams?.get('view') ?? '').toLowerCase()
+  if (view === 'defense-hub') {
+    const payload = await loadDefenseHub({ prisma, leagueId, userId })
+    return NextResponse.json(payload)
+  }
+  if (view === 'roster-week') {
+    const payload = await loadRosterWeekPoints({ prisma, leagueId, userId })
+    return NextResponse.json(payload)
+  }
+  if (view === 'idp-matchup') {
+    const seasonParam = Number(searchParams?.get('season'))
+    const weekParam = Number(searchParams?.get('week'))
+    const payload = await loadIdpMatchup({
+      prisma,
+      leagueId,
+      userId,
+      season: Number.isFinite(seasonParam) && seasonParam > 0 ? seasonParam : undefined,
+      week: Number.isFinite(weekParam) && weekParam > 0 ? weekParam : undefined,
+    })
+    return NextResponse.json(payload)
+  }
 
   const isIdp = await isIdpLeague(leagueId)
   if (!isIdp) return NextResponse.json({ error: 'Not an IDP league' }, { status: 404 })

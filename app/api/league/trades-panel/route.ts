@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { LeagueTradeBlockPanelItem, LeagueTradeHistoryItem, LeagueTradeAsset } from '@/components/league/types'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import {
-  scanPendingSleeperTradesForLeague,
+  scanPendingSleeperTrades,
   type PendingProviderTrade,
   type PendingTradeAsset,
+  type PendingTradeScan,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { scanPendingYahooTrades } from '@/lib/provider-trades/scanPendingYahooTrades'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,6 +143,41 @@ function mapProviderTrades(pending: PendingProviderTrade[]): LeagueTradeHistoryI
 }
 
 /**
+ * The same pending offers, in the shape a trade BUILDER can reload.
+ *
+ * ⚠ WHY NOT REUSE `activeTrades`. That array is `LeagueTradeHistoryItem`, whose
+ * assets are `{ label, sublabel }` — display strings. Turning "2027 1st round
+ * pick" back into `{ year: 2027, round: 1 }` means parsing prose, and the first
+ * reword of that label silently breaks the reload. This carries the fields the
+ * builder needs and leaves the panel's shape alone.
+ *
+ * `give` and `get` are from the VIEWER's side in both directions: an offer they
+ * sent and an offer they received both list what leaves their roster under
+ * `give`. Flipping on direction would show their own outgoing offer backwards.
+ */
+function builderOffers(pending: PendingProviderTrade[]) {
+  const asset = (a: PendingTradeAsset) => ({
+    playerId: a.playerId,
+    name: a.playerName,
+    position: a.position === '—' ? null : a.position,
+    team: a.team === '—' ? null : a.team,
+    isPick: Boolean(a.isPick),
+    pickYear: a.pickYear ?? null,
+    pickRound: a.pickRoundNumber ?? null,
+    faabAmount: a.faabAmount ?? null,
+  })
+
+  return pending.map((t) => ({
+    transactionId: t.transactionId,
+    direction: t.proposedByViewer ? ('outgoing' as const) : ('incoming' as const),
+    partnerName: t.proposedByViewer ? 'Awaiting response' : t.proposedBy,
+    proposedAt: t.proposedAt,
+    give: t.assetsGiven.map(asset),
+    get: t.assetsReceived.map(asset),
+  }))
+}
+
+/**
  * Trade hub data for the league Trades tab: trade block entries synced to `TradeBlockEntry`, plus active trade count (future).
  */
 export async function GET(req: NextRequest) {
@@ -172,16 +210,91 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
 
+  /*
+   * The manager's saved draft for this league, if the table is there.
+   *
+   * ⚠ A MISSING TABLE IS A NULL, NOT A 500. The migration is applied by hand on
+   * this project, so this code can land before the column does — and the Trade
+   * Center falls back to the browser when it gets null. Letting the read throw
+   * would take the whole panel down over a scratchpad.
+   */
+  const draft = await prisma.tradeDraft
+    .findUnique({
+      where: { userId_leagueId: { userId, leagueId } },
+      select: { payload: true, updatedAt: true },
+    })
+    .catch(() => null)
+
   const sleeperLeagueId =
     league.platform === 'sleeper' && league.platformLeagueId ? league.platformLeagueId : null
 
   if (!sleeperLeagueId) {
     const activeTrades = await buildNativeActiveTrades(leagueId, userId)
+    const platform = String(league.platform ?? 'manual').toLowerCase()
+
+    /*
+     * ── Yahoo ────────────────────────────────────────────────────────────
+     *
+     * The second platform whose open offers we can read. It goes through the
+     * league-import module's own auth and parser rather than a second Yahoo
+     * client, so the 401-refresh path is the one already in production.
+     *
+     * ⚠ NO DIRECTION IS CLAIMED. Yahoo's transactions payload does not name a
+     * proposer, so every offer is shown as incoming. Guessing would render a
+     * manager's own outgoing offer backwards, which reads as a plausible trade
+     * rather than as a bug.
+     */
+    if (platform === 'yahoo' && league.platformLeagueId) {
+      const scan = await scanPendingYahooTrades({
+        leagueId,
+        platformLeagueId: league.platformLeagueId,
+        userId,
+      }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
+
+      return NextResponse.json({
+        draft,
+        tradeBlock: [] as LeagueTradeBlockPanelItem[],
+        activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades)],
+        activeCount: activeTrades.length + scan.trades.length,
+        source: 'yahoo' as const,
+        leagueName: league.name ?? 'League',
+        providerPendingCount: scan.trades.length,
+        providerLeagueUrl: `https://football.fantasysports.yahoo.com/f1/${encodeURIComponent(
+          league.platformLeagueId.split('.l.')[1] ?? league.platformLeagueId,
+        )}`,
+        pending: {
+          scanned: scan.scanned,
+          reason: scan.reason,
+          platform: 'yahoo' as const,
+          leagueUrl: `https://football.fantasysports.yahoo.com/f1/${encodeURIComponent(
+            league.platformLeagueId.split('.l.')[1] ?? league.platformLeagueId,
+          )}`,
+          weeksUnanswered: 0,
+        },
+        pendingOffers: builderOffers(scan.trades),
+      })
+    }
+
     return NextResponse.json({
+      draft,
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
       activeTrades,
       activeCount: activeTrades.length,
       source: 'native' as const,
+      /*
+       * ⚠ NOT SCANNED, AND THE ENVELOPE SAYS SO. Only Sleeper exposes pending
+       * offers to a read-only client. On every other platform we have not
+       * looked, and an inbox that renders empty here would be claiming a fact
+       * about the manager's league that we never checked.
+       */
+      pending: {
+        scanned: false,
+        reason: `we do not read pending offers on ${platform} yet — Sleeper and Yahoo are the two we can`,
+        platform,
+        leagueUrl: null as string | null,
+        weeksUnanswered: 0,
+      },
+      pendingOffers: [] as ReturnType<typeof builderOffers>,
     })
   }
 
@@ -232,19 +345,32 @@ export async function GET(req: NextRequest) {
     return profile?.sleeperUserId?.trim() || null
   })()
 
-  const [nativeTrades, providerPending] = await Promise.all([
+  const [nativeTrades, pendingScan] = await Promise.all([
     buildNativeActiveTrades(leagueId, userId).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),
     viewerSleeperId
-      ? scanPendingSleeperTradesForLeague({
+      ? scanPendingSleeperTrades({
           platformLeagueId: sleeperLeagueId,
           ownerSleeperId: viewerSleeperId,
           sport: league.sport,
         })
-      : Promise.resolve([] as PendingProviderTrade[]),
+      : Promise.resolve<PendingTradeScan>({
+          trades: [],
+          scanned: false,
+          /*
+           * The viewer is in the league but nothing links them to a Sleeper
+           * account, so there is no roster to scan FOR. Distinct from "Sleeper
+           * refused" and from "nothing pending", and the copy has to keep them
+           * apart — this one the manager can fix themselves.
+           */
+          reason: 'link your Sleeper account, or claim your team, so we know whose offers to read',
+          weeksUnanswered: 0,
+        }),
   ])
+
+  const providerPending: PendingProviderTrade[] = pendingScan.trades
 
   // Native first (the viewer can act on those); provider proposals follow.
   const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending)]
@@ -276,6 +402,7 @@ export async function GET(req: NextRequest) {
     : null
 
   return NextResponse.json({
+    draft,
     tradeBlock,
     activeTrades,
     activeCount: activeTrades.length,
@@ -286,5 +413,85 @@ export async function GET(req: NextRequest) {
     // rather than offering actions AF cannot perform.
     providerPendingCount: providerPending.length,
     providerLeagueUrl: `https://sleeper.com/leagues/${encodeURIComponent(sleeperLeagueId)}`,
+    /*
+     * ⚠ THE SCAN'S OUTCOME, NOT JUST ITS RESULT. `providerPendingCount: 0` is
+     * true whether nothing is pending or nothing was read, and a consumer that
+     * only sees the count cannot tell those apart. Everything needed to say
+     * which one it was rides here.
+     */
+    pending: {
+      scanned: pendingScan.scanned,
+      reason: pendingScan.reason,
+      platform: 'sleeper' as const,
+      leagueUrl: `https://sleeper.com/leagues/${encodeURIComponent(sleeperLeagueId)}`,
+      weeksUnanswered: pendingScan.weeksUnanswered,
+    },
+    pendingOffers: builderOffers(providerPending),
   })
+}
+
+/**
+ * Save or clear the manager's trade draft for this league.
+ *
+ * ⚠ NO NEW API ROUTE. This is a second method on the endpoint the Trade Center
+ * already calls, not a new path — the repo sits at the platform's route ceiling
+ * and a scratchpad is not worth one. It is league-scoped and reuses the same
+ * membership gate as the GET above, because a draft belongs to a league the
+ * manager is actually in.
+ *
+ * ⚠ AN EMPTY DEAL DELETES RATHER THAN STORING NOTHING. "Save" on an empty board
+ * is how a manager clears a draft, and a row holding two empty arrays would
+ * restore as a deal with nothing in it — which reads as "your draft was lost"
+ * rather than "there is no draft".
+ */
+export async function POST(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  const member = await prisma.league.findFirst({
+    where: {
+      id: leagueId,
+      OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+    },
+    select: { id: true },
+  })
+  if (!member) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+
+  const body = (await req.json().catch(() => ({}))) as {
+    give?: unknown[]
+    get?: unknown[]
+  }
+  const give = Array.isArray(body.give) ? body.give : []
+  const get = Array.isArray(body.get) ? body.get : []
+
+  try {
+    if (give.length === 0 && get.length === 0) {
+      await prisma.tradeDraft
+        .delete({ where: { userId_leagueId: { userId, leagueId } } })
+        .catch(() => null)
+      return NextResponse.json({ ok: true, cleared: true })
+    }
+
+    /* A cap, so a scratchpad cannot become a payload. */
+    const payload = toPrismaJsonInput({ give: give.slice(0, 24), get: get.slice(0, 24) })
+    const saved = await prisma.tradeDraft.upsert({
+      where: { userId_leagueId: { userId, leagueId } },
+      create: { userId, leagueId, payload },
+      update: { payload },
+      select: { updatedAt: true },
+    })
+    return NextResponse.json({ ok: true, updatedAt: saved.updatedAt })
+  } catch (err) {
+    /*
+     * The table may not exist yet — the migration is applied by hand here. Say
+     * that plainly so the client falls back to the browser and TELLS the
+     * manager, rather than reporting a save that did not happen.
+     */
+    console.error('[trades-panel] draft save failed', { leagueId, err })
+    return NextResponse.json({ error: 'Draft could not be saved to your account.' }, { status: 503 })
+  }
 }

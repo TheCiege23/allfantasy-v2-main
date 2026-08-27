@@ -5,7 +5,7 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import type { SectionState, UnavailableSection } from './leagueHome'
 import { latestProjectionWeek, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
-import { isIdpPosition } from './scoringNotes'
+import { loadSnapShare } from './snapShare'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -527,60 +527,15 @@ export async function getPlayerDetail(
   /*
    * Snap share, from the game logs rather than from a provider feed.
    *
-   * Totals are summed and divided once — a mean of per-game shares would let a two-snap
-   * cameo count as much as a sixty-snap start. Defenders are read off the defensive columns,
-   * everyone else off the offensive ones, because a linebacker's `off_snp` is noise.
+   * The computation lives in `snapShare.ts` because the defence hub needs the same answer for a
+   * whole roster at once. Inlined here it would have to be copied there, and two copies of a
+   * derived number disagree eventually — on the same player, on the same afternoon.
    */
-  const snapShare: PlayerDetail['snapShare'] = await (async () => {
-    if (!row.sleeperId) {
-      return {
-        available: false as const,
-        reason: 'we hold no Sleeper id for this player, and the game logs are keyed by one',
-      }
-    }
-    const logs = await prisma.playerGameStat
-      .findMany({
-        where: { sportType: row.sport ?? 'NFL', playerId: row.sleeperId },
-        select: { normalizedStatMap: true },
-        orderBy: [{ season: 'desc' }, { weekOrRound: 'desc' }],
-        take: 40,
-      })
-      .catch(() => [])
-
-    const defensive = isIdpPosition(row.position)
-    const playerKey = defensive ? 'def_snp' : 'off_snp'
-    const teamKey = defensive ? 'tm_def_snp' : 'tm_off_snp'
-
-    let snaps = 0
-    let teamSnaps = 0
-    let games = 0
-    for (const log of logs) {
-      const m = (log.normalizedStatMap ?? {}) as Record<string, unknown>
-      const p = m[playerKey]
-      const t = m[teamKey]
-      if (typeof p !== 'number' || typeof t !== 'number' || !(t > 0)) continue
-      snaps += p
-      teamSnaps += t
-      games += 1
-    }
-
-    if (games === 0 || teamSnaps <= 0) {
-      return {
-        available: false as const,
-        reason: `no game on file carries both ${playerKey} and ${teamKey} for this player`,
-      }
-    }
-    return {
-      available: true as const,
-      data: {
-        share: Math.round((snaps / teamSnaps) * 1000) / 1000,
-        snaps,
-        teamSnaps,
-        games,
-        basis: defensive ? ('defense' as const) : ('offense' as const),
-      },
-    }
-  })()
+  const snapShare: PlayerDetail['snapShare'] = await loadSnapShare(prisma, {
+    sleeperId: row.sleeperId,
+    position: row.position,
+    sport: row.sport,
+  })
 
   const rankRow = projRow ? (await positionRanks([projKey], projectionWeek)).get(projKey) : undefined
   const rank: PlayerDetail['positionRank'] = rankRow

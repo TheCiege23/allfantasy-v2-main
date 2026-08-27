@@ -111,7 +111,25 @@ export function GlobalBroadcastModal({ isOpen, onClose, commissionerLeagues, onS
         toast.error(typeof data?.error === 'string' ? data.error : 'Broadcast failed')
         return
       }
-      toast.success(`Broadcast sent to ${data.sentToLeagues ?? selectedIds.length} leagues`)
+      /*
+       * A partial send is the dangerous outcome: the endpoint only accepts
+       * leagues you OWN, while this picker also offers ones you co-commission,
+       * so picking three and owning one used to report plain success. Name the
+       * shortfall — a sender who is not told will assume the reminder landed.
+       */
+      const skipped = Array.isArray(data?.skippedLeagueIds) ? (data.skippedLeagueIds as string[]) : []
+      const sent = Number(data?.sentToLeagues ?? selectedIds.length)
+      if (skipped.length > 0) {
+        const names = skipped
+          .map((id) => commissionerLeagues.find((l) => l.id === id)?.name ?? id)
+          .join(', ')
+        toast.error(
+          `Sent to ${sent} of ${selectedIds.length}. Not sent to ${names} — you do not own those leagues.`,
+          { duration: 8000 },
+        )
+      } else {
+        toast.success(`Broadcast sent to ${sent} league${sent === 1 ? '' : 's'}`)
+      }
       onClose()
       await onSend(payload)
     } finally {

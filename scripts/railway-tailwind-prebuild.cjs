@@ -1,7 +1,7 @@
 /**
  * Railway Tailwind CSS prebuild script.
  *
- * Problem: On Railway (Node 22 Linux / Docker), the tailwindcss PostCSS plugin
+ * Problem: On Railway (Node Linux / Docker), the tailwindcss PostCSS plugin
  * sometimes silently produces 0 bytes of CSS when run inside webpack workers —
  * either due to a stale postcss-loader disk cache or ESM-package loading issues
  * in the worker context.  The result is that mini-css-extract-plugin has nothing
@@ -9,15 +9,28 @@
  * is completely unstyled.
  *
  * Fix: run the Tailwind CLI as a *separate process* BEFORE `next build`.  The CLI
- * reads app/globals.css (which contains @tailwind base/components/utilities),
- * scans all content files, and writes the compiled CSS back to app/globals.css.
- * When webpack subsequently processes globals.css it sees plain CSS (no @tailwind
+ * reads the pristine source (which contains @tailwind base/components/utilities),
+ * scans all content files, and writes the compiled CSS to app/globals.css.  When
+ * webpack subsequently processes globals.css it sees plain CSS (no @tailwind
  * directives), so postcss-loader's tailwindcss plugin is a no-op, autoprefixer
  * adds vendor prefixes, and mini-css-extract creates the correct CSS chunk.
  *
- * This script is wired up as the npm `prebuild` lifecycle hook in package.json,
- * so it runs automatically before `next build` regardless of what the Railway /
- * Nixpacks buildCommand is set to.  It is a no-op outside Railway environments.
+ * ---------------------------------------------------------------------------
+ * HISTORY — why this script is shaped the way it is (2026-08-25)
+ *
+ * A previous version opened with a shortcut: if public/railway-styles.css
+ * existed and cleared 100KB, it copied that file over globals.css and exited
+ * WITHOUT COMPILING.  Because that cache file is committed and was 671KB, the
+ * branch fired on every single build.  Railway shipped CSS frozen at
+ * 2026-05-31 for nearly three months; every Tailwind class added after that
+ * date had no rule behind it, and the site rendered essentially unstyled.
+ *
+ * The rule that came out of that: A CACHED ARTIFACT IS NOT EVIDENCE THAT
+ * COMPILATION SUCCEEDED.  It may only be used when compilation has actually
+ * been attempted and actually failed — never in place of attempting it.
+ * Shipping silently-stale CSS is worse than failing the build, because a
+ * failed build tells you something is wrong and stale CSS does not.
+ * ---------------------------------------------------------------------------
  */
 
 'use strict';
@@ -27,7 +40,6 @@ const fs = require('fs');
 const path = require('path');
 
 const isRailway = !!(
-  process.env.AF_RAILWAY_TAILWIND_PREBUILD === '1' ||
   process.env.RAILWAY_ENVIRONMENT ||
   process.env.RAILWAY_PROJECT_ID ||
   process.env.RAILWAY_SERVICE_ID ||
@@ -40,99 +52,193 @@ const isLinuxProdBuild =
   process.platform === 'linux' &&
   !process.env.VERCEL &&
   !process.env.VERCEL_URL;
+
+/**
+ * Floor for "this looks like a real Tailwind build". The full sheet is ~775KB;
+ * anything under this is the 0-byte/near-empty failure this script exists to
+ * catch, not a legitimately small stylesheet.
+ */
 const MIN_RAILWAY_CSS_BYTES = 100_000;
+
+/**
+ * Escape hatch. Set to '1' to let a build continue on the committed fallback
+ * when compilation fails, instead of failing outright. Intended for an
+ * emergency ship when Tailwind itself is broken — NOT for routine use, because
+ * it reintroduces the silent-stale-CSS failure mode described above.
+ */
+const allowStaleFallback = process.env.AF_ALLOW_STALE_RAILWAY_CSS === '1';
+
+/**
+ * Escape hatch for comparing Railway against the Vercel build path.
+ *
+ * This script is the single largest difference between the two: Vercel skips it
+ * (isLinuxProdBuild requires !VERCEL), so there app/globals.css still holds
+ * @tailwind directives and webpack's tailwindcss plugin compiles it. On Railway
+ * it runs, and webpack sees already-compiled CSS with autoprefixer only.
+ *
+ * The root layout's stylesheet is missing from Railway builds and present on
+ * Vercel, so setting this to '1' runs Railway through Vercel's CSS path and
+ * says whether that difference is the cause.
+ */
+if (process.env.AF_SKIP_TAILWIND_PREBUILD === '1') {
+  console.log(
+    '[railway-prebuild] AF_SKIP_TAILWIND_PREBUILD=1 — skipping; app/globals.css keeps its @tailwind directives (Vercel path).',
+  );
+  process.exit(0);
+}
 
 if (!isRailway && !isLinuxProdBuild) {
   console.log('[railway-prebuild] Not a Railway/Linux prod build — skipping Tailwind CLI prebuild.');
   process.exit(0);
 }
 
-console.log('[railway-prebuild] Railway detected (env=%s). Pre-compiling Tailwind CSS via CLI...',
-  process.env.RAILWAY_ENVIRONMENT || 'unknown');
-
 const cwd = process.cwd();
-const globalsIn  = path.join(cwd, 'app', 'globals.css');
-const globalsOut = path.join(cwd, 'app', 'globals-compiled.css');
-const railwayStylesOut = path.join(cwd, 'public', 'railway-styles.css');
-const twConfig   = path.join(cwd, 'tailwind.config.js');
-const twBin      = path.join(cwd, 'node_modules', '.bin', 'tailwindcss');
+const globalsCss = path.join(cwd, 'app', 'globals.css');
+const sourceCss = path.join(cwd, 'app', 'globals.tailwind-source.css');
+const compiledTmp = path.join(cwd, 'app', 'globals-compiled.css');
+const fallbackCss = path.join(cwd, 'public', 'railway-styles.css');
+const twConfig = path.join(cwd, 'tailwind.config.js');
+const twBin = path.join(cwd, 'node_modules', '.bin', 'tailwindcss');
 
-function readRailwayFallbackBytes() {
+console.log(
+  '[railway-prebuild] Railway detected (env=%s). Compiling Tailwind CSS via CLI...',
+  process.env.RAILWAY_ENVIRONMENT || 'unknown'
+);
+
+function sizeOf(file) {
   try {
-    return fs.statSync(railwayStylesOut).size;
+    return fs.statSync(file).size;
   } catch {
     return 0;
   }
 }
 
-const fallbackBytes = readRailwayFallbackBytes();
-if (fallbackBytes >= MIN_RAILWAY_CSS_BYTES && process.env.AF_FORCE_TAILWIND_PREBUILD !== '1') {
-  fs.copyFileSync(railwayStylesOut, globalsIn);
-  console.log(
-    '[railway-prebuild] committed Railway fallback CSS found (%d bytes) - copied to app/globals.css.',
-    fallbackBytes
+function ageInDays(file) {
+  try {
+    return (Date.now() - fs.statSync(file).mtimeMs) / 86_400_000;
+  } catch {
+    return Infinity;
+  }
+}
+
+/**
+ * Fall back to the committed stylesheet, loudly. Only reachable after a real
+ * compilation attempt has failed.
+ */
+function useFallbackOrFail(reason) {
+  const bytes = sizeOf(fallbackCss);
+  const days = ageInDays(fallbackCss);
+
+  if (bytes < MIN_RAILWAY_CSS_BYTES) {
+    console.error(
+      '[railway-prebuild] FATAL: %s, and no usable fallback exists (public/railway-styles.css is %d bytes).',
+      reason,
+      bytes
+    );
+    process.exit(1);
+  }
+
+  if (!allowStaleFallback) {
+    console.error('[railway-prebuild] FATAL: %s.', reason);
+    console.error(
+      '[railway-prebuild] A fallback exists (%d bytes, %s days old) but will NOT be used automatically.',
+      bytes,
+      days === Infinity ? 'unknown' : days.toFixed(1)
+    );
+    console.error(
+      '[railway-prebuild] Shipping it would silently serve stale CSS. Fix the Tailwind build, or set'
+    );
+    console.error(
+      '[railway-prebuild] AF_ALLOW_STALE_RAILWAY_CSS=1 to deliberately ship the stale sheet.'
+    );
+    process.exit(1);
+  }
+
+  console.warn(
+    '[railway-prebuild] WARNING: %s. AF_ALLOW_STALE_RAILWAY_CSS=1 is set — shipping the committed fallback.',
+    reason
   );
+  console.warn(
+    '[railway-prebuild] WARNING: that stylesheet is %s days old. Classes added since then WILL have no styling.',
+    days === Infinity ? 'an unknown number of' : days.toFixed(1)
+  );
+  fs.copyFileSync(fallbackCss, globalsCss);
   process.exit(0);
 }
 
-// Sanity checks
-if (!fs.existsSync(globalsIn)) {
-  console.error('[railway-prebuild] ERROR: app/globals.css not found — cannot pre-compile.');
-  process.exit(1);
+// ---------------------------------------------------------------------------
+// Establish the pristine source.
+//
+// globals.css is the compile TARGET, so after a successful run it no longer
+// contains @tailwind directives. Compiling from it a second time would produce
+// a stylesheet from already-expanded CSS. The source is therefore pinned to its
+// own file the first time we see directives, and every compile reads from that.
+// This also means a clobbered globals.css is recoverable.
+// ---------------------------------------------------------------------------
+if (!fs.existsSync(sourceCss)) {
+  if (!fs.existsSync(globalsCss)) {
+    console.error('[railway-prebuild] FATAL: neither app/globals.css nor the pinned source exists.');
+    process.exit(1);
+  }
+
+  const current = fs.readFileSync(globalsCss, 'utf8');
+  if (!current.includes('@tailwind')) {
+    // globals.css holds compiled output and no pristine source was ever pinned,
+    // so the directives are not recoverable from this tree.
+    useFallbackOrFail(
+      'app/globals.css contains no @tailwind directives and no pinned source exists, ' +
+        'so there is nothing to compile from'
+    );
+  }
+
+  fs.copyFileSync(globalsCss, sourceCss);
+  console.log('[railway-prebuild] Pinned pristine source -> app/globals.tailwind-source.css');
 }
+
 if (!fs.existsSync(twBin)) {
-  console.error('[railway-prebuild] ERROR: tailwindcss binary not found at', twBin);
-  process.exit(1);
+  useFallbackOrFail(`tailwindcss binary not found at ${twBin}`);
 }
+
+// ---------------------------------------------------------------------------
+// Compile. This always runs — the presence of a cached artifact never skips it.
+// ---------------------------------------------------------------------------
+let compiledBytes = 0;
 
 try {
-  const source = fs.readFileSync(globalsIn, 'utf8');
-  if (!source.includes('@tailwind')) {
-    fs.copyFileSync(globalsIn, railwayStylesOut);
-    const compiledBytes = fs.statSync(railwayStylesOut).size;
-    if (compiledBytes < MIN_RAILWAY_CSS_BYTES) {
-      console.warn(
-        '[railway-prebuild] WARNING: compiled globals.css is only %d bytes - continuing with existing build pipeline.',
-        compiledBytes
-      );
-    }
-    console.log('[railway-prebuild] globals.css already compiled - copied to public/railway-styles.css (%d bytes).', compiledBytes);
-    process.exit(0);
-  }
-
-  // Run Tailwind CLI: read globals.css (has @tailwind directives), write compiled CSS
-  // to a temp file first (avoids reading-while-writing the same path), then swap.
-  const cmd = `"${twBin}" -i "${globalsIn}" -o "${globalsOut}" --minify --config "${twConfig}"`;
+  const cmd = `"${twBin}" -i "${sourceCss}" -o "${compiledTmp}" --minify --config "${twConfig}"`;
   console.log('[railway-prebuild] Running:', cmd);
   execSync(cmd, { stdio: 'inherit', env: { ...process.env } });
-
-  const compiledBytes = fs.statSync(globalsOut).size;
+  compiledBytes = sizeOf(compiledTmp);
   console.log('[railway-prebuild] Tailwind CLI output: %d bytes', compiledBytes);
-
-  if (compiledBytes < MIN_RAILWAY_CSS_BYTES) {
-    console.warn(
-      '[railway-prebuild] WARNING: compiled CSS is only %d bytes - continuing with existing build pipeline.',
-      compiledBytes
-    );
-    fs.unlinkSync(globalsOut);
-    process.exit(0);
-  }
-
-  // Replace globals.css with the compiled output.
-  // webpack will see plain CSS (no @tailwind directives), so the tailwindcss
-  // PostCSS plugin will be a no-op and autoprefixer will add vendor prefixes.
-  fs.copyFileSync(globalsOut, globalsIn);
-  fs.copyFileSync(globalsOut, railwayStylesOut);
-  fs.unlinkSync(globalsOut);
-  console.log('[railway-prebuild] ✓ app/globals.css replaced with compiled Tailwind CSS (%d bytes)', compiledBytes);
-  console.log('[railway-prebuild] ✓ public/railway-styles.css written (%d bytes)', compiledBytes);
-
 } catch (err) {
-  console.error('[railway-prebuild] Tailwind CLI FAILED:', err.message);
-  if (readRailwayFallbackBytes() >= MIN_RAILWAY_CSS_BYTES) {
-    console.warn('[railway-prebuild] committed Railway fallback CSS is available - continuing build.');
-    process.exit(0);
+  try {
+    fs.unlinkSync(compiledTmp);
+  } catch {
+    /* nothing to clean up */
   }
-  // Exit 1 only when there is no fallback; silent failure would produce an unstyled site.
-  process.exit(1);
+  useFallbackOrFail(`Tailwind CLI failed: ${err.message}`);
 }
+
+if (compiledBytes < MIN_RAILWAY_CSS_BYTES) {
+  try {
+    fs.unlinkSync(compiledTmp);
+  } catch {
+    /* nothing to clean up */
+  }
+  // This is the original silent-failure mode: the CLI exits 0 having emitted
+  // almost nothing. Treated as a failure, not as a smaller-than-usual success.
+  useFallbackOrFail(
+    `compiled CSS is only ${compiledBytes} bytes, below the ${MIN_RAILWAY_CSS_BYTES}-byte floor`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Publish. globals.css becomes the compiled sheet so webpack sees plain CSS,
+// and the fallback is refreshed ONLY now — after a compile we trust.
+// ---------------------------------------------------------------------------
+fs.copyFileSync(compiledTmp, globalsCss);
+fs.copyFileSync(compiledTmp, fallbackCss);
+fs.unlinkSync(compiledTmp);
+
+console.log('[railway-prebuild] ✓ app/globals.css written from fresh compile (%d bytes)', compiledBytes);
+console.log('[railway-prebuild] ✓ public/railway-styles.css refreshed (%d bytes)', compiledBytes);

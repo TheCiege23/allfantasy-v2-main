@@ -15,6 +15,9 @@ import { processIdpLeagueChatInput } from '@/lib/idp/idpChimmyLeagueChat'
 import { processDevyLeagueChatInput } from '@/lib/devy/devyChimmyLeagueChat'
 import { processC2cLeagueChatInput } from '@/lib/c2c/c2cChimmyLeagueChat'
 import { isChimmyPrivateMessage, parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
+import { markViewingChat, readChatPresence } from '@/lib/chat-core/chatPresence'
+import { redactAnonymousPollVotes } from '@/lib/chat-core/messagePolls'
+import { syncTradeCardsForLeague } from '@/lib/league-chat/tradeChatCards'
 import { generateChimmyPrivateReply } from '@/lib/chat-core/chimmyPrivateReply'
 import { getLeagueMemberUserIds } from '@/lib/league-chat/leagueMemberIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -56,6 +59,7 @@ function createdAtToUnixMs(createdAt: string): number {
 
 function toClientMessage(message: {
   id: string
+  parentMessageId?: string | null
   senderUserId?: string | null
   senderName: string | null
   senderAvatarUrl: string | null
@@ -69,6 +73,7 @@ function toClientMessage(message: {
   const createdMs = createdAtToUnixMs(message.createdAt)
   return {
     id: message.id,
+    parentMessageId: message.parentMessageId ?? null,
     authorId: message.senderUserId ?? '',
     authorName,
     authorAvatarUrl,
@@ -125,10 +130,31 @@ export async function GET(req: NextRequest) {
   }
 
   const limit = Math.min(Number(req.nextUrl.searchParams?.get('limit') || '50'), 100)
-  const messages = await getLeagueChatMessages(leagueId, { limit, requestingUserId: userId })
+  /*
+   * A VIEW preference, not a stored setting. The draft room already mirrors its
+   * messages here; this decides whether the reader sees them, and it is a query
+   * parameter precisely so it needs no per-league storage and no migration.
+   */
+  const includeDraftRoom = req.nextUrl.searchParams?.get('includeDraft') === '1'
+  const messages = await getLeagueChatMessages(leagueId, {
+    limit,
+    requestingUserId: userId,
+    includeDraftRoom,
+  })
+  /*
+   * ⚠ A PIN IS STORED AS A CHAT ROW WHOSE BODY IS JSON. `/pin` writes a
+   * `type: 'pin'` LeagueChatMessage carrying `{ messageId, snippet }`, and this
+   * GET has never filtered by type — so the moment anything could pin, every
+   * pin would also render in the stream as a line of raw JSON. Production has
+   * no pin rows yet, which is the only reason this is not already visible.
+   *
+   * The pinned board reads them through `/pinned`; the transcript should not.
+   */
+  const withoutPins = messages.filter((message) => (message.messageType ?? 'text') !== 'pin')
+
   const filteredMessages =
     bigBrotherLeague && selectedBbChannel
-      ? messages.filter((message) => {
+      ? withoutPins.filter((message) => {
           const metadata =
             message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata)
               ? (message.metadata as Record<string, unknown>)
@@ -136,19 +162,65 @@ export async function GET(req: NextRequest) {
           const channel = readBbChannelKeyFromMetadata(metadata) ?? 'main'
           return channel === selectedBbChannel
         })
-      : messages
+      : withoutPins
+
+  /*
+   * Presence beacon. Folded into the poll the drawer already makes rather than
+   * given a route of its own — this repo is at the platform's route ceiling —
+   * and deliberately after the access check, so viewing is only recorded for a
+   * league the caller is actually allowed to read.
+   *
+   * Both calls are best-effort inside their own module. A chat that failed to
+   * load because presence failed would be a worse product than a chat with no
+   * presence strip.
+   */
+  /*
+   * Card any trades that arrived since the last look. Folded into the read the
+   * drawer already makes rather than given a cron or a route: it throttles
+   * itself to one scan every five minutes per league, never throws, and its
+   * first run for a league posts nothing at all.
+   */
+  await syncTradeCardsForLeague(leagueId)
+
+  const presenceScope = { kind: 'league' as const, id: leagueId }
+  await markViewingChat(presenceScope, {
+    userId,
+    resolveName: async () => {
+      const row = await prisma.appUser.findUnique({
+        where: { id: userId },
+        select: { displayName: true, username: true },
+      })
+      return row?.displayName || row?.username || null
+    },
+  })
+  const presence = await readChatPresence(presenceScope)
 
   return NextResponse.json({
+    /*
+     * So the client can tell which reactions are the viewer's own. The stored
+     * entry lists user ids and the drawer has never known who it is rendering
+     * for; without this a reaction could be displayed but not un-done.
+     */
+    viewerUserId: userId,
+    presence,
     messages: filteredMessages.map((message) =>
       toClientMessage({
         id: message.id,
+        parentMessageId: message.parentMessageId ?? null,
         senderUserId: message.senderUserId ?? null,
         senderName: message.senderName ?? null,
         senderAvatarUrl: message.senderAvatarUrl ?? null,
         body: message.body,
         createdAt: message.createdAt,
         messageType: message.messageType ?? 'text',
-        metadata: message.metadata ?? null,
+        /*
+         * Anonymous polls are redacted HERE, on the way out. The ids stay in
+         * the database because refusing a second vote means knowing who has
+         * already voted; what changes is what other members can see.
+         */
+        metadata: (redactAnonymousPollVotes(message.metadata ?? null, userId) ?? null) as
+          | Record<string, unknown>
+          | null,
       })
     ),
   })
@@ -280,7 +352,7 @@ export async function POST(req: NextRequest) {
     if (!privateUserMsg) {
       return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
     }
-    const replyText = await generateChimmyPrivateReply(message, leagueId)
+    const replyText = await generateChimmyPrivateReply(message, { leagueId, userId })
     const leagueRow = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { userId: true },
@@ -330,10 +402,21 @@ export async function POST(req: NextRequest) {
     '[Media]'
 
   const mentionInfo = parseAtMentions(message)
+  /*
+   * The column and the service option have both existed the whole time; this
+   * route simply never read the field off the body, so a reply sent from the
+   * comms drawer was stored as a top-level message.
+   */
+  const parentMessageId =
+    typeof body?.parentMessageId === 'string' && body.parentMessageId.trim().length > 0
+      ? body.parentMessageId.trim()
+      : undefined
+
   const created = await createLeagueChatMessage(leagueId, userId, bodyText, {
     metadata: finalMetadata,
     messageSubtype: mentionInfo.hasAll ? 'at_all' : null,
     mentionedUserIds: mentionInfo.userMentions,
+    parentMessageId,
   })
   if (!created) {
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })

@@ -249,14 +249,93 @@ export async function loadUsage(args: {
 }
 
 /**
- * Experience, which we do not durably hold.
+ * Experience, which is now durably held.
  *
- * ⚠ NAMED RATHER THAN GUESSED. `years_exp` lives only in `SportsDataCache`,
- * written fire-and-forget on draft-pool resolve, and there is no column for it
- * on any player table. Inferring rookie status from a missing prior season would
- * label every player we simply failed to match as a rookie — the most confident
- * possible wrong answer about a class of asset dynasty managers pay a premium
- * for.
+ * ⚠ IT WAS NEVER MISSING FROM THE FEED, ONLY FROM THE WRITE. Sleeper sends
+ * `years_exp` and `SleeperPlayerSeedService` has always parsed it into its
+ * `SeededPlayer` type — there was simply no column to put it in, so it was
+ * dropped at the createMany. `SportsPlayer.yearsExp` exists now and the seed
+ * passes it through.
+ *
+ * ⚠ 0 AND NULL ARE DIFFERENT AND THE DIFFERENCE IS THE WHOLE FACTOR. 0 means
+ * he has not played an NFL snap. NULL means we do not know. Reading null as 0
+ * labels every player we failed to match a rookie — the most confident possible
+ * wrong answer about the class of asset dynasty managers pay the biggest
+ * premium for.
  */
+export type ExperienceSignal = {
+  yearsExp: number
+  rookie: boolean
+}
+
+/** Still true for a player with no row, or a row the seed has not refreshed. */
 export const EXPERIENCE_GAP =
-  'Years of experience are not stored on any player record — only in a cache written opportunistically — so rookie status cannot be confirmed here.'
+  'Years of experience are not on file for this player, so rookie status cannot be confirmed here.'
+
+/**
+ * Experience by player NAME, because the notes builder works from lines rather
+ * than ids.
+ *
+ * ⚠ AMBIGUITY IS RESOLVED ON THE VALUE, NOT THE ROW COUNT. `SportsPlayer` is
+ * unique on `(sport, externalId, source)`, so one player legitimately appears
+ * once per source and a name matching several rows is normal. What matters is
+ * whether those rows AGREE: if they do, the figure is safe; if two sources
+ * disagree about how many seasons a man has played, we do not get to pick one.
+ */
+export async function loadExperience(args: {
+  names: string[]
+  sport: string
+}): Promise<Map<string, ExperienceSignal>> {
+  const out = new Map<string, ExperienceSignal>()
+  const names = [...new Set(args.names.map((n) => n.trim()).filter(Boolean))]
+  if (names.length === 0) return out
+
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: { sport: args.sport, name: { in: names } },
+      select: { name: true, yearsExp: true },
+    })
+    .catch(() => [])
+
+  const byName = new Map<string, Set<number>>()
+  const sawNull = new Set<string>()
+  for (const r of rows) {
+    const key = r.name.toLowerCase()
+    if (r.yearsExp == null) {
+      sawNull.add(key)
+      continue
+    }
+    const set = byName.get(key) ?? new Set<number>()
+    set.add(r.yearsExp)
+    byName.set(key, set)
+  }
+
+  for (const [key, values] of byName) {
+    /* Two sources disagreeing is a reason to say nothing, not to average them. */
+    if (values.size !== 1) continue
+    const yearsExp = [...values][0]!
+    out.set(key, { yearsExp, rookie: yearsExp === 0 })
+  }
+  /* A name whose only rows carry null stays absent — unknown, not zero. */
+  for (const key of sawNull) if (!out.has(key)) out.delete(key)
+
+  return out
+}
+
+/**
+ * The note, for a player arriving on the viewer's roster.
+ *
+ * ⚠ ONLY THE ROOKIE CASE SPEAKS. "He is in his fourth season" is true and
+ * changes nothing a manager would do, and a panel that lists every non-finding
+ * is one people stop reading — the same rule the depth-role and leverage notes
+ * follow.
+ *
+ * ⚠ AND IT REPORTS, IT DOES NOT REPRICE. FantasyCalc's dynasty price already
+ * carries rookie hype; an adjustment on top would double-count it, exactly as an
+ * age curve would. What the note adds is what the number IS, not a correction
+ * to it.
+ */
+export function experienceNote(name: string, signal: ExperienceSignal | null): string | null {
+  if (!signal || !signal.rookie) return null
+  return `${name} has not played an NFL snap. His price is a projection of what he might become, not a record of what he has done.`
+}

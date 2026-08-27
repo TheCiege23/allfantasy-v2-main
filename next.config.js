@@ -18,6 +18,7 @@ const isRailwayRuntime = !!(
 
 const nextConfig = {
   reactStrictMode: true,
+    optimizeFonts: false,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
 
   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
@@ -66,6 +67,140 @@ const nextConfig = {
       config.cache = false;
     }
 
+    // Temporary, opt-in via AF_CSS_DEBUG=1. The root layout's stylesheet does not
+    // reach the page and no emitted asset anywhere in the build contains Tailwind's
+    // output, so this asks webpack directly whether it has the module at all.
+    if (process.env.AF_CSS_DEBUG === '1') {
+      config.plugins = config.plugins || [];
+      config.plugins.push({
+        apply(compiler) {
+          compiler.hooks.done.tap('AfCssDebug', (stats) => {
+            try {
+              const compilation = stats.compilation;
+              const matches = [];
+              for (const mod of compilation.modules) {
+                const resource =
+                  mod.resource || (typeof mod.identifier === 'function' ? mod.identifier() : '');
+                const text = String(resource || '');
+                if (text.includes('globals.css')) matches.push(text.slice(-140));
+              }
+              // Compilation-level failures nothing has inspected yet. A css-loader or
+              // postcss error on a 776KB file would explain a module that never
+              // appears in the graph.
+              const errs = (compilation.errors || []).map((e) => String(e && (e.message || e)).slice(0, 300));
+              const warns = (compilation.warnings || []).map((w) => String(w && (w.message || w)).slice(0, 200));
+              console.log(
+                '[af-css-debug] name=%s isServer=%s errors=%d warnings=%d',
+                compilation.name || '(unnamed)',
+                isServer,
+                errs.length,
+                warns.length,
+              );
+              for (const e of errs.slice(0, 4)) console.log('[af-css-debug]   ERROR: %s', e);
+              for (const w of warns.slice(0, 4)) console.log('[af-css-debug]   WARN: %s', w);
+
+              // Broad sweep: anything mentioning globals, and how the root layout is
+              // actually identified (next-app-loader / private-next-app-dir forms).
+              const anyGlobals = [];
+              const rootLayoutish = [];
+              for (const mod of compilation.modules) {
+                const raw =
+                  mod.resource || (typeof mod.identifier === 'function' ? mod.identifier() : '');
+                const text = String(raw || '');
+                if (text.includes('globals')) anyGlobals.push(text.slice(-160));
+                if (text.includes('private-next-app-dir') || text.includes('next-app-loader')) {
+                  rootLayoutish.push(text.slice(-160));
+                }
+              }
+              console.log(
+                '[af-css-debug] isServer=%s anyModuleMentioningGlobals=%d %s',
+                isServer,
+                anyGlobals.length,
+                JSON.stringify(anyGlobals.slice(0, 6)),
+              );
+              console.log(
+                '[af-css-debug] isServer=%s appLoaderModules=%d %s',
+                isServer,
+                rootLayoutish.length,
+                JSON.stringify(rootLayoutish.slice(0, 3)),
+              );
+
+              // Every module whose file is named layout.tsx, so the root layout can be
+              // told apart from the nested /app one by full path.
+              const layoutFiles = [];
+              let rootEntry = null;
+              for (const mod of compilation.modules) {
+                const res = String(mod.resource || '');
+                if (res.endsWith('layout.tsx')) layoutFiles.push(res);
+                const id = typeof mod.identifier === 'function' ? String(mod.identifier()) : '';
+                if (!rootEntry && id.includes('name=app%2Flayout&') && id.includes('page=%2Flayout')) {
+                  rootEntry = mod;
+                }
+              }
+              console.log(
+                '[af-css-debug] isServer=%s layoutTsxModules=%d %s',
+                isServer,
+                layoutFiles.length,
+                JSON.stringify(layoutFiles.slice(0, 8)),
+              );
+
+              if (rootEntry) {
+                const id = String(rootEntry.identifier());
+                console.log('[af-css-debug] ROOT ENTRY id(first 300)=%s', id.slice(0, 300));
+                let src = '';
+                try {
+                  const os = rootEntry.originalSource && rootEntry.originalSource();
+                  src = os ? String(os.source()).slice(0, 700) : '(no originalSource)';
+                } catch (e) {
+                  src = '(source threw: ' + (e && e.message) + ')';
+                }
+                console.log('[af-css-debug] ROOT ENTRY source(first 700)=%s', JSON.stringify(src));
+              } else {
+                console.log('[af-css-debug] ROOT ENTRY not found in this compilation');
+              }
+
+              const cssModules = [];
+              const layoutModules = [];
+              for (const mod of compilation.modules) {
+                const resource =
+                  mod.resource || (typeof mod.identifier === 'function' ? mod.identifier() : '');
+                const text = String(resource || '');
+                if (/\.css(\?|$)/.test(text)) cssModules.push(text.split('/').slice(-2).join('/'));
+                if (text.includes('app/layout.')) layoutModules.push(text.slice(-100));
+              }
+              console.log(
+                '[af-css-debug] isServer=%s cssModulesInGraph=%d %s',
+                isServer,
+                cssModules.length,
+                JSON.stringify(cssModules.slice(0, 40)),
+              );
+              console.log(
+                '[af-css-debug] isServer=%s ROOT LAYOUT modules=%d %s',
+                isServer,
+                layoutModules.length,
+                JSON.stringify(layoutModules.slice(0, 6)),
+              );
+              const cssAssets = Object.keys(compilation.assets).filter((a) => a.endsWith('.css'));
+              console.log(
+                '[af-css-debug] isServer=%s modulesMatchingGlobalsCss=%d %s',
+                isServer,
+                matches.length,
+                JSON.stringify(matches.slice(0, 6)),
+              );
+              console.log(
+                '[af-css-debug] isServer=%s cssAssets=%d %s',
+                isServer,
+                cssAssets.length,
+                JSON.stringify(cssAssets.slice(0, 12)),
+              );
+            } catch (err) {
+              console.log('[af-css-debug] failed (non-fatal):', err && err.message);
+            }
+          });
+        },
+      });
+    }
+
     config.ignoreWarnings = [
       ...(config.ignoreWarnings || []),
       {
@@ -78,6 +213,21 @@ const nextConfig = {
   },
 
   experimental: {
+    // Next 14.2 compiles the client and server passes in parallel build workers.
+    // On Railway (Linux) that build loses the root layout: app-build-manifest.json
+    // lists zero CSS for /layout, app/globals.css never enters the module graph,
+    // and the served document has no <!DOCTYPE html>, <html>, <head> or <body> —
+    // the layout is absent from the RSC tree entirely, so every page renders
+    // unstyled and then fails to hydrate.
+    //
+    // The same commit built locally is correct: /layout carries its two
+    // stylesheets, the 775KB Tailwind chunk is emitted, and the document has its
+    // shell. The difference is the build, not the code. This repo already carries
+    // scripts/patch-manifest-race.cjs for a concurrent manifest write race in the
+    // pages manifest; this is the same failure one manifest over.
+    //
+    // Serialising the compilations costs build time and nothing else.
+    webpackBuildWorker: false,
     instrumentationHook: process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1',
     outputFileTracingIncludes: {
       "/api/**": ["./data/**"],

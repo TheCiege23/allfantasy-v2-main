@@ -1,53 +1,74 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAfSubGate } from '@/hooks/useAfSubGate'
 import { useSession } from 'next-auth/react'
 import { Loader2, Sparkles } from 'lucide-react'
-import { IDPPlayerCard } from './IDPPlayerCard'
-import { mockContractSalaryM, mockIdpPoints, mockYearsRemaining } from './idpPositionUtils'
-import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
-import { resolvePlayerName } from '@/lib/hooks/useSleeperPlayers'
+
+import { useAfSubGate } from '@/hooks/useAfSubGate'
+import type { IdpMatchupPayload, IdpMatchupSide } from '@/lib/idp-projections/idpMatchup'
 import type { IDPMatchupReport } from '@/lib/idp/ai/idpChimmy'
+
+/**
+ * The IDP matchup, from the league rather than from a hash.
+ *
+ * ⚠ EVERY NUMBER HERE USED TO BE INVENTED, INCLUDING THE SCOREBOARD. This component summed
+ * `mockIdpPoints(id, week)` — a hash of the player id string — across both rosters to produce a
+ * team score, multiplied the offensive side by 0.85 for no stated reason, priced every player
+ * with `mockContractSalaryM` and then graded them "Good value" / "Underperforming" on the
+ * resulting ratio. Its parent handed it the literal ids `['4040','4041','4042']` against
+ * `['4043','4044','4045']`, with the team names "Your team" and "Opponent". It shipped on the
+ * Scores tab of live IDP leagues and read as analysis.
+ *
+ * What is gone and not replaced: the salary column, the points-per-million ratio and the value
+ * grades built on them. The IDP cap tables are empty in production, so none of that has a source
+ * for any league. The arbitrary head-to-head pairing is gone too — pairing your first defender
+ * against their first defender compared two players who have nothing to do with each other.
+ */
 
 type Tab = 'OFFENSE' | 'DEFENSE' | 'ALL'
 
 export type LeagueIdpMatchupViewProps = {
-  /** When set, enables Chimmy matchup analysis (POST /api/idp/ai). */
-  leagueId?: string
-  yourTeamName: string
-  oppTeamName: string
-  week: number
-  sport: string
-  /** Mock / future: your vs opp player ids per side */
-  yourOffenseIds: string[]
-  oppOffenseIds: string[]
-  yourDefenseIds: string[]
-  oppDefenseIds: string[]
-  players: PlayerMap
+  leagueId: string
+  sport?: string
+  /** Optional override; by default the loader picks the newest week it can actually score. */
+  week?: number
   live?: boolean
 }
 
-export function IDPMatchupView({
-  leagueId,
-  yourTeamName,
-  oppTeamName,
-  week,
-  sport,
-  yourOffenseIds,
-  oppOffenseIds,
-  yourDefenseIds,
-  oppDefenseIds,
-  players,
-  live = false,
-}: LeagueIdpMatchupViewProps) {
+const fmt = (n: number) => n.toFixed(1)
+
+export function IDPMatchupView({ leagueId, week, live = false }: LeagueIdpMatchupViewProps) {
   const { data: session } = useSession()
   const userId = session?.user?.id ?? ''
   const [tab, setTab] = useState<Tab>('ALL')
-  const [tick, setTick] = useState(false)
+  const [data, setData] = useState<IdpMatchupPayload | null>(null)
+  const [error, setError] = useState(false)
   const [chimmyLoading, setChimmyLoading] = useState(false)
   const [chimmyReport, setChimmyReport] = useState<IDPMatchupReport | null>(null)
   const { handleApiResponse } = useAfSubGate('commissioner_idp_analysis')
+
+  useEffect(() => {
+    let alive = true
+    setData(null)
+    setError(false)
+    const qs = new URLSearchParams({ leagueId, view: 'idp-matchup' })
+    if (week) qs.set('week', String(week))
+    fetch(`/api/idp/players?${qs.toString()}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error('failed')
+        return (await r.json()) as IdpMatchupPayload
+      })
+      .then((p) => alive && setData(p))
+      .catch(() => alive && setError(true))
+    return () => {
+      alive = false
+    }
+    /*
+     * `live` is in the dependency list rather than driving a setInterval. The old version ticked
+     * a boolean every 4 seconds to re-render mock numbers, which looked like live scoring and
+     * refreshed nothing. Real refresh belongs on a real feed.
+     */
+  }, [leagueId, week, live])
 
   const runChimmyMatchup = async () => {
     if (!leagueId || !userId) return
@@ -57,176 +78,84 @@ export function IDPMatchupView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          leagueId,
-          week,
-          action: 'matchup_analysis',
-          managerId: userId,
-        }),
+        body: JSON.stringify({ leagueId, week: data?.week ?? week, action: 'matchup_analysis', managerId: userId }),
       })
       if (!(await handleApiResponse(res))) {
         setChimmyReport(null)
         return
       }
-      const data = (await res.json().catch(() => null)) as IDPMatchupReport | null
-      if (data && typeof data.analysis === 'string') setChimmyReport(data)
+      const body = (await res.json().catch(() => null)) as IDPMatchupReport | null
+      if (body && typeof body.analysis === 'string') setChimmyReport(body)
     } finally {
       setChimmyLoading(false)
     }
   }
 
-  const yOff = yourOffenseIds.reduce((s, id) => s + mockIdpPoints(id, week).pts * 0.85, 0)
-  const oOff = oppOffenseIds.reduce((s, id) => s + mockIdpPoints(id, week).pts * 0.85, 0)
-  const yDef = yourDefenseIds.reduce((s, id) => s + mockIdpPoints(id, week).pts, 0)
-  const oDef = oppDefenseIds.reduce((s, id) => s + mockIdpPoints(id, week).pts, 0)
-  const yTot = yOff + yDef
-  const oTot = oOff + oDef
-
-  const sumSal = (ids: string[]) => ids.reduce((s, id) => s + mockContractSalaryM(id), 0)
-  const yourActiveSalM = sumSal([...yourOffenseIds, ...yourDefenseIds])
-  const oppActiveSalM = sumSal([...oppOffenseIds, ...oppDefenseIds])
-  const ptsPerM = (pts: number, sal: number) => (sal > 0.01 ? pts / sal : 0)
-  const yPpm = ptsPerM(yTot, yourActiveSalM)
-  const oPpm = ptsPerM(oTot, oppActiveSalM)
-  const betterYou = yPpm >= oPpm
-
-  const effLabel = (ppm: number): 'Good value' | 'Average' | 'Underperforming' => {
-    if (ppm >= 2.2) return 'Good value'
-    if (ppm >= 1.2) return 'Average'
-    return 'Underperforming'
+  if (error) {
+    return (
+      <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/50">
+        We couldn’t load this matchup. Nothing is shown rather than something wrong.
+      </p>
+    )
   }
-
-  useEffect(() => {
-    if (!live) return
-    const id = window.setInterval(() => setTick((t) => !t), 4000)
-    return () => window.clearInterval(id)
-  }, [live])
-
-  const splitBar = (y: number, o: number) => {
-    const t = y + o
-    if (t <= 0) {
-      return (
-        <div className="flex h-2 w-full overflow-hidden rounded-full bg-white/10">
-          <div className="h-full w-1/2 bg-[color:var(--idp-offense)]/70" />
-          <div className="h-full w-1/2 bg-[color:var(--idp-defense)]/70" />
-        </div>
-      )
+  if (!data) {
+    return (
+      <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/40">
+        Loading matchup…
+      </p>
+    )
+  }
+  if (data.state !== 'ok' || !data.you || !data.opponent) {
+    const copy: Record<string, string> = {
+      not_idp_league: 'This league doesn’t start defensive slots, so there’s no IDP matchup to show.',
+      no_team_claimed: 'Claim your team in this league and your matchup appears here.',
+      no_matchup: 'No matchup on file for this league yet.',
+      no_scoring_settings: 'We don’t hold this league’s scoring settings, so nothing here can be scored.',
     }
     return (
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full bg-[color:var(--idp-offense)]"
-          style={{ width: `${(y / t) * 100}%` }}
-        />
-        <div
-          className="h-full bg-[color:var(--idp-defense)]"
-          style={{ width: `${(o / t) * 100}%` }}
-        />
-      </div>
+      <p className="rounded-lg border border-white/[0.08] bg-black/20 p-4 text-[12px] text-white/50">
+        {copy[data.state] ?? 'Nothing to show for this matchup.'}
+      </p>
     )
   }
 
+  const { you, opponent } = data
+  const youLead = (you.officialScore ?? 0) >= (opponent.officialScore ?? 0)
+
   return (
-    <div className="space-y-4 p-4">
-      <div className="text-center">
-        <p className="text-[11px] uppercase tracking-wide text-white/40">Week {week}</p>
-        <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-sm font-bold text-white">
-          <span>{yourTeamName}</span>
-          <span className="text-white/30">vs</span>
-          <span>{oppTeamName}</span>
-          {live ? (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
-              LIVE
-            </span>
-          ) : null}
+    <div className="space-y-3">
+      <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3">
+        <div className="mb-2 flex items-baseline justify-between text-[10px] uppercase tracking-wide text-white/35">
+          <span>Week {data.week}</span>
+          <span>{data.season} season</span>
         </div>
-        {leagueId && userId ? (
-          <div className="mt-3 flex justify-center">
-            <button
-              type="button"
-              onClick={() => void runChimmyMatchup()}
-              disabled={chimmyLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-amber-500/35 bg-amber-950/30 px-3 py-2 text-[11px] font-semibold text-amber-100 hover:bg-amber-950/45 disabled:opacity-50"
-              data-testid="idp-matchup-chimmy-analysis"
-            >
-              {chimmyLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              Chimmy Analysis (AfSub)
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="space-y-3 rounded-xl border border-[color:var(--idp-border)] bg-[color:var(--idp-panel)] p-4">
-        <div>
-          <div className="mb-1 flex justify-between text-[11px] font-semibold text-[color:var(--idp-offense)]">
-            <span>OFFENSE</span>
-            <span>
-              <span className={tick ? 'idp-score-tick-pulse' : ''}>{yOff.toFixed(1)}</span>
-              {' — '}
-              <span>{oOff.toFixed(1)}</span>
-            </span>
-          </div>
-          {splitBar(yOff, oOff)}
-        </div>
-        <div>
-          <div className="mb-1 flex justify-between text-[11px] font-semibold text-[color:var(--idp-defense)]">
-            <span>DEFENSE</span>
-            <span>
-              {yDef.toFixed(1)} — {oDef.toFixed(1)}
-            </span>
-          </div>
-          {splitBar(yDef, oDef)}
-        </div>
-        <div>
-          <div className="mb-1 flex justify-between text-sm font-bold text-white">
-            <span>TOTAL</span>
-            <span>
-              {yTot.toFixed(1)} — {oTot.toFixed(1)}
-            </span>
-          </div>
-          {splitBar(yTot, oTot)}
-        </div>
-
-        <div className="mt-4 border-t border-white/[0.06] pt-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/45">Salary efficiency this week</p>
-          <div className="grid grid-cols-2 gap-3 text-[11px]">
-            <div className="rounded-lg border border-white/[0.06] bg-black/25 p-2.5">
-              <p className="text-[10px] font-semibold text-white/50">{yourTeamName}</p>
-              <p className="mt-1 text-white/80">
-                Active salary:{' '}
-                <span className="font-mono text-[color:var(--cap-contract)]">${yourActiveSalM.toFixed(1)}M</span>
-              </p>
-              <p className="text-white/80">
-                Points: <span className="font-mono">{yTot.toFixed(1)}</span>
-              </p>
-              <p className={betterYou ? 'font-semibold text-[color:var(--cap-green)]' : 'text-white/70'}>
-                Pts / $1M: <span className="font-mono">{yPpm.toFixed(2)}</span>
-              </p>
-            </div>
-            <div className="rounded-lg border border-white/[0.06] bg-black/25 p-2.5">
-              <p className="text-[10px] font-semibold text-white/50">{oppTeamName}</p>
-              <p className="mt-1 text-white/80">
-                Active salary:{' '}
-                <span className="font-mono text-[color:var(--cap-contract)]">${oppActiveSalM.toFixed(1)}M</span>
-              </p>
-              <p className="text-white/80">
-                Points: <span className="font-mono">{oTot.toFixed(1)}</span>
-              </p>
-              <p className={!betterYou ? 'font-semibold text-[color:var(--cap-green)]' : 'text-white/70'}>
-                Pts / $1M: <span className="font-mono">{oPpm.toFixed(2)}</span>
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <ScoreSide side={you} align="left" leading={youLead} />
+          <span className="text-[10px] font-bold text-white/30">vs</span>
+          <ScoreSide side={opponent} align="right" leading={!youLead} />
         </div>
       </div>
+
+      {/* The caveat rides with the numbers rather than sitting in a tooltip nobody opens. */}
+      {data.notes.map((n) => (
+        <p key={n} className="text-[10px] leading-relaxed text-white/35">
+          {n}
+        </p>
+      ))}
+
+      <button
+        type="button"
+        onClick={runChimmyMatchup}
+        disabled={chimmyLoading || !userId}
+        className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-100 disabled:opacity-50"
+      >
+        {chimmyLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+        Chimmy matchup analysis
+      </button>
 
       {chimmyReport ? (
-        <div
-          className="rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3 text-sm text-white/85"
-          data-testid="idp-matchup-chimmy-panel"
-        >
-          <p className="text-[10px] font-bold uppercase tracking-wide text-cyan-200/90">Chimmy — IDP matchup</p>
-          <p className="mt-2 whitespace-pre-wrap leading-relaxed">{chimmyReport.analysis}</p>
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3">
+          <p className="text-xs text-cyan-50/90">{chimmyReport.analysis}</p>
           {chimmyReport.defensiveHighlights ? (
             <p className="mt-2 text-xs text-emerald-200/85">{chimmyReport.defensiveHighlights}</p>
           ) : null}
@@ -251,103 +180,81 @@ export function IDPMatchupView({
         ))}
       </div>
 
-      {tab === 'DEFENSE' || tab === 'ALL' ? (
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">IDP matchup rows</p>
-          {yourDefenseIds.map((id, i) => {
-            const oid = oppDefenseIds[i] ?? oppDefenseIds[0] ?? id
-            const yPts = mockIdpPoints(id, week).pts
-            const oPts = mockIdpPoints(oid, week).pts
-            const leadYou = yPts >= oPts
-            const ySal = mockContractSalaryM(id)
-            const oSal = mockContractSalaryM(oid)
-            const yEff = effLabel(ptsPerM(yPts, ySal))
-            const oEff = effLabel(ptsPerM(oPts, oSal))
-            return (
-              <div
-                key={`${id}-${oid}`}
-                className={`grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-white/[0.06] p-2 ${
-                  leadYou ? 'opacity-100' : 'opacity-90'
-                }`}
-              >
-                <div className={leadYou ? 'opacity-100' : 'opacity-70'}>
-                  <IDPPlayerCard
-                    playerId={id}
-                    name={resolvePlayerName(id, players).name}
-                    position={resolvePlayerName(id, players).position || 'LB'}
-                    team={resolvePlayerName(id, players).team}
-                    sport={sport}
-                    players={players}
-                    week={week}
-                    isStarter
-                    maxPills={3}
-                    salaryM={ySal}
-                    yearsRemaining={mockYearsRemaining(id)}
-                    onOpen={() => {}}
-                  />
-                  <div className="mt-1 flex flex-wrap items-center gap-1 pl-1">
-                    <span className="text-[9px] text-white/40">
-                      ${ySal.toFixed(1)}M · {yPts.toFixed(1)} pts
-                    </span>
-                    <span
-                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
-                        yEff === 'Good value'
-                          ? 'bg-[color:var(--cap-green)]/20 text-emerald-200'
-                          : yEff === 'Average'
-                            ? 'bg-[color:var(--cap-amber)]/20 text-amber-100'
-                            : 'bg-red-500/15 text-red-200/90'
-                      }`}
-                    >
-                      {yEff}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col items-center gap-0.5 text-center">
-                  <span className="text-lg font-bold text-white">{yPts.toFixed(1)}</span>
-                  <span className="text-[10px] text-white/35">|</span>
-                  <span className="text-lg font-bold text-white">{oPts.toFixed(1)}</span>
-                </div>
-                <div className={!leadYou ? 'opacity-100' : 'opacity-70'}>
-                  <IDPPlayerCard
-                    playerId={oid}
-                    name={resolvePlayerName(oid, players).name}
-                    position={resolvePlayerName(oid, players).position || 'LB'}
-                    team={resolvePlayerName(oid, players).team}
-                    sport={sport}
-                    players={players}
-                    week={week}
-                    isStarter
-                    maxPills={3}
-                    salaryM={oSal}
-                    yearsRemaining={mockYearsRemaining(oid)}
-                    onOpen={() => {}}
-                  />
-                  <div className="mt-1 flex flex-wrap items-center justify-end gap-1 pr-1">
-                    <span className="text-[9px] text-white/40">
-                      ${oSal.toFixed(1)}M · {oPts.toFixed(1)} pts
-                    </span>
-                    <span
-                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
-                        oEff === 'Good value'
-                          ? 'bg-[color:var(--cap-green)]/20 text-emerald-200'
-                          : oEff === 'Average'
-                            ? 'bg-[color:var(--cap-amber)]/20 text-amber-100'
-                            : 'bg-red-500/15 text-red-200/90'
-                      }`}
-                    >
-                      {oEff}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
+      <div className="grid grid-cols-2 gap-2">
+        <PlayerColumn side={you} tab={tab} />
+        <PlayerColumn side={opponent} tab={tab} />
+      </div>
+    </div>
+  )
+}
 
-      {tab === 'OFFENSE' ? (
-        <p className="text-center text-xs text-white/45">Offensive matchup rows reuse your league scores feed (placeholder).</p>
+function ScoreSide({
+  side,
+  align,
+  leading,
+}: {
+  side: IdpMatchupSide
+  align: 'left' | 'right'
+  leading: boolean
+}) {
+  return (
+    <div className={align === 'right' ? 'text-right' : ''}>
+      <p className="truncate text-[12px] font-semibold text-white/85">{side.teamName}</p>
+      {/*
+        The platform's own score. A dash when the matchup carries none — an unplayed fixture has
+        no score, and rendering 0.0 would say both teams were shut out.
+      */}
+      <p className={`text-2xl font-bold ${leading ? 'text-white' : 'text-white/55'}`}>
+        {side.officialScore != null ? fmt(side.officialScore) : <span className="text-white/25">—</span>}
+      </p>
+      <p className="text-[9px] text-white/30">
+        priced {side.scoredPlayers}/{side.totalPlayers} rostered
+      </p>
+    </div>
+  )
+}
+
+function PlayerColumn({ side, tab }: { side: IdpMatchupSide; tab: Tab }) {
+  const rows = side.players.filter((p) =>
+    tab === 'ALL' ? true : tab === 'DEFENSE' ? p.side === 'defense' : p.side === 'offense',
+  )
+  return (
+    <div className="space-y-1">
+      {rows.length === 0 ? (
+        <p className="rounded-lg border border-white/[0.06] p-2 text-[10px] text-white/30">
+          No players on this side of the ball.
+        </p>
       ) : null}
+      {rows.map((p) => (
+        <div
+          key={p.sleeperId}
+          className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] px-2 py-1.5"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-medium text-white/85">{p.name}</p>
+            <p className="text-[9px] text-white/35">
+              {p.position ?? '—'} {p.team ? `· ${p.team}` : ''}
+            </p>
+          </div>
+          {/*
+            A dash, never 0.0. `no_game` is a bye or a week we have not ingested; `unscored`
+            means the line we hold carries nothing this league prices. Either shown as zero tells
+            a manager his starter blanked.
+          */}
+          <span
+            className="shrink-0 font-mono text-[12px] font-bold text-white/90"
+            title={
+              p.points.scored
+                ? undefined
+                : p.points.reason === 'no_game'
+                  ? 'no game on file for him that week'
+                  : 'we hold a line for him but none of the stats this league scores'
+            }
+          >
+            {p.points.scored ? fmt(p.points.points) : <span className="text-white/25">—</span>}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

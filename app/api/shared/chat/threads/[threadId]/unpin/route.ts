@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { resolvePlatformUser } from "@/lib/platform/current-user"
 import { deletePinMessage } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from "@/lib/league-access"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -38,7 +38,14 @@ export async function POST(
       return NextResponse.json({ status: "ok" })
     }
 
-    const canAccessMainLeague = await canAccessLeagueDraft(leagueId, user.appUserId)
+    /*
+     * ⚠ SAME WRONG PREDICATE THE REACTION ROUTE HAD. `canAccessLeagueDraft`
+     * needs a Roster row or a CLAIMED LeagueTeam; production has 1,078 league
+     * teams and 94 claimed. `/api/league/chat` admits anyone
+     * `resolveLeagueAccess` recognises, so most members could read a thread and
+     * be refused the moment they pinned in it.
+     */
+    const canAccessMainLeague = (await resolveLeagueAccess(leagueId, user.appUserId)) != null
     if (!canAccessMainLeague) return NextResponse.json({ error: "Not a member" }, { status: 403 })
 
     const result = await (prisma as any).leagueChatMessage.deleteMany({

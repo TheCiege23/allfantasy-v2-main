@@ -62,6 +62,20 @@ export interface LeagueIdpVorpResult {
     | 'valuation_refused'
   /** Rendered coverage, so a surface can say how much of the board it actually priced. */
   coverage: { defenders: number; projected: number; priced: number }
+  /**
+   * The league-scored projection behind each rank, in points.
+   *
+   * Returned rather than left for the caller to recompute: this function already scores every
+   * defender against the league's own settings to build the board, and a surface that scored
+   * them a second time could disagree with the ranks sitting next to it on the same screen.
+   * Null for a defender the scoring could not price — never zero.
+   */
+  projectionBySleeperId: Map<string, number | null>
+  /**
+   * The season and week the projection is FOR, resolved from the data rather than a clock.
+   * A surface that renders a number this specific has to be able to say which week it is.
+   */
+  projectedFor: { season: number; week: number } | null
 }
 
 const EMPTY = (
@@ -73,6 +87,8 @@ const EMPTY = (
   valueBySleeperId: new Map(),
   skipped,
   coverage,
+  projectionBySleeperId: new Map(),
+  projectedFor: null,
 })
 
 export async function loadLeagueIdpVorp(
@@ -194,11 +210,16 @@ export async function loadLeagueIdpVorp(
     valueBySleeperId.set(p.playerId, idpValueForRank(i + 1, args.isDynasty ?? true))
   })
 
+  const projectionBySleeperId = new Map<string, number | null>()
+  for (const p of valuationInput) projectionBySleeperId.set(p.playerId, p.projectedPoints)
+
   return {
     vorpBySleeperId,
     positionRankBySleeperId,
     valueBySleeperId,
     skipped: null,
     coverage: { defenders: defenders.length, projected, priced },
+    projectionBySleeperId,
+    projectedFor: { season, week },
   }
 }

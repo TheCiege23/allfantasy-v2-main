@@ -39,6 +39,19 @@ export interface PendingTradeAsset {
   team: string
   isPick?: boolean
   pickRound?: string
+  /*
+   * Machine-readable pick coordinates alongside the human label.
+   *
+   * WHY BOTH: `pickRound` is "2027 1st", which is right for a panel and wrong
+   * for anything that has to rebuild the pick as an asset. A consumer that
+   * loads one of these offers into a trade builder needs the year and the round
+   * as numbers, and parsing them back out of the label is a regex that breaks
+   * the first time the label is reworded.
+   */
+  pickYear?: number
+  pickRoundNumber?: number
+  /** Set on a FAAB line, in dollars. */
+  faabAmount?: number
 }
 
 export interface PendingProviderTrade {
@@ -58,7 +71,12 @@ export interface PendingProviderTrade {
   assetsReceived: PendingTradeAsset[]
   /** Always true — AF cannot act on provider-side trades. */
   readOnly: true
-  provider: 'sleeper'
+  /**
+   * Which platform the offer is sitting on. Widened when Yahoo joined: a Yahoo
+   * offer labelled `'sleeper'` would send the manager to the wrong site to
+   * answer it, which is a worse failure than not showing it at all.
+   */
+  provider: 'sleeper' | 'yahoo'
 }
 
 type SleeperRosterRow = { roster_id?: number; owner_id?: string }
@@ -91,7 +109,7 @@ function playerName(row: SleeperPlayerRow | undefined, fallbackId: string): stri
  * perspective of a specific roster. Exported for unit tests.
  */
 export function buildTradeAssetsForRoster(args: {
-  tx: Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks'>
+  tx: Partial<Pick<SleeperTransaction, 'adds' | 'drops' | 'draft_picks' | 'waiver_budget'>>
   userRosterId: number
   players: Record<string, SleeperPlayerRow>
 }): { assetsGiven: PendingTradeAsset[]; assetsReceived: PendingTradeAsset[] } {
@@ -133,6 +151,8 @@ export function buildTradeAssetsForRoster(args: {
         team: '—',
         isPick: true,
         pickRound: label,
+        pickYear: Number(pick.season),
+        pickRoundNumber: pick.round,
       })
     } else if (
       (pick as { previous_owner_id?: number }).previous_owner_id === userRosterId
@@ -144,27 +164,87 @@ export function buildTradeAssetsForRoster(args: {
         team: '—',
         isPick: true,
         pickRound: label,
+        pickYear: Number(pick.season),
+        pickRoundNumber: pick.round,
       })
     }
+  }
+
+  /*
+   * ⚠ FAAB WAS BEING DROPPED ON THE FLOOR. Sleeper carries budget transfers on
+   * the same trade under `waiver_budget`, and this function ignored them — so a
+   * deal that was "my WR2 for your WR3 plus $40" rendered as a straight player
+   * swap, and every side of it read as worse than it was. In a league where
+   * FAAB is the scarce asset (guillotine, survivor) that omission is the whole
+   * trade.
+   */
+  for (const move of tx.waiver_budget ?? []) {
+    const amount = Number(move.amount)
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    const line: PendingTradeAsset = {
+      playerId: null,
+      playerName: `$${amount} FAAB`,
+      position: 'FAAB',
+      team: '—',
+      faabAmount: amount,
+    }
+    if (Number(move.sender) === userRosterId) assetsGiven.push(line)
+    else if (Number(move.receiver) === userRosterId) assetsReceived.push(line)
   }
 
   return { assetsGiven, assetsReceived }
 }
 
 /**
- * Scan one Sleeper league for pending trades involving `ownerSleeperId`.
- * Never throws — a provider hiccup returns an empty list so the caller's own
- * data still renders.
+ * What the scan was actually able to do.
+ *
+ * ⚠ AN EMPTY LIST IS NOT AN ANSWER ON ITS OWN. `scanPendingSleeperTradesForLeague`
+ * returns `[]` for four different situations — nothing is pending, we could not
+ * work out which roster is the viewer's, Sleeper did not answer, or the league
+ * was never a Sleeper league. A surface that renders all four as "no offers
+ * waiting" states a fact we never established, which is exactly the failure the
+ * Trades screen's `inbox.reason` was written to avoid.
+ *
+ * So the scan reports whether it ran. Callers that want to say "nothing is
+ * waiting" must check `scanned` first; callers that only want the rows can keep
+ * using the list-returning wrapper below.
  */
-export async function scanPendingSleeperTradesForLeague(args: {
+export type PendingTradeScan = {
+  trades: PendingProviderTrade[]
+  /** True only when Sleeper answered and the viewer's roster was identified. */
+  scanned: boolean
+  /** Why the scan did not run. Null when it did. */
+  reason: string | null
+  /**
+   * Weeks Sleeper refused while others answered. A partial scan still counts as
+   * scanned — but "nothing waiting" is weaker than it looks, and the caller
+   * should say so rather than round it up to a clean empty.
+   */
+  weeksUnanswered: number
+}
+
+/**
+ * Scan one Sleeper league for pending trades involving `ownerSleeperId`, and
+ * report whether the scan actually happened.
+ *
+ * Never throws — a provider hiccup comes back as `scanned: false` with a reason.
+ */
+export async function scanPendingSleeperTrades(args: {
   platformLeagueId: string
   ownerSleeperId: string
   sport?: string | null
   /** Sleeper stores transactions per week; 1–18 covers a full NFL season. */
   weeks?: number[]
-}): Promise<PendingProviderTrade[]> {
+}): Promise<PendingTradeScan> {
   const { platformLeagueId, ownerSleeperId } = args
-  if (!platformLeagueId?.trim() || !ownerSleeperId?.trim()) return []
+  if (!platformLeagueId?.trim() || !ownerSleeperId?.trim()) {
+    return {
+      trades: [],
+      scanned: false,
+      reason: 'we do not know which Sleeper account is yours in this league',
+      weeksUnanswered: 0,
+    }
+  }
 
   try {
     const [rosters, users] = await Promise.all([
@@ -176,7 +256,14 @@ export async function scanPendingSleeperTradesForLeague(args: {
       (r) => String(r.owner_id) === String(ownerSleeperId),
     )
     const userRosterId = Number(roster?.roster_id)
-    if (!Number.isFinite(userRosterId)) return []
+    if (!Number.isFinite(userRosterId)) {
+      return {
+        trades: [],
+        scanned: false,
+        reason: 'no roster in this Sleeper league is owned by your linked account',
+        weeksUnanswered: 0,
+      }
+    }
 
     const userById = new Map(
       (Array.isArray(users) ? (users as SleeperUserRow[]) : [])
@@ -192,12 +279,24 @@ export async function scanPendingSleeperTradesForLeague(args: {
     const weeks = args.weeks ?? Array.from({ length: 18 }, (_, i) => i + 1)
     const seen = new Set<string>()
     const out: PendingProviderTrade[] = []
+    let weeksUnanswered = 0
 
     for (const week of weeks) {
-      const transactions = (await getLeagueTransactions(platformLeagueId, week).catch(
-        () => [],
-      )) as SleeperTransaction[]
-      if (!Array.isArray(transactions)) continue
+      /*
+       * ⚠ A THROW AND AN EMPTY WEEK ARE DIFFERENT FACTS. The previous
+       * `.catch(() => [])` turned "Sleeper refused" into "no transactions this
+       * week", which is how an outage became an empty inbox. A null body is
+       * still treated as empty — that is Sleeper's own spelling for a quiet
+       * week, not a failure.
+       */
+      let transactions: SleeperTransaction[]
+      try {
+        const raw = await getLeagueTransactions(platformLeagueId, week)
+        transactions = Array.isArray(raw) ? (raw as unknown as SleeperTransaction[]) : []
+      } catch {
+        weeksUnanswered += 1
+        continue
+      }
 
       for (const tx of transactions) {
         if (tx.type !== 'trade') continue
@@ -231,9 +330,40 @@ export async function scanPendingSleeperTradesForLeague(args: {
       }
     }
 
-    return out
+    /* Every week refused: we looked at nothing, so we know nothing. */
+    if (weeksUnanswered >= weeks.length) {
+      return {
+        trades: [],
+        scanned: false,
+        reason: 'Sleeper did not answer for this league',
+        weeksUnanswered,
+      }
+    }
+
+    return { trades: out, scanned: true, reason: null, weeksUnanswered }
   } catch {
     // Provider unavailability must never break the caller's own panel.
-    return []
+    return {
+      trades: [],
+      scanned: false,
+      reason: 'Sleeper could not be reached',
+      weeksUnanswered: 0,
+    }
   }
+}
+
+/**
+ * The list-only form, kept because most callers just want the rows.
+ *
+ * ⚠ USE THE SCAN ABOVE IF YOU INTEND TO RENDER AN EMPTY STATE. This returns
+ * `[]` for "nothing pending" and for "we never looked", and those must not read
+ * the same on screen.
+ */
+export async function scanPendingSleeperTradesForLeague(args: {
+  platformLeagueId: string
+  ownerSleeperId: string
+  sport?: string | null
+  weeks?: number[]
+}): Promise<PendingProviderTrade[]> {
+  return (await scanPendingSleeperTrades(args)).trades
 }

@@ -60,14 +60,34 @@ function draftCapitalScore(player: any): number | null {
   return 45
 }
 
+/**
+ * How many players the devy ADP board actually holds.
+ *
+ * ⚠ THE OLD THRESHOLDS ASSUMED A TWELVE-PICK BOARD AND THE REAL ONE IS A
+ * THOUSAND. This scored `adp <= 3` as elite and everything past 24 as a flat 50.
+ * Measured against the live Fantrax NCAAF ADP feed 2026-08-26: 927 rated
+ * players, median ADP 332, max 540 — so 906 of 927 would have scored exactly 50.
+ *
+ * That is not a harmless miscalibration. A constant carries no information but
+ * still carries this signal's 0.15 weight, so it would dilute recruiting,
+ * production and draft capital toward average — precisely the "phantom 50s"
+ * defect described at the top of this file, reintroduced through a different
+ * door.
+ *
+ * So ADP is scored as a PERCENTILE of the board rather than an absolute pick
+ * number, which is what makes it survive a board of any depth.
+ */
+const DEVY_ADP_BOARD_SIZE = 984
+
 function adpScore(player: any): number | null {
   const adp = player?.devyAdp
-  if (!adp || !Number.isFinite(adp)) return null
-  if (adp <= 3) return 95
-  if (adp <= 6) return 85
-  if (adp <= 12) return 75
-  if (adp <= 24) return 60
-  return 50
+  if (!adp || !Number.isFinite(adp) || adp <= 0) return null
+  const percentile = Math.min(1, adp / DEVY_ADP_BOARD_SIZE)
+  if (percentile <= 0.01) return 95
+  if (percentile <= 0.05) return 85
+  if (percentile <= 0.15) return 75
+  if (percentile <= 0.4) return 60
+  return 45
 }
 
 const SIGNALS: Signal[] = [

@@ -72,12 +72,14 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
+import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
 import { buildCommissionerContext } from '@/lib/chimmy/commissionerGrounding'
 import { buildLiveSlateContext } from '@/lib/chimmy/liveSlateGrounding'
+import { applyGroundingBudget } from '@/lib/chimmy/groundingBudget'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -1983,6 +1985,22 @@ ${standingsCtx}`
             } catch { /* non-fatal */ }
             try {
               /*
+               * Rivalry history. "Am I any good against him?" is the question
+               * league members ask each other most, and it was the one Chimmy
+               * could not answer: the aggregation behind this has three live
+               * callers and the chat route referenced none of them.
+               */
+              const h2h = await buildHeadToHeadGrounding(planInput.leagueId)
+              if (h2h) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${h2h.text}`
+                  : h2h.text
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
                * The draft. Live for 7 leagues and paused for 2 as of writing —
                * the one surface with rich data while the season has not started.
                */
@@ -2097,6 +2115,23 @@ ${describedTradeCtx}`
               `loaded ${legacyEnrichment.value.audit.sourcesUsed.length} data sources`
             ).catch(() => {})
           }
+
+          /*
+           * Bound the assembled grounding before it reaches the model. Nine
+           * sources now append to this string and nothing capped the total — the
+           * memory section beside it has always been capped at 4,000 characters,
+           * this was not capped at all. Blocks are dropped WHOLE: each one ends
+           * with its own constraint line ("do not grade these trades", "only a
+           * NOT STARTED player can still be benched"), and a cut landing
+           * mid-block would keep the data and lose the rule.
+           */
+          const budgeted = applyGroundingBudget(legacyEnrichmentContext)
+          if (budgeted.droppedBlocks > 0) {
+            console.warn(
+              `[chimmy] grounding truncated: dropped ${budgeted.droppedBlocks} of ${budgeted.droppedBlocks + budgeted.keptBlocks} blocks (${budgeted.originalLength} chars)`,
+            )
+          }
+          legacyEnrichmentContext = budgeted.text
 
           const enrichmentLoaded =
             legacyEnrichment.status === 'fulfilled' &&

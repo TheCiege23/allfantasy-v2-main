@@ -25,6 +25,69 @@ function pickKeyFromRaw(raw: unknown): string {
   return String(o.id ?? o.pick_id ?? o.draft_pick_id ?? o.pickId ?? '')
 }
 
+/** A pick that can be named in a proposal, because it has an id to name it by. */
+export type ProposablePick = {
+  /** The exact string `validateTradeAssets` will look for as `itemReference`. */
+  pickId: string
+  season: number | null
+  round: number | null
+  label: string
+}
+
+/**
+ * The picks on a roster that a trade proposal can actually reference.
+ *
+ * ⚠ A PICK WITHOUT A STORED ID IS NOT PROPOSABLE, AND THAT IS NOT A BUG HERE.
+ * `validateTradeAssets` matches `itemReference` against these same keys, so a
+ * pick whose raw record carries no `id` / `pick_id` / `draft_pick_id` / `pickId`
+ * has nothing an offer could point at. `extractDraftPicksFromPlayerData` mints a
+ * random pool id for those, which is right for a dispersal draft and wrong here
+ * — a reference generated on read cannot be matched on write. They are dropped
+ * rather than offered with an id that will fail validation a second later.
+ *
+ * ⚠ ONE DEFINITION, USED BY BOTH SIDES. The validator below calls this for its
+ * ownership check and the rosters API calls it to build the picker, so a UI can
+ * never offer a pick the engine would then refuse. Two copies of this parsing
+ * would drift apart the first time a platform spelled a key differently.
+ */
+export function listProposablePicks(playerData: unknown): ProposablePick[] {
+  const root = asRecord(playerData)
+  if (!root) return []
+
+  const raws: unknown[] = []
+  for (const key of ['draftPicks', 'futurePicks', 'draft_picks', 'picks']) {
+    const v = root[key]
+    if (Array.isArray(v)) raws.push(...v)
+  }
+
+  const seen = new Set<string>()
+  const out: ProposablePick[] = []
+  for (const raw of raws) {
+    const pickId = pickKeyFromRaw(raw)
+    if (!pickId || seen.has(pickId)) continue
+    seen.add(pickId)
+
+    const o = asRecord(raw) ?? {}
+    const seasonRaw = o.season ?? o.year ?? o.pickYear
+    const season = Number(seasonRaw)
+    const roundRaw = o.round
+    const round = Number(roundRaw)
+
+    out.push({
+      pickId,
+      season: Number.isFinite(season) && season > 0 ? season : null,
+      round: Number.isFinite(round) && round > 0 ? round : null,
+      label:
+        typeof o.label === 'string' && o.label.trim()
+          ? o.label.trim()
+          : [Number.isFinite(season) ? season : null, Number.isFinite(round) ? `round ${round}` : null]
+              .filter(Boolean)
+              .join(' ') || 'Draft pick',
+    })
+  }
+  return out
+}
+
 export function validateTradeAssets(params: {
   league: League
   settings: ResolvedLeagueTradeSettings
@@ -109,20 +172,18 @@ export function validateTradeAssets(params: {
       }
       const from = a.fromRosterId === proposer.id ? proposer : receiver
       const picks = extractDraftPicksFromPlayerData(from.playerData, from.id)
-      const hasPick = picks.some((p) => p.pickId === ref)
+      /*
+       * Two ways a reference can be legitimate. `extractDraftPicksFromPlayerData`
+       * mints a pool id when the raw record has none, so its ids only match for
+       * picks that carried one; `listProposablePicks` reads the stored key
+       * directly, and is what the rosters API offers the picker. Both are
+       * checked so an id from either path is honoured.
+       */
+      const hasPick =
+        picks.some((p) => p.pickId === ref) ||
+        listProposablePicks(from.playerData).some((p) => p.pickId === ref)
       if (!hasPick) {
-        const root = asRecord(from.playerData)
-        const lists: unknown[] = []
-        if (root) {
-          for (const key of ['draftPicks', 'futurePicks', 'draft_picks', 'picks']) {
-            const v = root[key]
-            if (Array.isArray(v)) lists.push(...v)
-          }
-        }
-        const found = lists.some((raw) => pickKeyFromRaw(raw) === ref)
-        if (!found) {
-          return { ok: false, code: 'PICK_NOT_OWNED', message: 'Pick is not on the sending roster.' }
-        }
+        return { ok: false, code: 'PICK_NOT_OWNED', message: 'Pick is not on the sending roster.' }
       }
       const key = `pick:${ref}`
       if (seen.has(key)) return { ok: false, code: 'DUPLICATE_ASSET', message: 'Duplicate pick in trade bundle.' }

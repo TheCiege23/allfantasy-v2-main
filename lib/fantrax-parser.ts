@@ -696,9 +696,32 @@ export function parseFantraxFiles(
   const userStats = calculateUserStats(userTeam, standings, matchups)
   
   const hasData = standings.length > 0 || roster.length > 0 || transactionFiles.length > 0
-  
+
+  /*
+   * ⚠ A PARSE THAT EXTRACTED NOTHING IS NOT A SUCCESS. This previously returned
+   * `errors.length === 0 || hasData`, so a file whose format we did not
+   * recognise — which throws nothing, it simply matches no filename branch —
+   * reported success with an empty roster and empty standings. The upload route
+   * only rejects when `!success && errors.length > 0`, so that hollow result
+   * sailed through and upserted a FantraxLeague row with no players in it. A
+   * franchise link would then attach to an empty league and grade trades against
+   * a roster that does not exist.
+   *
+   * Naming it as an error is what makes the existing route reject it, and tells
+   * the uploader the real problem: the files were readable, they just were not
+   * the ones we select on.
+   */
+  if (!hasData) {
+    errors.push(
+      'No recognisable Fantrax data was found. Export the league CSVs from Fantrax and include ' +
+        'files whose names contain "roster", "standings", or "transactions"/"claims"/"drops" — ' +
+        'the parser selects files by name and ignores anything else.',
+    )
+  }
+
   return {
-    success: errors.length === 0 || hasData,
+    /* Both halves required: no errors AND something actually parsed. */
+    success: errors.length === 0 && hasData,
     leagueName,
     season,
     userTeam,

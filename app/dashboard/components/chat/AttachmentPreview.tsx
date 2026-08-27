@@ -21,6 +21,8 @@ export type PollDraft = {
   options: string[]
   closeAt: Date
   allowMultiple: boolean
+  /** Hide WHO voted. Enforced on the server, not by the client declining to render it. */
+  anonymous?: boolean
 }
 
 type AttachmentPreviewProps = {

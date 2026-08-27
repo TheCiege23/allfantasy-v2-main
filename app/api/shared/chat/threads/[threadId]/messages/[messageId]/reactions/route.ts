@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { resolvePlatformUser } from "@/lib/platform/current-user"
 import { addReactionToMessage, removeReactionFromMessage } from "@/lib/platform/chat-service"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core"
-import { canAccessLeagueDraft } from "@/lib/live-draft-engine/auth"
+import { resolveLeagueAccess } from "@/lib/league-access"
 import { prisma } from "@/lib/prisma"
 
 type ReactionEntry = { emoji: string; count: number; userIds: string[] }
@@ -102,7 +102,18 @@ export async function POST(
       return NextResponse.json({ status: "ok" })
     }
 
-    const canAccessMainLeague = await canAccessLeagueDraft(leagueId, user.appUserId)
+    /*
+     * ⚠ THIS USED TO GATE ON `canAccessLeagueDraft`, WHICH IS NOT THE PREDICATE
+     * THAT LET THE READER SEE THE MESSAGE. `/api/league/chat` admits anyone
+     * `resolveLeagueAccess` recognises; this required a `Roster` row or a
+     * CLAIMED `LeagueTeam`. Production has 1,078 league teams and 94 claimed, so
+     * most members could read a thread and get a 403 the moment they reacted to
+     * it — a tap that looked like it did nothing.
+     *
+     * Reacting to a message you can already read is not a wider permission than
+     * reading it, so the two now use the same one predicate.
+     */
+    const canAccessMainLeague = (await resolveLeagueAccess(leagueId, user.appUserId)) != null
     if (!canAccessMainLeague) return NextResponse.json({ error: "Not a member" }, { status: 403 })
 
     const row = await (prisma as any).leagueChatMessage.findUnique({
@@ -171,7 +182,18 @@ export async function DELETE(
       return NextResponse.json({ status: "ok" })
     }
 
-    const canAccessMainLeague = await canAccessLeagueDraft(leagueId, user.appUserId)
+    /*
+     * ⚠ THIS USED TO GATE ON `canAccessLeagueDraft`, WHICH IS NOT THE PREDICATE
+     * THAT LET THE READER SEE THE MESSAGE. `/api/league/chat` admits anyone
+     * `resolveLeagueAccess` recognises; this required a `Roster` row or a
+     * CLAIMED `LeagueTeam`. Production has 1,078 league teams and 94 claimed, so
+     * most members could read a thread and get a 403 the moment they reacted to
+     * it — a tap that looked like it did nothing.
+     *
+     * Reacting to a message you can already read is not a wider permission than
+     * reading it, so the two now use the same one predicate.
+     */
+    const canAccessMainLeague = (await resolveLeagueAccess(leagueId, user.appUserId)) != null
     if (!canAccessMainLeague) return NextResponse.json({ error: "Not a member" }, { status: 403 })
 
     const row = await (prisma as any).leagueChatMessage.findUnique({

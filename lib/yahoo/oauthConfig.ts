@@ -49,6 +49,81 @@ export function getYahooRedirectUri(fallback: string): string {
   return configured && configured.length > 0 ? configured : fallback
 }
 
+/**
+ * Is this redirect_uri one Yahoo can possibly accept, given where the app is
+ * actually served?
+ *
+ * ⚠ THE CONFIGURED VALUE WAS WRONG AND NOTHING SAID SO. Measured against
+ * Yahoo's own authorize endpoint on 2026-08-26: of five candidates only
+ * `https://www.allfantasy.ai/api/league/yahoo/callback` is registered. The
+ * apex without `www` is rejected, the Vercel host is rejected, and
+ * `http://localhost:3000/api/league/yahoo/callback` — which is what
+ * `YAHOO_REDIRECT_URI` was set to — is rejected too. Yahoo answers a bad one
+ * with `error=invalid_request&error_description=invalid+redirect+uri` on its
+ * own error page, so the manager sees a Yahoo failure and the product looks
+ * innocent. Zero Yahoo accounts have ever connected, and this is the most
+ * likely reason.
+ *
+ * ⚠ IT REPORTS, IT DOES NOT CORRECT. Guessing a replacement would send Yahoo a
+ * URI nobody registered and produce the same error from a different line. The
+ * only fix is in Yahoo's developer console, and the caller's job is to say so
+ * before spending a round trip.
+ *
+ * `appOrigin` is where the request actually arrived — the one thing we know is
+ * real about how this deployment is reached.
+ */
+export function checkYahooRedirectUri(
+  redirectUri: string,
+  appOrigin: string,
+): { ok: true } | { ok: false; reason: string } {
+  let uri: URL
+  try {
+    uri = new URL(redirectUri)
+  } catch {
+    return { ok: false, reason: 'YAHOO_REDIRECT_URI is not a URL' }
+  }
+
+  let origin: URL
+  try {
+    origin = new URL(appOrigin)
+  } catch {
+    /* No usable origin to compare against; the URI itself is all we can judge. */
+    return uri.protocol === 'https:'
+      ? { ok: true }
+      : { ok: false, reason: 'YAHOO_REDIRECT_URI must be https' }
+  }
+
+  const localOrigin = origin.hostname === 'localhost' || origin.hostname === '127.0.0.1'
+
+  /*
+   * A localhost callback is only ever plausible when the app is itself being
+   * served from localhost — and even then Yahoo has to have registered it.
+   */
+  if (!localOrigin && (uri.hostname === 'localhost' || uri.hostname === '127.0.0.1')) {
+    return {
+      ok: false,
+      reason: `YAHOO_REDIRECT_URI points at ${uri.host}, but this deployment serves ${origin.host}. Yahoo would send the manager to a machine that is not this one.`,
+    }
+  }
+
+  if (uri.protocol !== 'https:' && !localOrigin) {
+    return { ok: false, reason: 'YAHOO_REDIRECT_URI must be https outside local development' }
+  }
+
+  /*
+   * Host mismatch is the `www` trap: `allfantasy.ai` and `www.allfantasy.ai`
+   * are different registrations to Yahoo, and only one of them is on file.
+   */
+  if (!localOrigin && uri.host !== origin.host) {
+    return {
+      ok: false,
+      reason: `YAHOO_REDIRECT_URI is ${uri.host} but this deployment serves ${origin.host}. Yahoo registers the exact host, so these are two different URIs to it.`,
+    }
+  }
+
+  return { ok: true }
+}
+
 /** Read the OAuth state from whichever cookie the initiating flow set. */
 export function readYahooOAuthState(
   cookies: { get(name: string): { value: string } | undefined },

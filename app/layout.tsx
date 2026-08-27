@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
@@ -21,6 +22,32 @@ export const viewport = {
   maximumScale: 5,
   viewportFit: 'cover' as const,
 };
+
+/**
+ * ⚠ FORCES EVERY ROUTE DYNAMIC, AND IT IS A BUG FIX, NOT A PERFORMANCE CHOICE.
+ *
+ * Measured on production 2026-08-27: `/` returned byte-identical HTML across
+ * repeated requests to one deploy, and different HTML across two deploys — it
+ * was being STATICALLY PRERENDERED at build time. It should never have been:
+ * this layout calls `await cookies()`, a dynamic API, which by itself forces
+ * every route under it to render per-request.
+ *
+ * That dynamic signal was being lost. The `try/catch` around `getServerSession`
+ * further down warns about exactly this — "a try/catch around a dynamic Next
+ * API also swallows Next's own internal control-flow exceptions, which would
+ * discard the layout's render rather than surfacing an error" — and a layout
+ * whose render is discarded during prerender emits its children WITHOUT the
+ * `<!DOCTYPE html><html><head><body>` shell it was supposed to wrap them in.
+ * That is the missing-document-shell bug: every App Router route served HTML
+ * beginning at `<meta charSet>`, browsers fell into quirks mode, and pages
+ * rendered unstyled.
+ *
+ * It also restores the two bisect flags below as working instruments. Both are
+ * read at REQUEST time, so against a build-time-prerendered page they were
+ * no-ops — every conclusion drawn from them was measured with an instrument
+ * that does not move.
+ */
+export const dynamic = 'force-dynamic';
 
 const useExperimentalManifest = process.env.NEXT_PUBLIC_PWA_EXPERIMENTAL_MANIFEST === '1';
 const metadataManifestPath = useExperimentalManifest
@@ -101,7 +128,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // (returns null when there is no session). Wrapped in try/catch so a
   // NextAuth misconfiguration cannot crash the document shell.
   let initialSession: Session | null = null;
-  try {
+  // AF_SKIP_SESSION_PRELOAD=1 removes this call entirely. It is wrapped in a
+  // try/catch below, and a try/catch around a dynamic Next API also swallows
+  // Next's own internal control-flow exceptions — which would discard the
+  // layout's render rather than surfacing an error. It runs before either
+  // return path, so the minimal-layout bisect still went through it. Temporary.
+  if (process.env.AF_SKIP_SESSION_PRELOAD !== '1') try {
     const [{ getServerSession }, { authOptions }] = await Promise.all([
       import('next-auth'),
       import('@/lib/auth'),
@@ -125,6 +157,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const gaMeasurementId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
   const metaPixelId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
   const fbAppId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
+  // Bisect for the missing document shell. Next serves every App Router route
+  // without <!DOCTYPE html>, <html>, <head> or <body> while /500 (Pages Router)
+  // is correct, so React is not flushing its preamble. Everything else has been
+  // ruled out by experiment: the fonts optimizer, the Node version, the Tailwind
+  // prebuild, the loader cache, the dist dir and next.config in isolation.
+  //
+  // AF_MINIMAL_LAYOUT=1 renders the smallest possible root document. If the shell
+  // comes back, the cause is inside this subtree and can be narrowed from here.
+  // If it does not, the cause is outside the layout entirely. Temporary.
+  if (process.env.AF_MINIMAL_LAYOUT === '1') {
+    return (
+      <html lang={htmlLang} data-mode={htmlMode} className="scroll-smooth" suppressHydrationWarning>
+        <body className="antialiased min-h-screen mode-readable">
+          <link rel="stylesheet" href="/railway-styles.css" precedence="default" />
+          {children}
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html
       lang={htmlLang}
@@ -138,6 +190,45 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
+
+        {/*
+          THE BUILD IS NOT EMITTING THE ROOT LAYOUT'S STYLESHEET. `import
+          './globals.css'` is at the top of this file, but no CSS chunk for /layout
+          reaches the page: only the two small route sheets load, so `--bg` and
+          `--text` are never defined, and <body> collapses to height 0 with all of
+          its content present and invisible. That is the exact failure
+          scripts/railway-tailwind-prebuild.cjs describes in its own header —
+          "app-build-manifest.json lists no CSS for /layout, and every page is
+          completely unstyled" — still happening.
+
+          public/railway-styles.css is that same compiled Tailwind, rewritten by the
+          prebuild on every deploy, served, and never referenced by anything.
+          Pointing at it here is what puts the theme back on the page.
+
+          RENDERED FROM THE TREE ON PURPOSE. scripts/railway-next-start.cjs used to
+          inject this link into <head> from outside React, and the comment left
+          behind there records how that went: a <head> child React never rendered is
+          a hydration mismatch, #418 escalates to #423, the document is torn down and
+          the page goes blank. Rendering it here means the server HTML and the client
+          tree agree about it.
+
+          Same-origin, which is why it survives to the output. The Google Fonts links
+          that used to sit a few lines below did not survive; the same-origin
+          <link rel="preload"> in this subtree does.
+
+          THIS IS A WORKAROUND, and it should not outlive the bug. When the layout's
+          CSS chunk is emitted properly this line comes out.
+        */}
+        {/*
+          `precedence` is not decoration. In the React build the App Router ships, a
+          <link rel="stylesheet"> is only treated as a stylesheet RESOURCE — hoisted
+          into <head> and emitted — when it carries one. Without it React drops the
+          element on the floor: measured after #658 shipped, this exact link with no
+          precedence never reached the served HTML at all. It is also why the Google
+          Fonts links that used to live below here disappeared. The two sheets Next
+          emits itself both come out carrying data-precedence="next".
+        */}
+        <link rel="stylesheet" href="/railway-styles.css" precedence="default" />
 
         {/*
           The core-app design handoff's two typefaces. Every .af-core surface
@@ -156,12 +247,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           only when matching text is actually rendered. Weights are exactly the
           handoff's — Archivo 400/600/700/800/900, JetBrains Mono 400/500/700/800.
         */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap"
-        />
 
         {metaPixelId ? (
           <script
@@ -375,8 +460,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             rather than replacing it with an amber error UI.
           */}
           <ErrorBoundaryClient fallback={null}>
-            {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
-            <SafeGlobalChrome fbAppId={fbAppId} />
+            {/*
+              MetaPixelPageViewTracker calls useSearchParams(). A client component
+              that reads the search params de-opts everything above it up to the
+              nearest Suspense boundary, and this is the ROOT layout — with no
+              boundary, that is the whole document, so the server stopped emitting
+              <!DOCTYPE html>, <html>, <head> and <body> on every App Router route.
+              Pages Router (/500) was unaffected, which is why the two disagreed.
+
+              The boundary keeps the de-opt inside these two widgets instead of
+              taking the document shell with it.
+            */}
+            <Suspense fallback={null}>
+              {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
+              <SafeGlobalChrome fbAppId={fbAppId} />
+            </Suspense>
           </ErrorBoundaryClient>
 
           {/* Music widgets deferred until Spotify Web Playback SDK is integrated.

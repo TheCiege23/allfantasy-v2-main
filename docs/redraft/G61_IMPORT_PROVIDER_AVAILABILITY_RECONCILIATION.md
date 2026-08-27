@@ -47,7 +47,49 @@ it was **not fully re-confirmed** before this pass closed — a second, apparent
 wasn't traced to a live page either. Flipped `available: false` as the conservative default until
 that's resolved, consistent with MFL.
 
+## Fantrax — LIVE as of 2026-08-27
+
+**Superseded the section below.** The audit under it is still accurate about the CSV-snapshot
+pipeline; what changed is that the CSV stopped being the only way in.
+
+Fantrax has a live, unauthenticated read API (`fxea`), so a league is readable from the id in its
+own URL. `available` is now `true` because the flow was built, not to unblock a build:
+
+- **Discovery lists TEAMS, not leagues.** Listing someone's leagues needs their Fantrax Secret ID,
+  which is a credential and does not belong in an import box. A league id is public — it is in the
+  URL of the league page — so the flow inverts: the user names the league, and we ask which team is
+  theirs. `app/api/leagues/import/discover/route.ts` reads `getLeagueInfo` and returns one row per
+  team.
+- **The team choice rides in the sourceId** as `fantrax-league:<leagueId>|<teamName>`, because
+  preview and commit are stateless. `importFantraxLeague` refuses to guess: defaulting to the first
+  roster attributes a stranger's players to the user and then grades trades against them.
+- **The snapshot is materialised, then read back.** `fetchFantraxLeagueForImport` calls the importer
+  and then continues down the existing path, so the live route and the upload route converge instead
+  of drifting. `appUserId` is stamped with the caller, so the ownership gate below still decides
+  ownership — verified: a second account gets the same "not found" as a missing snapshot.
+- **The sport is measured, not assumed.** `getLeagueInfo` reports no sport and the CFB/NFL id spaces
+  do not overlap, so both player maps are tried and the one that names more players wins. Measured
+  on a real league: 447/466 in CFB, 0/466 in NFL. Hardcoding CFB is what previously limited the tile
+  to college.
+
+Verified end to end against a real league (Cream Bowl, 12 teams, 2026): URL and bare-id parsing, the
+12-team picker, sport detection, the import itself (39 players on the chosen team), an unknown team
+name rejected with the real team list, and cross-account read refused.
+
+⚠ **Still true after the flip:** the snapshot stores only the chosen team's roster, so the other 11
+teams import with standings but no players. That is the snapshot schema's shape, not a live-path
+regression — the API returns all 12 rosters and the store drops 11. Widening it is a schema change.
+
+⚠ **Fantrax is not a monitored provider** in `scripts/check-db-first-api-boundary.mjs`, which is the
+only reason a provider call from a request path passes the guard. Worth adding.
+
+---
+
 ## Fantrax — real plumbing, flipped to `available: false`, additional fix pending
+
+> **Historical.** Left in place because the ownership analysis below is still the reason the gate is
+> shaped the way it is. The `available: false` conclusion is superseded by the section above.
+
 
 Real CSV-snapshot pipeline (`FantraxLeagueFetchService.ts`, `FantraxAdapter.ts` + 5 mappers) —
 substantial, not a stub. But it is currently broken end-to-end, independent of this reconciliation:

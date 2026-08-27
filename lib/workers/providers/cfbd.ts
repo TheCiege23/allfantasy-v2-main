@@ -1,5 +1,5 @@
 import type { ApiFetchParams, ApiProvider } from '@/lib/workers/api-config'
-import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
+import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 import { toApiChainSport } from '@/lib/workers/api-config'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
 

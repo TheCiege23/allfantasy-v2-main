@@ -112,6 +112,8 @@ export type AfCoreShellProps = {
     supportEmail: string | null
     /** Unread chat count for the launcher badge. */
     unread?: number
+    /** Of those, how many name you. Badged louder — see CommsDock. */
+    mentions?: number
   } | null
   /** Unread count for the Notifications nav badge. Omitted when zero. */
   notificationCount?: number
@@ -705,6 +707,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           dockable={comms.dockable}
           supportEmail={comms.supportEmail}
           unread={comms.unread ?? 0}
+          mentions={comms.mentions ?? 0}
         />
       ) : null}
     </div>

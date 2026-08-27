@@ -80,8 +80,8 @@ const DATA_API_IDENTIFIERS = [
   'ESPN_SITE_API_BASE',
   'THE_SPORTS_DB_V1_JSON_BASE',
   'THE_SPORTS_DB_V2_JSON_BASE',
-  // Added in the SAME commit that consolidated six hardcoded CFBD literals onto
-  // `lib/cfbd-base-url.ts`. Without this entry that consolidation would have
+  // The six hardcoded CFBD literals now all resolve to `CFBD_BASE_URL`, exported
+  // by `lib/cfbd-fetch.ts`. Without this entry that consolidation would have
   // removed the last `https://` literal from all six files at once and retired
   // the check for every one of them — the exact failure this list exists to
   // prevent, described in the block comment above.
@@ -105,9 +105,6 @@ const DATA_API_IDENTIFIERS = [
 const HOST_DEFINITION_FILES = [
   /^lib\/providers\/espnUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^lib\/providers\/theSportsDbUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
-  // Contains the CFBD base URL and nothing else — no fetch, no key, no client.
-  // A definition site, per the first category described above.
-  /^lib\/cfbd-base-url\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^scripts\/check-db-first-api-boundary\.mjs$/i,
 ];
 
@@ -193,6 +190,20 @@ const ALLOWED_PATH_PATTERNS = [
    * show ingestion plus `import type` lines and nothing else.
    */
   /^lib\/cfb-player-data\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
+   * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`
+   * performs the request, so it is allowlisted here with the other clients
+   * instead of in HOST_DEFINITION_FILES.
+   *
+   * Every importer is itself allowlisted — cfb-player-data, cfbdPlayerStats,
+   * scores/gameScoreProviders, workers/providers/cfbd, and the two ncaaf scripts.
+   *
+   * Its `CfbdResult` return type is the pattern the remaining raw fetchers in
+   * lib/cfb-player-data.ts should migrate to: it makes a caller state what it
+   * does when the answer is "we could not ask", rather than defaulting to `[]`.
+   */
+  /^lib\/cfbd-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The API-Football adapter. Earned the same way CFBD did, and checked the same
    * way — by its callers.

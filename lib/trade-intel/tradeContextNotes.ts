@@ -12,6 +12,9 @@ import {
   tradeDeadlineWeek,
 } from '@/lib/core-app/seasonTimeline'
 import { getDepthRole, depthRoleNote } from './depthChartRole'
+import { experienceNote, loadExperience } from './trajectory'
+import { loadManagerProfile, managerPremiumNotes } from './managerPremium'
+import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import { readProtections, resolveTribeRelation } from './formatState'
 import { crownValue, dethroneNote } from './kingOfTheHill'
 import {
@@ -55,6 +58,12 @@ import {
   assessUnpriced,
 } from './rosterShape'
 import { assessContention, postureNote } from './contention'
+import {
+  projectDevyOutlook,
+  refuseMixedScaleGrade,
+  type TradeAsset as DevyTradeAsset,
+} from './devyOutlook'
+import { devyAssetValue, gradeDevyTrade, type DevyTradeSide } from './devyTradeValue'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import {
@@ -87,6 +96,11 @@ const SEASON_HORIZON = 18
 type Line = { name: string; position: string | null; team: string | null }
 
 export type TradeContextNotes = {
+  /**
+   * Why nothing could be computed, when that is a fixable fact about the
+   * viewer rather than a finding about the deal. Absent when the ledger ran.
+   */
+  contextGap?: string | null
   /** Bye-week collisions this deal creates or fails to relieve. */
   byeNotes: string[]
   /**
@@ -218,14 +232,54 @@ export async function buildTradeContextNotes(args: {
    * The viewer's own roster in this league. Matched through LeagueTeam because
    * `Roster.platformUserId` is the PLATFORM's id for them, not ours — the same
    * two-id-space trap the scoreboard hit.
+   *
+   * ⚠ A CLAIMED TEAM IS NOT GUARANTEED, AND THIS FUNCTION RETURNS EVERYTHING.
+   * Claiming is a deliberate action a manager may never have taken, and until
+   * this fell back, an unclaimed league produced NO notes at all — not just no
+   * leverage: no byes, no roster need, no league scale, no format rules. One
+   * missing `claimedByUserId` silently emptied the entire ledger for that
+   * league, and nothing on screen said why. `buildNativeActiveTrades` already
+   * does this dual lookup for exactly this reason.
    */
-  const team = await prisma.leagueTeam
-    .findFirst({
-      where: { leagueId, claimedByUserId: userId },
-      select: { platformUserId: true, externalId: true },
-    })
-    .catch(() => null)
-  if (!team?.platformUserId) return EMPTY
+  const team = await (async () => {
+    const claimed = await prisma.leagueTeam
+      .findFirst({
+        where: { leagueId, claimedByUserId: userId },
+        select: { platformUserId: true, externalId: true },
+      })
+      .catch(() => null)
+    if (claimed?.platformUserId) return claimed
+
+    /*
+     * The linked Sleeper account. Deliberately second: a claim is an explicit
+     * statement about THIS league, and a linked platform id is an inference
+     * from an id space shared across all of them.
+     */
+    const profile = await prisma.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null)
+    const linked = profile?.sleeperUserId?.trim()
+    if (!linked) return null
+    return prisma.leagueTeam
+      .findFirst({
+        where: { leagueId, platformUserId: linked },
+        select: { platformUserId: true, externalId: true },
+      })
+      .catch(() => null)
+  })()
+  /*
+   * ⚠ AN EMPTY LEDGER AND A LEDGER THAT FOUND NOTHING LOOK IDENTICAL ON SCREEN.
+   * Both render as no notes. Only one of them is something the manager can fix,
+   * so the reason rides back and the analyzer prints it under "what we
+   * couldn't see" rather than leaving a silent blank.
+   */
+  if (!team?.platformUserId) {
+    return {
+      ...EMPTY,
+      contextGap:
+        'which of these teams is yours — claim your team, or link the account you play on, and the league-specific read turns on',
+    }
+  }
 
   const roster = await prisma.roster
     .findFirst({
@@ -233,7 +287,12 @@ export async function buildTradeContextNotes(args: {
       select: { id: true, playerData: true },
     })
     .catch(() => null)
-  if (!roster) return EMPTY
+  if (!roster) {
+    return {
+      ...EMPTY,
+      contextGap: 'your roster in this league, which has not been synced yet',
+    }
+  }
   const rosterRowId = roster.id
 
   /*
@@ -379,6 +438,17 @@ export async function buildTradeContextNotes(args: {
    * assumes.
    */
   const needNotes: string[] = []
+
+  /*
+   * One read for every incoming player, rather than one per player inside the
+   * loop below. Experience is a single column lookup and the loop already makes
+   * a depth-chart call each time round.
+   */
+  const experience = await loadExperience({
+    names: get.map((g) => g.name),
+    sport: league.sport ?? 'NFL',
+  }).catch(() => new Map())
+
   for (const g of get) {
     const role = await getDepthRole({
       playerName: g.name,
@@ -388,6 +458,15 @@ export async function buildTradeContextNotes(args: {
     }).catch(() => null)
     const rn = depthRoleNote({ playerName: g.name, role })
     if (rn) needNotes.push(rn)
+
+    /*
+     * A rookie arriving is worth saying out loud: the price you are paying is a
+     * projection rather than a record. Nothing is repriced on it — the dynasty
+     * market already carries rookie hype, and an adjustment here would
+     * double-count it the way an age curve would.
+     */
+    const en = experienceNote(g.name, experience.get(g.name.toLowerCase()) ?? null)
+    if (en) needNotes.push(en)
   }
 
   for (const g of get) {
@@ -425,6 +504,14 @@ export async function buildTradeContextNotes(args: {
     give,
     /* What they are sending you leaves THEIR roster, so it is their outgoing. */
     theirOutgoingNames: get.map((g) => g.name),
+    /*
+     * The unit every historical trade of theirs gets priced in. Read from THIS
+     * league so the ratio is denominated the same way the deal on screen is —
+     * a dynasty habit measured in redraft prices is a fact about the price
+     * list, not about the manager.
+     */
+    isDynasty: Boolean(league.isDynasty),
+    qbFormat: detectQbFormat(league.starters),
   }).catch(() => [])
 
   const { postureNotes, pickNotes } = await buildPostureAndPickNotes({
@@ -459,6 +546,8 @@ export async function buildTradeContextNotes(args: {
     starters: league.starters,
     rosterIds,
     format: null,
+    /* Needed to discount a devy asset by how far off his draft eligibility is. */
+    season: league.season,
     incoming: get.length + (args.picksToMe?.length ?? 0),
     outgoing: give.length + (args.picksToThem?.length ?? 0),
     futureLean: (args.picksToMe?.length ?? 0) - (args.picksToThem?.length ?? 0),
@@ -972,6 +1061,143 @@ async function buildFormatNotes(args: {
  * None of these are about the players in the deal, which is exactly why a value
  * chart cannot hold them and why they are worth saying out loud.
  */
+/**
+ * Which unpriced names in this deal are college players, and what that means.
+ *
+ * ⚠ MATCHED BY NAME, WHICH IS THE WEAKEST JOIN IN THIS FILE — but the trade
+ * console passes names, college players hold no sleeperId, and the surrounding
+ * code already resolves NFL players the same way. A miss here degrades to the
+ * generic unpriced note, which is the safe direction: it under-claims rather
+ * than mislabelling an NFL player as a college one.
+ *
+ * ⚠ ONLY PLAYERS WITH NO MARKET VALUE ARE CONSIDERED. A name that priced is an
+ * NFL player whatever else shares his name, so he is never reinterpreted as a
+ * college asset on the strength of a string match.
+ *
+ * Returns null when the deal contains no college assets at all, so the ordinary
+ * path is untouched.
+ */
+async function identifyDevyAssets(args: {
+  give: Array<{ name: string; marketValue: number | null }>
+  get: Array<{ name: string; marketValue: number | null }>
+  season: number
+}): Promise<{
+  matched: Array<{ name: string }>
+  refusal: string | null
+  standings: string[]
+  verdict: string | null
+} | null> {
+  const all = [...args.give, ...args.get]
+  const unpricedNames = all.filter((x) => x.marketValue == null).map((x) => x.name)
+  if (unpricedNames.length === 0) return null
+
+  const select = {
+    name: true,
+    position: true,
+    school: true,
+    draftEligibleYear: true,
+    recruitingComposite: true,
+    breakoutAge: true,
+    projectedDraftRound: true,
+    devyAdp: true,
+    draftProjectionScore: true,
+  } as const
+
+  const candidates = await prisma.devyPlayer.findMany({
+    where: {
+      graduatedToNFL: false,
+      OR: unpricedNames.map((n) => ({ name: { equals: n, mode: 'insensitive' as const } })),
+    },
+    select,
+  })
+  if (candidates.length === 0) return null
+
+  const assets: DevyTradeAsset[] = [
+    ...candidates.map((c) => ({ label: c.name, kind: 'devy_player' as const })),
+    ...all
+      .filter((x) => x.marketValue != null)
+      .map((x) => ({ label: x.name, kind: 'nfl_player' as const })),
+  ]
+  const refusal = refuseMixedScaleGrade(assets)?.reason ?? null
+
+  const outlookFor = (c: (typeof candidates)[number]) =>
+    projectDevyOutlook({
+      player: c,
+      draftEligibleYear: c.draftEligibleYear,
+      currentSeason: args.season,
+      name: c.name,
+    })
+
+  const standings = candidates.map(
+    (c) => `${c.name} (${c.position}, ${c.school}) — ${outlookFor(c).basis}`,
+  )
+
+  /*
+   * ⚠ RANK MUST BE AGAINST THE WHOLE BOARD, NOT THE PLAYERS IN THE DEAL. Ranking
+   * the two prospects in a trade against each other makes them #1 and #2 and
+   * therefore near-elite by construction, which is how a swap of two nobodies
+   * would grade as a blockbuster.
+   *
+   * The whole non-null score column is ~800 floats, so it is cheaper to pull and
+   * rank in memory than to issue a positional COUNT per player.
+   */
+  const board = await prisma.devyPlayer.findMany({
+    where: { graduatedToNFL: false, draftProjectionScore: { not: null } },
+    select: { draftProjectionScore: true },
+  })
+  const descending = board
+    .map((b) => b.draftProjectionScore as number)
+    .sort((a, b) => b - a)
+
+  const rankOf = (score: number | null): number | null => {
+    if (score == null) return null
+    /* One-based rank: how many players score strictly higher, plus one. */
+    let lo = 0
+    let hi = descending.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (descending[mid] > score) lo = mid + 1
+      else hi = mid
+    }
+    return lo + 1
+  }
+
+  /*
+   * A verdict only when the deal is devy on BOTH sides. A mixed deal is refused
+   * above, and devy points cannot settle a trade whose other half is priced in
+   * market units.
+   */
+  let verdict: string | null = null
+  if (!refusal) {
+    const byName = new Map(candidates.map((c) => [c.name.toLowerCase(), c]))
+    const toSide = (lines: Array<{ name: string }>): DevyTradeSide[] =>
+      lines
+        .map((l) => byName.get(l.name.toLowerCase()))
+        .filter((c): c is (typeof candidates)[number] => c != null)
+        .map((c) => ({
+          label: c.name,
+          value: devyAssetValue({
+            devyRank: rankOf(c.draftProjectionScore),
+            outlook: outlookFor(c),
+            name: c.name,
+          }),
+        }))
+
+    const give = toSide(args.give)
+    const get = toSide(args.get)
+    if (give.length > 0 && get.length > 0) {
+      verdict = gradeDevyTrade({ give, get }).basis
+    }
+  }
+
+  return {
+    matched: candidates.map((c) => ({ name: c.name })),
+    refusal,
+    standings,
+    verdict,
+  }
+}
+
 async function buildScaleNotes(args: {
   abundantPositions: Array<{ pos: string; freeAgents: number }>
   leagueId: string
@@ -984,6 +1210,8 @@ async function buildScaleNotes(args: {
   futureLean: number
   pricedGive: Array<{ name: string; marketValue: number | null }>
   pricedGet: Array<{ name: string; marketValue: number | null }>
+  /** The season being played, so a devy asset's wait can be priced. */
+  season: number
 }): Promise<string[]> {
   const notes: string[] = []
 
@@ -1018,8 +1246,49 @@ async function buildScaleNotes(args: {
   })
   if (deadline.basis) notes.push(deadline.basis)
 
-  const unpriced = assessUnpriced({ give: args.pricedGive, get: args.pricedGet })
+  /*
+   * ⚠ A COLLEGE PLAYER IS UNPRICED FOR A DIFFERENT REASON THAN A DEFENDER IS,
+   * AND SAYING THE WRONG ONE IS WORSE THAN SAYING NOTHING. `assessUnpriced`
+   * explains a null value with "our value feed covers offence and picks only",
+   * which is true of an IDP linebacker and false of a devy wideout — nothing
+   * anywhere prices him, and no amount of feed coverage would. Worse, the deal
+   * spans two scales that do not convert, so the verdict is not merely partial;
+   * it is not a verdict. See lib/trade-intel/devyOutlook.ts.
+   *
+   * So devy assets are pulled OUT of the generic count and explained on their
+   * own terms, leaving that note to speak only about players it is actually
+   * right about.
+   */
+  const devy = await identifyDevyAssets({
+    give: args.pricedGive,
+    get: args.pricedGet,
+    season: args.season,
+  }).catch(() => null)
+
+  const devyNames = new Set(devy?.matched.map((m) => m.name.toLowerCase()) ?? [])
+  const notDevy = (l: Array<{ name: string; marketValue: number | null }>) =>
+    l.filter((x) => !devyNames.has(x.name.toLowerCase()))
+
+  const unpriced = assessUnpriced({
+    give: notDevy(args.pricedGive),
+    get: notDevy(args.pricedGet),
+  })
   if (unpriced.basis) notes.push(unpriced.basis)
+
+  if (devy) {
+    /*
+     * Leads, like impossiblePickWarning: a verdict that silently spans both
+     * scales is a correctness problem, not a nuance.
+     */
+    if (devy.refusal) notes.unshift(devy.refusal)
+    /*
+     * The devy-for-devy verdict leads too when there is one — it is the answer
+     * to the question the manager actually asked, and the per-player standings
+     * below are the working behind it.
+     */
+    if (devy.verdict) notes.unshift(devy.verdict)
+    notes.push(...devy.standings)
+  }
 
   /*
    * Only in a shallow league, and only for positions the wire actually holds in
@@ -1227,6 +1496,8 @@ async function buildLeverageNotes(args: {
   give: Line[]
   /** Players they are sending away, which leaves holes on their side. */
   theirOutgoingNames: string[]
+  isDynasty: boolean
+  qbFormat: 'ONE_QB' | 'SUPERFLEX'
 }): Promise<string[]> {
   const { leagueId, sport, requirements, opponentTeamExternalId, give } = args
   if (!opponentTeamExternalId || give.length === 0) return []
@@ -1298,6 +1569,31 @@ async function buildLeverageNotes(args: {
 
   const who = team.teamName || team.ownerName || 'they'
   const notes: string[] = []
+
+  /*
+   * ── How they have actually traded, layer 5's last factor ──────────────
+   *
+   * Structural leverage (their holes, the waiver wire) says what a position is
+   * worth to them today. This says what they have HISTORICALLY paid for it,
+   * which is a separate fact and the only one on this page that comes from
+   * behaviour. It is reported and never folded into the price — a manager
+   * overpays for backs largely because they are short at back, so applying both
+   * would count the same shortage twice.
+   */
+  const profile = await loadManagerProfile({
+    managerKey: team.platformUserId,
+    isDynasty: args.isDynasty,
+    qbFormat: args.qbFormat,
+  }).catch(() => null)
+  if (profile) {
+    notes.push(
+      ...managerPremiumNotes({
+        who,
+        profile,
+        givePositions: give.map((g) => g.position ?? '').filter(Boolean),
+      }),
+    )
+  }
   for (const g of give) {
     if (!g.position) continue
     const pos = g.position.toUpperCase().trim()

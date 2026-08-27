@@ -119,22 +119,26 @@ rostered a single defender. `isIdpPosition(position)` is here too.
 If `hasIdpScoring` is false, the Defense Hub is not a page this league should
 see. Say that, and link out.
 
-### 4. `lib/core-app/playerFinder.ts` — the snap-share computation
-`getPlayerDetail` computes a real snap share at `:534`. Read it before writing
-your own; it encodes two decisions you need:
+### 4. `lib/core-app/snapShare.ts` — snap share, already lifted for you
+`loadSnapShares({ prisma, sport, players, gamesPerPlayer })` takes a roster and
+returns a `Map<sleeperId, SnapShareOutcome>` — available with
+`{ share, snaps, teamSnaps, games, basis }`, or unavailable with a reason naming
+the columns it looked for. `loadSnapShare(prisma, player)` is the one-player
+form; `getPlayerDetail` calls it, so the player page and this page compute the
+same number from the same code.
+
+It encodes three decisions you need:
 
 - Defenders read `def_snp` / `tm_def_snp`; everyone else reads `off_snp` /
   `tm_off_snp`. A linebacker's `off_snp` is special-teams noise.
 - It **sums totals and divides once**. It does not average per-game shares — a
   four-snap cameo must not count as much as a sixty-snap start.
+- It slices the game cap **per player**, not across the query. Do not "optimise"
+  that into a single `take` — a player whose games are all older than everyone
+  else's would drop out and read as untracked.
 
 Coverage on the columns: `off_snp` 77% of game rows, `tm_off_snp` 89%,
 `def_snp` 58%, `tm_def_snp` 70%.
-
-⚠ **This logic is currently inline inside `getPlayerDetail`, which resolves one
-player.** The Defense Hub needs it for a roster at a time. Lift it into a shared
-helper and have `getPlayerDetail` call that — do not copy-paste it, or the two
-will drift and the page will disagree with the player page.
 
 The rendered result of that computation is live on the player page today
 (`components/core-app/screens/PlayerFinder.tsx`, the "Snap share" tile) — that
@@ -250,8 +254,9 @@ did not find. Show the tendencies and let the manager grade it.
 
 ## Suggested order
 
-1. Lift the snap-share computation out of `getPlayerDetail` into a shared
-   helper that takes many ids. Both surfaces call it.
+1. ~~Lift the snap-share computation into a shared many-id helper.~~ **Done** —
+   `lib/core-app/snapShare.ts`, with `getPlayerDetail` migrated onto it and the
+   player page verified unchanged. Call `loadSnapShares`; do not write your own.
 2. Extend `app/api/idp/players/route.ts` with a defense-hub payload:
    `loadLeagueIdpVorp` + league-scored projections + snap shares, plus the
    `skipped` reason and `coverage` counts passed straight through.

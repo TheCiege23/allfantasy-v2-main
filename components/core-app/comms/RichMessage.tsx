@@ -14,11 +14,25 @@
  * inside a message list — one bad row must not blank the whole conversation.
  */
 
+import { readViewerPoll } from '@/lib/chat-core/messagePolls'
+import { MessagePoll } from './MessagePoll'
+import { TradeCardView } from './TradeCardView'
+
 export type RichMetadata = Record<string, unknown> | null | undefined
 
 type Gif = { previewUrl: string; url: string; title: string }
 type Attachment = { type: string; url: string; mimeType?: string; duration?: number }
 type Poll = { question: string; options: Array<{ id: string; text: string; votes: string[] }> }
+type TradeAsset = { id: string; name: string | null; position?: string | null; team?: string | null }
+type TradeCard = {
+  manager: string
+  gave: TradeAsset[]
+  got: TradeAsset[]
+  picksGave: number
+  picksGot: number
+  season: number | null
+  week: number | null
+}
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null
@@ -93,11 +107,67 @@ export function readPoll(meta: RichMetadata): Poll | null {
  * The rich half of a message. Returns null when there is nothing beyond text, so
  * an ordinary message renders exactly as it did before.
  */
-export function RichMessage({ metadata }: { metadata: RichMetadata }) {
+function readTradeCard(meta: RichMetadata): TradeCard | null {
+  if (!meta || typeof meta !== 'object') return null
+  const raw = (meta as Record<string, unknown>).tradeCard
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const t = raw as Record<string, unknown>
+
+  const side = (v: unknown): TradeAsset[] => {
+    if (!Array.isArray(v)) return []
+    const out: TradeAsset[] = []
+    for (const entry of v) {
+      if (!entry || typeof entry !== 'object') continue
+      const e = entry as Record<string, unknown>
+      const id = str(e.id)
+      if (!id) continue
+      out.push({
+        id,
+        name: str(e.name),
+        position: str(e.position),
+        team: str(e.team),
+      })
+    }
+    return out
+  }
+
+  const manager = str(t.manager)
+  if (!manager) return null
+
+  return {
+    manager,
+    gave: side(t.gave),
+    got: side(t.got),
+    picksGave: typeof t.picksGave === 'number' ? t.picksGave : 0,
+    picksGot: typeof t.picksGot === 'number' ? t.picksGot : 0,
+    season: typeof t.season === 'number' ? t.season : null,
+    week: typeof t.week === 'number' ? t.week : null,
+  }
+}
+
+export function RichMessage({
+  metadata,
+  viewerUserId,
+  onVote,
+  onClosePoll,
+}: {
+  metadata: RichMetadata
+  /*
+   * Both optional. Without them the poll renders exactly as it always has —
+   * read-only — which is what the DM and huddle panel still needs, because the
+   * vote route has no branch for a platform thread this app actually creates.
+   */
+  viewerUserId?: string | null
+  onVote?: (optionId: string) => void
+  /** Only passed when the viewer wrote the poll or runs the league. */
+  onClosePoll?: () => void
+}) {
   const gif = readGif(metadata)
   const attachments = readAttachments(metadata)
   const poll = readPoll(metadata)
-  if (!gif && attachments.length === 0 && !poll) return null
+  const trade = readTradeCard(metadata)
+  const viewerPoll = onVote ? readViewerPoll(metadata, viewerUserId ?? null) : null
+  if (!gif && attachments.length === 0 && !poll && !trade) return null
 
   return (
     <div className="af-cm-rich">
@@ -126,16 +196,20 @@ export function RichMessage({ metadata }: { metadata: RichMetadata }) {
         return null
       })}
 
-      {poll ? (
+      {trade ? <TradeCardView card={trade} /> : null}
+
+      {viewerPoll && onVote ? (
+        <MessagePoll poll={viewerPoll} onVote={onVote} onClose={onClosePoll} />
+      ) : poll ? (
         <div className="af-cm-poll">
           <p className="af-cm-poll-q">{poll.question}</p>
           {poll.options.map((o) => (
             <div key={o.id} className="af-cm-poll-o">
               <span>{o.text}</span>
               {/*
-                A count, not a bar. We hold the votes array but no total to size a
-                bar against honestly, and a bar drawn from one number invents a
-                proportion.
+                A count, not a bar. Read-only here because nothing on this surface
+                can vote yet, and a bar drawn from one number with no denominator
+                invents a proportion.
               */}
               <span className="af-cm-poll-n af-num">{o.votes.length}</span>
             </div>

@@ -18,6 +18,15 @@ vi.mock("@/lib/ai/providerRouter", () => ({
   routeTextCall: routeTextCallMock,
 }))
 
+// generateWorldCupChimmyPrivateReply writes an audit row via logAiInteraction.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    aiInteractionLog: {
+      create: vi.fn().mockResolvedValue({ id: "audit-1" }),
+    },
+  },
+}))
+
 vi.mock("@/lib/ai/deterministic", () => ({
   DETERMINISTIC_SOURCE: "deterministic",
   tryDeterministicAnswer: tryDeterministicAnswerMock,

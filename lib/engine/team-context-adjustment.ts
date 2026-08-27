@@ -11,6 +11,8 @@
  * Performance target: <5ms per team.
  */
 
+import { starterNeedsFromSlots } from '@/lib/core-app/slotEligibility'
+
 import type { TradePlayerAsset, SportKey } from './trade-types'
 
 // ---------------------------------------------------------------------------
@@ -67,6 +69,14 @@ export interface TeamContextResult {
 // Position requirements by sport (minimum starters)
 // ---------------------------------------------------------------------------
 
+/**
+ * ⚠ THESE ARE A LAST RESORT, AND THE NFL ENTRY CANNOT SEE A DEFENCE.
+ *
+ * Every entry here is a standard-redraft shape. In an IDP league that makes the entire defence
+ * invisible — a team with two linebacker slots and no linebacker reads as having no needs — and
+ * in superflex it misses the position that defines the format. `resolveRequiredStarters` prefers
+ * the league's own slots wherever the caller supplies them, and these only apply when it cannot.
+ */
 const DEFAULT_STARTER_NEEDS: Record<string, Record<string, number>> = {
   NFL: { QB: 1, RB: 2, WR: 3, TE: 1 },
   NBA: { PG: 1, SG: 1, SF: 1, PF: 1, C: 1 },
@@ -100,7 +110,7 @@ export function computeTeamContext(input: TeamContextInput): TeamContextResult {
   const needs = computePositionalNeeds(roster, sport, input.rosterSlots)
 
   // 3. Bench strength
-  const benchStrength = computeBenchStrength(roster, sport)
+  const benchStrength = computeBenchStrength(roster, sport, input.rosterSlots)
 
   // 4. Compute adjustment factors
 
@@ -178,19 +188,81 @@ function inferWindow(
   return 'middle'
 }
 
+/**
+ * What this league actually requires, preferring its own slots over the assumed table.
+ *
+ * ⚠ THREE THINGS WENT WRONG HERE AND EACH ONE LOOKED LIKE IT WAS WORKING.
+ *
+ * 1. `rosterSlots ?? DEFAULT` let an EMPTY OBJECT through. `af-legacy/page.tsx:2127` passes
+ *    `roster?.slots || {}`, and `{}` is not nullish — so a league whose slots we do not hold
+ *    stated zero requirements, every team came back with no needs, and `needsAdj` handed each
+ *    of them the -0.02 reserved for a genuinely complete roster. An empty statement of
+ *    requirements is an absence of information, not a finding, so it falls through here.
+ *
+ * 2. The counts arrive KEYED BY SLOT, NOT BY POSITION, and the slots include ones no player's
+ *    position ever equals. Iterating them raw makes `FLEX`, `SUPER_FLEX`, `BN` and `IR` into
+ *    phantom needs that no roster can ever satisfy — so passing real slots would have been
+ *    worse than the assumed table it replaced.
+ *
+ * 3. Flex must be counted, never distributed. A flex is a requirement without an address;
+ *    splitting it across positions invents a per-position number the league never stated.
+ *
+ * `starterNeedsFromSlots` already resolves all three — it is the predicate the game-day surfaces
+ * use — so this expands the counts back into a slot list and defers to it rather than keeping a
+ * fourth opinion about what a roster requires.
+ */
+function resolveRequiredStarters(
+  sport: SportKey,
+  rosterSlots?: Record<string, number>,
+): { required: Record<string, number>; flex: number; basis: 'league' | 'assumed' } {
+  const expanded: string[] = []
+  for (const [slot, count] of Object.entries(rosterSlots ?? {})) {
+    if (!Number.isFinite(count) || count <= 0) continue
+    for (let i = 0; i < Math.min(count, 64); i++) expanded.push(slot)
+  }
+
+  const stated = starterNeedsFromSlots(expanded)
+  if (Object.keys(stated.needs).length > 0 || stated.flex > 0) {
+    return { required: stated.needs, flex: stated.flex, basis: 'league' }
+  }
+
+  return { required: DEFAULT_STARTER_NEEDS[sport] ?? {}, flex: 0, basis: 'assumed' }
+}
+
+/**
+ * The group a player's position satisfies, in the same space the slots are stated in.
+ *
+ * Routed through the slot classifier rather than a second lookup table so a position can never
+ * mean one thing to the requirement and another to the count. Returns null for anything the
+ * classifier does not recognise, which is counted as nothing rather than as its own position —
+ * an unrecognised string inventing a roster group is how a phantom need appears.
+ */
+function positionGroup(pos: string | null | undefined): string | null {
+  const raw = String(pos ?? '').trim().toUpperCase()
+  if (!raw) return null
+  const keys = Object.keys(starterNeedsFromSlots([raw]).needs)
+  return keys.length === 1 ? keys[0] : null
+}
+
 function computePositionalNeeds(
   roster: TradePlayerAsset[],
   sport: SportKey,
   rosterSlots?: Record<string, number>,
 ): string[] {
   const needs: string[] = []
-  const required = rosterSlots ?? DEFAULT_STARTER_NEEDS[sport] ?? {}
+  const { required } = resolveRequiredStarters(sport, rosterSlots)
 
-  // Count players by position on roster
+  /*
+   * ⚠ COUNT THE ROSTER IN THE SAME SPACE THE REQUIREMENT IS STATED IN. `starterNeedsFromSlots`
+   * collapses `DE`/`DT` onto `DL` and `CB`/`S` onto `DB`, because that is the group the slot
+   * accepts. A roster counted by raw position has zero players at `DL` no matter how many ends
+   * it holds, so every defensive requirement would read as a hole on every team.
+   */
   const posCounts: Record<string, number> = {}
   for (const p of roster) {
-    const pos = p.pos ?? ''
-    posCounts[pos] = (posCounts[pos] ?? 0) + 1
+    const group = positionGroup(p.pos)
+    if (!group) continue
+    posCounts[group] = (posCounts[group] ?? 0) + 1
   }
 
   // Find positions where team is short
@@ -205,9 +277,22 @@ function computePositionalNeeds(
   return needs
 }
 
-function computeBenchStrength(roster: TradePlayerAsset[], sport: SportKey): number {
-  const required = DEFAULT_STARTER_NEEDS[sport] ?? {}
-  const totalRequired = Object.values(required).reduce((a, b) => a + b, 0)
+/**
+ * ⚠ THIS READ THE ASSUMED TABLE EVEN WHEN THE LEAGUE HAD STATED ITS OWN SLOTS.
+ *
+ * Bench strength is roster minus starters, so it is only as right as the starter count. Against
+ * the NFL default that count is seven for every league — so an IDP league starting nine on
+ * offence and four on defence had six real starters reclassified as bench, and a normal roster
+ * scored as unusually deep. Flex slots count toward starters here for the same reason: a flex is
+ * a player who has to start, even though no single position owns him.
+ */
+function computeBenchStrength(
+  roster: TradePlayerAsset[],
+  sport: SportKey,
+  rosterSlots?: Record<string, number>,
+): number {
+  const { required, flex } = resolveRequiredStarters(sport, rosterSlots)
+  const totalRequired = Object.values(required).reduce((a, b) => a + b, 0) + flex
   const totalRoster = roster.length
   const benchSize = Math.max(0, totalRoster - totalRequired)
 

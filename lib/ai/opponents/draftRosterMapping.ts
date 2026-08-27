@@ -2,6 +2,7 @@
  * Map between draft `slotOrder.rosterId` (Roster.id or LeagueTeam.id) and `LeagueTeam.id`.
  */
 
+import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import { prisma } from "@/lib/prisma"
 import type { SlotOrderEntry } from "@/lib/live-draft-engine/types"
 
@@ -41,10 +42,8 @@ export async function resolveDraftRosterIdForLeagueTeam(leagueId: string, league
   })
   if (!team?.platformUserId) return null
 
-  const roster = await prisma.roster.findFirst({
-    where: { leagueId, platformUserId: team.platformUserId },
-    select: { id: true },
-  })
+  /* Contract-aware — see lib/leagues/rosterForTeam.ts. */
+  const roster = await findRosterForTeam(leagueId, team.platformUserId)
   return roster?.id ?? null
 }
 

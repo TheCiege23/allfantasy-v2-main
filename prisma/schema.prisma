@@ -332,6 +332,11 @@ model SportsPlayer {
   teamId     String?
   number     Int?
   age        Int?
+  /// Seasons of NFL experience. 0 is a rookie; NULL is "we do not know", and the
+  /// two must never be conflated — a missing value read as 0 labels every
+  /// unmatched player a rookie, which is the most confident possible wrong
+  /// answer about the class of asset dynasty managers pay the biggest premium for.
+  yearsExp   Int?
   height     String?
   weight     String?
   college    String?
@@ -1886,6 +1891,29 @@ model LegacyFeedback {
   @@index([priority])
   @@index([aiSeverity])
   @@index([createdAt])
+}
+
+/// A trade the manager is part-way through building, kept so it survives a
+/// refresh and follows them to another device.
+///
+/// One per (user, league) on purpose: the Trade Center builds one deal at a
+/// time, and a list of drafts is a different feature with a different UI. The
+/// unique constraint is what makes "save" idempotent rather than accumulating.
+///
+/// `payload` holds the picked assets verbatim — players, picks and FAAB in the
+/// shape the builder uses. It is deliberately NOT normalised into rows: a draft
+/// is a scratchpad, nothing joins to it, and giving it a schema would mean
+/// migrating every time the builder learns a new asset class.
+model TradeDraft {
+  id        String   @id @default(uuid())
+  userId    String
+  leagueId  String
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, leagueId])
+  @@index([userId])
 }
 
 model YahooConnection {
@@ -12222,6 +12250,10 @@ model PlatformChatThreadMember {
 model PlatformChatMessage {
   id                String             @id @default(uuid())
   threadId          String
+  /// Set when this message answers another one in the same thread. Mirrors
+  /// `LeagueChatMessage.parentMessageId`; no FK, so removing a parent leaves its
+  /// replies standing rather than cascading a conversation away.
+  parentMessageId   String?
   senderUserId      String?
   messageType       String             @default("text")
   body              String
@@ -12239,6 +12271,7 @@ model PlatformChatMessage {
   @@index([threadId, createdAt])
   @@index([senderUserId, createdAt])
   @@index([globalBroadcastId])
+  @@index([parentMessageId])
   @@map("platform_chat_messages")
 }
 
@@ -17118,4 +17151,110 @@ enum DecisionOsLeagueFinancialConfidence {
   PROVIDER_CONFIRMED
   ESCROW_VERIFIED
   INFERRED
+}
+
+/// One franchise that spans more than one platform league.
+///
+/// A manager running his NFL side on Sleeper and his college side on Fantrax has
+/// one team in his head and two leagues in ours. This is the row that says so.
+///
+/// ⚠ NO FOREIGN KEY TO THE LEAGUE, DELIBERATELY. The two sides live in different
+/// tables — the pro side is `leagues` (League), the college side is
+/// `FantraxLeague` — so no single FK can point at both. `platform` + `leagueId`
+/// is a loose reference that only `FranchiseLeagueMember` resolves. Losing
+/// referential integrity is the price of spanning two id spaces, so the resolver
+/// must treat a missing league as ABSENCE rather than assuming the row is live.
+model FranchiseLink {
+  id          String                  @id @default(cuid())
+  /// The AllFantasy user whose franchise this is. Identity across platforms is
+  /// anchored here rather than matched on username, because usernames differ
+  /// between Sleeper and Fantrax and matching them is guesswork.
+  ownerUserId String
+  name        String
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  members     FranchiseLeagueMember[]
+  trades      CrossPlatformTrade[]
+
+  @@index([ownerUserId])
+  @@map("franchise_links")
+}
+
+/// One platform league inside a franchise.
+model FranchiseLeagueMember {
+  id             String        @id @default(cuid())
+  linkId         String
+  /// 'pro' or 'college' — which half of the franchise this league is.
+  role           String
+  /// 'sleeper' | 'fantrax' | 'yahoo' | ...
+  platform       String
+  /// League.id for the pro side, FantraxLeague.id for the college side.
+  leagueId       String
+  /// Which team inside that league belongs to this franchise. Null when the
+  /// owner has not been matched to a team yet — NOT a default to the first team,
+  /// which would silently attribute someone else's roster to him.
+  teamExternalId String?
+  createdAt      DateTime      @default(now())
+  link           FranchiseLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  /// A league belongs to at most one franchise, and a franchise holds each role
+  /// once — two "college" halves would make the combined view ambiguous.
+  @@unique([platform, leagueId])
+  @@unique([linkId, role])
+  @@index([linkId])
+  @@map("franchise_league_members")
+}
+
+/// A deal that moves assets on BOTH platforms.
+///
+/// ⚠ WE CANNOT EXECUTE EITHER HALF, AND THIS ROW EXISTS BECAUSE OF THAT.
+/// Sleeper's API is read-only and Fantrax arrives as a periodic CSV upload, so
+/// AllFantasy can evaluate a two-sided deal and watch for it, but never perform
+/// it. A deal that lands on one platform and not the other leaves the franchises
+/// unbalanced and WE ARE THE ONLY PARTY WHO CAN SEE IT — which is the whole
+/// reason to track settlement rather than grade the trade and forget it.
+model CrossPlatformTrade {
+  id         String                  @id @default(cuid())
+  linkId     String
+  /// Free text describing the deal as agreed, for the managers' own reference.
+  summary    String?
+  /// 'pending' | 'settled' | 'partial' | 'contradicted'. Derived from the legs,
+  /// stored so a half-landed deal can be queried without recomputing.
+  status     String                  @default("pending")
+  proposedAt DateTime                @default(now())
+  settledAt  DateTime?
+  updatedAt  DateTime                @updatedAt
+  link       FranchiseLink           @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  legs       CrossPlatformTradeLeg[]
+
+  @@index([linkId, status])
+  @@map("cross_platform_trades")
+}
+
+/// One platform's half of a cross-platform deal.
+model CrossPlatformTradeLeg {
+  id         String             @id @default(cuid())
+  tradeId    String
+  platform   String
+  /// 'pro' or 'college', matching FranchiseLeagueMember.role.
+  role       String
+  /// What this side sends and receives, as agreed. Names rather than ids: the
+  /// college side has no stable cross-platform id, and a name we can show the
+  /// manager beats an id we cannot resolve.
+  sends      Json
+  receives   Json
+  /// 'pending' | 'observed' | 'contradicted'. `observed` means a later sync or
+  /// upload actually showed the move. `contradicted` means the sync showed the
+  /// players did NOT move — different from still waiting, and that distinction
+  /// is the point of the field.
+  status     String             @default("pending")
+  observedAt DateTime?
+  /// Why we believe the status. Always populated, so a manager can tell an
+  /// observation from an assumption.
+  basis      String?
+  trade      CrossPlatformTrade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@unique([tradeId, role])
+  @@index([tradeId])
+  @@map("cross_platform_trade_legs")
 }

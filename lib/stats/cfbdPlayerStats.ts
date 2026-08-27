@@ -1,5 +1,5 @@
 import 'server-only'
-import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
+import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 import { prisma } from '@/lib/prisma'
 

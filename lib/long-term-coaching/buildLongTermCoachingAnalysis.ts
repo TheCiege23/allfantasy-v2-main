@@ -1,3 +1,4 @@
+import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -206,16 +207,18 @@ export async function buildLongTermCoachingAnalysis(args: {
     }
   }
 
-  const rosterRow = await prisma.roster.findFirst({
-    where: {
-      leagueId: args.leagueId,
-      OR: [
-        ...(team.platformUserId ? [{ platformUserId: team.platformUserId }] : []),
-        { platformUserId: args.userId },
-      ],
-    },
-    select: { playerData: true },
-  })
+  /* ⚠ Contract-aware — see lib/leagues/rosterForTeam.ts. Keying on the team's
+     raw Sleeper id resolves the signed-in user by luck and misses every other
+     manager with a linked account. */
+  const byTeam = team.platformUserId
+    ? await findRosterForTeam(args.leagueId, team.platformUserId)
+    : null
+  const rosterRow = byTeam
+    ? { playerData: byTeam.playerData as any }
+    : await prisma.roster.findFirst({
+        where: { leagueId: args.leagueId, platformUserId: args.userId },
+        select: { playerData: true },
+      })
 
   const picksRaw = parseDraftPicksFromPlayerData(rosterRow?.playerData ?? {}, lc.matchupPeriod.season)
   const pickCapitalScore = sumPickCapitalScore(picksRaw)

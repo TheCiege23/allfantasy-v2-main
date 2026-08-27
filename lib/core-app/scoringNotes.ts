@@ -110,8 +110,28 @@ const IDP_POSITIONS = new Set([
   'DL', 'DE', 'DT', 'LB', 'ILB', 'OLB', 'MLB', 'DB', 'CB', 'S', 'SS', 'FS', 'IDP_FLEX',
 ])
 
+/**
+ * Long-form spellings the player cache actually stores.
+ *
+ * ⚠ THE COLUMN IS NOT ALL ABBREVIATIONS, AND THE ONES IT SPELLS OUT WENT MISSING. Measured
+ * 2026-08-26: 583 of 15,043 NFL players carrying a Sleeper id have a long-form `position`, and
+ * ~74 of those are defenders — `Linebacker`, `Cornerback`, `Defensive End`, `Safety`,
+ * `Outside Linebacker`, `Defensive Lineman`. Matching the abbreviation set alone made every one
+ * of them a non-defender, which is not a display bug: they were dropped from the league's VORP
+ * board entirely, and `loadSnapShares` read them off the OFFENSIVE snap columns, where a
+ * linebacker's number is special-teams noise.
+ *
+ * Foye Oluokun and Jessie Bates are both in this set, so it is not a tail of obscure names.
+ */
+const IDP_LONG_FORM = new Set([
+  'LINEBACKER', 'OUTSIDE LINEBACKER', 'INSIDE LINEBACKER', 'MIDDLE LINEBACKER',
+  'CORNERBACK', 'SAFETY', 'FREE SAFETY', 'STRONG SAFETY', 'DEFENSIVE BACK',
+  'DEFENSIVE END', 'DEFENSIVE TACKLE', 'DEFENSIVE LINEMAN', 'EDGE RUSHER', 'NOSE TACKLE',
+])
+
 export function isIdpPosition(position: string | null | undefined): boolean {
-  return IDP_POSITIONS.has((position ?? '').trim().toUpperCase())
+  const raw = (position ?? '').trim().toUpperCase()
+  return IDP_POSITIONS.has(raw) || IDP_LONG_FORM.has(raw)
 }
 
 /**

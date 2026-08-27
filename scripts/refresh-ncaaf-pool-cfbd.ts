@@ -20,7 +20,7 @@
  */
 
 import fs from 'node:fs'
-import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
+import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 for (const f of ['.env', '.env.local']) {
   try {

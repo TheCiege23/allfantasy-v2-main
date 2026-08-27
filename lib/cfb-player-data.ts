@@ -1,7 +1,7 @@
 // CFB Player Data - Integrates with CollegeFootballData.com API for devy player info
 import { prisma } from '@/lib/prisma'
-import { CFBD_BASE_URL } from '@/lib/cfbd-base-url'
 import { getCfbdApiKey } from '@/lib/cfbd-env'
+import { cfbdGet, describeCfbdFailure, CFBD_BASE_URL, type CfbdResult } from '@/lib/cfbd-fetch'
 
 export interface CFBPlayer {
   id: number
@@ -49,25 +49,27 @@ export interface DevyPlayerValue {
 const CFBD_BASE = CFBD_BASE_URL
 
 /**
- * Statuses that are NEVER a legitimately empty result.
+ * Quota/credential guard for the fetchers NOT YET converted to `cfbdGet`.
  *
- * Every fetcher below answers `!response.ok` with `return []`, which makes
- * "your key is out of quota" indistinguishable from "this team has no players".
- * That is not hypothetical: on 2026-08-25 the key was returning
- * `429 {"message":"Monthly call quota exceeded."}` for every endpoint, and the
- * roster ingest reported `playersUpserted: 0, errors: 0` — a clean, healthy-
- * looking zero for a provider that was answering nothing at all. The devy pool
- * had been quietly filling with nothing on that basis.
+ * `lib/cfbd-fetch.ts` is the better answer and where these should all end up:
+ * it returns a discriminated `CfbdResult` so a caller must SAY what it does when
+ * the answer is "we could not ask". Two functions have moved
+ * (`getCFBDraftPicksResult`, `getCFBTeamRosterResult`); ELEVEN below still
+ * answer `!response.ok` with `return []`, which makes a 429 quota wall
+ * indistinguishable from "this team has no players".
  *
- * 401/403 (bad or revoked key) and 429 (quota/rate) all mean "we did not get an
- * answer". Throwing lets the per-team try/catch in lib/devy-classification.ts
- * record a real error, so the cron's summary says what happened. A 404 or a
- * genuine empty array still falls through to the existing `[]`, because those
- * really can mean no data.
+ * That conflation is live, not theoretical: on 2026-08-25 the key returned
+ * `429 {"message":"Monthly call quota exceeded."}` for every endpoint and the
+ * roster ingest reported `upserted: 0, errors: 0` — a clean, healthy-looking
+ * zero for a provider answering nothing at all.
  *
- * Deliberately never includes the response body or URL in the message — the
- * CFBD key travels in an Authorization header, but the query string can carry
- * identifying params and this string reaches logs.
+ * So the eleven throw instead. 401/403/429 are never a legitimate empty result;
+ * a 404 or a genuinely empty array still falls through to `[]`. This is a
+ * stopgap that keeps those callers honest until they move to `cfbdGet` too —
+ * delete it as each one migrates.
+ *
+ * The message deliberately carries no URL or body: the key travels in a header,
+ * but query strings can carry identifying params and this string reaches logs.
  */
 const CFBD_NEVER_EMPTY_STATUSES = new Set([401, 403, 429])
 
@@ -310,73 +312,86 @@ export interface CFBDraftPick {
   weight: number | null
 }
 
-export async function getCFBDraftPicks(year: number, college?: string): Promise<CFBDraftPick[]> {
-  const apiKey = getCfbdApiKey()
-  if (!apiKey) return []
-
-  try {
-    let url = `${CFBD_BASE}/draft/picks?year=${year}`
-    if (college) url += `&college=${encodeURIComponent(college)}`
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Accept': 'application/json',
-      },
-    })
-
-    assertCfbdAvailable(response)
-    if (!response.ok) {
-      console.error('[CFBD] Draft picks fetch failed:', response.status)
-      return []
-    }
-
-    const data = await response.json()
-    return data.map((p: any) => ({
-      collegeId: p.collegeAthleteId || p.collegeId || null,
-      collegeName: p.name || '',
-      collegeTeam: p.collegeTeam || p.college || '',
-      collegeConference: p.collegeConference || null,
-      nflTeam: p.nflTeam || '',
-      year: p.year,
-      round: p.round,
-      pick: p.pick,
-      overallPick: p.overall || p.pick,
-      position: p.position || '',
-      playerName: p.name || '',
-      height: p.height || null,
-      weight: p.weight || null,
-    }))
-  } catch (error) {
-    // A quota/credential refusal is not "no data" — let it out so the caller
-    // records a real error instead of an empty, healthy-looking result.
-    if (error instanceof CfbdUnavailableError) throw error
-    console.error('[CFBD] Draft picks error:', String(error))
-    return []
+function mapDraftPick(p: any): CFBDraftPick {
+  return {
+    collegeId: p.collegeAthleteId || p.collegeId || null,
+    collegeName: p.name || '',
+    collegeTeam: p.collegeTeam || p.college || '',
+    collegeConference: p.collegeConference || null,
+    nflTeam: p.nflTeam || '',
+    year: p.year,
+    round: p.round,
+    pick: p.pick,
+    overallPick: p.overall || p.pick,
+    position: p.position || '',
+    playerName: p.name || '',
+    height: p.height || null,
+    weight: p.weight || null,
   }
 }
 
-export async function getCFBTeamRoster(team: string, year?: number): Promise<CFBPlayer[]> {
-  const apiKey = getCfbdApiKey()
-  if (!apiKey) return []
+/**
+ * Draft picks, with a failed request kept distinct from an empty draft class.
+ *
+ * ⚠ PREFER THIS ANYWHERE THE ANSWER GETS WRITTEN DOWN. The plain version below
+ * still collapses a failure into `[]` for its existing callers, and "nobody was
+ * drafted" is a conclusion no caller should reach by being rate limited. See
+ * lib/cfbd-fetch.ts.
+ */
+export async function getCFBDraftPicksResult(
+  year: number,
+  college?: string,
+): Promise<CfbdResult<CFBDraftPick[]>> {
+  let path = `/draft/picks?year=${year}`
+  if (college) path += `&college=${encodeURIComponent(college)}`
 
-  try {
-    const rosterYear = year || new Date().getFullYear()
-    const response = await fetch(
-      `${CFBD_BASE}/roster?team=${encodeURIComponent(team)}&year=${rosterYear}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Accept': 'application/json',
-        },
-      }
-    )
+  const res = await cfbdGet<unknown>(path, getCfbdApiKey())
+  if (!res.ok) return res
+  if (!Array.isArray(res.data)) {
+    return {
+      ok: false,
+      failure: { kind: 'http', status: null, message: 'CFBD draft picks was not an array', path },
+    }
+  }
+  return { ok: true, data: res.data.map(mapDraftPick) }
+}
 
-    assertCfbdAvailable(response)
-    if (!response.ok) return []
+export async function getCFBDraftPicks(year: number, college?: string): Promise<CFBDraftPick[]> {
+  const res = await getCFBDraftPicksResult(year, college)
+  if (!res.ok) {
+    console.error('[CFBD] Draft picks fetch failed:', describeCfbdFailure(res.failure))
+    return []
+  }
+  return res.data
+}
 
-    const data = await response.json()
-    return data
+/**
+ * A team's roster, with a failed request kept distinct from an empty roster.
+ *
+ * ⚠ THE CLASSIFIER TREATS ABSENCE FROM THIS LIST AS EVIDENCE. If the request
+ * merely failed, "not on a current roster" becomes a fact about the network
+ * rather than the player, and lib/devy-classification.ts writes it down.
+ */
+export async function getCFBTeamRosterResult(
+  team: string,
+  year?: number,
+): Promise<CfbdResult<CFBPlayer[]>> {
+  const rosterYear = year || new Date().getFullYear()
+  const path = `/roster?team=${encodeURIComponent(team)}&year=${rosterYear}`
+
+  const res = await cfbdGet<unknown>(path, getCfbdApiKey())
+  if (!res.ok) return res
+  if (!Array.isArray(res.data)) {
+    return {
+      ok: false,
+      failure: { kind: 'http', status: null, message: 'CFBD roster was not an array', path },
+    }
+  }
+  return { ok: true, data: mapRoster(res.data, team) }
+}
+
+function mapRoster(data: any[], team: string): CFBPlayer[] {
+  return data
       .filter((p: any) => {
         const fn = p.firstName || p.first_name
         const ln = p.lastName || p.last_name
@@ -401,13 +416,15 @@ export async function getCFBTeamRoster(team: string, year?: number): Promise<CFB
           homeCountry: p.homeCountry || p.home_country || null,
         }
       })
-  } catch (error) {
-    // A quota/credential refusal is not "no data" — let it out so the caller
-    // records a real error instead of an empty, healthy-looking result.
-    if (error instanceof CfbdUnavailableError) throw error
-    console.error('CFBD roster error:', error)
+}
+
+export async function getCFBTeamRoster(team: string, year?: number): Promise<CFBPlayer[]> {
+  const res = await getCFBTeamRosterResult(team, year)
+  if (!res.ok) {
+    console.error('CFBD roster error:', describeCfbdFailure(res.failure))
     return []
   }
+  return res.data
 }
 
 export function enrichFantraxPlayerWithDevyValue(
@@ -546,10 +563,8 @@ async function getCachedOrFetch<T>(cacheKey: string, ttlMs: number, fetcher: () 
     }
     return data
   } catch (err) {
-    // Same reason as the fetchers above: a quota/credential refusal must not be
-    // laundered into `null` and read downstream as "this endpoint has nothing".
-    // Nothing is written to the cache on this path, so a refusal never poisons
-    // the cached value either.
+    // Same reason: a refusal must not be laundered into `null` and read as
+    // "this endpoint has nothing". Nothing is cached on this path.
     if (err instanceof CfbdUnavailableError) throw err
     console.error(`[CFBD Cache] Fetch failed for ${cacheKey}:`, err)
     return null
