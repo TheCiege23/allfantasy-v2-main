@@ -126,3 +126,62 @@ play-by-play) carried "confirm during the trial". Confirmed.
 **What it does NOT change:** `/injuries` still moves to hourly. That was never a
 quota decision — the feed is collected twice a day, so polling it faster buys
 nothing no matter how many calls are permitted.
+
+---
+
+## 📏 MEASURED 2026-08-27 — `N-02`, and a THIRD reading of 304
+
+Production, one RSC token, ~22:19-22:22 UTC. Roughly twenty distinct URLs, every
+one sent with `Cache-Control: no-cache, no-store`, `Pragma: no-cache`, and a fresh
+millisecond `_` buster — then, on a 304, **retried once with a new buster**.
+
+**NFL answered normally.** `team-info` 32 teams (32 badges), `player-info` 9,557
+players, and `player-stats` continues to write `fantasy_stat_lines` as it has all
+month.
+
+**Every other sport answered 304, on every endpoint, through the retry:**
+
+| sport | team-info | player-info | player-stats 2026 | player-stats 2025 |
+|---|---|---|---|---|
+| MLB | 304 | 304 | 304 | 304 |
+| NBA | 304 | 304 | 304 | 304 |
+| NHL | 304 | 304 | 304 | 304 |
+| NCAABB | 304 | 304 | 304 | 304 |
+| NCAAFB | 304 | 304 | — | — |
+| SOCCER (EPL, LALIGA, SERIEA — each separately) | 304 | 304 | n/a | n/a |
+
+### What this rules out
+
+**A cache artifact cannot survive a fresh millisecond buster on ~20 distinct URLs
+across four endpoint families and two seasons.** That is the skill repo's reading,
+and this measurement does not support it here.
+
+**"Empty result set" does not fit either.** `team-info/MLB` returning empty would
+mean the vendor has no MLB teams, which contradicts their own product.
+
+### The third reading — INFERENCE, NOT CONFIRMED
+
+304 appears to track **per-sport ENTITLEMENT**. Rolling Insights bills additively
+per sport (`commercial.pricing_monthly`, $100-600/mo each), the account demonstrably
+has NFL, and every sport it does not have answers 304 uniformly regardless of
+endpoint or season.
+
+⚠ **This is inference from one account's behaviour, not a vendor statement.** It is
+recorded because it changes how the status must be read, not because it is settled.
+
+### What to do with it
+
+- **Do NOT read 304 as "no data" or "cache miss".** It may mean *not subscribed*.
+  All three readings now coexist and the status alone cannot separate them.
+- **A 304 must never be written as an emptiness.** Already the rule; this is the
+  second independent reason for it.
+- **ASK THE VENDOR** (do not probe further): *does an unentitled sport return 304
+  rather than 401/403, and if so is that intentional?* A 401/403 would be
+  unambiguous and would let clients report "not subscribed" instead of "unchanged".
+
+### Consequence for product scope
+
+Non-NFL sports currently get **no live Rolling Insights data of any kind**. The
+existing non-NFL rows in `SportsPlayer` are 15 hours to 119 days old and are
+historical, not evidence of current entitlement — an easy and costly thing to
+misread, because the rows are real and carry RI player ids.
