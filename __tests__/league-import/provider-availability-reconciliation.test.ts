@@ -17,7 +17,16 @@ const EXPECTED_AVAILABILITY: Record<string, boolean> = {
   sleeper: true,
   espn: true,
   yahoo: true,
-  fantrax: false,
+  /*
+   * Flipped 2026-08-27 with the missing piece built, not to unblock anything.
+   * Fantrax has a live read API (`fxea`), so the import runs from a league id:
+   * discovery reads getLeagueInfo and lists the league's TEAMS, the chosen team
+   * rides in the sourceId as `fantrax-league:<leagueId>|<teamName>`, and
+   * fetchFantraxLeagueForImport materialises the snapshot before the existing
+   * ownership gate and normalisation run unchanged. Verified against a real
+   * league end to end; see the G61 doc.
+   */
+  fantrax: true,
   mfl: false,
   fleaflicker: false,
 }

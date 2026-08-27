@@ -28,24 +28,22 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   // yahoo discovery lists leagues from the user's CONNECTED Yahoo account (OAuth
   // use_login=1) — no account identifier input; requires Yahoo connected in League Sync.
   { provider: 'yahoo', label: 'Yahoo', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
-  // fantrax: STILL false, but the stated reason is out of date — corrected here so the
-  // next person does not re-diagnose a bug that was already fixed.
-  //
-  // The note read "appUserId is never stamped by the upload route". It is stamped now:
-  // server/api-route-modules/legacy/fantrax/route.ts sets `appUserId: auth.userId` in BOTH
-  // upsert branches, and requireVerifiedUser() returns session.user.id — the same id the
-  // import gate compares against via fetchFantraxLeagueForImport(session.user.id, …). So a
-  // fresh upload is no longer orphaned, and the gate (which still fails closed on a null or
-  // foreign appUserId) should no longer reject its own uploads.
-  //
-  // What is NOT yet done, and is what this flag is waiting on:
-  //   1. an end-to-end run — upload a CSV as a real account, then import it — which is the
-  //      bar the reconciliation guard sets, deliberately, because "the adapter is registered"
-  //      was true for three providers while they were unusable.
-  //   2. ImportV4 has no FIELD_BY_PROVIDER entry for fantrax and it does not support
-  //      discovery, so selecting it today renders neither a field nor a discover button:
-  //      selectable and impossible to finish. The field needs adding WITH the flip, not after.
-  { provider: 'fantrax', label: 'Fantrax', available: false, supportedSports: ['NFL', 'NCAAF'] },
+  /*
+   * fantrax: LIVE. Fantrax turned out to have a real read API (`fxea`), so the
+   * CSV upload is no longer the only way in — a league id is enough.
+   *
+   * ⚠ DISCOVERY LISTS TEAMS, NOT LEAGUES, and that is not a shortcut. Listing
+   * someone's leagues needs their Fantrax Secret ID, which is a credential and
+   * does not belong in an import box; a league id is public, so the flow asks
+   * for the league and then which team is theirs. `supportsDiscovery` is true
+   * because the import UI can populate a pickable list from an identifier,
+   * which is exactly what that flag gates.
+   *
+   * NFL as well as NCAAF: the sport is measured by resolving the rosters
+   * against both player maps and keeping whichever names more, because
+   * getLeagueInfo does not report a sport and the two id spaces do not overlap.
+   */
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
   // mfl: real adapter, but no credential-entry UI exists anywhere for the API key a private league needs.
   { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: false, supportedSports: ['NFL'] },
   // fleaflicker: real adapter, but no confirmed reachable path in the main import flow (only an

@@ -26,8 +26,15 @@ describe('LeagueImportFlow — provider availability truth (no UI/config drift)'
   it('config reflects launch truth: Sleeper enabled; unusable providers stay blocked', () => {
     // Sleeper is the launch-recommended, available provider.
     expect(isImportProviderAvailable('sleeper')).toBe(true)
+    /*
+     * Fantrax moved to true on 2026-08-27 because the import was BUILT, not to
+     * unblock anything: it runs from the league id in the league URL via
+     * Fantrax's `fxea` read API, discovery lists the league's teams so the user
+     * picks their own, and the existing ownership gate and normalisation run
+     * unchanged behind it. Verified against a real league end to end.
+     */
+    expect(isImportProviderAvailable('fantrax')).toBe(true)
     // Providers with no usable end-to-end import must not be silently enabled.
-    expect(isImportProviderAvailable('fantrax')).toBe(false)
     expect(isImportProviderAvailable('mfl')).toBe(false)
     expect(isImportProviderAvailable('fleaflicker')).toBe(false)
   })

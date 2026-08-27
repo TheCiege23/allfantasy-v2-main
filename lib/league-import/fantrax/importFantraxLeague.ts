@@ -48,27 +48,48 @@ export async function importFantraxLeague(args: {
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message }
 
-  const [rosters, playerMap] = await Promise.all([
+  const [rosters, cfb, nfl] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
-    /* CFB, not NFL — different id spaces, and the wrong one resolves nothing
-       and looks exactly like an empty league. */
     getFantraxPlayerIds('CFB'),
+    getFantraxPlayerIds('NFL'),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message }
-  if (!playerMap.ok) return { ok: false, error: playerMap.failure.message }
+  /* Only one map has to load. A league is one sport, so failing the whole
+     import because the OTHER sport's map was unavailable would be wrong. */
+  if (!cfb.ok && !nfl.ok) return { ok: false, error: cfb.failure.message }
 
-  const resolved = resolveRosters(rosters.data, playerMap.data)
+  /*
+   * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
+   * ASSUMED. `getLeagueInfo` returns a name, a season and teams — nothing that
+   * says college or pro. The id spaces do not overlap at all (measured on a real
+   * college league: 0 of 38 ids in the NFL map, 447 of 466 in CFB), so whichever
+   * map names more players IS the sport. Hardcoding CFB made every NFL Fantrax
+   * league look empty, which is why the tile could only ever claim college.
+   */
+  const candidates = [
+    cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, cfb.data) } : null,
+    nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
+  ].filter((c): c is NonNullable<typeof c> => c !== null)
+
+  const scored = candidates
+    .map((c) => ({ ...c, named: c.resolved.reduce((a, r) => a + r.resolved, 0) }))
+    .sort((a, b) => b.named - a.named)
+
+  const best = scored[0]
+  const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
-  const named = resolved.reduce((a, r) => a + r.resolved, 0)
+  const named = best.named
 
   /*
    * ⚠ A LEAGUE WHERE ALMOST NOTHING RESOLVED IS THE WRONG SPORT MAP, NOT AN
-   * EMPTY LEAGUE. Storing it would persist rosters of anonymous ids.
+   * EMPTY LEAGUE. Storing it would persist rosters of anonymous ids. Now that
+   * both maps are tried, reaching here means NEITHER fits — so the message says
+   * that rather than blaming one of them.
    */
   if (total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `only ${named} of ${total} players could be named, which is the signature of the wrong sport map rather than a real league. Nothing was imported.`,
+      error: `only ${named} of ${total} players could be named against either the college or the NFL player map, which is the signature of a sport we do not handle rather than a real league. Nothing was imported.`,
     }
   }
 
@@ -110,10 +131,10 @@ export async function importFantraxLeague(args: {
 
   const payload = {
     appUserId: args.appUserId,
-    sport: 'cfb',
+    sport: best.sport,
     teamCount: resolved.length,
     userTeam: mine.teamName,
-    isDevy: true,
+    isDevy: best.isDevy,
     roster: mine.players as unknown as object,
     standings: summarise(resolved) as unknown as object,
   }

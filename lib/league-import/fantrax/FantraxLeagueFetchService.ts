@@ -57,6 +57,12 @@ interface FantraxSourceLookup {
   username?: string
   leagueName?: string
   season?: number
+  /**
+   * A live Fantrax league plus the team the user says is theirs. Set only by the
+   * `fantrax-league:` form, which fetches from Fantrax rather than reading a
+   * previously uploaded snapshot.
+   */
+  nativeLeague?: { leagueId: string; teamName: string }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,6 +117,16 @@ function parseFantraxSourceInput(sourceInput: string): FantraxSourceLookup {
     throw new FantraxImportLeagueNotFoundError(
       'Fantrax source is required. Use a legacy Fantrax league ID or username.'
     )
+  }
+
+  /*
+   * A live league, chosen from the team list the import screen shows. Carries
+   * the team because Fantrax will not tell us which one is the caller's, and
+   * guessing attributes a stranger's players to them.
+   */
+  const native = trimmed.match(/^fantrax-league:([^|]+)\|(.+)$/i)
+  if (native?.[1] && native[2]) {
+    return { nativeLeague: { leagueId: native[1].trim(), teamName: native[2].trim() } }
   }
 
   const idPrefixed = trimmed.match(/^id:(.+)$/i)
@@ -246,7 +262,20 @@ function buildRosterPlayerMap(players: LegacyRosterPlayer[]): Record<string, { n
     const playerId = asString(player.fantraxId)
     if (!playerId) continue
     map[playerId] = {
-      name: asString(player.name) || playerId,
+      /*
+       * ⚠ A RAW FANTRAX ID IS NOT A NAME. `|| playerId` put "069b6" in the name
+       * field, so an unresolved player rendered on the roster as though that
+       * WERE his name — measured 10 of 39 on a real college league, because
+       * roughly one id in twenty is absent from Fantrax's player map
+       * (graduated or inactive). resolveRosters deliberately keeps those rows
+       * with a null name rather than dropping them, and this is where that null
+       * was being turned back into a confident-looking string.
+       *
+       * The id stays visible, but labelled as the unknown it is: nothing
+       * downstream should match on it, and a hex id would not have matched
+       * either.
+       */
+      name: asString(player.name) || `Unknown player (${playerId})`,
       position: (asString(player.primaryPosition) || asString(player.position) || 'N/A').toUpperCase(),
       team: asString(player.nflTeam),
     }
@@ -274,6 +303,30 @@ export async function fetchFantraxLeagueForImport(
   }
 
   const lookup = parseFantraxSourceInput(sourceInput)
+
+  /*
+   * ⚠ A LIVE LEAGUE IS FETCHED HERE, THEN READ BACK AS A SNAPSHOT. Fantrax has a
+   * real read API, so a league id needs no CSV — but everything downstream
+   * (normalisation, backfill, the ownership gate below) is written against a
+   * stored snapshot. Materialising the row first means the live path and the
+   * upload path converge on one code path instead of two that drift.
+   *
+   * The import stamps `appUserId` with this caller, so the gate below still
+   * decides ownership; this does not bypass it.
+   */
+  if (lookup.nativeLeague) {
+    const { importFantraxLeague } = await import('./importFantraxLeague')
+    const outcome = await importFantraxLeague({
+      leagueId: lookup.nativeLeague.leagueId,
+      teamName: lookup.nativeLeague.teamName,
+      appUserId: userId,
+    })
+    if (!outcome.ok) {
+      throw new FantraxImportLeagueNotFoundError(outcome.error)
+    }
+    lookup.leagueRecordId = outcome.fantraxLeagueId
+  }
+
   const includeConfig = {
     user: {
       select: {

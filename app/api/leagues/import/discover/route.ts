@@ -6,6 +6,10 @@ import {
   getImportProviderLabel,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
+import {
+  getFantraxLeagueInfo,
+  parseFantraxLeagueId,
+} from '@/lib/league-import/fantrax/fantraxApi'
 import { lookupSleeperUser } from '@/lib/sleeper/user-lookup'
 import { getUserLeagues } from '@/lib/sleeper-client'
 import {
@@ -115,6 +119,76 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       )
     }
+  }
+
+  /*
+   * ── Fantrax: the identifier is a LEAGUE, and what comes back is its TEAMS.
+   *
+   * ⚠ THIS IS THE ONE PROVIDER WHERE DISCOVERY DOES NOT LIST LEAGUES, and the
+   * shape is deliberate. Listing someone's Fantrax leagues needs their Secret
+   * ID, which is a credential we will not ask for in an import box. A league id
+   * is not a credential — it is in the URL of the league page — so the flow
+   * inverts: you name the league, and we ask which team is yours.
+   *
+   * ⚠ AND THE TEAM QUESTION IS NOT OPTIONAL. Fantrax's API will not say which
+   * team belongs to the caller, and `importFantraxLeague` refuses to guess:
+   * defaulting to the first roster attributes a stranger's players to them and
+   * then grades trades against those players.
+   */
+  if (provider === 'fantrax') {
+    const leagueId = parseFantraxLeagueId(accountIdentifier)
+    if (!leagueId) {
+      return NextResponse.json(
+        {
+          error:
+            'Paste your Fantrax league ID, or the address of the league page. The ID is the code in the URL, like fantrax.com/fantasy/league/THIS-PART/home.',
+        },
+        { status: 400 },
+      )
+    }
+
+    const info = await getFantraxLeagueInfo(leagueId)
+    if (!info.ok) {
+      /* Fantrax answers 200 with an error body, so `ok` is the only signal; a
+         bad id reads as not-found rather than as a server fault. */
+      return NextResponse.json(
+        { error: info.failure.message },
+        { status: info.failure.kind === 'not_found' ? 404 : 502 },
+      )
+    }
+
+    const teams = Object.values(info.data.teamInfo ?? {})
+    if (teams.length === 0) {
+      return NextResponse.json(
+        { error: 'Fantrax returned no teams for that league, so there is nothing to import yet.' },
+        { status: 502 },
+      )
+    }
+
+    const season = info.data.seasonYear != null ? String(info.data.seasonYear) : null
+    return NextResponse.json({
+      provider,
+      sport: null,
+      season,
+      accountLabel: info.data.leagueName,
+      account: {
+        providerUserId: null,
+        accountIdentifier: leagueId,
+        displayName: info.data.leagueName,
+      },
+      /*
+       * The team name round-trips in the sourceId because preview and commit are
+       * stateless — `fantrax-league:<leagueId>|<teamName>` is the only place the
+       * choice is carried, and FantraxLeagueFetchService parses it back out.
+       */
+      leagues: teams.map((team) => ({
+        sourceId: `fantrax-league:${leagueId}|${team.name}`,
+        name: team.name,
+        sport: null,
+        season,
+        totalTeams: teams.length,
+      })),
+    })
   }
 
   // ── Sleeper self-discovery: with no identifier, use the caller's own linked

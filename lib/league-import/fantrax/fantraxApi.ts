@@ -327,3 +327,29 @@ export function resolveRosters(
     }
   })
 }
+
+/**
+ * Pull a Fantrax league id out of whatever the user pasted.
+ *
+ * ⚠ PEOPLE PASTE THE URL, NOT THE ID. The id is only visible as a path segment
+ * of the league page, so "copy the league ID" in practice means copying
+ * `https://www.fantrax.com/fantasy/league/v2kzedypmm8jp61b/home` out of the
+ * address bar. Rejecting that and asking again is a dead end the user cannot
+ * debug, because nothing on Fantrax ever shows the bare id.
+ *
+ * ⚠ CASE IS PRESERVED DELIBERATELY. Fantrax ids are case-sensitive and a
+ * lowercased id returns an HTML error page rather than JSON — which `fxeaGet`
+ * reports, but only after a wasted round trip and a confusing message.
+ */
+export function parseFantraxLeagueId(input: string): string | null {
+  const trimmed = (input ?? '').trim()
+  if (!trimmed) return null
+
+  const fromUrl = trimmed.match(/fantrax\.com\/(?:fantasy\/)?league\/([A-Za-z0-9]+)/)
+  if (fromUrl?.[1]) return fromUrl[1]
+
+  /* A bare id. Bounded so a username or a sentence cannot masquerade as one. */
+  if (/^[A-Za-z0-9]{8,32}$/.test(trimmed)) return trimmed
+
+  return null
+}
