@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const canonical = buildCanonicalImportBundle(result.normalized)
-    const { persisted, runId } = await persistImportWithCanonicalAudit({
+    const { persisted, runId, skipped } = await persistImportWithCanonicalAudit({
       userId: auth.userId,
       provider,
       normalized: result.normalized,
@@ -149,6 +149,10 @@ export async function POST(req: NextRequest) {
       historicalBackfill: persisted.historicalBackfill,
       importRunId: runId,
       existed: persisted.existed === true,
+      /* Whether this request actually re-read the provider, or matched a completed run
+         and returned it untouched. `existed` cannot answer that — see the persistence
+         service. */
+      skipped: skipped === true,
     })
   } catch (error) {
     if (error instanceof ImportedLeagueConflictError) {

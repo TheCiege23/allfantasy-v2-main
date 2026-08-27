@@ -1,0 +1,121 @@
+/* ── LeagueTabs — 38a's in-league segmented control ───────────────────────
+ *
+ * Geometry is the handoff's, verbatim: a --chip container with a 1px
+ * --chip-line border at radius 10, 4px of padding and 4px gaps, holding pills
+ * at radius 7 / 8px 12px. The active pill is --accent on --accent-ink; the
+ * rest are --faint.
+ *
+ * ⚠ THE TAB RULES CARRY `.af-core`. af-core.css scopes its anchor primitive as
+ * `.af-core a` — specificity (0,2,0). A bare `.af-lt-tab` is (0,1,0) and loses
+ * whatever the import order, which in this suite silently reverted a link
+ * colour and dropped a control under the 44px touch floor. Neither raised an
+ * error; only computed styles showed it.
+ */
+
+.af-lt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 0 0 14px;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ── The named league ────────────────────────────────────────────────── */
+
+.af-lt-league {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.af-lt-league-eyebrow {
+  color: var(--faint);
+  letter-spacing: 0.14em;
+}
+
+.af-lt-league-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42ch;
+}
+
+/* ── The segmented control ───────────────────────────────────────────── */
+
+.af-lt-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-left: auto;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  border-radius: 10px;
+  /* On a phone the set scrolls rather than wrapping into a second ragged row. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.af-lt-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.af-core .af-lt-tab {
+  display: inline-flex;
+  align-items: center;
+  /* 44px floor, met by padding + line-height rather than a fixed height so the
+     label can never be clipped at large text sizes. */
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font: 700 11px/1 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  color: var(--faint);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.af-core .af-lt-tab:hover,
+.af-core .af-lt-tab:focus-visible {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.af-core .af-lt-tab[data-active='true'] {
+  font-weight: 800;
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+/* Hover must not repaint the active pill into the inactive palette. */
+.af-core .af-lt-tab[data-active='true']:hover,
+.af-core .af-lt-tab[data-active='true']:focus-visible {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .af-lt {
+    gap: 10px;
+  }
+
+  /* Full width so the scrollable set uses the row rather than being pinned
+     right and clipped against the edge. */
+  .af-lt-tabs {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .af-lt-league-name {
+    max-width: 100%;
+  }
+}

@@ -1,0 +1,220 @@
+/* ── PickALeague — the no-league state for league-scoped screens ──────────
+ *
+ * ⚠ THE ROW AND LEAGUE RULES CARRY `.af-core` ON PURPOSE. af-core.css scopes
+ * its primitives as `.af-core a` / `.af-core .af-card` — specificity (0,2,0).
+ * A bare `.af-pl-row` is (0,1,0) and LOSES regardless of import order, which
+ * has silently dropped a link's colour and a control's height in this suite
+ * before. Neither failure produced an error; only computed styles showed it.
+ */
+
+.af-pl {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 980px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-pl-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-pl-eyebrow {
+  color: var(--faint);
+  letter-spacing: 0.14em;
+}
+
+.af-pl-title {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-pl-blurb {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+/* ── Panels ──────────────────────────────────────────────────────────── */
+
+.af-pl-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.af-pl-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.af-pl-panel-note {
+  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.af-pl-quiet {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Issue rows ──────────────────────────────────────────────────────── */
+
+.af-pl-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-pl-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  /* 44px floor: this is the primary control on the screen and it is a phone target. */
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.af-core .af-pl-row:hover,
+.af-core .af-pl-row:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+
+.af-pl-sev {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  font: 700 12px/1 'JetBrains Mono', ui-monospace, monospace;
+  background: var(--chip);
+  color: var(--muted);
+}
+
+.af-pl-sev[data-sev='critical'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.af-pl-sev[data-sev='high'] {
+  background: var(--warn-soft, var(--chip));
+  color: var(--warn);
+}
+
+.af-pl-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.af-pl-row-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-pl-row-meta {
+  font: 400 11px/1.4 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-pl-row-league {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ── League picker ───────────────────────────────────────────────────── */
+
+.af-pl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.af-core .af-pl-league {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.af-core .af-pl-league:hover,
+.af-core .af-pl-league:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+
+.af-pl-league-name {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-pl-league-plat {
+  flex: none;
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .af-core .af-pl-row {
+    grid-template-columns: 26px 1fr;
+    row-gap: 4px;
+  }
+
+  /* The league name moves under the text rather than being squeezed out of it. */
+  .af-pl-row-league {
+    grid-column: 2;
+    font-size: 11px;
+  }
+
+  .af-pl-grid {
+    grid-template-columns: 1fr;
+  }
+}

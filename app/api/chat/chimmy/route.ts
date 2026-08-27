@@ -88,6 +88,13 @@ import {
   normalizeChimmyAssistantMode,
 } from '@/lib/chimmy-chat/assistant-mode'
 import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
+/*
+ * ⚠ NOT IMPORTED AT MODULE SCOPE. The loop pulls in the OpenAI SDK and every
+ * grounding builder its tools wrap, and the flag is OFF by default — so a
+ * static import would load all of it on every chat request for a feature almost
+ * nobody has enabled. It is imported inside the guard instead. Measured: the
+ * static version pushed route module init past a 30s test timeout.
+ */
 import { buildChimmyAnswerContract } from '@/lib/chimmy-chat/response-contract'
 import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-events'
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
@@ -321,6 +328,22 @@ const ChimmyFormSchema = z.object({
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS),
   hasImage: z.boolean(),
 })
+
+/**
+ * The tool loop's system prompt.
+ *
+ * ⚠ IT CARRIES THE SAME REFUSAL RULES AS THE PUSH PATH. When the model fetches
+ * its own context, nothing upstream can guarantee the context is there — so the
+ * instruction not to invent has to travel with the tools, or the loop quietly
+ * becomes the one path in this assistant that guesses.
+ */
+const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
+  'You are Chimmy, the calm, analytical fantasy sports assistant for AllFantasy.',
+  "You have tools that read this app's own data. Call them when a question needs league, schedule or live-stat facts.",
+  'NEVER invent player stats, scores, standings, records or schedules. If a tool says it has no data, say that plainly and stop — do not fall back on general knowledge.',
+  'A tool reporting an empty live feed means no games were polled, NOT that nobody scored. Never report that as a zero.',
+  'Answer in a few sentences. Name the data you used.',
+].join(' ')
 
 const SPORTS_KEYWORDS = [
   'trade', 'waiver', 'draft', 'player', 'pick', 'roster', 'lineup',
@@ -1774,6 +1797,68 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         )
       }
       return NextResponse.json({ error: 'Unable to process token spend.' }, { status: 500 })
+    }
+  }
+
+  /*
+   * ⚠ TOOL LOOP: OPTIONAL, GROK-ONLY, AND SILENT WHEN IT DOES NOT RUN.
+   *
+   * Placed HERE on purpose — after the spend is settled, before PECR. It is an
+   * ALTERNATIVE to the push path, not an addition: running both would make two
+   * paid provider journeys for one charged message. Returning null (flag off,
+   * no key, provider error, turn ceiling, empty text) falls through to PECR
+   * exactly as before, so a failure here is invisible rather than an error the
+   * reader has to interpret.
+   *
+   * It is deliberately NOT given the assembled grounding: the point of the loop
+   * is that the model fetches what it needs. Handing it the push context as
+   * well would pay for both and prove nothing about whether the tools work.
+   */
+  const chimmyToolLoopEnabled = getChimmyFeatureFlags().toolLoop
+
+  if (chimmyToolLoopEnabled) {
+    const { runChimmyToolLoop } = await import('@/lib/chimmy/tools/chimmyToolLoop')
+    const loop = await runChimmyToolLoop({
+      question: message,
+      systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
+      conversation: conversation.slice(-6).map((turn) => ({
+        role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+        content: turn.content,
+      })),
+      context: { leagueId: leagueId ?? null, userId: userId ?? null },
+      enabled: true,
+    }).catch(() => null)
+
+    if (loop?.text) {
+      return NextResponse.json({
+        response: loop.text,
+        result: loop.text,
+        source: 'chimmy_tool_loop',
+        sessionId,
+        meta: {
+          /* The spend already happened above; report what it actually cost. */
+          tokenSpend:
+            spendLedger && tokenPreview
+              ? {
+                  ruleCode: tokenPreview.ruleCode,
+                  tokenCost: tokenPreview.tokenCost,
+                  balanceAfter: spendLedger.balanceAfter,
+                  ledgerId: spendLedger.id,
+                }
+              : undefined,
+          providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          /* Which lookups the model chose, so the answer's sourcing is visible. */
+          toolsUsed: loop.toolsUsed,
+          turns: loop.turns,
+          dataSources: loop.toolsUsed,
+          responseStructure: {
+            shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
+            caveats: [
+              'Answered by the experimental tool loop; the model chose which data to read.',
+            ],
+          },
+        },
+      })
     }
   }
 

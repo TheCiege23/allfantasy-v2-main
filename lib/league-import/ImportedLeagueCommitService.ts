@@ -508,8 +508,31 @@ export async function persistImportedLeagueFromNormalization(
         data: { claimedByUserId: userId },
       })
       if (claimed.count === 0) {
+        /*
+         * ⚠ THE COUNT ALONE COULD NOT SAY WHY, and there are two very different causes:
+         * the rows carry a different `platformUserId` than the marker, or the team is
+         * already claimed (possibly by the parallel `importerSourceManagerId` path) and
+         * the zero is a false alarm. Guessing between them cost two round trips, so the
+         * warning now carries the evidence needed to tell them apart on sight.
+         *
+         * Deliberately bounded and non-identifying: team ids only, the claim reported as
+         * a boolean rather than a user id, and capped at 15 rows.
+         */
+        const actual = await (prisma as any).leagueTeam
+          .findMany({
+            where: { leagueId: league.id },
+            select: { externalId: true, platformUserId: true, claimedByUserId: true },
+            take: 15,
+          })
+          .catch(() => [] as Array<Record<string, unknown>>)
+        const shape = (actual as Array<Record<string, unknown>>)
+          .map(
+            (t) =>
+              `${String(t.externalId ?? '?')}=${String(t.platformUserId ?? 'null')}${t.claimedByUserId ? '[claimed]' : ''}`,
+          )
+          .join(' ')
         console.warn(
-          `[ImportedLeagueCommitService] ${provider}: self manager "${selfManagerId}" matched no unclaimed LeagueTeam on ${league.id} — the league will not appear on Portfolio`,
+          `[ImportedLeagueCommitService] ${provider}: self manager "${selfManagerId}" matched no unclaimed LeagueTeam on ${league.id} — the league will not appear on Portfolio. Actual rows: ${shape || '(none)'}`,
         )
       }
     }
