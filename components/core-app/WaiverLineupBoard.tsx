@@ -65,10 +65,10 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
       </div>
 
       {board.state !== 'ok' ? (
-        <p className="af-wv-rule-why">{REASON[board.state]}</p>
+        <p className="af-wlb-why">{REASON[board.state]}</p>
       ) : board.candidates.length === 0 ? (
         // A finding, not an error — nobody available changes the lineup.
-        <p className="af-wv-rule-why">
+        <p className="af-wlb-why">
           nobody on the wire would improve your starting lineup this week
         </p>
       ) : (
@@ -106,7 +106,7 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
         claim from one built off all of it, and nothing else on screen would say which.
       */}
       {board.notes.map((n) => (
-        <p key={n} className="af-wv-section-note">
+        <p key={n} className="af-wlb-note">
           {n}
         </p>
       ))}

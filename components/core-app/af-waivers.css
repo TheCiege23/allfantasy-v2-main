@@ -265,3 +265,22 @@
   .af-core .af-wlb-row { grid-template-columns: 1fr auto; }
   .af-core .af-wlb-over { grid-column: 1 / -1; text-align: left; }
 }
+
+/* ⚠ THESE TWO EXIST BECAUSE BORROWING THE RULES-LIST CLASSES BROKE THE LAYOUT.
+   `.af-wv-rule-why` carries `flex: 1 1 240px`, which is a WIDTH inside the row-flex
+   rules list it was written for and a 240px HEIGHT inside this column-flex section —
+   a one-line message rendered as a 240px empty box. And `.af-wv-section-note` sets
+   `margin-left: auto` to sit at the right of the head row, which stranded these
+   footnotes 219px and 522px from the left edge. Measured on the live page. */
+.af-core .af-wlb-why {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+  margin: 0;
+}
+.af-core .af-wlb-note {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--faint);
+  margin: 0;
+}
