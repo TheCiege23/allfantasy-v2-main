@@ -17,7 +17,27 @@ export async function GET(request: NextRequest) {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    /*
+     * ⚠ THE ERRAND HAS TO SURVIVE THE LOGIN. This redirected to a bare `/login`
+     * and threw the destination away, so a manager who clicked Connect Yahoo
+     * without a readable session signed in and arrived on the home page with
+     * nothing resuming — the click was simply lost, and the only signal was
+     * being "kicked out of the app". `/api/auth/yahoo`, the other entry point,
+     * has carried a callbackUrl all along; this one never did.
+     *
+     * It also makes the failure legible: a bare `/login` is indistinguishable
+     * from every other auth bounce in the product, while
+     * `/login?callbackUrl=/api/league/yahoo-auth` names which route decided the
+     * session was missing.
+     */
+    const login = request.nextUrl.clone();
+    login.pathname = '/login';
+    login.search = '';
+    login.searchParams.set(
+      'callbackUrl',
+      `/api/league/yahoo-auth${request.nextUrl.search}`,
+    );
+    return NextResponse.redirect(login);
   }
 
   const clientId = process.env.YAHOO_CLIENT_ID;
@@ -35,6 +55,15 @@ export async function GET(request: NextRequest) {
    * manager sees a Yahoo failure, the product looks innocent, and nothing in our
    * logs records that we sent a URI that could never have worked.
    */
+  /*
+   * Logged because the deployment stores this as a SENSITIVE env var, which
+   * hides it in the dashboard but not in the runtime log. A redirect URI is not
+   * a secret — it rides in the browser address bar on every round trip and
+   * Yahoo echoes it back on its own error page — and being unable to read it is
+   * what turned one wrong character into several failed attempts.
+   */
+  console.log('[Yahoo OAuth] redirect_uri:', redirectUri);
+
   const redirectCheck = checkYahooRedirectUri(redirectUri, request.nextUrl.origin);
   if (!redirectCheck.ok) {
     console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason);

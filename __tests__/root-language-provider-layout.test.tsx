@@ -78,8 +78,17 @@ const modeToggleSource = fs.readFileSync(path.join(process.cwd(), "components", 
 const languageToggleSource = fs.readFileSync(path.join(process.cwd(), "components", "i18n", "LanguageToggle.tsx"), "utf8")
 const packageJsonSource = fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")
 const nextConfigSource = fs.readFileSync(path.join(process.cwd(), "next.config.js"), "utf8")
-const railwayJsonSource = fs.readFileSync(path.join(process.cwd(), "railway.json"), "utf8")
-const nixpacksSource = fs.readFileSync(path.join(process.cwd(), "nixpacks.toml"), "utf8")
+/*
+ * ⚠ railway.json and nixpacks.toml ARE GONE — Railway was disconnected from this
+ * repo on 2026-08-27 and the site is served by Vercel alone. These were read at
+ * module scope, so leaving the reads in place would throw on import and take the
+ * whole file down rather than failing one assertion.
+ *
+ * The assertions that survived are the ones about package.json, next.config.js
+ * and the layout: those files are shared with the Vercel build and the
+ * `railway-` prefix on their scripts is a naming artefact, not a dependency.
+ * `prebuild` in particular runs before EVERY build.
+ */
 const railwayStartSource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-next-start.cjs"), "utf8")
 const railwayCleanSource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-clean-next-build.cjs"), "utf8")
 const railwayVerifySource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-verify-next-build.cjs"), "utf8")
@@ -464,12 +473,17 @@ describe("root language provider layout", () => {
   it("uses the guarded Next start path for Railway production", () => {
     expect(packageJsonSource).toContain('"start": "next start"')
     expect(packageJsonSource).toContain('"start:railway": "node scripts/railway-next-start.cjs"')
-    expect(railwayJsonSource).toContain("npm run start:railway")
-    expect(railwayJsonSource).toContain('"/api/af-debug/sha"')
-    expect(nixpacksSource).toContain('cmd = "npm run start:railway"')
-    expect(nextConfigSource).toContain("const railwayDistDir")
-    expect(nextConfigSource).toContain("RAILWAY_GIT_COMMIT_SHA")
-    expect(nextConfigSource).toContain("isRailwayRuntime ? railwayDistDir : '.next'")
+    /*
+     * ⚠ THE next.config.js RAILWAY ASSERTIONS ARE GONE, AND MUST NOT COME BACK.
+     * They required `const railwayDistDir`, `RAILWAY_GIT_COMMIT_SHA` and the
+     * `isRailwayRuntime ? railwayDistDir : '.next'` switch to be PRESENT. That
+     * code has already been removed from next.config.js, and Railway was
+     * disconnected from this repo on 2026-08-27 — so a test demanding it is not
+     * merely stale, it points the next reader at re-adding dead host logic.
+     *
+     * The negative assertions below are the ones worth keeping: they pin that
+     * the layout and the start script carry nothing Railway-shaped.
+     */
     expect(layoutSource).not.toContain('id="af-railway-styles"')
     expect(layoutSource).not.toContain("data-af-railway-styles")
     expect(layoutSource).not.toContain("RAILWAY_GIT_COMMIT_SHA")
@@ -507,14 +521,6 @@ describe("root language provider layout", () => {
     expect(packageJsonSource).toContain('"prebuild": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs"')
     expect(packageJsonSource).toContain('"build": "next build"')
     expect(packageJsonSource).toContain('"build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && next build"')
-    expect(railwayJsonSource).toContain(
-      "npx prisma generate && npm run build:railway"
-    )
-    expect(railwayJsonSource).not.toContain("railway-verify-next-build.cjs")
-    expect(nixpacksSource).toContain('"npx prisma generate"')
-    expect(nixpacksSource).toContain('"npm run build:railway"')
-    expect(nixpacksSource).not.toContain("railway-patch-app-build-manifest.cjs")
-    expect(nixpacksSource).not.toContain('"node scripts/railway-verify-next-build.cjs"')
     /*
      * ⚠ THE ROOT LAYOUT NO LONGER CARRIES ANYTHING RAILWAY-SPECIFIC, and these
      * two assertions were what pinned it there. The unconditional
