@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy';
 import RosterLegacyReport from '@/app/components/RosterLegacyReport';
 import SyncedRosters from '@/app/components/SyncedRosters';
 import WaiverAI from '@/app/components/WaiverAI';
@@ -49,14 +50,23 @@ export default function LegacyOverview() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return;
         const leagues = Array.isArray(data?.leagues) ? data.leagues : [];
-        const mapped = leagues.map((l: any) => ({
-          id: String(l.id),
-          name: String(l.name || 'League'),
-          platform: String(l.platform || 'sleeper'),
-          leagueSize: Number(l.leagueSize || 12),
-          isDynasty: Boolean(l.isDynasty),
-          scoring: l.scoring ?? null,
-        }));
+        /*
+         * ⚠ These rows go straight into `MockDraftSimulatorClient`, which fetches
+         * `/api/leagues/<id>/roster-config` and posts `leagueId` to five mock-draft endpoints —
+         * all keyed on the `leagues` table. AF Legacy rows and tournament hubs carry ids from
+         * other tables; the latter set `hasUnifiedRecord: true`, so only `resolvesToLeagueRecord`
+         * excludes both.
+         */
+        const mapped = leagues
+          .filter((l: any) => resolvesToLeagueRecord(l as LeagueRecordPolicyInput))
+          .map((l: any) => ({
+            id: String(l.id),
+            name: String(l.name || 'League'),
+            platform: String(l.platform || 'sleeper'),
+            leagueSize: Number(l.leagueSize || 12),
+            isDynasty: Boolean(l.isDynasty),
+            scoring: l.scoring ?? null,
+          }));
         if (mounted) setMockLeagues(mapped);
       } finally {
         if (mounted) setMockLoading(false);

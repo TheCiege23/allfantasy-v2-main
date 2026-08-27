@@ -33,6 +33,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { MessageSquare } from 'lucide-react'
 import { useAccessTier } from '@/hooks/useAccessTier'
+import { isTournamentHubRow, resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
@@ -164,7 +165,17 @@ export default function AdaptiveDashboard({
    * since the imported Sleeper leagues (unified=false) are precisely the ones this engine can
    * serve. A native league with no provider id has no rankings source at all.
    */
-  const analyticsLeagueId = selectedLeague?.platformLeagueId ?? null
+  /*
+   * ⚠ A SECOND ID SPACE, NOT THE `leagues` ONE ABOVE. Tournament rows also fabricate a provider
+   * id — `platformLeagueId: \`tournament-${t.id}\`` — which is not a Sleeper league id and matches
+   * no `legacyLeague.sleeperLeagueId`, so `computeLeagueRankingsV2` cannot serve it either. The
+   * `unified` flag does not catch this: it describes the `leagues` table, and this call
+   * deliberately ignores that table. Withheld rather than sent as a request that must 404.
+   */
+  const analyticsLeagueId =
+    selectedLeague && !isTournamentHubRow(selectedLeague as LeagueRecordPolicyInput)
+      ? selectedLeague.platformLeagueId ?? null
+      : null
   const analytics = useLeagueAnalytics(analyticsLeagueId, sleeperUserId)
 
   // ── Today's actions + live scores ───────────────────────────────────────────
@@ -689,7 +700,9 @@ function toDashboardLeague(raw: unknown): DashboardLeague {
     // number-only guard silently nulls every Sleeper league, which is most of a real board.
     season: seasonYear(r.season),
     isCommissioner: r.isCommissioner === true || r.userRole === 'commissioner',
-    unified: r.hasUnifiedRecord === true,
+    // ⚠ Tournament hubs set the raw flag true but carry a `LegacyTournament` id, so they do not
+    // resolve on /league/[id] any more than an AF-Legacy row does. One predicate covers both.
+    unified: resolvesToLeagueRecord(r as LeagueRecordPolicyInput),
     // Sleeper rows expose `platformLeagueId`; AF-Legacy board rows carry `sleeperLeagueId`.
     platformLeagueId: str(r.platformLeagueId) ?? str(r.sleeperLeagueId),
     accent: PLATFORM_ACCENT[platform] ?? 'var(--af-violet)',
@@ -719,7 +732,8 @@ function toUserLeague(raw: unknown): UserLeague | null {
     logoUrl: str(r.logoUrl),
     leagueType: str(r.leagueType),
     leagueVariant: str(r.leagueVariant),
-    hasUnifiedRecord: r.hasUnifiedRecord === true,
+    // Same reason as `unified` above: this flag reaches league-scoped components that key on `leagues`.
+    hasUnifiedRecord: resolvesToLeagueRecord(r as LeagueRecordPolicyInput),
     isCommissioner: r.isCommissioner === true || r.userRole === 'commissioner',
     userRole: role,
     lifecycleState: str(r.lifecycleState),

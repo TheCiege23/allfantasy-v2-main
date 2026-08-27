@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { isTournamentHubRow, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 
 type EntryStep = 'entry' | 'league' | 'open' | 'draft' | 'complete'
 type DraftMode = 'league' | 'open'
@@ -187,6 +188,14 @@ function normalizeLeagueFromList(value: unknown): LeagueListItem | null {
   const id = stringFromUnknown(raw.id)
   const name = stringFromUnknown(raw.name)
   if (!id || !name) return null
+
+  /*
+   * ⚠ A tournament hub is not a league this tool can answer for. Its `id` is a
+   * `LegacyTournament` key, so every league-scoped call downstream resolves to nothing — and it
+   * cannot be spotted by `hasUnifiedRecord`, which these rows set TRUE. Dropped from the picker
+   * rather than listed as a dead entry; tournaments live at `/tournament/[id]`.
+   */
+  if (isTournamentHubRow(raw as LeagueRecordPolicyInput)) return null
 
   return {
     id,

@@ -10,6 +10,7 @@ import { useSession } from 'next-auth/react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { isTournamentHubRow, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
 
@@ -408,6 +409,14 @@ function normalizeLeagueFromList(rawLeague: unknown, userId: string | undefined)
   const id = stringFromUnknown(raw.id)
   const name = stringFromUnknown(raw.name)
   if (!id || !name) return null
+
+  /*
+   * ⚠ A tournament hub is not a league this tool can answer for. Its `id` is a
+   * `LegacyTournament` key, so every league-scoped call downstream resolves to nothing — and it
+   * cannot be spotted by `hasUnifiedRecord`, which these rows set TRUE. Dropped from the picker
+   * rather than listed as a dead entry; tournaments live at `/tournament/[id]`.
+   */
+  if (isTournamentHubRow(raw as LeagueRecordPolicyInput)) return null
 
   const rosterLeagueId =
     stringFromUnknown(raw.navigationLeagueId) ??

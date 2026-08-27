@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { prismaSportToUiKey } from '@/lib/startSit/shared'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,13 @@ export async function GET(req: Request) {
       const r = row as Record<string, unknown>
       const id = typeof r.id === 'string' ? r.id : ''
       if (!id) continue
+      /*
+       * Start/Sit resolves the id the picker sends against the `leagues` table. AF Legacy rows and
+       * tournament hubs carry ids from other tables, so offering them here builds a picker whose
+       * entries cannot be answered — the tournament case slipped through because those rows set
+       * `hasUnifiedRecord: true`.
+       */
+      if (!resolvesToLeagueRecord(r as LeagueRecordPolicyInput)) continue
       const name = typeof r.name === 'string' && r.name.trim() ? r.name : 'League'
       const sport = typeof r.sport === 'string' ? r.sport : 'NFL'
       const key = prismaSportToUiKey(sport) as keyof typeof grouped

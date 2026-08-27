@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -265,7 +266,15 @@ export default async function AfCorePage({
    * 604-tile rail and a 604-row home. Same filter the home loader applies, for
    * the same reason.
    */
-  const playedLeagues = leagues.filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+  /*
+   * ⚠ AND NOT `hasUnifiedRecord !== false` ON ITS OWN. Tournament-hub rows set that flag TRUE while
+   * their `id` is a `LegacyTournament` key, so they passed this filter, took a tile on the rail, and
+   * then resolved to nothing: `?league=<tournamentId>` sends `getLeagueHomeData` — and every
+   * per-screen loader below it — into `prisma.league.findUnique`, which returns null. The tile opened
+   * a blank league world. `/core` has no tournament screen; tournaments open at `/tournament/[id]`
+   * (lib/dashboard/league-list-destination.ts), which is where the dashboard board still links them.
+   */
+  const playedLeagues = leagues.filter((l) => resolvesToLeagueRecord(l))
 
   const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,

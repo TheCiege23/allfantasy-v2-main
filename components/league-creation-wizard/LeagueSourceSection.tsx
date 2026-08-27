@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { WizardSetupSource } from '@/lib/league-creation-wizard/types'
 import { StepHeader } from './StepHelp'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -13,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export type LeagueListRow = {
+export type LeagueListRow = LeagueRecordPolicyInput & {
   id: string
   name?: string | null
   sport?: string | null
@@ -56,7 +57,14 @@ export function LeagueSourceSection({
             sport: (lg.sport as string) ?? (lg.sport_type as string) ?? null,
             leagueSize: typeof lg.leagueSize === 'number' ? lg.leagueSize : typeof lg.teamCount === 'number' ? lg.teamCount : null,
             settings: lg.settings,
-          })).filter((x: LeagueListRow) => x.id)
+          }))
+          /*
+           * ⚠ A tournament hub is not a league you can source a new league FROM — its id is a
+           * `LegacyTournament` key, and every read behind this step goes to `leagues`. AF Legacy
+           * board rows are the same story. `hasUnifiedRecord` is the wrong test for the first of
+           * those (tournament rows set it true); `resolvesToLeagueRecord` covers both.
+           */
+          .filter((x: LeagueListRow) => x.id && resolvesToLeagueRecord(x as LeagueRecordPolicyInput))
         )
       })
       .catch(() => setRows([]))

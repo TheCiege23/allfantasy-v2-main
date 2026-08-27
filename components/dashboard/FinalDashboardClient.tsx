@@ -23,6 +23,7 @@ import { getLeagueListDestinationHref } from '@/lib/dashboard/league-list-destin
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import { useLeagueList } from '@/hooks/useLeagueList'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { useAIAssistantAvailability } from '@/hooks/useAIAssistantAvailability'
 import { useDashboardHomeSignals } from '@/hooks/useDashboardHomeSignals'
 import { ErrorBoundary } from '@/components/error-handling'
@@ -73,8 +74,23 @@ export default function FinalDashboardClient() {
 
   const groups = useMemo(() => groupLeaguesBySport(leagues), [leagues])
   const leaguesFlat = useMemo(() => groups.flatMap((group) => group.leagues), [groups])
-  const leagueById = useMemo(() => new Map(leaguesFlat.map((league) => [league.id, league])), [leaguesFlat])
-  const firstLeague = leaguesFlat[0]
+  /*
+   * ⚠ `groups` STILL RENDERS EVERY ROW — this is a narrower list for the things that resolve an
+   * id, not a display filter. `firstLeague` seeds `?leagueId=`, `/league/<id>/draft` and Chimmy's
+   * chat href, and `useDashboardHomeSignals` queries drafts/matchups by id; all of those key on the
+   * `leagues` table. Tournament-hub rows carry a `LegacyTournament` id while setting
+   * `hasUnifiedRecord: true`, so they are prepended to the list and could seed every one of those
+   * links with an id that resolves to nothing.
+   */
+  const resolvableLeagues = useMemo(
+    () => leaguesFlat.filter((league) => resolvesToLeagueRecord(league as LeagueRecordPolicyInput)),
+    [leaguesFlat]
+  )
+  const leagueById = useMemo(
+    () => new Map(resolvableLeagues.map((league) => [league.id, league])),
+    [resolvableLeagues]
+  )
+  const firstLeague = resolvableLeagues[0]
   const isAuthed = status === 'authenticated'
   const {
     loading: signalsLoading,
@@ -82,7 +98,7 @@ export default function FinalDashboardClient() {
     upcomingDrafts,
     liveMatchups,
     refetch: refetchSignals,
-  } = useDashboardHomeSignals(leaguesFlat, isAuthed)
+  } = useDashboardHomeSignals(resolvableLeagues, isAuthed)
 
   const buildLeagueContextHref = useMemo(
     () =>

@@ -44,6 +44,15 @@ export interface UserLeague {
    * 404. Same meaning as LeagueSyncDashboard's `hasUnifiedRecord ? 'Open League' : 'Sync & Open'`.
    */
   hasUnifiedRecord?: boolean | null
+  /**
+   * Which table this row's `id` came from. `'league'` → `League.id`; `'legacy'` → `LegacyLeague.id`;
+   * `'tournament'` → `LegacyTournament.id`.
+   *
+   * ⚠ `hasUnifiedRecord` DOES NOT COVER TOURNAMENTS — they set it `true` and still have no row in
+   * `leagues`. Use `resolvesToLeagueRecord` (lib/dashboard/league-card-fetch-policy.ts) before
+   * resolving `id` against the `leagues` table, never `hasUnifiedRecord` on its own.
+   */
+  kind?: 'league' | 'tournament' | 'legacy' | null
   /** True if the current user is commissioner (Sleeper is_owner sync) or owns a native AllFantasy league */
   isCommissioner?: boolean
   /** User relationship to this league row */

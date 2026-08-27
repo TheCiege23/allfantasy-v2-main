@@ -289,6 +289,20 @@ function mapLeague(rawValue: unknown): DashboardConnectedLeague | null {
   return {
     id: selectedLeagueId,
     sourceLeagueId: sourceLeagueId || selectedLeagueId,
+    /*
+     * ⚠ THESE TWO MUST SURVIVE THE MAPPING. `id` above prefers `navigationLeagueId`/
+     * `unifiedLeagueId`, and for a tournament-hub row all three are the same `LegacyTournament`
+     * key — so without a marker the mapped league is indistinguishable from a real one and every
+     * downstream `leagues`-keyed call resolves to nothing. Dropping these rows instead would
+     * remove the tournament tile the board deliberately renders (LeagueHubCard reads
+     * `settings.league_type === 'tournament_hub'`), so they are carried and TAGGED.
+     * Gate on `resolvesToLeagueRecord`, never on `hasUnifiedRecord` alone.
+     */
+    hasUnifiedRecord: raw.hasUnifiedRecord === true,
+    kind:
+      raw.kind === 'tournament' || raw.kind === 'legacy' || raw.kind === 'league'
+        ? raw.kind
+        : null,
     name: toStringValue(raw.name, 'Unnamed League'),
     platform,
     sport,

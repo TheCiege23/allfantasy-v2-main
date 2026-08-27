@@ -10,6 +10,7 @@ import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
 import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
 import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui"
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
+import { resolvesToLeagueRecord } from "@/lib/dashboard/league-card-fetch-policy"
 import type { NegotiationToolkit } from "@/lib/trade-engine/types"
 
 type LeagueFormat = "dynasty" | "keeper" | "redraft"
@@ -864,7 +865,9 @@ function TradeHubInner() {
         if (!league || cancelled) return
         // Only a unified (native League.id) row passes the API's membership
         // gate — a legacy/Sleeper-space id would 403 the whole evaluation.
-        if (league.hasUnifiedRecord) {
+        // ⚠ And `hasUnifiedRecord` alone is not that test: a tournament-hub row sets it true while
+        // `unifiedLeagueId` is a `LegacyTournament` id, which fails the same gate for the same reason.
+        if (resolvesToLeagueRecord(league)) {
           setLinkedLeagueId(String(league.unifiedLeagueId ?? league.id))
         }
         setFormat(formatFromLinkedLeague(league))
