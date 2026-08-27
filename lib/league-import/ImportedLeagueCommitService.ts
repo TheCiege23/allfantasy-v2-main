@@ -21,6 +21,13 @@ export interface PersistImportedLeagueOptions {
   allowUpdateExisting?: boolean
   /** When set, merges canonical `SettingsSnapshot` + concept rules into `League.settings` and top-level league fields. */
   canonicalBundle?: CanonicalImportBundle
+  /**
+   * The importing user's manager id on the source platform, from the
+   * commissioner gate. Used to claim their own team — see the note on
+   * `bootstrapLeagueFromNormalizedImport`. Optional so the callers that do not
+   * run the gate (the legacy per-provider routes) behave exactly as before.
+   */
+  importerSourceManagerId?: string | null
 }
 
 export interface PersistImportedLeagueResult {
@@ -456,7 +463,10 @@ export async function persistImportedLeagueFromNormalization(
 
   try {
     const { bootstrapLeagueFromImport } = await import('@/lib/league-import/LeagueCreationBootstrapService')
-    await bootstrapLeagueFromImport(league.id, normalized)
+    await bootstrapLeagueFromImport(league.id, normalized, {
+      userId,
+      sourceManagerId: options.importerSourceManagerId ?? null,
+    })
   } catch (err) {
     console.warn(`[ImportedLeagueCommitService] ${provider} import bootstrap non-fatal:`, err)
   }

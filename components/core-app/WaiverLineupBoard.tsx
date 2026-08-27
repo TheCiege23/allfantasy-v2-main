@@ -81,6 +81,18 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
                   {c.position ?? '—'}
                   {c.team ? ` · ${c.team}` : ''} · proj{' '}
                   <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
+                  {/*
+                    ⚠ A FORM NUMBER IS BACKWARD-LOOKING AND SAYS SO. It is a recency-weighted mean
+                    of what he has actually scored here, used only where no projection feed covers
+                    him. It knows nothing about a coming bye or a changed depth chart, so
+                    rendering it identically to a real projection would make a forecast the
+                    number never made. The design's LIMITED DATA chip is exactly this case.
+                  */}
+                  {c.basis === 'form' ? (
+                    <span className="af-wlb-chip" title="No projection feed covers him — this is his recent scoring here">
+                      form · {c.formGames}g
+                    </span>
+                  ) : null}
                 </span>
               </span>
               {/* The headline. Everything else on the row justifies it. */}

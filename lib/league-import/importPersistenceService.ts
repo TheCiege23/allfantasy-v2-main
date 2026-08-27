@@ -49,6 +49,8 @@ export async function persistImportWithCanonicalAudit(input: {
   canonical: CanonicalImportBundle
   allowUpdateExisting?: boolean
   additionalWarnings?: ImportWarningRecord[]
+  /** From the commissioner gate — lets the bootstrap claim the importer's own team. */
+  importerSourceManagerId?: string | null
 }): Promise<{
   persisted: PersistImportedLeagueResult
   runId: string
@@ -139,6 +141,7 @@ export async function persistImportWithCanonicalAudit(input: {
       normalized: input.normalized,
       allowUpdateExisting: input.allowUpdateExisting ?? false,
       canonicalBundle: input.canonical,
+      importerSourceManagerId: input.importerSourceManagerId ?? null,
     })
 
     await prisma.importRun.update({
