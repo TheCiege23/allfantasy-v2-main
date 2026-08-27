@@ -15,7 +15,8 @@ import { describe, it, expect, vi } from 'vitest'
 // and never touches the database.
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { stripInlineCitations, toNewsItems } from '@/lib/workers/x-news-ingestion'
+import { readFileSync } from 'node:fs'
+import { classifyImpact, stripInlineCitations, toNewsItems } from '@/lib/workers/x-news-ingestion'
 import type { XNewsResult } from '@/lib/ai/xNewsSearch'
 
 const SEARCHED_AT = '2026-08-27T15:00:00.000Z'
@@ -40,6 +41,61 @@ const ok = (over: Partial<Extract<XNewsResult, { ok: true }>> = {}) =>
   }) as Extract<XNewsResult, { ok: true }>
 
 const ctx = { sport: 'NFL', name: 'Ashton Jeanty', team: 'LV' }
+
+describe('classifyImpact', () => {
+  describe('the four keywords that were dead until 2026-08-27', () => {
+    // Each carried a capital and was tested with .includes() against an
+    // already-lowercased string, so none could ever fire. 'ACL' never matched
+    // once; torn-ACL reports only scored high because 'torn' was listed too.
+    it('matches "placed on IR"', () => {
+      expect(classifyImpact('Smith was placed on IR this morning.')).toBe('high')
+    })
+    it('matches a bare ACL mention with no other high keyword', () => {
+      expect(classifyImpact('Imaging confirmed an ACL issue.')).toBe('high')
+    })
+    it('matches TJS', () => {
+      expect(classifyImpact('He is headed for TJS.')).toBe('high')
+    })
+    it('matches DNP', () => {
+      expect(classifyImpact('Listed as DNP on Wednesday.')).toBe('medium')
+    })
+  })
+
+  describe('reporter prose, which is what x_search actually returns', () => {
+    // Both of these scored low on the live run that prompted this fix.
+    it('treats "on the mend" as meaningful rather than noise', () => {
+      expect(classifyImpact('Raiders HC said injured RB Ashton Jeanty is on the mend.')).toBe('medium')
+    })
+    it('treats an up-in-the-air Week 1 status as meaningful', () => {
+      expect(classifyImpact('Good news on the ankle, though Week 1 status is up in the air.')).toBe('medium')
+    })
+  })
+
+  it('still scores the official designations it always did', () => {
+    expect(classifyImpact('Ruled out for Sunday.')).toBe('high')
+    expect(classifyImpact('Listed as questionable.')).toBe('medium')
+    expect(classifyImpact('Caught four passes in the win.')).toBe('low')
+  })
+
+  it('does not let a bare "ir" substring match ordinary words', () => {
+    // Without word boundaries this scores high, because "first" contains "ir".
+    expect(classifyImpact('He led the team in first downs and third-down conversions.')).toBe('low')
+  })
+
+  it('every keyword is lowercase, or it silently cannot match', () => {
+    // Structural guard: the original bug was invisible to behaviour tests for
+    // any keyword nobody happened to write a case for.
+    const src = readFileSync('lib/workers/x-news-ingestion.ts', 'utf8')
+    const block = src.slice(
+      src.indexOf('const HIGH_IMPACT_KEYWORDS'),
+      src.indexOf('const HIGH_IMPACT_ACRONYMS'),
+    )
+    const offenders = [...block.matchAll(/'([^']+)'/g)]
+      .map((m) => m[1]!)
+      .filter((kw) => kw !== kw.toLowerCase())
+    expect(offenders, `keywords with capitals can never match: ${offenders.join(', ')}`).toEqual([])
+  })
+})
 
 describe('stripInlineCitations', () => {
   it('removes the numeric footnote form', () => {
