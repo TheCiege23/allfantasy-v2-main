@@ -197,6 +197,34 @@ async function handle(req: NextRequest) {
     //
     // Safe only because the intel model returns null for unevidenced fields —
     // before that it wrote a manufactured recruitingComposite to 991 players.
+    /*
+     * The four CFBD intel FEEDS, which fill the columns the enrichment below
+     * then reasons over. Runs BEFORE it for that reason.
+     *
+     * ⚠ THESE HAD NEVER RUN. Reachable only via runFullDevySync (zero callers),
+     * so in production every column they own was empty across all 1,718 rows:
+     * usageOverall 0, ppaTotal 0, wepaTotal 0, returningProdPct 0,
+     * teamSpRating 0, portalStatus 0. Same shape as ingestCFBDStats — correct
+     * code, no scheduled caller — and the reason draftProjectionScore covered
+     * only 812 of 1,718.
+     *
+     * Cheap on quota (8-11 season-wide provider calls, not per-team) but each
+     * writes across TOP_CFB_TEAMS, so the module gates each feed on its own
+     * cadence rather than redoing identical writes every six hours.
+     */
+    let devyIntelSources: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
+    if (budget.exhausted()) {
+      deferredPhases.push('devyIntelSources')
+    } else try {
+      const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
+      devyIntelSources = await refreshDevyIntelSources(budget)
+    } catch (intelError) {
+      // Maintenance must never fail the player import it rides along with.
+      const message = intelError instanceof Error ? intelError.message : String(intelError)
+      console.error('[cron/import-players] devy intel sources failed:', message)
+      devyIntelSources = { error: message.slice(0, 200) }
+    }
+
     let devyIntel: Record<string, number> | { error: string } = { enriched: 0, errors: 0 }
     // Guarded OUTSIDE the try on purpose: routing a deferral through the catch would report it as
     // `{ error: ... }`, turning "we ran out of time" into "enrichment failed" — the opposite of
@@ -293,6 +321,7 @@ async function handle(req: NextRequest) {
       budgetElapsedMs: budget.elapsedMs(),
       devyPool,
       devyStats,
+      devyIntelSources,
       devyIntel,
       sleeperRows,
       psychProfiles,
