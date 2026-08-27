@@ -16,6 +16,7 @@
  */
 import "server-only"
 import { routeTextCall } from "@/lib/ai/providerRouter"
+import { resolveProviderForFeature } from "@/lib/ai/taskProviderRouting"
 import { applyValidationPipeline } from "../responseValidator"
 import type { AIGroundingContract } from "../aiGroundingContract"
 import { getPlugin } from "./registry"
@@ -188,6 +189,8 @@ export async function runAIEngine(input: AIEngineInput): Promise<AIEngineOutput>
       `User: ${input.userQuestion}`,
     ].join("\n")
 
+    const taskRoute = resolveProviderForFeature(input.feature)
+
     try {
       const result = await routeTextCall({
         messages: [
@@ -201,6 +204,11 @@ export async function runAIEngine(input: AIEngineInput): Promise<AIEngineOutput>
             : input.aiProfile === "standard"
               ? "standard"
               : "cheap",
+        // Task-aware provider selection: bulk/derived text goes to the cheap
+        // provider, time-sensitive text to the one with live X access, and
+        // user-facing prose to the one with the best voice. Returns null for
+        // unmapped features, which leaves the failover chain untouched.
+        preferredProvider: taskRoute?.provider ?? null,
         temperature: 0.4,
         maxTokens: 520,
         skipCache: true,

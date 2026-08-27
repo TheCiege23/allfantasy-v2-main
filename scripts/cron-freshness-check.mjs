@@ -282,6 +282,12 @@ const HEARTBEAT_TIME_COLUMN = 'started_at'
 export const NO_PROBE = {
   '/api/cron/import-standings': 'the `standings` table has never held a row -- find where this job actually writes before probing it',
   '/api/cron/import-schedules?source=tsdb-only': '`fantasy_schedule_games` has never held a row; the tsdb path may be dead',
+  '/api/cron/import-schedules?rosters=1':
+    'writes prisma.sportsPlayer -- the SAME sports_players.last_updated that import-players probes, ' +
+    'and that job runs far more often, so a table probe here would report this one healthy on the ' +
+    'strength of a different job entirely. That is the exact false green that hid the dead fast tier ' +
+    'for six days. The route records no heartbeat yet; add one (withSyncJobRun) and promote this to a ' +
+    'heartbeat probe, rather than pointing it at a column it does not own.',
 
   // The eight CONDITIONAL jobs that used to live here -- waivers, redraft score-sync and
   // waiver-process, guillotine eliminate, tournament automation, draft-tick, legacy-import-drain

@@ -52,8 +52,17 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
-vi.mock("@/lib/fantasycalc", () => ({
-  getPlayerValuesForNames: mockGetPlayerValuesForNames,
+/*
+ * ⚠ THIS MOCKED THE WRONG MODULE, so the real one ran and every projection came
+ * back null. The resolver moved to the DB-FIRST reader —
+ * `getPlayerValuesForNamesDbFirst` from `@/lib/fantasycalc-db` — while this file
+ * kept stubbing `getPlayerValuesForNames` on `@/lib/fantasycalc`. Nothing
+ * errored: the stub simply applied to a module the resolver only takes a TYPE
+ * from, which is why it failed as a missing value rather than a missing
+ * function.
+ */
+vi.mock("@/lib/fantasycalc-db", () => ({
+  getPlayerValuesForNamesDbFirst: mockGetPlayerValuesForNames,
 }))
 
 import { resolvePlayerStats } from "@/lib/player-comparison-lab/PlayerStatsResolver"

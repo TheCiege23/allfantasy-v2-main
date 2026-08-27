@@ -38,7 +38,20 @@ export interface DevyPlayerValue {
   team: string
   position: string
   classYear: string // FR, SO, JR, SR
-  devyValue: number
+  /**
+   * Devy points from the ranked board, or NULL when the player is not ranked.
+   *
+   * ⚠ NULL, NEVER 0 — that distinction is the whole point. This used to carry
+   * `DevyPlayer.devyValue`, a position-and-class-year lookup that is 0 for 1,237
+   * of 1,718 rows, so "no data" and "worthless" were the same number and a
+   * consumer could not tell a freshman nobody has scouted from a player the
+   * board actively rates at nothing.
+   *
+   * `lib/devy/devyValueBoard.ts` is the authority and states the same rule.
+   */
+  devyValue: number | null
+  /** 1 = best devy asset on the board. Null when unranked. */
+  devyRank?: number | null
   projectedNFLValue: number | null
   draftEligibleYear: number
   projectedRound: number | null

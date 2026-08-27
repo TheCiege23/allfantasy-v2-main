@@ -90,8 +90,24 @@ describe('usage: absence is a coverage gap, never a zero', () => {
     expect(TRAJ).toContain('THIRD-DOWN ROLE IS NOT DERIVABLE')
   })
 
+  /**
+   * ⚠ WAS PINNED TO THE PROSE OF A COMMENT, and the comment was reworded, so a
+   * guard against the most confident possible wrong answer went red over a
+   * sentence. The guarantee lives in the code: `rookie` is true only when
+   * yearsExp is genuinely 0, never when it is null.
+   *
+   * 0 and null are different and the difference is the whole factor — 0 means he
+   * has not played a snap, null means we do not know, and reading null as 0
+   * would label every unmatched player a rookie.
+   */
   it('does not infer rookie status from a missing prior season', () => {
-    expect(TRAJ).toContain('label every player we simply failed to match as a rookie')
+    /* Not `!yearsExp`, which is true for null and would collapse the two. */
+    expect(TRAJ).toMatch(/rookie:\s*yearsExp === 0/)
+    expect(TRAJ).not.toMatch(/rookie:\s*!yearsExp/)
+    /* And an unknown says so rather than defaulting to a claim. */
+    expect(TRAJ).toContain('rookie status cannot be confirmed here')
+    /* The reasoning stays written down next to it, in whatever words. */
+    expect(TRAJ).toMatch(/0 AND NULL ARE DIFFERENT/)
   })
 })
 

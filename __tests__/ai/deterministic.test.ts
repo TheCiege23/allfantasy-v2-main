@@ -44,6 +44,17 @@ vi.mock('@/lib/weather/weatherService', () => ({
   getCachedGameWeather: getCachedGameWeatherMock,
 }))
 
+/*
+ * The live feed, mocked at the SOURCE rather than at `readStatLeaders`, so the
+ * real aggregation and the real name matching both run in these tests. Mocking
+ * the reader would have made the per-player assertions test the mock.
+ */
+const readPlayByPlayFeedMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/live/playByPlayFeed', () => ({
+  readPlayByPlayFeed: readPlayByPlayFeedMock,
+}))
+
 import { prisma } from '@/lib/prisma'
 import {
   detectScheduleQuestion,
@@ -64,6 +75,8 @@ beforeEach(() => {
   mockWorldCupMatchFindFirst.mockResolvedValue(null)
   getEnrichedNewsFeedMock.mockResolvedValue([])
   getCachedGameWeatherMock.mockResolvedValue(null)
+  /* Default: no live games. `resetAllMocks` clears this, so it must be re-set. */
+  readPlayByPlayFeedMock.mockResolvedValue([])
 })
 
 // ── detectScheduleQuestion ────────────────────────────────────────────────────
@@ -307,6 +320,122 @@ describe('tryDeterministicAnswer', () => {
     expect(result).toContain("I don't have reliable data")
     expect(result).toContain('home runs')
     expect(result).toContain('not invent')
+  })
+
+  /*
+   * ⚠ REGRESSION. "HRs" walked past the refusal and reached a model with no
+   * baseball data behind it, because `\bhr\b` cannot match a plural. Nobody
+   * types "HR" singular when asking who hit the most of them.
+   */
+  it('refuses the ABBREVIATED plural too, not just the spelled-out stat', async () => {
+    for (const question of [
+      'who hit the most HRs in the majors today?',
+      'most HR in MLB today?',
+      'how many RBIs did he have',
+    ]) {
+      const result = await tryDeterministicAnswer(question)
+      expect(result, question).toContain("I don't have reliable data")
+    }
+  })
+
+  it('still refuses a football stat question when the live feed is empty', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([])
+
+    const result = await tryDeterministicAnswer('How many TDs did Josh Allen have today?')
+
+    expect(result).toContain("I don't have reliable data")
+  })
+
+  /*
+   * A question about ONE player, which used to be refused while the answer sat
+   * in the feed: the leader builder only fires on "most / top" phrasing, so
+   * "how many TDs did X have" fell through to the blanket refusal.
+   */
+  const play = (over: Record<string, unknown> = {}) => ({
+    gameId: 'g1',
+    playerId: 'p-allen',
+    playerName: 'Josh Allen',
+    team: 'BUF',
+    type: 'TOUCHDOWN',
+    stat: 'rushing_touchdowns',
+    delta: 1,
+    value: 1,
+    detectedAt: new Date('2026-08-27T23:30:00Z'),
+    idempotencyKey: 'k1',
+    detail: 'J.Allen 3 yd rush TOUCHDOWN',
+    ...over,
+  })
+
+  it('answers with the total the feed actually holds', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([
+      play({ value: 1, idempotencyKey: 'k1' }),
+      play({ value: 2, idempotencyKey: 'k2' }),
+    ])
+
+    const result = await tryDeterministicAnswer('How many TDs did Josh Allen have today?')
+
+    expect(result).toContain('Josh Allen')
+    expect(result).toContain('2')
+    expect(result).toContain('touchdowns')
+    expect(result).not.toContain("I don't have reliable data")
+  })
+
+  /* The window is at most a few hours; presenting it as a full day would lie. */
+  it('says the number came from the live window, not a season total', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([play()])
+
+    const result = await tryDeterministicAnswer('how many touchdowns does Josh Allen have today')
+
+    expect(result).toContain('live plays')
+    expect(result).toMatch(/not a season total/i)
+  })
+
+  it('finds the player by surname when only one in the window carries it', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([play({ value: 3 })])
+
+    const result = await tryDeterministicAnswer('how many TDs did Allen have today?')
+
+    expect(result).toContain('Josh Allen')
+    expect(result).toContain('3')
+  })
+
+  /*
+   * ⚠ THE IMPORTANT ONE. An absent player is NOT a zero — the window holds at
+   * most 200 plays. Reporting "0 touchdowns" about a real player who simply is
+   * not in it is the worst answer available, so this must refuse instead.
+   */
+  it('never reports a zero for a player it cannot see', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([play()])
+
+    const result = await tryDeterministicAnswer('How many TDs did Lamar Jackson have today?')
+
+    expect(result).toContain("I don't have reliable data")
+    expect(result).not.toContain('Lamar Jackson has 0')
+    expect(result).not.toMatch(/\b0 touchdowns\b/)
+  })
+
+  /* Two named players is a comparison; guessing which one was meant is worse. */
+  it('does not pick one of two named players', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([
+      play({ value: 2 }),
+      play({ playerId: 'p-hurts', playerName: 'Jalen Hurts', team: 'PHI', value: 1 }),
+    ])
+
+    const result = await tryDeterministicAnswer(
+      'how many TDs did Josh Allen and Jalen Hurts have today?',
+    )
+
+    expect(result).toContain("I don't have reliable data")
+  })
+
+  /* Leaderboard phrasing still belongs to the leader builder, not this one. */
+  it('leaves "who has the most" to the leaderboard answer', async () => {
+    readPlayByPlayFeedMock.mockResolvedValue([play({ value: 2 })])
+
+    const result = await tryDeterministicAnswer('who has the most TDs today?')
+
+    expect(result).toContain('Josh Allen')
+    expect(result).toMatch(/leader|leads|most/i)
   })
 
   it('returns refusal (not null) when DB errors on schedule question (fail-safe)', async () => {
