@@ -40,6 +40,37 @@ import {
  * to be weighted 0 — which the zero-weight skip below handles correctly.)
  */
 const STAT_ALIASES: Record<string, string[]> = {
+  /*
+   * ⚠ EVERY OFFENSIVE STAT LINE IN THE DATABASE WAS UNSCOREABLE UNTIL THESE EXISTED, AND THE
+   * SYMPTOM LOOKED LIKE MISSING DATA RATHER THAN A NAMING MISMATCH.
+   *
+   * Leagues state scoring in Sleeper's vocabulary — `rec`, `rec_yd`, `rec_td`, `rush_yd`,
+   * `pass_td`. The stat ingest writes nflverse's — `receptions`, `receiving_yards`,
+   * `receiving_td`, `rushing_yards`, `passing_td`. Measured across 8,000 rows of the 2025
+   * season: the seven Sleeper keys appear ZERO times each, while `receptions` appears 790 times
+   * and `receiving_yards` 782. Nothing bridged them, so `computeLeagueProjectedPoints` matched
+   * no key and returned null — which every caller correctly reported as "could not be projected",
+   * and which read as a coverage gap in the feed rather than a vocabulary gap in this map.
+   *
+   * The IDP block below was written first and is exactly the same problem solved once already:
+   * Sleeper PROJECTS `idp_sack` while leagues CONFIGURE `sack`. Offence simply never got the
+   * same treatment, so defenders scored and skill players did not.
+   */
+  rec: ['receptions'],
+  rec_yd: ['receiving_yards'],
+  rec_td: ['receiving_td'],
+  rush_yd: ['rushing_yards'],
+  rush_td: ['rushing_td'],
+  pass_yd: ['passing_yards'],
+  pass_td: ['passing_td'],
+
+  /*
+   * ⚠ `int` IS NOT ALIASED TO `interceptions` AND MUST NOT BE. In a league's scoring `int` is a
+   * DEFENDER catching one; in an offensive feed `interceptions` is a quarterback throwing one.
+   * Bridging them would pay a QB defensive points for his own turnovers. The defensive key keeps
+   * its `idp_int` alias and the offensive one is spelled `pass_int`, which the data carries
+   * natively where it carries it at all.
+   */
   tkl: ['idp_tkl'],
   tkl_ast: ['idp_tkl_ast'],
   tkl_solo: ['idp_tkl_solo'],
