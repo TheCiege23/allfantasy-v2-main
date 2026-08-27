@@ -127,6 +127,18 @@ export type LivePageData = {
    * made every sport throw, and the screen calmly reported no games.
    */
   loadFailed: boolean
+  /**
+   * ⚠ TRUE WHEN YOUR ROSTERS COULD NOT BE READ — A DIFFERENT FAULT FROM `loadFailed`.
+   * The slate itself is fine and still renders; what failed is the tie-in join.
+   * Kept separate precisely because blaming the slate for a roster fault is what
+   * made the P2021 outage read as a scores bug for two deploys.
+   *
+   * It matters most under `scope: 'my'`, where no tie-ins means no games shown:
+   * without this flag that state is indistinguishable from "none of your players
+   * are playing", which is the one thing this page must not assert when it does
+   * not know.
+   */
+  rosterFailed: boolean
 }
 
 /** A rostered player of yours, resolved to a real-world team. */
@@ -403,12 +415,29 @@ export async function getLivePageData(opts: {
    * rather than destroying the slate. Logged, because the page-level catch
    * cannot say which half failed.
    */
+  let rosterFailed = false
   const { players, hasRosterData } = opts.userId
     ? await loadRosteredPlayers(opts.userId, sport).catch((err) => {
         console.error(
           '[live] roster tie-in read failed, rendering slate without it:',
           err instanceof Error ? err.message : err,
         )
+        /*
+         * ⚠ THE FLAG IS THE OTHER HALF OF THIS CATCH. Without it the catch
+         * trades a crash for a lie, which is the worse of the two.
+         *
+         * `scope: 'my'` is the DEFAULT, and with no tie-ins it filters every
+         * game away — so a silent degrade renders "None of your players are
+         * playing right now" above "Claim a team in one of your leagues", to a
+         * user who HAS claimed one and whose players may be on the field. Two
+         * false statements, on a screen that looks perfectly healthy.
+         *
+         * ⚠ AND IT IS DELIBERATELY NOT `loadFailed`. That flag says the SLATE
+         * failed. Blaming the slate for a roster fault is the same misdirection
+         * that sent two deploys chasing a scores bug that was really an
+         * unapplied migration. Distinct fault, distinct flag, distinct copy.
+         */
+        rosterFailed = true
         return { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
       })
     : { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
@@ -511,6 +540,7 @@ export async function getLivePageData(opts: {
     fetchedAt: active?.fetchedAt ?? new Date().toISOString(),
     hasRosterData,
     loadFailed: active?.failed ?? false,
+    rosterFailed,
   }
 }
 

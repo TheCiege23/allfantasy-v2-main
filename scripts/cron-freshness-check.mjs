@@ -107,7 +107,9 @@ export const PROBES = {
   },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
-  '/api/cron/sync-player-images?sport=all': { table: 'sports_core_player_images', column: 'fetched_at' },
+  /* ⚠ KEY MATCHES THE FULL PATH INCLUDING QUERY, so adding `&limit=500` to the cron orphaned
+     this entry: the job read as unclassified AND the probe read as pointing at no cron. */
+  '/api/cron/sync-player-images?sport=all&limit=500': { table: 'sports_core_player_images', column: 'fetched_at' },
   /*
    * ⚠ `lastUpdatedAt`, NOT `createdAt`. This job UPSERTS, so `createdAt` freezes at first insert
    * and never moves again no matter how many times the row is refreshed.
@@ -282,6 +284,16 @@ const HEARTBEAT_TIME_COLUMN = 'started_at'
 export const NO_PROBE = {
   '/api/cron/import-standings': 'the `standings` table has never held a row -- find where this job actually writes before probing it',
   '/api/cron/import-schedules?source=tsdb-only': '`fantasy_schedule_games` has never held a row; the tsdb path may be dead',
+  '/api/cron/import-player-game-stats?multiSport=1&days=3':
+    'writes the same player_game_stats.updatedAt the NFL job an hour earlier probes, so a table ' +
+    'probe here reports this one healthy on that run instead. The NFL probe is scoped with ' +
+    'seasonal.sport; this sweep covers the other sports and needs either its own heartbeat or a ' +
+    'probe scoped to a sport the NFL job never touches.',
+  '/api/cron/import-schedules?riProfiles=1':
+    'syncRollingInsightsTeamsToDb/PlayersToDb write sportsTeam and sportsPlayer — the same ' +
+    'sports_players that import-players and ?rosters=1 already write, and those run more often, so ' +
+    'any table probe here is satisfied by another job. Needs a heartbeat on the route, which is ' +
+    'the same fix ?rosters=1 is waiting on.',
   '/api/cron/import-schedules?rosters=1':
     'writes prisma.sportsPlayer -- the SAME sports_players.last_updated that import-players probes, ' +
     'and that job runs far more often, so a table probe here would report this one healthy on the ' +

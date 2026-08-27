@@ -51,7 +51,16 @@ import { GET } from '@/app/api/cron/compute-projections/route'
 const SECRET = 'test-cron-secret'
 const ORIGINAL_ENV = { ...process.env }
 
-function req(path = '/api/cron/compute-projections'): never {
+/*
+ * ⚠ `?sport=NFL` IS LOAD-BEARING. The route grew a multi-sport mode: with no
+ * `sport` param it now rotates every supported sport and returns an AGGREGATE —
+ * `{ ok, sports: [...] }` — which carries no top-level `failureReason`. Every
+ * assertion in this file is about the single-sport contract, so without the
+ * param they were reading a different response shape and `failureReason` came
+ * back undefined. An explicit sport still returns the original body, which is
+ * what admin and manual callers use too.
+ */
+function req(path = '/api/cron/compute-projections?sport=NFL'): never {
   return new Request(`http://localhost${path}`, {
     headers: { authorization: `Bearer ${SECRET}` },
   }) as never
@@ -150,6 +159,25 @@ describe('the carve-out does not swallow real failures', () => {
 
     expect(res.status).toBe(500)
     expect(body.failureReason).toBe('refusal_rate_above_threshold')
+  })
+
+  /**
+   * ⚠ THE SCHEDULED CRON PASSES NO SPORT, so the aggregate is the path that
+   * actually runs in production — and nothing here covered it. A failing sport
+   * has to surface through the wrapper, or the "no quiet pass" guarantee this
+   * whole file exists for stops at the single-sport body.
+   */
+  it('a failing sport still fails the multi-sport aggregate the cron actually calls', async () => {
+    writeMock.mockResolvedValue(report({ statLinesRead: 0, written: 0, refused: 0, refusalsByReason: {} }))
+
+    const res = await GET(req('/api/cron/compute-projections'))
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(body.ok).toBe(false)
+    /* And it names which sports, rather than collapsing to one bit. */
+    expect(Array.isArray(body.sports)).toBe(true)
+    expect(body.sports.length).toBeGreaterThan(0)
   })
 
   it('zero rows AND zero refusals is still a failure, not a quiet pass', async () => {

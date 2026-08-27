@@ -3,6 +3,7 @@ import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGroundi
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { detectStatFamily, readStatLeaders, FAMILY_LABEL } from '@/lib/live/playerStatLeaders'
 import { findUpcomingGames } from '@/lib/ai/upcomingGames'
+import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -19,19 +20,45 @@ import { findUpcomingGames } from '@/lib/ai/upcomingGames'
  * push path was built to prevent. So each executor returns prose that states
  * what was looked for and that it was not found.
  *
- * ⚠ THE SCHEMAS ARE DELIBERATELY NARROW. No free-form query parameter, no
- * league id from the model. The league comes from the SESSION, because a model
- * that can name a league id can name somebody else's.
+ * ⚠ THE SCHEMAS ARE DELIBERATELY NARROW, AND NO TOOL TAKES A LEAGUE ID. A model
+ * that can pass a league id can pass somebody else's. `find_league_by_name` is
+ * the single exception to the league coming from the session, and it takes a
+ * NAME — resolved server-side against leagues this user is demonstrably in, so
+ * the id is still something only we can produce. That distinction is load
+ * bearing: never add a `leagueId` parameter to any tool here.
  */
 
 export type ChimmyToolContext = {
-  /** From the session, never from the model. */
+  /**
+   * The league in scope. Starts from the SESSION and is mutable for exactly one
+   * reason: `find_league_by_name` binds it after verifying membership, so the
+   * user can say "KBFL" instead of picking from the scope selector. It is never
+   * assigned from a model-supplied id.
+   */
   leagueId: string | null
   userId: string | null
 }
 
 /** OpenAI-shaped function tools; Grok accepts these through the OpenAI SDK. */
 export const CHIMMY_TOOL_SPECS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'find_league_by_name',
+      description:
+        "Select one of the user's own leagues by the name they used, e.g. 'KBFL' or 'Dynasty for life'. Call this FIRST whenever the question names a league, before any other league tool — otherwise nothing is selected and the other tools have nothing to read. It takes a NAME, never an id.",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: "The league name as the user wrote it. Do not guess or expand it.",
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
   {
     type: 'function' as const,
     function: {
@@ -133,6 +160,52 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      /*
+       * ⚠ THIS TOOL BINDS `ctx.leagueId` FOR THE REST OF THE TURN. That is the
+       * point: every other league tool reads the league from the context, so
+       * resolving a name without binding it would be a lookup with nowhere to
+       * go. The binding is safe precisely because the id never came from the
+       * model — `findLeagueByName` only ever returns a league this user is
+       * demonstrably a member of.
+       */
+      case 'find_league_by_name': {
+        if (!ctx.userId) {
+          return 'I cannot tell who is signed in, so I cannot look up their leagues. Say that; do not name a league.'
+        }
+        const asked = typeof args.name === 'string' ? args.name : ''
+        const found = await findLeagueByName(ctx.userId, asked)
+
+        if (found.kind === 'match') {
+          ctx.leagueId = found.league.id
+          return [
+            `Selected "${found.league.name}" (${found.league.sport}, ${found.league.season} season).`,
+            'It is now the league in scope — call the other league tools to read its actual data.',
+          ].join(' ')
+        }
+
+        if (found.kind === 'ambiguous') {
+          /*
+           * Deliberately NOT picking one. Someone in sixty-five leagues has
+           * several called "Dynasty something", and a confident answer about the
+           * wrong one is indistinguishable from a right one.
+           */
+          return [
+            `More than one of their leagues matches "${asked}":`,
+            found.candidates.map((c) => `"${c.name}"`).join(', ') + '.',
+            'Ask which one they mean. Do NOT pick one, and do not answer about any of them yet.',
+          ].join(' ')
+        }
+
+        if (found.known.length === 0) {
+          return 'This user has no leagues on file at all, so there is nothing to select. Say that; do not describe a league.'
+        }
+        return [
+          `No league of theirs is called "${asked}".`,
+          `Their leagues include: ${found.known.map((c) => `"${c.name}"`).join(', ')}.`,
+          'Tell them the name did not match and offer those. Do NOT answer as though a league were selected.',
+        ].join(' ')
+      }
+
       case 'get_league_standings': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const text = await buildLeagueStandingsContext(ctx.leagueId, ctx.userId)
