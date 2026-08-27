@@ -99,6 +99,31 @@ describe('⚠ what the dedupe refuses to do', () => {
     expect(SCRIPT).toContain('never touched')
   })
 
+  it('⚠ names its exceptions instead of loosening the rule', () => {
+    /*
+     * Four ids carried the same player under two spellings — Matt/Matthew
+     * Hibner, A.J./AJ Haulcy, Irv/Irvin Charles, T.J./TJ Parker. The obvious
+     * fix was to widen sameName to forgive punctuation and nicknames. That
+     * trades the script's only protection for four rows: a rule that forgives
+     * "Matt"/"Matthew" cannot tell a spelling variant from two different men
+     * called Matt and Matthew sharing an id.
+     */
+    expect(SCRIPT).toContain('AN ALLOWLIST, NOT A LOOSER RULE')
+    expect(SCRIPT).toContain('const REVIEWED_NAME_VARIANTS')
+    for (const id of ['13324', '13384', '8861', '13455']) {
+      expect(SCRIPT).toContain(`'${id}'`)
+    }
+  })
+
+  it('still refuses an unreviewed name conflict', () => {
+    expect(SCRIPT).toContain('if (!reviewed) {')
+    expect(SCRIPT).toContain('conflicts.push({ sleeperId, names:')
+  })
+
+  it('announces a reviewed collapse rather than doing it quietly', () => {
+    expect(SCRIPT).toContain('reviewed variant, collapsing:')
+  })
+
   it('is a census until told otherwise', () => {
     expect(SCRIPT).toContain("const WRITE = process.argv.includes('--write')")
     expect(SCRIPT).toContain('census only — nothing written')

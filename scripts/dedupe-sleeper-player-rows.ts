@@ -58,6 +58,27 @@ function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase().replace(/\s+/g, ' ') === b.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+/**
+ * Sleeper ids where a human looked at the two names and confirmed one player.
+ *
+ * ⚠ AN ALLOWLIST, NOT A LOOSER RULE. The obvious alternative was to widen
+ * `sameName` to forgive punctuation and nicknames — "A.J."/"AJ", "Matt"/"Matthew".
+ * That trades the one protection this script has for four rows: the rule exists
+ * to stop two DIFFERENT people who share an id from being silently merged, and a
+ * rule that forgives nicknames cannot tell "Matt Hibner / Matthew Hibner" from a
+ * genuine collision between two men called Matt and Matthew.
+ *
+ * So the rule stays strict and the exceptions are named, one line each, with the
+ * pair written down so the next reader can check the judgement rather than trust
+ * it. Reviewed and approved by Guap on 2026-08-27.
+ */
+const REVIEWED_NAME_VARIANTS = new Map<string, string>([
+  ['13324', 'Matthew Hibner / Matt Hibner'],
+  ['13384', 'A.J. Haulcy / AJ Haulcy'],
+  ['8861', 'Irvin Charles / Irv Charles'],
+  ['13455', 'T.J. Parker / TJ Parker'],
+])
+
 async function main() {
   console.log(`mode: ${WRITE ? 'WRITE' : 'census only'}`)
 
@@ -100,8 +121,14 @@ async function main() {
     if (group.length < 2) continue
     const first = group[0]!
     if (!group.every((r) => sameName(r.name, first.name))) {
-      conflicts.push({ sleeperId, names: [...new Set(group.map((r) => r.name))] })
-      continue
+      const reviewed = REVIEWED_NAME_VARIANTS.get(sleeperId)
+      if (!reviewed) {
+        conflicts.push({ sleeperId, names: [...new Set(group.map((r) => r.name))] })
+        continue
+      }
+      /* Named above, checked by a person, and printed again here so a run that
+         collapses one of these says so out loud rather than doing it quietly. */
+      console.log(`     reviewed variant, collapsing: ${sleeperId}  ${reviewed}`)
     }
     const keep = pickBestSourceRow(group)
     duplicates.push({ sleeperId, keep, drop: group.filter((r) => r.id !== keep.id) })
