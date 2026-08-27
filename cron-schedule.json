@@ -73,6 +73,10 @@
       "schedule": "10 */6 * * *"
     },
     {
+      "path": "/api/cron/import-schedules?rosters=1",
+      "schedule": "40 8 * * *"
+    },
+    {
       "path": "/api/cron/adp-refresh",
       "schedule": "0 10 * * *"
     },
