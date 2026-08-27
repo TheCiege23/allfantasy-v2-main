@@ -202,8 +202,24 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
 
 
 function navItems(props: AfCoreShellProps): NavItem[] {
+  /*
+   * ⚠ A CROSS-LEAGUE SCREEN STILL CARRIES THE LEAGUE. Home, Portfolio, Rankings
+   * and Tools each read across every league, and each used to link without
+   * `?league=` for that reason — which silently CLEARED the rail's selection.
+   * Clicking Home from inside a league and then Matchup landed you back on
+   * "pick a league", having undone a choice you never asked to undo.
+   *
+   * Being cross-league is about what a screen READS, not about whether the app
+   * should forget where you were. `week` and `live` already worked this way:
+   * they show everything and carry the league so the rail stays put.
+   */
+  const inLeague = (path: string) =>
+    props.selectedLeagueId
+      ? `${path}?league=${encodeURIComponent(props.selectedLeagueId)}`
+      : path
+
   return [
-    { key: 'home', label: 'Home', glyph: '▣', href: '/core' },
+    { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
     // My team is league-scoped in the handoff, so the link carries the selected
     // league rather than dropping the user on a screen that has to ask which one.
     {
@@ -300,7 +316,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/draft-hq',
     },
-    { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: '/core/portfolio' },
+    { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: inLeague('/core/portfolio') },
     // 21a's My Leagues and the connect/re-sync dashboard it links to. League
     // Sync is the ONLY entry point to the Yahoo OAuth handoff and per-league
     // re-sync, so the shell must reach it or the /core cutover quietly removes
@@ -356,7 +372,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       key: 'rankings',
       label: 'Rankings',
       glyph: '↑',
-      href: '/core/rankings',
+      href: inLeague('/core/rankings'),
       // Only shown when a level actually exists — never a placeholder "LVL 1".
       badge: props.rankingsLevel != null ? { text: `LVL ${props.rankingsLevel}`, tone: 'level' } : undefined,
     },
@@ -416,7 +432,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/sync?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/leagues/sync',
     },
-    { key: 'tools', label: 'Tools', glyph: '⚙', href: '/core/tools' },
+    { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
     // Full page outside /core, like My Leagues and League Sync above. This is
     // where appearance mode and language live (Settings → Preferences), and
     // the rail's bottom profile tile was the only way there — a single-letter

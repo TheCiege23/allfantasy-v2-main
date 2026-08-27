@@ -85,6 +85,8 @@ import { getLivePageData } from '@/lib/live/liveScoresPage'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import Standings from '@/components/core-app/screens/Standings'
+import PickALeague from '@/components/core-app/PickALeague'
+import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
@@ -367,6 +369,19 @@ export default async function AfCorePage({
      */
     imageUrl: imageOf(l as unknown as Dash34LeagueRow),
   }))
+
+  /*
+   * The selected league's display name, for the in-league tab bar.
+   *
+   * ⚠ RESOLVED FROM THE RAIL, NOT QUERIED. The rail is the list the user picked
+   * from, so an id that is absent from it is stale, foreign, or hand-typed —
+   * and null is the honest answer for all three. Fetching a name for an id the
+   * rail does not contain would put a league heading above a screen the user
+   * has no membership in.
+   */
+  const selectedLeagueName = selectedLeagueId
+    ? (rail.find((l) => l.id === selectedLeagueId)?.name ?? null)
+    : null
 
   /*
    * ⚠ `playedLeagues`, AND THE REAL SYNC TIMESTAMPS.
@@ -1192,6 +1207,24 @@ export default async function AfCorePage({
         homeSignals: serializeHomeSignals(buildHomeSignals(dash34, issues.length)),
       }}
     >
+      {/*
+       * 38a's in-league tab bar. Rendered once here rather than inside each of
+       * the twelve screens: every screen would otherwise grow its own copy, and
+       * the first one to drift would be the bug nobody notices.
+       *
+       * ⚠ ONLY WHEN A LEAGUE IS ACTUALLY SELECTED AND NAMED. Rendering it with a
+       * placeholder name would put "In league —" above a screen that is not in
+       * one, which is exactly the kind of confident-but-empty chrome the rest of
+       * this suite refuses to draw.
+       */}
+      {selectedLeagueId && selectedLeagueName ? (
+        <LeagueTabs
+          leagueId={selectedLeagueId}
+          leagueName={selectedLeagueName}
+          activeKey={activeKey}
+        />
+      ) : null}
+
       {segment === 'bracket' ? (
         bracket ? (
           <BracketChallenge data={bracket} />
@@ -1234,29 +1267,25 @@ export default async function AfCorePage({
         myTeam ? (
           <MyTeam data={myTeam} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              My team
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail to see your lineup. This screen is scoped to one league —
-              your roster, slots and lock time only mean something inside a single league&apos;s rules.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="my-team"
+            title="My team"
+            blurb="Your roster, slots and lock time only mean something inside a single league's rules."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'matchup' ? (
         matchup ? (
           <Matchup data={matchup} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Matchup
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail to see its matchup. A head-to-head only means something
-              inside one league&apos;s schedule and scoring.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="matchup"
+            title="Matchup"
+            blurb="A head-to-head only means something inside one league's schedule and scoring."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'trades' ? (
         trades ? (
@@ -1286,56 +1315,49 @@ export default async function AfCorePage({
             <Trades data={trades} />
           </>
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Trades
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail. Every trade grade is scored against one league&apos;s own
-              scoring and roster rules, so trades only mean something inside a league.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="trades"
+            title="Trades"
+            blurb="Every trade grade is scored against one league's own scoring and roster rules, so a grade only means something inside a league."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'waivers' ? (
         waivers ? (
           <Waivers data={waivers} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Waivers
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail. FAAB, waiver order and bid pricing are all per-league.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="waivers"
+            title="Waivers"
+            blurb="FAAB, waiver order and bid pricing are all per-league — the same player is worth a different amount in a different league."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'draft-hq' ? (
         draftHq ? (
           <DraftHq data={draftHq} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Draft HQ
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail. Draft order, pick slots and board settings are all
-              per-league.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="draft-hq"
+            title="Draft HQ"
+            blurb="Draft order, pick slots and board settings are all per-league."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'war-room' ? (
         warRoom ? (
           <WarRoom data={warRoom} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              War Room
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail. The board, the clock and the queue all belong to one
-              league&apos;s draft.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="war-room"
+            title="War Room"
+            blurb="The board, the clock and the queue all belong to one league's draft."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'players' ? (
         <PlayerFinder
@@ -1401,46 +1423,68 @@ export default async function AfCorePage({
          */
         commissionerHub ? (
           <CommissionerHub data={commissionerHub} />
-        ) : (
+        ) : /*
+           * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
+           * selected and we failed to read it" is a read failure on our side.
+           * "No league is selected" is a routing state. Collapsing them would
+           * tell a commissioner their league is unreadable when in fact they
+           * had simply not picked one yet.
+           */
+        selectedLeagueId ? (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
               Commissioner
             </h1>
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              {selectedLeagueId
-                ? 'We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.'
-                : 'Pick a league you commission from the rail. Health, disputes and settings all belong to one league.'}
+              We could not read this league just now. This is a read failure on our side, not a
+              sign that you do not run it.
             </p>
           </div>
+        ) : (
+          <PickALeague
+            tabKey="commissioner"
+            title="Commissioner"
+            blurb="Health, disputes and settings all belong to one league. Below is what needs a commissioner across the leagues you run."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'sync' ? (
         leagueSync ? (
           <LeagueSync data={leagueSync} manageHref="/leagues/sync" />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Sync
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              Pick a league from the rail to see what we read for it and when. To connect a platform
-              or re-sync everything, use <a href="/leagues/sync">Manage connections</a>.
-            </p>
-          </div>
+          <PickALeague
+            tabKey="sync"
+            title="Sync"
+            blurb="What AllFantasy reads for a league, and when it last read it. Connecting a platform or re-syncing everything lives on Manage connections, linked from the account-wide League Sync page."
+            issues={issues}
+            leagues={rail}
+          />
         )
       ) : activeKey === 'standings' ? (
         standings ? (
           <Standings data={standings} />
         ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Standings
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              {selectedLeagueId
-                ? 'We could not read this league’s weekly results just now. This is a read failure on our side, not a season with no games in it.'
-                : 'Pick a league from the rail. Points-for only means something inside one league — two leagues with different scoring settings produce numbers that cannot be compared.'}
-            </p>
-          </div>
+          /* Same split as Commissioner: a read failure is not an unpicked league. */
+          selectedLeagueId ? (
+            <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+                Standings
+              </h1>
+              <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+                We could not read this league&apos;s weekly results just now. This is a read failure
+                on our side, not a season with no games in it.
+              </p>
+            </div>
+          ) : (
+            <PickALeague
+              tabKey="standings"
+              title="Standings"
+              blurb="Points-for only means something inside one league — two leagues with different scoring settings produce numbers that cannot be compared."
+              issues={issues}
+              leagues={rail}
+            />
+          )
         )
       ) : activeKey === 'live' ? (
         liveScores ? (
