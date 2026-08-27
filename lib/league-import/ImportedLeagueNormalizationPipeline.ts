@@ -11,9 +11,11 @@ import {
 } from './espn/EspnLeagueFetchService'
 import {
   fetchYahooLeagueForImport,
+  YahooApiResponseError,
   YahooImportConnectionError,
   YahooImportLeagueNotFoundError,
 } from './yahoo/YahooLeagueFetchService'
+import { describeYahooRejection } from './yahoo/yahooRejection'
 import {
   fetchMflLeagueForImport,
   MflImportConnectionError,
@@ -142,6 +144,32 @@ export async function runImportedLeagueNormalizationPipeline(
     }
     if (e instanceof YahooImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }
+    }
+    /*
+     * ⚠ WITHOUT THIS, YAHOO'S RAW JSON REACHED THE SCREEN. The message on a
+     * YahooApiResponseError is the provider's response body, and the generic
+     * handler below returns `e.message` verbatim — so an import attempt rendered
+     * `{"error":{"xml:lang":"en-us","yahoo:uri":"/fantasy/v2/league/…"}}` to the
+     * user, publishing our own API path and explaining nothing. Observed on the
+     * first real use of the league-ID fallback.
+     */
+    if (e instanceof YahooApiResponseError) {
+      /*
+       * Mapped onto the existing codes rather than widening the union: 401 and
+       * 403 are both "this connection cannot do it as it stands", 404 is a league
+       * that is not there, and anything else keeps the generic code it already
+       * fell through to. Only the message changes for that last group.
+       */
+      return {
+        success: false,
+        error: describeYahooRejection(e.status),
+        code:
+          e.status === 404
+            ? 'LEAGUE_NOT_FOUND'
+            : e.status === 401 || e.status === 403
+              ? 'CONNECTION_REQUIRED'
+              : 'NORMALIZATION_FAILED',
+      }
     }
     if (e instanceof MflImportConnectionError) {
       return { success: false, error: e.message, code: 'CONNECTION_REQUIRED' }
