@@ -557,7 +557,21 @@ export default async function AfCorePage({
           userId,
           sport: typeof sp.sport === 'string' ? sp.sport : 'NFL',
           scope: sp.scope === 'all' ? 'all' : 'my',
-        }).catch(() => null)
+        }).catch((err) => {
+          /*
+           * ⚠ LOG IT. A bare `.catch(() => null)` here is what made the
+           * 2026-08-27 outage take three sessions and two wasted deploys to
+           * find: the screen says "We could not read the slate", which points
+           * at the score fetch, while the actual throw was a missing
+           * `league_player_weekly_scores` table in the roster tie-in read.
+           * The null return is still the right fallback — but silent it is not.
+           */
+          console.error(
+            '[core/live] getLivePageData threw, rendering the read-failure notice:',
+            err instanceof Error ? err.message : err,
+          )
+          return null
+        })
       : null
 
   /*
