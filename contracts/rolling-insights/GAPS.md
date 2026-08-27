@@ -129,59 +129,58 @@ nothing no matter how many calls are permitted.
 
 ---
 
-## 📏 MEASURED 2026-08-27 — `N-02`, and a THIRD reading of 304
+## 📏 MEASURED 2026-08-27 — `N-02` RESOLVED IN PRACTICE: **304 can mean NOT SUBSCRIBED**
 
-Production, one RSC token, ~22:19-22:22 UTC. Roughly twenty distinct URLs, every
-one sent with `Cache-Control: no-cache, no-store`, `Pragma: no-cache`, and a fresh
-millisecond `_` buster — then, on a 304, **retried once with a new buster**.
+### The controlled result
 
-**NFL answered normally.** `team-info` 32 teams (32 badges), `player-info` 9,557
-players, and `player-stats` continues to write `fantasy_stat_lines` as it has all
-month.
+**This deployment holds TWO Rolling Insights accounts with DISJOINT sport coverage.** Same URL,
+same headers, same millisecond buster, retried once — the ONLY variable is which `RSC_token` is
+sent. `team-info/{SPORT}`, measured directly:
 
-**Every other sport answered 304, on every endpoint, through the retry:**
+| credential | NFL | MLB | NBA | NHL | NCAABB | NCAAFB | SOCCER (EPL·LALIGA·SERIEA) |
+|---|---|---|---|---|---|---|---|
+| `ROLLING_INSIGHTS_RSC_TOKEN`  | **200** | 304 | 304 | 304 | 304 | 304 | 304 |
+| `ROLLING_INSIGHTS_RSC_TOKEN2` | 304 | **200** | **200** | **200** | **200** | **200** | **200** |
 
-| sport | team-info | player-info | player-stats 2026 | player-stats 2025 |
-|---|---|---|---|---|
-| MLB | 304 | 304 | 304 | 304 |
-| NBA | 304 | 304 | 304 | 304 |
-| NHL | 304 | 304 | 304 | 304 |
-| NCAABB | 304 | 304 | 304 | 304 |
-| NCAAFB | 304 | 304 | — | — |
-| SOCCER (EPL, LALIGA, SERIEA — each separately) | 304 | 304 | n/a | n/a |
+That is a proper control, not an inference. **A 304 from this vendor can mean "this account is not
+subscribed to this sport"** — a third reading neither the skill repo ("cache artifact to defeat")
+nor the OpenAPI spec ("valid request, empty result set") documents.
 
-### What this rules out
+### There is also a LEGITIMATE 304, and it looks identical
 
-**A cache artifact cannot survive a fresh millisecond buster on ~20 distinct URLs
-across four endpoint families and two seasons.** That is the skill repo's reading,
-and this measurement does not support it here.
+On the entitled account, `player-stats/{season}/{SPORT}`:
 
-**"Empty result set" does not fit either.** `team-info/MLB` returning empty would
-mean the vendor has no MLB teams, which contradicts their own product.
+| | 2026 | 2025 |
+|---|---|---|
+| MLB | 200 | 200 |
+| NBA | **304** | 200 |
+| NHL | **304** | 200 |
 
-### The third reading — INFERENCE, NOT CONFIRMED
+NBA and NHL 2026 had not tipped off in August. So 304 there means *not yet started*. **Three
+distinct causes, one status code, no way to tell them apart from the response alone.**
 
-304 appears to track **per-sport ENTITLEMENT**. Rolling Insights bills additively
-per sport (`commercial.pricing_monthly`, $100-600/mo each), the account demonstrably
-has NFL, and every sport it does not have answers 304 uniformly regardless of
-endpoint or season.
+### The rule that survives all three
 
-⚠ **This is inference from one account's behaviour, not a vendor statement.** It is
-recorded because it changes how the status must be read, not because it is settled.
+1. Send no-cache headers + a fresh millisecond buster. Retry once. (kills the cache reading)
+2. Still 304 → **try the other credential**. (kills the entitlement reading)
+3. Still 304 → treat as UNCHANGED and fall back to the prior season. (handles not-yet-started)
+4. **Never** write an emptiness on a 304, at any stage.
 
-### What to do with it
+Implemented in `lib/workers/providers/rollingInsightsRest.ts` (`riCredentialsFor` + the two nested
+escalations in `riFetch`). Normal cost is one request — the sport's own account is tried first.
 
-- **Do NOT read 304 as "no data" or "cache miss".** It may mean *not subscribed*.
-  All three readings now coexist and the status alone cannot separate them.
-- **A 304 must never be written as an emptiness.** Already the rule; this is the
-  second independent reason for it.
-- **ASK THE VENDOR** (do not probe further): *does an unentitled sport return 304
-  rather than 401/403, and if so is that intentional?* A 401/403 would be
-  unambiguous and would let clients report "not subscribed" instead of "unchanged".
+### ⚠ The trap that cost real time here
 
-### Consequence for product scope
+The first reader took **the first token present and stopped**. `ROLLING_INSIGHTS_RSC_TOKEN` is
+set, so `..._TOKEN2` was NEVER tried and all six sports on the second account 304'd forever — while
+the pipeline reported itself healthy, because refusing to write on a 304 is correct behaviour. It
+was honest about the wrong cause.
 
-Non-NFL sports currently get **no live Rolling Insights data of any kind**. The
-existing non-NFL rows in `SportsPlayer` are 15 hours to 119 days old and are
-historical, not evidence of current entitlement — an easy and costly thing to
-misread, because the rows are real and carry RI player ids.
+Compounding it: the non-NFL rows already in `SportsPlayer` are real, carry real RI player ids, and
+are 15 hours to 119 days old. They read as proof of entitlement and are not.
+
+### Still worth asking the vendor (do not probe)
+
+*Should an unentitled sport return 401/403 rather than 304?* A 403 would be unambiguous and would
+let a client report "not subscribed" instead of "unchanged". Until then, credential fallback is the
+only way to tell them apart.
