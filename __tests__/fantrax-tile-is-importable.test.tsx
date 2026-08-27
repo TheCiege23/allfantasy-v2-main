@@ -103,11 +103,21 @@ describe('the Fantrax tile', () => {
    */
   it('still offers the CSV uploader once Fantrax is chosen', async () => {
     render(<ImportV4 />)
-    expect(screen.queryByText(/Have a Fantrax CSV export/i)).toBeTruthy()
+    /*
+     * ⚠ MATCHED ON THE ELEMENT, NOT ON THE TEXT. The first version asserted the
+     * phrase was gone, and the UPLOADER ITSELF says "Have a Fantrax CSV export"
+     * in its own <summary> — so once it rendered there were two matches and
+     * queryByText threw. It passed locally and failed in CI, which is the worst
+     * shape a test can have.
+     *
+     * ⚠ AND THE CLASS IS NOT ENOUGH EITHER: the uploader's own <summary> also
+     * carries `af-im-fx-link`. What identifies the POINTER is where it points.
+     */
+    expect(document.querySelector('a[href="/import?provider=fantrax"]')).toBeTruthy()
     fireEvent.click(fantraxTile())
     await waitFor(() => expect(screen.queryByText(/Fantrax league ID/i)).toBeTruthy())
     /* The pointer gives way to the uploader itself, rather than to nothing. */
-    expect(screen.queryByText(/Have a Fantrax CSV export/i)).toBeNull()
+    expect(document.querySelector('a[href="/import?provider=fantrax"]')).toBeNull()
     expect(document.querySelector('input[type="file"]')).toBeTruthy()
   })
 

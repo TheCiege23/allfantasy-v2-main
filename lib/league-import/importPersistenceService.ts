@@ -68,7 +68,22 @@ export async function persistImportWithCanonicalAudit(input: {
   await deleteFailedImportRunIfPresent(idempotencyKey)
 
   const existingRun = await prisma.importRun.findUnique({ where: { idempotencyKey } })
-  if (existingRun?.status === 'completed' && existingRun.leagueId) {
+
+  /*
+   * ⚠ `force` EXISTED AND COULD NOT REACH ANYTHING, because this short-circuit runs
+   * BEFORE `allowUpdateExisting` is consulted (it is passed to the persist call ~35
+   * lines below). A previously-completed run returned `existed: true` here and the
+   * import never re-ran — so "re-import" was answerable only by deleting rows by hand.
+   *
+   * That is not academic: the self-claim added in ImportedLeagueCommitService only runs
+   * inside `persistImportedLeagueFromNormalization`, which this return skips entirely.
+   * Every league imported before that fix would have stayed unclaimed and invisible on
+   * Portfolio forever, with a re-import cheerfully reporting success and changing
+   * nothing — the same "33 imported / 0 imported" shape this repo has already been bitten
+   * by once.
+   */
+  const force = input.allowUpdateExisting === true
+  if (!force && existingRun?.status === 'completed' && existingRun.leagueId) {
     const league = await prisma.league.findUnique({
       where: { id: existingRun.leagueId },
       select: { id: true, name: true, sport: true },
@@ -85,18 +100,37 @@ export async function persistImportWithCanonicalAudit(input: {
     }
   }
 
-  const run = await prisma.importRun.create({
-    data: {
-      userId: input.userId,
-      provider: input.provider,
-      sourceLeagueId: input.normalized.source.source_league_id,
-      season: seasonYear,
-      status: 'running',
-      idempotencyKey,
-      rawPayloadHash: hashPayload(input.normalized),
-      canonicalSummary: input.canonical as object,
-    },
-  })
+  /*
+   * A forced re-run REUSES the existing audit row rather than deleting it or mutating the
+   * key. `idempotencyKey` is unique, so a fresh `create` would collide; deleting would
+   * throw away the audit trail this table exists to keep, and salting the key would leave
+   * an unbounded set of near-duplicate rows. Reusing records the latest attempt against
+   * the same logical import, which is what it is.
+   */
+  const run =
+    force && existingRun
+      ? await prisma.importRun.update({
+          where: { idempotencyKey },
+          data: {
+            status: 'running',
+            completedAt: null,
+            error: null,
+            rawPayloadHash: hashPayload(input.normalized),
+            canonicalSummary: input.canonical as object,
+          },
+        })
+      : await prisma.importRun.create({
+          data: {
+            userId: input.userId,
+            provider: input.provider,
+            sourceLeagueId: input.normalized.source.source_league_id,
+            season: seasonYear,
+            status: 'running',
+            idempotencyKey,
+            rawPayloadHash: hashPayload(input.normalized),
+            canonicalSummary: input.canonical as object,
+          },
+        })
 
   try {
     const persisted = await persistImportedLeagueFromNormalization({
