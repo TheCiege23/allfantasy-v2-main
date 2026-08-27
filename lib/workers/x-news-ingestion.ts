@@ -350,6 +350,27 @@ async function persistInjuryFromNews(item: XNewsItem): Promise<void> {
 const HEADLINE_MAX = 256
 
 /**
+ * Strip the inline markdown citation links Grok embeds mid-sentence.
+ *
+ * Observed on a live run 2026-08-27: bullets come back as
+ *   Adam Schefter reports … is "on the mend."[[2]](https://x.com/AdamSchefter/status/209…)
+ * Stored verbatim that lands raw markdown in a VarChar(256) headline, truncated
+ * mid-URL, and renders as literal "[[2]](https://…" in the panel. The URLs are
+ * not lost — they are already in `citations`, which is where links belong.
+ */
+export function stripInlineCitations(text: string): string {
+  return text
+    // [[2]](url) and [2](url) — the numeric footnote form Grok actually emits.
+    .replace(/\[+\s*\d+\s*\]+\(\s*https?:\/\/[^)\s]*\s*\)/g, '')
+    // Any remaining [label](url), which the same prompt can produce.
+    .replace(/\[([^\]]*)\]\(\s*https?:\/\/[^)\s]*\s*\)/g, '$1')
+    // A bare trailing url left behind by a malformed link.
+    .replace(/\s*https?:\/\/\S+$/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
+/**
  * Deliberately small. Each subject spends — see the cost note on
  * ingestXNewsForPlayers before raising it.
  */
@@ -379,11 +400,13 @@ export function toNewsItems(
     ? `\n\nSources consulted:\n${result.citations.map((c) => c.url).join('\n')}`
     : ''
 
-  const lines = result.bullets.length > 0 ? result.bullets : result.summary ? [result.summary] : []
+  const summary = stripInlineCitations(result.summary)
+  const bullets = result.bullets.map(stripInlineCitations).filter((b) => b !== '')
+  const lines = bullets.length > 0 ? bullets : summary ? [summary] : []
 
   return lines.map((line) => {
-    const headline = line.trim().slice(0, HEADLINE_MAX)
-    const body = `${result.summary || line}${sources}`
+    const headline = line.slice(0, HEADLINE_MAX)
+    const body = `${summary || line}${sources}`
     return {
       headline,
       body,

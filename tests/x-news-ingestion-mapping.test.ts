@@ -15,7 +15,7 @@ import { describe, it, expect, vi } from 'vitest'
 // and never touches the database.
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
-import { toNewsItems } from '@/lib/workers/x-news-ingestion'
+import { stripInlineCitations, toNewsItems } from '@/lib/workers/x-news-ingestion'
 import type { XNewsResult } from '@/lib/ai/xNewsSearch'
 
 const SEARCHED_AT = '2026-08-27T15:00:00.000Z'
@@ -40,6 +40,22 @@ const ok = (over: Partial<Extract<XNewsResult, { ok: true }>> = {}) =>
   }) as Extract<XNewsResult, { ok: true }>
 
 const ctx = { sport: 'NFL', name: 'Ashton Jeanty', team: 'LV' }
+
+describe('stripInlineCitations', () => {
+  it('removes the numeric footnote form', () => {
+    expect(stripInlineCitations('On the mend.[[2]](https://x.com/a/status/1)')).toBe('On the mend.')
+  })
+
+  it('keeps the label of a normal markdown link but drops the url', () => {
+    expect(stripInlineCitations('See [Schefter](https://x.com/a/status/1) for detail')).toBe(
+      'See Schefter for detail',
+    )
+  })
+
+  it('leaves text with no links untouched', () => {
+    expect(stripInlineCitations('Ruled out for Sunday.')).toBe('Ruled out for Sunday.')
+  })
+})
 
 describe('toNewsItems', () => {
   it('emits one record per bullet', () => {
@@ -108,6 +124,27 @@ describe('toNewsItems', () => {
     // The old path writes 'x_grok_search' and never actually queried X.
     const [item] = toNewsItems(ok(), ctx)
     expect(item.source).toBe('x_search')
+  })
+
+  it('strips the inline markdown citations Grok embeds mid-sentence', () => {
+    // The exact shape a live run produced on 2026-08-27. Stored verbatim this
+    // put raw markdown in the headline, truncated mid-URL at the column width.
+    const bullet =
+      'Adam Schefter reports Raiders HC said Ashton Jeanty is “on the mend.”[[2]](https://x.com/AdamSchefter/status/2092371465660236156)'
+    const [item] = toNewsItems(ok({ bullets: [bullet] }), ctx)
+    expect(item.headline).toBe('Adam Schefter reports Raiders HC said Ashton Jeanty is “on the mend.”')
+    expect(item.headline).not.toContain('](')
+    expect(item.headline).not.toContain('http')
+  })
+
+  it('keeps the citation urls in the body even after stripping them from the text', () => {
+    const [item] = toNewsItems(ok({ bullets: ['Reported.[[1]](https://x.com/i/status/1)'] }), ctx)
+    expect(item.body).toContain('https://x.com/i/status/1')
+  })
+
+  it('drops a bullet that was nothing but a citation link', () => {
+    const items = toNewsItems(ok({ bullets: ['[[1]](https://x.com/i/status/1)'], summary: '' }), ctx)
+    expect(items).toEqual([])
   })
 
   it('tolerates a result with no citations', () => {
