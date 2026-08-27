@@ -93,6 +93,45 @@
 .af-pf-platform[data-platform='sleeper'] { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); border-color: transparent; }
 .af-pf-platform[data-platform='espn'] { background: var(--p-espn-bg); color: var(--p-espn-fg); border-color: transparent; }
 .af-pf-platform[data-platform='yahoo'] { background: var(--p-yahoo-bg); color: var(--p-yahoo-fg); border-color: transparent; }
+.af-pf-platform[data-platform='fantrax'] { background: var(--p-fantrax-bg); color: var(--p-fantrax-fg); border-color: transparent; }
+.af-pf-platform[data-platform='mfl'] { background: var(--p-mfl-bg); color: var(--p-mfl-fg); border-color: transparent; }
+.af-pf-platform[data-platform='fleaflicker'] { background: var(--p-fleaflicker-bg); color: var(--p-fleaflicker-fg); border-color: transparent; }
+/* Everything with no external provider — manual, native, seeded. */
+.af-pf-platform[data-platform='manual'],
+.af-pf-platform[data-platform='native'] { background: var(--p-manual-bg); color: var(--p-manual-fg); border-color: transparent; }
+
+/*
+ * Platform sections. Sixty Sleeper rows with one Fantrax row somewhere in the
+ * middle is a list you have to search rather than read, so the rows are grouped
+ * and each group says how many it holds.
+ */
+.af-pf-group { margin-top: 22px; }
+.af-pf-group:first-of-type { margin-top: 8px; }
+.af-pf-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 8px;
+}
+.af-pf-group-name {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+.af-pf-group-name[data-platform='sleeper'] { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); border-color: transparent; }
+.af-pf-group-name[data-platform='espn'] { background: var(--p-espn-bg); color: var(--p-espn-fg); border-color: transparent; }
+.af-pf-group-name[data-platform='yahoo'] { background: var(--p-yahoo-bg); color: var(--p-yahoo-fg); border-color: transparent; }
+.af-pf-group-name[data-platform='fantrax'] { background: var(--p-fantrax-bg); color: var(--p-fantrax-fg); border-color: transparent; }
+.af-pf-group-name[data-platform='mfl'] { background: var(--p-mfl-bg); color: var(--p-mfl-fg); border-color: transparent; }
+.af-pf-group-name[data-platform='fleaflicker'] { background: var(--p-fleaflicker-bg); color: var(--p-fleaflicker-fg); border-color: transparent; }
+.af-pf-group-name[data-platform='manual'],
+.af-pf-group-name[data-platform='native'] { background: var(--p-manual-bg); color: var(--p-manual-fg); border-color: transparent; }
+.af-pf-group-count { font-size: 11px; color: var(--faint); }
+.af-pf-group-rule { flex: 1; height: 1px; background: var(--chip-line); }
 
 .af-pf-row-team { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .af-pf-team-name {

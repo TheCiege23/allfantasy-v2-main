@@ -27,6 +27,21 @@ import '@/components/core-app/af-portfolio.css'
  * no path segment, and `selectedLeagueId` reads the `league` search param.
  */
 
+/**
+ * How each platform is named to a person. The row chip prints the raw key, which is
+ * fine as a mark but wrong as a heading — "mfl" is not a word.
+ */
+const PLATFORM_LABEL: Record<string, string> = {
+  sleeper: 'Sleeper',
+  espn: 'ESPN',
+  yahoo: 'Yahoo',
+  fantrax: 'Fantrax',
+  mfl: 'MyFantasyLeague',
+  fleaflicker: 'Fleaflicker',
+  manual: 'Manual',
+  native: 'AllFantasy',
+}
+
 export type PortfolioProps = {
   data: PortfolioData
   /** Where "import a league" should go — carries the return path. */
@@ -64,6 +79,32 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
 
   const leagues = data.leagues.data
 
+  /*
+   * ⚠ GROUPED BECAUSE SIXTY OF ONE PLATFORM BURIES ONE OF ANOTHER. A single
+   * alphabetical list put the first Fantrax league ever imported between "Bla bla
+   * bla" and "Fathers Day-Dads Dynasty", where it was reported as missing while it
+   * was on screen. Rows keep the order the service sorted them into (commissioner
+   * first, then alphabetical) INSIDE each group.
+   *
+   * Plain code rather than useMemo on purpose: there is an early return above this
+   * line, and a hook added here would change hook order between renders.
+   *
+   * Biggest group first so the platform someone actually lives in leads, with an
+   * alphabetical tiebreak so equal-sized groups do not reshuffle between visits.
+   */
+  const groups = (() => {
+    const by = new Map<string, typeof leagues>()
+    for (const l of leagues) {
+      const key = (l.platform || 'manual').toLowerCase()
+      const bucket = by.get(key)
+      if (bucket) bucket.push(l)
+      else by.set(key, [l])
+    }
+    return [...by.entries()].sort(
+      (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
+    )
+  })()
+
   return (
     <div className="af-pf">
       <header className="af-pf-head">
@@ -79,8 +120,19 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
         </Link>
       </header>
 
-      <ul className="af-pf-list">
-        {leagues.map((l) => (
+      {groups.map(([platform, rows]) => (
+        <section key={platform} className="af-pf-group">
+          <header className="af-pf-group-head">
+            <span className="af-pf-group-name" data-platform={platform}>
+              {PLATFORM_LABEL[platform] ?? platform}
+            </span>
+            <span className="af-pf-group-count">
+              {rows.length} {rows.length === 1 ? 'league' : 'leagues'}
+            </span>
+            <span className="af-pf-group-rule" aria-hidden />
+          </header>
+          <ul className="af-pf-list">
+        {rows.map((l) => (
           <li key={l.leagueId} className="af-pf-item">
             <Link href={`/core?league=${l.leagueId}`} className="af-pf-row">
               <span className="af-pf-row-main">
@@ -170,7 +222,9 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
             ) : null}
           </li>
         ))}
-      </ul>
+          </ul>
+        </section>
+      ))}
     </div>
   )
 }

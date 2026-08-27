@@ -120,6 +120,22 @@
   --p-espn-fg: #ffb4b4;
   --p-yahoo-bg: #3a1d55;
   --p-yahoo-fg: #dcb4ff;
+  /*
+   * ⚠ THREE PLATFORMS HAD COLOUR AND FOUR DID NOT, so every Fantrax, MFL,
+   * Fleaflicker and manual league fell through to the neutral chip and was
+   * indistinguishable from the page. On a 66-league portfolio that is 60 Sleeper
+   * rows the first imported Fantrax league was genuinely hard to find — reported
+   * as "still not there" when it was on screen. A platform mark that only marks
+   * some platforms is not a mark.
+   */
+  --p-fantrax-bg: #123a2c;
+  --p-fantrax-fg: #6fe3ad;
+  --p-mfl-bg: #3a2410;
+  --p-mfl-fg: #f0b46a;
+  --p-fleaflicker-bg: #123244;
+  --p-fleaflicker-fg: #7fd4f0;
+  --p-manual-bg: #2a2a33;
+  --p-manual-fg: #b8bccb;
   --p-green-bg: #12352a;
   --p-green-fg: #7ff0c4;
   --p-gold-bg: #3a2a12;
@@ -230,6 +246,14 @@ html[data-mode='light'] .af-core {
   --p-espn-fg: #a3221f;
   --p-yahoo-bg: #eaddfa;
   --p-yahoo-fg: #5f2f8f;
+  --p-fantrax-bg: #d6f3e5;
+  --p-fantrax-fg: #0d6b48;
+  --p-mfl-bg: #fbe8d2;
+  --p-mfl-fg: #8a4d0a;
+  --p-fleaflicker-bg: #d8eef8;
+  --p-fleaflicker-fg: #14607f;
+  --p-manual-bg: #e6e8ef;
+  --p-manual-fg: #4a5163;
   --p-green-bg: #d5f4e5;
   --p-green-fg: #0b6b4a;
   --p-gold-bg: #faedcd;
