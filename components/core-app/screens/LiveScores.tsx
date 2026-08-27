@@ -239,7 +239,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
           </h2>
 
           {data.games.length === 0 ? (
-            <EmptySlate scope={scope} hasRosterData={data.hasRosterData} loadFailed={data.loadFailed} />
+            <EmptySlate
+              scope={scope}
+              hasRosterData={data.hasRosterData}
+              loadFailed={data.loadFailed}
+              rosterFailed={data.rosterFailed}
+            />
           ) : (
             data.games.map((game) => (
               <GameCard key={game.gameId} game={game} selectedLeagueId={selectedLeagueId} />
@@ -250,7 +255,26 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
         <aside className="af-live-side" aria-label="Your live impact">
           <div className="af-live-impact">
             <h2 className="af-label">Your live impact</h2>
-            {data.hasRosterData ? (
+            {data.rosterFailed ? (
+              /*
+               * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
+               * The em dash is right — we have no number we can stand behind —
+               * but "claim your team" is the wrong explanation and an actively
+               * misleading instruction: the team IS claimed, the read failed.
+               * "We could not read it" and "you have not created one" are
+               * different facts, exactly as that branch argues about 0.0.
+               */
+              <>
+                <p className="af-live-impact-total" data-missing="true">
+                  <span className="af-num">—</span>
+                  <span>we could not read your rosters</span>
+                </p>
+                <p className="af-live-impact-sub">
+                  This is a problem on our end, not an empty roster. The scores themselves are
+                  fine.
+                </p>
+              </>
+            ) : data.hasRosterData ? (
               <>
                 <p className="af-live-impact-total">
                   <span className="af-num">{data.impact.totalPoints.toFixed(1)}</span>
@@ -546,10 +570,12 @@ function EmptySlate({
   scope,
   hasRosterData,
   loadFailed,
+  rosterFailed,
 }: {
   scope: 'my' | 'all'
   hasRosterData: boolean
   loadFailed: boolean
+  rosterFailed: boolean
 }) {
   if (loadFailed) {
     return (
@@ -558,6 +584,27 @@ function EmptySlate({
         <p className="af-live-empty-body">
           This is a problem on our end, not an empty slate — there may well be games on. Retrying
           automatically.
+        </p>
+      </div>
+    )
+  }
+
+  /*
+   * The fourth distinct state this panel needs, by the same rule as the three
+   * above: a failed ROSTER read is not a failed slate and not a quiet Sunday.
+   * Without it, `scope: 'my'` falls through to "None of your players are playing
+   * right now" over "Claim your team in one of your leagues" — both false, told
+   * to someone who has already claimed a team and whose players may be on the
+   * field. Below loadFailed because a dead slate is the larger fault; above the
+   * normal state because that state asserts something we do not know.
+   */
+  if (rosterFailed) {
+    return (
+      <div className="af-live-empty" data-tone="bad">
+        <p className="af-live-empty-title">We could not read your rosters.</p>
+        <p className="af-live-empty-body">
+          The scores themselves are fine — this is a problem on our end, so we cannot say which
+          games involve your players. Switch to All games to see the full slate meanwhile.
         </p>
       </div>
     )
