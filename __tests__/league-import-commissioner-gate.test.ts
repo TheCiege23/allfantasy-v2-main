@@ -149,11 +149,21 @@ describe('assertImportCommissioner', () => {
       sourceLeagueId: '12345',
       requireCommissioner: true,
     })
-    expect(result.ok).toBe(false)
-    expect(result.requiresAttestation).toBe(true)
+    /*
+     * ⚠ CHANGED DELIBERATELY 2026-08-27 ("a gate asking the wrong question").
+     * This asserted that proven ESPN membership was NOT enough and demanded an
+     * attestation. It blocked the ordinary case — most people are not
+     * commissioner of most leagues they play in — and asked them to confirm a
+     * claim they could not truthfully make. `checkEspn` only succeeds when the
+     * caller's linked account holds a team in THIS league, which is the same
+     * strength Sleeper proves and is let through as `member`.
+     */
+    expect(result.ok).toBe(true)
+    expect(result.verification).toBe('member')
+    expect(result.requiresAttestation).toBeFalsy()
   })
 
-  it('allows a full-league ESPN commit once the real member explicitly attests', async () => {
+  it('records an ESPN commit as member even when an attestation is supplied', async () => {
     espnFetchMock.mockResolvedValue({
       viewerTeamId: '3',
       commissionerTeamIds: [],
@@ -167,8 +177,13 @@ describe('assertImportCommissioner', () => {
       requireCommissioner: true,
       attestation: { accepted: true },
     })
+    /*
+     * ⚠ `member`, NOT `attestation`. The audit trail records what was PROVEN —
+     * membership — rather than a commissioner claim that played no part in the
+     * decision. Was 'attestation' while ESPN still required one.
+     */
     expect(result.ok).toBe(true)
-    expect(result.verification).toBe('attestation')
+    expect(result.verification).toBe('member')
   })
 
   it('requires explicit attestation for a full-league Yahoo commit — real membership alone is not enough (Import Security Closure phase)', async () => {
@@ -508,8 +523,16 @@ describe('assertImportCommissioner — attestation self-consistency check (Commi
       // A stale/malformed client payload claiming it was confirmed for Yahoo, not ESPN.
       attestation: { accepted: true, confirmedProvider: 'yahoo', confirmedSourceLeagueId: '12345' },
     })
+    /*
+     * ⚠ REFUSED, BUT NOT BY ASKING FOR AN ATTESTATION. This asserted
+     * `requiresAttestation`, which was right while ESPN still demanded one. It
+     * no longer does — proven membership is the basis — so replying "resubmit
+     * with a confirmation" would send the client round a loop it can never
+     * finish. The mismatch is reported as what it is instead, matching the
+     * sibling branch for the other membership-verified providers.
+     */
     expect(result.ok).toBe(false)
-    expect(result.requiresAttestation).toBe(true)
+    expect(result.reason).toMatch(/different league or provider/i)
   })
 
   it('rejects an attestation whose confirmedSourceLeagueId does not match this request\'s real league', async () => {

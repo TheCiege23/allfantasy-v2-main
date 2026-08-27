@@ -34,8 +34,16 @@ describe('LeagueImportFlow — provider availability truth (no UI/config drift)'
      * unchanged behind it. Verified against a real league end to end.
      */
     expect(isImportProviderAvailable('fantrax')).toBe(true)
+    /*
+     * Fleaflicker moved to true on 2026-08-27 in "Fleaflicker was one text
+     * field away the whole time": its adapter always worked and needs no
+     * credential, but no field in the main flow accepted a league id. Verified
+     * end to end against league 206154 before the flag moved. The sibling
+     * reconciliation test was updated with it and this one was missed, so the
+     * two guards disagreed and this file went red on main.
+     */
+    expect(isImportProviderAvailable('fleaflicker')).toBe(true)
     // Providers with no usable end-to-end import must not be silently enabled.
     expect(isImportProviderAvailable('mfl')).toBe(false)
-    expect(isImportProviderAvailable('fleaflicker')).toBe(false)
   })
 })

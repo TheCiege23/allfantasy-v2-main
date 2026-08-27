@@ -319,6 +319,48 @@ async function runHistoricalBackfill(args: {
   return null
 }
 
+/** ESPN wraps the SWID in braces in some payloads and not others; compare on the bare value. */
+function normalizeSwid(value: string): string {
+  return value.trim().replace(/^\{|\}$/g, '').toLowerCase()
+}
+
+/**
+ * Which `source_manager_id` belongs to the importing user, per provider.
+ *
+ * Returns null whenever it cannot be established — a missing credential, a provider
+ * with no self-marker, an unreadable payload. Null means "claim nothing", which
+ * leaves behaviour exactly as it was rather than guessing at a team; claiming the
+ * wrong one would attribute a stranger's roster to this account.
+ */
+async function resolveSelfManagerId(
+  userId: string,
+  provider: ImportProvider,
+  normalized: NormalizedImportResult,
+): Promise<string | null> {
+  if (provider === 'fantrax') {
+    const own = normalized.rosters.find((r) =>
+      String(r.source_manager_id ?? '').startsWith('fantrax-user:'),
+    )
+    return own?.source_manager_id ?? null
+  }
+
+  if (provider === 'espn') {
+    const { getDecryptedAuth } = await import('@/lib/league-sync-core')
+    const auth = await getDecryptedAuth(userId, 'espn').catch(() => null)
+    const swid = auth?.espnSwid?.trim()
+    if (!swid) return null
+    const wanted = normalizeSwid(swid)
+    const own = normalized.rosters.find(
+      (r) => normalizeSwid(String(r.source_manager_id ?? '')) === wanted,
+    )
+    return own?.source_manager_id ?? null
+  }
+
+  /* Sleeper already claims through resolveImportedManagerUserIds; everyone else has
+     no self-marker to read, and a guess is worse than leaving it unclaimed. */
+  return null
+}
+
 export async function persistImportedLeagueFromNormalization(
   options: PersistImportedLeagueOptions
 ): Promise<PersistImportedLeagueResult> {
@@ -417,6 +459,52 @@ export async function persistImportedLeagueFromNormalization(
     await bootstrapLeagueFromImport(league.id, normalized)
   } catch (err) {
     console.warn(`[ImportedLeagueCommitService] ${provider} import bootstrap non-fatal:`, err)
+  }
+
+  /*
+   * ⚠ AN IMPORTED LEAGUE THAT NOBODY OWNS IS INVISIBLE ON /core/portfolio.
+   *
+   * `getPortfolio` does not list leagues — it lists `LeagueTeam` rows
+   * `WHERE claimedByUserId = <you>` and derives the league from each. Only the Sleeper
+   * bootstrap ever wrote that column, via `resolveImportedManagerUserIds`, which resolves
+   * linked SLEEPER accounts and nothing else. So a Fantrax or ESPN import wrote every team
+   * correctly and claimed none of them, and the league did not exist as far as Portfolio
+   * was concerned. Measured on production 2026-08-27: a Fantrax league, 12 LeagueTeam rows,
+   * zero claimed, absent from the screen. It is also why every row on that page is Sleeper.
+   *
+   * BOTH PROVIDERS ALREADY SAY WHICH TEAM IS THE CALLER'S. Nothing read it:
+   *
+   *   fantrax  FantraxLeagueFetchService stamps `managerId` as `fantrax-user:<username>`
+   *            for the caller's own team and `fantrax-manager:<slug>` for everyone else.
+   *   espn     `managerId` IS the owner's SWID (`uniqueOwners[0].id`), and the caller's
+   *            own SWID is already stored in `leagueAuth` for the ESPN connection.
+   *
+   * Both reach `LeagueTeam.platformUserId` through their roster mappers untouched, so the
+   * match is against a value the provider itself wrote.
+   *
+   * ⚠ NEVER OVERWRITES AN EXISTING CLAIM — scoped to `claimedByUserId: null`, so a
+   * re-import cannot take a team from whoever already holds it. That is the same rule the
+   * Sleeper path keeps by only setting the column when a manager resolves.
+   *
+   * ⚠ A ZERO MATCH IS LOGGED, NOT SWALLOWED. If the id spaces ever drift, the symptom is a
+   * league that imports "successfully" and is invisible — precisely the bug this fixes, and
+   * one that took a production query to see the first time.
+   */
+  try {
+    const selfManagerId = await resolveSelfManagerId(userId, provider, normalized)
+    if (selfManagerId) {
+      const claimed = await (prisma as any).leagueTeam.updateMany({
+        where: { leagueId: league.id, platformUserId: selfManagerId, claimedByUserId: null },
+        data: { claimedByUserId: userId },
+      })
+      if (claimed.count === 0) {
+        console.warn(
+          `[ImportedLeagueCommitService] ${provider}: self manager "${selfManagerId}" matched no unclaimed LeagueTeam on ${league.id} — the league will not appear on Portfolio`,
+        )
+      }
+    }
+  } catch (err) {
+    console.warn(`[ImportedLeagueCommitService] ${provider} self-claim non-fatal:`, err)
   }
 
   // Canonical imported-league lifecycle completion — provider-agnostic,
