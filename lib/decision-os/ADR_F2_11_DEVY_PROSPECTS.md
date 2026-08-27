@@ -1,6 +1,7 @@
 # ADR-DOS-F2.11 — Canonical Enrichment: Devy / College Prospects
 
-**Status:** **PROPOSED — not implemented.** Awaiting acceptance.
+**Status:** **REJECTED (2026-08-27) — F2.4's deferral is upheld.** Not implemented.
+**Decision:** devy stays out of Canonical World. See §7.
 **Phase:** 2 (Canonical Enrichment), layer **F2.11** — additive. NOT cutover, NOT a redesign.
 **Governed by:** `ARCHITECTURE_FREEZE.md`. **Builds on:** F2.1 player metadata, F2.4 ADP / market values.
 
@@ -114,3 +115,33 @@ honest answer is to keep F2.4's deferral standing and let the Chimmy provider
 need — it delivers the same board with the same coverage honesty and sits outside the freeze.
 
 Deferring again costs nothing that has not already been paid.
+
+---
+
+## 7. Decision (2026-08-27)
+
+**Rejected. F2.4's deferral stands.**
+
+Not because the data is bad — it is materially better than it was this morning: the ingest is
+scheduled, the intel feeds run, the key has quota, and the board is honest about what it cannot rank.
+Rejected because **nothing needs it here yet**, and the freeze is worth more than the option value of
+having it early.
+
+The reasoning, so this is not re-litigated from scratch:
+
+1. **The need it would serve is already served.** `DevyContextProvider` gives Chimmy the same board
+   with the same coverage figure and the same null-not-zero contract, and it sits outside the freeze.
+   Admitting devy to Canonical World would duplicate that reach, not extend it.
+2. **The objections in §4 are unchanged by anything shipped today.** Still one provider with no
+   corroboration; still 47% coverage; still a points scale that is not NFL trade units.
+3. **The cost of waiting is nearly zero.** Everything an implementation would need — the pool, the
+   board, the coverage figure, the intel columns — is now maintained on a schedule. This ADR can be
+   re-opened later against BETTER data than it was written on, which is the opposite of most deferrals.
+
+**What would change the answer:** a Decision OS slice that genuinely needs prospect facts — most
+likely a dynasty or devy-aware trade slice. At that point re-open this ADR rather than writing a new
+one, and treat §4.3 (scale incompatibility) as the first problem to solve, not the last.
+
+**What must NOT happen in the meantime:** devy facts reaching Decision OS by accident — a helper
+import, a shared type, a convenience join. That is exactly the drift the freeze exists to prevent, and
+it would land the integration without the conformance proof §5 asks for.
