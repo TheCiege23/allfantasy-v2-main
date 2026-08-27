@@ -346,8 +346,31 @@ export async function getLivePageData(opts: {
   const active = perSport.find((entry) => entry.sport === sport)
   const rows = active?.rows ?? []
 
+  /*
+   * ⚠ A ROSTER-READ FAILURE MUST NOT DISCARD AN ALREADY-FETCHED SLATE.
+   *
+   * This was the only unguarded await left on the path, and on 2026-08-27 it
+   * blanked /core/live in production for every signed-in user: the
+   * `league_player_weekly_scores` migration had never been applied to prod, so
+   * `loadRosteredPlayers` threw P2021, the throw escaped `getLivePageData`, and
+   * the page's `.catch(() => null)` turned it into "We could not read the slate
+   * just now" — for a slate that had been fetched perfectly well moments before.
+   * Two deploys chased it as a scores bug because the copy blames the slate.
+   *
+   * Roster tie-ins are an ENHANCEMENT, not the page. The null-user branch below
+   * is the module's own documented contract for "no tie-ins available", and a
+   * failed read is the same state arrived at differently — so degrade into it
+   * rather than destroying the slate. Logged, because the page-level catch
+   * cannot say which half failed.
+   */
   const { players, hasRosterData } = opts.userId
-    ? await loadRosteredPlayers(opts.userId, sport)
+    ? await loadRosteredPlayers(opts.userId, sport).catch((err) => {
+        console.error(
+          '[live] roster tie-in read failed, rendering slate without it:',
+          err instanceof Error ? err.message : err,
+        )
+        return { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
+      })
     : { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
 
   // Real-world team -> your players on it.
