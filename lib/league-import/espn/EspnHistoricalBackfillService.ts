@@ -301,6 +301,53 @@ async function persistEspnSeasonWarehouseFacts(args: {
     ...draftCreates,
   ])
 
+  /*
+   * ⚠ THE NAME WAS IN HAND AND WAS BEING THROWN AWAY.
+   *
+   * `parseEspnDraftPicks` resolves every pick against ESPN's own player directory and
+   * returns `playerName`, `position` and `team`. `DraftFact` has columns for none of
+   * them, so all three were dropped and only the ESPN player id was stored — and
+   * nothing in this database maps an ESPN player id to a person. Draft HQ rendered a
+   * real 14-pick draft as fourteen rows of "Player 2577417".
+   *
+   * `PlayerProviderIdentity` is the table built to answer exactly that question, so the
+   * name is recorded there rather than adding columns to DraftFact. It benefits every
+   * reader of an ESPN player id, not just this screen.
+   *
+   * ⚠ NOT AN UPSERT ON THE COMPOUND UNIQUE. That key includes the nullable `leagueKey`,
+   * and Postgres treats NULLs as distinct — upserting with a null there would insert a
+   * fresh row every run rather than matching. Existing ids are read first and only the
+   * genuinely new ones are inserted.
+   *
+   * Outside the transaction and non-fatal on purpose: a naming convenience must never
+   * fail a draft import.
+   */
+  try {
+    const named = args.payload.draftPicks.filter((p) => p.playerName?.trim())
+    if (named.length > 0) {
+      const uniqueByPlayerId = new Map(named.map((p) => [p.playerId, p]))
+      const existing = await prisma.playerProviderIdentity.findMany({
+        where: { provider: 'espn', providerPlayerId: { in: [...uniqueByPlayerId.keys()] } },
+        select: { providerPlayerId: true },
+      })
+      const known = new Set(existing.map((e) => e.providerPlayerId))
+      const rows = [...uniqueByPlayerId.values()]
+        .filter((p) => !known.has(p.playerId))
+        .map((p) => ({
+          provider: 'espn',
+          providerPlayerId: p.playerId,
+          sportKey: String(args.payload.league.sport ?? 'nfl').toLowerCase(),
+          displayName: p.playerName as string,
+          source: 'espn-draft-import',
+        }))
+      if (rows.length > 0) {
+        await prisma.playerProviderIdentity.createMany({ data: rows, skipDuplicates: true })
+      }
+    }
+  } catch (err) {
+    console.warn('[EspnHistoricalBackfill] player identity capture non-fatal:', err)
+  }
+
   return {
     rosterSnapshotsPersisted: snapshotCreates.length,
     matchupFactsPersisted: matchupCreates.length,
