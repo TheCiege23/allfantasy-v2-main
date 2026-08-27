@@ -176,7 +176,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               id={`af-live-tab-${c.sport}`}
               className="af-live-sport"
               data-active={c.sport === sport}
-              data-quiet={c.liveCount === 0}
+              data-quiet={c.slateCount === 0}
               aria-selected={c.sport === sport}
               aria-controls="af-live-slate"
               /* Only the selected tab is in the tab order; arrow keys are the
@@ -186,7 +186,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               onClick={() => pickSport(c.sport)}
             >
               {c.label}
-              <span className="af-live-sport-count af-num">{c.liveCount}</span>
+              {/* Today's slate for this sport, not games in progress — a live
+                  count reads 0 for most of the day and made the badge look broken. */}
+              <span
+                className="af-live-sport-count af-num"
+                aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} today`}
+              >
+                {c.slateCount}
+              </span>
             </button>
           ))}
         </div>

@@ -99,7 +99,8 @@ export type LiveImpact = {
 export type LivePageData = {
   sport: string
   scope: 'my' | 'all'
-  counts: Array<{ sport: string; label: string; liveCount: number }>
+  /** Per-sport tab badges. `slateCount` is TODAY'S SLATE, not games in progress. */
+  counts: Array<{ sport: string; label: string; slateCount: number }>
   games: LiveGameCard[]
   impact: LiveImpact
   /** When the underlying feed was last refreshed — drives "updated Ns ago". */
@@ -337,10 +338,38 @@ export async function getLivePageData(opts: {
     }),
   )
 
+  /*
+   * ⚠ THE BADGE COUNTS TODAY'S SLATE, NOT GAMES IN PROGRESS. User-confirmed
+   * 2026-08-27, and the previous behaviour was indefensible either way:
+   *
+   * It was `rows.filter(isLiveRow)`, and `isLiveRow` matches only "progress",
+   * "halftime", "end_period" or period > 0. Our own `SportsGame.status` column
+   * holds at least four vocabularies — "NS", "scheduled", "FT", "Final", and
+   * (genuinely) raw date strings like "8/27 - 7:05 PM EDT" written into the
+   * status field by one of the ingest writers. NONE of those match, so every
+   * sport read from the database scored zero live games forever.
+   *
+   * Only the ACTIVE sport could ever show a number, because `loadActiveSlate`
+   * refreshes through ESPN and gets a real status vocabulary back. That is the
+   * whole "the number vanishes when I click another tab" bug: not a UI defect,
+   * a predicate that cannot read the data we store.
+   *
+   * `entry.rows` is already windowed by `isInSlateWindow`, and the cached reader
+   * runs `pickFreshestSourceRows`, so this counts DISTINCT FIXTURES from one
+   * source — not the 3-4 rows per fixture the table holds across feeds. Measured
+   * on prod: NFL 4, MLB 7, NCAAF 53, which are the real slates.
+   *
+   * A sport genuinely out of season still reads 0 (NHL/NBA/NCAAB in August have
+   * no rows at all). That zero is correct and must not be "fixed".
+   *
+   * ⚠ `isLiveRow` is still the right predicate for a single game's `isLive`
+   * flag below, so it stays — but it is equally blind there for DB-sourced rows.
+   * The real repair is on the ingest side: stop writing a date into `status`.
+   */
   const counts = perSport.map((entry) => ({
     sport: entry.sport,
     label: SPORT_LABELS[entry.sport] ?? entry.sport,
-    liveCount: entry.rows.filter(isLiveRow).length,
+    slateCount: entry.rows.length,
   }))
 
   const active = perSport.find((entry) => entry.sport === sport)
