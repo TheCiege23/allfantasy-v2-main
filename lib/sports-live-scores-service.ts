@@ -8,8 +8,143 @@ import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport } from '@/li
 import { fetchWithChain } from '@/lib/workers/api-chain'
 import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import { normalizeGameStatus, type CanonicalGameStatus } from '@/lib/scores/gameScoreProviders'
 
 export const LIVE_SCORES_FRESHNESS_MS = 60 * 1000
+
+/**
+ * The widget contract speaks ESPN's status vocabulary — `ScoresTab.tsx` and
+ * `LiveScoringWidget.tsx` both branch on the literal `STATUS_IN_PROGRESS` /
+ * `STATUS_HALFTIME`. Rows coming back out of `SportsGame` do NOT: every writer
+ * puts its own spelling in that column ("Match Finished" from TheSportsDB,
+ * "8/27 - 7:00 PM EDT" from the ESPN live sync, lowercase "scheduled" from
+ * others). Mapping through the canonical vocabulary is what lets a cached row
+ * light the live badge at all — a raw display string can never equal
+ * `STATUS_IN_PROGRESS`, so before this the DB fallback reported zero live games
+ * no matter what was actually being played.
+ */
+const CANONICAL_TO_ESPN_STATUS: Record<CanonicalGameStatus, string> = {
+  scheduled: 'STATUS_SCHEDULED',
+  in_progress: 'STATUS_IN_PROGRESS',
+  final: 'STATUS_FINAL',
+  postponed: 'STATUS_POSTPONED',
+  canceled: 'STATUS_CANCELED',
+}
+
+/** Human label for the cached view, which has no clock to show. */
+const CANONICAL_STATUS_LABEL: Record<CanonicalGameStatus, string> = {
+  scheduled: 'Scheduled',
+  in_progress: 'In Progress',
+  final: 'Final',
+  postponed: 'Postponed',
+  canceled: 'Canceled',
+}
+
+/**
+ * ESPN's own `type.name` tokens, for READING. These arrive on the live fetch
+ * path and still sit in rows written before this module stopped storing them;
+ * they are deliberately NOT what gets written now — see `syncLiveScoresToDb`
+ * for why the lowercase canonical vocabulary goes into the column instead.
+ *
+ * The shared `normalizeGameStatus` covers most of them incidentally
+ * ("status_final" is in its final list, "STATUS_HALFTIME" is caught by its
+ * `includes('half')` rule), but not all: `STATUS_END_PERIOD` matches none of
+ * its patterns and would come back null — i.e. a game between quarters would be
+ * read as "not started yet" and have its score nulled out. Mapping the vendor's
+ * own vocabulary explicitly is cheaper than widening a shared helper that four
+ * other providers depend on.
+ */
+const ESPN_STATUS_TOKENS: Record<string, CanonicalGameStatus> = {
+  STATUS_SCHEDULED: 'scheduled',
+  STATUS_PRE: 'scheduled',
+  STATUS_IN_PROGRESS: 'in_progress',
+  STATUS_HALFTIME: 'in_progress',
+  STATUS_END_PERIOD: 'in_progress',
+  STATUS_END_OF_EXTRATIME: 'in_progress',
+  STATUS_OVERTIME: 'in_progress',
+  STATUS_FINAL: 'final',
+  STATUS_FINAL_OT: 'final',
+  STATUS_FULL_TIME: 'final',
+  STATUS_POSTPONED: 'postponed',
+  STATUS_DELAYED: 'postponed',
+  STATUS_RAIN_DELAY: 'postponed',
+  STATUS_SUSPENDED: 'postponed',
+  STATUS_CANCELED: 'canceled',
+  STATUS_FORFEIT: 'canceled',
+  STATUS_ABANDONED: 'canceled',
+}
+
+/**
+ * Short vendor codes, mostly TheSportsDB's soccer vocabulary.
+ *
+ * Measured against all 25,586 production rows: without these, 186 of them —
+ * `AP` (128), `CANC` (52), `PST` (6) — resolve to nothing and their games
+ * become undeterminable on the live tab. They are NOT exotic: every one of them
+ * is already in `lib/sports/gameStatus.ts`'s sets. The two normalizers simply
+ * have complementary blind spots, which is the hazard of having three of them
+ * and the reason this layer consults more than one.
+ */
+const VENDOR_SHORT_CODES: Record<string, CanonicalGameStatus> = {
+  AP: 'final', // after penalties
+  AET: 'final', // after extra time
+  PEN: 'final',
+  F: 'final',
+  'F/OT': 'final',
+  AWARDED: 'final',
+  CANC: 'canceled',
+  ABD: 'canceled', // abandoned
+  AWD: 'canceled', // awarded / walkover
+  WO: 'canceled',
+  PST: 'postponed',
+  SUSP: 'postponed',
+  INT: 'postponed', // interrupted
+}
+
+/**
+ * A period marker carrying a running clock — "Q2 5:43", "OT 1:12", "2nd 0:48".
+ * The shared normalizer only matches a bare period ("Q2"), so the far more
+ * common form with the clock attached fell through to null.
+ *
+ * ⚠ ORDER MATTERS. This is applied ONLY after `normalizeGameStatus` has
+ * declined, which is what keeps a kickoff time out of it: "8/27 - 7:00 PM EDT"
+ * is claimed by that function's date/meridiem rule and never reaches here. Run
+ * these patterns first and every scheduled game with a time on it would be
+ * reported as being played right now.
+ */
+const IN_PLAY_CLOCK_PATTERNS = [
+  /^(q[1-4]|p[1-3]|ot\d*)\b/,
+  /^\d{1,2}(st|nd|rd|th)\b/,
+  /^(end|start)\s+(of\s+)?(q[1-4]|\d(st|nd|rd|th))/,
+]
+
+/** ESPN's vocabulary first, then the cross-provider one. Null when neither knows. */
+export function resolveGameState(rawStatus: unknown): CanonicalGameStatus | null {
+  const raw = String(rawStatus ?? '').trim()
+  if (!raw) return null
+
+  const upper = raw.toUpperCase()
+  const espn = ESPN_STATUS_TOKENS[upper] ?? VENDOR_SHORT_CODES[upper]
+  if (espn) return espn
+
+  const shared = normalizeGameStatus(rawStatus)
+  if (shared) return shared
+
+  const v = raw.toLowerCase()
+  if (IN_PLAY_CLOCK_PATTERNS.some((re) => re.test(v))) return 'in_progress'
+
+  return null
+}
+
+/**
+ * True once the ball is in play — the gate for whether a score is a real
+ * observation or a placeholder. Deliberately conservative: an unrecognised
+ * status returns false, so an unknown vocabulary parks a score at NULL rather
+ * than minting a 0-0 nobody measured.
+ */
+export function hasStarted(rawStatus: unknown): boolean {
+  const state = resolveGameState(rawStatus)
+  return state === 'in_progress' || state === 'final'
+}
 
 /** ESPN site.api path segments (after sports/) — scoreboard, standings, etc. */
 export const ESPN_SPORT_SITE_PATH: Record<LeagueSport, string | null> = {
@@ -632,6 +767,41 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
 
   for (const score of scores) {
     try {
+      // ⚠ TWO THINGS THAT LOOK LIKE DATA AND ARE NOT.
+      //
+      // 1. `status` used to be written from `statusDetail`, which for an
+      //    unstarted game is ESPN's DISPLAY string ("8/27 - 7:00 PM EDT") and
+      //    during play is a clock ("Q2 5:43"). That is a caption, not a state,
+      //    and it made every cached row invisible to the live-game check.
+      //    `score.status` is ESPN's own `type.name` and is what belongs here.
+      //
+      // 2. ESPN sends "0" for both sides of a game that has not kicked off, so
+      //    the old write stamped a real-looking 0-0 on every future fixture —
+      //    measured on production: 72 scheduled NCAAF rows, all 0-0, plus the
+      //    whole NFL preseason slate. NULL is the honest value for a score
+      //    nobody has taken yet, and it is what lets a reader tell "0-0 in the
+      //    first quarter" apart from "has not started".
+      //
+      // ⚠ WRITE THE LOWERCASE CANONICAL STATE, NOT ESPN'S TOKEN. Three separate
+      //   normalizers read this column and they do NOT agree:
+      //     lib/sports/gameStatus.ts        — Chimmy's slate grounding
+      //     lib/scores/gameScoreProviders   — this module
+      //     lib/sports-data-gateway/runtime/lock
+      //   Only the middle one recognises `STATUS_FINAL`; the first returns
+      //   'unknown' for it, which would have made Chimmy report every finished
+      //   game as a game it could not read. 'final' / 'scheduled' /
+      //   'in_progress' / 'postponed' / 'canceled' are understood by all three,
+      //   so that is the vocabulary that goes in the database. An unresolvable
+      //   status is passed through verbatim rather than defaulted, so a new
+      //   vendor spelling stays visible instead of being laundered into a state
+      //   nobody observed.
+      const state = resolveGameState(score.status)
+      const statusForDb = state ?? score.status
+
+      const started = state === 'in_progress' || state === 'final'
+      const homeScore = started ? score.homeScore : null
+      const awayScore = started ? score.awayScore : null
+
       await prisma.sportsGame.upsert({
         where: {
           sport_externalId_source: {
@@ -643,9 +813,9 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
         update: {
           homeTeam: score.homeTeam,
           awayTeam: score.awayTeam,
-          homeScore: score.homeScore,
-          awayScore: score.awayScore,
-          status: score.statusDetail,
+          homeScore,
+          awayScore,
+          status: statusForDb,
           startTime: new Date(score.startTime),
           venue: score.venue,
           week: score.week,
@@ -658,9 +828,9 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
           externalId: score.gameId,
           homeTeam: score.homeTeam,
           awayTeam: score.awayTeam,
-          homeScore: score.homeScore,
-          awayScore: score.awayScore,
-          status: score.statusDetail,
+          homeScore,
+          awayScore,
+          status: statusForDb,
           startTime: new Date(score.startTime),
           venue: score.venue,
           week: score.week,
@@ -684,7 +854,7 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
  * `topPerformer` is null here — the row is a real score with one fewer field,
  * not a reason to invent a performer from a table that does not have one.
  */
-function dbRowToLiveScore(g: {
+export function dbRowToLiveScore(g: {
   externalId: string
   homeTeam: string
   awayTeam: string
@@ -697,6 +867,15 @@ function dbRowToLiveScore(g: {
   season: number | null
   fetchedAt: Date
 }): LiveScoreRow {
+  // Every writer spells this column differently, so translate through the
+  // canonical vocabulary instead of comparing raw strings. Without this a
+  // TheSportsDB "Match Finished" row and an in-play "Q2 5:43" row both fail
+  // every `STATUS_*` check in the UI and fall through to `statusLabel`'s
+  // default branch — which renders a played game as UPCOMING with an em-dash
+  // where the score should be. Unrecognised stays scheduled, which is the
+  // pre-existing default and the safe one.
+  const state = resolveGameState(g.status) ?? 'scheduled'
+
   return {
     gameId: g.externalId,
     homeTeam: g.homeTeam,
@@ -709,11 +888,17 @@ function dbRowToLiveScore(g: {
     awayLogo: '',
     awayScore: g.awayScore ?? 0,
     awayRecord: null,
-    status: g.status ?? 'STATUS_SCHEDULED',
-    statusDetail: g.status ?? 'Scheduled',
+    status: CANONICAL_TO_ESPN_STATUS[state],
+    // The cached row carries no clock, so the raw string is the better caption
+    // when it is human-readable ("Q2 5:43", "8/27 - 7:00 PM EDT"). Fall back to
+    // the canonical label rather than echoing a machine token at the user.
+    statusDetail:
+      g.status && g.status !== CANONICAL_TO_ESPN_STATUS[state]
+        ? g.status
+        : CANONICAL_STATUS_LABEL[state],
     period: 0,
     clock: '0:00',
-    completed: (g.status ?? '').toLowerCase().includes('final'),
+    completed: state === 'final',
     startTime: g.startTime?.toISOString() ?? '',
     venue: g.venue,
     broadcast: null,
