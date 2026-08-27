@@ -425,11 +425,30 @@ describe('E.5 (9) — no writes occur', () => {
     expect(/\.(create|update|upsert|delete|createMany|updateMany|deleteMany)\(/.test(src)).toBe(false)
   })
 
-  it('loadAdpRecords reads via findMany only (no write/upsert surface)', () => {
-    const src = readFileSync(resolve(process.cwd(), 'lib/decision-os/trade/loader.ts'), 'utf8')
-    const adpFn = src.slice(src.indexOf('export async function loadAdpRecords'))
-    expect(adpFn).toContain('adpDataRecord.findMany')
-    expect(/adpDataRecord\.(create|update|upsert|delete)/.test(adpFn)).toBe(false)
+  /**
+   * ⚠ THIS PINNED THE IMPLEMENTATION AND BROKE ON A LEGITIMATE REFACTOR. It
+   * required the literal `adpDataRecord.findMany` inside `loadAdpRecords`; the
+   * query moved into `lib/adp/resolveAdp.ts`, which owns id translation now, and
+   * the assertion failed even though nothing about the read-only guarantee
+   * changed.
+   *
+   * The guarantee is what matters, so it follows the delegation: neither the
+   * caller nor the module it delegates to may write. That is strictly stronger —
+   * the old version would have been satisfied by a `findMany` sitting beside an
+   * upsert hidden one function call away.
+   */
+  it('the ADP path stays read-only, through whatever it delegates to', () => {
+    const WRITES = /\.(create|createMany|update|updateMany|upsert|delete|deleteMany|executeRaw)\(/
+
+    const loader = readFileSync(resolve(process.cwd(), 'lib/decision-os/trade/loader.ts'), 'utf8')
+    const adpFn = loader.slice(loader.indexOf('export async function loadAdpRecords'))
+    expect(WRITES.test(adpFn)).toBe(false)
+
+    /* The delegate that actually issues the query. */
+    expect(adpFn).toContain('loadAdpBySleeperId')
+    const delegate = readFileSync(resolve(process.cwd(), 'lib/adp/resolveAdp.ts'), 'utf8')
+    expect(delegate).toMatch(/adpDataRecord[\s\S]{0,40}(findMany|groupBy)/)
+    expect(WRITES.test(delegate)).toBe(false)
   })
 })
 

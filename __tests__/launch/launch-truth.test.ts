@@ -18,12 +18,24 @@ describe("canonical launch truth (Phase 1 Step 3)", () => {
     )
   })
 
-  it("available launch platforms are exactly Sleeper/ESPN/Yahoo", () => {
-    expect(LAUNCH_PLATFORMS_AVAILABLE.map((p) => p.provider).sort()).toEqual([
-      "espn",
-      "sleeper",
-      "yahoo",
-    ])
+  /**
+   * ⚠ THIS HARDCODED THE THREE AND BECAME THE SECOND SOURCE THE FILE HEADER
+   * FORBIDS. Fantrax, Fleaflicker and MFL all shipped on 2026-08-27 and each one
+   * turned this red — not because launch truth was wrong, but because the list
+   * was written down twice. The test above already derives the full set from
+   * provider-ui-config; the available subset is derived the same way.
+   *
+   * What is actually worth guarding is that the two agree, and that the launch
+   * set is never empty — an empty one would pass a naive equality check while
+   * meaning the import page offers nothing.
+   */
+  it("derives the available subset from provider-ui-config too", () => {
+    const fromConfig = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available)
+      .map((o) => o.provider)
+      .sort()
+    expect(LAUNCH_PLATFORMS_AVAILABLE.map((p) => p.provider).sort()).toEqual(fromConfig)
+    expect(fromConfig).toContain("sleeper")
+    expect(fromConfig.length).toBeGreaterThan(0)
   })
 
   it("launch sports are NFL/NCAAF only", () => {
