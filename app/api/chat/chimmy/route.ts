@@ -600,10 +600,26 @@ function requiresLeagueGrounding(args: {
     return true
   }
   if (['trade', 'waiver', 'roster'].includes(args.intent)) return true
-  if (args.intent === 'draft' && /\b(draft order|draft time|in\s+.+\s+league|my\s+draft|our\s+draft)\b/.test(message)) {
+  /*
+   * ⚠ `in\s+.+\s+league` USED TO 412 EVERY QUESTION ABOUT A REAL COMPETITION.
+   * It was written for "in my dynasty league", but `.+` happily spans "the
+   * champions", so "who scored in the Champions League last night?" was
+   * rejected as a team-specific planning request. Premier League, Major League
+   * Baseball and "best team in the league this year" all failed the same way.
+   *
+   * The `hasGlobalSportContext` escape hatch below DOES list `champions league`
+   * — it just sits underneath this branch and never got the chance. Rather than
+   * reorder (which would drop grounding from "draft order in my NFL league",
+   * since that reads as global too), the pattern now requires the POSSESSIVE it
+   * always meant: my / our / this. No competition on earth is called "my
+   * league", so this keeps every real one out while still catching the phrasing
+   * the rule exists for.
+   */
+  const inTheirOwnLeague = /\bin\s+(?:my|our|this)\s+[\w\s]*league\b/
+  if (args.intent === 'draft' && (/\b(draft order|draft time|my\s+draft|our\s+draft)\b/.test(message) || inTheirOwnLeague.test(message))) {
     return true
   }
-  if (/\b(draft order|draft time|waiver|trade|in\s+.+\s+league)\b/.test(message)) {
+  if (/\b(draft order|draft time|waiver|trade)\b/.test(message) || inTheirOwnLeague.test(message)) {
     return true
   }
   if (/\b(my team|my roster|my lineup|our team|future|next season|for my team)\b/.test(message)) {

@@ -88,6 +88,52 @@ describe('tool loop wiring', () => {
   })
 })
 
+/*
+ * ⚠ THIS GATE 412'd EVERY QUESTION ABOUT A REAL COMPETITION. `in\s+.+\s+league`
+ * was written for "in my dynasty league", but `.+` spans "the champions", so
+ * "who scored in the Champions League last night?" was rejected as a
+ * team-specific planning request before any answer path ran. Caught by asking
+ * the deployed endpoint; the control was the same call with different wording,
+ * which returned 200.
+ *
+ * The pattern is read out of the source because `requiresLeagueGrounding` is
+ * module-private and importing this route in a test times out.
+ */
+describe('league grounding is not required for real-world competitions', () => {
+  /*
+   * No trailing newline in this matcher: the file is checked out CRLF, `.` does
+   * not cross the \r, and anchoring on \n silently captured nothing — which
+   * made the pattern fall back to a never-matching regex and the "does NOT
+   * demand" cases pass for the wrong reason.
+   */
+  const match = ROUTE.match(/const inTheirOwnLeague = (\/.*\/)/)
+
+  it('still uses a possessive-scoped pattern', () => {
+    expect(match).not.toBeNull()
+  })
+
+  const pattern: RegExp = eval(match?.[1] ?? '/$^/')
+
+  it.each([
+    'who scored in the champions league last night?',
+    'who won the premier league this year',
+    'how many home runs in major league baseball yesterday',
+    'who leads the national league in home runs',
+  ])('does NOT demand a league for: %s', (question) => {
+    expect(pattern.test(question)).toBe(false)
+  })
+
+  /* The phrasing the rule actually exists for must still be caught. */
+  it.each([
+    'should i trade josh allen in my dynasty league',
+    'what is the draft order in my league',
+    'who is the worst manager in our keeper league',
+    'how many teams are in this league',
+  ])('still demands a league for: %s', (question) => {
+    expect(pattern.test(question)).toBe(true)
+  })
+})
+
 describe('tool loop system prompt', () => {
   /*
    * When the model fetches its own context, nothing upstream can guarantee the
