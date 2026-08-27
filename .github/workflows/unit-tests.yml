@@ -24,10 +24,21 @@ name: Unit tests
 # core shards were required while red and "would block every merge in the repo
 # rather than protect anything".
 #
-# This suite's health in CI is UNKNOWN. It has never run here, it is ~1,600
-# files, and a local full run did not finish inside ten minutes. So it lands
-# advisory, and gets promoted only after it has been observed green on several
-# consecutive completed runs.
+# Its health is no longer unknown. Measured 2026-08-27:
+#
+#   ~5 minutes a shard in CI, not the 25-minute timeout this file allows
+#   green on main at 3b461765c and 1a6435d0a, the first two clean runs it has had
+#
+# Everything before those two failed on 11 files that were red OUTSIDE the
+# baseline — 8 guard drift, 1 test that expired with the calendar, 2 real
+# defects. All fixed. The bar is unchanged and deliberately conservative: several
+# consecutive COMPLETED runs, observed, before any context is required.
+#
+# ⚠ A LOCAL RUN IS NOT EVIDENCE FOR THIS. On a machine shared with other
+# sessions, vitest fails to start workers under load and reports healthy files as
+# failures — measured, 7 of 12 in one run. CI is the only trustworthy verdict,
+# and `vitest-ratchet.mjs --update` must never be run from a local full suite:
+# it would write those 7 in as permanent allowances.
 #
 # To promote it, add these four contexts (all of them -- a shard left out is a
 # hole) via the API, never by editing a comment:
@@ -50,11 +61,30 @@ on:
   push:
     branches: [main]
 
-# A superseded run tells you nothing except that you pushed again. Playwright
-# already does this; without it a slow suite queues behind its own dead runs.
+# ⚠ THIS GROUPED EVERY PUSH TO MAIN UNDER ONE KEY AND CANCELLED IN PROGRESS, so
+# with 111 commits landing on main in a day the suite was killed by the next push
+# almost every time. Measured 2026-08-27: of the last 25 runs, 16 were `cancelled`
+# and not one of those produced a verdict. A gate that never finishes cannot be
+# promoted to a required check, and cannot even be OBSERVED green, which is the
+# standard this file sets for itself below.
+#
+# So the two cases are separated, because they are not the same case:
+#
+#   pull_request  cancel. A superseded PR run tells you nothing except that you
+#                 pushed again, and the run that matters is the one on the head
+#                 you are asking to merge. Grouping by PR NUMBER (not by ref)
+#                 keeps that precise.
+#   push to main  do NOT cancel. Every commit gets its own group, so nothing
+#                 supersedes anything and every push produces a real verdict.
+#                 Each commit is a distinct question — "is main green at this
+#                 sha" — and cancelling it discards the only answer.
+#
+# The cost of not cancelling is runner minutes, and this repo is PUBLIC, so
+# standard-runner minutes are free. At ~5 minutes a shard (measured, not the
+# 25-minute timeout) that is well inside the concurrency ceiling.
 concurrency:
-  group: unit-tests-${{ github.ref }}
-  cancel-in-progress: true
+  group: unit-tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit:
