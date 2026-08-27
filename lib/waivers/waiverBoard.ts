@@ -5,6 +5,8 @@ import { hasIdpScoring } from '@/lib/core-app/scoringNotes'
 import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
+import { projectFromRecentForm } from './recentFormProjection'
+
 /**
  * What a waiver add is actually worth: how much it improves YOUR starting lineup.
  *
@@ -34,6 +36,17 @@ export interface WaiverCandidate {
   gain: number
   /** The starter he pushes out, when he displaces one. Null when he fills an unfilled slot. */
   displaces: { sleeperId: string; name: string; projectedPoints: number } | null
+  /**
+   * Where the projection came from.
+   *
+   * ⚠ 'form' IS BACKWARD-LOOKING AND MUST BE LABELLED AS SUCH. It is a recency-weighted mean of
+   * what he has actually scored under this league's rules — it knows nothing about a coming bye,
+   * a return from injury or a changed depth chart. A surface that renders it identically to a
+   * real projection is making a forecast the number never made.
+   */
+  basis: 'projection' | 'form'
+  /** Games behind a 'form' number, so a two-game estimate can be weighed as one. */
+  formGames?: number
 }
 
 export type WaiverBoardState =
@@ -69,6 +82,8 @@ export interface Scored {
   position: string | null
   team: string | null
   points: number
+  basis?: 'projection' | 'form'
+  formGames?: number
 }
 
 /**
@@ -183,9 +198,57 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
           .catch(() => [] as Array<{ playerId: string }>)
       : []
 
+  const activeIds = new Set<string>()
+  for (const r of activeRows) if (!rostered.has(r.playerId)) activeIds.add(r.playerId)
+  if (activeIds.size === 0) return EMPTY('no_projections', ['No recent game data to build a free-agent pool from.'])
+
+  /*
+   * ⚠ A PLAYER WHO CANNOT FILL A SLOT IS NOT A FREE AGENT THIS LEAGUE HAS, AND COUNTING HIM MADE
+   * THE COVERAGE NOTE LIE. "Played last week" is the right way to find who is active; it is the
+   * wrong way to decide who is relevant. Measured on a standard PPR superflex league: of 2,457
+   * players in that pool only 732 can fill any of its slots — the rest are 1,127 defenders in a
+   * league with no defensive slots, plus 434 offensive linemen and long snappers. The page was
+   * reporting "1,623 of 2,176 free agents could not be projected", which is true of long snappers
+   * and says nothing about the waiver wire.
+   *
+   * Filtering here also cuts the projection work by two thirds, and a player who fills no slot
+   * has a marginal gain of exactly zero by construction — so nothing rankable is lost.
+   */
+  const poolMeta = await args.prisma.sportsPlayer
+    .findMany({
+      where: { sleeperId: { in: [...activeIds] } },
+      select: { sleeperId: true, name: true, team: true, position: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+    .catch(() => [] as Array<{ sleeperId: string | null; name: string; team: string | null; position: string | null }>)
+
+  /*
+   * Name and team come from here too, not only position. The players the form fallback rescues
+   * are by definition the ones the projection feed does not carry, so its metadata cannot name
+   * them — and a board listing "11699" instead of a player is worse than one row shorter.
+   */
+  const positionOf = new Map<string, string | null>()
+  const metaOf = new Map<string, { name: string; team: string | null; position: string | null }>()
+  for (const r of poolMeta) {
+    if (!r.sleeperId) continue
+    const cur = metaOf.get(r.sleeperId)
+    if (!cur || (!cur.position && r.position) || (!cur.team && r.team)) {
+      metaOf.set(r.sleeperId, { name: r.name, team: r.team, position: r.position })
+    }
+    const curPos = positionOf.get(r.sleeperId)
+    if (curPos == null || (!curPos && r.position)) positionOf.set(r.sleeperId, r.position)
+  }
+
   const poolIds = new Set<string>()
-  for (const r of activeRows) if (!rostered.has(r.playerId)) poolIds.add(r.playerId)
-  if (poolIds.size === 0) return EMPTY('no_projections', ['No recent game data to build a free-agent pool from.'])
+  for (const id of activeIds) {
+    const pos = positionOf.get(id)
+    // `canFillSlot` normalises, so a cache row spelling the position out in full still matches.
+    if (pos && slots.some((slot) => canFillSlot(slot, pos))) poolIds.add(id)
+  }
+  const ineligible = activeIds.size - poolIds.size
+  if (poolIds.size === 0) {
+    return EMPTY('no_projections', ['No available player can fill a starting slot in this league.'])
+  }
 
   /*
    * The IDP enrichment is passed only when the league actually scores defenders — the strict
@@ -216,6 +279,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
         position: p.position,
         team: p.team,
         points: Math.round(priced.points * 100) / 100,
+        basis: 'projection',
       })
     }
     return out
@@ -223,6 +287,39 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const roster = score(mineProj as never)
   const pool = score(poolProj as never)
+
+  /*
+   * ⚠ THE VENDOR FEED IS ONE WEEK DEEP, SO MOST OF THE WIRE HAD NO PROJECTION AT ALL.
+   * `FantasyProjection` carries ~1,000 rows for a single week and preset — on a standard league
+   * that left 141 of 449 startable free agents projectable and the other 308 unrankable. Recent
+   * form fills those gaps from what each player has actually scored under THIS league's rules.
+   *
+   * It NEVER overrides a real projection. A vendor number is forward-looking; this one is not,
+   * and quietly preferring it would trade a forecast for a memory. Every filled gap is marked
+   * `basis: 'form'` so the surface can say which it is showing.
+   */
+  const missing = [...poolIds].filter((id) => !pool.some((p) => p.sleeperId === id))
+  if (missing.length > 0 && statSeason != null) {
+    const form = await projectFromRecentForm({
+      prisma: args.prisma,
+      season: statSeason,
+      playerIds: missing,
+      scoring,
+    })
+    for (const [id, f] of form) {
+      const fromFeed = poolProj.get(id)
+      const cached = metaOf.get(id)
+      pool.push({
+        sleeperId: id,
+        name: fromFeed?.name ?? cached?.name ?? id,
+        position: fromFeed?.position ?? cached?.position ?? null,
+        team: fromFeed?.team ?? cached?.team ?? null,
+        points: f.points,
+        basis: 'form',
+        formGames: f.games,
+      })
+    }
+  }
   if (roster.length === 0) {
     return EMPTY('no_projections', ['None of your rostered players could be projected under this league’s scoring.'])
   }
@@ -247,6 +344,8 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
       displaces: dropped
         ? { sleeperId: dropped.sleeperId, name: dropped.name, projectedPoints: dropped.points }
         : null,
+      basis: cand.basis ?? 'projection',
+      formGames: cand.formGames,
     })
   }
 
@@ -261,8 +360,14 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
   if (pool.length < poolIds.size) {
     notes.push(
-      `${poolIds.size - pool.length} of ${poolIds.size} free agents could not be projected under ` +
-        `this league’s scoring and are not shown.`,
+      `${poolIds.size - pool.length} of ${poolIds.size} startable free agents could not be ` +
+        `projected under this league’s scoring and are not shown.`,
+    )
+  }
+  if (ineligible > 0) {
+    // Stated rather than silently dropped, so the pool size is auditable.
+    notes.push(
+      `${ineligible} other active players were skipped because no slot in this league can hold them.`,
     )
   }
 

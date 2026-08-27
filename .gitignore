@@ -141,3 +141,10 @@ vitest-ratchet-result.json
 # either would put compiled CSS where the source belongs.
 app/globals.tailwind-source.css
 app/globals-compiled.css
+
+# Local HTTPS dev certificates. `certificates/` holds localhost.pem and its
+# PRIVATE KEY. Until 2026-08-27 this rule existed ONLY in an uncommitted working
+# copy, so a fresh clone of this PUBLIC repo had no protection and a single
+# `git add -A` would have published the key. Nothing matching has ever been
+# committed on any ref — checked — and this keeps it that way.
+certificates/

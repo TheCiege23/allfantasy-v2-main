@@ -206,7 +206,10 @@ export async function getDevyEligibleOnly(): Promise<any[]> {
       devyEligible: true,
       graduatedToNFL: false,
     },
-    orderBy: { devyValue: 'desc' },
+    // draftProjectionScore, not devyValue: the latter is a position-and-class
+    // lookup that is 0 for most of the pool, so it ranked the eligible board by
+    // little more than position. See lib/devy/devyValueBoard.ts.
+    orderBy: [{ draftProjectionScore: 'desc' }, { devyValue: 'desc' }],
   })
 }
 

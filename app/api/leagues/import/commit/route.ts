@@ -100,12 +100,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const canonical = buildCanonicalImportBundle(result.normalized)
-    const { persisted, runId } = await persistImportWithCanonicalAudit({
+    const { persisted, runId, skipped } = await persistImportWithCanonicalAudit({
       userId: auth.userId,
       provider,
       normalized: result.normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
+      /*
+       * The gate resolved this on the way in — it has to, to decide whether this
+       * caller may import at all — and it was dropped here. That is why every
+       * non-Sleeper import landed with no claimed team and went invisible.
+       */
+      importerSourceManagerId: gate.sourceManagerId ?? null,
     })
 
     // Stamp the attestation on the new league so the gate is auditable.
@@ -143,6 +149,10 @@ export async function POST(req: NextRequest) {
       historicalBackfill: persisted.historicalBackfill,
       importRunId: runId,
       existed: persisted.existed === true,
+      /* Whether this request actually re-read the provider, or matched a completed run
+         and returned it untouched. `existed` cannot answer that — see the persistence
+         service. */
+      skipped: skipped === true,
     })
   } catch (error) {
     if (error instanceof ImportedLeagueConflictError) {

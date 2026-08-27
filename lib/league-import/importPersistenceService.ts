@@ -49,8 +49,12 @@ export async function persistImportWithCanonicalAudit(input: {
   canonical: CanonicalImportBundle
   allowUpdateExisting?: boolean
   additionalWarnings?: ImportWarningRecord[]
+  /** From the commissioner gate — lets the bootstrap claim the importer's own team. */
+  importerSourceManagerId?: string | null
 }): Promise<{
   persisted: PersistImportedLeagueResult
+  /** True only when a completed run was matched and nothing was re-read. */
+  skipped: boolean
   runId: string
 }> {
   const seasonYear =
@@ -89,12 +93,19 @@ export async function persistImportWithCanonicalAudit(input: {
       select: { id: true, name: true, sport: true },
     })
     if (league) {
+      /*
+       * ⚠ `existed` AND `skipped` ARE NOT THE SAME QUESTION, and conflating them made
+       * the import screen lie. `existed` is `Boolean(existing)` on the LEAGUE row, so it
+       * is true on a forced re-import too — the league does still exist. Only this
+       * branch means "nothing was re-read", and only it should say so.
+       */
       return {
         persisted: {
           league: { id: league.id, name: league.name ?? '', sport: String(league.sport) },
           historicalBackfill: null,
           existed: true,
         },
+        skipped: true,
         runId: existingRun.id,
       }
     }
@@ -139,6 +150,7 @@ export async function persistImportWithCanonicalAudit(input: {
       normalized: input.normalized,
       allowUpdateExisting: input.allowUpdateExisting ?? false,
       canonicalBundle: input.canonical,
+      importerSourceManagerId: input.importerSourceManagerId ?? null,
     })
 
     await prisma.importRun.update({
@@ -253,7 +265,7 @@ export async function persistImportWithCanonicalAudit(input: {
       }
     }
 
-    return { persisted, runId: run.id }
+    return { persisted, skipped: false, runId: run.id }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     await prisma.importRun.update({

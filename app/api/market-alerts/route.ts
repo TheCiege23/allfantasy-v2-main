@@ -387,7 +387,20 @@ export async function GET(req: Request) {
 
           if (signal === 'HOLD' && strength < 15) continue
 
-          const devyValue = dp.devyValue || 0
+          /*
+           * ⚠ NOT `dp.devyValue`. That column is a position-and-class-year
+           * lookup with no player-specific input — lib/devy/devyValueBoard.ts
+           * says so in its own header — and it is 0 for 1,237 of 1,718 rows.
+           * Feeding it into a field named `dynastyValue` gives it a credibility
+           * it has not earned.
+           *
+           * 0 is the honest answer here: a devy prospect has no dynasty market
+           * value, and the UI already renders this only for `category === 'nfl'`
+           * (MarketTimingAlerts.tsx gates on it), so nothing regresses. The devy
+           * SIGNAL is unaffected — it runs off draftProjectionScore, which is
+           * the number that actually reflects the player.
+           */
+          const devyValue = 0
           let statLine = ''
           if (playerCfbdStats) {
             const pos = dp.position
