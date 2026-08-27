@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 import '@/components/core-app/af-waivers.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
@@ -175,6 +176,20 @@ export function Waivers({ data }: WaiversProps) {
           </li>
         </ul>
       </section>
+
+      {/*
+        ── Worth adding ─────────────────────────────────────────────────
+
+        Ranked by what each add does to YOUR starting lineup, which is the
+        question the two panels below do not answer: `WaiverIntel` prices a bid
+        from market value and this room's history, and Chimmy writes a
+        recommendation. Neither says how much a player changes your week.
+
+        It sits FIRST deliberately — decide who helps, then decide what to pay —
+        and it removes itself when it cannot form an opinion rather than leaving
+        an empty card above panels that work.
+      */}
+      <WaiverLineupBoard leagueId={data.league.id} />
 
       {/*
         ── Waiver intelligence ──────────────────────────────────────────

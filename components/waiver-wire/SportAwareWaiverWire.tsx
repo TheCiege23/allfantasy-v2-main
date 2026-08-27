@@ -1,7 +1,6 @@
 'use client'
 
 import WaiverWirePage from '@/components/waiver-wire/WaiverWirePage'
-import { WaiverBoardPanel } from '@/components/waiver-wire/WaiverBoardPanel'
 
 export interface SportAwareWaiverWireProps {
   leagueId: string
@@ -11,16 +10,11 @@ export interface SportAwareWaiverWireProps {
  * SportAwareWaiverWire — sport-aware waiver surface wrapper.
  * WaiverWirePage resolves sport-specific pools/filters from league settings.
  *
- * The board sits ABOVE the wire rather than inside it: `WaiverWirePage` owns claims, FAAB,
- * watchlists and automation — the mechanics of getting a player — and has never answered the
- * question that comes first, which is who is worth getting. Mounting here keeps that 1,550-line
- * file untouched and lets the panel remove itself when it has nothing to say.
+ * The lineup-gain board briefly lived here and now sits on the /core Waivers Center
+ * (`components/core-app/WaiverLineupBoard.tsx`), which is the surface managers actually use.
+ * Two copies of the same ranking on two waiver pages would drift, so this one is a plain
+ * passthrough again.
  */
 export function SportAwareWaiverWire({ leagueId }: SportAwareWaiverWireProps) {
-  return (
-    <div className="flex flex-col gap-4">
-      <WaiverBoardPanel leagueId={leagueId} />
-      <WaiverWirePage leagueId={leagueId} />
-    </div>
-  )
+  return <WaiverWirePage leagueId={leagueId} />
 }

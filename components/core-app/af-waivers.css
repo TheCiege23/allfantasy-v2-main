@@ -213,3 +213,55 @@
     justify-content: center;
   }
 }
+
+/* ── Worth adding ──────────────────────────────────────────────────────────
+   The lineup-gain board. Scoped under .af-core for the same specificity reason
+   every other rule here is: a bare class loses to the (0,2,0) selectors that the
+   38a handoff tokens ship with, and the panel would render unstyled next to the
+   ones that do not. */
+.af-core .af-wlb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-wlb-row {
+  display: grid;
+  grid-template-columns: 1fr auto minmax(0, 34%);
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--af-line, rgba(255, 255, 255, 0.07));
+}
+.af-core .af-wlb-row:last-child { border-bottom: 0; }
+.af-core .af-wlb-who { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.af-core .af-wlb-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--af-text, #eef0fa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-wlb-meta { font-size: 10px; color: var(--af-faint, #5d648a); }
+.af-core .af-wlb-gain {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--af-good, #34d399);
+  white-space: nowrap;
+}
+.af-core .af-wlb-over {
+  font-size: 10px;
+  color: var(--af-muted, #8f97bd);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  /* The displaced starter drops below rather than truncating to nothing. */
+  .af-core .af-wlb-row { grid-template-columns: 1fr auto; }
+  .af-core .af-wlb-over { grid-column: 1 / -1; text-align: left; }
+}

@@ -2,7 +2,7 @@ import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 
-import { WaiverBoardPanel } from '@/components/waiver-wire/WaiverBoardPanel'
+import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
 
 /**
  * The panel that answers "who is worth adding". The route it replaces
@@ -45,7 +45,7 @@ const mockFetch = (body: unknown, ok = true) =>
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('WaiverBoardPanel', () => {
+describe('WaiverLineupBoard', () => {
   it('leads with the gain and names who it displaces', async () => {
     /*
      * The gain is the whole point. Sorting by projection reproduces a rankings page — a big name
@@ -53,14 +53,14 @@ describe('WaiverBoardPanel', () => {
      * the number and the incumbent it is measured against.
      */
     mockFetch(PAYLOAD)
-    render(<WaiverBoardPanel leagueId="lg1" />)
+    render(<WaiverLineupBoard leagueId="lg1" />)
 
-    await waitFor(() => expect(screen.getByTestId('waiver-board-panel')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('waiver-lineup-board')).toBeTruthy())
     /*
      * One decimal, matching the projection column beside it — 6.55 renders as +6.5. JSX also
      * splits the `+` from the number into separate text nodes, so this matches on the panel.
      */
-    expect(screen.getByTestId('waiver-board-panel').textContent).toContain('+6.5')
+    expect(screen.getByTestId('waiver-lineup-board').textContent).toContain('+6.5')
     expect(screen.getByText(/Patrick Queen/)).toBeTruthy()
     expect(screen.getByText('Blake Cashman')).toBeTruthy()
   })
@@ -68,28 +68,28 @@ describe('WaiverBoardPanel', () => {
   it('says "an empty slot" rather than naming nobody', async () => {
     // A candidate who fills an unfilled slot displaces no one; a blank cell there reads as a bug.
     mockFetch(PAYLOAD)
-    render(<WaiverBoardPanel leagueId="lg1" />)
-    await waitFor(() => expect(screen.getByText('an empty slot')).toBeTruthy())
+    render(<WaiverLineupBoard leagueId="lg1" />)
+    await waitFor(() => expect(screen.getByText('fills an empty slot')).toBeTruthy())
   })
 
   it('carries the coverage note with the ranking', async () => {
     // A board built from a third of the wire is a different claim from one built off all of it.
     mockFetch(PAYLOAD)
-    render(<WaiverBoardPanel leagueId="lg1" />)
+    render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(screen.getByText(/40 free agents/)).toBeTruthy())
   })
 
   it('states the finding when nobody would improve the lineup', async () => {
     // Not an error — a real answer, and the manager should not go hunting for a bug.
     mockFetch({ ...PAYLOAD, candidates: [] })
-    render(<WaiverBoardPanel leagueId="lg1" />)
+    render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(screen.getByText(/would improve your starting lineup/)).toBeTruthy())
   })
 
   it('explains a refusal instead of rendering an empty table', async () => {
     mockFetch({ ...PAYLOAD, state: 'no_team_claimed', candidates: [] })
-    render(<WaiverBoardPanel leagueId="lg1" />)
-    await waitFor(() => expect(screen.getByText(/Claim your team/)).toBeTruthy())
+    render(<WaiverLineupBoard leagueId="lg1" />)
+    await waitFor(() => expect(screen.getByText(/cannot tell which roster/)).toBeTruthy())
   })
 
   it('renders nothing at all when the request fails', async () => {
@@ -98,7 +98,7 @@ describe('WaiverBoardPanel', () => {
      * opinion should disappear, not leave a broken card sitting above a working page.
      */
     mockFetch(null, false)
-    const { container } = render(<WaiverBoardPanel leagueId="lg1" />)
+    const { container } = render(<WaiverLineupBoard leagueId="lg1" />)
     await waitFor(() => expect(container.textContent).toBe(''))
   })
 })
