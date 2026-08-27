@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
-import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
+import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 
 /**
@@ -30,8 +30,8 @@ import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingIns
 const SOURCE = 'rolling_insights'
 const TTL_DAYS = 7
 
-/** Every soccer league the vendor documents. Not MLS — `not_covered` in the contract. */
-export const RI_SOCCER_LEAGUES: readonly RollingInsightsSoccerLeagueCode[] = ['EPL', 'LALIGA', 'SERIEA']
+/** @see rollingInsightsSupport — re-exported so existing importers keep working. */
+export { RI_SOCCER_LEAGUES }
 
 function ttl(now: Date): Date {
   return new Date(now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000)

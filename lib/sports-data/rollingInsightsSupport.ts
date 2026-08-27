@@ -2,7 +2,10 @@ import {
   getRollingInsightsSportCode,
   type RollingInsightsVendorSport,
 } from '@/lib/providers/rollingInsightsFieldMaps'
-import { normalizeSoccerLeague } from '@/lib/providers/rollingInsightsSoccerLeague'
+import {
+  normalizeSoccerLeague,
+  type RollingInsightsSoccerLeagueCode,
+} from '@/lib/providers/rollingInsightsSoccerLeague'
 
 /**
  * Rolling Insights capability facts and envelope parsing — PURE, no network, no credentials.
@@ -127,3 +130,13 @@ export function resolveRiEnvelope(
   }
   return []
 }
+
+/**
+ * Every soccer league the vendor documents. Not MLS — `not_covered` in the contract.
+ *
+ * Lives in the PURE module because a caller that only needs the league list should not have to
+ * import an ingest module (and through it prisma and the transport) to get three string
+ * constants. It previously sat in `rollingInsightsTeamsPlayers`, which made the game-log ingest
+ * depend on the teams/players writer for no reason.
+ */
+export const RI_SOCCER_LEAGUES: readonly RollingInsightsSoccerLeagueCode[] = ['EPL', 'LALIGA', 'SERIEA']

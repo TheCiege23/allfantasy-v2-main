@@ -3,10 +3,9 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
-import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
+import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import { getRollingInsightsSportCode } from '@/lib/providers/rollingInsightsFieldMaps'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
-import { RI_SOCCER_LEAGUES } from '@/lib/sports-data/rollingInsightsTeamsPlayers'
 
 /**
  * Per-game player box lines for every sport, from Rolling Insights `/live/{date}/{SPORT}`.
@@ -102,10 +101,27 @@ export interface RiGameBox {
 /**
  * Pull player box lines out of one `/live` game object.
  *
- * The documented shape is `full_box.<side>_team.player_box`, where `player_box` is either an
- * ARRAY of players (NFL, NBA, NCAAB) or an OBJECT of named sub-boxes (MLB `batting`/`pitching`,
- * NHL `skaters`/`goalies`). Both are accepted, and the sub-box name is preserved as `group`
- * because "3 assists" means different things to a skater and a point guard.
+ * ⚠ THE SHAPE BELOW IS MEASURED, NOT INFERRED — see `fixtures/live.MLB.json`, captured
+ * 2026-08-26 via `scripts/probe.sh`. The first version of this parser was written from the NBA
+ * hint in `rollingInsightsFieldMaps` (`playerBox: 'player_box'` under the team shell) and got
+ * three things wrong at once, which is why it found ZERO games on dates that had fifteen:
+ *
+ *   1. `player_box` sits at the GAME ROOT, a sibling of `full_box` — not inside the team node.
+ *   2. Below it the split is `away_team` / `home_team`, then the GROUP (`batting`, `pitching`).
+ *   3. The innermost level is an OBJECT KEYED BY PLAYER ID, not an array. The entry itself
+ *      carries NO `player_id` field at all, so the old code — which required one — would have
+ *      dropped every line even had it found them.
+ *
+ * Measured shape:
+ *   game.player_box.{away_team|home_team}.{batting|pitching}.<PLAYER_ID> = { player, POS, AB, H, … }
+ *
+ * Team identity still comes from `full_box.<side>_team` (`abbrv`, `team_id`), which is where the
+ * fixture confirms it lives.
+ *
+ * ⚠ ONLY MLB IS MEASURED. NBA / NHL / NCAAB / NFL live shapes remain UNVERIFIED (GAPS.md
+ * G-01..G-04 — their seasons were out when this was captured). Both the array form and the
+ * id-keyed object form are therefore accepted, and an array entry may still carry its own
+ * `player_id`. Do not narrow this to the MLB shape until each has its own committed fixture.
  */
 export function normalizeRiGameBox(game: unknown): RiGameBox | null {
   const g = asRecord(game)
@@ -115,6 +131,9 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
   if (!providerGameId) return null
 
   const fullBox = asRecord(g.full_box)
+  // Root first (measured), team node second (the shape other sports might still use).
+  const playerBox = asRecord(g.player_box) ?? asRecord(fullBox?.player_box)
+
   const sides: Array<{ key: 'home_team' | 'away_team'; other: 'home_team' | 'away_team' }> = [
     { key: 'home_team', other: 'away_team' },
     { key: 'away_team', other: 'home_team' },
@@ -124,28 +143,44 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
   for (const side of sides) {
     const teamNode = asRecord(fullBox?.[side.key])
     const otherNode = asRecord(fullBox?.[side.other])
-    if (!teamNode) continue
 
+    // `abbrv` off full_box is the measured source. The root carries `<side>_team_name` (a full
+    // club name, hence the VarChar(8) bounding) as a fallback only.
     const team =
-      teamCode(teamNode.abbrv ?? teamNode.abbreviation) ??
-      teamCode(g[side.key === 'home_team' ? 'home_team' : 'away_team'])
+      teamCode(teamNode?.abbrv ?? teamNode?.abbreviation) ?? teamCode(g[`${side.key}_name`])
     const opponent =
-      teamCode(otherNode?.abbrv ?? otherNode?.abbreviation) ??
-      teamCode(g[side.other === 'home_team' ? 'home_team' : 'away_team'])
+      teamCode(otherNode?.abbrv ?? otherNode?.abbreviation) ?? teamCode(g[`${side.other}_name`])
 
-    const box = teamNode.player_box ?? teamNode.playerBox
-    if (box == null) continue
+    const sideBox = asRecord(playerBox?.[side.key]) ?? asRecord(teamNode?.player_box)
+    if (!sideBox) continue
 
-    const buckets: Array<[string, unknown]> = Array.isArray(box)
-      ? [['all', box]]
-      : Object.entries(asRecord(box) ?? {})
+    for (const [group, bucket] of Object.entries(sideBox)) {
+      // Array form: each entry must identify itself.
+      if (Array.isArray(bucket)) {
+        for (const entry of bucket) {
+          const p = asRecord(entry)
+          if (!p) continue
+          const providerPlayerId = str(p.player_id ?? p.playerId ?? p.player_ID)
+          if (!providerPlayerId) continue
+          lines.push({
+            providerPlayerId,
+            playerName: str(p.player ?? p.name),
+            group,
+            team,
+            opponent,
+            raw: p,
+          })
+        }
+        continue
+      }
 
-    for (const [group, bucket] of buckets) {
-      if (!Array.isArray(bucket)) continue
-      for (const entry of bucket) {
+      // Measured form: the KEY is the player id and the entry carries no id of its own.
+      const byId = asRecord(bucket)
+      if (!byId) continue
+      for (const [playerId, entry] of Object.entries(byId)) {
         const p = asRecord(entry)
         if (!p) continue
-        const providerPlayerId = str(p.player_id ?? p.playerId ?? p.player_ID)
+        const providerPlayerId = str(p.player_id ?? p.playerId ?? p.player_ID) ?? str(playerId)
         if (!providerPlayerId) continue
         lines.push({
           providerPlayerId,
@@ -153,7 +188,9 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
           group,
           team,
           opponent,
-          raw: p,
+          // The id is the KEY, so it is folded into the stored payload — otherwise the row's own
+          // provenance would be missing from `statPayload`.
+          raw: { player_id: providerPlayerId, ...p },
         })
       }
     }
