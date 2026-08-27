@@ -1306,10 +1306,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
      * still costs nothing; only a refusal gets to look further.
      */
     if (deterministic.kind === 'refusal' && getChimmyFeatureFlags().liveSearchFallback) {
-      const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
-      const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
+      /*
+       * ⚠ THIS PATH SHIPPED FREE AND IT SHOULD NOT HAVE BEEN. It sits above the
+       * spend block, so a live search — the most expensive call we make — cost
+       * the platform real money and the reader nothing. With open signup that is
+       * an uncapped spend path.
+       *
+       * ORDER MATTERS IN BOTH DIRECTIONS:
+       *  - Check they CAN pay BEFORE searching, so we never buy a search for
+       *    somebody who cannot be charged for it.
+       *  - Charge only AFTER a sourced answer exists. The refusal below stays
+       *    free, which is the honest deal and what the copy already promises:
+       *    an unavailable-data answer "should not charge tokens". You pay for an
+       *    answer, never for us admitting we have none.
+       *
+       * An unconfirmed client falls through to the free refusal rather than
+       * getting a 409 here. This path used to always be free, and turning it
+       * into a new confirmation prompt would be a worse surprise than a refusal.
+       */
+      const spendService = new TokenSpendService()
+      const preview = userId
+        ? await spendService
+            .previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+            .catch(() => null)
+        : null
 
-      if (searched) {
+      const mayCharge = Boolean(userId && confirmTokenSpend && preview?.canSpend)
+
+      if (mayCharge) {
+        const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
+        const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
+
+        if (searched) {
+        /*
+         * The answer exists, so the search has already been paid for upstream.
+         * If the charge now fails — a balance race against the preview above —
+         * we serve it anyway with tokenSpend null rather than eat the provider
+         * cost AND withhold the answer. Losing the fee is bad; losing the fee
+         * and the answer is worse.
+         */
+        const ledger = await spendService
+          .spendTokensForRule({
+            userId: userId as string,
+            ruleCode: 'ai_chimmy_chat_message',
+            confirmed: confirmTokenSpend,
+            sourceType: 'chimmy_chat',
+            sourceId: conversationId,
+            description: 'Chimmy live web search answer',
+            metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
+            userEmail,
+          })
+          .catch(() => null)
+
         const sourceLines = searched.citations.map((c) => `- ${c.label}: ${c.url}`).join('\n')
         const body = `${searched.text}\n\nSources consulted:\n${sourceLines}`
         return NextResponse.json({
@@ -1317,7 +1365,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           result: body,
           source: LIVE_SEARCH_SOURCE,
           sessionId,
-          tokenSpend: null,
+          tokenSpend:
+            ledger && preview
+              ? {
+                  ruleCode: preview.ruleCode,
+                  tokenCost: preview.tokenCost,
+                  balanceAfter: ledger.balanceAfter,
+                  ledgerId: ledger.id,
+                }
+              : undefined,
           citations: searched.citations,
           meta: {
             /*
@@ -1337,8 +1393,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             },
           },
         })
+        }
+        /* Nothing sourced came back. Fall through to the honest refusal. */
       }
-      /* Nothing sourced came back. Fall through to the honest refusal. */
+      /*
+       * Not chargeable — anonymous, unconfirmed, or out of balance. We do NOT
+       * search in that case: buying a provider call we cannot bill is the exact
+       * leak this block was added to close. The free refusal is still served.
+       */
     }
 
     const deterministicAnswer = deterministic.text

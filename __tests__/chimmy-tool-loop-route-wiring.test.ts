@@ -89,6 +89,52 @@ describe('tool loop wiring', () => {
 })
 
 /*
+ * The live-search fallback bills like every other answer.
+ *
+ * ⚠ IT SHIPPED FREE. The block sits ABOVE the spend, so a web search — the most
+ * expensive call we make — cost the platform real money and the reader nothing.
+ * With open signup that is an uncapped spend path, and it was only caught by
+ * reading `tokenSpend: null` off a live response.
+ */
+describe('live search fallback charges for what it costs', () => {
+  const FALLBACK_AT = idx('liveSearchFallback')
+  const DETERMINISTIC_RETURN_AT = idx('const deterministicAnswer = deterministic.text')
+  const BLOCK = ROUTE.slice(FALLBACK_AT, DETERMINISTIC_RETURN_AT)
+
+  it('spends against the same rule as a normal chat message', () => {
+    expect(BLOCK).toContain('spendTokensForRule')
+    expect(BLOCK).toContain("ruleCode: 'ai_chimmy_chat_message'")
+  })
+
+  /* Never buy a provider call we cannot bill for. */
+  it('checks affordability BEFORE running the search', () => {
+    expect(BLOCK.indexOf('previewSpend')).toBeLessThan(BLOCK.indexOf('answerSportsQuestionFromSearch'))
+    expect(BLOCK).toContain('canSpend')
+    expect(BLOCK).toContain('confirmTokenSpend')
+  })
+
+  /*
+   * ⚠ You pay for an ANSWER, never for us admitting we have none. One refusal's
+   * own copy already promises an unavailable-data answer "should not charge
+   * tokens", so charging before knowing the search worked would make the app
+   * contradict itself.
+   */
+  it('charges only after a sourced answer exists', () => {
+    expect(BLOCK.indexOf('if (searched)')).toBeLessThan(BLOCK.indexOf('spendTokensForRule'))
+  })
+
+  it('reports the real ledger rather than a null spend', () => {
+    expect(BLOCK).toContain('balanceAfter')
+    expect(BLOCK).toContain('ledgerId')
+  })
+
+  /* A failed charge must not also swallow the answer we already paid for. */
+  it('still returns the answer if the charge races and fails', () => {
+    expect(BLOCK).toMatch(/spendTokensForRule[\s\S]*?\.catch\(\(\) => null\)/)
+  })
+})
+
+/*
  * ⚠ THIS GATE 412'd EVERY QUESTION ABOUT A REAL COMPETITION. `in\s+.+\s+league`
  * was written for "in my dynasty league", but `.+` spans "the champions", so
  * "who scored in the Champions League last night?" was rejected as a
