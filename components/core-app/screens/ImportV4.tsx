@@ -163,6 +163,19 @@ const FIELD_BY_PROVIDER: Partial<
   },
 }
 
+/**
+ * What the tile promises, where the generic line would be wrong.
+ *
+ * ⚠ "FINDS YOUR LEAGUES AUTOMATICALLY" IS THE DEFAULT FOR ANY PROVIDER WITH
+ * DISCOVERY, AND FOR FANTRAX IT IS FALSE. Fantrax discovery cannot enumerate an
+ * account without the Secret ID, which is a credential — it takes a league id
+ * and lists that league's teams. Sleeper and Yahoo really do find leagues on
+ * their own, so they keep the generic line.
+ */
+const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
+  fantrax: 'League ID · pick your team',
+}
+
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
   mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
@@ -817,9 +830,10 @@ export function ImportV4({
                 </span>
                 <span className="af-im-provider-meta">
                   {available
-                    ? supportsImportProviderDiscovery(opt.provider)
-                      ? 'Finds your leagues automatically'
-                      : 'League ID · read-only'
+                    ? PROVIDER_TAGLINE[opt.provider] ??
+                      (supportsImportProviderDiscovery(opt.provider)
+                        ? 'Finds your leagues automatically'
+                        : 'League ID · read-only')
                     : BLOCKED_REASON[opt.provider] ?? 'Not connectable yet.'}
                 </span>
                 <span className="af-im-provider-sports af-num">
@@ -831,12 +845,14 @@ export function ImportV4({
         </div>
 
         {/*
-          The Fantrax tile is disabled and says why, which leaves a reader with a
-          fact and no action. Uploading a snapshot is the one Fantrax thing that
-          does work today, so the door to it is here rather than nowhere. Not
-          rendered once the uploader is already on screen.
+          ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
+          Fantrax work removed the only pointer to the CSV uploader. The upload
+          is still the second way in — an export carries seasons the live API
+          does not expose, and a league the fxea API will not serve has nowhere
+          else to go — so the door stays. It is hidden only when the uploader is
+          already on screen, which is what it was really guarding.
         */}
-        {defaultProvider !== 'fantrax' && !isImportProviderAvailable('fantrax') ? (
+        {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
           <p className="af-im-fx-link">
             <a href="/import?provider=fantrax">
               Have a Fantrax CSV export? Bank it now →
@@ -960,7 +976,7 @@ export function ImportV4({
         the live API does not expose, and a league whose id will not read (a
         format the fxea API does not serve) has nowhere else to go.
       */}
-      {defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
+      {provider === 'fantrax' || defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
 
       {/* ── Discovered leagues ──────────────────────────────────────── */}
       {leagues.length > 0 && phase.k !== 'done' ? (
