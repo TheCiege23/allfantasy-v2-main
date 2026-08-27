@@ -57,10 +57,19 @@ const CAPTURED_AT = new Date().toISOString()
 const NFL = 4391
 const NCAAF = 4479
 const KNOWN_NFL_PLAYER = '34201502' // Jalen Hurts — GAPS.md R-04
+/*
+ * GAPS.md G-04 lists `lookupplayerstats` position coverage as PARTIAL: a quarterback returned
+ * passing + rushing, and defensive players were never tested. That matters more than it looks —
+ * the IDP projection stack is built entirely on defensive stat lines, so whether this provider
+ * carries ANY defensive categories decides whether it can contribute to that at all.
+ */
+const NFL_DEFENDER = '34167758' // Micah Parsons, LB/EDGE — via searchplayers.php 2026-08-27
 const KNOWN_NFL_EVENT = '2475349' // GAPS.md R-01..R-03 recorded nulls here
 
 /** @type {{name:string, endpoint:string, params:Record<string,string>, why:string}[]} */
 const PLAN = [
+  { name: 'lookupplayerstats.NFL_defender', endpoint: 'lookupplayerstats.php', params: { id: NFL_DEFENDER },
+    why: 'GAPS G-04 — does a DEFENDER return defensive categories, or only the offensive ones a QB showed?' },
   { name: 'lookupleague.NFL', endpoint: 'lookupleague.php', params: { id: String(NFL) }, why: 'confirm R-05 idLeague 4391' },
   { name: 'lookupleague.NCAAF', endpoint: 'lookupleague.php', params: { id: String(NCAAF) }, why: 'confirm R-06 idLeague 4479' },
   // lookup_all_teams.php?id=<league> 404s — it is NOT a real v1 endpoint,
@@ -154,6 +163,12 @@ async function probe(item) {
 
 async function main() {
   const dryRun = process.argv.includes('--dry-run')
+  /*
+   * Re-running the whole plan to answer one question burns calls and rewrites every fixture,
+   * which buries the one that changed in a diff nobody can read.
+   */
+  const onlyIdx = process.argv.indexOf('--only')
+  const only = onlyIdx !== -1 ? process.argv[onlyIdx + 1] : null
 
   console.log(`key source : ${KEY_SOURCE}`)
   console.log(`key tier   : ${IS_FREE_KEY ? 'FREE (30/min, lists silently truncated, commercial use NOT licensed)' : 'paid or unknown'}`)
@@ -169,7 +184,13 @@ async function main() {
   fs.mkdirSync(FIXTURE_DIR, { recursive: true })
   const manifest = []
 
-  for (const [i, item] of PLAN.entries()) {
+  const plan = only ? PLAN.filter((p) => p.name === only) : PLAN
+  if (only && plan.length === 0) {
+    console.error(`no probe named "${only}". Available: ${PLAN.map((p) => p.name).join(', ')}`)
+    process.exitCode = 1
+    return
+  }
+  for (const [i, item] of plan.entries()) {
     const { result, body } = await probe(item)
     manifest.push(result)
 
@@ -181,7 +202,7 @@ async function main() {
           ? `NULL (meaningful — record, do not retry)`
           : `${result.row_count} row(s) under .${result.top_level_key}`
 
-    console.log(`[${String(i + 1).padStart(2)}/${PLAN.length}] ${item.name.padEnd(28)} HTTP ${String(result.http_status ?? '---').padEnd(4)} ${status}`)
+    console.log(`[${String(i + 1).padStart(2)}/${plan.length}] ${item.name.padEnd(28)} HTTP ${String(result.http_status ?? '---').padEnd(4)} ${status}`)
 
     if (body !== null) {
       // Fixture carries its own provenance. A bare body cannot tell a later
@@ -190,7 +211,7 @@ async function main() {
       fs.writeFileSync(path.join(FIXTURE_DIR, `v1.${item.name}.json`), JSON.stringify(fixture, null, 2) + '\n')
     }
 
-    if (i < PLAN.length - 1) await sleep(2500) // stay under the 30/min free cap
+    if (i < plan.length - 1) await sleep(2500) // stay under the 30/min free cap
   }
 
   fs.writeFileSync(

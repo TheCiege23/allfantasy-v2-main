@@ -160,6 +160,11 @@ american_football_support:
     player_season_stats: { verified: true,
                            endpoint: lookupplayerstats.php,
                            limitation: "⚠️ SEASON AGGREGATES ONLY. No per-game or weekly lines.",
+                           defensive_coverage: "✅ VERIFIED 2026-08-27 (GAPS R-18). Defenders return Solo/Assisted/Combined
+                             Tackles, Sacks, Tackles For Loss, QB Hits, Passes Defended, Forced Fumbles, Fumbles
+                             Recovered, Defensive Interceptions + return yards/TDs, Safeties, Games Played/Started.",
+                           defensive_trap: "⚠️ `Total Tackles` MEANS SOLO. Combined Tackles = solo + assisted; a parser
+                             trusting `Total Tackles` undercounts every defender by his assists. See GAPS R-19.",
                            example: "Jalen Hurts 2024: Passing Yards 2903, Passing TDs 18, Rushing Yards 630",
                            free_row_limit: 10, premium_row_limit: 10000,
                            caveat: "Not in the v1 OpenAPI YAML at all. Some duplicate rows observed across seasons." }
