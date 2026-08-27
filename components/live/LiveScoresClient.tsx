@@ -119,12 +119,21 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
             {data.sport} · sorted by leagues affected
           </p>
           {data.games.length === 0 ? (
-            <EmptyState scope={scope} hasRosterData={data.hasRosterData} loadFailed={data.loadFailed} />
+            <EmptyState
+              scope={scope}
+              hasRosterData={data.hasRosterData}
+              loadFailed={data.loadFailed}
+              rosterFailed={data.rosterFailed}
+            />
           ) : (
             data.games.map((game) => <MatchupCard key={game.gameId} game={game} />)
           )}
         </main>
-        <LiveImpactPanel impact={data.impact} hasRosterData={data.hasRosterData} />
+        <LiveImpactPanel
+          impact={data.impact}
+          hasRosterData={data.hasRosterData}
+          rosterFailed={data.rosterFailed}
+        />
       </div>
     </div>
   )
@@ -186,10 +195,12 @@ function EmptyState({
   scope,
   hasRosterData,
   loadFailed,
+  rosterFailed,
 }: {
   scope: 'my' | 'all'
   hasRosterData: boolean
   loadFailed: boolean
+  rosterFailed: boolean
 }) {
   if (loadFailed) {
     return (
@@ -203,6 +214,31 @@ function EmptyState({
         <p className="live-display mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
           This is a problem on our end, not an empty slate — there may well be games on. Retrying
           automatically.
+        </p>
+      </div>
+    )
+  }
+
+  /*
+   * ⚠ A ROSTER FAULT IS NOT AN EMPTY SLATE, AND SAYING SO IS THE WORSE ERROR.
+   * Without this branch, a failed tie-in read falls through to "None of your
+   * players are playing right now" plus "Claim a team in one of your leagues" —
+   * told to someone who has claimed one and whose players may be on the field.
+   * Checked AFTER loadFailed because a dead slate is the bigger fault; checked
+   * BEFORE the normal state because that state asserts something we do not know.
+   */
+  if (rosterFailed) {
+    return (
+      <div
+        className="rounded-2xl p-8 text-center"
+        style={{ background: 'var(--panel)', border: '1px solid var(--live-line2)' }}
+      >
+        <p className="live-display text-[15px] font-bold" style={{ color: 'var(--bad)' }}>
+          We could not read your rosters.
+        </p>
+        <p className="live-display mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
+          The scores themselves are fine — this is a problem on our end, so we cannot say which
+          games involve your players. Switch to All games to see the full slate meanwhile.
         </p>
       </div>
     )

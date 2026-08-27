@@ -34,6 +34,30 @@ import '@/components/core-app/af-live.css'
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
 
+/**
+ * Play-feed labels and tone.
+ *
+ * Kept local rather than imported from `dash-v2/LivePlays`: that component
+ * renders a raw `LiveEvent` under the `af-d2-*` stylesheet, which this screen
+ * does not load. Sharing it would mean pulling another screen's CSS onto this
+ * one for two small maps.
+ */
+const PLAY_TYPE_LABEL: Record<string, string> = {
+  TOUCHDOWN: 'TD',
+  BIG_PLAY: 'BIG PLAY',
+  TURNOVER: 'TURNOVER',
+  FIELD_GOAL: 'FG',
+  DEFENSIVE_SCORE: 'DEF TD',
+  SPECIAL_TEAMS_SCORE: 'ST TD',
+}
+
+/** A score is good, a turnover costs someone, a big gain is merely notable. */
+function playTone(type: string): 'good' | 'bad' | 'warn' {
+  if (type === 'TURNOVER') return 'bad'
+  if (type === 'BIG_PLAY') return 'warn'
+  return 'good'
+}
+
 export type LiveScoresProps = {
   data: LivePageData
   /** The league held in the rail, so its tie-ins can be marked. Null on the
@@ -176,7 +200,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               id={`af-live-tab-${c.sport}`}
               className="af-live-sport"
               data-active={c.sport === sport}
-              data-quiet={c.liveCount === 0}
+              data-quiet={c.slateCount === 0}
               aria-selected={c.sport === sport}
               aria-controls="af-live-slate"
               /* Only the selected tab is in the tab order; arrow keys are the
@@ -186,7 +210,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               onClick={() => pickSport(c.sport)}
             >
               {c.label}
-              <span className="af-live-sport-count af-num">{c.liveCount}</span>
+              {/* Today's slate for this sport, not games in progress — a live
+                  count reads 0 for most of the day and made the badge look broken. */}
+              <span
+                className="af-live-sport-count af-num"
+                aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} today`}
+              >
+                {c.slateCount}
+              </span>
             </button>
           ))}
         </div>
@@ -208,7 +239,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
           </h2>
 
           {data.games.length === 0 ? (
-            <EmptySlate scope={scope} hasRosterData={data.hasRosterData} loadFailed={data.loadFailed} />
+            <EmptySlate
+              scope={scope}
+              hasRosterData={data.hasRosterData}
+              loadFailed={data.loadFailed}
+              rosterFailed={data.rosterFailed}
+            />
           ) : (
             data.games.map((game) => (
               <GameCard key={game.gameId} game={game} selectedLeagueId={selectedLeagueId} />
@@ -219,7 +255,26 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
         <aside className="af-live-side" aria-label="Your live impact">
           <div className="af-live-impact">
             <h2 className="af-label">Your live impact</h2>
-            {data.hasRosterData ? (
+            {data.rosterFailed ? (
+              /*
+               * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
+               * The em dash is right — we have no number we can stand behind —
+               * but "claim your team" is the wrong explanation and an actively
+               * misleading instruction: the team IS claimed, the read failed.
+               * "We could not read it" and "you have not created one" are
+               * different facts, exactly as that branch argues about 0.0.
+               */
+              <>
+                <p className="af-live-impact-total" data-missing="true">
+                  <span className="af-num">—</span>
+                  <span>we could not read your rosters</span>
+                </p>
+                <p className="af-live-impact-sub">
+                  This is a problem on our end, not an empty roster. The scores themselves are
+                  fine.
+                </p>
+              </>
+            ) : data.hasRosterData ? (
               <>
                 <p className="af-live-impact-total">
                   <span className="af-num">{data.impact.totalPoints.toFixed(1)}</span>
@@ -273,6 +328,53 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                   ) : null}
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {data.impact.plays.length > 0 ? (
+            <div className="af-live-card">
+              {/*
+                Conditional, not empty-stated, because both cards either side of
+                it behave that way — an aside stacked with "nothing yet"
+                placeholders is noise on a Tuesday. `impact.plays` is NFL-only by
+                construction, so on any other tab this card is simply absent.
+              */}
+              <h2 className="af-label">Live plays</h2>
+              <ul className="af-live-plays">
+                {data.impact.plays.map((p) => (
+                  /* Keyed on the feed's own idempotency key — the same key it
+                     dedupes on, so re-polling cannot duplicate a row. */
+                  <li key={p.id} className="af-live-play" data-tone={playTone(p.type)}>
+                    <MiniPlayerImg
+                      sleeperId={null}
+                      name={p.playerName}
+                      avatarUrl={p.imageUrl}
+                      size={28}
+                    />
+                    <span className="af-live-play-text">
+                      <span className="af-live-play-head">
+                        <span className="af-live-play-type af-num" data-tone={playTone(p.type)}>
+                          {PLAY_TYPE_LABEL[p.type] ?? p.type}
+                        </span>
+                        {p.team ? <span className="af-live-play-team af-num">{p.team}</span> : null}
+                      </span>
+                      {/*
+                        `headline` already reads "Bijan Robinson (RB) ran for 17
+                        yards" — it carries the name and the position, so those
+                        are not repeated beside it.
+
+                        ⚠ AND `yards` IS NOT RENDERED, ON PURPOSE. It is
+                        `Math.round(delta)` of whatever stat moved, so it is a
+                        yardage only for yardage stats; on a touchdown the stat
+                        is a counter and the delta is 1, which would print as
+                        "+1" next to a scoring play. The headline is the composed
+                        sentence that already knows the difference.
+                      */}
+                      <span className="af-live-play-line">{p.headline}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
@@ -468,10 +570,12 @@ function EmptySlate({
   scope,
   hasRosterData,
   loadFailed,
+  rosterFailed,
 }: {
   scope: 'my' | 'all'
   hasRosterData: boolean
   loadFailed: boolean
+  rosterFailed: boolean
 }) {
   if (loadFailed) {
     return (
@@ -480,6 +584,27 @@ function EmptySlate({
         <p className="af-live-empty-body">
           This is a problem on our end, not an empty slate — there may well be games on. Retrying
           automatically.
+        </p>
+      </div>
+    )
+  }
+
+  /*
+   * The fourth distinct state this panel needs, by the same rule as the three
+   * above: a failed ROSTER read is not a failed slate and not a quiet Sunday.
+   * Without it, `scope: 'my'` falls through to "None of your players are playing
+   * right now" over "Claim your team in one of your leagues" — both false, told
+   * to someone who has already claimed a team and whose players may be on the
+   * field. Below loadFailed because a dead slate is the larger fault; above the
+   * normal state because that state asserts something we do not know.
+   */
+  if (rosterFailed) {
+    return (
+      <div className="af-live-empty" data-tone="bad">
+        <p className="af-live-empty-title">We could not read your rosters.</p>
+        <p className="af-live-empty-body">
+          The scores themselves are fine — this is a problem on our end, so we cannot say which
+          games involve your players. Switch to All games to see the full slate meanwhile.
         </p>
       </div>
     )

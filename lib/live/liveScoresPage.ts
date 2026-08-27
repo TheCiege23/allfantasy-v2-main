@@ -92,6 +92,17 @@ export type LiveImpact = {
   liveGames: number
   /** The most recent notable play involving a player you roster. */
   biggestMover: (PlayFeedItem & { leagues: string[] }) | null
+  /**
+   * The recent play feed for this slate, newest first — the very rows
+   * `biggestMover` is picked from, now kept instead of thrown away.
+   *
+   * ⚠ NFL ONLY, AND DELIBERATELY EMPTY ON EVERY OTHER TAB. The cache behind it
+   * is the literal key `pbp:feed:NFL` and every `LiveEventType` is an NFL play,
+   * so there is genuinely nothing to show for MLB or NCAAF. Letting the NFL
+   * feed render under another sport's tab would caption real plays with the
+   * wrong games — the exact class of confident lie this page refuses to tell.
+   */
+  plays: PlayFeedItem[]
   /** Your players whose games have not kicked off yet. */
   upNext: Array<{ playerName: string; matchup: string; startTime: string }>
 }
@@ -99,7 +110,8 @@ export type LiveImpact = {
 export type LivePageData = {
   sport: string
   scope: 'my' | 'all'
-  counts: Array<{ sport: string; label: string; liveCount: number }>
+  /** Per-sport tab badges. `slateCount` is TODAY'S SLATE, not games in progress. */
+  counts: Array<{ sport: string; label: string; slateCount: number }>
   games: LiveGameCard[]
   impact: LiveImpact
   /** When the underlying feed was last refreshed — drives "updated Ns ago". */
@@ -115,6 +127,18 @@ export type LivePageData = {
    * made every sport throw, and the screen calmly reported no games.
    */
   loadFailed: boolean
+  /**
+   * ⚠ TRUE WHEN YOUR ROSTERS COULD NOT BE READ — A DIFFERENT FAULT FROM `loadFailed`.
+   * The slate itself is fine and still renders; what failed is the tie-in join.
+   * Kept separate precisely because blaming the slate for a roster fault is what
+   * made the P2021 outage read as a scores bug for two deploys.
+   *
+   * It matters most under `scope: 'my'`, where no tie-ins means no games shown:
+   * without this flag that state is indistinguishable from "none of your players
+   * are playing", which is the one thing this page must not assert when it does
+   * not know.
+   */
+  rosterFailed: boolean
 }
 
 /** A rostered player of yours, resolved to a real-world team. */
@@ -337,17 +361,83 @@ export async function getLivePageData(opts: {
     }),
   )
 
+  /*
+   * ⚠ THE BADGE COUNTS TODAY'S SLATE, NOT GAMES IN PROGRESS. User-confirmed
+   * 2026-08-27, and the previous behaviour was indefensible either way:
+   *
+   * It was `rows.filter(isLiveRow)`, and `isLiveRow` matches only "progress",
+   * "halftime", "end_period" or period > 0. Our own `SportsGame.status` column
+   * holds at least four vocabularies — "NS", "scheduled", "FT", "Final", and
+   * (genuinely) raw date strings like "8/27 - 7:05 PM EDT" written into the
+   * status field by one of the ingest writers. NONE of those match, so every
+   * sport read from the database scored zero live games forever.
+   *
+   * Only the ACTIVE sport could ever show a number, because `loadActiveSlate`
+   * refreshes through ESPN and gets a real status vocabulary back. That is the
+   * whole "the number vanishes when I click another tab" bug: not a UI defect,
+   * a predicate that cannot read the data we store.
+   *
+   * `entry.rows` is already windowed by `isInSlateWindow`, and the cached reader
+   * runs `pickFreshestSourceRows`, so this counts DISTINCT FIXTURES from one
+   * source — not the 3-4 rows per fixture the table holds across feeds. Measured
+   * on prod: NFL 4, MLB 7, NCAAF 53, which are the real slates.
+   *
+   * A sport genuinely out of season still reads 0 (NHL/NBA/NCAAB in August have
+   * no rows at all). That zero is correct and must not be "fixed".
+   */
   const counts = perSport.map((entry) => ({
     sport: entry.sport,
     label: SPORT_LABELS[entry.sport] ?? entry.sport,
-    liveCount: entry.rows.filter(isLiveRow).length,
+    slateCount: entry.rows.length,
   }))
 
   const active = perSport.find((entry) => entry.sport === sport)
   const rows = active?.rows ?? []
 
+  /*
+   * ⚠ A ROSTER-READ FAILURE MUST NOT DISCARD AN ALREADY-FETCHED SLATE.
+   *
+   * This was the only unguarded await left on the path, and on 2026-08-27 it
+   * blanked /core/live in production for every signed-in user: the
+   * `league_player_weekly_scores` migration had never been applied to prod, so
+   * `loadRosteredPlayers` threw P2021, the throw escaped `getLivePageData`, and
+   * the page's `.catch(() => null)` turned it into "We could not read the slate
+   * just now" — for a slate that had been fetched perfectly well moments before.
+   * Two deploys chased it as a scores bug because the copy blames the slate.
+   *
+   * Roster tie-ins are an ENHANCEMENT, not the page. The null-user branch below
+   * is the module's own documented contract for "no tie-ins available", and a
+   * failed read is the same state arrived at differently — so degrade into it
+   * rather than destroying the slate. Logged, because the page-level catch
+   * cannot say which half failed.
+   */
+  let rosterFailed = false
   const { players, hasRosterData } = opts.userId
-    ? await loadRosteredPlayers(opts.userId, sport)
+    ? await loadRosteredPlayers(opts.userId, sport).catch((err) => {
+        console.error(
+          '[live] roster tie-in read failed, rendering slate without it:',
+          err instanceof Error ? err.message : err,
+        )
+        /*
+         * ⚠ THE FLAG IS THE OTHER HALF OF THIS CATCH. Without it the catch
+         * trades a crash for a lie, which is the worse of the two.
+         *
+         * `scope: 'my'` is the DEFAULT, and with no tie-ins it filters every
+         * game away — so a silent degrade renders "None of your players are
+         * playing right now" above "Claim a team in one of your leagues", to a
+         * user who HAS claimed one and whose players may be on the field. Two
+         * false statements, on a screen that looks perfectly healthy. The
+         * `loadFailed` docstring and EmptyState's own header both name this as
+         * the worst claim this page can make.
+         *
+         * ⚠ AND IT IS DELIBERATELY NOT `loadFailed`. That flag says the SLATE
+         * failed. Blaming the slate for a roster fault is the same misdirection
+         * that sent two deploys chasing a scores bug that was really an
+         * unapplied migration. Distinct fault, distinct flag, distinct copy.
+         */
+        rosterFailed = true
+        return { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
+      })
     : { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
 
   // Real-world team -> your players on it.
@@ -444,10 +534,11 @@ export async function getLivePageData(opts: {
     scope,
     counts,
     games: visible,
-    impact: await buildImpact(visible, players),
+    impact: await buildImpact(visible, players, sport),
     fetchedAt: active?.fetchedAt ?? new Date().toISOString(),
     hasRosterData,
     loadFailed: active?.failed ?? false,
+    rosterFailed,
   }
 }
 
@@ -455,6 +546,7 @@ export async function getLivePageData(opts: {
 async function buildImpact(
   games: readonly LiveGameCard[],
   players: Map<string, RosteredPlayer>,
+  sport: string,
 ): Promise<LiveImpact> {
   const liveGames = games.filter((g) => g.isLive)
 
@@ -473,7 +565,20 @@ async function buildImpact(
     }
   }
 
-  const plays = await getPlayFeed().catch(() => [] as PlayFeedItem[])
+  /*
+   * ⚠ SCOPED BY SPORT, NOT BY GAME ID — AND THAT IS NOT THE OBVIOUS CHOICE.
+   * The tempting scoping is "keep the plays whose `gameId` is on this slate".
+   * It yields NOTHING, always, because the two ids come from different
+   * providers: the feed is built from `SportsGame.externalId` rows where
+   * `source: 'rolling_insights'`, while the active slate is fetched from ESPN
+   * and carries `event.id`. They are different id spaces that happen to share a
+   * field name. The feed's own cache key is `pbp:feed:NFL`, so the sport is the
+   * scope that is both honest and non-empty.
+   *
+   * Skipping the read outright off-NFL also spares every other tab a cache
+   * lookup that could only ever return plays it must not display.
+   */
+  const plays = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
   const liveGameIds = new Set(liveGames.map((g) => g.gameId))
   /*
    * The most recent play involving a player YOU roster, in a game that is
@@ -507,6 +612,7 @@ async function buildImpact(
     livePlayers: livePlayerIds.size,
     liveGames: liveGames.length,
     biggestMover,
+    plays,
     upNext,
   }
 }

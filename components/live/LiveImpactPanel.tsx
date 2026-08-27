@@ -10,7 +10,22 @@ import type { LiveImpact } from '@/lib/live/liveScoresPage'
  * calculation, so the total is the sum of what each league reported, never a
  * recomputation under some house scoring.
  */
-export function LiveImpactPanel({ impact, hasRosterData }: { impact: LiveImpact; hasRosterData: boolean }) {
+export function LiveImpactPanel({
+  impact,
+  hasRosterData,
+  rosterFailed,
+}: {
+  impact: LiveImpact
+  hasRosterData: boolean
+  /**
+   * ⚠ WHEN TRUE, THE TOTAL IS UNKNOWN — NOT ZERO. A failed roster read leaves
+   * `impact.totalPoints` at 0, and rendering that as "0.0 fantasy pts scored
+   * live right now" states a number we did not measure, to a user whose players
+   * may be scoring. Falls back to an em dash, the same rule the /core panel
+   * already applies to the no-claimed-team case.
+   */
+  rosterFailed: boolean
+}) {
   return (
     <aside className="flex flex-col gap-4">
       <section
@@ -24,15 +39,20 @@ export function LiveImpactPanel({ impact, hasRosterData }: { impact: LiveImpact;
           Your live impact
         </h2>
         <p className="flex items-baseline gap-2">
-          <span className="live-mono text-[34px] font-extrabold leading-none" style={{ color: 'var(--good)' }}>
-            {impact.totalPoints.toFixed(1)}
+          <span
+            className="live-mono text-[34px] font-extrabold leading-none"
+            style={{ color: rosterFailed ? 'var(--muted)' : 'var(--good)' }}
+          >
+            {rosterFailed ? '—' : impact.totalPoints.toFixed(1)}
           </span>
           <span className="live-display text-[13px]" style={{ color: 'var(--muted)' }}>
-            fantasy pts scored live right now
+            {rosterFailed ? 'we could not read your rosters' : 'fantasy pts scored live right now'}
           </span>
         </p>
         <p className="live-display mt-3 text-[13px] leading-relaxed" style={{ color: 'var(--muted)' }}>
-          {!hasRosterData
+          {rosterFailed
+            ? 'This is a problem on our end, not an empty roster. The scores themselves are fine.'
+            : !hasRosterData
             ? 'Connect or claim a team to see which of your players are playing right now.'
             : impact.livePlayers === 0
               ? 'None of your players are in a live game right now.'
