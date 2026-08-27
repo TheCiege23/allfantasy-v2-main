@@ -83,8 +83,37 @@ const SPORT_SEARCH_QUERIES: Record<string, string[]> = {
 }
 
 // Impact classification
-const HIGH_IMPACT_KEYWORDS = ['ruled out', 'out for season', 'traded', 'suspended', 'released', 'placed on IR', 'ACL', 'torn', 'fracture', 'surgery', 'TJS']
-const MEDIUM_IMPACT_KEYWORDS = ['questionable', 'doubtful', 'day-to-day', 'signed', 'extension', 'limited', 'DNP']
+//
+// ⚠ EVERY ENTRY MUST BE LOWERCASE. `classifyImpact` lowercases the haystack and
+// matches with `.includes()`, so an entry carrying a capital can never fire.
+// Until 2026-08-27 four did — 'placed on IR', 'ACL', 'TJS' and 'DNP' — and were
+// dead for the life of this file. 'ACL' never once matched; a torn-ACL report
+// only ever scored high because 'torn' happened to be listed separately. There
+// is a test that fails if a capital reappears here.
+//
+// The vocabulary is written for how REPORTERS write, not how injury designations
+// read. A live run on 2026-08-27 scored "on the mend" and "status is up in the
+// air" as low, because the original list only knew official statuses like
+// "questionable" — words that rarely appear in a Schefter post.
+const HIGH_IMPACT_KEYWORDS = [
+  'ruled out', 'out for the season', 'out for season', 'season-ending', 'season ending',
+  'placed on ir', 'injured reserve', 'pup list', 'carted off', 'stretchered',
+  'will miss', 'expected to miss', 'tommy john', 'achilles',
+  'traded', 'suspended', 'released', 'waived',
+  'surgery', 'torn', 'ruptured', 'fracture', 'broken',
+]
+const MEDIUM_IMPACT_KEYWORDS = [
+  'questionable', 'doubtful', 'day-to-day', 'day to day', 'week-to-week', 'week to week',
+  'game-time decision', 'game time decision', 'did not practice', 'limited',
+  'on the mend', 'up in the air', 'in doubt', 'uncertain', 'no timetable',
+  'expected to return', 'returned to practice', 'cleared', 'activated',
+  'signed', 'extension',
+]
+
+// Acronyms need word boundaries: a bare 'ir' as a substring matches "first",
+// "third" and "retire", which would score most of the feed as high impact.
+const HIGH_IMPACT_ACRONYMS = /\b(acl|mcl|pcl|tjs|ir)\b/
+const MEDIUM_IMPACT_ACRONYMS = /\b(gtd|dnp)\b/
 
 /**
  * Run the X API news ingestion for all sports.
@@ -237,10 +266,19 @@ function parseXNewsResponse(output: unknown, sport: string): XNewsItem[] {
   return items.slice(0, 20) // Max 20 items per query
 }
 
-function classifyImpact(text: string): 'high' | 'medium' | 'low' {
+/**
+ * Exported for tests. Keyword matching cannot read negation — "avoided a torn
+ * ACL" scores high — so treat the result as a coarse sort key, never as a claim
+ * about severity.
+ */
+export function classifyImpact(text: string): 'high' | 'medium' | 'low' {
   const lower = text.toLowerCase()
-  if (HIGH_IMPACT_KEYWORDS.some((kw) => lower.includes(kw))) return 'high'
-  if (MEDIUM_IMPACT_KEYWORDS.some((kw) => lower.includes(kw))) return 'medium'
+  if (HIGH_IMPACT_KEYWORDS.some((kw) => lower.includes(kw)) || HIGH_IMPACT_ACRONYMS.test(lower)) {
+    return 'high'
+  }
+  if (MEDIUM_IMPACT_KEYWORDS.some((kw) => lower.includes(kw)) || MEDIUM_IMPACT_ACRONYMS.test(lower)) {
+    return 'medium'
+  }
   return 'low'
 }
 
