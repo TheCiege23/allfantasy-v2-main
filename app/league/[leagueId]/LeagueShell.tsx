@@ -1,5 +1,7 @@
 'use client'
 
+import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
+import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
@@ -434,10 +436,19 @@ export function LeagueShell({
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
-    if (league.leagueVariant === 'idp' || league.leagueVariant === 'dynasty_idp') {
+    if (isIdpLeagueVariant(league.leagueVariant)) {
+      /*
+       * Case-insensitive because production stores `DYNASTY_IDP`, and the exact-match comparison
+       * this replaces (`=== 'dynasty_idp'`) never fired for any of the ten IDP leagues.
+       *
+       * Defense Hub rides the same predicate: it is only meaningful where the league prices
+       * defenders, and on a league that does not roster them it would render an empty page with
+       * a confident title.
+       */
       const idx = base.findIndex((t) => t.id === 'redraft')
       const idp = { id: 'idp', label: 'IDP' }
-      base = idx >= 0 ? [...base.slice(0, idx + 1), idp, ...base.slice(idx + 1)] : [idp, ...base]
+      const hub = { id: 'defense_hub', label: 'Defense Hub' }
+      base = idx >= 0 ? [...base.slice(0, idx + 1), idp, hub, ...base.slice(idx + 1)] : [idp, hub, ...base]
     }
     if (league.leagueType === 'keeper' && league.keeperPhaseActive) {
       base = [{ id: 'keeper', label: 'Keepers' }, ...base]
@@ -2034,6 +2045,8 @@ function LeagueTabRouter({
       )
     case 'idp':
       return <IDPHome leagueId={leagueId} />
+    case 'defense_hub':
+      return <DefenseHubClient leagueId={leagueId} embedded />
     case 'keeper':
       return <KeeperSelectionTab leagueId={leagueId} />
     case 'team':
