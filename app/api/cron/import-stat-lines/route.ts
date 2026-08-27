@@ -42,7 +42,7 @@ import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncRollingInsightsPlayerStatsToDb } from "@/lib/stats/rollingInsightsPlayerStats"
 import { syncCfbdPlayerStatsToDb } from "@/lib/stats/cfbdPlayerStats"
 import { backfillIdentityMapForSport } from "@/lib/sports-data/multiSportIdentityMap"
-import { riSupports } from "@/lib/sports-data/rollingInsightsRest"
+import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
 export const dynamic = "force-dynamic"

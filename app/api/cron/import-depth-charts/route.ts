@@ -28,7 +28,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncNFLDepthChartsToDb } from "@/lib/rolling-insights"
 import { syncRollingInsightsDepthChartsToDb } from "@/lib/sports-data/rollingInsightsDepthCharts"
-import { riSupports } from "@/lib/sports-data/rollingInsightsRest"
+import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
 /**

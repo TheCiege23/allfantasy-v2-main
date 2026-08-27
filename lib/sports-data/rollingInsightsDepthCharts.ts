@@ -2,7 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { riFetchRows, riSupports } from '@/lib/sports-data/rollingInsightsRest'
+import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
+import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 
 /**
  * Depth charts for every sport Rolling Insights serves them for — MLB, NFL, NBA, NHL.
