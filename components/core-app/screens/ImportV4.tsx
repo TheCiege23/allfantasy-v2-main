@@ -124,7 +124,7 @@ type Phase =
   | { k: 'attest'; sourceId: string; message: string }
   | { k: 'preview'; sourceId: string; leagueName: string; attested: boolean }
   | { k: 'committing'; sourceId: string }
-  | { k: 'done'; leagueId: string; leagueName: string; backfilled: boolean }
+  | { k: 'done'; leagueId: string; leagueName: string; backfilled: boolean; sourceId: string; existed: boolean; attested: boolean }
 
 const FIELD_BY_PROVIDER: Partial<
   Record<ImportProvider, { label: string; placeholder: string; help: string }>
@@ -533,14 +533,15 @@ export function ImportV4({
   }, [initialLeagueSourceId, provider, runPreview])
 
   const runCommit = useCallback(
-    async (sourceId: string, attested: boolean) => {
+    async (sourceId: string, attested: boolean, force = false) => {
       setError(null)
       setPhase({ k: 'committing', sourceId })
       const res = await submitImportCreation(
         provider,
         sourceId,
         '',
-        attested ? { accepted: true } : undefined
+        attested ? { accepted: true } : undefined,
+        force ? { force: true } : undefined
       )
       if (!res.ok) {
         /**
@@ -575,6 +576,10 @@ export function ImportV4({
         name?: string
         league?: { id: string; name: string }
         historicalBackfill?: unknown
+        /* The persist reports whether this run actually wrote anything, or matched an
+           already-completed import and returned it untouched. */
+        existed?: boolean
+        league_existed?: boolean
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -589,6 +594,9 @@ export function ImportV4({
         leagueId,
         leagueName: data?.name || data?.league?.name || 'Your league',
         backfilled: Boolean(data?.historicalBackfill),
+        sourceId,
+        attested,
+        existed: Boolean(data?.existed ?? data?.league_existed),
       })
     },
     [provider]
@@ -1383,11 +1391,34 @@ export function ImportV4({
               : 'Rosters, matchups and scoring are in. '}
             Nothing was changed on {provider}.
           </p>
+          {/*
+            ⚠ "IMPORTED" DID NOT ALWAYS MEAN ANYTHING WAS WRITTEN. A league already
+            imported for this account short-circuits on its idempotency key and comes
+            back untouched — correct, and indistinguishable on screen from a fresh
+            import, which is how a run that changed nothing got reported as success.
+            Say which happened, and offer the only action that changes the answer.
+          */}
+          {phase.existed ? (
+            <p className="af-im-field-help">
+              This league was already imported, so nothing was re-read and nothing was
+              overwritten. Re-import if it is missing data or has not appeared on your
+              portfolio.
+            </p>
+          ) : null}
           <div className="af-im-actions">
             {phase.leagueId ? (
               <Link href={`/league/${phase.leagueId}`} className="af-btn af-im-submit">
                 Open your league
               </Link>
+            ) : null}
+            {phase.existed ? (
+              <button
+                type="button"
+                className="af-btn af-btn--ghost"
+                onClick={() => void runCommit(phase.sourceId, phase.attested, true)}
+              >
+                Re-import and refresh
+              </button>
             ) : null}
             {/*
               ⚠ THE ONLY WAY BACK TO THE FORM. Both other actions navigate AWAY, so
