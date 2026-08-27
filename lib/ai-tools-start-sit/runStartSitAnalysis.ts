@@ -1,3 +1,4 @@
+import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import 'server-only'
 
 import type { LeagueSport, SportsPlayerRecord } from '@prisma/client'
@@ -222,10 +223,13 @@ export async function runStartSitAnalysis(input: {
       select: { platformUserId: true },
     })
     if (lt?.platformUserId) {
-      const r2 = await prisma.roster.findFirst({
-        where: { leagueId: trimmedLeagueId, platformUserId: lt.platformUserId },
-        select: { playerData: true, platformUserId: true },
-      })
+      /* Contract-aware: Roster.platformUserId holds the AF id for a LINKED
+         manager, so keying on the team's raw Sleeper id misses exactly the
+         opponents who have accounts. See lib/leagues/rosterForTeam.ts. */
+      const found = await findRosterForTeam(trimmedLeagueId, lt.platformUserId)
+      const r2 = found
+        ? { playerData: found.playerData as any, platformUserId: lt.platformUserId }
+        : null
       if (r2) roster = r2
     }
   }

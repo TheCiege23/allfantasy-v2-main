@@ -1,3 +1,4 @@
+import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -454,10 +455,10 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
       select: { platformUserId: true },
     })
     if (lt?.platformUserId) {
-      oppRosterRow = await prisma.roster.findFirst({
-        where: { leagueId: input.leagueId.trim(), platformUserId: lt.platformUserId },
-        select: { playerData: true },
-      })
+      /* Contract-aware — see lib/leagues/rosterForTeam.ts. Keying on the
+         team's raw Sleeper id misses every opponent with an AF account. */
+      const oppFound = await findRosterForTeam(input.leagueId.trim(), lt.platformUserId)
+      oppRosterRow = oppFound ? { playerData: oppFound.playerData as any } : null
     }
   }
 

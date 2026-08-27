@@ -193,7 +193,7 @@ describe('the connect-a-league flow', () => {
  * nothing.
  */
 describe('roster lookup honours the sync identity contract', () => {
-  const LOOKUP = readFileSync(resolve(process.cwd(), 'lib/franchise/rosterLookup.ts'), 'utf8')
+  const LOOKUP = readFileSync(resolve(process.cwd(), 'lib/leagues/rosterForTeam.ts'), 'utf8')
   const BOARD = readFileSync(resolve(process.cwd(), 'lib/franchise/franchiseBoard.ts'), 'utf8')
 
   it('prefers source_manager_id, the key the contract guarantees', () => {

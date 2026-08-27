@@ -24,7 +24,7 @@ import {
   type Settlement,
   type TradeLeg,
 } from './franchiseLink'
-import { findRosterForTeam, rosterPlayerIds } from './rosterLookup'
+import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 
 /** One side's roster, however that platform stores it. */
 export type FranchiseSideRoster = {

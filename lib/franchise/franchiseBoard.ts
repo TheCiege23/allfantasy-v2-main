@@ -21,7 +21,7 @@ import {
 import { projectDevyOutlook } from '@/lib/trade-intel/devyOutlook'
 import { devyAssetValue } from '@/lib/trade-intel/devyTradeValue'
 import { applyCrossHalfNeed, crossHalfNeedFactor, type CrossHalfNeed } from './crossHalfNeed'
-import { findRosterForTeam, rosterPlayerIds } from './rosterLookup'
+import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 
 /**
  * The pro half's roster need, computed from real positions.

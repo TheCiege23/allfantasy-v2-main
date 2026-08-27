@@ -1,3 +1,4 @@
+import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
@@ -159,18 +160,22 @@ export async function resolveAiTeamContext(args: {
     return null
   }
 
-  const roster = await prisma.roster.findFirst({
-    where: {
-      leagueId: args.leagueId,
-      OR: [
-        ...(leagueTeam.platformUserId
-          ? [{ platformUserId: leagueTeam.platformUserId }]
-          : []),
-        { platformUserId: args.userId },
-      ],
-    },
-    select: { playerData: true, platformUserId: true },
-  })
+  /*
+   * ⚠ Contract-aware. The old OR keyed on LeagueTeam.platformUserId, which is
+   * the RAW Sleeper id, while Roster.platformUserId holds the AF id for a LINKED
+   * manager — so it resolved the signed-in user by luck (their AF id is the
+   * second branch) and missed every OTHER manager with an account. See
+   * lib/leagues/rosterForTeam.ts.
+   */
+  const byTeam = leagueTeam.platformUserId
+    ? await findRosterForTeam(args.leagueId, leagueTeam.platformUserId)
+    : null
+  const roster = byTeam
+    ? { playerData: byTeam.playerData as any, platformUserId: leagueTeam.platformUserId }
+    : await prisma.roster.findFirst({
+        where: { leagueId: args.leagueId, platformUserId: args.userId },
+        select: { playerData: true, platformUserId: true },
+      })
 
   if (!roster) {
     return {
