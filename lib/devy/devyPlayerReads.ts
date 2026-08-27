@@ -70,6 +70,7 @@ const DEVY_SELECT = {
   cfbdId: true,
   jerseyNumber: true,
   devyValue: true,
+  draftProjectionScore: true,
   projectedNFLValue: true,
   projectedDraftRound: true,
   draftEligibleYear: true,
@@ -96,6 +97,7 @@ type DevyRow = {
   cfbdId: string | null
   jerseyNumber: string | null
   devyValue: number
+  draftProjectionScore: number | null
   projectedNFLValue: number | null
   projectedDraftRound: number | null
   draftEligibleYear: number | null
@@ -169,6 +171,27 @@ function toCFBPlayerStats(row: DevyRow): CFBPlayerStats {
   }
 }
 
+/*
+ * ⚠ DO NOT RANK ON `devyValue`. It is a position-and-class-year lookup with no
+ * player-specific input, and it is 0 for 1,237 of 1,718 rows in production —
+ * every player without a stat line, which for devy is most of the asset class.
+ * Ordering by it leaves 72% of the pool tied at zero in arbitrary order, so a
+ * team roster read returned a handful of statted players and then noise.
+ *
+ * `lib/devy/devyValueBoard.ts` reached the same conclusion and says so in its
+ * own header — it ranks on `draftProjectionScore` and never reads devyValue.
+ * This matches that, so the two do not disagree about who the best prospect is.
+ *
+ * `devyValue` stays as the SECOND key rather than being dropped: where a
+ * projection is missing it still separates a statted player from an empty row,
+ * which is better than falling straight through to alphabetical.
+ */
+const DEVY_RANK_ORDER = [
+  { draftProjectionScore: 'desc' as const },
+  { devyValue: 'desc' as const },
+  { name: 'asc' as const },
+]
+
 /**
  * Name search over the devy pool.
  *
@@ -183,7 +206,7 @@ export async function searchDevyPlayersFromDb(searchTerm: string, limit = 25): P
     where: { normalizedName: { contains: needle } },
     select: DEVY_SELECT,
     take: limit,
-    orderBy: [{ devyValue: 'desc' }, { name: 'asc' }],
+    orderBy: DEVY_RANK_ORDER,
   })
 
   return rows.map(toCFBPlayer)
@@ -198,7 +221,7 @@ export async function getDevyTeamRosterFromDb(team: string, limit = 200): Promis
     },
     select: DEVY_SELECT,
     take: limit,
-    orderBy: [{ devyValue: 'desc' }, { name: 'asc' }],
+    orderBy: DEVY_RANK_ORDER,
   })
 
   return rows.map(toDevyPlayerValue)
@@ -223,11 +246,11 @@ export async function getDevyValuesForNamesFromDb(
   const rows = await prisma.devyPlayer.findMany({
     where: { normalizedName: { in: lookup } },
     select: DEVY_SELECT,
-    orderBy: { devyValue: 'desc' },
+    orderBy: DEVY_RANK_ORDER,
   })
 
-  // First row per normalized name wins — ordered by devyValue, so when the same
-  // name exists at two schools the more valuable prospect is the one returned.
+  // First row per normalized name wins — ordered by draft projection, so when the
+  // same name exists at two schools the better-projected prospect is returned.
   const byName = new Map<string, DevyRow>()
   for (const row of rows) if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, row)
 
