@@ -236,13 +236,40 @@ export async function attachToFranchise(args: {
     where: { platform: args.platform, leagueId: args.leagueId },
     select: { linkId: true },
   })
+  /*
+   * ⚠ THIS TOLD PEOPLE THEIR OWN LEAGUE BELONGED TO SOMEBODY ELSE.
+   *
+   * The check compared link IDs only, so a league already attached to a franchise
+   * THIS SAME USER owns was refused exactly like one owned by a stranger. That is
+   * precisely what a re-import hits: the first import creates the franchise link,
+   * and every attempt afterwards dies on a message that reads as an ownership
+   * conflict with another account. Measured on production 2026-08-27 — the single
+   * Fantrax row in `franchise_league_members` is the owner's own Cream Bowl link,
+   * and it was blocking that owner.
+   *
+   * The rule is about the OWNER, not the link id. Someone else's franchise is still
+   * refused: silently re-parenting it would empty the franchise it came from, which
+   * is what the uniqueness note above is protecting.
+   */
+  let reclaimedLinkId: string | null = null
   if (claimed && claimed.linkId !== args.linkId) {
-    return { ok: false, error: 'that league is already part of another franchise' }
+    const owner = await prisma.franchiseLink.findFirst({
+      where: { id: claimed.linkId },
+      select: { id: true, ownerUserId: true },
+    })
+    if (!owner || owner.ownerUserId !== args.ownerUserId) {
+      return { ok: false, error: 'that league is already part of another franchise' }
+    }
+    // Their own franchise — reuse it rather than creating a second one for the
+    // same league, which is what the unique (platform, leagueId) would reject.
+    reclaimedLinkId = owner.id
   }
 
-  const link = args.linkId
+  const effectiveLinkId = args.linkId ?? reclaimedLinkId
+
+  const link = effectiveLinkId
     ? await prisma.franchiseLink.findFirst({
-        where: { id: args.linkId, ownerUserId: args.ownerUserId },
+        where: { id: effectiveLinkId, ownerUserId: args.ownerUserId },
         select: { id: true },
       })
     : await prisma.franchiseLink.create({
