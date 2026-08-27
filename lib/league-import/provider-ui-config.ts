@@ -45,15 +45,26 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    */
   { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
   /*
-   * mfl: real adapter and a real fetch service, still not selectable, and the
-   * reason is unchanged — `MflLeagueFetchService` reads an API key off
-   * `LeagueAuth` and there is nowhere in the product to put one. The storage
-   * exists (`LeagueAuth.apiKey`, and `/api/league/auth` already encrypts it);
-   * the entry UI does not. Until a key can be saved, discovery
-   * (`fetchMflUserLeagues`) has nothing to authenticate with and a private
-   * league cannot be read at all.
+   * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
+   * service, the pipeline entry and the storage column all existed; what did not
+   * was anywhere to type the API key `MflLeagueFetchService` requires — so
+   * `getMflAuthForUser` threw on every import. `MflApiKeyConnection` in
+   * Settings → Connected Accounts saves one, through the endpoint that already
+   * encrypted it.
+   *
+   * ⚠ THE KEY IS REQUIRED FOR EVERY LEAGUE, NOT JUST PRIVATE ONES. MFL's export
+   * API takes `APIKEY` on every call this service makes, so there is no
+   * public-league shortcut and the tile must name the setup step the way ESPN's
+   * does.
+   *
+   * ⚠ AND THIS IS THE ONE FLAG HERE NOT VERIFIED AGAINST A REAL LEAGUE.
+   * Fantrax and Fleaflicker were both proven end to end before they flipped;
+   * MFL cannot be, because the verification needs a key nobody on this side
+   * holds. It is flipped on the same standard ESPN was held to — the missing
+   * piece is built, and the failure path already names the fix in the user's
+   * terms ("Save your MFL API key in League Sync before importing").
    */
-  { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: false, supportedSports: ['NFL'] },
+  { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: true, supportedSports: ['NFL'] },
   /*
    * fleaflicker: FLIPPED 2026-08-27 with the missing piece built, not to unblock
    * anything. The blocker was never the adapter — it was that no field in the

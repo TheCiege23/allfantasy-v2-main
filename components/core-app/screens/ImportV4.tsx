@@ -167,6 +167,18 @@ const FIELD_BY_PROVIDER: Partial<
    * and no key to find — which is worth saying, because every other tile on
    * this screen has taught the user to expect a setup step first.
    */
+  /*
+   * ⚠ NAMES THE SETUP STEP, LIKE ESPN'S DOES. MFL's export API takes an API key
+   * on every call — private leagues and public ones alike — so a user who pastes
+   * a league id without saving a key first gets a failure that is about setup,
+   * not about their league. ESPN learned this the expensive way; the copy here
+   * starts where that one ended up.
+   */
+  mfl: {
+    label: 'MFL league ID',
+    placeholder: '12345, or paste the league URL',
+    help: 'Save your MFL API key once under Settings → Connected Accounts, then paste a league ID here. MFL needs the key for every league, public ones included. The key is not your password.',
+  },
   fleaflicker: {
     label: 'Fleaflicker league ID',
     placeholder: '206154, or paste the league URL',
@@ -187,16 +199,18 @@ const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   fantrax: 'League ID · pick your team',
   /* No account, no cookie, no key — the only tile here that needs nothing first. */
   fleaflicker: 'League ID · nothing to connect',
+  /* The key is not optional and not private-league-only; say so on the tile. */
+  mfl: 'League ID · API key required',
 }
 
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
   /*
-   * Still true, and still the whole reason. `MflLeagueFetchService` reads the
-   * key off `LeagueAuth` — the column exists and `/api/league/auth` already
-   * encrypts one — but no screen in the product asks for it.
+   * Empty, and kept rather than deleted: every provider on this screen is
+   * selectable today, and the next one added will need somewhere to say why it
+   * is not. The tile falls back to "Not connectable yet." if a provider is ever
+   * marked unavailable without an entry here.
    */
-  mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
 }
 
 /**

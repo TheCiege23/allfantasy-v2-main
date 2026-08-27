@@ -28,13 +28,19 @@ const EXPECTED_AVAILABILITY: Record<string, boolean> = {
    */
   fantrax: true,
   /*
-   * mfl stays false, and not for want of an adapter. `MflLeagueFetchService`
-   * reads an API key off `LeagueAuth` and nothing in the product can save one —
-   * the column and the write endpoint exist, the entry UI does not. Flipping
-   * this before that is built would put a tile in front of users that fails on
-   * every private league.
+   * Flipped 2026-08-27 with the missing piece built: `MflApiKeyConnection` in
+   * Settings → Connected Accounts saves the API key `MflLeagueFetchService`
+   * requires, through the endpoint that already encrypted it. The key is needed
+   * for EVERY MFL league, not only private ones, so the tile names the setup
+   * step the way ESPN's does.
+   *
+   * ⚠ UNLIKE FANTRAX AND FLEAFLICKER, THIS ONE IS NOT VERIFIED AGAINST A REAL
+   * LEAGUE — that needs a key nobody on this side holds. It is flipped on the
+   * standard ESPN was held to before it was proven: missing piece built, and a
+   * failure path that names the fix rather than failing blankly. The first real
+   * MFL import is still the real test.
    */
-  mfl: false,
+  mfl: true,
   /*
    * Flipped 2026-08-27 with the missing piece built, not to unblock anything.
    * Fleaflicker needs no credential of any kind — `fetchFleaflickerLeagueForImport`

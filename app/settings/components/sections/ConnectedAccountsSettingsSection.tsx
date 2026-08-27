@@ -17,6 +17,7 @@ import {
 } from "@/lib/connected-accounts"
 import { ConnectedIdentityRenderer } from "@/components/connected-accounts/ConnectedIdentityRenderer"
 import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection"
+import { MflApiKeyConnection } from "@/components/settings/MflApiKeyConnection"
 import type { SettingsProfile } from "./settings-types"
 
 const IMPORT_PLATFORM_IDS = ["yahoo", "espn", "mfl", "fleaflicker", "fantrax"] as const
@@ -471,6 +472,7 @@ export function ConnectedAccountsSettingsSection({
                 </Link>
               </div>
               {id === "espn" && <EspnCookieConnection />}
+              {id === "mfl" && <MflApiKeyConnection />}
             </li>
           ))}
         </ul>
