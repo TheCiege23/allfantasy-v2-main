@@ -1,6 +1,7 @@
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { prisma } from '@/lib/prisma'
-import { getDraftPicks, getLeagueDrafts } from '@/lib/sleeper-client'
+import { getDraftPicks, getLeagueDrafts, getLeagueRosters } from '@/lib/sleeper-client'
+import { getSourceTeamIdFromPlayerData } from './SleeperHistoricalMatchupSyncService'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 
 interface PendingSleeperDraftFact {
@@ -92,6 +93,31 @@ async function collectSleeperDraftFacts(args: {
   providerCallsAvoided: number
 }> {
   const historyChain = await getSleeperHistoricalLeagueChain(args.startingLeagueId, args.maxPreviousSeasons)
+
+  /*
+   * ⚠ WITHOUT THIS, A PICK BELONGS TO WHOEVER HOLDS THAT ROSTER SLOT TODAY.
+   *
+   * `normalizeManagerId` returns the pick's raw `roster_id` — a number that identifies
+   * a slot within ONE season, not a person across seasons. Slots get reused: the
+   * manager who was roster 4 in 2022 is very often not roster 4 now. Any reader that
+   * filters DraftFact by a current team's `externalId` would therefore show one
+   * manager another manager's draft, silently and plausibly.
+   *
+   * The matchup sync already resolves this — historical roster -> that season's owner
+   * -> the owner's CURRENT `source_team_id`, which is what `LeagueTeam.externalId`
+   * holds. This is the same resolution, against the same helper, so the two fact
+   * tables agree on what a team id means.
+   */
+  const currentRosters = await prisma.roster.findMany({
+    where: { leagueId: args.internalLeagueId },
+    select: { platformUserId: true, playerData: true },
+  })
+  const canonicalIdByManagerId = new Map<string, string>()
+  for (const roster of currentRosters) {
+    const sourceTeamId = getSourceTeamIdFromPlayerData(roster.playerData)
+    if (sourceTeamId) canonicalIdByManagerId.set(roster.platformUserId, sourceTeamId)
+  }
+
   const pendingRows: PendingSleeperDraftFact[] = []
   const seasonsWithDrafts = new Set<number>()
   let importedDraftCount = 0
@@ -112,6 +138,35 @@ async function collectSleeperDraftFacts(args: {
         providerCallsAvoided += 1
         continue
       }
+    }
+
+    /*
+     * That season's own rosters map its roster_id to an owner; the owner maps to the
+     * current team. Fetched AFTER the completion gate above, so a season we already
+     * imported still costs no provider call.
+     */
+    const seasonRosters = await getLeagueRosters(seasonLeague.externalLeagueId).catch(() => null)
+    const canonicalByHistoricalRosterId = new Map<string, string>()
+    for (const roster of seasonRosters ?? []) {
+      const raw = (roster as { roster_id?: unknown; owner_id?: unknown } | null) ?? {}
+      const historicalRosterId = raw.roster_id != null ? String(raw.roster_id) : ''
+      if (!historicalRosterId) continue
+      const ownerId = typeof raw.owner_id === 'string' ? raw.owner_id : null
+      canonicalByHistoricalRosterId.set(
+        historicalRosterId,
+        (ownerId ? canonicalIdByManagerId.get(ownerId) : undefined) ?? historicalRosterId,
+      )
+    }
+
+    /*
+     * `normalizeManagerId` may hand back a roster id, an owner id, or `picked_by`.
+     * Try both maps, then fall through to the raw value — an unresolvable manager
+     * keeps its historical id rather than being dropped, so the pick still exists on
+     * the board even when it cannot be attributed to a current team.
+     */
+    const canonicalManagerId = (raw: string | undefined): string | undefined => {
+      if (!raw) return undefined
+      return canonicalByHistoricalRosterId.get(raw) ?? canonicalIdByManagerId.get(raw) ?? raw
     }
 
     const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
@@ -167,7 +222,7 @@ async function collectSleeperDraftFacts(args: {
           round,
           pickNumber,
           playerId,
-          managerId: normalizeManagerId(pick),
+          managerId: canonicalManagerId(normalizeManagerId(pick)),
           season: seasonLeague.season,
         })
         draftProducedRows = true

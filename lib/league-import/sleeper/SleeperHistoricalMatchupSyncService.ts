@@ -209,7 +209,13 @@ function toPlayoffFinishLabel(info: PlayoffFinishInfo): string | null {
   return null
 }
 
-function getSourceTeamIdFromPlayerData(playerData: unknown): string | null {
+/**
+ * The current season's canonical team id for a roster, as stamped into `playerData`
+ * by the import. Exported because the DRAFT sync needs the identical resolution —
+ * it wrote raw historical roster ids for a long time, which attributed picks to
+ * whoever happens to hold that roster slot today. One definition, not two that drift.
+ */
+export function getSourceTeamIdFromPlayerData(playerData: unknown): string | null {
   if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) {
     return null
   }

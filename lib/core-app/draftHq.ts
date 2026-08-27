@@ -86,6 +86,90 @@ export function computePickSlots(
   return out
 }
 
+/**
+ * The draft this league already played, read from the import.
+ *
+ * ⚠ NO LIVE DRAFT SESSION DOES NOT MEAN NO DRAFT. `DraftSession` describes a draft this
+ * app is RUNNING; an imported league has never had one, so this screen answered "no
+ * draft has been set up for this league" to someone whose ten drafted seasons were
+ * sitting in `DraftFact` (`dw_draft_facts`), written by the import and read by nothing.
+ *
+ * ⚠ THIS IS SAFE ONLY BECAUSE `managerId` IS NOW CANONICAL. It used to hold the raw
+ * historical `roster_id` — a slot within one season, reused by different managers across
+ * seasons — so filtering it by a current team's `externalId` would have shown one manager
+ * another manager's draft, plausibly and silently. The draft sync now resolves it the way
+ * the matchup sync always has. Picks imported BEFORE that fix keep their raw ids and
+ * simply will not match here, which is the correct failure: nothing is shown rather than
+ * the wrong thing.
+ */
+async function loadImportedDraftPicks(
+  leagueId: string,
+  userId: string,
+): Promise<SectionState<MadePick[]>> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+
+  const myTeam = await prisma.leagueTeam.findFirst({
+    where: { leagueId, claimedByUserId: userId },
+    select: { externalId: true },
+  })
+  if (!myTeam?.externalId) {
+    return unavailable('no draft has been set up, and no team in this league is claimed by you')
+  }
+
+  const facts = await prisma.draftFact.findMany({
+    where: { leagueId, managerId: String(myTeam.externalId) },
+    orderBy: [{ season: 'desc' }, { pickNumber: 'asc' }],
+    select: { round: true, pickNumber: true, playerId: true, season: true },
+  })
+  if (facts.length === 0) {
+    return unavailable('no draft has been set up, and no imported draft picks are on file for your team')
+  }
+
+  /* The most recent imported season only — a screen headed "your picks" showing ten
+     drafts at once is a list, not an answer. */
+  const season = facts[0]?.season ?? null
+  const rows = facts.filter((f) => f.season === season)
+
+  /* Pick-in-round is derived from the overall pick and the league size, the same
+     correction the live path documents: DraftPick.slot is a roster's draft slot, not a
+     pick-in-round, and labelling from it prints every round identically. */
+  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
+
+  /* DraftFact stores only a provider player id. Names come from SportsPlayer, which is
+     where this codebase resolves Sleeper ids. Coverage is not total, so an unmatched id
+     is SAID to be unmatched rather than hidden — dropping the pick would misreport the
+     draft. */
+  const players = await prisma.sportsPlayer.findMany({
+    where: { sleeperId: { in: rows.map((r) => r.playerId) } },
+    select: { sleeperId: true, name: true, position: true, team: true },
+  })
+  const byPlayerId = new Map<string, { name: string; position: string | null; team: string | null }>()
+  for (const p of players) {
+    if (p.sleeperId && !byPlayerId.has(p.sleeperId)) {
+      byPlayerId.set(p.sleeperId, { name: p.name, position: p.position, team: p.team })
+    }
+  }
+
+  return {
+    available: true,
+    data: rows.map((r) => {
+      const hit = byPlayerId.get(r.playerId)
+      const inRound = teamCount > 0 ? r.pickNumber - (r.round - 1) * teamCount : 0
+      return {
+        overall: r.pickNumber,
+        round: r.round,
+        label:
+          inRound > 0
+            ? `${r.round}.${String(inRound).padStart(2, '0')}`
+            : `Pick ${r.pickNumber}`,
+        playerName: hit?.name ?? `Unmatched player ${r.playerId}`,
+        position: hit?.position ?? '—',
+        team: hit?.team ?? null,
+      }
+    }),
+  }
+}
+
 export async function getDraftHqData(leagueId: string, userId: string): Promise<DraftHqData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -121,8 +205,11 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
   })
 
   if (!session) {
+    /* Session and slots genuinely do not exist — this app is not running a draft here,
+       and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
-    return { ...base, session: none, pickSlots: none, madePicks: none }
+    const madePicks = await loadImportedDraftPicks(leagueId, userId).catch(() => none)
+    return { ...base, session: none, pickSlots: none, madePicks }
   }
 
   const myTeam = await prisma.leagueTeam.findFirst({
