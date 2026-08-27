@@ -86,6 +86,47 @@ function getImportApiErrorMessage(
 /**
  * Fetch import preview for the given provider and source input.
  */
+/**
+ * ⚠ A FETCH WITH NO TIMEOUT IS WHY "This is my team" HUNG FOREVER.
+ *
+ * `runPreview` in ImportV4 sets the row's phase to `previewing` and awaits this
+ * call; that row's button renders "Reading…" and disables itself while the phase
+ * holds. Nothing here ever aborted, so a provider that stalls — Fantrax reads
+ * every team's roster, one request per team — left the row reading forever, with
+ * no error, no recovery, and no way out but a page reload. Observed on a 12-team
+ * Fantrax league.
+ *
+ * The bound belongs HERE rather than in the caller: all three import entry points
+ * go through this module, and a timeout added per-caller is one somebody forgets
+ * on the next one.
+ *
+ * 60s is deliberately generous — a real Fantrax league sweep is slow, and cutting
+ * a working import short would be a worse bug than the hang. This is a backstop
+ * against never returning, not a latency budget.
+ */
+const IMPORT_REQUEST_TIMEOUT_MS = 60_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMPORT_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * An aborted request is not a "network error" — the user needs to know it was
+ * still working and ran out of time, which implies a different next action.
+ */
+function importRequestErrorMessage(e: unknown): string {
+  if (e instanceof DOMException && e.name === 'AbortError') {
+    return 'That league took too long to read. It may be a large league — try again.';
+  }
+  return e instanceof Error ? e.message : 'Network error';
+}
+
 export async function fetchImportPreview(
   provider: ImportProvider,
   sourceInput: string,
@@ -100,7 +141,7 @@ export async function fetchImportPreview(
   }
 
   try {
-    const res = await fetch('/api/leagues/import/preview', {
+    const res = await fetchWithTimeout('/api/leagues/import/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -120,7 +161,7 @@ export async function fetchImportPreview(
     }
     return { ok: true, data };
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Network error';
+    const message = importRequestErrorMessage(e);
     return { ok: false, error: message };
   }
 }
@@ -144,7 +185,7 @@ export async function submitImportCreation(
   }
 
   try {
-    const res = await fetch('/api/leagues/import/commit', {
+    const res = await fetchWithTimeout('/api/leagues/import/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -170,7 +211,7 @@ export async function submitImportCreation(
      */
     return { ok: true, data, existed: Boolean((data as { existed?: boolean })?.existed) };
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Network error';
+    const message = importRequestErrorMessage(e);
     return { ok: false, error: message };
   }
 }
@@ -192,7 +233,7 @@ export async function discoverProviderLeagues(
   }
 
   try {
-    const res = await fetch('/api/leagues/import/discover', {
+    const res = await fetchWithTimeout('/api/leagues/import/discover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -212,7 +253,7 @@ export async function discoverProviderLeagues(
     }
     return { ok: true, data };
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Network error';
+    const message = importRequestErrorMessage(e);
     return { ok: false, error: message };
   }
 }

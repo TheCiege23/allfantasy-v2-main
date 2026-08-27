@@ -364,6 +364,34 @@ export async function assertImportCommissioner(args: {
   // authenticated user" behavior unchanged — extending it there would
   // silently regress a working import path, exactly what this phase's hard
   // guardrails warn against.
+  /*
+   * ESPN: PROVEN MEMBERSHIP IS ENOUGH. BEING THE COMMISSIONER IS NOT THE BAR.
+   *
+   * `checkEspn` only reaches `ok: true` when the league payload carries a
+   * `viewerTeamId` — the caller's own linked ESPN account holds a team in THIS
+   * league. That is real, active membership verification, the same strength
+   * Sleeper proves, and it is reported as `verification: 'api'`.
+   *
+   * What ESPN cannot report is commissioner status for a viewer who is not on its
+   * commissioner list, so `isCommissioner` comes back `undefined` and the request
+   * used to fall into the attestation branch below — asking an ordinary manager to
+   * swear they are the commissioner in order to import a league they demonstrably
+   * play in. Sleeper's equivalent case does not do that: an established
+   * non-commissioner member returns `verification: 'member'` and is allowed
+   * through, a few lines above. ESPN now matches it.
+   *
+   * ⚠ THIS DOES NOT REOPEN WHAT THE ATTESTATION BRANCH CLOSED. That hole was "any
+   * authenticated user can import any league", and it belongs to the OPEN_READ
+   * providers, which attempt no verification at all. ESPN still requires a linked
+   * account owning a team in this specific league; without one, `checkEspn`
+   * returns `ok: false` ("Link the ESPN account that manages this league…") long
+   * before control reaches here. A stranger with only a league ID still cannot
+   * import it.
+   */
+  if (args.provider === 'espn' && base.isCommissioner === undefined && base.verification === 'api') {
+    return { ...base, ok: true, verification: 'member' }
+  }
+
   if (
     base.isCommissioner === undefined &&
     base.verification === 'api' &&

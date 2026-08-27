@@ -5,6 +5,7 @@ import {
   getFantraxLeagueInfo,
   getFantraxPlayerIds,
   getFantraxStandings,
+  flattenFantraxSchedule,
   getFantraxTeamRosters,
   resolveRosters,
 } from '@/lib/league-import/fantrax/fantraxApi'
@@ -290,5 +291,104 @@ describe('standings', () => {
     const res = await getFantraxStandings('nope')
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.failure.kind).toBe('not_found')
+  })
+})
+
+
+/**
+ * ⚠ THE WHOLE SEASON SCHEDULE WAS SITTING IN A RESPONSE THE IMPORT ALREADY MADE.
+ * `getLeagueInfo` was read for the league name and the team list and everything
+ * else discarded, so every Fantrax league imported with no schedule and no
+ * playoff structure while the data was in the same object.
+ *
+ * Shape captured live 2026-08-27: 13 periods, `playoffs.firstPlayoffPeriod` 11,
+ * `lastRegularSeasonPeriod` 10. Verified end to end on that league — 60
+ * fixtures, 12 teams, 10 games each, all resolving to real rosters.
+ */
+function infoWith(overrides: Record<string, unknown>) {
+  return {
+    leagueName: 'Cream Bowl',
+    seasonYear: 2026,
+    draftType: null,
+    ppr: null,
+    startDate: null,
+    endDate: null,
+    teamInfo: {},
+    playerInfo: {},
+    rosterInfo: {},
+    ...overrides,
+  } as Parameters<typeof flattenFantraxSchedule>[0]
+}
+
+const TWO_PERIODS = [
+  {
+    period: 1,
+    matchupList: [
+      { away: { name: 'loganhall', id: 'a' }, home: { name: 'Yourdyinggrandpa', id: 'b' } },
+      { away: { name: 'Team JMasc', id: 'c' }, home: { name: 'Connor0488', id: 'd' } },
+    ],
+  },
+  {
+    period: 11,
+    matchupList: [{ away: { name: 'Ciege82', id: 'e' }, home: { name: 'rfasti', id: 'f' } }],
+  },
+]
+
+describe('the schedule that was being thrown away', () => {
+  it('flattens every period into one row per pairing', () => {
+    const rows = flattenFantraxSchedule(infoWith({ matchups: TWO_PERIODS }))
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatchObject({ week: 1, awayTeam: 'loganhall', homeTeam: 'Yourdyinggrandpa' })
+  })
+
+  /** Real structure, not "which weeks happen to carry a flag". */
+  it("flags playoff weeks from the league's own first playoff period", () => {
+    const rows = flattenFantraxSchedule(
+      infoWith({ matchups: TWO_PERIODS, playoffs: { used: true, firstPlayoffPeriod: 11 } }),
+    )
+    expect(rows.filter((r) => r.isPlayoff).map((r) => r.week)).toEqual([11])
+  })
+
+  /**
+   * ⚠ A LEAGUE WITH PLAYOFFS TURNED OFF HAS NO PLAYOFF WEEKS, however late the
+   * period number runs.
+   */
+  it('flags nothing when the league does not use playoffs', () => {
+    const rows = flattenFantraxSchedule(
+      infoWith({ matchups: TWO_PERIODS, playoffs: { used: false, firstPlayoffPeriod: 11 } }),
+    )
+    expect(rows.some((r) => r.isPlayoff)).toBe(false)
+  })
+
+  /**
+   * ⚠ A BYE IS SKIPPED, NOT HALF-STORED. Writing a pairing with one empty side
+   * resolves to no team and reads as a corrupt fixture.
+   */
+  it('skips a pairing missing a side', () => {
+    const rows = flattenFantraxSchedule(
+      infoWith({
+        matchups: [
+          { period: 1, matchupList: [{ away: { name: 'loganhall' }, home: null }, { away: {}, home: { name: 'rfasti' } }] },
+        ],
+      }),
+    )
+    expect(rows).toEqual([])
+  })
+
+  /**
+   * ⚠ NO SCORES, AND NO ZEROS STANDING IN FOR THEM. getLeagueInfo carries
+   * fixtures, not results; a stored 0-0 is indistinguishable from a real
+   * scoreless tie.
+   */
+  it('carries no score fields at all', () => {
+    const rows = flattenFantraxSchedule(infoWith({ matchups: TWO_PERIODS }))
+    for (const row of rows) {
+      expect(Object.keys(row).sort()).toEqual(['awayTeam', 'homeTeam', 'isPlayoff', 'week'])
+    }
+  })
+
+  it('returns nothing rather than throwing when the league has no schedule', () => {
+    expect(flattenFantraxSchedule(infoWith({}))).toEqual([])
+    expect(flattenFantraxSchedule(infoWith({ matchups: null }))).toEqual([])
   })
 })
