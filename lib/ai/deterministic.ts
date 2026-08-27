@@ -23,7 +23,12 @@ import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { detectUpcomingIntent, findUpcomingGames } from '@/lib/ai/upcomingGames'
-import { detectStatFamily, FAMILY_LABEL, readStatLeaders } from '@/lib/live/playerStatLeaders'
+import {
+  detectStatFamily,
+  findPlayerInText,
+  FAMILY_LABEL,
+  readStatLeaders,
+} from '@/lib/live/playerStatLeaders'
 
 /** US sports days are Eastern days; this is what "today" and "tonight" mean. */
 const SPORTS_DAY_TIMEZONE = 'America/New_York'
@@ -171,7 +176,14 @@ function detectWeatherQuestion(message: string): boolean {
  * through it — and TD, RBI and HR are how people actually write these.
  */
 function detectUnsupportedStatEventQuestion(message: string): boolean {
-  return /\b(home runs?|homers?|hr|hit a home run|touchdowns?|tds?|rbis?|goalscorers?|who scored|box score|stat ?line|player stats?|passing yards?|rushing yards?|receiving yards?)\b/i.test(
+  /*
+   * ⚠ `hr` DID NOT MATCH "HRs". The `\b` after it requires a boundary, and the
+   * plural `s` is a word character — so "who hit the most HRs today?" walked
+   * straight past this guard into a model with no baseball play-by-play behind
+   * it. Exactly the gap that `TDs` had, reintroduced one abbreviation over.
+   * Every abbreviation here now carries its own optional plural.
+   */
+  return /\b(home runs?|homers?|hrs?|hit a home run|touchdowns?|tds?|rbis?|ypc|goalscorers?|who scored|box score|stat ?line|player stats?|passing yards?|rushing yards?|receiving yards?)\b/i.test(
     message,
   )
 }
@@ -585,6 +597,51 @@ async function buildStatLeaderAnswer(message: string, locale?: string): Promise<
   return `${head}\n${lines.join('\n')}\n${caveat}`
 }
 
+/**
+ * "How many TDs did Josh Allen have today?" — one player, not a leaderboard.
+ *
+ * ⚠ THIS QUESTION USED TO REFUSE WHILE THE ANSWER WAS IN HAND. The leader
+ * answer only fires on "most / lead / top" phrasing, so a specific-player
+ * question fell to the blanket refusal — even though the feed stores every
+ * player's cumulative total per stat. Refusing with the data present is worse
+ * than not having it: it teaches people the assistant cannot do something it
+ * can.
+ *
+ * ⚠ NOT IN THE WINDOW IS NOT ZERO. The feed is at most 200 events over about
+ * six hours. A player absent from it may simply not have appeared in what we
+ * hold, so this says that rather than reporting a nil — a fabricated zero about
+ * a real player is the worst answer available here.
+ */
+async function buildPlayerStatAnswer(message: string, locale?: string): Promise<string | null> {
+  const family = detectStatFamily(message)
+  if (!family) return null
+
+  /* Leaderboard questions belong to the other builder. */
+  if (/\b(most|lead|leads|leading|leader|leaderboard|top)\b/i.test(message)) return null
+
+  const { leaders, eventsScanned } = await readStatLeaders(family, 200)
+
+  /* No feed at all — defer to the refusal, which says why. */
+  if (eventsScanned === 0) return null
+
+  const player = findPlayerInText(leaders, message)
+  if (!player) {
+    /*
+     * A stat question naming nobody we can see. Only answer it if the asker
+     * clearly named someone; otherwise let the refusal handle it.
+     */
+    return null
+  }
+
+  const label = FAMILY_LABEL[family]
+  const team = player.team ? ` (${player.team})` : ''
+
+  if (locale === 'es') {
+    return `${player.playerName}${team}: ${player.total} ${label} en las ${eventsScanned} jugadas en vivo que tengo de las últimas horas. No son totales de temporada.`
+  }
+  return `${player.playerName}${team} has ${player.total} ${label} in the ${eventsScanned} live plays I have from the last few hours. That is the live window, not a season total — if they played earlier outside it, this will undercount.`
+}
+
 function buildUnsupportedStatEventAnswer(message: string, locale?: string): string | null {
   if (!detectUnsupportedStatEventQuestion(message)) return null
   return `${reliableUnavailable(locale)} I need cached play-by-play/player event data before I can answer that exact stat question. I will not invent home runs, touchdowns, player stats, goals, injuries, or box-score details.`
@@ -647,6 +704,9 @@ export async function tryDeterministicAnswer(message: string, locale?: string): 
    */
   const statLeaders = await buildStatLeaderAnswer(message, safeLocale)
   if (statLeaders) return statLeaders
+  /* One named player, before the blanket refusal that used to swallow these. */
+  const playerStat = await buildPlayerStatAnswer(message, safeLocale)
+  if (playerStat) return playerStat
   const unsupportedStatEvent = buildUnsupportedStatEventAnswer(message, safeLocale)
   if (unsupportedStatEvent) return unsupportedStatEvent
   /* Forward-looking first: the cached path below only knows about today. */
