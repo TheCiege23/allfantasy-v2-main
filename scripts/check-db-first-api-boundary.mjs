@@ -397,10 +397,15 @@ function getAllSourceFiles(rootDir) {
    * Any Next build output, matched by PREFIX rather than by name.
    *
    * `.next`, `.next-dev-local` and `.next-dev-local-uifix` were listed literally, which missed
-   * `.next-dev-3101` — a build directory that is COMMITTED to this repo. Its compiled bundles
-   * inline every provider URL from the source they were built from, so the weekly full scan was
+   * `.next-dev-3101` — at the time a build directory COMMITTED to this repo. (It no longer is:
+   * `.next-dev-3101` and `.next-dev-local-smoke` were untracked on 2026-08-27, 724 files and
+   * ~379MB of dev-server output that `.gitignore` already covered.) Its compiled bundles inline
+   * every provider URL from the source they were built from, so the weekly full scan was
    * reporting hundreds of duplicate violations from build artefacts and burying the real ones.
-   * A prefix test also covers whatever the next `.next-*` variant is called.
+   *
+   * ⚠ Keep the prefix test anyway. The dirs are gone from the repo, not from anyone's working
+   * tree — every dev still has a `.next*` locally, and a full scan walks the filesystem, not the
+   * index. It also covers whatever the next `.next-*` variant is called.
    *
    * Excluding build output loses nothing: the source it was compiled from is scanned directly,
    * and a bundle is never itself a caller anyone can fix.
