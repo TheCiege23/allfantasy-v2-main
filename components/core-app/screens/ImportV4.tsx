@@ -439,6 +439,30 @@ export function ImportV4({
    * changes, and re-firing would restart a preview the user had already moved on
    * from.
    */
+  /*
+   * ⚠ "NOTHING HAPPENS" WAS THIS, AND THE IMPORT HAD ALREADY WORKED.
+   *
+   * Every outcome of an action on this screen — the confirmation prompt, "Ready to
+   * import", and "Imported" — renders near the BOTTOM of a very long page, below the
+   * provider grid, the input, the trust panels and a discovered-league list that can
+   * run to a dozen rows. The button that triggers them is far above. So pressing
+   * "Import this league" swapped one off-screen panel for another and, from where the
+   * page was scrolled, looked like nothing at all.
+   *
+   * Confirmed against production: a Fantrax league imported successfully — 12 teams,
+   * an `import_runs` row, a `leagues` row — while the person who pressed the button
+   * was told nothing and reasonably concluded it had failed.
+   *
+   * Only one of these phases is mounted at a time, so a single ref is enough.
+   */
+  const outcomeRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (phase.k !== 'attest' && phase.k !== 'preview' && phase.k !== 'done') return
+    /* `block: 'center'` rather than 'start': these panels are short, and centring them
+       keeps the discovered list visible above so the screen still reads as one flow. */
+    outcomeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [phase.k])
+
   const deepLinked = useRef(false)
 
   const runPreview = useCallback(
@@ -1247,7 +1271,7 @@ export function ImportV4({
 
       {/* ── Attestation gate ────────────────────────────────────────── */}
       {phase.k === 'attest' ? (
-        <section className="af-im-card">
+        <section className="af-im-card" ref={outcomeRef}>
           <h2 className="af-label">One confirmation first</h2>
           <p className="af-im-attest">{phase.message}</p>
           <div className="af-im-actions">
@@ -1277,7 +1301,7 @@ export function ImportV4({
 
       {/* ── Preview, then commit ────────────────────────────────────── */}
       {phase.k === 'preview' ? (
-        <section className="af-im-card">
+        <section className="af-im-card" ref={outcomeRef}>
           <header className="af-im-result-head">
             <h2 className="af-label">Ready to import</h2>
           </header>
@@ -1317,7 +1341,7 @@ export function ImportV4({
 
       {/* ── Done ────────────────────────────────────────────────────── */}
       {phase.k === 'done' ? (
-        <section className="af-im-card">
+        <section className="af-im-card" ref={outcomeRef}>
           <header className="af-im-result-head">
             <h2 className="af-label">Imported</h2>
           </header>
