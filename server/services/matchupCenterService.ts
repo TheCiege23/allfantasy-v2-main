@@ -122,7 +122,7 @@ export async function buildMatchupCenterPayload(params: {
   viewerUserId: string
   season?: number
   week?: number
-}): Promise<MatchupCenterPayload | { error: string; status: number }> {
+}): Promise<MatchupCenterPayload | { error: string; status: number; code?: string }> {
   const league = await prisma.league.findFirst({
     where: { id: params.leagueId },
     select: {
@@ -151,11 +151,46 @@ export async function buildMatchupCenterPayload(params: {
   const season = params.season ?? league.season
   const week = params.week ?? weekFromSettings(league.settings)
 
+  /*
+   * ⚠ `Roster.platformUserId` IS THE PLATFORM'S ID, NOT OURS, ON AN IMPORTED
+   * LEAGUE. Matching it against the AllFantasy user id works on native leagues
+   * and can never match on an imported one — ESPN stores its own account id
+   * there, Sleeper stores a Sleeper id. Measured on the first ESPN league ever
+   * imported (10 teams, 10 rosters, all present): this lookup found nothing and
+   * the whole Matchup Center answered "League not found."
+   *
+   * Resolved the way every other league surface resolves identity: the claimed
+   * LeagueTeam first, because a claim is an explicit statement about THIS
+   * league; then the linked Sleeper id; then the AF id itself, which is the
+   * native case and the one that already worked.
+   */
+  const identityIds = await (async () => {
+    const ids = new Set<string>([params.viewerUserId])
+    const claimed = await prisma.leagueTeam
+      .findFirst({
+        where: { leagueId: params.leagueId, claimedByUserId: params.viewerUserId },
+        select: { platformUserId: true },
+      })
+      .catch(() => null)
+    if (claimed?.platformUserId) ids.add(claimed.platformUserId)
+    const profile = await prisma.userProfile
+      .findUnique({ where: { userId: params.viewerUserId }, select: { sleeperUserId: true } })
+      .catch(() => null)
+    if (profile?.sleeperUserId) ids.add(profile.sleeperUserId)
+    return [...ids]
+  })()
+
   const myRoster = await prisma.roster.findFirst({
-    where: { leagueId: params.leagueId, platformUserId: params.viewerUserId },
+    where: { leagueId: params.leagueId, platformUserId: { in: identityIds } },
     select: { id: true, playerData: true },
   })
-  if (!myRoster) return { error: 'Roster not found', status: 404 }
+  /*
+   * ⚠ A DISTINCT CODE, BECAUSE THIS IS A DIFFERENT PROBLEM FROM A MISSING
+   * LEAGUE. The league is right there and the manager simply has no team in it
+   * yet — which they can fix in one click, and never will if the screen tells
+   * them the league does not exist.
+   */
+  if (!myRoster) return { error: 'Roster not found', status: 404, code: 'NO_CLAIMED_TEAM' }
 
   const [myResult, labels, standings, myScores] = await Promise.all([
     prisma.teamWeekResult.findUnique({
