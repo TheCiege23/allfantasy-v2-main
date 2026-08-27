@@ -95,8 +95,27 @@ export const CHIMMY_TOOL_SPECS = [
   },
 ] as const
 
+/*
+ * ⚠ THE MODEL REWROTE THIS INTO A CLAIM ABOUT THE USER'S DATA. Observed in
+ * production: with no league selected, this sentence came back to the reader as
+ * "No last-season records are stored for the KBFL league" — turning "I could not
+ * look" into "I looked and your data is missing". The second is far worse than
+ * unhelpful; it tells a commissioner their league is empty when it was never
+ * queried, and in the same session the model went on to invent "all 18 teams
+ * begin at 0-0 with equal FAAB budgets" for a 32-team league.
+ *
+ * So the sentence now names the distinction and forbids the paraphrase outright.
+ * A tool result is the only thing standing between an empty lookup and a
+ * confident lie, and it has to say so in words the model cannot soften.
+ */
 const NO_LEAGUE =
-  'No league is selected for this conversation, so there is nothing league-specific to read. Say that rather than guessing which league was meant.'
+  'NO LEAGUE IS SELECTED for this conversation, so NOTHING WAS LOOKED UP. ' +
+  'This is NOT a finding about the user\'s data. You must NOT say that a league ' +
+  'has no records, no standings, no roster, or is empty — you have not checked. ' +
+  'You must NOT state a team count, scoring setting, FAAB budget, or any other ' +
+  'league detail; none was retrieved and inventing one is the worst answer here. ' +
+  'Tell the user to pick a league from the scope selector above the message box, ' +
+  'or to open Chimmy from a league page, and say nothing else about their league.'
 
 /**
  * Run one tool call and return prose for the model.
