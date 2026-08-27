@@ -63,7 +63,7 @@
 
 | ID | Gap | Status | Notes |
 |---|---|---|---|
-| `G-08` | In `game_id` = `YYYYMMDD-{n}-{n}`, is the first number **home or away**? | UNVERIFIED | One weak sample suggests `{home}-{away}`. **Do not codify on one sample.** Cross-check 3+ games against a known schedule. |
+| `G-08` | In `game_id` = `YYYYMMDD-{n}-{n}`, is the first number **home or away**? | ✅ **RESOLVED 2026-08-26 — it is `{away}-{home}`** | **The earlier guess was BACKWARDS.** 15 of 15 MLB games in `fixtures/live.MLB.json` are `{away_team_id}-{home_team_id}`, cross-checked against `full_box.home_team.team_id` / `full_box.away_team.team_id` in the same payload; ZERO matched `{home}-{away}`. Anything codified on the old "weak sample" renders every matchup reversed. Confirmed for MLB only — re-check per sport. |
 | `G-09` | Does `RS-DATA-TYPE` response header actually exist? | CONTRADICTED | Notion docs mention it (`LIVE-DATA`, `INJURY-REPORTS`). The vendor's own skill repo documents **no** custom response headers. **Do not depend on it either way.** |
 | `G-10` | Are NCAAFB/NCAABB injuries genuinely absent, or just undocumented? | UNVERIFIED | Vendor instructs agents not to call them — that's **policy, not a 404 guarantee**. Worth one probe before hard-coding unavailability. |
 | `G-11` | Does `/play-by-play` really 404 for NHL/NCAAFB? | UNVERIFIED | Same reasoning as G-10. Vendor scripts hard-block it client-side, which tells us nothing about the server. |
@@ -184,3 +184,44 @@ are 15 hours to 119 days old. They read as proof of entitlement and are not.
 *Should an unentitled sport return 401/403 rather than 304?* A 403 would be unambiguous and would
 let a client report "not subscribed" instead of "unchanged". Until then, credential fallback is the
 only way to tell them apart.
+
+---
+
+## ✅ CAPTURED 2026-08-26 — `/live` for **MLB** (`fixtures/live.MLB.json`)
+
+15 completed games, via `scripts/probe.sh live MLB "" 2026-08-26`. Envelope `data.MLB`.
+
+### The one thing worth reading twice
+
+**The player box hangs off the GAME ROOT, not the team shell.**
+
+```
+game.player_box.{away_team|home_team}.{batting|pitching}.<PLAYER_ID> = { player, POS, AB, H, … }
+```
+
+Our first parser was written from the NBA hint in `rollingInsightsFieldMaps`
+(`playerBox: 'player_box'`, listed under the team shell) and looked for
+`full_box.<side>_team.player_box`. It found **zero games on a slate of fifteen**, while the
+provider returned HTTP 200 with no error — so nothing failed, the pipeline just wrote nothing.
+
+Three separate mistakes, all invisible:
+1. `player_box` is a SIBLING of `full_box`, not a child of the team node.
+2. The innermost level is an OBJECT KEYED BY PLAYER ID, not an array.
+3. The entry carries **no `player_id` field at all** — the key IS the identifier. A parser
+   requiring `player_id` drops every line even after it finds them.
+
+⚠ **The batting/pitching FIELD names were already correct** in
+`ROLLING_INSIGHTS_FIELD_MAPS.MLB`. What was missing was the SHELL PATH. A field map without a
+shell path cannot parse a payload, and having one is easy to mistake for having both.
+
+### Now pinned
+
+`__tests__/sports-data/rolling-insights-game-logs.test.ts` asserts the parser against this
+fixture, including "finds a game at all" — the exact silent failure above.
+
+### Still unverified: `/live` for NBA, NHL, NCAABB, NCAAFB, SOCCER
+
+`G-01`..`G-04` stay open. Those seasons were out of session on 2026-08-26, so probing then would
+have captured an empty slate and taught nothing — which is the re-probing trap this file exists to
+prevent. **Probe each on a game day for that sport.** The parser accepts both the id-keyed object
+form and an array form until each has its own fixture; do not narrow it to the MLB shape.
