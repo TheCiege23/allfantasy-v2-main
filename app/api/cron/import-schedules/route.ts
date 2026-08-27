@@ -300,7 +300,23 @@ async function handle(req: NextRequest) {
       const profiles: Record<string, unknown> = {}
       const deferred: string[] = []
 
-      for (const s of rotateForFairness(RI_PROFILE_SPORTS, 24 * 60 * 60 * 1000)) {
+      /*
+       * `?sport=` narrows this pass to one league, and it is not a convenience.
+       *
+       * NCAAF alone returns 68,517 players and 265 teams — measured, it consumes the entire 240s
+       * budget on its own and defers every sport behind it. With rotation on a 24h period, the
+       * deferred five would then wait a full day for their turn. An operator needs to be able to
+       * say "just soccer" and get it now.
+       *
+       * `resolveSports` above only knows NFL/NCAAF (it drives the schedule blocks), so this reads
+       * the raw param against the profile list instead of reusing it.
+       */
+      const explicitProfileSport = url.searchParams.get("sport")?.trim().toUpperCase()
+      const profileSports = (RI_PROFILE_SPORTS as readonly string[]).includes(explicitProfileSport ?? "")
+        ? [explicitProfileSport as IngestSport]
+        : rotateForFairness(RI_PROFILE_SPORTS, 24 * 60 * 60 * 1000)
+
+      for (const s of profileSports) {
         if (budget.exhausted()) {
           deferred.push(s)
           continue
