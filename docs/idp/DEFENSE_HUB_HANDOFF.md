@@ -209,15 +209,22 @@ The existing subtitle — "Snap data may have a 24–48h delay for some games" �
 honest and worth keeping.
 
 ### Defender role cards
-**Cannot be built as specified.** `DefenderRoleCard` takes `salaryM`, `years`
-and `capEff` (no data, see above) and `snapsPct` (real). The role label it pairs
-with comes from `idpRoleLabel`, which is a hash.
+**Resolved — and `DefenderRoleCard` has been DELETED, so do not look for it.**
 
-We do not have coverage/run-stop/pass-rush snap splits from any provider we
-ingest — only total defensive snaps. So "Run Stopper" vs "Coverage" is not
-currently derivable. Either drop the role label, or replace it with something we
-can actually stand behind from the stat line (tackle share, sack rate, targets
-allowed if the column exists — check before you assume it does).
+It could not be built as specified. It took `salaryM`, `years` and `capEff` (no
+data, see above) and paired them with a role label from `idpRoleLabel` — a hash
+of the player id. It was never mounted anywhere, and it was removed rather than
+left in the tree, because its prop contract could only ever be satisfied by
+inventing the inputs.
+
+We still do not have coverage/run-stop/pass-rush snap splits from any provider
+we ingest, only total defensive snaps, so "Run Stopper" vs "Coverage" remains
+underivable. The replacement is `lib/idp-projections/deriveDefenderRole`, which
+states the rates we CAN derive — sack rate and tackle rate, both as "1 per N
+defensive snaps" — and names coverage as not derivable rather than omitting it.
+It counts only games carrying `def_snp`, because without a snap count a blank
+cannot be told from a zero. It is rendered by the Defense Hub and by the player
+modal; build on it rather than on a new label.
 
 ### Matchup difficulty board
 **Downgrade it to a tendencies board.** The opponent is real (`SportsGame` — but
