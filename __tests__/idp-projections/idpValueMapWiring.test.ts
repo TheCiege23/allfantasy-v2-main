@@ -225,11 +225,16 @@ describe('the value curve is shaped like a market, not like a staircase', () => 
 
   it('leaves the ceiling exactly where the product put it', async () => {
     /*
-     * What a top defender is worth against a top receiver is an unvalidated product decision.
-     * Reshaping the curve beneath it must not quietly move it.
+     * What a top defender is worth against a top receiver is a product decision, not a measured
+     * quantity. Reshaping the curve beneath it must not quietly move it.
+     *
+     * Redraft moved from 3500 to 5300 on 2026-08-27, deliberately. 3500 valued defenders LESS
+     * generously in redraft than dynasty, which is backwards — dynasty offensive values carry a
+     * multi-year premium redraft ones do not. 5300 holds the dynasty stance as a share of the
+     * top offensive asset: 5500 is 49% of the dynasty #1, and 49% of the redraft #1 is ~5300.
      */
     const { idpTierValueCeiling } = await load()
     expect(idpTierValueCeiling(true)).toBe(5500)
-    expect(idpTierValueCeiling(false)).toBe(3500)
+    expect(idpTierValueCeiling(false)).toBe(5300)
   })
 })

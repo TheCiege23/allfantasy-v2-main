@@ -104,16 +104,49 @@ const MARKET_DECAY_REDRAFT: ReadonlyArray<{ rank: number; share: number }> = [
  * stance: in an IDP league with real defensive starting requirements, an elite defender IS a
  * core asset.
  *
- * ⚠ REDRAFT 3500 HAS NOT BEEN CONFIRMED, AND THE TWO CURRENTLY DISAGREE. It sits above only
- * 79% of its own board — beside Garrett Wilson and Zay Flowers, roughly overall #42 of 194 —
- * so this codebase presently values defenders MORE generously in dynasty than in redraft,
- * which is backwards from how most markets treat them. Matching the dynasty stance would put
- * it near 7,800 (James Cook, overall #10). Left alone rather than moved on inference: nobody
- * has made this call, and changing it silently would be exactly the unexamined default the
- * dynasty side just stopped being.
+ * REDRAFT 5300 — confirmed 2026-08-27, replacing an unconfirmed 3500. The old value sat above
+ * only 79.2% of its own board (overall #42 of 202, beside Zay Flowers, 33% of the #1 player),
+ * so this codebase valued defenders MORE generously in dynasty than in redraft. That is
+ * backwards: dynasty offensive values embed a multi-year and youth premium that redraft values
+ * do not, so relative to offence a defender should be worth at LEAST as much in redraft.
+ *
+ * ⚠ IT IS SET BY THE SHARE OF THE #1 PLAYER, NOT BY PERCENTILE, AND THE TWO DISAGREE BY 2,700.
+ * Dynasty 5500 is 49% of the top offensive asset and above 95.8% of its board. Matching the
+ * SHARE gives 0.49 x 10,738 = ~5,300 (redraft #24, 88th percentile). Matching the PERCENTILE
+ * gives ~8,000 (redraft #9) — the reading behind the 7,800 this comment used to suggest. They
+ * diverge because the redraft board is less than half as deep (202 priced players against 450),
+ * so the same percentile is a very different rank. Share wins: these are ratio scales, and a
+ * trade compares magnitudes rather than ranks. If you revisit this, revisit that choice — the
+ * number follows from it.
+ *
+ * ⚠ MEASURED AGAINST THE OFFENSIVE MARKET, NOT AGAINST REDRAFT IDP TRADES, BECAUSE THERE ARE
+ * NONE. Checked on 2026-08-27, and worth knowing before anyone tries again: all 10 IDP leagues
+ * in production are dynasty (`leagueType` and `isDynasty` agree on every one), so no redraft IDP
+ * trade exists; `PlayerValueSnapshot` carries 7,043 rows and zero defenders, so no vendor prices
+ * them in either format; and the dynasty IDP trades that do exist cannot be priced, because
+ * `SportsPlayer.externalId` mixes at least three id namespaces (`tsdb_*`, `sleeper:*`, and bare
+ * numerics that COLLIDE with the Sleeper space — id 8144 is John Rhys Plumlee there and Chris
+ * Olave in the value table). Join by name or by bare id and you will get a confident, wrong
+ * answer rather than an empty one.
+ *
+ * ⚠ NOTHING USER-VISIBLE MOVED WHEN THIS CHANGED, AND THAT IS NOT A SIGN IT DOES NOT MATTER.
+ * Both call sites resolve `isDynasty` from the league, and every IDP league is dynasty, so the
+ * redraft curve is unreachable today. It goes live the moment the first redraft IDP league is
+ * imported, which is exactly why it was worth setting properly while the blast radius was zero.
+ *
+ * ⚠ AND THE TWO CURVES ARE NEVER COMPARED, WHICH IS EASY TO GET WRONG WHILE READING THIS.
+ * `waiver-intelligence.ts` does `Math.max(value, redraftValue)`, which looks like it prices a
+ * defender both ways and takes the better one. It does not: `buildIdpKickerValueMap` writes
+ * `value: isDynasty ? value : 0` and `redraftValue: isDynasty ? 0 : value`, so exactly one is
+ * ever populated and the max only selects the one that was computed. That matters here because
+ * the redraft decay is FLATTER at the top (0.947/0.883/0.785 against dynasty's
+ * 0.883/0.714/0.597), so at these two ceilings the redraft curve is the higher of the two
+ * between ranks 2 and 20. If anyone ever makes that `Math.max` compare real numbers instead of
+ * a number against zero, a dynasty league would silently start pricing its best defenders off
+ * the redraft curve.
  */
 const IDP_CEILING_DYNASTY = 5500
-const IDP_CEILING_REDRAFT = 3500
+const IDP_CEILING_REDRAFT = 5300
 
 function decayToTiers(
   decay: ReadonlyArray<{ rank: number; share: number }>,
