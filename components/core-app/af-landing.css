@@ -1042,3 +1042,29 @@
   text-decoration: none;
 }
 .af-lp-crosslink:hover { text-decoration: underline; }
+
+/* ── 44px touch floor ─────────────────────────────────────────────────
+ *
+ * ⚠ MEASURED, NOT ASSUMED. `.af-wl-allweeks` rendered at 16px — a real
+ * link a thumb cannot reliably hit. These are the controls on this sheet
+ * that carried no floor of their own.
+ *
+ * ⚠ min-height DOES NOTHING ON AN INLINE BOX, which is why the ones that
+ * declared no `display` get `inline-flex` here. A control that only looks
+ * padded is not a control that can be tapped.
+ *
+ * ⚠ BOTH SELECTORS ON PURPOSE. af-core.css scopes its primitives as
+ * `.af-core a` (0,2,0); a bare class is (0,1,0) and loses wherever that
+ * applies. Links inside running text are deliberately NOT here — forcing
+ * 44px on those breaks the paragraph and WCAG exempts them.
+ */
+
+.af-lp-brand,
+.af-core .af-lp-brand {
+  min-height: 44px;
+}
+
+.af-lp-partners,
+.af-core .af-lp-partners {
+  min-height: 44px;
+}
