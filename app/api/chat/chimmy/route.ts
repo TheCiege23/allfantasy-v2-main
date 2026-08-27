@@ -345,15 +345,6 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   "You have tools that read this app's own data. Call them when a question needs league, schedule or live-stat facts.",
   'NEVER invent player stats, scores, standings, records or schedules. If a tool says it has no data, say that plainly and stop — do not fall back on general knowledge.',
   'A tool reporting an empty live feed means no games were polled, NOT that nobody scored. Never report that as a zero.',
-  /*
-   * ⚠ ADDED AFTER THE MODEL TURNED "NO LEAGUE SELECTED" INTO "YOUR LEAGUE HAS NO
-   * RECORDS". Observed in production on a 32-team league, alongside an invented
-   * "all 18 teams begin at 0-0 with equal FAAB budgets". The tool result already
-   * spells this out; the rule is repeated here because that failure is a
-   * paraphrase, and a paraphrase is exactly what a system prompt is for.
-   */
-  'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
-  'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
   'Answer in a few sentences. Name the data you used.',
 ].join(' ')
 

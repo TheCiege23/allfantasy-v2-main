@@ -92,6 +92,17 @@ export type LiveImpact = {
   liveGames: number
   /** The most recent notable play involving a player you roster. */
   biggestMover: (PlayFeedItem & { leagues: string[] }) | null
+  /**
+   * The recent play feed for this slate, newest first — the very rows
+   * `biggestMover` is picked from, now kept instead of thrown away.
+   *
+   * ⚠ NFL ONLY, AND DELIBERATELY EMPTY ON EVERY OTHER TAB. The cache behind it
+   * is the literal key `pbp:feed:NFL` and every `LiveEventType` is an NFL play,
+   * so there is genuinely nothing to show for MLB or NCAAF. Letting the NFL
+   * feed render under another sport's tab would caption real plays with the
+   * wrong games — the exact class of confident lie this page refuses to tell.
+   */
+  plays: PlayFeedItem[]
   /** Your players whose games have not kicked off yet. */
   upNext: Array<{ playerName: string; matchup: string; startTime: string }>
 }
@@ -496,7 +507,7 @@ export async function getLivePageData(opts: {
     scope,
     counts,
     games: visible,
-    impact: await buildImpact(visible, players),
+    impact: await buildImpact(visible, players, sport),
     fetchedAt: active?.fetchedAt ?? new Date().toISOString(),
     hasRosterData,
     loadFailed: active?.failed ?? false,
@@ -507,6 +518,7 @@ export async function getLivePageData(opts: {
 async function buildImpact(
   games: readonly LiveGameCard[],
   players: Map<string, RosteredPlayer>,
+  sport: string,
 ): Promise<LiveImpact> {
   const liveGames = games.filter((g) => g.isLive)
 
@@ -525,7 +537,20 @@ async function buildImpact(
     }
   }
 
-  const plays = await getPlayFeed().catch(() => [] as PlayFeedItem[])
+  /*
+   * ⚠ SCOPED BY SPORT, NOT BY GAME ID — AND THAT IS NOT THE OBVIOUS CHOICE.
+   * The tempting scoping is "keep the plays whose `gameId` is on this slate".
+   * It yields NOTHING, always, because the two ids come from different
+   * providers: the feed is built from `SportsGame.externalId` rows where
+   * `source: 'rolling_insights'`, while the active slate is fetched from ESPN
+   * and carries `event.id`. They are different id spaces that happen to share a
+   * field name. The feed's own cache key is `pbp:feed:NFL`, so the sport is the
+   * scope that is both honest and non-empty.
+   *
+   * Skipping the read outright off-NFL also spares every other tab a cache
+   * lookup that could only ever return plays it must not display.
+   */
+  const plays = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
   const liveGameIds = new Set(liveGames.map((g) => g.gameId))
   /*
    * The most recent play involving a player YOU roster, in a game that is
@@ -559,6 +584,7 @@ async function buildImpact(
     livePlayers: livePlayerIds.size,
     liveGames: liveGames.length,
     biggestMover,
+    plays,
     upNext,
   }
 }
