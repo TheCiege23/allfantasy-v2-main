@@ -18,7 +18,18 @@ import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/lea
  * that would each silently revert: the stage is derived from the right field, and the
  * pre-season branch is actually consulted by every section that needs it.
  */
-const SRC = readFileSync(resolve(process.cwd(), 'lib/core-app/leagueHome.ts'), 'utf8')
+/*
+ * ⚠ CARRIAGE RETURNS STRIPPED, OR EVERY MULTI-LINE ASSERTION HERE IS
+ * WINDOWS-ONLY RED. This repo checks out CRLF on Windows (core.autocrlf), so an
+ * assertion that embeds a newline matches on Linux CI and never matches locally.
+ * It cost a real detour: a local full-suite run reported this file as a
+ * regression while CI was green on the same commit, and the gating it checks was
+ * correct the whole time.
+ */
+const SRC = readFileSync(resolve(process.cwd(), 'lib/core-app/leagueHome.ts'), 'utf8').replace(
+  /\u000D/g,
+  '',
+)
 
 describe('league home: the stage comes from the field that tracks reality', () => {
   it('a drafting league with the in_season default resolves as drafting', () => {
