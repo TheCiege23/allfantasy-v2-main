@@ -442,9 +442,29 @@
     margin-right: 0;
   }
 
+  /*
+   * The avatar goes, as it does in the 38a mobile design.
+   *
+   * ⚠ THIS BUYS HEIGHT, NOT WIDTH — measured, and it is the opposite of how it
+   * looks. Removing a 44px circle and its 12px gap gains the team name exactly
+   * ZERO horizontal pixels: the name was never truncated, 160px is simply how
+   * wide that text is. What it buys is 32px off the hero (403 -> 371), which
+   * on a phone decides whether the rivalry line sits above or below the fold.
+   */
+  .af-wl-avatar {
+    display: none;
+  }
+
+  /* Nothing left to clear now that the avatar is gone. */
   .af-wl-vs {
     justify-self: start;
-    padding-left: 56px;
+    padding-left: 0;
+  }
+
+  /* The rivalry reads as one sentence rather than a tag beside a block. */
+  .af-wl-rivalry {
+    gap: 6px;
+    padding: 10px 12px;
   }
 
   .af-wl-side-proj {
