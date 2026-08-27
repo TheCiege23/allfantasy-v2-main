@@ -446,6 +446,59 @@ function attestationMatchesThisRequest(
   return true
 }
 
+/**
+ * Fantrax: the Secret ID is the only real identity this provider offers.
+ *
+ * Fantrax is an OPEN_READ provider — a league id is public, anyone can read any league,
+ * and the attestation branch is exactly what stops "any authenticated user imports any
+ * league". That remains true, unchanged, for a caller with no credential stored.
+ *
+ * But `getFantraxLeagues` is keyed on the caller's OWN Secret ID and names the teams it
+ * owns. When it confirms the team being imported is theirs, that is real membership
+ * verification — the same strength `checkEspn` and `checkSleeper` provide — and asking
+ * them to additionally swear they are the commissioner is the same wrong question ESPN
+ * was asking. Observed live: a verified league member, importing their own team, was
+ * shown "fantrax cannot verify commissioner status automatically".
+ *
+ * ⚠ FAILS BACK, NEVER OPEN. A missing credential, an API failure, a malformed sourceId,
+ * a league the caller does not appear in, or any throw — every one returns the plain
+ * open-read result, leaving the attestation exactly as strict as it is today. This can
+ * only ever UPGRADE a caller to verified, and only on a positive answer from Fantrax.
+ */
+async function checkFantrax(
+  appUserId: string,
+  sourceLeagueId: string,
+): Promise<CommissionerGateResult> {
+  /* What an OPEN_READ provider resolves to today — the fallback for every path below. */
+  const openRead: CommissionerGateResult = { ok: true, verification: 'api' }
+  try {
+    const native = sourceLeagueId.trim().match(/^fantrax-league:([^|]+)\|(.+)$/i)
+    if (!native?.[1] || !native[2]) return openRead
+    const leagueId = native[1].trim()
+    const teamName = native[2].trim()
+
+    const auth = await getDecryptedAuth(appUserId, 'fantrax')
+    const secretId = auth?.apiKey?.trim()
+    if (!secretId) return openRead
+
+    const { getFantraxLeagues } = await import('./fantrax/fantraxApi')
+    const res = await getFantraxLeagues(secretId)
+    if (!res.ok) return openRead
+
+    const wanted = teamName.toLowerCase()
+    const owns = res.data.some(
+      (league) =>
+        league.leagueId === leagueId &&
+        league.teamNames.some((name) => name.trim().toLowerCase() === wanted),
+    )
+    if (!owns) return openRead
+
+    return { ok: true, sourceManagerId: teamName, verification: 'member' }
+  } catch {
+    return openRead
+  }
+}
+
 async function resolveImportGate(args: {
   appUserId: string
   provider: ImportProvider
@@ -462,6 +515,11 @@ async function resolveImportGate(args: {
   }
   if (args.provider === 'mfl') {
     return checkMfl(args.appUserId, args.sourceLeagueId)
+  }
+  /* Before the open-read fallback: a stored Secret ID can prove real membership, and a
+     proven member should not be asked to attest to being the commissioner. */
+  if (args.provider === 'fantrax') {
+    return checkFantrax(args.appUserId, args.sourceLeagueId)
   }
   if (OPEN_READ_PROVIDERS.includes(args.provider)) {
     // Public-read providers: any authenticated user can import.
