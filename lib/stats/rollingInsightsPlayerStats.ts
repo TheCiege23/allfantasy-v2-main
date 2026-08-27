@@ -41,7 +41,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { resolveRiEnvelope, riFetch, riSupports } from '@/lib/sports-data/rollingInsightsRest'
+import { riFetch } from '@/lib/workers/providers/rollingInsightsRest'
+import { resolveRiEnvelope, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 
 const RI_SOURCE = 'rolling_insights'
 /** Season aggregates refreshed daily by cron; a week of TTL tolerates cron
@@ -164,7 +165,7 @@ function currentSeason(now: Date): number {
 }
 
 /*
- * Credentials and transport now live in `lib/sports-data/rollingInsightsRest.ts`.
+ * Credentials and transport now live in `lib/workers/providers/rollingInsightsRest.ts`.
  *
  * The private `fetchRiJson` that used to sit here sent no cache-buster and no no-cache headers,
  * and read a 304 as a plain status the caller turned into `[]`. That is the ONE response the

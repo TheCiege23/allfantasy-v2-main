@@ -160,7 +160,21 @@ describe('syncRollingInsightsPlayerStatsToDb', () => {
     })
     expect(res.written).toBe(0)
     expect(res.seasonUsed).toBeNull()
-    expect(res.errors.join(' ')).toContain('season not started')
+    /*
+     * The 304 is reported as a 304, NOT as "season not started".
+     *
+     * This assertion used to read `toContain('season not started')`, which baked one side of a
+     * dispute the contract itself refuses to settle into a test: `304_conflict` in
+     * contracts/rolling-insights/ENDPOINTS.yaml has the skill repo calling 304 a cache artifact
+     * and the newer OpenAPI spec calling it a valid-request-empty-result. A bare 304 cannot tell
+     * you which, so a message that says "not started" is a guess presented as a finding.
+     *
+     * `notModified` is the structured signal, and it is only ever set after the transport has
+     * retried once with a fresh cache-buster — so it means "unchanged through a bust", which is
+     * as much as either reading permits.
+     */
+    expect(res.notModified).toBe(true)
+    expect(res.errors.join(' ')).toContain('304')
   })
 
   it('REFUSES an ambiguous name collision instead of binding by map order', async () => {

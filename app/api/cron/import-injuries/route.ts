@@ -24,7 +24,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncRollingInsightsInjuriesToDb } from "@/lib/injuries/rollingInsightsInjuries"
 import { espnHasInjuryFeed, syncEspnInjuriesToDb } from "@/lib/injuries/espnInjuries"
-import { riSupports } from "@/lib/sports-data/rollingInsightsRest"
+import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
 /**

@@ -32,7 +32,8 @@ import 'server-only'
  */
 
 import { prisma } from '@/lib/prisma'
-import { riFetch, riSupports } from '@/lib/sports-data/rollingInsightsRest'
+import { riFetch } from '@/lib/workers/providers/rollingInsightsRest'
+import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 
 /** One row exactly as Rolling Insights returns it. */
 export interface RiInjuryRow {

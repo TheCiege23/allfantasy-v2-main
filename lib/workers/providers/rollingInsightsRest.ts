@@ -9,6 +9,12 @@ import {
   normalizeSoccerLeague,
   type RollingInsightsSoccerLeagueCode,
 } from '@/lib/providers/rollingInsightsSoccerLeague'
+import {
+  resolveRiEnvelope,
+  riSeasonArg,
+  riSupports,
+  type RiEndpoint,
+} from '@/lib/sports-data/rollingInsightsSupport'
 
 /**
  * ONE Rolling Insights REST transport, shared by every sport.
@@ -35,59 +41,24 @@ import {
  *   5. Endpoint x sport combinations the vendor does not document are refused BEFORE the request,
  *      so an unsupported sport reads as `unsupported`, not as a mysterious 404.
  *
- * db-first-exception: this is the provider ingestion transport itself — the module the DB-first
- * boundary exists to funnel provider traffic THROUGH. Application read paths must call the
- * database, never this file.
- */
-
-/** Endpoints this transport can build. Names match `endpoints:` in ENDPOINTS.yaml. */
-export type RiEndpoint =
-  | 'schedule'
-  | 'schedule_week'
-  | 'schedule_season'
-  | 'live'
-  | 'play_by_play'
-  | 'team_info'
-  | 'team_stats'
-  | 'player_info'
-  | 'player_stats'
-  | 'injuries'
-  | 'depth_charts'
-
-/**
- * `support_matrix` from ENDPOINTS.yaml, verbatim for the seven sports this product carries.
+ * WHY IT LIVES IN lib/workers/providers/ RATHER THAN lib/sports-data/.
+ * That directory is the DB-first boundary guard's audited home for provider adapters, and the
+ * guard's warning on the pattern is the test this file has to pass: the exemption "is intended for
+ * adapters and wrong for anything a page can reach". Its runtime importers are, in full:
  *
- * `false` means the VENDOR DOES NOT DOCUMENT IT and instructs agents not to call it. Per
- * GAPS.md that is not a 404 guarantee — but calling anyway costs a request and returns nothing
- * useful, and the honest product answer for those cells is "not available from this provider",
- * which is what refusing lets callers report.
+ *   lib/injuries/rollingInsightsInjuries.ts        ingestion writer -> sports_injuries
+ *   lib/stats/rollingInsightsPlayerStats.ts        ingestion writer -> fantasy_stat_lines
+ *   lib/sports-data/rollingInsightsDepthCharts.ts  ingestion writer -> depth_charts
+ *   lib/sports-data/rollingInsightsTeamsPlayers.ts ingestion writer -> SportsTeam / SportsPlayer
+ *   lib/sports-data/rollingInsightsGameLogs.ts     ingestion writer -> player_game_stats
+ *
+ * Every one is fetch-then-upsert with no read API, and every one is reached only from a cron
+ * handler. The cron handlers themselves import `riSupports` from
+ * `lib/sports-data/rollingInsightsSupport.ts` — a pure predicate over a committed constant with
+ * no URL and no credentials — precisely so that asking "is this sport supported?" never drags the
+ * transport into a route's module graph. That split is what keeps this census true rather than
+ * merely asserted; re-run it by callers, with a positive control, before adding anything here.
  */
-const SUPPORT: Record<RiEndpoint, Record<RollingInsightsVendorSport, boolean>> = {
-  schedule:        { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  schedule_week:   { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  schedule_season: { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  live:            { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  play_by_play:    { NFL: true, NBA: true, MLB: true, NHL: false, NCAABB: false, NCAAFB: false, SOCCER: false },
-  team_info:       { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  team_stats:      { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  player_info:     { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
-  /** SOCCER has no player season stats — see support_consequences in the contract. */
-  player_stats:    { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: false },
-  /** College has no injuries feed at all, and neither does soccer. */
-  injuries:        { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: false, NCAAFB: false, SOCCER: false },
-  depth_charts:    { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: false, NCAAFB: false, SOCCER: false },
-}
-
-/** Does the vendor document this endpoint for this sport? Accepts app or vendor sport codes. */
-export function riSupports(endpoint: RiEndpoint, sport: string): boolean {
-  return SUPPORT[endpoint]?.[getRollingInsightsSportCode(sport)] === true
-}
-
-/** Every endpoint the vendor documents for a sport, for capability reporting. */
-export function riSupportedEndpoints(sport: string): RiEndpoint[] {
-  const code = getRollingInsightsSportCode(sport)
-  return (Object.keys(SUPPORT) as RiEndpoint[]).filter((e) => SUPPORT[e][code])
-}
 
 export type RiOutcome =
   | { ok: true; payload: unknown; status: number }
@@ -136,6 +107,10 @@ export function riRestBase(): string {
     process.env.ROLLING_INSIGHTS_REST_BASE?.trim() ||
     process.env.ROLLING_INSIGHTS_BASE_URL?.trim() ||
     process.env.ROLLING_INSIGHTS_API_BASE?.trim() ||
+    // db-first-exception: provider ingestion transport — the vendor base URL from
+    // contracts/rolling-insights/ENDPOINTS.yaml meta.base_url, used only when every env spelling
+    // above is unset. This module fetches and hands rows to ingestion writers; no read path
+    // reaches it (see the caller census in the module header).
     'https://rest.datafeeds.rolling-insights.com/api/v1'
   // A comma-separated list is legal in ROLLING_INSIGHTS_REST_BASE_URL elsewhere in the repo.
   const first = raw.split(',')[0]!.trim().replace(/\/+$/, '')
@@ -153,19 +128,6 @@ export function riToken(): string | null {
     process.env.ROLLING_INSIGHTS_KEY?.trim() ||
     null
   )
-}
-
-/** Year the season STARTED — the only form `season` may take (identifiers.season_arg). */
-export function riSeasonArg(input: number | string | undefined, now = new Date()): string {
-  if (input != null) {
-    const s = String(input).trim()
-    if (/^\d{4}/.test(s)) return s.slice(0, 4)
-  }
-  // Aug onward belongs to the season named for the current year; before that, the previous one.
-  // Correct for NFL/NBA/NHL/NCAA (all span a new year) and harmless for MLB, whose season is
-  // wholly inside one calendar year and so is never asked for in Jan-Jul anyway.
-  const y = now.getUTCFullYear()
-  return String(now.getUTCMonth() + 1 >= 8 ? y : y - 1)
 }
 
 function todayUtc(now = new Date()): string {
@@ -201,13 +163,13 @@ function buildPath(endpoint: RiEndpoint, req: RiRequest, code: RollingInsightsVe
  * Fetch one documented Rolling Insights endpoint.
  *
  * Applies the contract's transport rules in full. The returned payload is the RAW body — call
- * {@link resolveRiEnvelope} to unwrap it, because the envelope key is sport-dependent and getting
- * it wrong is the single highest-risk parsing trap in this API (`soccer_trap`).
+ * `resolveRiEnvelope` to unwrap it, because the envelope key is sport-dependent and getting it
+ * wrong is the single highest-risk parsing trap in this API (`soccer_trap`).
  */
 export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiOutcome> {
   const code = getRollingInsightsSportCode(req.sport)
 
-  if (!SUPPORT[endpoint]?.[code]) {
+  if (!riSupports(endpoint, req.sport)) {
     return {
       ok: false,
       kind: 'unsupported',
@@ -298,53 +260,6 @@ export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiO
 }
 
 /**
- * Unwrap `{ "data": { "<KEY>": [...] } }`.
- *
- * ⚠ THE KEY IS NOT THE PATH SEGMENT FOR SOCCER. You request `/…/SOCCER?league=EPL` and the
- * response comes back keyed `data.EPL`. A parser that keys off the request path returns empty for
- * every soccer call and looks like a provider outage. That is `soccer_trap`, named in the
- * contract as its highest-risk parsing trap.
- *
- * Falls back to any array found under `data` so a vendor key we have not seen still yields rows
- * rather than silence — but only after the documented keys have been tried in order.
- */
-export function resolveRiEnvelope(
-  payload: unknown,
-  opts: { sport: string; league?: string },
-): unknown[] {
-  if (payload == null) return []
-  if (Array.isArray(payload)) return payload
-
-  const root = payload as Record<string, unknown>
-  const data = (root.data ?? root) as unknown
-  if (Array.isArray(data)) return data
-  if (!data || typeof data !== 'object') return []
-
-  const bag = data as Record<string, unknown>
-  const code = getRollingInsightsSportCode(opts.sport)
-
-  const keys: string[] = []
-  if (code === 'SOCCER') {
-    const league = normalizeSoccerLeague(opts.league ?? '')
-    if (league) keys.push(league)
-    keys.push('EPL', 'LALIGA', 'SERIEA')
-  }
-  keys.push(code)
-
-  for (const key of keys) {
-    const v = bag[key]
-    if (Array.isArray(v)) return v
-    // Some endpoints return an object map keyed by team/player id rather than an array.
-    if (v && typeof v === 'object') return Object.values(v as Record<string, unknown>)
-  }
-
-  for (const v of Object.values(bag)) {
-    if (Array.isArray(v)) return v
-  }
-  return []
-}
-
-/**
  * Fetch + unwrap in one step, for the common case.
  *
  * `notModified` is carried separately from `rows` on purpose: a caller that collapses the two
@@ -370,3 +285,5 @@ export async function riFetchRows(
     error: redactSecrets(out.error),
   }
 }
+
+export type { RiEndpoint }
