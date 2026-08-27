@@ -1411,7 +1411,14 @@ export function ImportV4({
           ) : null}
           <div className="af-im-actions">
             {phase.leagueId ? (
-              <Link href={`/league/${phase.leagueId}`} className="af-btn af-im-submit">
+              /*
+                ⚠ THE LAST STEP OF AN IMPORT MUST NOT LAND ON THE OLD SURFACE.
+                This sent a manager who had just finished importing to the legacy
+                league page, so the first thing they saw of their new league was
+                the screen /core replaces — and it read as the import having gone
+                somewhere wrong.
+              */
+              <Link href={`/core?league=${phase.leagueId}`} className="af-btn af-im-submit">
                 Open your league
               </Link>
             ) : null}

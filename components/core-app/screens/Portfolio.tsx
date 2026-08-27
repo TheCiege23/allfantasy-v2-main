@@ -16,8 +16,15 @@ import '@/components/core-app/af-portfolio.css'
  * see them.
  *
  * ⚠ THE ROW LINKS TO THE LEAGUE, NOT TO A MODAL. The old dashboard opened a
- * detail modal; a link is addressable, shareable and survives a refresh, and the
- * league page already exists at /league/{id}.
+ * detail modal; a link is addressable, shareable and survives a refresh.
+ *
+ * ⚠ AND IT LINKS INTO /core, NOT TO /league/{id}. This row pointed at the legacy
+ * league page, so the primary way into a league from the new shell landed on the
+ * exact surface /core exists to replace — the first ESPN league ever imported
+ * opened there, which is how this was found.
+ *
+ * `/core?league={id}` renders LeagueHome: `activeKey` falls back to 'home' with
+ * no path segment, and `selectedLeagueId` reads the `league` search param.
  */
 
 export type PortfolioProps = {
@@ -75,7 +82,7 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
       <ul className="af-pf-list">
         {leagues.map((l) => (
           <li key={l.leagueId} className="af-pf-item">
-            <Link href={`/league/${l.leagueId}`} className="af-pf-row">
+            <Link href={`/core?league=${l.leagueId}`} className="af-pf-row">
               <span className="af-pf-row-main">
                 <span className="af-pf-row-name">
                   {l.isCommissioner ? (

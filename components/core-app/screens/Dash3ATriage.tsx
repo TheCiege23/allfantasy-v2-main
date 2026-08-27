@@ -215,7 +215,7 @@ export function Dash3ATriage({
                     {p.leagues.slice(0, 6).map((l) => (
                       <Link
                         key={l.id}
-                        href={`/league/${l.id}`}
+                        href={`/core?league=${l.id}`}
                         className="af-triage-league"
                         data-slot={l.slot ?? undefined}
                       >
