@@ -164,6 +164,28 @@ async function handle(req: NextRequest) {
       devyPool = { error: message.slice(0, 200) }
     }
 
+    // Stat lines for the schools the phase above just refreshed, same rotating
+    // slice, so a school is seeded and statted in one fire.
+    //
+    // This is the ONLY scheduled writer of DevyPlayer.passingYards and its
+    // siblings. Before it existed those columns were written solely by
+    // seedCollegePlayers — reachable only from excluded routes and the Redis
+    // worker — so in production they simply went stale, which is why
+    // /api/market-alerts fetched CFBD live on the request path instead of
+    // reading them. That surface now reads the DB and depends on this phase.
+    let devyStats: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
+    if (budget.exhausted()) {
+      deferredPhases.push('devyStats')
+    } else try {
+      const { refreshDevyStatsSlice } = await import('@/lib/devy/devyStatsRefresh')
+      devyStats = await refreshDevyStatsSlice(budget)
+    } catch (statsError) {
+      // Maintenance must never fail the player import it rides along with.
+      const message = statsError instanceof Error ? statsError.message : String(statsError)
+      console.error('[cron/import-players] devy stats refresh failed:', message)
+      devyStats = { error: message.slice(0, 200) }
+    }
+
     // Devy intel metrics ride along here because this is a built, scheduled
     // player-data cron. The natural home, /api/devy/automation, is excluded
     // from the production build by scripts/vercel-next-build.cjs (route budget)
@@ -270,6 +292,7 @@ async function handle(req: NextRequest) {
       budgetExhausted: budget.exhausted(),
       budgetElapsedMs: budget.elapsedMs(),
       devyPool,
+      devyStats,
       devyIntel,
       sleeperRows,
       psychProfiles,

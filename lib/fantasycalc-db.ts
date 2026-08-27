@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
-import type { FantasyCalcPlayer, FantasyCalcSettings } from '@/lib/fantasycalc'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
+import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/fantasycalc-fetch'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 const KEY_PREFIX = 'fantasycalc:values:'
@@ -125,6 +126,46 @@ export async function getFantasyCalcValuesDbFirst(
   const fresh = await fetchFantasyCalcValues(settings)
   await writeFantasyCalcValuesToDb(settings, fresh)
   return fresh
+}
+
+/**
+ * DB-first equivalent of `getPlayerValuesForNames`.
+ *
+ * Same shape, same empty-map-on-failure contract, but the values come through
+ * `getFantasyCalcValuesDbFirst` instead of a live vendor call on the request
+ * path. The name lookup itself is the adapter's own pure helper, so the two
+ * paths cannot drift in how they shape a `PlayerValueLookup`.
+ */
+export async function getPlayerValuesForNamesDbFirst(
+  names: string[],
+  settings: FantasyCalcSettings = { isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 },
+  options?: { maxStaleMs?: number }
+): Promise<Map<string, PlayerValueLookup>> {
+  try {
+    const players = await getFantasyCalcValuesDbFirst(settings, options)
+    return buildPlayerValuesForNames(players, names)
+  } catch (error) {
+    console.error('[fantasycalc-db] getPlayerValuesForNamesDbFirst failed:', error)
+    return new Map<string, PlayerValueLookup>()
+  }
+}
+
+/**
+ * Age of the DB-backed valuation snapshot, or null when nothing is cached.
+ *
+ * The DB-first counterpart to `getValuationCacheAgeMs`, which reads the
+ * adapter's in-process Map. Any surface that has moved to
+ * `getFantasyCalcValuesDbFirst` MUST use this one instead: the in-process Map is
+ * no longer populated on that path, so the old accessor silently answers null —
+ * a freshness readout that reports "unknown" for data that is actually fresh.
+ */
+export async function getFantasyCalcCacheAgeMs(
+  settings: FantasyCalcSettings
+): Promise<number | null> {
+  const { syncedAt } = await readFantasyCalcValuesFromDb(settings, { allowStale: true })
+  if (!syncedAt) return null
+  const ms = Date.now() - new Date(syncedAt).getTime()
+  return Number.isFinite(ms) ? ms : null
 }
 
 export async function getFantasyCalcCacheHealth(): Promise<{

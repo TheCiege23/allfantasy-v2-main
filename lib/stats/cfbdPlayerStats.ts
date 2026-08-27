@@ -1,4 +1,5 @@
 import 'server-only'
+import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 import { prisma } from '@/lib/prisma'
 
@@ -26,7 +27,7 @@ import { prisma } from '@/lib/prisma'
  *    preset's numbers into the store and call them the truth.
  */
 
-const CFBD_BASE = 'https://api.collegefootballdata.com'
+const CFBD_BASE = CFBD_BASE_URL
 const STAT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /**

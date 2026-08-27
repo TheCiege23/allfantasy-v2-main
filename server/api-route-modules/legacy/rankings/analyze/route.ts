@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { writeSnapshot } from '@/lib/trade-engine/snapshot-store'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { logUserEventByUsername } from '@/lib/user-events'
@@ -559,7 +559,7 @@ async function getFantasyCalcValues(league: any): Promise<Map<string, number>> {
 
   const values = new Map<string, number>()
   try {
-    const fcPlayers = await fetchFantasyCalcValues({
+    const fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty: true,
       numQbs: isSF ? 2 : 1,
       numTeams,

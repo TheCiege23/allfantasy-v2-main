@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { fetchFantasyCalcValues, type FantasyCalcPlayer, type FantasyCalcSettings } from '@/lib/fantasycalc';
+import { type FantasyCalcPlayer, type FantasyCalcSettings } from '@/lib/fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 
 interface RosterInsight {
   title: string;
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
       ppr: pprFromScoring(league.scoring),
     };
 
-    const allPlayers = await fetchFantasyCalcValues(fcSettings);
+    const allPlayers = await getFantasyCalcValuesDbFirst(fcSettings);
     const playerMap = buildSleeperIdMap(allPlayers);
 
     const insights = analyzeRoster(

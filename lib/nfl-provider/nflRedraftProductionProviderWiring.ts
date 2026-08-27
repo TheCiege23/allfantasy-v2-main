@@ -642,7 +642,7 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
       weather: async (request) => {
         const team = requestTeam(request)
         if (!team) return null
-        const { fetchGameWeather } = await import('@/lib/openweathermap')
+        const { fetchGameWeather } = await import('@/lib/weather/openWeatherFetch')
         const gameWeather = await fetchGameWeather(team)
         if (!gameWeather) return null
         const canonical = normalizeNflRedraftProviderGameContext('openweather', {

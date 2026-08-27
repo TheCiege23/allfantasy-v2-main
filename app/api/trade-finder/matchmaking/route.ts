@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { convertSleeperToAssets } from '@/lib/trade-engine'
 import { getPreAnalysisStatus, runPreAnalysis } from '@/lib/trade-pre-analysis'
 import { waitUntil } from '@vercel/functions'
@@ -197,7 +198,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
         numTeams: Number(numTeams) || 12,
         ppr,
       }
-      fcPlayers = await fetchFantasyCalcValues(fcSettings)
+      fcPlayers = await getFantasyCalcValuesDbFirst(fcSettings)
     } catch { fcPlayers = [] }
 
     const ctx: ValuationContext = {

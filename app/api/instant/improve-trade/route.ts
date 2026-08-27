@@ -7,7 +7,7 @@ import { withApiUsage } from '@/lib/telemetry/usage'
 import { buildFeedbackPromptBlock } from '@/lib/feedback-store'
 import { getUserTradeProfile } from '@/lib/trade-feedback-profile'
 import { executeSerperWebSearch, executeSerperNewsSearch } from '@/lib/serper'
-import { fetchFantasyCalcValues as fetchCalcValues } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst as fetchCalcValues } from '@/lib/fantasycalc-db'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 
 export const runtime = "nodejs"

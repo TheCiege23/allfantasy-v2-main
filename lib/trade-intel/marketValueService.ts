@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 
 /**
  * marketValueService — REAL trade-value charts for players, picks, and FAAB,
@@ -28,7 +29,6 @@ import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextSe
  * player/pick numbers are market consensus, and the one heuristic is labeled.
  */
 
-const FC = 'https://api.fantasycalc.com/values/current'
 const CACHE_PREFIX = 'market-values:v1:'
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const FAAB_ANCHOR_RANK = 150
@@ -89,6 +89,18 @@ function cacheKeyFor(mode: string, numQbs: number, numTeams: number, ppr: number
   return `${CACHE_PREFIX}${mode}:${numQbs}qb:${numTeams}t:${ppr}ppr`
 }
 
+/**
+ * Market rows for one league format.
+ *
+ * Reads through `lib/fantasycalc-db.ts` rather than calling the vendor. This
+ * service called FantasyCalc directly instead of going through the adapter, so
+ * migrating the adapter's callers stepped straight past it — it needed its own
+ * move.
+ *
+ * `null` still means "no rows", and every caller already treats it that way;
+ * the DB-first read simply makes that outcome far rarer, since a vendor blip no
+ * longer empties the chart.
+ */
 async function fetchFcRows(
   isDynasty: boolean,
   numQbs: number,
@@ -96,11 +108,15 @@ async function fetchFcRows(
   ppr: number,
 ): Promise<FcRow[] | null> {
   try {
-    const url = `${FC}?isDynasty=${isDynasty}&numQbs=${numQbs}&numTeams=${numTeams}&ppr=${ppr}`
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return null
-    const data = (await res.json()) as unknown
-    return Array.isArray(data) ? (data as FcRow[]) : null
+    const players = await getFantasyCalcValuesDbFirst({
+      isDynasty,
+      // The settings type narrows these; this service carries them as plain
+      // numbers because they arrive from league config.
+      numQbs: (numQbs === 2 ? 2 : 1) as 1 | 2,
+      numTeams,
+      ppr: ppr as 0 | 0.5 | 1,
+    })
+    return players.length > 0 ? (players as unknown as FcRow[]) : null
   } catch {
     return null
   }

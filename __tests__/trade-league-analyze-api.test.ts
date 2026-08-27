@@ -83,6 +83,16 @@ vi.mock('@/lib/fantasycalc', () => ({
   ]),
 }))
 
+
+// These modules read through the DB-first layer now, so mocking only the
+// adapter stopped intercepting and the real prisma-backed path ran.
+vi.mock('@/lib/fantasycalc-db', () => ({
+  getFantasyCalcValuesDbFirst: vi.fn(async () => [
+    { player: { name: 'Patrick Mahomes' }, value: 15000, overallRank: 1 },
+    { player: { name: 'Josh Allen' }, value: 14000, overallRank: 2 },
+  ]),
+}))
+
 vi.mock('@/lib/trade-pre-analysis', () => ({
   getPreAnalysisStatus: vi.fn(async () => ({ cached: false })),
 }))

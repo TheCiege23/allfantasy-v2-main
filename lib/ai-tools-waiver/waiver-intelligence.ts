@@ -13,7 +13,8 @@ import { getTrendingPlayers } from '@/lib/sleeper-client'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { buildIdpKickerValueMap, idpTierValueCeiling, isIdpPosition } from '@/lib/idp-kicker-values'
 import { isIdpLeague } from '@/lib/idp/IDPLeagueConfig'
-import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import { sportsRecordToPricedAsset } from '@/lib/trade-value-console/sports-db-valuation'
 import { loadLeagueForTrade } from '@/lib/trade-value-console/league-loader'
@@ -238,7 +239,7 @@ async function buildNflValuationBundle(opts: {
   tePremium: boolean
 }): Promise<NflValuationBundle> {
   const nTeams = Math.min(32, Math.max(4, opts.leagueSize))
-  const fc = await fetchFantasyCalcValues({
+  const fc = await getFantasyCalcValuesDbFirst({
     isDynasty: opts.isDynasty,
     numQbs: opts.isSuperFlex ? 2 : 1,
     numTeams: nTeams,

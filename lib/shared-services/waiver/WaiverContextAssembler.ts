@@ -38,7 +38,8 @@ import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-ser
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
-import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
+import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { expandRosterPositionTokens } from '@/lib/trade-engine/rosterPositionFormat'
 import { computeTeamNeeds } from '@/lib/waiver-engine/team-needs'
 import type { LeagueSport } from '@prisma/client'
@@ -285,7 +286,7 @@ export async function buildWaiverDecisionContext(input: BuildWaiverDecisionConte
   const pool = await getPlayerPoolForLeague(input.leagueId, league.sport as LeagueSport, { limit: maxFreeAgents })
   const availablePool = pool.filter((p) => !rosteredIds.has(p.player_id))
 
-  const fcPlayers = await fetchFantasyCalcValues({
+  const fcPlayers = await getFantasyCalcValuesDbFirst({
     isDynasty: true, // matches the existing hardcoded convention in tradeLearningCapture.ts/every hypothetical-evaluation tool
     numQbs: isSF ? 2 : 1,
     numTeams,

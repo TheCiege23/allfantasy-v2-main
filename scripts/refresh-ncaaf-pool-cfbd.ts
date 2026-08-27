@@ -20,6 +20,7 @@
  */
 
 import fs from 'node:fs'
+import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
 
 for (const f of ['.env', '.env.local']) {
   try {
@@ -43,7 +44,7 @@ const REPLACE_SKILL = process.argv.includes('--replace-skill')
 const RI_SKILL_POSITIONS = ['QB', 'RB', 'FB', 'WR', 'TE', 'K', 'PK', 'ATH']
 const yearArg = process.argv[process.argv.indexOf('--year') + 1]
 const SEASON = /^\d{4}$/.test(yearArg ?? '') ? (yearArg as string) : '2025'
-const CFBD_BASE = 'https://api.collegefootballdata.com'
+const CFBD_BASE = CFBD_BASE_URL
 const FANTASY_POSITIONS = new Set(['QB', 'RB', 'FB', 'WR', 'TE', 'K', 'PK', 'ATH'])
 const POSITION_MAP: Record<string, string> = { FB: 'RB', PK: 'K' }
 

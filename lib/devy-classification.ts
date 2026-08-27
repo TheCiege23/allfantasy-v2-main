@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import {
   getCFBPlayerStats, getCFBTeamRoster,
-  getCFBDraftPicksResult, getCFBTeamRosterResult,
+  getCFBDraftPicksResult, getCFBTeamRosterResult, CfbdUnavailableError,
   getCFBRecruits, getCFBTransferPortal, getCFBReturningProduction,
   getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings,
   getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing,
@@ -132,8 +132,18 @@ export async function ingestCFBDRosters(
   const errors: string[] = []
   const teamsProcessed: string[] = []
 
-  const testRoster = await getCFBTeamRoster('Alabama', year)
-  if (testRoster.length === 0 && year === currentYear) {
+  /*
+   * Season probe. Uses the RESULT variant on purpose: `getCFBTeamRoster` answers
+   * `[]` for a quota wall exactly as it does for "this season is not published
+   * yet", so the `[]`-returning wrapper would silently drop us to last season on
+   * a provider outage — and then upsert a full roster under the wrong year.
+   * A refusal must abort the phase, not be read as a season signal.
+   */
+  const probe = await getCFBTeamRosterResult('Alabama', year)
+  if (!probe.ok) {
+    throw new CfbdUnavailableError(probe.failure.status ?? 0)
+  }
+  if (probe.data.length === 0 && year === currentYear) {
     year = currentYear - 1
     console.log(`[DevySync] Current year roster not available, falling back to ${year}`)
   }
@@ -141,8 +151,14 @@ export async function ingestCFBDRosters(
   for (const team of options?.teams ?? TOP_CFB_TEAMS) {
     if (options?.shouldStop?.()) break
     try {
-      const roster = await getCFBTeamRoster(team, year)
-      const fantasyPlayers = roster.filter(p => FANTASY_POSITIONS.has(p.position))
+      // Result variant again: an empty roster and a refused request must not
+      // both arrive as `[]`, or the run reports `upserted: 0, errors: 0` for a
+      // provider that answered nothing.
+      const rosterRes = await getCFBTeamRosterResult(team, year)
+      if (!rosterRes.ok) {
+        throw new CfbdUnavailableError(rosterRes.failure.status ?? 0)
+      }
+      const fantasyPlayers = rosterRes.data.filter(p => FANTASY_POSITIONS.has(p.position))
 
       for (const p of fantasyPlayers) {
         const normalizedName = normalizeName(p.fullName)
@@ -234,12 +250,30 @@ export async function ingestCFBDRosters(
   return { ingested, rosterYear: year, teamsProcessed, errors }
 }
 
-export async function ingestCFBDStats(season?: number): Promise<{ updated: number; errors: string[] }> {
+/**
+ * Stat ingestion for the DevyPlayer pool.
+ *
+ * The `teams` / `shouldStop` options mirror ingestCFBDRosters and exist for the
+ * same reason: this now runs inside the import-players cron's shared 240s
+ * budget, which means it must cover a ROTATING SLICE and stop cleanly between
+ * teams rather than a fixed `TOP_CFB_TEAMS.slice(0, 25)` that could neither
+ * finish nor reach schools 26-49. That hardcoded 25 was also why the back half
+ * of TOP_CFB_TEAMS had never had a stat line written for it by any caller.
+ *
+ * `teamsProcessed` is returned (rosters already did) so the caller can record
+ * real coverage instead of assuming the slice it asked for is the slice that ran.
+ */
+export async function ingestCFBDStats(
+  season?: number,
+  options?: { teams?: readonly string[]; shouldStop?: () => boolean },
+): Promise<{ updated: number; teamsProcessed: string[]; errors: string[] }> {
   const year = season || new Date().getFullYear() - 1
   let updated = 0
   const errors: string[] = []
+  const teamsProcessed: string[] = []
 
-  for (const team of TOP_CFB_TEAMS.slice(0, 25)) {
+  for (const team of options?.teams ?? TOP_CFB_TEAMS.slice(0, 25)) {
+    if (options?.shouldStop?.()) break
     try {
       const stats = await getCFBPlayerStats(year, team)
 
@@ -298,13 +332,14 @@ export async function ingestCFBDStats(season?: number): Promise<{ updated: numbe
         }
       }
 
+      teamsProcessed.push(team)
       await new Promise(r => setTimeout(r, 200))
     } catch (err: any) {
       errors.push(`Team ${team} stats failed: ${err.message?.slice(0, 100)}`)
     }
   }
 
-  return { updated, errors }
+  return { updated, teamsProcessed, errors }
 }
 
 function normalizePosition(pos: string): string {

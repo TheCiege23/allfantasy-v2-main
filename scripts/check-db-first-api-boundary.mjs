@@ -30,6 +30,38 @@ const DATA_API_HOST_PATTERNS = [
   // Covers every subdomain seen in this repo: rest.datafeeds., datafeeds., accounts., auth.,
   // api., and the bare domain.
   /(^|\.)rolling-insights\.com$/i,
+  // CollegeFootballData. Rolling Insights was described as "the last provider missing" when it
+  // was added in #584; that was wrong — CFBD was never on this list at all, and it is the SOLE
+  // NCAAF source behind the entire devy/college stack (15 endpoints across 6 files). Nothing
+  // else prices, ranks or rosters a college player, so an outage on a request path has no
+  // fallback to degrade to.
+  //
+  // Adding it reports ONE file: lib/cfb-player-data.ts, reached from app/api/market-alerts and
+  // server/api-route-modules/legacy/cfb-players — both request paths, both fetching CFBD live
+  // with only a 6-hour in-process Map for cover. That is a real pre-existing violation and it is
+  // left reported on purpose. The other five call sites were already covered: workers/providers/
+  // and scores/gameScoreProviders.ts by existing allowlist entries, the two scripts/ by the
+  // import|refresh pattern, and lib/stats/cfbdPlayerStats.ts by the entry added below.
+  /(^|\.)api\.collegefootballdata\.com$/i,
+  // api-sports.io. NOT the same vendor as `api.sportsdata.io` above, despite the
+  // names — that near-collision is how this one stayed off the list while its
+  // lookalike was monitored. Seen as `v3.football.api-sports.io` and
+  // `v1.american-football.api-sports.io`.
+  //
+  // `media.api-sports.io` is EXCLUDED. It is the image CDN, not the data API: a
+  // headshot or crest URL carries no key, returns no data to cache, and is
+  // consumed as an <img src> rather than fetched. Matching the bare domain
+  // reported five such lines — four of them string literals in test fixtures —
+  // which is exactly the noise that buries real findings.
+  /^(?!media\.)([a-z0-9-]+\.)*api-sports\.io$/i,
+  // FantasyCalc — the player-value source behind trade grading, rankings and
+  // the trade finder. A DB-first path already exists (`lib/fantasycalc-db.ts`,
+  // fed by `scripts/sync-fantasycalc-valuations.ts`), but most callers still go
+  // to the vendor directly, so this reports real debt rather than a clean slate.
+  /(^|\.)api\.fantasycalc\.com$/i,
+  // OpenWeatherMap. Weather rather than sport, but it is a rate-limited keyed
+  // vendor on the same request paths and the rule is the same.
+  /(^|\.)api\.openweathermap\.org$/i,
 ];
 
 /**
@@ -48,6 +80,12 @@ const DATA_API_IDENTIFIERS = [
   'ESPN_SITE_API_BASE',
   'THE_SPORTS_DB_V1_JSON_BASE',
   'THE_SPORTS_DB_V2_JSON_BASE',
+  // The six hardcoded CFBD literals now all resolve to `CFBD_BASE_URL`, exported
+  // by `lib/cfbd-fetch.ts`. Without this entry that consolidation would have
+  // removed the last `https://` literal from all six files at once and retired
+  // the check for every one of them — the exact failure this list exists to
+  // prevent, described in the block comment above.
+  'CFBD_BASE_URL',
 ];
 
 /**
@@ -88,7 +126,14 @@ const ALLOWED_PATH_PATTERNS = [
    * never a request path. scripts/audit-playoff-provider-data.ts documents itself as read-only,
    * writes nothing, and is invoked by hand (absent from package.json and CI).
    */
-  /^scripts\/.*(audit|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
+  /*
+   * `compare` joins for the same reason as `audit`, one line down: a comparison
+   * tool exists to hold what a provider says against what we stored, which it
+   * cannot do without calling the provider. scripts/compare-player-apis.ts is
+   * hand-run — absent from package.json and from CI — and a script is never a
+   * request path.
+   */
+  /^scripts\/.*(audit|compare|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
   /^lib\/.*(ingest|ingestion|sync)/i,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
@@ -114,6 +159,179 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/sports-live-scores-service\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^lib\/scores\/gameScoreProviders\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * Third file in the same category as the two above, and added for the same reason: it IS the
+   * ingestion module, and the `lib/.*(ingest|sync)` pattern misses it only because the directory
+   * is `stats/` and the file is named after the provider rather than the verb.
+   *
+   * Checked by CALLERS, not by name, per the warning above. `lib/stats/cfbdPlayerStats.ts`
+   * exports `syncCfbdPlayerStatsToDb` and is imported from exactly two places in tracked source:
+   * `app/api/cron/import-stat-lines/route.ts` (a cron, itself already allowed) and
+   * `__tests__/cfbd-idp-scoring.test.ts`. No request path reaches it.
+   *
+   * ⚠ Not a blanket exemption for `lib/stats/`. Listed by exact filename so a new module dropped
+   * beside it is still caught.
+   */
+  /^lib\/stats\/cfbdPlayerStats\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The CollegeFootballData adapter. Every export is a live CFBD fetch and
+   * nothing else — same profile as lib/workers/providers/, listed by filename
+   * because of where it happens to sit.
+   *
+   * EARNED, NOT ASSUMED. When CFBD joined the host list this file was a real
+   * violation: `/api/market-alerts` and `/api/legacy/cfb-players` imported it on
+   * the request path. Both now read Postgres through `lib/devy/devyPlayerReads.ts`,
+   * and the only remaining runtime importer is `lib/devy-classification.ts` — the
+   * ingestion module, which is what an adapter is for. The two route files keep a
+   * TYPE-only import, which is erased at compile and carries no fetch.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. The exemption is valid only while no request
+   * path imports it for a value. `grep -rn "from '@/lib/cfb-player-data'"` should
+   * show ingestion plus `import type` lines and nothing else.
+   */
+  /^lib\/cfb-player-data\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
+   * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`
+   * performs the request, so it is allowlisted here with the other clients
+   * instead of in HOST_DEFINITION_FILES.
+   *
+   * Every importer is itself allowlisted — cfb-player-data, cfbdPlayerStats,
+   * scores/gameScoreProviders, workers/providers/cfbd, and the two ncaaf scripts.
+   *
+   * Its `CfbdResult` return type is the pattern the remaining raw fetchers in
+   * lib/cfb-player-data.ts should migrate to: it makes a caller state what it
+   * does when the answer is "we could not ask", rather than defaulting to `[]`.
+   */
+  /^lib\/cfbd-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The API-Football adapter. Earned the same way CFBD did, and checked the same
+   * way — by its callers.
+   *
+   * It has exactly ONE importer in tracked source: `app/api/sports/sync/route.ts`,
+   * which is POST-only, gated behind `requireAdminOrBearer`, and imports nothing
+   * from here but `sync*ToDb` writers plus the two diagnostics helpers. That is an
+   * ingestion trigger that happens to be reachable over HTTP, not a read path.
+   *
+   * ⚠ Its sibling `lib/api-sports.ts` is NOT here and must not be added by
+   * analogy — the two look alike and are not alike. `lib/sports-router.ts`
+   * imports it as `./api-sports` (a RELATIVE path, invisible to a
+   * `from '@/lib/api-sports'` search) and pulls live `fetchAPISportsStandings` /
+   * `fetchAPISportsPlayerStatistics`, which AI enrichment and the survivor
+   * pipeline reach. That is a genuine read path.
+   */
+  /^lib\/api-football\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The FantasyCalc adapter, and the clearest worked example of EARNING an
+   * exemption rather than asserting one.
+   *
+   * `lib/fantasycalc.ts` could never be allowlisted: the fetch sat beside the
+   * pure helpers (findPlayerByName, getPickValue, getValueTier, the trade
+   * grading maths) that ~45 modules import legitimately. So the fetch moved out
+   * to this file instead of moving 45 importers — leaving exactly three runtime
+   * importers, all ingestion-shaped:
+   *   - lib/fantasycalc-db.ts        the DB-first layer every request path uses
+   *   - scripts/sync-fantasycalc-valuations.ts
+   *   - lib/replay-framework/ingest/ingestSleeperTradesForLeague.ts
+   *
+   * That set is the exemption. 36 request-path call sites were migrated to
+   * lib/fantasycalc-db.ts first; the allowlist came last, which is the order
+   * that makes it true.
+   *
+   * ⚠ RE-CHECK BY CALLERS, AND WITH A POSITIVE CONTROL. `from '@/lib/x'` alone
+   * is not a census — a relative `./fantasycalc-fetch` import would not appear.
+   */
+  /^lib\/fantasycalc-fetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The OpenWeatherMap geocoding call, isolated behind a durable cache.
+   *
+   * Its sole importer is `geocodeOpenWeather` in lib/weather/weatherService.ts,
+   * which reads `sportsDataCache` first and writes the result back — the same
+   * DB-first-reader-over-allowlisted-fetcher shape as fantasycalc-fetch above.
+   *
+   * A geocode is immutable (an address does not move), so after the first
+   * lookup this vendor call never runs again for that address. Only SUCCESSES
+   * are cached: writing a miss would turn one transient outage into a year of
+   * "this address has no coordinates".
+   *
+   * Deliberately NOT a `db-first-exception:` marker. That is for temporary debt
+   * with a migration plan, plus the standing health-probe case; a permanent
+   * read-through cache is neither, and using the marker here would blunt it.
+   */
+  /^lib\/weather\/openWeatherGeocode\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The OpenWeatherMap data calls, split out of `lib/openweathermap.ts` for the
+   * same reason the FantasyCalc fetch was split out of its adapter: the module
+   * also holds the venue coordinate tables, `getVenueForTeam` and `isTeamDome`,
+   * which request paths such as `/api/sports/weather` import legitimately and
+   * which touch no network.
+   *
+   * Moving the FETCH rather than those importers leaves two callers, both
+   * provider/caching layers rather than routes:
+   *   - lib/weather/weatherService.ts   the weatherCache-backed reader
+   *   - lib/nfl-provider/nflRedraftProductionProviderWiring.ts
+   *
+   * ⚠ The census that found those two only worked because it also checked
+   * DYNAMIC imports — the provider orchestrator reaches it via
+   * `await import(...)`, which a plain `from '...'` grep does not see.
+   */
+  /^lib\/weather\/openWeatherFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The api-sports.io adapter. Allowlisted on a FULL caller census — every
+   * import form, aliased, relative and dynamic:
+   *   crons            app/api/cron/import-{schedules,scores,standings}
+   *   admin ingestion  app/api/sports/sync, legacy/identity-sync (both POST-gated)
+   *   ingestion        lib/ncaaf-provider/legacyApiSportsIngestion.ts (dynamic)
+   *   orchestrator     lib/nfl-provider/nflRedraftProductionProviderWiring.ts (dynamic)
+   *   worker provider  lib/workers/providers/api-sports.ts
+   *   script           scripts/audit-api-sports-player-stats.ts
+   *   DB-FIRST ROUTER  lib/sports-router.ts
+   *
+   * That last one is why this took a second look. `lib/sports-router.ts` was
+   * cited as the reason api-sports could never be exempted — it imports the
+   * adapter RELATIVELY (`./api-sports`) and takes live standings and player
+   * stats. But `getSportsData` is itself DB-first: in-memory cache, then
+   * `sportsDataCache`, then `tryNFLFromDb`, and only then the provider chain,
+   * writing what it fetches back. It is the same read-through shape as
+   * `getFantasyCalcValuesDbFirst`, so the provider call is the cache MISS path,
+   * not a request-path read.
+   *
+   * ⚠ Re-check with dynamic imports included. Four of the callers above are
+   * `await import(...)` and appear in no `from '...'` grep.
+   */
+  /^lib\/api-sports\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The World Cup api-sports client. Nothing that reads reaches its fetch:
+   *   sync         lib/world-cup/worldCupSyncService.ts, worldCupLiveScoreSyncService
+   *   diagnostics  lib/world-cup/worldCupDiagnosticsService.ts
+   *   probes       app/api/admin/ai/provider-health, AdminProviderHealthService
+   *   admin sync   app/api/admin/world-cup/scores/sync-live
+   *
+   * The two surfaces that looked like read paths are not: `/api/sports/injuries`
+   * reads rows written by `worldCupDataSyncService` (its own comment says so),
+   * and the world-cup catch-all imports only `WorldCupProviderConfigError`, an
+   * error class. `worldCupDataProvider.ts` is a provider INTERFACE with zero
+   * prisma — it is not a DB-first layer, so the chain had to be walked to its
+   * ends rather than stopped there.
+   */
+  /^lib\/world-cup\/apiSportsWorldCup\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The bracket provider REGISTRY — configuration, not a client. It contains no
+   * `fetch`; it builds `HttpProvider` configs, and that class does the calling
+   * from `baseUrl + endpoint`, so the actual request has no URL literal at all.
+   *
+   * Three importers: two POST ingestion workers (`bracket/workers/auto-import`,
+   * `bracket/workers/live-ingest`, both writing through prisma) and
+   * `/api/bracket/providers`, which returns capabilities and a score — a
+   * capability probe, the same standing exception as the health probes in
+   * SystemHealthResolver.
+   *
+   * ⚠ KNOWN BLIND SPOT, recorded rather than hidden: because HttpProvider is
+   * config-driven, the guard cannot see bracket provider calls wherever they
+   * originate. This registry is the one place a human can read which hosts the
+   * bracket stack talks to. Do not add new provider hosts anywhere else.
+   */
+  /^lib\/brackets\/providers\/index\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
    * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is

@@ -10,7 +10,8 @@ import {
   SleeperUser,
   SleeperPlayoffBracket,
 } from '../sleeper-client'
-import { fetchFantasyCalcValues, FantasyCalcPlayer, FantasyCalcSettings, getValuationCacheAgeMs } from '../fantasycalc'
+import { FantasyCalcPlayer, FantasyCalcSettings } from '../fantasycalc'
+import { getFantasyCalcValuesDbFirst, getFantasyCalcCacheAgeMs } from '@/lib/fantasycalc-db'
 import { prisma } from '../prisma'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'
@@ -2864,14 +2865,16 @@ export async function computeLeagueRankingsV2(
   const [rosters, users, fcPlayers, ldiData, playoffBracket, sleeperPlayersRaw, leagueDrafts, weightConfig] = await Promise.all([
     getLeagueRosters(leagueId),
     getLeagueUsers(leagueId),
-    fetchFantasyCalcValues(fcSettings),
+    getFantasyCalcValuesDbFirst(fcSettings),
     fetchLdiForLeague(leagueId),
     phase === 'post_season' ? getPlayoffBracket(leagueId) : Promise.resolve([]),
     getAllPlayers().catch(() => null),
     getLeagueDrafts(leagueId).catch(() => []),
     getCompositeWeightConfig(),
   ])
-  const valuationCacheAgeMs = getValuationCacheAgeMs(fcSettings)
+  // DB-backed age, matching the DB-first read above. getValuationCacheAgeMs
+  // reads the adapter's in-process Map, which this path no longer fills.
+  const valuationCacheAgeMs = await getFantasyCalcCacheAgeMs(fcSettings)
   let sleeperLastSyncMs: number | null = null
   try {
     const syncRow = await prisma.legacyLeague.findFirst({

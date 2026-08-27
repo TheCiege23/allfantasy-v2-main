@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchFantasyCalcValues, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { computeTradeDrivers, computeBestLineupBySlot, type SlotAssignment } from '@/lib/trade-engine/trade-engine'
 import { computeManagerTendencies, computeAcceptProbability, type ManagerTendencyProfile, type AcceptProbabilityResult } from '@/lib/trade-engine/manager-tendency-engine'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
@@ -33,7 +34,7 @@ async function getFcPlayers(isSF: boolean, numTeams: number): Promise<FantasyCal
   const now = Date.now()
   if (fcCache.data && now - fcCache.at < FC_TTL && fcCache.sf === isSF) return fcCache.data
   try {
-    const players = await fetchFantasyCalcValues({
+    const players = await getFantasyCalcValuesDbFirst({
       isDynasty: true,
       numQbs: isSF ? 2 : 1,
       numTeams,

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
-
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 let cachedPlayers: any[] | null = null
 let cacheTime = 0
 const CACHE_TTL = 5 * 60 * 1000
@@ -30,7 +29,7 @@ export async function GET(req: NextRequest) {
   try {
     const now = Date.now()
     if (!cachedPlayers || now - cacheTime > CACHE_TTL) {
-      const fresh = await fetchFantasyCalcValues({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 })
+      const fresh = await getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 })
       if (fresh && fresh.length > 0) {
         cachedPlayers = fresh
         cacheTime = now

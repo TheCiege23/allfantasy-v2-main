@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
@@ -198,7 +199,7 @@ export const POST = withApiUsage({ endpoint: "/api/instant/trade", tool: "Instan
     const leagueSize = detectedLeagueSize
       ?? (VALID_LEAGUE_SIZES.includes(Number(passedLeagueSize)) ? Number(passedLeagueSize) : 12)
 
-    const fcPlayers = await fetchFantasyCalcValues({
+    const fcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty: true,
       numQbs: isSuperFlex ? 2 : 1,
       numTeams: leagueSize,

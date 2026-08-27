@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { computeAdaptiveRankings, type RankingView } from '@/lib/rankings-engine/adaptive-rankings'
 import { computeLeagueDemandIndex } from '@/lib/rankings-engine/league-demand-index'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
@@ -123,7 +124,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/enhanced", to
     const baseView: RankingView = view === 'this_year' ? 'win_now' : view === 'dynasty_horizon' ? 'rebuild' : 'league'
 
     const [fcPlayers, ldi, strategyMetaContext] = await Promise.all([
-      fetchFantasyCalcValues(fcSettings),
+      getFantasyCalcValuesDbFirst(fcSettings),
       computeLeagueDemandIndex(leagueId),
       getStrategyMetaReports({ sport: normalizedSport, timeframe: '30d' }).then((rows) => rows.slice(0, 3)).catch(() => []),
     ])

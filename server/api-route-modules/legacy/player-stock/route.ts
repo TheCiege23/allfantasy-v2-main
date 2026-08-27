@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { fetchFantasyCalcValues, FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { findPlayerInCSV, getPlayerValue as getCSVPlayerValue, getPlayerECR, CSVPlayerValue } from '@/lib/player-values-csv'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 
@@ -25,13 +26,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-stock", tool: "
     
     const pricedPlayer = await pricePlayer(player_name, ctx)
     
-    const dynastyValues = await fetchFantasyCalcValues({ 
+    const dynastyValues = await getFantasyCalcValuesDbFirst({ 
       isDynasty: true, 
       numQbs: is2QB ? 2 : 1, 
       numTeams: 12, 
       ppr: 1 
     })
-    const redraftValues = await fetchFantasyCalcValues({ 
+    const redraftValues = await getFantasyCalcValuesDbFirst({ 
       isDynasty: false, 
       numQbs: is2QB ? 2 : 1, 
       numTeams: 12, 

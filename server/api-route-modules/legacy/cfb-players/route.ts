@@ -1,6 +1,11 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { searchCFBPlayers, getDevyValuesForPlayers, getTeamDevyRoster, DevyPlayerValue } from '@/lib/cfb-player-data'
+import type { DevyPlayerValue } from '@/lib/cfb-player-data'
+import {
+  searchDevyPlayersFromDb,
+  getDevyTeamRosterFromDb,
+  getDevyValuesForNamesFromDb,
+} from '@/lib/devy/devyPlayerReads'
 import { prisma } from '@/lib/prisma'
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/cfb-players", tool: "LegacyCfbPlayers" })(async (request: NextRequest) => {
@@ -14,13 +19,17 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/cfb-players", tool: "Le
   try {
     // Action: search - Search for CFB players by name
     if (action === 'search' && query) {
-      const players = await searchCFBPlayers(query)
+      const players = await searchDevyPlayersFromDb(query)
       return NextResponse.json({ players })
     }
 
     // Action: roster - Get full team roster with devy values
     if (action === 'roster' && team) {
-      const roster = await getTeamDevyRoster(team, year)
+      // `year` is accepted for backward compatibility but no longer selects a
+      // roster season: the pool holds one current row per player, stamped with
+      // `lastRosterYear` by the ingest. Honouring the parameter would mean
+      // promising historical rosters we do not store.
+      const roster = await getDevyTeamRosterFromDb(team)
       return NextResponse.json({ roster })
     }
 
@@ -32,14 +41,15 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/cfb-players", tool: "Le
         return NextResponse.json({ error: 'No players specified' }, { status: 400 })
       }
 
-      const players = playerNames.map(name => ({
-        name: name.trim(),
-        position: 'Unknown',
-        team: 'Unknown',
-      }))
-
-      const values = await getDevyValuesForPlayers(players)
-      return NextResponse.json({ values })
+      // Unresolved names come back null rather than as an invented value built
+      // from a hardcoded 'JR' default, which was indistinguishable downstream
+      // from a real one. They are reported separately so a caller can see which
+      // names the pool does not cover.
+      const resolved = await getDevyValuesForNamesFromDb(playerNames.map(n => n.trim()))
+      return NextResponse.json({
+        values: resolved.filter((v): v is DevyPlayerValue => v !== null),
+        unresolved: playerNames.map(n => n.trim()).filter((_, i) => resolved[i] === null),
+      })
     }
 
     // Action: fantrax-roster - Get Fantrax league roster with devy values
@@ -74,24 +84,21 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/cfb-players", tool: "Le
       // Get devy values for each player
       const enrichedRoster: Array<DevyPlayerValue & { fantasyPoints?: number }> = []
 
-      for (const player of rosterData.slice(0, 50)) { // Limit to 50 players for performance
-        const cfbPlayers = await searchCFBPlayers(player.name)
-        const cfbPlayer = cfbPlayers.find(p => 
-          p.fullName.toLowerCase().includes(player.name.toLowerCase().split(' ')[0])
-        )
+      // The 50-player cap was here because each player cost a live CFBD search
+      // — up to 50 sequential vendor round-trips inside one GET. The whole
+      // roster now resolves in a single indexed query, so the cap is gone and
+      // the loop below is pure in-memory assembly.
+      const poolValues = await getDevyValuesForNamesFromDb(rosterData.map(p => p.name))
 
-        if (cfbPlayer) {
+      for (const [index, player] of rosterData.entries()) {
+        const pooled = poolValues[index]
+
+        if (pooled) {
           enrichedRoster.push({
-            name: cfbPlayer.fullName,
-            team: cfbPlayer.team,
-            position: cfbPlayer.position || player.position,
-            classYear: cfbPlayer.year === 1 ? 'FR' : cfbPlayer.year === 2 ? 'SO' : cfbPlayer.year === 3 ? 'JR' : cfbPlayer.year === 4 ? 'SR' : 'Unknown',
-            devyValue: calculateQuickDevyValue(cfbPlayer.position || player.position, cfbPlayer.year),
-            projectedNFLValue: null,
-            draftEligibleYear: new Date().getFullYear() + Math.max(0, 4 - (cfbPlayer.year || 3)),
-            projectedRound: null,
-            trend: 'stable',
-            notes: null,
+            ...pooled,
+            // Fantrax is authoritative for what the manager actually rosters;
+            // the pool is authoritative for who the player is.
+            position: pooled.position || player.position,
             fantasyPoints: player.fantasyPoints,
           })
         } else {

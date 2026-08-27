@@ -2,7 +2,8 @@ import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
 import { DEFAULT_SPORT } from '@/lib/sport-scope';
 import { getAllPlayers, SleeperPlayer } from './sleeper-client';
-import { fetchFantasyCalcValues, FantasyCalcPlayer, findPlayerByName } from './fantasycalc';
+import { FantasyCalcPlayer, findPlayerByName } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 
 export interface PlatformLeagueInfo {
   name: string;
@@ -888,7 +889,7 @@ export async function buildMultiPlatformContext(
 
   let fantasyCalcValues: Map<string, FantasyCalcPlayer> | undefined;
   try {
-    const fcData = await fetchFantasyCalcValues({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 });
+    const fcData = await getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 });
     fantasyCalcValues = new Map();
     for (const p of fcData) {
       fantasyCalcValues.set(p.player.name.toLowerCase(), p);

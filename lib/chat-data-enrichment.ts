@@ -5,7 +5,8 @@ import { fetchWeatherForTeamHomeWindow } from '@/lib/weather/venueResolver'
 import { defaultNflGameTime } from '@/lib/weather/defaultGameTimes'
 import { calculateWeatherImpact } from '@/lib/weather/weatherImpactEngine'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
-import { fetchFantasyCalcValues, findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 import { getTrendingAdds, getTrendingDrops, getPlayerName, getAllPlayers } from '@/lib/sleeper-client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -433,7 +434,7 @@ export async function enrichChatWithData(
     tasks.push((async () => {
       try {
         const isDynasty = lower.includes('dynasty')
-        const allValues = await fetchFantasyCalcValues({
+        const allValues = await getFantasyCalcValuesDbFirst({
           isDynasty,
           numQbs: lower.includes('superflex') || lower.includes('sf') ? 2 : 1,
           numTeams: 12,

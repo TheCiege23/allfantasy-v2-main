@@ -89,7 +89,14 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
         },
         playoffSettings: {
           state: schedule.some((week) => week.matchups.length > 0) ? 'partial' : 'missing',
-          note: 'Playoff structure is inferred from playoff matchup flags when present in uploaded schedule data.',
+          /*
+           * ⚠ THE FLAGS ARE NO LONGER AN INFERENCE on a live import. They are
+           * set from the league's own `firstPlayoffPeriod`, so a flagged week
+           * is one Fantrax calls a playoff week. Still `partial` because the
+           * bracket itself is not modelled — and playoff periods carry no
+           * pairings until the regular season seeds them.
+           */
+          note: "Playoff weeks are flagged from the league's own first playoff period; the bracket itself is not imported.",
         },
         /*
          * ⚠ "FULL" USED TO MEAN "THERE ARE ROWS", and rows always existed — one
@@ -117,10 +124,17 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
         currentSchedule: {
           state: schedule.length > 0 ? 'partial' : 'missing',
           count: schedule.length,
+          /*
+           * ⚠ WAS "depends on uploaded standings/matchup exports", WHICH IS NO
+           * LONGER THE ONLY SOURCE. A live import reads every period's fixtures
+           * from the league API. What it does NOT read is results: getLeagueInfo
+           * carries the pairings and not the scores, which live on
+           * getMatchupScores?period=N, one request per period.
+           */
           note:
             schedule.length > 0
-              ? 'Fantrax schedule coverage depends on uploaded standings/matchup exports.'
-              : 'No Fantrax matchup data was available in imported CSV history.',
+              ? 'Fixtures come from the league schedule; scores are present only where a CSV export supplied them.'
+              : 'No Fantrax matchup data was available for this league.',
         },
         draftHistory: {
           state: history.draft_picks.length > 0 ? 'partial' : 'missing',

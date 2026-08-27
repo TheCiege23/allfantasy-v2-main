@@ -1,6 +1,7 @@
 import { prisma } from './prisma'
 import { normalizeTeamAbbrev, normalizePosition, normalizePlayerName, playerNamesMatch } from './team-abbrev'
-import { fetchFantasyCalcValues, type FantasyCalcPlayer } from './fantasycalc'
+import { type FantasyCalcPlayer } from './fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { findMultiADP, getConsensusADP, type ADPConsensus } from './multi-platform-adp'
 import { getTeamLogoUrl as resolveTeamLogoUrl } from './player-media-urls'
 
@@ -285,7 +286,7 @@ export async function enrichWithValuation(
 ): Promise<UnifiedPlayer> {
   if (!fcPlayers) {
     try {
-      fcPlayers = await fetchFantasyCalcValues({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
+      fcPlayers = await getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
     } catch {
       return player
     }
@@ -369,7 +370,7 @@ export async function syncIdentityMap(): Promise<{ created: number; updated: num
   let updated = 0
   let matched = 0
 
-  const fcPlayers = await fetchFantasyCalcValues({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
+  const fcPlayers = await getFantasyCalcValuesDbFirst({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
 
   for (const fc of fcPlayers) {
     const sleeperId = fc.player.sleeperId || null

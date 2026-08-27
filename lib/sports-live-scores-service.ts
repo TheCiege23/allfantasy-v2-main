@@ -725,6 +725,59 @@ function dbRowToLiveScore(g: {
   }
 }
 
+/**
+ * Which feed wins when several have rows for the same sport.
+ *
+ * Earlier entries win, but ONLY among sources that are actually current. A
+ * preference list alone is not enough: `espn_live` still holds 8 NCAAF rows
+ * from 2026-04-26 carrying 0-0, and ranking it above TheSportsDB would show a
+ * scoreboard of nil-nils while the real scores sat one row over.
+ */
+const LIVE_SOURCE_PREFERENCE = ['rolling_insights', 'api_sports', 'espn_live', 'thesportsdb'] as const
+
+/** A feed silent this long is treated as dead, whatever its rank. */
+const LIVE_SOURCE_DEAD_AFTER_MS = 6 * 60 * 60 * 1000
+
+type SourcedRow = { source: string | null; fetchedAt: Date | null }
+
+/**
+ * Pick one source's rows — never a blend.
+ *
+ * Mixing sources is what produces a scoreboard where the same fixture appears
+ * two or three times with different scores: this table deliberately keeps one
+ * row PER SOURCE per game, so an un-deduped read shows a game once per feed.
+ */
+export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Date.now()): T[] {
+  if (rows.length === 0) return rows
+
+  const bySource = new Map<string, { rows: T[]; newest: number }>()
+  for (const row of rows) {
+    const key = row.source ?? ''
+    const stamp = row.fetchedAt ? row.fetchedAt.getTime() : 0
+    const entry = bySource.get(key)
+    if (entry) {
+      entry.rows.push(row)
+      if (stamp > entry.newest) entry.newest = stamp
+    } else {
+      bySource.set(key, { rows: [row], newest: stamp })
+    }
+  }
+
+  const all = [...bySource.entries()]
+  // Prefer live feeds; fall back to everything only if none is current, so a
+  // fully stale sport still renders something rather than an empty screen.
+  const live = all.filter(([, v]) => now - v.newest <= LIVE_SOURCE_DEAD_AFTER_MS)
+  const pool = live.length > 0 ? live : all
+
+  const rank = (source: string): number => {
+    const i = (LIVE_SOURCE_PREFERENCE as readonly string[]).indexOf(source)
+    return i === -1 ? LIVE_SOURCE_PREFERENCE.length : i
+  }
+  pool.sort((a, b) => rank(a[0]) - rank(b[0]) || b[1].newest - a[1].newest)
+
+  return pool[0]![1].rows
+}
+
 async function readCachedLiveScoreRows(options: {
   sport: LeagueSport
   team?: string | null
@@ -733,12 +786,24 @@ async function readCachedLiveScoreRows(options: {
   return prisma.sportsGame.findMany({
     where: {
       sport: options.sport,
-      // `api_sports` is written every 2 minutes by the import-scores cron and is both the
-      // freshest and most-complete source in production (335/335 rows carry score+status+start,
-      // newest 2026-07-21; vs rolling_insights 497/3010 with scores, newest 2026-05-19). It was
-      // omitted only because this filter (2026-04-14) predates the api_sports cron (2026-06-09)
-      // — an oversight, not a data-quality exclusion. `thesportsdb`/`e2e` stay out: null scores.
-      source: { in: ['rolling_insights', 'espn_live', 'api_sports'] },
+      /*
+       * ⚠ `thesportsdb` WAS EXCLUDED HERE AND IT IS THE ONLY NCAAF SCORE SOURCE.
+       *
+       * The exclusion reason on this line — "null scores" — was measured against
+       * NFL, where TheSportsDB carries scores on 367 of 658 rows. For NCAAF it
+       * carries them on 1,524 of 1,524, and it is the ONLY writer keeping the
+       * sport current (881 rows refreshed in the last 6h, 2026-08-27).
+       *
+       * The other three are all empty or dead for college: rolling_insights has
+       * no NCAAF data at all, `api_sports` has zero NCAAF rows because the
+       * import-scores freshness gate suppresses it (see that route), and
+       * `espn_live` last wrote 2026-04-26. So this filter returned NOTHING for
+       * NCAAF while a complete, minutes-old feed sat in the same table.
+       *
+       * Source SELECTION now happens in pickFreshestSourceRows below rather than
+       * here, so adding a source cannot let a stale feed outrank a live one.
+       */
+      source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
       ...(team
         ? {
             OR: [
@@ -769,8 +834,10 @@ export async function getCachedLiveScoresForSport(options: {
   const sport = normalizeToSupportedSport(options.sport)
   const team = options.team?.trim() || null
   const cachedGames = await readCachedLiveScoreRows({ sport, team })
-  const preferredRi = cachedGames.filter((g) => g.source === 'rolling_insights')
-  const useRows = preferredRi.length > 0 ? preferredRi : cachedGames
+  // Was: RI-if-present, else EVERY row from every source blended together.
+  // That blend is how one fixture rendered once per feed, and how a dead feed's
+  // 0-0 rows sat beside a live one's real score.
+  const useRows = pickFreshestSourceRows(cachedGames)
   const scores = useRows.map(dbRowToLiveScore)
   const now = Date.now()
   const latestFetched =
@@ -875,8 +942,9 @@ export async function getLiveScoresForSport(options: {
   }
 
   if (scores.length === 0) {
-    const preferredRi = cachedGames.filter((g) => g.source === 'rolling_insights')
-    const useRows = preferredRi.length > 0 ? preferredRi : cachedGames
+    // Same rule as the cached-only reader: one source, the freshest that ranks
+    // highest, never a blend across feeds.
+    const useRows = pickFreshestSourceRows(cachedGames)
     scores = useRows.map(dbRowToLiveScore)
     source = useRows[0]?.source === 'rolling_insights' ? 'db_cache_ri' : 'db_cache'
     fetchedAt = useRows[0]?.fetchedAt?.toISOString() ?? null

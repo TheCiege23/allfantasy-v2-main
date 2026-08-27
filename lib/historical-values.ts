@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { fetchFantasyCalcValues, findPlayerByName } from './fantasycalc';
+import { findPlayerByName } from './fantasycalc';
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { pickValue } from './pick-valuation';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'historical-values');
@@ -724,9 +725,9 @@ export async function computeDualModeGrades(
   let picksFromCurve = 0;
   
   // Fetch FantasyCalc data once for coverage fallback
-  let fantasyCalcPlayers: Awaited<ReturnType<typeof fetchFantasyCalcValues>> = [];
+  let fantasyCalcPlayers: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>> = [];
   try {
-    fantasyCalcPlayers = await fetchFantasyCalcValues({
+    fantasyCalcPlayers = await getFantasyCalcValuesDbFirst({
       isDynasty: true,
       numQbs: isSuperFlex ? 2 : 1,
       numTeams: 12,

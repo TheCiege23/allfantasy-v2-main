@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueUsers } from '@/lib/sleeper-client'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
@@ -81,7 +82,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/league-format
     const pprVal = isPPR ? 1 : isHalfPPR ? 0.5 : 0
     let fcPlayers: FantasyCalcPlayer[] = []
     try {
-      fcPlayers = await fetchFantasyCalcValues({
+      fcPlayers = await getFantasyCalcValuesDbFirst({
         isDynasty: true,
         numQbs,
         numTeams: rosters.length || 12,

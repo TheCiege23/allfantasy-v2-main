@@ -1100,12 +1100,12 @@ export async function fetchFantasyCalcPlayerAndPickWeights(
   } = params
 
   const {
-    fetchFantasyCalcValues,
     findPlayerByName,
     findPlayerBySleeperId,
     getDetailedTier,
     getPickValue,
   } = await import('./fantasycalc')
+  const { getFantasyCalcValuesDbFirst } = await import('./fantasycalc-db')
 
   const fullSettings: FantasyCalcSettings = {
     isDynasty: partialSettings?.isDynasty ?? true,
@@ -1114,7 +1114,7 @@ export async function fetchFantasyCalcPlayerAndPickWeights(
     ppr: partialSettings?.ppr ?? 1,
   }
 
-  const allPlayers = await fetchFantasyCalcValues(fullSettings)
+  const allPlayers = await getFantasyCalcValuesDbFirst(fullSettings)
   const playerWeights: PlayerWeight[] = []
 
   for (const name of playerNames) {

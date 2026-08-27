@@ -16,10 +16,15 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveChimmyIntentRoute } from '@/lib/ai/chimmyIntentRouter'
 import { DEFAULT_WORLD_CUP_SCORING } from '@/lib/world-cup/worldCupBracketBuilder'
-import { fetchFantasyCalcValues, findPlayerByName, getValueTier } from '@/lib/fantasycalc'
+import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
 import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
+import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
+
+/** US sports days are Eastern days; this is what "today" and "tonight" mean. */
+const SPORTS_DAY_TIMEZONE = 'America/New_York'
 
 // ── Schedule question detection ───────────────────────────────────────────────
 
@@ -148,8 +153,17 @@ function detectWeatherQuestion(message: string): boolean {
   return /\b(weather|forecast|wind|rain|snow|temperature|temp|cold|hot|dome|outdoor)\b/i.test(message)
 }
 
+/*
+ * ⚠ ABBREVIATIONS BYPASSED THIS GUARD. It matched "touchdowns" and not "TDs",
+ * so "who has the most TDs today?" sailed past the one check that exists to
+ * stop invented stats, and went to a model with no play-by-play data behind
+ * it. A guard is worth nothing if the shortest, most natural phrasing walks
+ * through it — and TD, RBI and HR are how people actually write these.
+ */
 function detectUnsupportedStatEventQuestion(message: string): boolean {
-  return /\b(home runs?|homers?|hit a home run|touchdowns?|goalscorers?|who scored|box score|player stats?)\b/i.test(message)
+  return /\b(home runs?|homers?|hr|hit a home run|touchdowns?|tds?|rbis?|goalscorers?|who scored|box score|stat ?line|player stats?|passing yards?|rushing yards?|receiving yards?)\b/i.test(
+    message,
+  )
 }
 
 function resolveNflTeamForWeather(message: string): { abbrev: string; label: string } | null {
@@ -182,15 +196,26 @@ function resolveTeamAlias(message: string, sport: string | null): { canonical: s
   return null
 }
 
+/**
+ * "Today" for a US sports audience, which is an EASTERN day, not a UTC one.
+ *
+ * ⚠ THIS BUILT A UTC CALENDAR DAY WHILE RENDERING EASTERN TIMES, and that
+ * mismatch hid the entire evening slate — the games people actually ask about.
+ * An 8pm ET kickoff is 00:00 UTC the NEXT day, so "what games are on tonight?"
+ * excluded them by construction. Verified against production: tonight's NFL
+ * preseason games sit at 03:00 UTC tomorrow and fell outside this window.
+ *
+ * Reuses the time engine's own day window rather than a second hand-rolled
+ * offset that would be free to disagree with it.
+ */
 function dayWindowUtc(input: 'today' | 'yesterday') {
-  const now = new Date()
-  const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const start = input === 'yesterday'
-    ? new Date(base.getTime() - 24 * 60 * 60 * 1000)
-    : base
+  const { windowStartUTC, windowEndUTC } = getFantasyDayWindowUTC(SPORTS_DAY_TIMEZONE)
+  if (input === 'today') return { start: windowStartUTC, end: windowEndUTC }
+
+  const dayMs = 24 * 60 * 60 * 1000
   return {
-    start,
-    end: new Date(start.getTime() + 24 * 60 * 60 * 1000),
+    start: new Date(windowStartUTC.getTime() - dayMs),
+    end: new Date(windowEndUTC.getTime() - dayMs),
   }
 }
 
@@ -308,7 +333,23 @@ async function buildCachedGamesAnswer(message: string): Promise<string | null> {
 
   if (!games.length) return null
 
-  const lines = games.map((game: any) => {
+  /*
+   * ⚠ THE SAME FIXTURE IS STORED SEVERAL TIMES. Production carries duplicate
+   * `SportsGame` rows per fixture — tonight's Steelers @ Bills appears three
+   * times, differing only in `seasonType` and `status` — so listing rows
+   * verbatim reads as three separate games. Collapse on the pairing and
+   * kickoff, preferring whichever copy actually carries a score.
+   */
+  const unique = new Map<string, any>()
+  for (const game of games) {
+    const key = `${game.sport}|${game.awayTeam}|${game.homeTeam}|${new Date(game.startTime).getTime()}`
+    const held = unique.get(key)
+    const hasScore = typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
+    const heldScored = held && typeof held.awayScore === 'number' && typeof held.homeScore === 'number'
+    if (!held || (hasScore && !heldScored)) unique.set(key, game)
+  }
+
+  const lines = [...unique.values()].map((game: any) => {
     const score =
       typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
         ? `${game.awayScore}-${game.homeScore}`
@@ -334,7 +375,7 @@ async function buildFantasyCalcValueAnswer(message: string): Promise<string | nu
   const isSuperflex = /\bsuperflex|\bsf\b|2qb|two qb/i.test(message)
 
   try {
-    const values = await fetchFantasyCalcValues({
+    const values = await getFantasyCalcValuesDbFirst({
       isDynasty,
       numQbs: isSuperflex ? 2 : 1,
       numTeams: 12,

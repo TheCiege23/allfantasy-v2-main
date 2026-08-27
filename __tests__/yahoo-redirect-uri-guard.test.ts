@@ -104,6 +104,27 @@ describe('⚠ refused before the round trip, not after', () => {
     expect(ROUTE).toContain('checkYahooRedirectUri(redirectUri, request.nextUrl.origin)')
   })
 
+  it('⚠ carries the errand through login instead of dropping it', () => {
+    /*
+     * This redirected to a bare `/login` and threw the destination away, so a
+     * manager who clicked Connect Yahoo without a readable session signed in
+     * and arrived on the home page with nothing resuming. The click was simply
+     * lost, and the only signal was being "kicked out of the app".
+     * `/api/auth/yahoo` has carried a callbackUrl all along; this one never did.
+     */
+    expect(ROUTE).toContain('THE ERRAND HAS TO SURVIVE THE LOGIN')
+    expect(ROUTE).toContain("login.searchParams.set(")
+    expect(ROUTE).toContain('/api/league/yahoo-auth${request.nextUrl.search}')
+    /* A bare /login is indistinguishable from every other auth bounce. */
+    expect(ROUTE).not.toContain("NextResponse.redirect(new URL('/login', request.url))")
+  })
+
+  it('logs the redirect_uri, which the sensitive env flag hides from the dashboard', () => {
+    // A redirect URI is not a secret — it rides in the address bar on every
+    // round trip and Yahoo echoes it back on its own error page.
+    expect(ROUTE).toContain("console.log('[Yahoo OAuth] redirect_uri:', redirectUri)")
+  })
+
   it('sends the manager somewhere with a named reason', () => {
     expect(ROUTE).toContain('yahoo_redirect_uri')
     expect(ROUTE).toContain("console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason)")

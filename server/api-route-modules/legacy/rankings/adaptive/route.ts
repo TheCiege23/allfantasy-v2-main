@@ -1,7 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { computeAdaptiveRankings, type RankingView } from '@/lib/rankings-engine/adaptive-rankings'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { computeLeagueDemandIndex } from '@/lib/rankings-engine/league-demand-index'
@@ -82,7 +83,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/adaptive", to
     const userPlayerIds: string[] = userRoster?.players?.filter(Boolean) || []
 
     const [fcPlayers, ldi] = await Promise.all([
-      fetchFantasyCalcValues(fcSettings),
+      getFantasyCalcValuesDbFirst(fcSettings),
       computeLeagueDemandIndex(leagueId),
     ])
 

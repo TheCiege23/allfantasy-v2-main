@@ -1,14 +1,17 @@
 import { prisma } from '@/lib/prisma'
+import { fetchOpenWeatherGeocode } from '@/lib/weather/openWeatherGeocode'
 import {
-  fetchForecastWeatherAtTime,
-  fetchWeatherByCity,
-  fetchWeatherByCoords,
   type ForecastWeatherAtTime,
   type GameWeather,
   type WeatherData,
   NFL_TEAM_VENUES,
   NFL_VENUE_COORDS,
 } from '@/lib/openweathermap'
+import {
+  fetchForecastWeatherAtTime,
+  fetchWeatherByCity,
+  fetchWeatherByCoords,
+} from '@/lib/weather/openWeatherFetch'
 
 type WeatherCacheDelegate = {
   upsert: (args: unknown) => Promise<unknown>
@@ -799,19 +802,58 @@ function matchVenueTable(address: string): { lat: number; lng: number; isDome?: 
   return null
 }
 
+const GEOCODE_CACHE_PREFIX = 'geocode:owm:v1:'
+/**
+ * A geocode does not expire in any meaningful sense — a stadium does not move.
+ * A year is a bound on staleness rather than a refresh cadence; the value is
+ * expected to be re-read from cache essentially forever.
+ */
+const GEOCODE_TTL_MS = 365 * 24 * 60 * 60 * 1000
+
+function geocodeCacheKey(address: string): string {
+  return `${GEOCODE_CACHE_PREFIX}${address.trim().toLowerCase().replace(/\s+/g, ' ')}`
+}
+
+/**
+ * Address → coordinates, DB-cached.
+ *
+ * This is imported by six request paths, so it was a genuine DB-first
+ * violation rather than a naming accident. It is also the best possible
+ * candidate for a durable cache: the answer is immutable, so every call after
+ * the first for a given address is pure waste — latency on the user's request
+ * and a rate-limited vendor call to learn something we already knew.
+ *
+ * ONLY SUCCESSES ARE CACHED. Writing a miss would turn one transient outage
+ * into a year of "this address has no coordinates", which is exactly the
+ * fake-negative this codebase keeps getting bitten by. A failure stays
+ * uncached and is simply retried next time.
+ */
 async function geocodeOpenWeather(address: string): Promise<{ lat: number; lng: number } | null> {
-  const apiKey = process.env.OPENWEATHERMAP_API_KEY
-  if (!apiKey) return null
-  try {
-    const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(address)}&limit=1&appid=${apiKey}`
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return null
-    const data = (await res.json()) as Array<{ lat: number; lon: number }>
-    if (!data?.length) return null
-    return { lat: data[0]!.lat, lng: data[0]!.lon }
-  } catch {
-    return null
+  const cacheKey = geocodeCacheKey(address)
+
+  const cached = await prisma.sportsDataCache.findUnique({ where: { cacheKey } }).catch(() => null)
+  if (cached?.data && typeof cached.data === 'object' && !Array.isArray(cached.data)) {
+    const row = cached.data as { lat?: unknown; lng?: unknown }
+    if (typeof row.lat === 'number' && typeof row.lng === 'number') {
+      return { lat: row.lat, lng: row.lng }
+    }
   }
+
+  const coords = await fetchOpenWeatherGeocode(address)
+  if (!coords) return null
+
+  const expiresAt = new Date(Date.now() + GEOCODE_TTL_MS)
+  await prisma.sportsDataCache
+    .upsert({
+      where: { cacheKey },
+      update: { data: coords, expiresAt },
+      create: { cacheKey, data: coords, expiresAt },
+    })
+    .catch(() => {
+      // A failed cache write must not fail the lookup we already have.
+    })
+
+  return coords
 }
 
 export async function getWeatherForEventByAddress(
