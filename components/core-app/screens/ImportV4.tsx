@@ -230,6 +230,39 @@ function needsConnectionSetup(message: string): boolean {
 }
 
 /**
+ * What to say when the lookup worked and found nothing.
+ *
+ * ⚠ "NO LEAGUES" IS AN ANSWER, NOT AN ABSENCE OF ONE. Rendering it as a blank
+ * screen is the single worst option: it is indistinguishable from a dead button,
+ * and it hides the two things the person could actually act on.
+ *
+ * ⚠ IT MUST NOT CLAIM WHICH CAUSE IT WAS. For Yahoo, an empty list is consistent
+ * with an approval that omitted fantasy read access AND with the leagues living
+ * on a different Yahoo account, and this screen cannot tell those apart — Yahoo
+ * answers both with an empty collection rather than an error. Naming one would be
+ * a confident guess, so it names both and offers the step that resolves either.
+ */
+function emptyDiscoveryMessage(provider: ImportProvider): string {
+  if (provider === 'yahoo') {
+    return (
+      'Yahoo answered, and listed no NFL leagues on the connected account. ' +
+      'That happens when the Yahoo approval did not include fantasy read access, ' +
+      'or when the leagues sit on a different Yahoo account. Reconnect and approve ' +
+      'read-only access to try again.'
+    )
+  }
+  if (provider === 'sleeper') {
+    /* No setup words here: an empty Sleeper result is usually a typo, and a
+       "connect your accounts" link would send someone to fix what is not broken. */
+    return (
+      'No NFL leagues came back for that Sleeper username this season. Check the ' +
+      'spelling, or leave it blank to use the Sleeper account on your profile.'
+    )
+  }
+  return 'The lookup worked, but no NFL leagues came back for that account.'
+}
+
+/**
  * Per-league outcome of a bulk run, in the user's terms. "Already imported" is a
  * success state, not a failure — the league is present and was not overwritten.
  */
@@ -433,8 +466,23 @@ export function ImportV4({
         return
       }
       const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string }
-      setLeagues(payload?.leagues ?? [])
+      const found = payload?.leagues ?? []
+      setLeagues(found)
       setAccountLabel(payload?.accountLabel ?? null)
+      /*
+       * ⚠ A LOOKUP THAT SUCCEEDED AND FOUND NOTHING USED TO RENDER AS NOTHING.
+       * This branch cleared the error, set an empty list and returned to idle, so
+       * pressing the button repainted the screen identically — no leagues, no
+       * message, no failure. Reported live as "I click connect yahoo and nothing
+       * happens", with Yahoo connected the whole time and the button working
+       * exactly as written.
+       *
+       * ⚠ ONLY ON THE EXPLICIT PRESS. The lookup that runs on provider select is
+       * deliberately silent (see the effect below) — nobody asked it a question,
+       * so it has no answer to report. Speaking there would greet someone with an
+       * error for a screen they had only just opened.
+       */
+      if (found.length === 0) setError(emptyDiscoveryMessage(provider))
       setPhase({ k: 'idle' })
     },
     [provider]
@@ -862,7 +910,23 @@ export function ImportV4({
         </div>
       ) : yahooConnected ? (
         <div className="af-im-note" role="status">
-          <p>Yahoo is connected. Your Yahoo leagues are listed below.</p>
+          {/*
+            ⚠ THIS SAID "YOUR LEAGUES ARE LISTED BELOW" WHETHER OR NOT ANY WERE.
+            An empty list is a real outcome of a successful connect, and pairing it
+            with a sentence asserting the opposite is how a working connection reads
+            as a broken screen: the banner promised leagues, none appeared, and the
+            button beneath it looked dead. All three states are now distinguishable.
+          */}
+          {leagues.length > 0 ? (
+            <p>Yahoo is connected. Your Yahoo leagues are listed below.</p>
+          ) : phase.k === 'discovering' ? (
+            <p>Yahoo is connected. Looking up your leagues&hellip;</p>
+          ) : (
+            <p>
+              Yahoo is connected, but no leagues have come back yet. Choose Yahoo below
+              and press Connect Yahoo to look again.
+            </p>
+          )}
         </div>
       ) : null}
 

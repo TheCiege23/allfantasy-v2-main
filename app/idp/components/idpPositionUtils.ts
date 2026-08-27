@@ -1,4 +1,16 @@
-/** Client-side offense vs IDP defense split (NFL). No scoring engine imports. */
+/**
+ * Client-side offense vs IDP defense split (NFL). No scoring engine imports.
+ *
+ * ⚠ THE FABRICATION GENERATORS THAT LIVED HERE ARE GONE. This file used to export
+ * `mockStatPills`, `mockIdpPoints`, `mockOffensePoints`, `idpRoleLabel` and `mockYearsRemaining`
+ * — hashes of the player id that surfaces rendered as box scores, points, archetypes and
+ * contracts beside real names. The four with no callers left are deleted outright so they
+ * cannot be picked up again; real replacements live in `lib/idp-projections/idpPlayerCard.ts`
+ * and `lib/idp-projections/defenderRole.ts`.
+ *
+ * The two below survive only because the unmounted design mock `IDPDraftFilters` still calls
+ * them. Do not import them into anything that renders.
+ */
 
 export function isOffensivePosition(pos: string): boolean {
   const p = pos.toUpperCase()
@@ -8,20 +20,6 @@ export function isOffensivePosition(pos: string): boolean {
 export function isIdpDefensivePosition(pos: string): boolean {
   const p = pos.toUpperCase()
   return ['DE', 'DT', 'DL', 'LB', 'CB', 'S', 'SS', 'FS', 'DB', 'IDP_FLEX', 'DEF'].includes(p)
-}
-
-export function idpRoleLabel(playerId: string): 'Run Stopper' | 'Edge Rusher' | 'Coverage' | 'Hybrid' {
-  let h = 0
-  for (let i = 0; i < playerId.length; i++) h = (h + playerId.charCodeAt(i) * (i + 1)) % 4
-  return (['Run Stopper', 'Edge Rusher', 'Coverage', 'Hybrid'] as const)[h]
-}
-
-export function mockOffensePoints(playerId: string, week: number): { pts: number; proj: number } {
-  let s = 0
-  for (let i = 0; i < playerId.length; i++) s = (s * 13 + playerId.charCodeAt(i)) | 0
-  const base = 6 + (Math.abs(s) % 180) / 10
-  const w = (week % 5) * 0.3
-  return { pts: Math.round((base + w) * 10) / 10, proj: Math.round((base + 0.8) * 10) / 10 }
 }
 
 export function mockIdpPoints(playerId: string, week: number): { pts: number; proj: number } {
@@ -37,27 +35,4 @@ export function mockContractSalaryM(playerId: string): number {
   let s = 0
   for (let i = 0; i < playerId.length; i++) s = (s * 19 + playerId.charCodeAt(i)) | 0
   return Math.round((1.2 + (Math.abs(s) % 2600) / 100) * 10) / 10
-}
-
-/** Mock years remaining on contract (1–4) for UI previews. */
-export function mockYearsRemaining(playerId: string): number {
-  let s = 0
-  for (let i = 0; i < playerId.length; i++) s = (s * 7 + playerId.charCodeAt(i)) | 0
-  return 1 + (Math.abs(s) % 4)
-}
-
-export function mockStatPills(playerId: string) {
-  let s = 0
-  for (let i = 0; i < playerId.length; i++) s = (s * 17 + playerId.charCodeAt(i)) | 0
-  const a = Math.abs(s)
-  return {
-    soloTackles: 2 + (a % 8),
-    assistedTackles: 1 + (a % 5),
-    sacks: (a % 3) / 2,
-    interceptions: a % 2,
-    passDeflections: a % 4,
-    forcedFumbles: a % 2,
-    fumbleRecoveries: a % 2,
-    defensiveTDs: a % 3 === 0 ? 1 : 0,
-  }
 }

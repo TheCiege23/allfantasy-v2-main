@@ -69,12 +69,20 @@ function makeCtx(numTeams: number): TradeDecisionContextV1 {
   }
 }
 
+/*
+ * ⚠ THE DEP WAS RENAMED IN THE PRODUCTION CONTRACT AND THE FAKE WAS NOT.
+ * `TradeAnalyzerIntelDeps` declares `getFantasyCalcValuesDbFirst` (the db-first
+ * reader); this file still supplied `fetchFantasyCalcValues`, so the key never
+ * matched and the call landed on undefined — "deps.getFantasyCalcValuesDbFirst
+ * is not a function". Same settings argument, same FantasyCalcPlayer[] return,
+ * so only the name moved.
+ */
 describe('buildTradeAnalyzerIntelPrompt', () => {
   it('builds prompt with external sections', async () => {
     const deps: TradeAnalyzerIntelDeps = {
       fetchNewsContext: vi.fn().mockResolvedValue({ items: [{ id: 'n1', title: 'Player X expected to start', source: 'NewsAPI', url: null, team: 'MIN', publishedAt: '2026-02-01T00:00:00Z', isInjury: false, relevance: 'direct' }], fetchedAt: '2026-02-01T00:00:00Z', sources: ['newsapi'], playerHits: 1, teamHits: 0 }),
       fetchRollingInsights: vi.fn().mockResolvedValue({ players: [{ playerId: '1', name: 'Justin Jefferson', team: 'MIN', position: 'WR', status: 'active', age: null, fantasyPointsPerGame: 18.7, gamesPlayed: 17, seasonStats: null }], teams: [], fetchedAt: '2026-02-01T00:00:00Z', source: 'db_cache' }),
-      fetchFantasyCalcValues: vi.fn().mockResolvedValue([{ player: { id: 1, name: 'Justin Jefferson', mflId: '', sleeperId: '', position: 'WR', maybeBirthday: null, maybeHeight: null, maybeWeight: null, maybeCollege: null, maybeTeam: 'MIN', maybeAge: 25, maybeYoe: null }, value: 10000, overallRank: 1, positionRank: 1, trend30Day: 50, redraftDynastyValueDifference: 0, redraftDynastyValuePercDifference: 0, redraftValue: 0, combinedValue: 0, maybeMovingStandardDeviation: null, maybeMovingAverage: null }]),
+      getFantasyCalcValuesDbFirst: vi.fn().mockResolvedValue([{ player: { id: 1, name: 'Justin Jefferson', mflId: '', sleeperId: '', position: 'WR', maybeBirthday: null, maybeHeight: null, maybeWeight: null, maybeCollege: null, maybeTeam: 'MIN', maybeAge: 25, maybeYoe: null }, value: 10000, overallRank: 1, positionRank: 1, trend30Day: 50, redraftDynastyValueDifference: 0, redraftDynastyValuePercDifference: 0, redraftValue: 0, combinedValue: 0, maybeMovingStandardDeviation: null, maybeMovingAverage: null }]),
       findPlayerByName: vi.fn((players, name) => players.find((p: any) => p.player.name === name) || null),
       findLatestRookieClass: vi.fn().mockResolvedValue({ year: 2026, strength: 0.88, qbDepth: 0.7, rbDepth: 0.9, wrDepth: 0.92, teDepth: 0.61, updatedAt: new Date() }),
       findTopRookieRankings: vi.fn().mockResolvedValue([{ id: '1', year: 2026, name: 'Rookie One', position: 'WR', team: 'MIN', rank: 1, dynastyValue: 7000, college: 'X', createdAt: new Date(), updatedAt: new Date() }]),
@@ -93,7 +101,7 @@ describe('buildTradeAnalyzerIntelPrompt', () => {
     const deps: TradeAnalyzerIntelDeps = {
       fetchNewsContext: vi.fn().mockResolvedValue({ items: [], fetchedAt: new Date().toISOString(), sources: [], playerHits: 0, teamHits: 0 }),
       fetchRollingInsights: vi.fn().mockResolvedValue({ players: [], teams: [], fetchedAt: new Date().toISOString(), source: 'db_cache' }),
-      fetchFantasyCalcValues: vi.fn().mockResolvedValue([]),
+      getFantasyCalcValuesDbFirst: vi.fn().mockResolvedValue([]),
       findPlayerByName: vi.fn().mockReturnValue(null),
       findLatestRookieClass: vi.fn().mockResolvedValue(null),
       findTopRookieRankings: vi.fn().mockResolvedValue([]),
@@ -102,7 +110,7 @@ describe('buildTradeAnalyzerIntelPrompt', () => {
 
     await buildTradeAnalyzerIntelPrompt(makeCtx(13), deps)
 
-    expect(deps.fetchFantasyCalcValues).toHaveBeenCalledWith(
+    expect(deps.getFantasyCalcValuesDbFirst).toHaveBeenCalledWith(
       expect.objectContaining({ numTeams: 12 })
     )
   })

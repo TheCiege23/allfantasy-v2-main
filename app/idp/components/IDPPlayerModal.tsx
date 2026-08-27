@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAfSubGate } from '@/hooks/useAfSubGate'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -14,10 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { mockIdpPoints, mockStatPills, idpRoleLabel } from './idpPositionUtils'
-import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
-import { WeatherBadge } from '@/components/weather/WeatherBadge'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
+import type { IdpPlayerCardPayload } from '@/lib/idp-projections/idpPlayerCard'
 import type { IdpSalaryRecordJson } from '@/app/idp/hooks/useIdpTeamCap'
 import { mockContractUi } from '@/app/idp/hooks/useIdpTeamCap'
 import type { DefenderEvaluation } from '@/lib/idp/ai/idpCapChimmy'
@@ -55,28 +53,44 @@ export function IDPPlayerModal({
   const { data: session } = useSession()
   const userId = session?.user?.id ?? ''
   const p = players[playerId]
-  const stats = mockStatPills(playerId)
-  const { pts, proj } = mockIdpPoints(playerId, week)
-  const role = idpRoleLabel(playerId)
-  const matchup: 'Favorable' | 'Average' | 'Tough' =
-    playerId.length % 3 === 0 ? 'Favorable' : playerId.length % 3 === 1 ? 'Average' : 'Tough'
-  const matchupClass =
-    matchup === 'Favorable'
-      ? 'text-emerald-300'
-      : matchup === 'Tough'
-        ? 'text-red-300'
-        : 'text-white/50'
+  /*
+   * ⚠ EVERY NUMBER BELOW USED TO BE A HASH OF `playerId`, RENDERED BESIDE THE REAL NAME AND
+   * PHOTOGRAPH ABOVE. The box score came from `mockStatPills`, the points from `mockIdpPoints`,
+   * the archetype from `idpRoleLabel`, the snap share from `40 + playerId.length % 55`, the
+   * matchup from `playerId.length % 3` and the opponent rank from `playerId.charCodeAt(0) % 22`.
+   * Nothing on screen said so. They are all served from game rows now, and a figure without a
+   * row is named as absent rather than filled in.
+   */
+  const [card, setCard] = useState<IdpPlayerCardPayload | null>(null)
+  const [cardLoading, setCardLoading] = useState(false)
 
-  const showOutdoorWeatherHint = isWeatherSensitiveSport(sport)
-  const mockGameWeather =
-    showOutdoorWeatherHint
-      ? {
-          conditionLabel: 'Partly cloudy' as const,
-          temperatureF: 48,
-          windSpeedMph: 14,
-          precipChancePct: 12,
-        }
-      : null
+  useEffect(() => {
+    if (!open || !leagueId || !playerId) return
+    let cancelled = false
+    setCardLoading(true)
+    setCard(null)
+    fetch(
+      `/api/idp/players?view=player-card&leagueId=${encodeURIComponent(
+        leagueId,
+      )}&playerId=${encodeURIComponent(playerId)}`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled) setCard((j ?? null) as IdpPlayerCardPayload | null)
+      })
+      .catch(() => {
+        if (!cancelled) setCard(null)
+      })
+      .finally(() => {
+        if (!cancelled) setCardLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, leagueId, playerId])
+
+  const scoredWeeks = card?.weeks.filter((w) => w.points != null) ?? []
+  const peakWeek = scoredWeeks.reduce((max, w) => Math.max(max, w.points ?? 0), 0)
 
   const [aiLoading, setAiLoading] = useState(false)
   const [aiEval, setAiEval] = useState<DefenderEvaluation | null>(null)
@@ -205,92 +219,135 @@ export function IDPPlayerModal({
           </DialogHeader>
 
           <section className="space-y-2 border-t border-white/[0.06] pt-3">
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">This week</h4>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {Object.entries(stats).map(([k, v]) => (
-                <div
-                  key={k}
-                  className="flex justify-between rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5"
-                >
-                  <span className="text-white/50">{k}</span>
-                  <span className="font-semibold">{String(v)}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-sm flex flex-wrap items-center gap-2">
-              <span className="text-white/45">IDP points:</span>{' '}
-              <span className="font-bold text-[color:var(--idp-defense)]">{pts}</span>{' '}
-              <span className="text-white/35 inline-flex items-center gap-1">
-                proj
+            <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">
+              Season to date
+            </h4>
+            {cardLoading ? (
+              <p className="text-sm text-white/45">Loading game log…</p>
+            ) : !card || card.state !== 'ok' ? (
+              <p className="text-sm text-white/45">
+                {card?.notes?.[0] ?? 'No game rows on file for this player.'}
+              </p>
+            ) : (
+              <>
+                {card.stats.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {card.stats.map((s) => (
+                      <div
+                        key={s.key}
+                        className="flex justify-between rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5"
+                      >
+                        <span className="text-white/50">{s.label}</span>
+                        <span className="font-semibold tabular-nums">
+                          {s.total}
+                          <span className="ml-1 font-normal text-white/35">{s.perGame}/g</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="text-xs text-white/40">
+                  {card.games} game{card.games === 1 ? '' : 's'} with a defensive snap count ·{' '}
+                  {card.season} season
+                </p>
+                {card.seasonPoints ? (
+                  <p className="text-sm">
+                    <span className="text-white/45">IDP points:</span>{' '}
+                    <span className="font-bold text-[color:var(--idp-defense)] tabular-nums">
+                      {card.seasonPoints.total}
+                    </span>{' '}
+                    <span className="text-white/35">
+                      total · {card.seasonPoints.perGame}/game over {card.seasonPoints.games}{' '}
+                      priced game{card.seasonPoints.games === 1 ? '' : 's'}
+                    </span>
+                  </p>
+                ) : null}
+              </>
+            )}
+          </section>
+
+          {scoredWeeks.length > 0 ? (
+            <section className="space-y-2 border-t border-white/[0.06] pt-3">
+              <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">
+                Week by week
+              </h4>
+              {/* Real bars from the priced game log. The gradient this replaces was captioned
+                  "Week-by-week sparkline (placeholder)" and drew nothing at all. */}
+              <div className="flex h-12 items-end gap-1">
+                {scoredWeeks.map((w) => (
+                  <div
+                    key={w.week}
+                    className="flex-1 rounded-sm bg-[color:var(--idp-defense)]/60"
+                    style={{
+                      height: `${peakWeek > 0 ? Math.max(6, ((w.points ?? 0) / peakWeek) * 100) : 6}%`,
+                    }}
+                    title={`Week ${w.week}: ${w.points} pts${w.snaps != null ? ` · ${w.snaps} snaps` : ''}`}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-white/40">
+                Weeks {scoredWeeks[0]?.week}–{scoredWeeks[scoredWeeks.length - 1]?.week} · peak{' '}
+                {peakWeek} pts
+              </p>
+            </section>
+          ) : null}
+
+          {card?.role ? (
+            <section className="space-y-2 border-t border-white/[0.06] pt-3">
+              <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">Role</h4>
+              <div className="space-y-1.5">
+                {card.role.lines.map((line) => (
+                  <p key={line.label} className="text-sm">
+                    <span className="text-white/45">{line.label}:</span>{' '}
+                    {line.value ? (
+                      <span className="text-white/85">{line.value}</span>
+                    ) : (
+                      <span className="text-white/40 italic">not derivable</span>
+                    )}
+                    <span className="block text-xs text-white/30">{line.basis}</span>
+                  </p>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {card?.projection ? (
+            <section className="space-y-2 border-t border-white/[0.06] pt-3">
+              <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">
+                Projection
+              </h4>
+              <p className="text-sm text-white/70 flex flex-wrap items-center gap-2">
                 <ProjectionDisplay
-                  projection={proj}
-                  suffix=""
-                  pointsClassName="text-sm text-white/35"
+                  projection={card.projection.points}
+                  suffix=" / game"
+                  pointsClassName="text-sm text-white/70"
                   afCrestProps={{
                     playerId,
                     playerName: name,
                     sport,
                     position,
                     week,
-                    season: new Date().getFullYear(),
+                    season: card.season,
                     size: 'sm',
                   }}
                 />
-              </span>
-            </p>
-            <p className="text-xs text-white/45">Snap share (snapshot): ~{40 + (playerId.length % 55)}%</p>
-          </section>
+                <span className="text-xs text-white/35">
+                  recency-weighted from his last {card.projection.games} priced game
+                  {card.projection.games === 1 ? '' : 's'} — backward-looking, not a forecast
+                </span>
+              </p>
+            </section>
+          ) : null}
 
-          <section className="space-y-2 border-t border-white/[0.06] pt-3">
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">Season averages</h4>
-            <p className="text-sm text-white/70">
-              Avg tackles ~{(stats.soloTackles + stats.assistedTackles) / 2} · Avg sacks ~{stats.sacks} · Avg IDP pts
-              ~{(pts + proj) / 2}
-            </p>
-            <div className="h-12 rounded-md bg-gradient-to-r from-red-500/20 via-violet-500/15 to-blue-500/20" title="Week-by-week sparkline (placeholder)" />
-          </section>
-
-          <section className="space-y-2 border-t border-white/[0.06] pt-3">
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">Role + matchup</h4>
-            <p className="text-sm text-white/80">
-              {role} — Edge / box mix (illustrative). Defender role:{' '}
-              <span className="text-white">{position === 'LB' ? 'Run Stopper – 4-3 MIKE' : 'Edge Rusher – 3-4 OLB'}</span>
-            </p>
-            <p className="text-sm flex flex-wrap items-center gap-2">
-              Matchup: <span className={matchupClass}>{matchup}</span> · Opp rank vs {position}: #
-              {10 + (playerId.charCodeAt(0) ?? 0) % 22}
-              {mockGameWeather ? (
-                <WeatherBadge
-                  conditionLabel={mockGameWeather.conditionLabel}
-                  temperatureF={mockGameWeather.temperatureF}
-                  windSpeedMph={mockGameWeather.windSpeedMph}
-                  precipChancePct={mockGameWeather.precipChancePct}
-                  className="text-white/45"
-                />
-              ) : null}
-            </p>
-          </section>
-
-          <section className="space-y-2 border-t border-white/[0.06] pt-3">
-            <h4 className="text-[11px] font-bold uppercase tracking-wide text-white/40">Projection</h4>
-            <p className="text-sm text-white/70 flex flex-wrap items-center gap-2">
-              <span>Projected IDP pts for remaining schedule (UI placeholder): ~</span>
-              <ProjectionDisplay
-                projection={proj + 0.5}
-                suffix=" / game"
-                pointsClassName="text-sm text-white/70"
-                afCrestProps={{
-                  playerId,
-                  playerName: name,
-                  sport,
-                  position,
-                  week,
-                  season: new Date().getFullYear(),
-                  size: 'sm',
-                }}
-              />
-            </p>
-          </section>
+          {card && card.notes.length > 0 ? (
+            <section className="space-y-1 border-t border-white/[0.06] pt-3">
+              {card.notes.map((n) => (
+                <p key={n} className="text-xs leading-relaxed text-white/35">
+                  {n}
+                </p>
+              ))}
+            </section>
+          ) : null}
 
           <section className="space-y-2 border-t border-white/[0.06] pt-3" data-testid="idp-player-contract-panel">
             <h4 className="text-[11px] font-bold uppercase tracking-wide text-[color:var(--cap-contract)]/90">

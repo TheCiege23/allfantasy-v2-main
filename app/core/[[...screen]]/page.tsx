@@ -1513,6 +1513,7 @@ export default async function AfCorePage({
               league={outlook.leagues.find((l) => l.leagueId === selectedLeagueId)!}
               swing={outlook.swingByLeague[selectedLeagueId] ?? null}
               basis={outlook.basis}
+              priorities={outlook.priorities}
             />
           ) : (
             <SeasonOutlook data={outlook} />

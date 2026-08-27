@@ -21,6 +21,13 @@ import {
   classifyPlayerNewsCategory,
   type PlayerNewsCategory,
 } from '@/lib/news/player-news-category'
+// Aliased: this file already has a private `searchXForNews` that predates the
+// real one and passes `web_search` rather than `x_search`.
+import {
+  searchXForNews as searchSubjectOnX,
+  type XNewsKind,
+  type XNewsResult,
+} from '@/lib/ai/xNewsSearch'
 
 export type { PlayerNewsCategory as NewsCategory } from '@/lib/news/player-news-category'
 
@@ -333,4 +340,187 @@ async function persistInjuryFromNews(item: XNewsItem): Promise<void> {
       team: item.team ?? 'UNKNOWN',
     },
   }).catch(() => {})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Player-scoped ingestion, via first-party X search
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** PlayerNewsRecord.headline is VarChar(256); persistNewsItem does not truncate it. */
+const HEADLINE_MAX = 256
+
+/**
+ * Deliberately small. Each subject spends — see the cost note on
+ * ingestXNewsForPlayers before raising it.
+ */
+const DEFAULT_MAX_SUBJECTS = 25
+
+/**
+ * Convert one search result into PlayerNewsRecord-shaped items.
+ *
+ * One bullet is one attributed statement, so one bullet is one record. When the
+ * model returned prose instead of the requested JSON (parseModelJson's fallback
+ * path) there is still a single item worth keeping.
+ *
+ * Exported for tests: the mapping choices here (what becomes a headline, what
+ * `publishedAt` actually means, where citations go now that there is no URL
+ * column) are the kind that rot silently.
+ */
+export function toNewsItems(
+  result: Extract<XNewsResult, { ok: true }>,
+  ctx: { sport: string; name: string; team: string | null },
+): XNewsItem[] {
+  // Citations are search-level, not claim-level: every annotation comes back
+  // with start_index and end_index 0, so nothing maps a post to the bullet it
+  // supports. Attaching the whole list to each row is therefore the only honest
+  // representation — and PlayerNewsRecord has no URL column, so they ride in
+  // `body` rather than being dropped the way sourceUrl is.
+  const sources = result.citations.length
+    ? `\n\nSources consulted:\n${result.citations.map((c) => c.url).join('\n')}`
+    : ''
+
+  const lines = result.bullets.length > 0 ? result.bullets : result.summary ? [result.summary] : []
+
+  return lines.map((line) => {
+    const headline = line.trim().slice(0, HEADLINE_MAX)
+    const body = `${result.summary || line}${sources}`
+    return {
+      headline,
+      body,
+      // Exact by construction — this is the name we searched for, not one the
+      // model extracted. That is the whole point: see the note on the caller.
+      playerName: ctx.name,
+      team: ctx.team,
+      sport: ctx.sport,
+      // Both classifiers are deterministic keyword rules. The model never gets
+      // to decide category or impact, per the boundary in lib/ai/xNewsSearch.ts.
+      category: classifyPlayerNewsCategory(headline, body),
+      impact: classifyImpact(`${headline} ${body}`),
+      source: 'x_search',
+      sourceUrl: result.citations[0]?.url ?? null,
+      // NOT when the reporter posted. x_search annotations carry no timestamp,
+      // so this is when WE searched. Never render it as "reported at".
+      publishedAt: new Date(result.searchedAt),
+    }
+  })
+}
+
+/**
+ * Search X for a KNOWN list of players and write the results to PlayerNewsRecord.
+ *
+ * WHY THIS EXISTS ALONGSIDE runXNewsIngestion. That function sweeps sport-wide
+ * keyword queries and asks the model to extract player names from whatever comes
+ * back. Decision OS cannot consume most of that: its reader in
+ * lib/decision-os/world/port.ts matches `playerName` against roster names with an
+ * exact case-insensitive `in` list and no fuzzy fallback, so an extracted name
+ * spelled even slightly differently is invisible to it. Here the name is an
+ * INPUT, so it matches by construction. That is the difference between rows that
+ * reach lineup signals and rows that just sit in the table.
+ *
+ * It also genuinely searches X. runXNewsIngestion passes `web_search`, not
+ * `x_search`, so despite this file's name it has never had first-party X access.
+ *
+ * COST — READ THIS BEFORE ADDING A CALLER. One subject is not one API call. Grok
+ * picks its own retrieval budget and was observed issuing 8-15 server-side
+ * x_search calls for a single subject (2026-08-27), each billed. Sweeping one
+ * 12-team league's rosters would be thousands of billed searches per run. That is
+ * why `players` is an explicit list with a hard cap and there is no "all rostered
+ * players" mode: this is an on-demand, narrow-scope tool, not a cron over
+ * everyone.
+ *
+ * Never throws. A disabled spend switch, a provider error and a genuine "no news"
+ * are all reported in the return value, because a news lookup failing should
+ * degrade a surface, not break the request that asked for it.
+ */
+export async function ingestXNewsForPlayers(input: {
+  sport: string
+  players: Array<{ name: string; team?: string | null }>
+  kind?: XNewsKind
+  lookbackHours?: number
+  /** Hard ceiling on subjects searched in one call. Each one spends. */
+  maxPlayers?: number
+}): Promise<{
+  searched: number
+  /** Subjects dropped because they exceeded maxPlayers. */
+  skipped: number
+  newRecords: number
+  duplicatesSkipped: number
+  injuryRecords: number
+  /** Searched successfully and there was genuinely nothing to report. Not errors. */
+  noNews: string[]
+  errors: string[]
+}> {
+  // Same normalisation the sweep path writes with, so both produce rows that
+  // port.ts's `where: { sport }` finds. It is non-nullable and falls back to a
+  // default sport rather than returning null.
+  const sport = normalizeToSupportedSport(input.sport)
+
+  const seen = new Set<string>()
+  const subjects = input.players.filter((p) => {
+    const name = p.name?.trim()
+    if (!name) return false
+    const key = name.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  const cap = Math.max(0, input.maxPlayers ?? DEFAULT_MAX_SUBJECTS)
+  const targets = subjects.slice(0, cap)
+
+  let newRecords = 0
+  let duplicatesSkipped = 0
+  let injuryRecords = 0
+  const noNews: string[] = []
+  const errors: string[] = []
+
+  for (const player of targets) {
+    const name = player.name.trim()
+    const result = await searchSubjectOnX({
+      sport: input.sport,
+      subject: name,
+      teamName: player.team ?? null,
+      // Injury is the kind whose value decays fastest, and the one Decision OS
+      // lineup signals actually consume.
+      kind: input.kind ?? 'injury',
+      lookbackHours: input.lookbackHours,
+    })
+
+    if (!result.ok) {
+      errors.push(`${name}: ${result.error}`)
+      continue
+    }
+    // A well-formed empty result is a real answer, and writing a row for it
+    // would manufacture news that nobody reported.
+    if (result.empty) {
+      noNews.push(name)
+      continue
+    }
+
+    for (const item of toNewsItems(result, { sport, name, team: player.team ?? null })) {
+      // Counts come from persistNewsItem, which reports 'new' even when its
+      // insert is rejected — headlines are truncated above so this path should
+      // not be reached, but the number is optimistic by inheritance.
+      const persisted = await persistNewsItem(item)
+      if (persisted === 'new') {
+        newRecords++
+        if (item.category === 'injury') {
+          await persistInjuryFromNews(item)
+          injuryRecords++
+        }
+      } else if (persisted === 'duplicate') {
+        duplicatesSkipped++
+      }
+    }
+  }
+
+  return {
+    searched: targets.length,
+    skipped: subjects.length - targets.length,
+    newRecords,
+    duplicatesSkipped,
+    injuryRecords,
+    noNews,
+    errors,
+  }
 }

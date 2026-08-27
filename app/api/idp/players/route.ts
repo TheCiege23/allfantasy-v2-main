@@ -9,6 +9,7 @@ import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/id
 import { prisma } from '@/lib/prisma'
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
 import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
+import { loadIdpPlayerCard } from '@/lib/idp-projections/idpPlayerCard'
 import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
 
@@ -75,6 +76,19 @@ export async function GET(req: NextRequest) {
   }
   if (view === 'roster-week') {
     const payload = await loadRosterWeekPoints({ prisma, leagueId, userId })
+    return NextResponse.json(payload)
+  }
+  if (view === 'player-card') {
+    const playerId = searchParams?.get('playerId')?.trim() ?? ''
+    if (!playerId) return NextResponse.json({ error: 'playerId required' }, { status: 400 })
+    const seasonParam = Number(searchParams?.get('season'))
+    const payload = await loadIdpPlayerCard({
+      prisma,
+      leagueId,
+      playerId,
+      season:
+        Number.isFinite(seasonParam) && seasonParam > 0 ? seasonParam : new Date().getFullYear(),
+    })
     return NextResponse.json(payload)
   }
   if (view === 'idp-matchup') {

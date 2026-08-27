@@ -1,5 +1,18 @@
 'use client'
 
+/**
+ * ⚠ DESIGN MOCK. NOT WIRED TO ANY LEAGUE, AND NO LONGER MOUNTED.
+ *
+ * Every row here is invented: the three players are literals, the salaries and projections
+ * come from hashes of their fake ids, and the cap room is a constant. It was rendered on the
+ * draft tab of every IDP league until it was unmounted in `DraftTab`.
+ *
+ * The board half can be wired — the league-scored IDP valuation stack exists in
+ * `lib/idp-projections/`. The cap half cannot: the salary, contract and cap tables have zero
+ * rows in production. Keep this file out of the render tree until at least the board half is
+ * real, and drop the cap columns rather than filling them in.
+ */
+
 import { useMemo, useState } from 'react'
 import { mockContractSalaryM, mockIdpPoints } from './idpPositionUtils'
 

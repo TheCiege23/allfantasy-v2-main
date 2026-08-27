@@ -366,3 +366,91 @@
     flex-basis: 100%;
   }
 }
+
+/* ── Where to spend your attention ────────────────────────────────────────
+ *
+ * The cross-league ranking, shown on a one-league screen for the OTHER
+ * leagues. Deliberately quieter than the tiles above it: this is context for
+ * the decision, not the decision.
+ *
+ * ⚠ THE ROW RULE CARRIES `.af-core`. af-core.css scopes its anchor primitive
+ * as `.af-core a` (0,2,0); a bare `.af-sol-attention-row` is (0,1,0) and loses
+ * regardless of import order.
+ */
+
+.af-sol-attention {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.af-sol-attention-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-sol-attention-note {
+  font: 400 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.af-sol-attention-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-sol-attention-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: baseline;
+  gap: 12px;
+  /* 44px floor — this is a link, and on a phone it is a thumb target. */
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.af-core .af-sol-attention-row:hover,
+.af-core .af-sol-attention-row:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+
+.af-sol-attention-league {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-sol-attention-reason {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  /* Stacked: at 375px the two-column split leaves the reason four words wide. */
+  .af-core .af-sol-attention-row {
+    grid-template-columns: 1fr;
+    row-gap: 3px;
+  }
+}

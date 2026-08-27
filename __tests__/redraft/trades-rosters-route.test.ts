@@ -11,12 +11,34 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const getServerSession = vi.fn()
 const assertLeagueMember = vi.fn()
 const findManyRoster = vi.fn()
+const findUniqueLeague = vi.fn()
+const findManyAppUser = vi.fn()
+const findManyLeagueTeam = vi.fn()
+const findFirstLeagueTeam = vi.fn()
+const findUniqueUserProfile = vi.fn()
 const getNormalizedPlayerData = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+/*
+ * ⚠ THE ROUTE READS `prisma.league` NOW, AND THE MOCK ONLY HAD `roster`. The
+ * season lookup that decides rookie-vs-future on a draft pick was added to the
+ * handler and this fake was not extended, so every call landed on undefined —
+ * "Cannot read properties of undefined (reading 'findUnique')" — before a single
+ * assertion ran. Stubbing the model rather than the whole call keeps the route's
+ * own `.catch(() => null)` fallback exercised.
+ */
 vi.mock('@/lib/prisma', () => ({
-  prisma: { roster: { findMany: (...args: unknown[]) => findManyRoster(...args) } },
+  prisma: {
+    roster: { findMany: (...args: unknown[]) => findManyRoster(...args) },
+    league: { findUnique: (...args: unknown[]) => findUniqueLeague(...args) },
+    appUser: { findMany: (...args: unknown[]) => findManyAppUser(...args) },
+    leagueTeam: {
+      findMany: (...args: unknown[]) => findManyLeagueTeam(...args),
+      findFirst: (...args: unknown[]) => findFirstLeagueTeam(...args),
+    },
+    userProfile: { findUnique: (...args: unknown[]) => findUniqueUserProfile(...args) },
+  },
 }))
 vi.mock('@/lib/league/league-access', () => ({
   assertLeagueMember: (...args: unknown[]) => assertLeagueMember(...args),
@@ -35,6 +57,15 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSession.mockResolvedValue({ user: { id: 'user-a' } })
+    /* Any real season will do here: these tests assert roster contents and the
+       player-id fallback, not pick labelling. */
+    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    /* Empty is the honest default: these tests are about rosters, and the route
+       must degrade to raw ids rather than depending on display-name lookups. */
+    findManyAppUser.mockResolvedValue([])
+    findManyLeagueTeam.mockResolvedValue([])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
   })
 
   it('rejects a non-member (403), matching every other trade route\'s access gate', async () => {

@@ -28,6 +28,16 @@ export type SeasonOutlookLeagueProps = {
   swing: SwingMatchup | null
   /** Printed verbatim — a simulated number without its basis is a guess. */
   basis: string
+  /**
+   * The cross-league attention ranking, which this screen shows for the OTHER
+   * leagues.
+   *
+   * ⚠ COMPUTED AND THEN DISCARDED UNTIL NOW. `getSeasonOutlook` ranks every
+   * league by what needs a decision; the league-scoped view took `league`,
+   * `swing` and `basis` and dropped the rest. The 38a design has a "where to
+   * spend your attention" panel and this is the data behind it.
+   */
+  priorities?: Array<{ leagueName: string; reason: string; href: string }>
 }
 
 function pct(n: number): string {
@@ -42,8 +52,25 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
-export function SeasonOutlookLeague({ league, swing, basis }: SeasonOutlookLeagueProps) {
+export function SeasonOutlookLeague({
+  league,
+  swing,
+  basis,
+  priorities = [],
+}: SeasonOutlookLeagueProps) {
   const you = league.you
+
+  /*
+   * The attention ranking minus the league already on screen. Leaving this one
+   * in would put "Guillotine League 26 — your seed is at risk" inside the
+   * Guillotine League 26 screen, restating what the tiles above already show
+   * and pushing a genuinely different league off the list.
+   *
+   * Matched on leagueName because that is what `priorities` carries; the ids
+   * are not in it, and adding one just for this would widen a shared type for
+   * a single consumer.
+   */
+  const elsewhere = priorities.filter((p) => p.leagueName !== league.leagueName).slice(0, 4)
 
   if (!you) {
     return (
@@ -195,6 +222,35 @@ export function SeasonOutlookLeague({ league, swing, basis }: SeasonOutlookLeagu
           </p>
         </section>
       )}
+
+      {/* ── Where to spend your attention ───────────────────────────── */}
+      {elsewhere.length > 0 ? (
+        <section className="af-sol-attention">
+          <header className="af-sol-attention-head">
+            <h2 className="af-label">Where to spend your attention</h2>
+            {/*
+              ⚠ SCOPED AND LABELLED AS CROSS-LEAGUE. `priorities` is ranked over
+              every league the user is in, and this is a one-league screen — so
+              printing it under a bare heading would read as "the things to do in
+              THIS league", which is not what the ranking means. The other
+              leagues still belong here: the reason a single league's odds matter
+              at all is that they compete for the same attention as the rest.
+            */}
+            <span className="af-sol-attention-note">your other leagues, most urgent first</span>
+          </header>
+
+          <ul className="af-sol-attention-rows">
+            {elsewhere.map((p) => (
+              <li key={p.href}>
+                <Link className="af-sol-attention-row" href={p.href}>
+                  <span className="af-sol-attention-league">{p.leagueName}</span>
+                  <span className="af-sol-attention-reason">{p.reason}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* ── Standings ───────────────────────────────────────────────── */}
       <Standings league={league} />

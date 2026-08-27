@@ -147,6 +147,19 @@ export type LeagueWeekBoard = {
     meetings: number
     averageMargin: number
   } | null
+  /**
+   * Current-season W-L by rosterId, from SCORED rows only.
+   *
+   * ⚠ AN ABSENT ROSTER MEANS "HAS NOT PLAYED", NOT 0-0. A freshly synced league
+   * carries a whole season of 0-0 rows, so a roster with no entry here has no
+   * record yet — printing 0-0 beside a team name would state a fact that does
+   * not exist. The screen renders nothing for an absent roster.
+   */
+  records: Record<number, { wins: number; losses: number }>
+  /** The user's roster in this league, for looking up their own record. */
+  yourRosterId: number | null
+  /** The team name the platform published, when it published one. */
+  yourTeamName: string | null
 }
 
 export type WeekBoard = {
@@ -658,6 +671,50 @@ export async function getWeekBoard(
         }
       }
 
+      /*
+       * Current-season W-L per roster, for the records the 38a header shows
+       * beside each team name.
+       *
+       * ⚠ COMPUTED FROM ROWS ALREADY IN MEMORY, NOT A SECOND QUERY. `history.rows`
+       * is every row for every league the user is in; filtering it costs nothing
+       * next to another round trip.
+       *
+       * ⚠ AN UNSCORED ROW IS NOT A LOSS. The Sleeper sync bootstraps a whole
+       * season of 0-0 rows before anybody plays, so counting `pointsFor >
+       * pointsAgainst` over raw rows would hand every team in a fresh league an
+       * 0-13 record and render it beside their name as fact. Only scored pairs
+       * are counted, which is why a preseason league correctly shows nothing
+       * here rather than a wall of zeros.
+       */
+      const records: Record<number, { wins: number; losses: number }> = {}
+      for (const pair of pairRows(
+        history.rows.filter((r) => r.leagueId === pid && r.seasonYear === latest.season),
+      )) {
+        const scored =
+          pair.a.pointsFor > 0 ||
+          pair.a.pointsAgainst > 0 ||
+          pair.b.pointsFor > 0 ||
+          pair.b.pointsAgainst > 0
+        if (!scored) continue
+        // A tie advances neither column; it is rare and inventing a bucket for
+        // it would misreport two teams rather than omit one game.
+        if (pair.a.pointsFor === pair.b.pointsFor) continue
+        const aWon = pair.a.pointsFor > pair.b.pointsFor
+        for (const [rid, won] of [
+          [pair.a.rosterId, aWon],
+          [pair.b.rosterId, !aWon],
+        ] as Array<[number, boolean]>) {
+          const rec = (records[rid] ??= { wins: 0, losses: 0 })
+          if (won) rec.wins += 1
+          else rec.losses += 1
+        }
+      }
+
+      /* `myRosters` is keyed "platformLeagueId:rosterId"; the first entry for this
+       * league is the user's roster in it. */
+      const yourRosterId =
+        [...myRosters.entries()].find(([k]) => k.startsWith(`${pid}:`))?.[1] ?? null
+
       leagueBoard = {
         leagueId: meta.id,
         leagueName: meta.name,
@@ -667,6 +724,10 @@ export async function getWeekBoard(
         yours,
         sidelines,
         rivalry,
+        records,
+        yourRosterId,
+        yourTeamName:
+          yourRosterId != null ? (rosterNames.get(`${pid}:${yourRosterId}`) ?? null) : null,
       }
     }
   }

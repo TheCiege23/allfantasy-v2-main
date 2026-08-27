@@ -1,11 +1,31 @@
 import React from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
 
 import { MyTeam } from '@/components/core-app/screens/MyTeam'
 import type { LineupPlayer, MyTeamData } from '@/lib/core-app/myTeam'
 
 const NOW = new Date('2026-08-24T20:00:00Z')
+
+/*
+ * ⚠ THIS SUITE ROTTED WITH THE CALENDAR AND HAD NOTHING TO DO WITH THE CODE.
+ * Fixtures are built relative to NOW, but the screen reads the REAL clock — so
+ * "a lock three days out" stopped being three days out on 2026-08-27, when the
+ * wall clock caught up with NOW + 3 days. The lock countdown then rendered
+ * `0:34:57`, which is CORRECT for a lock 34 minutes away, and the day-format
+ * assertion failed. It would have gone red on that date no matter what shipped.
+ *
+ * Freezing the clock to NOW makes the fixtures mean what they say, permanently.
+ * `shouldAdvanceTime` keeps timer-driven work in React and testing-library from
+ * hanging on a clock that never moves.
+ */
+beforeAll(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  vi.setSystemTime(NOW)
+})
+afterAll(() => {
+  vi.useRealTimers()
+})
 
 function player(over: Partial<LineupPlayer> = {}): LineupPlayer {
   return {

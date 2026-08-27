@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { REFERENCE_NFL_BUCKETS } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
 
 /**
  * ADP, resolved into Sleeper-id space.
@@ -89,12 +90,22 @@ export function adpSlug(
 /*
  * Specific defensive positions collapse onto the group the ADP board ranks them in, the same way
  * the roster slots do. Without this a `CB` on our side never matches a `DB` on theirs.
+ *
+ * ⚠ DERIVED FROM THE CANONICAL BUCKETS, NOT WRITTEN OUT AGAIN. This was a hand-kept copy of the
+ * same mapping, which is a second normalization truth — the thing
+ * `unified-plane-provider-boundary` exists to stop spreading. Inverting the governed buckets keeps
+ * one definition, so a position added there reaches the ADP join automatically.
+ *
+ * ⚠ ONLY THE THREE DEFENSIVE GROUPS. `REFERENCE_NFL_BUCKETS` also defines IDP_FLEX, FLEX and
+ * SUPER_FLEX, and those OVERLAP — inverting the whole map would make RB, WR and TE collapse to
+ * FLEX and quietly wreck every offensive ADP match.
  */
-const POSITION_GROUP: Record<string, string> = {
-  DE: 'DL', DT: 'DL', EDGE: 'DL', NT: 'DL',
-  CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB',
-  OLB: 'LB', ILB: 'LB', MLB: 'LB',
-}
+const GROUPED_FOR_ADP = ['DL', 'LB', 'DB'] as const
+const POSITION_GROUP: Record<string, string> = Object.fromEntries(
+  GROUPED_FOR_ADP.flatMap((bucket) =>
+    (REFERENCE_NFL_BUCKETS.buckets[bucket] ?? []).map((member) => [member.toUpperCase(), bucket]),
+  ),
+)
 const group = (p: string | null | undefined) => {
   const up = String(p ?? '').toUpperCase()
   return POSITION_GROUP[up] ?? up
