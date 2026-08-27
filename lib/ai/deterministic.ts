@@ -23,6 +23,7 @@ import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { detectUpcomingIntent, findUpcomingGames } from '@/lib/ai/upcomingGames'
+import { detectStatFamily, FAMILY_LABEL, readStatLeaders } from '@/lib/live/playerStatLeaders'
 
 /** US sports days are Eastern days; this is what "today" and "tonight" mean. */
 const SPORTS_DAY_TIMEZONE = 'America/New_York'
@@ -538,6 +539,52 @@ async function buildCachedWeatherAnswer(message: string, locale?: string): Promi
   }
 }
 
+/**
+ * "Who has the most TDs today?" answered from the live play-by-play feed.
+ *
+ * Returns null when the question is not a stat-leader question OR when the feed
+ * holds nothing, so the honest refusal below still fires in exactly the case it
+ * was written for: no data. What it must never do is refuse while the answer is
+ * sitting in cache, which is what happened before this existed.
+ */
+async function buildStatLeaderAnswer(message: string, locale?: string): Promise<string | null> {
+  /* Only leaderboard-shaped questions; "did Kelce score?" is a different ask. */
+  if (!/\b(most|lead|leads|leading|leader|leaderboard|top)\b/i.test(message)) return null
+
+  const family = detectStatFamily(message)
+  if (!family) return null
+
+  const { leaders, eventsScanned } = await readStatLeaders(family, 5)
+
+  /*
+   * An empty window is NOT "nobody scored" — it is "no games in the last six
+   * hours, or none polled". Saying the first would be a fabricated fact about
+   * the day, so this defers to the refusal instead.
+   */
+  if (eventsScanned === 0 || leaders.length === 0) return null
+
+  const label = FAMILY_LABEL[family]
+  const lines = leaders.map((leader, i) => {
+    const team = leader.team ? ` (${leader.team})` : ''
+    return `${i + 1}. ${leader.playerName}${team} — ${leader.total} ${label}`
+  })
+
+  const head = locale === 'es'
+    ? `Líderes de ${label} en las jugadas en vivo que tengo:`
+    : `Leaders in ${label} from the live plays I have:`
+
+  /*
+   * The window is stated, not implied. This is a six-hour rolling feed capped at
+   * 200 events, so calling it "today" would overclaim on a Sunday and underclaim
+   * at midnight.
+   */
+  const caveat = locale === 'es'
+    ? `Basado en ${eventsScanned} jugadas en vivo de las últimas horas, no en la temporada completa.`
+    : `Based on ${eventsScanned} plays from the live feed of the last few hours — not full-season totals.`
+
+  return `${head}\n${lines.join('\n')}\n${caveat}`
+}
+
 function buildUnsupportedStatEventAnswer(message: string, locale?: string): string | null {
   if (!detectUnsupportedStatEventQuestion(message)) return null
   return `${reliableUnavailable(locale)} I need cached play-by-play/player event data before I can answer that exact stat question. I will not invent home runs, touchdowns, player stats, goals, injuries, or box-score details.`
@@ -592,6 +639,14 @@ export async function tryDeterministicAnswer(message: string, locale?: string): 
   if (injuries) return injuries
   const news = await buildCachedNewsAnswer(message, safeLocale)
   if (news) return news
+  /*
+   * Try to ANSWER the stat question before refusing it. The refusal below is
+   * correct when there is no play-by-play in the window, and was previously the
+   * only outcome — even while the feed held the answer. Data first, refusal as
+   * the fallback, never the other way round.
+   */
+  const statLeaders = await buildStatLeaderAnswer(message, safeLocale)
+  if (statLeaders) return statLeaders
   const unsupportedStatEvent = buildUnsupportedStatEventAnswer(message, safeLocale)
   if (unsupportedStatEvent) return unsupportedStatEvent
   /* Forward-looking first: the cached path below only knows about today. */
