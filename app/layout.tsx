@@ -23,6 +23,32 @@ export const viewport = {
   viewportFit: 'cover' as const,
 };
 
+/**
+ * ⚠ FORCES EVERY ROUTE DYNAMIC, AND IT IS A BUG FIX, NOT A PERFORMANCE CHOICE.
+ *
+ * Measured on production 2026-08-27: `/` returned byte-identical HTML across
+ * repeated requests to one deploy, and different HTML across two deploys — it
+ * was being STATICALLY PRERENDERED at build time. It should never have been:
+ * this layout calls `await cookies()`, a dynamic API, which by itself forces
+ * every route under it to render per-request.
+ *
+ * That dynamic signal was being lost. The `try/catch` around `getServerSession`
+ * further down warns about exactly this — "a try/catch around a dynamic Next
+ * API also swallows Next's own internal control-flow exceptions, which would
+ * discard the layout's render rather than surfacing an error" — and a layout
+ * whose render is discarded during prerender emits its children WITHOUT the
+ * `<!DOCTYPE html><html><head><body>` shell it was supposed to wrap them in.
+ * That is the missing-document-shell bug: every App Router route served HTML
+ * beginning at `<meta charSet>`, browsers fell into quirks mode, and pages
+ * rendered unstyled.
+ *
+ * It also restores the two bisect flags below as working instruments. Both are
+ * read at REQUEST time, so against a build-time-prerendered page they were
+ * no-ops — every conclusion drawn from them was measured with an instrument
+ * that does not move.
+ */
+export const dynamic = 'force-dynamic';
+
 const useExperimentalManifest = process.env.NEXT_PUBLIC_PWA_EXPERIMENTAL_MANIFEST === '1';
 const metadataManifestPath = useExperimentalManifest
   ? '/manifest.experimental.webmanifest'
