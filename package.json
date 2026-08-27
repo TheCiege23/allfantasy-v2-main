@@ -101,6 +101,7 @@
     "repair:player-identity": "tsx scripts/repair-player-identity-drift.ts",
     "test:draft": "vitest run __tests__/draft/",
     "check:draft-env": "node scripts/draft-env-check.mjs",
+    "check:css": "node scripts/check-css-syntax.cjs",
     "gate:draft": "npm run typecheck && npx vitest run __tests__/draft/",
     "gate:draft:tests": "npx vitest run __tests__/draft/",
     "gate:draft:full": "node scripts/draft-launch-gate.mjs",
