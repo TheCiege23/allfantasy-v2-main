@@ -12,6 +12,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
 import {
   flattenFantraxSchedule,
   getFantraxLeagueInfo,
@@ -32,6 +33,13 @@ export type FantraxImportOutcome =
       teamName: string
       resolved: number
       total: number
+      /**
+       * The league's scoring settings, read from the same getLeagueInfo call.
+       * Returned rather than stored: the snapshot has no column for settings,
+       * and the live path re-reads getLeagueInfo on every import anyway.
+       */
+      scoringRules: FantraxScoringRule[]
+      scoringGaps: string[]
     }
   | { ok: false; error: string; teams?: string[] }
 
@@ -47,6 +55,12 @@ export async function importFantraxLeague(args: {
   leagueId: string
   teamName: string
   appUserId: string
+  /**
+   * The caller's Fantrax Secret ID confirmed, via `getFantraxLeagues`, that this
+   * team in this league is theirs. Only set by a real API check — never by user
+   * input. See the ownership gate below for what it unlocks and why.
+   */
+  ownershipVerified?: boolean
 }): Promise<FantraxImportOutcome> {
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message }
@@ -109,6 +123,7 @@ export async function importFantraxLeague(args: {
   }
 
   const season = Number(info.data.seasonYear) || new Date().getFullYear()
+  const scoring = fantraxScoringRules(info.data)
 
   const fantraxUser = await prisma.fantraxUser.upsert({
     where: { fantraxUsername: mine.teamName },
@@ -127,9 +142,26 @@ export async function importFantraxLeague(args: {
     },
     select: { appUserId: true },
   })
-  /* Mirrors the upload route's rule: a snapshot owned by a different real
-     account is never silently overwritten. */
-  if (existing?.appUserId && existing.appUserId !== args.appUserId) {
+  /*
+   * ⚠ THIS REFUSED PEOPLE THEIR OWN LEAGUES, AND THE IDENTITY IS WHY.
+   *
+   * `fantraxUser` above is keyed on `mine.teamName` — a TEAM NAME, not a person.
+   * Two unrelated managers in two unrelated leagues can both be "Ciege82", and one
+   * CSV snapshot uploaded under any account then owns that string forever. Measured
+   * on production 2026-08-27: the single `FantraxLeague` row was the importer's OWN
+   * earlier upload, carrying a different `appUserId`, and it blocked them from
+   * importing their own league — with no surface anywhere to release it.
+   *
+   * A Fantrax Secret ID IS a real identity, and `getFantraxLeagues` reports which
+   * teams it owns. When the caller has proven ownership of this team, that beats
+   * stale snapshot bookkeeping and they take the row over.
+   *
+   * ⚠ THE GUARD STILL STANDS WITHOUT PROOF, which is the half worth keeping: an
+   * unverified caller still cannot overwrite somebody else's snapshot, and
+   * `ownershipVerified` is never settable from user input — it comes only from a
+   * live API check against a credential the caller had to store first.
+   */
+  if (existing?.appUserId && existing.appUserId !== args.appUserId && !args.ownershipVerified) {
     return { ok: false, error: 'that league snapshot is already owned by a different AllFantasy account' }
   }
 
@@ -186,6 +218,8 @@ export async function importFantraxLeague(args: {
     teamName: mine.teamName,
     resolved: mine.resolved,
     total: mine.total,
+    scoringRules: scoring.rules,
+    scoringGaps: scoring.gaps,
   }
 }
 

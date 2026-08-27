@@ -1,5 +1,7 @@
 'use client'
 
+import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
+import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
@@ -434,10 +436,19 @@ export function LeagueShell({
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
-    if (league.leagueVariant === 'idp' || league.leagueVariant === 'dynasty_idp') {
+    if (isIdpLeagueVariant(league.leagueVariant)) {
+      /*
+       * Case-insensitive because production stores `DYNASTY_IDP`, and the exact-match comparison
+       * this replaces (`=== 'dynasty_idp'`) never fired for any of the ten IDP leagues.
+       *
+       * Defense Hub rides the same predicate: it is only meaningful where the league prices
+       * defenders, and on a league that does not roster them it would render an empty page with
+       * a confident title.
+       */
       const idx = base.findIndex((t) => t.id === 'redraft')
       const idp = { id: 'idp', label: 'IDP' }
-      base = idx >= 0 ? [...base.slice(0, idx + 1), idp, ...base.slice(idx + 1)] : [idp, ...base]
+      const hub = { id: 'defense_hub', label: 'Defense Hub' }
+      base = idx >= 0 ? [...base.slice(0, idx + 1), idp, hub, ...base.slice(idx + 1)] : [idp, hub, ...base]
     }
     if (league.leagueType === 'keeper' && league.keeperPhaseActive) {
       base = [{ id: 'keeper', label: 'Keepers' }, ...base]
@@ -762,6 +773,19 @@ export function LeagueShell({
   const [leaveLeagueHintOpen, setLeaveLeagueHintOpen] = useState(false)
   const [portalMounted, setPortalMounted] = useState(false)
   const [idpUi, setIdpUi] = useState<{ active: boolean; positionMode: string } | null>(null)
+
+  /*
+   * ⚠ THE CONFIG ROW THIS USED TO DEPEND ON DOES NOT EXIST FOR ANY LEAGUE. `idpUi.active` is set
+   * only when `/api/leagues/{id}/idp/config` returns a config, which reads `idpLeagueConfig` —
+   * a table with ZERO rows in production. So every IDP surface gated on it (the matchup view on
+   * Scores, the team dashboard on My Team) has been dark for every league, including the ten
+   * that genuinely roster defenders.
+   *
+   * The config row stays authoritative when present — it carries `positionMode` and is how a
+   * commissioner opts in explicitly. The league's own variant is the fallback, and it agrees
+   * exactly with the scoring predicate on production. See `idpLeagueVariant.ts`.
+   */
+  const idpLeagueActive = (idpUi?.active ?? false) || isIdpLeagueVariant(league.leagueVariant)
   const [idpViewMode, setIdpViewMode] = useState<'offense' | 'defense' | 'full'>('full')
   const [devyConfig, setDevyConfig] = useState<Record<string, unknown> | null | 'none'>(null)
   const [devyBucketStats, setDevyBucketStats] = useState({ active: 0, taxi: 0, devy: 0 })
@@ -1362,7 +1386,7 @@ export function LeagueShell({
                     }
               }
               onGoHome={() => router.push('/dashboard')}
-              idpLeagueActive={idpUi?.active ?? false}
+              idpLeagueActive={idpLeagueActive}
               idpViewMode={idpViewMode}
               onIdpViewModeChange={setIdpViewMode}
               devyLeagueActive={devyConfig !== null && devyConfig !== 'none'}
@@ -1443,7 +1467,7 @@ export function LeagueShell({
               isCommissioner={isCommissioner}
               isHeadCommissioner={isHeadCommissioner}
               onPlayerClick={handlePlayerClick}
-              idpLeagueActive={idpUi?.active ?? false}
+              idpLeagueActive={idpLeagueActive}
               idpViewMode={idpViewMode}
               idpPositionMode={idpUi?.positionMode ?? 'standard'}
               seasonSnapshot={seasonSnapshot}
@@ -2034,6 +2058,8 @@ function LeagueTabRouter({
       )
     case 'idp':
       return <IDPHome leagueId={leagueId} />
+    case 'defense_hub':
+      return <DefenseHubClient leagueId={leagueId} embedded />
     case 'keeper':
       return <KeeperSelectionTab leagueId={leagueId} />
     case 'team':

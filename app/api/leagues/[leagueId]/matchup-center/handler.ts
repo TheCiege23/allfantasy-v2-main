@@ -51,11 +51,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   if ('error' in out) {
     // Do not leak the engine's internal string ("Forbidden", "Roster not found") to the client.
     // Map to a stable, user-facing message keyed on status; the engine detail stays server-side.
+    /*
+     * ⚠ THREE DIFFERENT 404s USED TO SAY THE SAME THING. The engine returns 404
+     * for "League not found", "Roster not found" and "Opponent roster missing",
+     * and all three rendered as "League not found." — so a manager looking at a
+     * league that had just imported correctly was told it did not exist, and
+     * went looking for a problem with the import instead of clicking Claim.
+     *
+     * The engine's internal strings still stay server-side; what crosses the
+     * boundary is a code it sets deliberately.
+     */
     const clientError =
       out.status === 403
         ? 'You do not have access to this league.'
         : out.status === 404
-          ? 'League not found.'
+          ? out.code === 'NO_CLAIMED_TEAM'
+            ? 'You have not claimed a team in this league yet, so there is no matchup to show.'
+            : 'League not found.'
           : 'Unable to load the matchup center.'
     if (out.status >= 500) console.warn('[matchup-center] engine error', out)
     return NextResponse.json({ error: clientError }, { status: out.status })

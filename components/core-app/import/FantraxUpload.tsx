@@ -132,11 +132,19 @@ export function FantraxUpload({ onUploaded }: { onUploaded?: (snapshotId: string
 
   return (
     <section className="af-im-fx">
-      <h2 className="af-im-fx-h">Upload a Fantrax export</h2>
+      {/*
+        ⚠ THIS COPY SAID THE OPPOSITE OF WHAT SHIPPED. It read "Fantrax leagues cannot
+        be read from a league ID the way Sleeper and Yahoo can — nothing there is
+        public", which was true before the fxea API work landed and false after it.
+        Fantrax is registered `available: true, supportsDiscovery: true`, and pasting a
+        league id returns its teams. Telling people the working path does not exist sent
+        them to a CSV export — which on a phone is effectively a dead end.
+      */}
+      <h2 className="af-im-fx-h">Have a Fantrax CSV export?</h2>
       <p className="af-im-fx-p">
-        Fantrax leagues cannot be read from a league ID the way Sleeper and Yahoo can — nothing there
-        is public. Export your league&apos;s CSVs from Fantrax and upload them here; that snapshot is
-        what an import reads.
+        Optional. A league ID is all an import needs &mdash; we read Fantrax directly. An export is
+        only worth uploading for past seasons the live API does not expose, or a league whose ID
+        will not read.
       </p>
 
       <form onSubmit={submit} className="af-im-fx-form">

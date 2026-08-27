@@ -44,11 +44,44 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * getLeagueInfo does not report a sport and the two id spaces do not overlap.
    */
   { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
-  // mfl: real adapter, but no credential-entry UI exists anywhere for the API key a private league needs.
-  { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: false, supportedSports: ['NFL'] },
-  // fleaflicker: real adapter, but no confirmed reachable path in the main import flow (only an
-  // orphaned, unlinked page) — see the G61 doc for what's unresolved.
-  { provider: 'fleaflicker', label: 'Fleaflicker', available: false, supportedSports: ['NFL'] },
+  /*
+   * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
+   * service, the pipeline entry and the storage column all existed; what did not
+   * was anywhere to type the API key `MflLeagueFetchService` requires — so
+   * `getMflAuthForUser` threw on every import. `MflApiKeyConnection` in
+   * Settings → Connected Accounts saves one, through the endpoint that already
+   * encrypted it.
+   *
+   * ⚠ THE KEY IS REQUIRED FOR EVERY LEAGUE, NOT JUST PRIVATE ONES. MFL's export
+   * API takes `APIKEY` on every call this service makes, so there is no
+   * public-league shortcut and the tile must name the setup step the way ESPN's
+   * does.
+   *
+   * ⚠ AND THIS IS THE ONE FLAG HERE NOT VERIFIED AGAINST A REAL LEAGUE.
+   * Fantrax and Fleaflicker were both proven end to end before they flipped;
+   * MFL cannot be, because the verification needs a key nobody on this side
+   * holds. It is flipped on the same standard ESPN was held to — the missing
+   * piece is built, and the failure path already names the fix in the user's
+   * terms ("Save your MFL API key in League Sync before importing").
+   */
+  { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: true, supportedSports: ['NFL'] },
+  /*
+   * fleaflicker: FLIPPED 2026-08-27 with the missing piece built, not to unblock
+   * anything. The blocker was never the adapter — it was that no field in the
+   * main import flow accepted a Fleaflicker league id, so the only path in was
+   * an orphaned page nothing linked to.
+   *
+   * ⚠ IT NEEDS NO CREDENTIAL AT ALL, which is what makes it the cheapest of the
+   * six. `fetchFleaflickerLeagueForImport(sourceId)` takes one argument and
+   * calls a public JSON API — no OAuth, no cookie, no key. Verified end to end
+   * against a real league before this flag moved: league 206154 fetched and
+   * normalised to "Jackpot Dynasty League", 16 teams, NFL, 2026.
+   *
+   * No discovery: listing someone's leagues would need an account identifier
+   * Fleaflicker does not expose publicly, so the flow takes a league id the
+   * same way ESPN does.
+   */
+  { provider: 'fleaflicker', label: 'Fleaflicker', available: true, supportedSports: ['NFL'] },
 ];
 
 export function getImportProviderLabel(provider: ImportProvider): string {

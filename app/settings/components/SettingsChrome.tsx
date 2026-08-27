@@ -23,6 +23,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { AVATAR_PRESET_EMOJI } from '@/lib/avatar'
 import type { SettingsProfile } from './sections/settings-types'
+import { settingsNavBadges } from './settingsNavBadges'
 import '../nocturne-settings.css'
 
 export type SettingsTabId =
@@ -211,6 +212,13 @@ export function SettingsChrome({
   const { t } = useLanguage()
   const [query, setQuery] = useState('')
 
+  /*
+   * 38a·12 — the state a setting is in, visible without opening it. Derived
+   * from the profile the chrome already has; see settingsNavBadges.ts for why
+   * there is no placeholder branch.
+   */
+  const badges = useMemo(() => settingsNavBadges(profile), [profile])
+
   const filteredNav = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return NAV_DEFS
@@ -267,6 +275,11 @@ export function SettingsChrome({
                 >
                   <Icon />
                   <span className="ns-nav-label">{t(`settings.nav.${tab.id}`)}</span>
+                  {badges[tab.id] ? (
+                    <span className="ns-nav-badge" data-tone={badges[tab.id]!.tone}>
+                      {badges[tab.id]!.text}
+                    </span>
+                  ) : null}
                 </button>
               )
             })}

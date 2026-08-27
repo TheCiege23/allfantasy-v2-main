@@ -538,3 +538,192 @@
   text-transform: uppercase;
   color: var(--muted);
 }
+/* ══════════════════════════════════════════════════════════════════════
+   38a — nav sections, phone tab bar, skip link.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Skip link. Off-screen until focused rather than display:none — a hidden
+ * element is not focusable, which defeats the entire point of the control.
+ */
+.af-core .af-skip {
+  position: absolute;
+  left: 8px;
+  top: -60px;
+  z-index: 60;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  transition: top 120ms ease;
+}
+.af-core .af-skip:focus-visible {
+  top: 8px;
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.af-core .af-content:focus {
+  outline: none;
+}
+
+/* ── Nav sections ────────────────────────────────────────────────────── */
+
+.af-core .af-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.af-core .af-nav-heading {
+  padding: 10px 10px 2px;
+  color: var(--faint);
+}
+
+/* `.af-nav-items` is a <ul> now; the flex rules above still apply, these only
+   strip the list chrome the browser adds. */
+.af-core .af-nav-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-nav-items > li {
+  display: flex;
+}
+.af-core .af-nav-items > li > .af-nav-item {
+  flex: 1 1 auto;
+}
+
+/*
+ * The active item drew a 1px border that no inactive item had, so selecting a
+ * row grew it by two pixels and nudged every row below it. Transparent border
+ * on the base, coloured on the active one — same box either way.
+ */
+.af-core .af-nav-item {
+  border: 1px solid transparent;
+}
+/* Must out-specify the base rule above, which is declared later in the file
+   than the original `[data-active]` rule and would otherwise erase its border. */
+.af-core .af-nav-item[data-active='true'] {
+  border-color: var(--accent-line);
+}
+.af-core .af-nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ── Phone bottom bar ────────────────────────────────────────────────── */
+
+/*
+ * Hidden above 720px. It is the phone's primary nav, not a supplement to the
+ * sidebar — showing both would give a tablet two competing navs.
+ */
+.af-core .af-tabbar {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .af-core .af-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--surface2) 92%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+  }
+
+  .af-core .af-tabbar-item {
+    /* 44px is the floor, not the target — the row is taller than that in
+       practice and the number is the minimum a thumb can reliably hit. */
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 2px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--faint);
+  }
+  .af-core .af-tabbar-item[data-active='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .af-core .af-tabbar-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .af-core .af-tabbar-glyph {
+    position: relative;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .af-core .af-tabbar-dot {
+    position: absolute;
+    top: -3px;
+    right: -5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bad);
+  }
+  .af-core .af-tabbar-dot[data-tone='count'] {
+    background: var(--accent);
+  }
+
+  .af-core .af-tabbar-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    text-align: center;
+    /* Five labels across a 390px frame: "Notifications" has to wrap or clip,
+       and clipping mid-word is the worse of the two. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  /*
+   * The bar is fixed, so the last thing on every screen would otherwise sit
+   * underneath it. Reserved here once rather than by each screen remembering.
+   */
+  .af-core .af-content {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Headings would be five more rows in a horizontal strip. The strip is
+     already grouped by proximity there; the labels are the desktop affordance. */
+  .af-core .af-nav-heading {
+    display: none;
+  }
+  .af-core .af-nav {
+    scroll-margin-top: 8px;
+  }
+  .af-core .af-nav-group {
+    flex-direction: row;
+    gap: 6px;
+  }
+  .af-core .af-nav-items {
+    flex-direction: row;
+    gap: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-skip {
+    transition: none;
+  }
+}

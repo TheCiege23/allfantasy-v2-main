@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ImportV4 } from "@/components/core-app/screens/ImportV4";
 import { normalizeIncomingImportProvider } from "@/lib/import/importSearchParams";
+import { prisma } from "@/lib/prisma";
 
 /**
  * /import — cut over to the V4 screen.
@@ -64,11 +65,33 @@ export default async function ImportPage({
    */
   const yahooError = pickQuery(sp, "yahoo_error");
   const yahooErrorDesc = pickQuery(sp, "yahoo_error_desc");
-  const yahooConnected = pickQuery(sp, "yahoo_connected") === "1";
+  /*
+   * ⚠ THE TWO CALLBACKS SET DIFFERENT PARAMETERS, AND THIS ONLY KNEW ONE.
+   * `/api/auth/yahoo/callback` returns `yahoo_connected=1`;
+   * `/api/league/yahoo/callback` returns `success=yahoo_connected`. Both are
+   * real exits from a successful OAuth round trip, and a manager who came back
+   * through the second one landed on a page still offering to connect an
+   * account they had just connected. Read both spellings rather than picking a
+   * winner, because either callback can legitimately be the one that ran.
+   */
+  const yahooConnectedFromQuery =
+    pickQuery(sp, "yahoo_connected") === "1" ||
+    pickQuery(sp, "success") === "yahoo_connected";
 
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string };
   } | null;
+
+  /*
+   * ⚠ AND A CONNECTION IS NOT A QUERY STRING. Deriving this from the URL alone
+   * meant the fact survived exactly one render: a refresh, a new tab, or coming
+   * back the next day all showed "not connected" while the token sat in the
+   * database the whole time. The row is the truth; the query parameter is only
+   * how we learn about it a few milliseconds early, before the redirect settles.
+   *
+   * Read AFTER the session check below so an unauthenticated visitor never
+   * costs a query.
+   */
 
   if (!session?.user?.id) {
     const qs = new URLSearchParams();
@@ -79,6 +102,27 @@ export default async function ImportPage({
     const callbackUrl = encodeURIComponent(`/import?${qs.toString()}`);
     redirect(`/login?callbackUrl=${callbackUrl}`);
   }
+
+  /*
+   * Never throws: the import page's job is importing, and a failed lookup here
+   * should degrade to "offer to connect" rather than take the page down. That
+   * is the same answer the old query-only check gave, so the floor has not
+   * moved.
+   */
+  const yahooAuthRow = await (prisma as never as {
+    leagueAuth: {
+      findUnique: (args: unknown) => Promise<{ oauthToken: string | null } | null>;
+    };
+  }).leagueAuth
+    .findUnique({
+      where: { userId_platform: { userId: session.user.id, platform: "yahoo" } },
+      select: { oauthToken: true },
+    })
+    .catch(() => null);
+
+  /* A row with no token is a connect that started and never finished — the same
+     shape the ESPN row has carried since August. It is not a connection. */
+  const yahooConnected = yahooConnectedFromQuery || Boolean(yahooAuthRow?.oauthToken);
 
   return (
     <ImportV4

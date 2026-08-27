@@ -337,6 +337,18 @@ const filesToKeep = new Set([
   console.log(`[vercel-next-build] Cron keep-line guard: ${crons.length} scheduled cron(s) verified against exclusions`)
 })()
 
+// ── CSS syntax guard ─────────────────────────────────────────────────────────
+// A missing `}` in a stylesheet is invisible to tsc, vitest and eslint, so the
+// first thing to read it was `next build` — in production. That is exactly how
+// prod lost four consecutive deploys on 2026-08-27. Parse before building, and
+// fail here where the message is legible instead of inside a webpack trace.
+// Runs before disableNonProdRoutes() so it sees the tree as committed.
+;(function assertStylesheetsParse() {
+  const { reportAndExit } = require('./check-css-syntax.cjs')
+  const exitCode = reportAndExit('[vercel-next-build]')
+  if (exitCode !== 0) process.exit(exitCode)
+})()
+
 function directoryExists(targetPath) {
   try {
     return fs.statSync(targetPath).isDirectory()

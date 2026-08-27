@@ -92,7 +92,18 @@ const Dash = () => <span className="text-[#5d648a]">—</span>
 
 const pct = (n: number) => `${Math.round(n * 100)}%`
 
-export function DefenseHubClient({ leagueId }: { leagueId: string }) {
+export function DefenseHubClient({
+  leagueId,
+  embedded = false,
+}: {
+  leagueId: string
+  /*
+   * Rendered inside a league tab rather than as its own page. The standalone page owns the
+   * viewport — full-height background and page padding — which inside a tab produces a second
+   * scroll container and a band of dead space above the content.
+   */
+  embedded?: boolean
+}) {
   const [data, setData] = useState<DefenseHubPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -113,14 +124,22 @@ export function DefenseHubClient({ leagueId }: { leagueId: string }) {
   }, [leagueId])
 
   return (
-    <div className="min-h-screen bg-[#06070f] px-5 pb-24 pt-10 text-[#eef0fa] md:px-10">
+    <div
+      className={
+        embedded
+          ? 'px-4 pb-10 pt-4 text-[#eef0fa] md:px-6'
+          : 'min-h-screen bg-[#06070f] px-5 pb-24 pt-10 text-[#eef0fa] md:px-10'
+      }
+    >
       <div className="mx-auto max-w-[1200px]">
         <header className="mb-6">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#5d648a]">
-            <Link href={`/league/${leagueId}`} className="hover:text-[#22d3ee]">
-              ← League
-            </Link>
-          </div>
+          {!embedded ? (
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#5d648a]">
+              <Link href={`/league/${leagueId}`} className="hover:text-[#22d3ee]">
+                ← League
+              </Link>
+            </div>
+          ) : null}
           <h1 className="mt-2 text-[24px] font-black tracking-[-0.03em]">Defense Hub</h1>
           <p className="mt-1.5 max-w-[520px] text-[13px] leading-relaxed text-[#8f97bd]">
             If a number can’t be traced to a real stat line, it doesn’t render — this page shows

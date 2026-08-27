@@ -8,6 +8,7 @@
 import { prisma } from '@/lib/prisma'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { normalizedPlayerValue } from '@/lib/trade-value/valueEngine'
+import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import type { DiscoveryRoster } from '@/lib/trade-discovery/redraftTradeDiscovery'
 
 const RECENT_DAYS = 30
@@ -29,7 +30,10 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
   if (!season) return null
 
   const [league, rosters] = await Promise.all([
-    prisma.league.findUnique({ where: { id: leagueId }, select: { draftPickTrading: true } }),
+    prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { draftPickTrading: true, settings: true, leagueType: true },
+    }),
     prisma.redraftRoster.findMany({
       where: { seasonId: season.id },
       select: {
@@ -53,6 +57,35 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
     : []
   const projByPlayer = new Map<string, number>()
   for (const row of projRows) if (!projByPlayer.has(row.playerId)) projByPlayer.set(row.playerId, row.projectedPoints)
+
+  /*
+   * ⚠ DEFENDERS HAVE NO PROJECTION HERE AND NO MARKET PRICE ANYWHERE. `FantasyProjection` is an
+   * offensive feed and `PlayerValueSnapshot` contains ZERO defensive players, so in an IDP league
+   * every defender previously arrived at the discovery engine valued at null — which reads as
+   * "worthless" to anything ranking a package.
+   *
+   * This is the one trade path that can fix that honestly. The other two deliberately pass
+   * `idpValue: null` because they carry no league at all — a described trade may name no league,
+   * and the snapshot write path has no scoring or slots — and an IDP value computed against the
+   * wrong league is worse than an absent one. Here the league IS known, so its own scoring and
+   * starting slots price its own defenders.
+   */
+  const rosterPositions = (() => {
+    const raw = ((league?.settings ?? {}) as Record<string, unknown>).roster_positions
+    return Array.isArray(raw) ? raw.map((x) => String(x).toUpperCase()) : null
+  })()
+  const idpValues = allPlayerIds.length
+    ? (
+        await loadLeagueIdpVorp({
+          prisma,
+          leagueId,
+          rosterPositions,
+          rosterPlayerIds: allPlayerIds,
+          numTeams: leagueSize,
+          isDynasty: (league?.leagueType ?? '').toLowerCase().includes('dynasty'),
+        }).catch(() => null)
+      )?.valueBySleeperId ?? new Map<string, number>()
+    : new Map<string, number>()
 
   // Recent trade activity per roster (last 30 days, any status).
   const cutoff = new Date(Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000)
@@ -88,7 +121,20 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
           playerId: p.playerId,
           playerName: p.playerName,
           position: p.position,
-          value: typeof proj === 'number' ? normalizedPlayerValue({ projection: proj, position: p.position }) : null,
+          /*
+           * `normalizedPlayerValue` already prefers an IDP value over a projection when one is
+           * present, so a defender is priced on his league's own board and an offensive player is
+           * unaffected. A defender with neither stays null rather than being scored as a zero.
+           */
+          value: (() => {
+            const idpValue = idpValues.get(p.playerId) ?? null
+            if (idpValue == null && typeof proj !== 'number') return null
+            return normalizedPlayerValue({
+              projection: typeof proj === 'number' ? proj : null,
+              position: p.position,
+              idpValue,
+            })
+          })(),
           isLocked: p.isLocked,
           byeWeek: p.byeWeek,
         }

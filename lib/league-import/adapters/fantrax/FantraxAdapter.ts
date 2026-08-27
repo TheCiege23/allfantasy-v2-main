@@ -82,10 +82,21 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
         scoringSettings: {
           state: scoring ? 'partial' : 'missing',
           count: scoring?.rules.length ?? 0,
-          note:
-            scoring && scoring.rules.length > 0
+          /*
+           * ⚠ RULES EXISTING IS NOT THE SAME AS EVERY RULE BEING CARRIED. The
+           * mapper names the categories it could not place, and dropping that
+           * on the floor would present a partial scoring system as a whole one
+           * — a silently wrong score rather than a visible gap.
+           */
+          note: (() => {
+            const gaps = (scoring?.raw as { scoringGaps?: unknown })?.scoringGaps
+            if (Array.isArray(gaps) && gaps.length > 0) {
+              return `Some scoring categories were not carried across: ${gaps.join('; ')}.`
+            }
+            return scoring && scoring.rules.length > 0
               ? null
-              : 'Fantrax CSV imports include limited scoring detail; raw settings are preserved when available.',
+              : 'No scoring detail was available for this league; raw settings are preserved when present.'
+          })(),
         },
         playoffSettings: {
           state: schedule.some((week) => week.matchups.length > 0) ? 'partial' : 'missing',

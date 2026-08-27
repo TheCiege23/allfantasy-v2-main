@@ -161,6 +161,29 @@ const FIELD_BY_PROVIDER: Partial<
     placeholder: 'v2kzedypmm8jp61b, or paste the league URL',
     help: 'The ID is the code in your league URL — fantrax.com/fantasy/league/THIS-PART/home. Paste either. We will show you the teams so you can pick yours. Never your Fantrax password or Secret ID.',
   },
+  /*
+   * ⚠ THE ONLY PROVIDER HERE THAT ASKS FOR NOTHING BUT A NUMBER. Fleaflicker's
+   * JSON API is public, so there is no account to connect, no cookie to paste
+   * and no key to find — which is worth saying, because every other tile on
+   * this screen has taught the user to expect a setup step first.
+   */
+  /*
+   * ⚠ NAMES THE SETUP STEP, LIKE ESPN'S DOES. MFL's export API takes an API key
+   * on every call — private leagues and public ones alike — so a user who pastes
+   * a league id without saving a key first gets a failure that is about setup,
+   * not about their league. ESPN learned this the expensive way; the copy here
+   * starts where that one ended up.
+   */
+  mfl: {
+    label: 'MFL league ID',
+    placeholder: '12345, or paste the league URL',
+    help: 'Save your MFL API key once under Settings → Connected Accounts, then paste a league ID here. MFL needs the key for every league, public ones included. The key is not your password.',
+  },
+  fleaflicker: {
+    label: 'Fleaflicker league ID',
+    placeholder: '206154, or paste the league URL',
+    help: 'The number in your league URL — fleaflicker.com/nfl/leagues/THIS-PART. Nothing to connect first: Fleaflicker publishes league data, so we read it without an account.',
+  },
 }
 
 /**
@@ -174,12 +197,20 @@ const FIELD_BY_PROVIDER: Partial<
  */
 const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
   fantrax: 'League ID · pick your team',
+  /* No account, no cookie, no key — the only tile here that needs nothing first. */
+  fleaflicker: 'League ID · nothing to connect',
+  /* The key is not optional and not private-league-only; say so on the tile. */
+  mfl: 'League ID · API key required',
 }
 
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
-  fleaflicker: 'No connected path from this flow yet.',
+  /*
+   * Empty, and kept rather than deleted: every provider on this screen is
+   * selectable today, and the next one added will need somewhere to say why it
+   * is not. The tile falls back to "Not connectable yet." if a provider is ever
+   * marked unavailable without an entry here.
+   */
 }
 
 /**
@@ -327,6 +358,10 @@ export function ImportV4({
   const [accountLabel, setAccountLabel] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ k: 'idle' })
   const [error, setError] = useState<string | null>(null)
+  /* Fantrax Secret ID: stored via the same encrypted `leagueAuth` row every other
+     provider uses, never held in component state after it is saved. */
+  const [fxSecret, setFxSecret] = useState('')
+  const [fxSaving, setFxSaving] = useState(false)
 
   const selectable = isImportProviderAvailable(provider)
   // Provider display name comes from the shared config, never a local literal — the same
@@ -435,6 +470,30 @@ export function ImportV4({
    * changes, and re-firing would restart a preview the user had already moved on
    * from.
    */
+  /*
+   * ⚠ "NOTHING HAPPENS" WAS THIS, AND THE IMPORT HAD ALREADY WORKED.
+   *
+   * Every outcome of an action on this screen — the confirmation prompt, "Ready to
+   * import", and "Imported" — renders near the BOTTOM of a very long page, below the
+   * provider grid, the input, the trust panels and a discovered-league list that can
+   * run to a dozen rows. The button that triggers them is far above. So pressing
+   * "Import this league" swapped one off-screen panel for another and, from where the
+   * page was scrolled, looked like nothing at all.
+   *
+   * Confirmed against production: a Fantrax league imported successfully — 12 teams,
+   * an `import_runs` row, a `leagues` row — while the person who pressed the button
+   * was told nothing and reasonably concluded it had failed.
+   *
+   * Only one of these phases is mounted at a time, so a single ref is enough.
+   */
+  const outcomeRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (phase.k !== 'attest' && phase.k !== 'preview' && phase.k !== 'done') return
+    /* `block: 'center'` rather than 'start': these panels are short, and centring them
+       keeps the discovered list visible above so the screen still reads as one flow. */
+    outcomeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [phase.k])
+
   const deepLinked = useRef(false)
 
   const runPreview = useCallback(
@@ -863,6 +922,72 @@ export function ImportV4({
         {/* ── Step 2: the provider's own field ──────────────────────── */}
         {selectable && phase.k !== 'done' ? (
           <div className="af-im-field-block">
+            {/*
+              ── Fantrax: connect once, then there is nothing to type.
+              A league id is public and says nothing about who is asking, which is why
+              that path has to follow up with "which team is yours". A Secret ID is the
+              one thing Fantrax offers that identifies a PERSON, so `getLeagues` returns
+              the caller's leagues AND the teams they own in them — no league id, no
+              season, no sport, no team picker.
+              It posts to the SAME /api/league/auth every other provider's credentials
+              use (platform `fantrax`, encrypted `apiKey`), so nothing new stores it and
+              it never rides in an import request body.
+            */}
+            {provider === 'fantrax' ? (
+              <div className="af-im-field">
+                <span className="af-label">Fantrax Secret ID</span>
+                <input
+                  type="password"
+                  placeholder="paste your Secret ID"
+                  value={fxSecret}
+                  autoComplete="off"
+                  onChange={(e) => setFxSecret(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="af-btn af-btn--ghost"
+                  disabled={fxSaving || phase.k === 'discovering'}
+                  onClick={() => {
+                    const secret = fxSecret.trim()
+                    if (!secret) {
+                      setError('Paste your Fantrax Secret ID first.')
+                      return
+                    }
+                    setError(null)
+                    setFxSaving(true)
+                    void (async () => {
+                      try {
+                        const res = await fetch('/api/league/auth', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ platform: 'fantrax', apiKey: secret }),
+                        })
+                        if (!res.ok) {
+                          const body = (await res.json().catch(() => null)) as { error?: string } | null
+                          setError(body?.error || 'That Secret ID could not be saved.')
+                          return
+                        }
+                        // Cleared on success: it is a credential, and it is stored now.
+                        setFxSecret('')
+                        await runDiscover('')
+                      } catch {
+                        setError('Could not reach the server to save that Secret ID.')
+                      } finally {
+                        setFxSaving(false)
+                      }
+                    })()
+                  }}
+                >
+                  {fxSaving ? 'Connecting…' : 'Connect Fantrax and list my leagues'}
+                </button>
+                <span className="af-im-field-help">
+                  Fantrax → Settings → API Access. Read-only, and it is stored encrypted. With it
+                  connected we can name your leagues and your team without you typing either. Prefer
+                  not to? Paste a league ID below instead.
+                </span>
+              </div>
+            ) : null}
+
             {field ? (
               <label className="af-im-field">
                 <span className="af-label">{field.label}</span>
@@ -976,7 +1101,21 @@ export function ImportV4({
         the live API does not expose, and a league whose id will not read (a
         format the fxea API does not serve) has nowhere else to go.
       */}
-      {provider === 'fantrax' || defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
+      {/*
+        ⚠ COLLAPSED, NOT DELETED. As a always-open panel this was the first thing a
+        Fantrax importer met — a username field, a season, a sport, a file picker — and
+        its own heading told them the league-id path did not exist. On a phone, "export
+        CSVs from Fantrax and upload them" is where the import ends.
+        The capability is still worth keeping for exactly the reason above: an export
+        carries past seasons the live API does not expose, and a league whose id will not
+        read has nowhere else to go. So it stays one click away instead of in the way.
+      */}
+      {provider === 'fantrax' || defaultProvider === 'fantrax' ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
+          <FantraxUpload />
+        </details>
+      ) : null}
 
       {/* ── Discovered leagues ──────────────────────────────────────── */}
       {leagues.length > 0 && phase.k !== 'done' ? (
@@ -1163,7 +1302,7 @@ export function ImportV4({
 
       {/* ── Attestation gate ────────────────────────────────────────── */}
       {phase.k === 'attest' ? (
-        <section className="af-im-card">
+        <section className="af-im-card" ref={outcomeRef}>
           <h2 className="af-label">One confirmation first</h2>
           <p className="af-im-attest">{phase.message}</p>
           <div className="af-im-actions">
@@ -1193,7 +1332,7 @@ export function ImportV4({
 
       {/* ── Preview, then commit ────────────────────────────────────── */}
       {phase.k === 'preview' ? (
-        <section className="af-im-card">
+        <section className="af-im-card" ref={outcomeRef}>
           <header className="af-im-result-head">
             <h2 className="af-label">Ready to import</h2>
           </header>
@@ -1233,7 +1372,7 @@ export function ImportV4({
 
       {/* ── Done ────────────────────────────────────────────────────── */}
       {phase.k === 'done' ? (
-        <section className="af-im-card">
+        <section className="af-im-card" ref={outcomeRef}>
           <header className="af-im-result-head">
             <h2 className="af-label">Imported</h2>
           </header>

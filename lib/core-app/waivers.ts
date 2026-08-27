@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { myRosterCandidates } from './myRoster'
+import { leagueDisplayName, type SectionState } from './leagueHome'
 
 /**
  * Waivers — "targets, bids and claim order, priced against this league's FAAB
@@ -19,9 +20,15 @@ import { leagueDisplayName, type SectionState, type UnavailableSection } from '.
  * league's waivers actually run. Measured across all 120 production leagues:
  * waiver type resolves for 90 and the run schedule for 82.
  *
- * What is not: suggested claims. Ranking targets by confidence needs projections
- * and rostered-percentage data, neither of which is ingested, and a bid figure
- * invented without them would be the most actionable wrong number on the screen.
+ * Suggested claims used to be withheld here on the grounds that ranking targets
+ * needs projections and rostered-percentage data. The principle was right — a
+ * bid figure invented from nothing is the most actionable wrong number this
+ * screen could carry — but the premise was wrong: `WaiverIntel`
+ * (/api/league/waiver-intel) computes bids from this league's own winning-claim
+ * history against market value, and had simply never been mounted on this tab.
+ * The screen renders that panel now, and it keeps its own no-data state, so the
+ * honesty rule is intact and the field that encoded it is gone rather than
+ * sitting here contradicting the panel beside it.
  */
 
 export type WaiverBudget = {
@@ -63,7 +70,13 @@ export type WaiversData = {
   claimsQueued: SectionState<{ count: number; committed: number | null }>
   waiverType: SectionState<WaiverTypeInfo>
   processTime: SectionState<WaiverRunInfo>
-  suggestedClaims: UnavailableSection
+  /**
+   * How a tie between equal bids is broken. Real column (`tiebreakRule`) and
+   * genuinely nullable — most imported leagues have never published it.
+   */
+  tiebreak: SectionState<string>
+  /** Claims allowed per waiver period, and the minimum bid when one is set. */
+  claimLimits: SectionState<string>
 }
 
 const WAIVER_TYPE_LABEL: Record<string, string> = {
@@ -94,6 +107,8 @@ const DAY_LABEL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 async function resolveWaiverRules(leagueId: string): Promise<{
   waiverType: SectionState<WaiverTypeInfo>
   processTime: SectionState<WaiverRunInfo>
+  tiebreak: SectionState<string>
+  claimLimits: SectionState<string>
 }> {
   const s = await prisma.leagueWaiverSettings.findUnique({
     where: { leagueId },
@@ -102,6 +117,9 @@ async function resolveWaiverRules(leagueId: string): Promise<{
       faabBudget: true,
       processingDayOfWeek: true,
       processingTimeUtc: true,
+      tiebreakRule: true,
+      claimLimitPerPeriod: true,
+      waiverEngineConfig: true,
     },
   })
 
@@ -110,6 +128,8 @@ async function resolveWaiverRules(leagueId: string): Promise<{
     return {
       waiverType: { available: false, reason },
       processTime: { available: false, reason },
+      tiebreak: { available: false, reason },
+      claimLimits: { available: false, reason },
     }
   }
 
@@ -139,7 +159,73 @@ async function resolveWaiverRules(leagueId: string): Promise<{
         ? { available: true, data: { dayOfWeek: day, dayLabel: DAY_LABEL[day], timeUtc: time } }
         : { available: false, reason: 'no waiver run schedule was ingested for this league' }
 
-  return { waiverType, processTime }
+  /*
+   * Tiebreak, verbatim-ish from the stored rule.
+   *
+   * ⚠ ONLY MEANINGFUL WHEN THERE IS SOMETHING TO TIE. On a FAAB league the tie
+   * is between equal bids; on rolling priority the order IS the tiebreak and
+   * printing a separate rule would imply a second mechanism that does not
+   * exist.
+   */
+  const rawTiebreak = s.tiebreakRule?.trim()
+  const tiebreak: SectionState<string> =
+    kind === 'off'
+      ? { available: false, reason: 'no waivers to tie — free agents are claimed instantly' }
+      : rawTiebreak
+        ? { available: true, data: TIEBREAK_LABEL[rawTiebreak.toLowerCase()] ?? rawTiebreak }
+        : kind === 'rolling' || kind === 'standard'
+          ? { available: true, data: 'Waiver priority order' }
+          : { available: false, reason: 'this league’s tiebreak rule was not published' }
+
+  /*
+   * Claim limits. `claimLimitPerPeriod` is a real nullable column; the minimum
+   * bid lives inside the `waiverEngineConfig` JSON blob as `faab_min_bid`,
+   * which is the only place the importer puts it.
+   */
+  const minBid = readEngineNumber(s.waiverEngineConfig, 'faab_min_bid')
+  const limitParts: string[] = []
+  if (s.claimLimitPerPeriod != null) {
+    limitParts.push(`${s.claimLimitPerPeriod} per period`)
+  }
+  if (minBid != null && kind === 'faab') {
+    limitParts.push(`$${minBid} minimum bid`)
+  }
+  const claimLimits: SectionState<string> =
+    limitParts.length > 0
+      ? { available: true, data: limitParts.join(' · ') }
+      : {
+          available: false,
+          reason: 'no claim limit was published — this platform does not expose one',
+        }
+
+  return { waiverType, processTime, tiebreak, claimLimits }
+}
+
+const TIEBREAK_LABEL: Record<string, string> = {
+  faab: 'Highest FAAB bid',
+  highest_bid: 'Highest FAAB bid',
+  priority: 'Waiver priority order',
+  waiver_order: 'Waiver priority order',
+  reverse_standings: 'Reverse standings order',
+  random: 'Random draw',
+}
+
+/**
+ * Pulls one number out of `waiverEngineConfig`.
+ *
+ * ⚠ THE BLOB IS `Json?` AND ITS SHAPE IS NOT GUARANTEED. Every access is
+ * defensive on purpose: this column is written by several importers and a
+ * malformed one must yield "not published", never a crash on a screen someone
+ * is about to spend budget from.
+ */
+function readEngineNumber(config: unknown, key: string): number | null {
+  if (!config || typeof config !== 'object') return null
+  const raw = (config as Record<string, unknown>)[key]
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw))) {
+    return Number(raw)
+  }
+  return null
 }
 
 export async function getWaiversData(leagueId: string, userId: string): Promise<WaiversData | null> {
@@ -160,11 +246,8 @@ export async function getWaiversData(leagueId: string, userId: string): Promise<
     },
     waiverType: rules.waiverType,
     processTime: rules.processTime,
-    suggestedClaims: {
-      available: false as const,
-      reason:
-        'ranking targets needs weekly projections and rostered-percentage data; neither is ingested, and a suggested bid without them would be a number to act on that nothing supports',
-    },
+    tiebreak: rules.tiebreak,
+    claimLimits: rules.claimLimits,
   }
 
   const myTeam = await prisma.leagueTeam.findFirst({
@@ -172,7 +255,19 @@ export async function getWaiversData(leagueId: string, userId: string): Promise<
     select: { platformUserId: true, externalId: true },
   })
 
-  const candidates = [myTeam?.platformUserId, myTeam?.externalId].filter(Boolean) as string[]
+  /*
+   * ⚠ THIS WAS THE TWO-CANDIDATE JOIN, AND IT IS WHY ALL FOUR TILES READ "we cannot tell which
+   * roster in this league is yours" ON A LEAGUE THE MANAGER PLAYS IN. Measured on production and
+   * written up in `myRoster.ts`: with only `platformUserId` and `externalId`, 38 of 106 claimed
+   * teams joined to a roster; adding the caller's own user id takes it to 93, and matches more
+   * than one roster for exactly zero teams.
+   *
+   * It also no longer gives up when no LeagueTeam is CLAIMED. `Roster.platformUserId` sometimes
+   * holds our own User uuid directly, so a manager with an imported roster and an unclaimed team
+   * row is still findable — and telling him we cannot identify his roster, on the page whose
+   * whole job is his FAAB and his holes, is the worst place to be wrong.
+   */
+  const candidates = myRosterCandidates(myTeam ?? {}, userId)
 
   const allRosters = await prisma.roster.findMany({
     where: { leagueId },
