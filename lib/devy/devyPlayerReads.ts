@@ -26,6 +26,8 @@ import 'server-only'
  */
 
 import { prisma } from '@/lib/prisma'
+import { buildDevyValueBoard } from '@/lib/devy/devyValueBoard'
+import { getEligibleDevyPlayers } from '@/lib/devy-classification'
 import type { CFBPlayer, CFBPlayerStats, DevyPlayerValue } from '@/lib/cfb-player-data'
 
 /** Mirrors normalizeName in lib/devy-classification.ts — the key rows are stored under. */
@@ -71,6 +73,9 @@ const DEVY_SELECT = {
   jerseyNumber: true,
   devyValue: true,
   draftProjectionScore: true,
+  recruitingComposite: true,
+  breakoutAge: true,
+  devyAdp: true,
   projectedNFLValue: true,
   projectedDraftRound: true,
   draftEligibleYear: true,
@@ -98,6 +103,9 @@ type DevyRow = {
   jerseyNumber: string | null
   devyValue: number
   draftProjectionScore: number | null
+  recruitingComposite: number | null
+  breakoutAge: number | null
+  devyAdp: number | null
   projectedNFLValue: number | null
   projectedDraftRound: number | null
   draftEligibleYear: number | null
@@ -140,13 +148,21 @@ function toCFBPlayer(row: DevyRow): CFBPlayer {
   }
 }
 
-function toDevyPlayerValue(row: DevyRow): DevyPlayerValue {
+function toDevyPlayerValue(
+  row: DevyRow,
+  board: Map<string, { value: number | null; rank: number | null }>,
+): DevyPlayerValue {
+  const ranked = board.get(row.id)
   return {
     name: row.name,
     team: row.school,
     position: row.position,
     classYear: classYearString(row.classYear),
-    devyValue: row.devyValue ?? 0,
+    // Board points, or null when unranked. NEVER the stored devyValue: that is
+    // a position-and-class lookup which is 0 for most of the pool, so it cannot
+    // distinguish "unscouted" from "worth nothing".
+    devyValue: ranked?.value ?? null,
+    devyRank: ranked?.rank ?? null,
     projectedNFLValue: row.projectedNFLValue,
     draftEligibleYear: draftEligibleYearFor(row),
     projectedRound: row.projectedDraftRound,
@@ -169,6 +185,54 @@ function toCFBPlayerStats(row: DevyRow): CFBPlayerStats {
     receivingTDs: row.receivingTDs ?? 0,
     receptions: row.receptions ?? 0,
   }
+}
+
+
+/**
+ * The ranked devy board, cached briefly in process.
+ *
+ * ⚠ IT MUST BE BUILT FROM THE WHOLE POOL, NOT FROM THE ROWS BEING RETURNED.
+ * Rank is relative, so a board built from one team's roster makes its best
+ * depth piece the number one devy asset in the world. `legacy/devy-board`
+ * flags the same trap: a shortlist "reads as a class of blue chips".
+ *
+ * So this loads the eligible pool once and every read joins to it by id. The
+ * cache is short and in-process — the board only moves when the intel feeds
+ * run, which is at most daily.
+ */
+const BOARD_TTL_MS = 5 * 60 * 1000
+let boardCache: { at: number; byId: Map<string, { value: number | null; rank: number | null }> } | null = null
+
+async function getDevyBoardIndex(): Promise<Map<string, { value: number | null; rank: number | null }>> {
+  if (boardCache && Date.now() - boardCache.at < BOARD_TTL_MS) return boardCache.byId
+
+  // `requireProjection` drops players nothing has scouted rather than ranking
+  // them off the bottom — being unranked is the honest answer for them, and it
+  // is what makes a null value meaningful further down.
+  const pool = await getEligibleDevyPlayers({ requireProjection: true, limit: 2000 }).catch(() => [])
+  const board = buildDevyValueBoard(
+    (pool as Array<Record<string, unknown>>).map((p) => ({
+      id: String(p.id ?? ''),
+      name: String(p.name ?? ''),
+      position: (p.position as string) ?? null,
+      school: (p.school as string) ?? null,
+      draftEligibleYear: (p.draftEligibleYear as number) ?? null,
+      classYear: (p.classYear as number) ?? null,
+      draftProjectionScore: (p.draftProjectionScore as number) ?? null,
+      recruitingComposite: (p.recruitingComposite as number) ?? null,
+      breakoutAge: (p.breakoutAge as number) ?? null,
+      projectedDraftRound: (p.projectedDraftRound as number) ?? null,
+      devyAdp: (p.devyAdp as number) ?? null,
+    })),
+    new Date().getFullYear(),
+  )
+
+  const byId = new Map<string, { value: number | null; rank: number | null }>()
+  for (const entry of board.entries) {
+    if (entry.id) byId.set(entry.id, { value: entry.value.value, rank: entry.devyRank })
+  }
+  boardCache = { at: Date.now(), byId }
+  return byId
 }
 
 /*
@@ -224,7 +288,8 @@ export async function getDevyTeamRosterFromDb(team: string, limit = 200): Promis
     orderBy: DEVY_RANK_ORDER,
   })
 
-  return rows.map(toDevyPlayerValue)
+  const board = await getDevyBoardIndex()
+  return rows.map((row) => toDevyPlayerValue(row, board))
 }
 
 /**
@@ -254,9 +319,10 @@ export async function getDevyValuesForNamesFromDb(
   const byName = new Map<string, DevyRow>()
   for (const row of rows) if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, row)
 
+  const board = await getDevyBoardIndex()
   return normalized.map((n) => {
     const row = byName.get(n)
-    return row ? toDevyPlayerValue(row) : null
+    return row ? toDevyPlayerValue(row, board) : null
   })
 }
 
