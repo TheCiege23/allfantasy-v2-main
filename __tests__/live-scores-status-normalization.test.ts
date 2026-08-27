@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import {
   dbRowToLiveScore,
   hasStarted,
+  pickFreshestSourceRows,
   resolveGameState,
 } from '@/lib/sports-live-scores-service'
 
@@ -41,6 +42,14 @@ describe('resolveGameState', () => {
     expect(resolveGameState('Match Finished')).toBe('final')
     expect(resolveGameState('scheduled')).toBe('scheduled')
     expect(resolveGameState('Q2')).toBe('in_progress')
+  })
+
+  it('reads the real in-play string production wrote during PIT @ BUF', () => {
+    // Captured live 2026-08-27 23:43Z, Steelers 14 Bills 3, second quarter.
+    // This is the exact value espn_live stores for a game being played, so it
+    // is the one case that decides whether the live badge lights on gameday.
+    expect(resolveGameState('15:00 - 2nd')).toBe('in_progress')
+    expect(hasStarted('15:00 - 2nd')).toBe(true)
   })
 
   it('handles the short vendor codes actually present in production', () => {
@@ -142,5 +151,45 @@ describe('dbRowToLiveScore — cached rows must speak the UI vocabulary', () => 
     const mapped = dbRowToLiveScore(row('wat', { home: null, away: null }))
     expect(mapped.status).toBe('STATUS_SCHEDULED')
     expect(mapped.completed).toBe(false)
+  })
+})
+
+describe('pickFreshestSourceRows — a stale favourite must not beat a live feed', () => {
+  // Reproduces production at 2026-08-27 23:43Z, mid PIT @ BUF.
+  //
+  // rolling_insights outranks espn_live in LIVE_SOURCE_PREFERENCE, and rank was
+  // applied BEFORE freshness — so a feed three hours cold won the slate while
+  // ESPN held the actual 14-3. Both sit inside the 6h "dead feed" window, so
+  // that guard never fires. This is the scoreboard showing kickoff times during
+  // a game that is on television.
+  const NOW = new Date('2026-08-28T03:43:31Z').getTime()
+
+  const rollingInsights = {
+    source: 'rolling_insights',
+    fetchedAt: new Date('2026-08-28T00:30:03Z'), // 3h13m stale
+    label: 'RI scheduled, no score',
+  }
+  const espnLive = {
+    source: 'espn_live',
+    fetchedAt: new Date('2026-08-28T03:43:29Z'), // 2 seconds old
+    label: 'ESPN 15:00 - 2nd, 14-3',
+  }
+
+  it('picks the feed that actually has the live game', () => {
+    const picked = pickFreshestSourceRows([rollingInsights, espnLive], NOW)
+    expect(picked.map((r) => r.source)).toEqual(['espn_live'])
+  })
+
+  it('still honours preference between feeds of comparable freshness', () => {
+    // Same minute: rank is the right tiebreak, and rolling_insights wins it.
+    const riFresh = { ...rollingInsights, fetchedAt: new Date('2026-08-28T03:43:20Z') }
+    const picked = pickFreshestSourceRows([espnLive, riFresh], NOW)
+    expect(picked.map((r) => r.source)).toEqual(['rolling_insights'])
+  })
+
+  it('ignores a long-dead feed even when it outranks everything', () => {
+    const ancient = { ...rollingInsights, fetchedAt: new Date('2026-04-26T00:00:00Z') }
+    const picked = pickFreshestSourceRows([ancient, espnLive], NOW)
+    expect(picked.map((r) => r.source)).toEqual(['espn_live'])
   })
 })

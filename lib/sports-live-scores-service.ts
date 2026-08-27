@@ -923,6 +923,15 @@ const LIVE_SOURCE_PREFERENCE = ['rolling_insights', 'api_sports', 'espn_live', '
 /** A feed silent this long is treated as dead, whatever its rank. */
 const LIVE_SOURCE_DEAD_AFTER_MS = 6 * 60 * 60 * 1000
 
+/**
+ * Feeds updated within this window of each other are treated as equally fresh,
+ * and the preference order decides between them. Wider than the 60s refresh so
+ * normal jitter between two healthy feeds does not flip the slate back and
+ * forth mid-game; far narrower than the 6h dead-feed cutoff, which is a
+ * liveness floor rather than a "still worth preferring" test.
+ */
+const LIVE_SOURCE_STALENESS_BUCKET_MS = 5 * 60 * 1000
+
 type SourcedRow = { source: string | null; fetchedAt: Date | null }
 
 /**
@@ -958,7 +967,29 @@ export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Da
     const i = (LIVE_SOURCE_PREFERENCE as readonly string[]).indexOf(source)
     return i === -1 ? LIVE_SOURCE_PREFERENCE.length : i
   }
-  pool.sort((a, b) => rank(a[0]) - rank(b[0]) || b[1].newest - a[1].newest)
+
+  // ⚠ FRESHNESS OUTRANKS PREFERENCE, IN BUCKETS.
+  //
+  // Rank alone put a feed three hours cold ahead of one two seconds old.
+  // Measured mid-game on 2026-08-27: rolling_insights held the NFL slate as
+  // `scheduled` with no scores from 00:30Z while espn_live had PIT 14 BUF 3 in
+  // the second quarter — and rolling_insights is rank 0, so it won. Both were
+  // inside the 6h dead-feed window, so that guard never fired. The scoreboard
+  // showed kickoff times for a game that was on television.
+  //
+  // Live scoring is a recency problem before it is a preference problem. Rank
+  // still decides between feeds updated at about the same time, which is what
+  // the preference list is actually for; it no longer overrides a feed that has
+  // simply stopped reporting.
+  const bucket = (newest: number): number =>
+    Math.floor(Math.max(0, now - newest) / LIVE_SOURCE_STALENESS_BUCKET_MS)
+
+  pool.sort(
+    (a, b) =>
+      bucket(a[1].newest) - bucket(b[1].newest) ||
+      rank(a[0]) - rank(b[0]) ||
+      b[1].newest - a[1].newest,
+  )
 
   return pool[0]![1].rows
 }
