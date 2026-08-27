@@ -773,6 +773,19 @@ export function LeagueShell({
   const [leaveLeagueHintOpen, setLeaveLeagueHintOpen] = useState(false)
   const [portalMounted, setPortalMounted] = useState(false)
   const [idpUi, setIdpUi] = useState<{ active: boolean; positionMode: string } | null>(null)
+
+  /*
+   * ⚠ THE CONFIG ROW THIS USED TO DEPEND ON DOES NOT EXIST FOR ANY LEAGUE. `idpUi.active` is set
+   * only when `/api/leagues/{id}/idp/config` returns a config, which reads `idpLeagueConfig` —
+   * a table with ZERO rows in production. So every IDP surface gated on it (the matchup view on
+   * Scores, the team dashboard on My Team) has been dark for every league, including the ten
+   * that genuinely roster defenders.
+   *
+   * The config row stays authoritative when present — it carries `positionMode` and is how a
+   * commissioner opts in explicitly. The league's own variant is the fallback, and it agrees
+   * exactly with the scoring predicate on production. See `idpLeagueVariant.ts`.
+   */
+  const idpLeagueActive = (idpUi?.active ?? false) || isIdpLeagueVariant(league.leagueVariant)
   const [idpViewMode, setIdpViewMode] = useState<'offense' | 'defense' | 'full'>('full')
   const [devyConfig, setDevyConfig] = useState<Record<string, unknown> | null | 'none'>(null)
   const [devyBucketStats, setDevyBucketStats] = useState({ active: 0, taxi: 0, devy: 0 })
@@ -1373,7 +1386,7 @@ export function LeagueShell({
                     }
               }
               onGoHome={() => router.push('/dashboard')}
-              idpLeagueActive={idpUi?.active ?? false}
+              idpLeagueActive={idpLeagueActive}
               idpViewMode={idpViewMode}
               onIdpViewModeChange={setIdpViewMode}
               devyLeagueActive={devyConfig !== null && devyConfig !== 'none'}
@@ -1454,7 +1467,7 @@ export function LeagueShell({
               isCommissioner={isCommissioner}
               isHeadCommissioner={isHeadCommissioner}
               onPlayerClick={handlePlayerClick}
-              idpLeagueActive={idpUi?.active ?? false}
+              idpLeagueActive={idpLeagueActive}
               idpViewMode={idpViewMode}
               idpPositionMode={idpUi?.positionMode ?? 'standard'}
               seasonSnapshot={seasonSnapshot}
