@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Activity, HeartPulse, ShieldCheck } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Activity, HeartPulse, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { UserLeague } from '../../types'
 import type { InjuryImpactDashboardResult, InjuryPlayerIntelRow } from '@/lib/injury-impact-dashboard/types'
 import { WarRoomCard } from './WarRoomCard'
@@ -43,15 +43,16 @@ export function InjuryImpactPanel({ league }: { league: UserLeague }) {
   const [data, setData] = useState<InjuryImpactDashboardResult | null>(null)
   const [ready, setReady] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    setReady(false)
-    const sport = league.sport ? String(league.sport).toUpperCase() : 'ALL'
-    void fetch('/api/ai-tools/injury-impact/dashboard', {
+  const sportKey = league.sport ? String(league.sport).toUpperCase() : 'ALL'
+
+  // Extracted from the mount effect so the refresh below can re-read the panel
+  // without duplicating the request body.
+  const fetchImpact = useCallback(async (): Promise<InjuryImpactDashboardResult | null> => {
+    const r = await fetch('/api/ai-tools/injury-impact/dashboard', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        sportFilter: sport,
+        sportFilter: sportKey,
         leagueId: league.id,
         teamContext: 'my_team',
         statusFilter: 'all',
@@ -67,10 +68,17 @@ export function InjuryImpactPanel({ league }: { league: UserLeague }) {
         },
       }),
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json: InjuryImpactDashboardResult | { ok: false } | null) => {
-        if (cancelled) return
-        setData(json && (json as InjuryImpactDashboardResult).ok ? (json as InjuryImpactDashboardResult) : null)
+    if (!r.ok) return null
+    const json = (await r.json()) as InjuryImpactDashboardResult | { ok: false }
+    return (json as InjuryImpactDashboardResult).ok ? (json as InjuryImpactDashboardResult) : null
+  }, [league.id, sportKey])
+
+  useEffect(() => {
+    let cancelled = false
+    setReady(false)
+    void fetchImpact()
+      .then((result) => {
+        if (!cancelled) setData(result)
       })
       .catch(() => {})
       .finally(() => {
@@ -79,7 +87,7 @@ export function InjuryImpactPanel({ league }: { league: UserLeague }) {
     return () => {
       cancelled = true
     }
-  }, [league.id, league.sport])
+  }, [fetchImpact])
 
   const affectedStarters = useMemo<InjuryPlayerIntelRow[]>(() => {
     if (!data) return []
@@ -88,6 +96,49 @@ export function InjuryImpactPanel({ league }: { league: UserLeague }) {
       .sort((a, b) => b.impactScore - a.impactScore)
       .slice(0, 5)
   }, [data])
+
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshNote, setRefreshNote] = useState<string | null>(null)
+
+  /**
+   * Search X for fresh reports on the starters shown, then re-read the panel.
+   *
+   * Scoped to exactly the players on screen — which is at most 5, the same cap
+   * the endpoint enforces. That is deliberate: each player searched costs real
+   * money, so the button never asks about anyone the user cannot currently see.
+   */
+  const onRefresh = useCallback(async () => {
+    if (refreshing || affectedStarters.length === 0) return
+    setRefreshing(true)
+    setRefreshNote(null)
+    try {
+      const res = await fetch('/api/injury-news/context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sport: sportKey, players: affectedStarters.map((p) => p.name) }),
+      })
+      const json = res.ok ? await res.json() : null
+      if (!json?.ok) {
+        // Covers 401, 429 and a disabled spend switch alike: the panel keeps
+        // showing what it already had rather than emptying itself.
+        setRefreshNote(t('dashboard.warroom.injury.refreshFailed'))
+        return
+      }
+      const found = Number(json.refresh?.newRecords ?? 0)
+      setRefreshNote(
+        found > 0
+          ? tInterpolate('dashboard.warroom.injury.refreshFound', { n: found })
+          : t('dashboard.warroom.injury.refreshNone'),
+      )
+      // Only re-read when something actually landed. Re-fetching after a
+      // confirmed "no news" is latency that cannot change what is on screen.
+      if (found > 0) setData(await fetchImpact())
+    } catch {
+      setRefreshNote(t('dashboard.warroom.injury.refreshFailed'))
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing, affectedStarters, sportKey, t, tInterpolate, fetchImpact])
 
   if (!ready) {
     return (
@@ -157,6 +208,29 @@ export function InjuryImpactPanel({ league }: { league: UserLeague }) {
             : t('dashboard.warroom.injury.emptyClean')}
         </div>
       )}
+
+      {/* Only offered when there is someone to ask about — a button that can
+          only ever spend money on an empty list is worse than no button. */}
+      {affectedStarters.length > 0 ? (
+        <div className="flex items-center justify-between gap-2 border-t border-white/[0.04] px-4 py-2">
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white/60 transition hover:bg-white/[0.1] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
+            {refreshing
+              ? t('dashboard.warroom.injury.refreshing')
+              : t('dashboard.warroom.injury.refresh')}
+          </button>
+          {refreshNote ? (
+            <span aria-live="polite" className="truncate text-[10px] text-white/40">
+              {refreshNote}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {data?.degraded ? (
         <p className="flex items-center gap-1.5 border-t border-white/[0.04] px-4 py-2 text-[10px] text-white/30">

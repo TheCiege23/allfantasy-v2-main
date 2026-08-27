@@ -532,6 +532,75 @@
   color: var(--faint);
 }
 
+/* The play feed. Sits with the mover card because it is the same PlayFeedItem
+   shape, one row per play instead of a single highlight. */
+.af-live-plays {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-live-play {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  /* Tone reads down the left edge, so a turnover is scannable without having to
+     read the sentence first. */
+  padding-left: 9px;
+  border-left: 2px solid var(--line2);
+}
+.af-live-play[data-tone='good'] {
+  border-left-color: var(--good);
+}
+.af-live-play[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+.af-live-play[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+.af-live-play-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-live-play-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-live-play-type {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+.af-live-play-type[data-tone='good'] {
+  color: var(--good);
+}
+.af-live-play-type[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-live-play-type[data-tone='warn'] {
+  color: var(--warn);
+}
+.af-live-play-team {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-live-play-line {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  /* One whole sentence, allowed to wrap. A clipped play description is worse
+     than a two-line row. */
+  overflow-wrap: anywhere;
+}
+
 .af-live-next {
   margin: 0;
   padding: 0;

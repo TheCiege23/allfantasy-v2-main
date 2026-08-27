@@ -17,6 +17,7 @@ import {
   YahooApiResponseError,
   YahooImportConnectionError,
 } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
+import { describeYahooRejection } from '@/lib/league-import/yahoo/yahooRejection'
 
 function normalizeSeason(raw: unknown): string {
   const currentSeason = String(new Date().getFullYear())
@@ -31,35 +32,6 @@ function normalizeSport(raw: unknown): string {
   return trimmed || 'nfl'
 }
 
-/**
- * What Yahoo's refusal actually means, in the user's terms.
- *
- * ⚠ THE STATUS WAS BEING THROWN AWAY, AND IT IS THE WHOLE DIAGNOSIS. Every
- * rejection collapsed into one sentence — "Yahoo rejected the league list
- * request. Reconnect Yahoo in League Sync and try again." — so a token that had
- * expired and an approval that never included fantasy read access produced
- * identical output, on a screen with no way to tell them apart and a log line
- * that recorded neither.
- *
- * 403 is the one worth naming outright: it is what Yahoo returns when the app
- * holds a valid token for an account that never granted Fantasy Sports read, and
- * the fix is a specific checkbox at approval time, not a generic "try again".
- *
- * The status only — never Yahoo's response body, which can echo request context.
- */
-function yahooRejectionMessage(status: number): string {
-  if (status === 401) {
-    return 'Yahoo would not accept the saved authorisation for your account. Reconnect Yahoo and try again.'
-  }
-  if (status === 403) {
-    return (
-      'Yahoo refused to share your leagues with AllFantasy. That is the Fantasy Sports ' +
-      'read permission missing from the approval — reconnect Yahoo and make sure you ' +
-      'approve fantasy access when it asks.'
-    )
-  }
-  return `Yahoo rejected the league list request (HTTP ${status}). Reconnect Yahoo and try again.`
-}
 
 export async function POST(req: NextRequest) {
   const auth = await requireVerifiedUser()
@@ -161,7 +133,7 @@ export async function POST(req: NextRequest) {
           error.status,
         )
         return NextResponse.json(
-          { error: yahooRejectionMessage(error.status), yahooStatus: error.status },
+          { error: describeYahooRejection(error.status), yahooStatus: error.status },
           { status: 502 },
         )
       }

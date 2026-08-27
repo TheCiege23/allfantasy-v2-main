@@ -21,7 +21,18 @@ import { prisma } from '@/lib/prisma'
  */
 
 /** A full league fits comfortably; beyond this the prompt is being abused. */
-const MAX_MANAGERS = 20
+/**
+ * ⚠ THIS CAP WAS BEING REPORTED AS THE LEAGUE SIZE. The header line said
+ * `${rows.length} teams`, and rows.length is whatever `take` returned — so
+ * KBFL, a 32-team dynasty league, was described to its own commissioner as
+ * "20 teams". A confident, precise number produced entirely by a LIMIT clause.
+ *
+ * 40 covers the large dynasty and guillotine formats this platform actually
+ * hosts (32-team is not rare here). The real defence is not the number though:
+ * the true total is now counted separately and any truncation is stated, so a
+ * cap can never again be mistaken for a fact.
+ */
+const MAX_MANAGERS = 40
 
 type RosterRow = {
   ownerId: string
@@ -104,8 +115,33 @@ export async function buildLeagueStandingsContext(
   }
   if (rows.length === 0) return null
 
+  /*
+   * The TRUE team count, which is not rows.length. Counted separately precisely
+   * because the two diverge exactly when it matters most — a big league — and
+   * the divergence used to be invisible.
+   */
+  let totalTeams = rows.length
+  try {
+    totalTeams = await prisma.redraftRoster.count({ where: { seasonId: season.id } })
+  } catch {
+    /* Keep rows.length, but then we must not claim it is the league size. */
+    totalTeams = rows.length
+  }
+
   const viewer = rows.find((r) => r.ownerId === userId) ?? null
-  const lines: string[] = [`LEAGUE STANDINGS AND MANAGERS — ${season.season} season, ${rows.length} teams.`]
+  const lines: string[] = [
+    `LEAGUE STANDINGS AND MANAGERS — ${season.season} season, ${totalTeams} teams in the league.`,
+  ]
+
+  if (rows.length < totalTeams) {
+    /*
+     * Say it out loud. A silently truncated list reads as complete, and the
+     * model will happily answer "who is last?" from a partial table.
+     */
+    lines.push(
+      `⚠ ONLY ${rows.length} of those ${totalTeams} teams are listed below. This is a truncated view: do NOT say who is last, count how many teams there are from this list, or claim anyone is absent from the league.`,
+    )
+  }
 
   if (!hasPlayedGames(rows)) {
     /*

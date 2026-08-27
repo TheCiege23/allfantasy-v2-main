@@ -15,6 +15,8 @@ import type {
   RankingContextSlice,
   RosterContextSlice,
   SportsScheduleSlice,
+  ReplayInsightSlice,
+  DevyContextSlice,
   StandingsContextSlice,
   SubscriptionContextSlice,
   UserContextSlice,
@@ -52,6 +54,8 @@ function buildEngine(overrides: Partial<{
   leagueDifficulty: ChimmyContextProvider<LeagueDifficultyContextSlice>
   importedHistory: ChimmyContextProvider<ImportedHistorySlice>
   sportsSchedule: ChimmyContextProvider<SportsScheduleSlice>
+  replayInsights: ChimmyContextProvider<ReplayInsightSlice>
+  devy: ChimmyContextProvider<DevyContextSlice>
 }> = {}) {
   return new ChimmyContextEngine({
     providerTimeoutMs: 200,
@@ -114,6 +118,33 @@ function buildEngine(overrides: Partial<{
           games: [],
           hasRealData: false,
         }),
+      /*
+       * ⚠ THESE TWO WERE NOT FAKED, SO A "HAPPY-PATH" UNIT TEST WAS RUNNING THE
+       * REAL PROVIDERS — and therefore hitting the database. `devy` is what
+       * exposed it: it reports a NAMED failure when its query throws (correct,
+       * and deliberate in DevyContextProvider), so the moment it was added the
+       * every-provider-ok assertion went false. `replayInsights` had been
+       * leaking through the same hole and only looked fine because it degrades
+       * to ok with a null slice.
+       *
+       * Every provider the engine constructs must be stubbed here, or this test
+       * is measuring the environment rather than the engine.
+       */
+      replayInsights:
+        overrides.replayInsights ??
+        fakeProvider<ReplayInsightSlice>("replayInsights", {
+          status: "empty",
+          insightSet: null,
+        }),
+      devy:
+        overrides.devy ??
+        fakeProvider<DevyContextSlice>("devy", {
+          topProspects: [],
+          ranked: 0,
+          unranked: 0,
+          coverage: 0,
+          gaps: [],
+        }),
     },
   })
 }
@@ -129,7 +160,31 @@ describe("ChimmyContextEngine", () => {
     expect(bundle.leagues).toEqual([])
     expect(bundle.activeLeague).toBeNull()
     expect(bundle.memoryRefs).toEqual([])
-    expect(bundle.meta.providers).toHaveLength(11)
+    /*
+     * ⚠ WAS `toHaveLength(11)`, AND A NEW PROVIDER MADE IT 12. Adding `devy`
+     * turned this red with "expected 12 to be 11" — a number that says a count
+     * moved and not WHICH provider arrived, so the failure took a dig through the
+     * engine to interpret.
+     *
+     * Named instead. Adding a provider still fails here, deliberately — every
+     * slice reaching Chimmy should be a decision someone wrote down — but now the
+     * diff names the newcomer, and the list doubles as the record of what is in a
+     * bundle.
+     */
+    expect(bundle.meta.providers.map((p) => p.name).sort()).toEqual([
+      'devy',
+      'importedHistory',
+      'league',
+      'leagueDifficulty',
+      'matchup',
+      'ranking',
+      'replayInsights',
+      'roster',
+      'sportsSchedule',
+      'standings',
+      'subscription',
+      'user',
+    ])
     expect(bundle.meta.providers.every((p) => p.ok)).toBe(true)
   })
 

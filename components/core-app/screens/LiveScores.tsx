@@ -34,6 +34,30 @@ import '@/components/core-app/af-live.css'
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
 
+/**
+ * Play-feed labels and tone.
+ *
+ * Kept local rather than imported from `dash-v2/LivePlays`: that component
+ * renders a raw `LiveEvent` under the `af-d2-*` stylesheet, which this screen
+ * does not load. Sharing it would mean pulling another screen's CSS onto this
+ * one for two small maps.
+ */
+const PLAY_TYPE_LABEL: Record<string, string> = {
+  TOUCHDOWN: 'TD',
+  BIG_PLAY: 'BIG PLAY',
+  TURNOVER: 'TURNOVER',
+  FIELD_GOAL: 'FG',
+  DEFENSIVE_SCORE: 'DEF TD',
+  SPECIAL_TEAMS_SCORE: 'ST TD',
+}
+
+/** A score is good, a turnover costs someone, a big gain is merely notable. */
+function playTone(type: string): 'good' | 'bad' | 'warn' {
+  if (type === 'TURNOVER') return 'bad'
+  if (type === 'BIG_PLAY') return 'warn'
+  return 'good'
+}
+
 export type LiveScoresProps = {
   data: LivePageData
   /** The league held in the rail, so its tie-ins can be marked. Null on the
@@ -176,7 +200,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               id={`af-live-tab-${c.sport}`}
               className="af-live-sport"
               data-active={c.sport === sport}
-              data-quiet={c.liveCount === 0}
+              data-quiet={c.slateCount === 0}
               aria-selected={c.sport === sport}
               aria-controls="af-live-slate"
               /* Only the selected tab is in the tab order; arrow keys are the
@@ -186,7 +210,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               onClick={() => pickSport(c.sport)}
             >
               {c.label}
-              <span className="af-live-sport-count af-num">{c.liveCount}</span>
+              {/* Today's slate for this sport, not games in progress — a live
+                  count reads 0 for most of the day and made the badge look broken. */}
+              <span
+                className="af-live-sport-count af-num"
+                aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} today`}
+              >
+                {c.slateCount}
+              </span>
             </button>
           ))}
         </div>
@@ -273,6 +304,53 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                   ) : null}
                 </div>
               </div>
+            </div>
+          ) : null}
+
+          {data.impact.plays.length > 0 ? (
+            <div className="af-live-card">
+              {/*
+                Conditional, not empty-stated, because both cards either side of
+                it behave that way — an aside stacked with "nothing yet"
+                placeholders is noise on a Tuesday. `impact.plays` is NFL-only by
+                construction, so on any other tab this card is simply absent.
+              */}
+              <h2 className="af-label">Live plays</h2>
+              <ul className="af-live-plays">
+                {data.impact.plays.map((p) => (
+                  /* Keyed on the feed's own idempotency key — the same key it
+                     dedupes on, so re-polling cannot duplicate a row. */
+                  <li key={p.id} className="af-live-play" data-tone={playTone(p.type)}>
+                    <MiniPlayerImg
+                      sleeperId={null}
+                      name={p.playerName}
+                      avatarUrl={p.imageUrl}
+                      size={28}
+                    />
+                    <span className="af-live-play-text">
+                      <span className="af-live-play-head">
+                        <span className="af-live-play-type af-num" data-tone={playTone(p.type)}>
+                          {PLAY_TYPE_LABEL[p.type] ?? p.type}
+                        </span>
+                        {p.team ? <span className="af-live-play-team af-num">{p.team}</span> : null}
+                      </span>
+                      {/*
+                        `headline` already reads "Bijan Robinson (RB) ran for 17
+                        yards" — it carries the name and the position, so those
+                        are not repeated beside it.
+
+                        ⚠ AND `yards` IS NOT RENDERED, ON PURPOSE. It is
+                        `Math.round(delta)` of whatever stat moved, so it is a
+                        yardage only for yardage stats; on a touchdown the stat
+                        is a counter and the delta is 1, which would print as
+                        "+1" next to a scoring play. The headline is the composed
+                        sentence that already knows the difference.
+                      */}
+                      <span className="af-live-play-line">{p.headline}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 

@@ -332,7 +332,13 @@ identifiers:
     SOCCER: { format: unknown }   # see GAPS.md
     # ⚠️ The two numeric segments are team IDs, but which is home vs away is
     # NOT documented. One weak sample suggests {home}-{away}. VERIFY before relying.
-    home_away_order: unverified
+    home_away_order: away_home   # RESOLVED 2026-08-26 — see fixtures/live.MLB.json
+    home_away_order_evidence: >
+      15 of 15 MLB games in that fixture are {away_team_id}-{home_team_id}, cross-checked against
+      full_box.home_team.team_id / full_box.away_team.team_id in the same payload. ZERO matched
+      {home}-{away}. The earlier note in this file said "one weak sample suggests {home}-{away}" —
+      that reading was BACKWARDS, and anything codified on it renders every matchup reversed.
+      Confirmed for MLB only; re-check per sport before relying on it elsewhere.
 
   season_arg:
     rule: Always the year the season STARTED.
@@ -393,7 +399,36 @@ fields:
            "full_box.home_team.score", "full_box.away_team.score", game_time, clock]
 
   MLB:
-    confidence: low
+    confidence: high   # for `live`; schedule/play_by_play below remain doc-derived
+    live_fixture: fixtures/live.MLB.json   # captured 2026-08-26, 15 completed games
+    # ⚠ THE PLAYER BOX HANGS OFF THE GAME ROOT, NOT THE TEAM SHELL. Writing this parser from the
+    # NBA hint (`playerBox: 'player_box'` under full_box.<side>_team) yields ZERO rows on a slate
+    # of fifteen games. The measured path is:
+    #     player_box.{away_team|home_team}.{batting|pitching}.<PLAYER_ID>
+    # and the innermost level is an OBJECT KEYED BY PLAYER ID — the entry carries no player_id
+    # field of its own, so the key IS the identifier.
+    live:
+      game:      [game_ID, sport, season, season_type, round, status, game_status, game_time,
+                  event_name, game_location, home_team_name, away_team_name, full_box, player_box]
+      team_shell: ["full_box.<side>_team.abbrv", "full_box.<side>_team.team_id",
+                   "full_box.<side>_team.score", "full_box.<side>_team.record",
+                   "full_box.<side>_team.mascot", "full_box.<side>_team.division_name",
+                   "full_box.<side>_team.quarter_scores.<inning>",
+                   "full_box.<side>_team.team_stats.{AB,H,R,RBI,HR,BB,SO,SB,CS,2B,3B,E}"]
+      current:   ["full_box.current_box.inning", "full_box.current_box.inning_half",
+                  "full_box.current_box.balls", "full_box.current_box.strikes",
+                  "full_box.current_box.outs",
+                  "full_box.current_box.current_batter.{id,name,position}",
+                  "full_box.current_box.current_pitcher.{id,name,position}"]
+      player_box_groups: [batting, pitching]
+      batting:   [player, POS, position_category, status, BAT_ORD, AB, H, R, RBI, HR, BB, SO,
+                  SB, CS, "1B", "2B", "3B", HBP, IBB, E, PO, Outs]
+      pitching:  [player, POS, position_category, status, IP, K, W, L, S, HLD, BS, ER, R, H, HR,
+                  BB, HBP, IBB, SB, CS, "1B", "2B", "3B", BK, WP, E, PO, pitches, strikes]
+      note: >
+        The batting/pitching FIELD names already matched ROLLING_INSIGHTS_FIELD_MAPS.MLB
+        (live_batting / live_pitching) — what was missing from this contract was the SHELL that
+        says where those objects hang. Field maps without a shell path are not enough to parse.
     schedule: [game_ID, season_type, season, game_time, home_team, away_team,
                "home_pitcher.player", "away_pitcher.player"]
     play_by_play: [game_ID, "innings[].inning", "innings[].half",
@@ -474,9 +509,9 @@ open_questions:
   - id: game_id_formats
     question: game_id format for NHL, NCAAFB, NCAABB, SOCCER.
     blocking: per-game polling
-  - id: home_away_order
-    question: In "YYYYMMDD-{n}-{n}", is the first number home or away?
-    blocking: matchup display correctness
+  # RESOLVED 2026-08-26 — {away}-{home}, 15/15 in fixtures/live.MLB.json. See
+  # identifiers.game_id.home_away_order. Kept here so the question is not re-asked.
+  # - id: home_away_order  (closed)
   - id: ncaa_injuries_real_404
     question: >
       Are NCAAFB/NCAABB injuries genuinely absent, or merely undocumented?

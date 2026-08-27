@@ -2,20 +2,30 @@
  * GET/POST /api/cron/import-injuries
  *
  * Vercel Cron schedule: every 15 minutes (see vercel.json).
- * Syncs NFL/NCAAF injury reports from API-Sports into the sportsInjury table.
+ * Syncs injury reports for EVERY supported sport into the sportsInjury table.
  * InjuryReportRecord rows are written by the sports-data-importer which reads
  * from this table, so freshness here directly affects AI injury context.
  *
  * Optional query params:
- *   sport   — "NFL" (default) or "NCAAF"
+ *   sport   — one supported sport code; omitted runs all of them
  *   season  — 4-digit year string (defaults to current season)
+ *
+ * ⚠ WHY THIS GREW FROM TWO SPORTS TO SEVEN (2026-08-27). Measured on production the same day,
+ * `sports_injuries` last moved for MLB, NBA, NHL and SOCCER on 2026-05-01 and for NCAAB on
+ * 2026-04-26 — nearly four months stale — because this route only ever iterated NFL and NCAAF.
+ * Everything downstream that reads an injury designation (playerUrgency, the projection engine's
+ * availability input, Decision OS context) was therefore reading spring rows for five sports
+ * while reporting itself healthy.
  */
 
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncRollingInsightsInjuriesToDb } from "@/lib/injuries/rollingInsightsInjuries"
-import { syncEspnInjuriesToDb } from "@/lib/injuries/espnInjuries"
+import { espnHasInjuryFeed, syncEspnInjuriesToDb } from "@/lib/injuries/espnInjuries"
+import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
+import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
 /**
  * PROVIDER MIGRATED 2026-08-10: API-Sports -> Rolling Insights.
@@ -55,7 +65,7 @@ export const dynamic = "force-dynamic"
  */
 export const maxDuration = 240
 
-type Sport = "NFL" | "NCAAF"
+type Sport = string
 
 /**
  * ⚠ OMITTING `sport` RUNS EVERY SPORT. This route used to default to NFL, so
@@ -65,15 +75,34 @@ type Sport = "NFL" | "NCAAF"
  * once. An explicit `?sport=` still runs exactly that one and returns the
  * original single-sport response, because admin and manual callers pass it.
  */
-const ALL_SPORTS: Sport[] = ["NFL", "NCAAF"]
+const ALL_SPORTS: Sport[] = SUPPORTED_SPORTS.map((s) => String(s))
 
 function resolveSport(param: string | null): Sport {
-  if (param?.toUpperCase() === "NCAAF") return "NCAAF"
-  return "NFL"
+  const upper = param?.trim().toUpperCase() ?? ""
+  return ALL_SPORTS.includes(upper) ? upper : "NFL"
 }
 
 function resolveSports(param: string | null): Sport[] {
-  return param ? [resolveSport(param)] : ALL_SPORTS
+  if (param) return [resolveSport(param)]
+  /*
+   * Rotated, not fixed-order. Seven sports against a 240s budget checked BETWEEN sports means a
+   * fixed order would refresh NFL every quarter-hour and never reach the tail — the failure mode
+   * `rotateForFairness` exists to prevent. NFL still leads most periods by volume of consumers,
+   * but no sport can be starved indefinitely.
+   */
+  return rotateForFairness(ALL_SPORTS)
+}
+
+/**
+ * Which providers can answer for this sport at all.
+ *
+ * A sport with NO source is not a failing sport. SOCCER has neither — Rolling Insights documents
+ * no injuries endpoint for it and ESPN scopes soccer per competition with no all-competition
+ * injuries path — so it reports `providerCoverage: "none"` and stays green. Reporting it red
+ * every fifteen minutes forever is how an operator learns to ignore the whole job.
+ */
+function sourcesFor(sport: Sport): { rollingInsights: boolean; espn: boolean } {
+  return { rollingInsights: riSupports("injuries", sport), espn: espnHasInjuryFeed(sport) }
 }
 
 async function runOneSport(url: URL, sport: Sport) {
@@ -81,23 +110,41 @@ async function runOneSport(url: URL, sport: Sport) {
 
   const startedAt = Date.now()
 
+  const sources = sourcesFor(sport)
+
   try {
-    // Rolling Insights is NFL-only: injuries/NCAAF answers 304-empty, which is
-    // why college sat at ONE injury row. ESPN publishes both codes and needs no
-    // key, so it runs for NFL as corroboration and for NCAAF as the only source.
-    // The upsert key includes the source, so the two feeds coexist and
-    // injuryReadPort picks the freshest row per player.
+    /*
+     * Two feeds, each run only where the provider actually documents the sport.
+     *
+     * Rolling Insights covers NFL, NBA, MLB and NHL (support_matrix.injuries) and nothing else —
+     * `injuries/NCAAF` answers 304-empty, which is why college once sat at ONE injury row. ESPN
+     * publishes both football codes plus NBA, NCAAB, MLB and NHL, needs no key, and so acts as
+     * corroboration where RI also answers and as the only source where it does not.
+     *
+     * The upsert key includes the source, so the two feeds coexist and injuryReadPort picks the
+     * freshest row per player rather than one overwriting the other.
+     */
     const [result, espn] = await Promise.all([
-      sport === 'NFL'
+      sources.rollingInsights
         ? syncRollingInsightsInjuriesToDb({ sport })
-        : Promise.resolve({ fetched: 0, written: 0, unparseableStatus: 0, legacyExpired: 0, errors: [] as string[] }),
-      syncEspnInjuriesToDb({ sport }).catch((e) => ({
-        sport,
-        fetched: 0,
-        written: 0,
-        skippedNoPlayer: 0,
-        errors: [e instanceof Error ? e.message : String(e)],
-      })),
+        : Promise.resolve({
+            fetched: 0,
+            written: 0,
+            unparseableStatus: 0,
+            legacyExpired: 0,
+            unsupported: true,
+            notModified: false,
+            errors: [] as string[],
+          }),
+      sources.espn
+        ? syncEspnInjuriesToDb({ sport }).catch((e) => ({
+            sport,
+            fetched: 0,
+            written: 0,
+            skippedNoPlayer: 0,
+            errors: [e instanceof Error ? e.message : String(e)],
+          }))
+        : Promise.resolve({ sport, fetched: 0, written: 0, skippedNoPlayer: 0, errors: [] as string[] }),
     ])
 
     /**
@@ -107,16 +154,61 @@ async function runOneSport(url: URL, sport: Sport) {
      * import-projections: non-2xx too, because Vercel's cron dashboard keys off
      * the HTTP status and a 200 carrying `ok:false` still reads as healthy.
      */
-    // Either feed landing rows counts as success. For NCAAF, ESPN is the only
-    // one that can, and reporting failure because RI wrote nothing would be
-    // reporting a fact about the wrong provider.
-    const failed = result.written === 0 && espn.written === 0
+    /*
+     * Either feed landing rows counts as success. For NCAAF, ESPN is the only one that can, and
+     * reporting failure because RI wrote nothing would be reporting a fact about the wrong
+     * provider.
+     *
+     * TWO OUTCOMES ARE EXPLICITLY NOT FAILURES:
+     *   - no provider covers the sport at all (SOCCER) — nothing to write, nothing broken;
+     *   - Rolling Insights answered 304 through a cache-busted retry and ESPN did not cover the
+     *     sport. Per the unresolved `304_conflict` that means UNCHANGED-or-empty and the contract
+     *     refuses to say which, so the existing rows stand. Calling that a failure would be
+     *     asserting the reading the contract declines to make.
+     */
+    const noCoverage = !sources.rollingInsights && !sources.espn
+    const unchangedOnly = result.notModified && !sources.espn
+
+    /*
+     * A PROVIDER THAT ANSWERS 200 WITH ZERO ROWS IS NOT A FAILING PROVIDER.
+     *
+     * Measured 2026-08-27: ESPN returns HTTP 200 and `injuries: []` for college basketball,
+     * because the season starts in November and nobody is hurt yet. Treating that as a failure
+     * meant this route 500'd for NCAAB and would keep doing so for three months — the exact
+     * "red light that can never go green" this file already refuses to ship elsewhere.
+     *
+     * ⚠ THIS MUST NOT WEAKEN THE GUARD THAT CAUGHT THE 17-DAY OUTAGE. That outage was API-Sports
+     * returning a plan-restriction PAYLOAD, which lands in `errors` — so the discriminator is
+     * whether a provider ERRORED, not whether rows arrived. Errors still fail. Rows fetched but
+     * none written still fails, because that is a write bug. Only a clean, silent, error-free zero
+     * from every configured provider is allowed through, and it is reported explicitly rather than
+     * blending into a green.
+     */
+    const providerErrored = result.errors.length > 0 || espn.errors.length > 0
+    const cleanEmpty =
+      !providerErrored && result.fetched === 0 && espn.fetched === 0 && !result.notModified
+
+    const failed =
+      !noCoverage && !unchangedOnly && !cleanEmpty && result.written === 0 && espn.written === 0
+
+    const providerLabel = noCoverage
+      ? "none"
+      : [sources.rollingInsights ? "rolling_insights" : null, sources.espn ? "espn" : null]
+          .filter(Boolean)
+          .join("+")
+
     return {
       body: {
         ok: !failed,
         sport,
         season: season ?? "current",
-        source: sport === 'NFL' ? "rolling_insights+espn" : "espn",
+        source: providerLabel,
+        providerCoverage: noCoverage ? "none" : "partial_or_full",
+        /** Every configured provider answered 200 with zero rows and no error — an out-of-season
+         *  feed, not an outage. Surfaced so it is legible rather than an unexplained green. */
+        providerReturnedEmpty: cleanEmpty || undefined,
+        /** RI answered 304 through the retry: unchanged-or-empty, existing rows untouched. */
+        rollingInsightsNotModified: result.notModified || undefined,
         synced: result.written + espn.written,
         fetched: result.fetched + espn.fetched,
         espn: { fetched: espn.fetched, written: espn.written, errors: espn.errors.slice(0, 3) },
@@ -160,8 +252,21 @@ async function handle(req: NextRequest) {
    * own errors, so a Rolling Insights outage on NFL still lets NCAAF write from
    * ESPN. The two separate crons had that isolation for free.
    */
+  /*
+   * ⚠ SEVEN SPORTS NEED A BUDGET; TWO DID NOT. The loop is sequential and each sport makes up to
+   * two provider calls, so the worst case scales with the sport count against a fixed platform
+   * ceiling. `createRunBudget` stops BETWEEN sports and names what it did not reach, so a slow
+   * provider costs the tail this run and the rotation gives it the lead next run — instead of a
+   * 502 at 300s that writes nothing and records no telemetry at all.
+   */
+  const budget = createRunBudget(200_000)
   const results = []
+  const deferred: string[] = []
   for (const sport of resolveSports(explicit)) {
+    if (!explicit && budget.exhausted()) {
+      deferred.push(sport)
+      continue
+    }
     results.push(await runOneSport(url, sport))
   }
 
@@ -182,6 +287,10 @@ async function handle(req: NextRequest) {
     {
       ok: !anyFailed,
       sports: results.map((r) => r.body),
+      /** Named, not silent: a sport the budget cut is a fact the operator needs, and the
+       *  rotation means it leads the next period rather than never running. */
+      deferredForBudget: deferred.length ? deferred : undefined,
+      budgetMsRemaining: budget.remainingMs(),
       timestamp: new Date().toISOString(),
     },
     { status: anyFailed ? 500 : 200 },

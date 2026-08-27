@@ -15,6 +15,7 @@ vi.mock('@/lib/xai-client', async () => {
 import {
   answerSportsQuestionFromSearch,
   isSearchableSportsQuestion,
+  stripMarkdown,
 } from '@/lib/ai/liveSportsAnswer'
 
 /** An xAI Responses payload carrying text plus `url_citation` annotations. */
@@ -73,6 +74,50 @@ describe('isSearchableSportsQuestion', () => {
   it('ignores empty and trivially short input', () => {
     expect(isSearchableSportsQuestion('')).toBe(false)
     expect(isSearchableSportsQuestion('hi')).toBe(false)
+  })
+})
+
+describe('stripMarkdown', () => {
+  /*
+   * The exact first live answer, which rendered its asterisks and brackets
+   * literally because the chat bubble is plain text.
+   */
+  it('cleans the real answer that shipped with markdown showing', () => {
+    expect(
+      stripMarkdown(
+        '**32 home runs** were hit in MLB on August 26, 2026 (across 15 games).[[1]](https://livehomeruns.com/)',
+      ),
+    ).toBe('32 home runs were hit in MLB on August 26, 2026 (across 15 games).')
+  })
+
+  /*
+   * ⚠ NOT COSMETIC. xAI returns citation annotations with start_index and
+   * end_index both zero, so nothing maps a source to the sentence it supports.
+   * A [1] pinned to a number asserts exactly that mapping.
+   */
+  it('removes inline citation markers, which claim an attribution we cannot make', () => {
+    expect(stripMarkdown('The Yankees won 6-2.[1] The Mets lost.[2]')).toBe(
+      'The Yankees won 6-2. The Mets lost.',
+    )
+  })
+
+  it('keeps link text and drops the URL', () => {
+    expect(stripMarkdown('See [the box score](https://example.com/box) for detail.')).toBe(
+      'See the box score for detail.',
+    )
+  })
+
+  it('handles bold, italic, headings and bullets', () => {
+    expect(stripMarkdown('## Results\n- **Alpha** beat *Beta*\n- Gamma drew')).toBe(
+      'Results\nAlpha beat Beta\nGamma drew',
+    )
+  })
+
+  /* Ordinary prose must survive untouched — including lone asterisks. */
+  it('leaves plain text alone', () => {
+    const plain = 'There were 41 home runs across MLB on August 26, 2026.'
+    expect(stripMarkdown(plain)).toBe(plain)
+    expect(stripMarkdown('2 * 3 = 6')).toBe('2 * 3 = 6')
   })
 })
 

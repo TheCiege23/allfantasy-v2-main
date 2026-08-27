@@ -92,6 +92,17 @@ export type LiveImpact = {
   liveGames: number
   /** The most recent notable play involving a player you roster. */
   biggestMover: (PlayFeedItem & { leagues: string[] }) | null
+  /**
+   * The recent play feed for this slate, newest first — the very rows
+   * `biggestMover` is picked from, now kept instead of thrown away.
+   *
+   * ⚠ NFL ONLY, AND DELIBERATELY EMPTY ON EVERY OTHER TAB. The cache behind it
+   * is the literal key `pbp:feed:NFL` and every `LiveEventType` is an NFL play,
+   * so there is genuinely nothing to show for MLB or NCAAF. Letting the NFL
+   * feed render under another sport's tab would caption real plays with the
+   * wrong games — the exact class of confident lie this page refuses to tell.
+   */
+  plays: PlayFeedItem[]
   /** Your players whose games have not kicked off yet. */
   upNext: Array<{ playerName: string; matchup: string; startTime: string }>
 }
@@ -99,7 +110,8 @@ export type LiveImpact = {
 export type LivePageData = {
   sport: string
   scope: 'my' | 'all'
-  counts: Array<{ sport: string; label: string; liveCount: number }>
+  /** Per-sport tab badges. `slateCount` is TODAY'S SLATE, not games in progress. */
+  counts: Array<{ sport: string; label: string; slateCount: number }>
   games: LiveGameCard[]
   impact: LiveImpact
   /** When the underlying feed was last refreshed — drives "updated Ns ago". */
@@ -337,10 +349,38 @@ export async function getLivePageData(opts: {
     }),
   )
 
+  /*
+   * ⚠ THE BADGE COUNTS TODAY'S SLATE, NOT GAMES IN PROGRESS. User-confirmed
+   * 2026-08-27, and the previous behaviour was indefensible either way:
+   *
+   * It was `rows.filter(isLiveRow)`, and `isLiveRow` matches only "progress",
+   * "halftime", "end_period" or period > 0. Our own `SportsGame.status` column
+   * holds at least four vocabularies — "NS", "scheduled", "FT", "Final", and
+   * (genuinely) raw date strings like "8/27 - 7:05 PM EDT" written into the
+   * status field by one of the ingest writers. NONE of those match, so every
+   * sport read from the database scored zero live games forever.
+   *
+   * Only the ACTIVE sport could ever show a number, because `loadActiveSlate`
+   * refreshes through ESPN and gets a real status vocabulary back. That is the
+   * whole "the number vanishes when I click another tab" bug: not a UI defect,
+   * a predicate that cannot read the data we store.
+   *
+   * `entry.rows` is already windowed by `isInSlateWindow`, and the cached reader
+   * runs `pickFreshestSourceRows`, so this counts DISTINCT FIXTURES from one
+   * source — not the 3-4 rows per fixture the table holds across feeds. Measured
+   * on prod: NFL 4, MLB 7, NCAAF 53, which are the real slates.
+   *
+   * A sport genuinely out of season still reads 0 (NHL/NBA/NCAAB in August have
+   * no rows at all). That zero is correct and must not be "fixed".
+   *
+   * ⚠ `isLiveRow` is still the right predicate for a single game's `isLive`
+   * flag below, so it stays — but it is equally blind there for DB-sourced rows.
+   * The real repair is on the ingest side: stop writing a date into `status`.
+   */
   const counts = perSport.map((entry) => ({
     sport: entry.sport,
     label: SPORT_LABELS[entry.sport] ?? entry.sport,
-    liveCount: entry.rows.filter(isLiveRow).length,
+    slateCount: entry.rows.length,
   }))
 
   const active = perSport.find((entry) => entry.sport === sport)
@@ -467,7 +507,7 @@ export async function getLivePageData(opts: {
     scope,
     counts,
     games: visible,
-    impact: await buildImpact(visible, players),
+    impact: await buildImpact(visible, players, sport),
     fetchedAt: active?.fetchedAt ?? new Date().toISOString(),
     hasRosterData,
     loadFailed: active?.failed ?? false,
@@ -478,6 +518,7 @@ export async function getLivePageData(opts: {
 async function buildImpact(
   games: readonly LiveGameCard[],
   players: Map<string, RosteredPlayer>,
+  sport: string,
 ): Promise<LiveImpact> {
   const liveGames = games.filter((g) => g.isLive)
 
@@ -496,7 +537,20 @@ async function buildImpact(
     }
   }
 
-  const plays = await getPlayFeed().catch(() => [] as PlayFeedItem[])
+  /*
+   * ⚠ SCOPED BY SPORT, NOT BY GAME ID — AND THAT IS NOT THE OBVIOUS CHOICE.
+   * The tempting scoping is "keep the plays whose `gameId` is on this slate".
+   * It yields NOTHING, always, because the two ids come from different
+   * providers: the feed is built from `SportsGame.externalId` rows where
+   * `source: 'rolling_insights'`, while the active slate is fetched from ESPN
+   * and carries `event.id`. They are different id spaces that happen to share a
+   * field name. The feed's own cache key is `pbp:feed:NFL`, so the sport is the
+   * scope that is both honest and non-empty.
+   *
+   * Skipping the read outright off-NFL also spares every other tab a cache
+   * lookup that could only ever return plays it must not display.
+   */
+  const plays = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
   const liveGameIds = new Set(liveGames.map((g) => g.gameId))
   /*
    * The most recent play involving a player YOU roster, in a game that is
@@ -530,6 +584,7 @@ async function buildImpact(
     livePlayers: livePlayerIds.size,
     liveGames: liveGames.length,
     biggestMover,
+    plays,
     upNext,
   }
 }

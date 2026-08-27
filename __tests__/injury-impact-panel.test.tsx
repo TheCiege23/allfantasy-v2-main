@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { InjuryImpactPanel } from '@/app/dashboard/components/warroom/InjuryImpactPanel'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -106,5 +106,79 @@ describe('InjuryImpactPanel (Phase 3.2)', () => {
     stubFetch(result({ summaryCounts: { outIr: 0, doubtful: 0, questionable: 0, limited: 0, fullPractice: 5 }, players: [] }))
     render(<InjuryImpactPanel league={league} />)
     await waitFor(() => expect(screen.getByText('dashboard.warroom.injury.emptyClean')).toBeTruthy())
+  })
+
+  describe('X news refresh', () => {
+    const twoStartersAndABench = result({
+      players: [
+        player({ name: 'A.J. Brown', playerKey: 'p1', severity: 'questionable', impactScore: 72 }),
+        player({ name: 'Second Starter', playerKey: 'p2', severity: 'doubtful', impactScore: 40 }),
+        player({ name: 'Bench Guy', playerKey: 'p3', isStarter: false, impactScore: 99 }),
+      ],
+    })
+
+    /** Routes by URL so the panel read and the X refresh can answer differently. */
+    function stubRoutedFetch(opts: { impact: unknown; refresh?: unknown; refreshOk?: boolean }) {
+      const calls: Array<{ url: string; body: Record<string, unknown> | null }> = []
+      global.fetch = vi.fn().mockImplementation(async (url: unknown, init?: RequestInit) => {
+        const u = String(url)
+        calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : null })
+        if (u.includes('/api/injury-news/context')) {
+          return { ok: opts.refreshOk ?? true, json: async () => opts.refresh }
+        }
+        return { ok: true, json: async () => opts.impact }
+      }) as unknown as typeof fetch
+      return calls
+    }
+
+    it('asks about exactly the starters on screen, and nobody else', async () => {
+      // The money guard at the UI edge: every extra name here is a real bill,
+      // so a bench player the panel does not show must never be searched.
+      const calls = stubRoutedFetch({
+        impact: twoStartersAndABench,
+        refresh: { ok: true, refresh: { newRecords: 0, notSearched: [] } },
+      })
+      render(<InjuryImpactPanel league={league} />)
+      await waitFor(() => expect(screen.getByText('A.J. Brown', { exact: false })).toBeTruthy())
+
+      fireEvent.click(screen.getByRole('button'))
+
+      await waitFor(() =>
+        expect(calls.some((c) => c.url.includes('/api/injury-news/context'))).toBe(true),
+      )
+      const refreshCall = calls.find((c) => c.url.includes('/api/injury-news/context'))!
+      expect(refreshCall.body?.players).toEqual(['A.J. Brown', 'Second Starter'])
+    })
+
+    it('reports a confirmed "no news" rather than implying it found something', async () => {
+      stubRoutedFetch({
+        impact: twoStartersAndABench,
+        refresh: { ok: true, refresh: { newRecords: 0, notSearched: [] } },
+      })
+      render(<InjuryImpactPanel league={league} />)
+      await waitFor(() => expect(screen.getByText('A.J. Brown', { exact: false })).toBeTruthy())
+
+      fireEvent.click(screen.getByRole('button'))
+      await waitFor(() => expect(screen.getByText('dashboard.warroom.injury.refreshNone')).toBeTruthy())
+    })
+
+    it('keeps the rows it already had when the refresh fails', async () => {
+      // Covers 401, 429 and a disabled spend switch alike — a failed lookup must
+      // not blank a panel the user is already reading.
+      stubRoutedFetch({ impact: twoStartersAndABench, refreshOk: false, refresh: null })
+      render(<InjuryImpactPanel league={league} />)
+      await waitFor(() => expect(screen.getByText('A.J. Brown', { exact: false })).toBeTruthy())
+
+      fireEvent.click(screen.getByRole('button'))
+      await waitFor(() => expect(screen.getByText('dashboard.warroom.injury.refreshFailed')).toBeTruthy())
+      expect(screen.getByText('A.J. Brown', { exact: false })).toBeTruthy()
+    })
+
+    it('offers no refresh button when there is nobody to ask about', async () => {
+      stubFetch(result({ summaryCounts: { outIr: 0, doubtful: 0, questionable: 0, limited: 0, fullPractice: 5 }, players: [] }))
+      render(<InjuryImpactPanel league={league} />)
+      await waitFor(() => expect(screen.getByText('dashboard.warroom.injury.emptyClean')).toBeTruthy())
+      expect(screen.queryByRole('button')).toBeNull()
+    })
   })
 })

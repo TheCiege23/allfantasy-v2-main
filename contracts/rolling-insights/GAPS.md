@@ -63,7 +63,7 @@
 
 | ID | Gap | Status | Notes |
 |---|---|---|---|
-| `G-08` | In `game_id` = `YYYYMMDD-{n}-{n}`, is the first number **home or away**? | UNVERIFIED | One weak sample suggests `{home}-{away}`. **Do not codify on one sample.** Cross-check 3+ games against a known schedule. |
+| `G-08` | In `game_id` = `YYYYMMDD-{n}-{n}`, is the first number **home or away**? | ✅ **RESOLVED 2026-08-26 — it is `{away}-{home}`** | **The earlier guess was BACKWARDS.** 15 of 15 MLB games in `fixtures/live.MLB.json` are `{away_team_id}-{home_team_id}`, cross-checked against `full_box.home_team.team_id` / `full_box.away_team.team_id` in the same payload; ZERO matched `{home}-{away}`. Anything codified on the old "weak sample" renders every matchup reversed. Confirmed for MLB only — re-check per sport. |
 | `G-09` | Does `RS-DATA-TYPE` response header actually exist? | CONTRADICTED | Notion docs mention it (`LIVE-DATA`, `INJURY-REPORTS`). The vendor's own skill repo documents **no** custom response headers. **Do not depend on it either way.** |
 | `G-10` | Are NCAAFB/NCAABB injuries genuinely absent, or just undocumented? | UNVERIFIED | Vendor instructs agents not to call them — that's **policy, not a 404 guarantee**. Worth one probe before hard-coding unavailability. |
 | `G-11` | Does `/play-by-play` really 404 for NHL/NCAAFB? | UNVERIFIED | Same reasoning as G-10. Vendor scripts hard-block it client-side, which tells us nothing about the server. |
@@ -126,3 +126,102 @@ play-by-play) carried "confirm during the trial". Confirmed.
 **What it does NOT change:** `/injuries` still moves to hourly. That was never a
 quota decision — the feed is collected twice a day, so polling it faster buys
 nothing no matter how many calls are permitted.
+
+---
+
+## 📏 MEASURED 2026-08-27 — `N-02` RESOLVED IN PRACTICE: **304 can mean NOT SUBSCRIBED**
+
+### The controlled result
+
+**This deployment holds TWO Rolling Insights accounts with DISJOINT sport coverage.** Same URL,
+same headers, same millisecond buster, retried once — the ONLY variable is which `RSC_token` is
+sent. `team-info/{SPORT}`, measured directly:
+
+| credential | NFL | MLB | NBA | NHL | NCAABB | NCAAFB | SOCCER (EPL·LALIGA·SERIEA) |
+|---|---|---|---|---|---|---|---|
+| `ROLLING_INSIGHTS_RSC_TOKEN`  | **200** | 304 | 304 | 304 | 304 | 304 | 304 |
+| `ROLLING_INSIGHTS_RSC_TOKEN2` | 304 | **200** | **200** | **200** | **200** | **200** | **200** |
+
+That is a proper control, not an inference. **A 304 from this vendor can mean "this account is not
+subscribed to this sport"** — a third reading neither the skill repo ("cache artifact to defeat")
+nor the OpenAPI spec ("valid request, empty result set") documents.
+
+### There is also a LEGITIMATE 304, and it looks identical
+
+On the entitled account, `player-stats/{season}/{SPORT}`:
+
+| | 2026 | 2025 |
+|---|---|---|
+| MLB | 200 | 200 |
+| NBA | **304** | 200 |
+| NHL | **304** | 200 |
+
+NBA and NHL 2026 had not tipped off in August. So 304 there means *not yet started*. **Three
+distinct causes, one status code, no way to tell them apart from the response alone.**
+
+### The rule that survives all three
+
+1. Send no-cache headers + a fresh millisecond buster. Retry once. (kills the cache reading)
+2. Still 304 → **try the other credential**. (kills the entitlement reading)
+3. Still 304 → treat as UNCHANGED and fall back to the prior season. (handles not-yet-started)
+4. **Never** write an emptiness on a 304, at any stage.
+
+Implemented in `lib/workers/providers/rollingInsightsRest.ts` (`riCredentialsFor` + the two nested
+escalations in `riFetch`). Normal cost is one request — the sport's own account is tried first.
+
+### ⚠ The trap that cost real time here
+
+The first reader took **the first token present and stopped**. `ROLLING_INSIGHTS_RSC_TOKEN` is
+set, so `..._TOKEN2` was NEVER tried and all six sports on the second account 304'd forever — while
+the pipeline reported itself healthy, because refusing to write on a 304 is correct behaviour. It
+was honest about the wrong cause.
+
+Compounding it: the non-NFL rows already in `SportsPlayer` are real, carry real RI player ids, and
+are 15 hours to 119 days old. They read as proof of entitlement and are not.
+
+### Still worth asking the vendor (do not probe)
+
+*Should an unentitled sport return 401/403 rather than 304?* A 403 would be unambiguous and would
+let a client report "not subscribed" instead of "unchanged". Until then, credential fallback is the
+only way to tell them apart.
+
+---
+
+## ✅ CAPTURED 2026-08-26 — `/live` for **MLB** (`fixtures/live.MLB.json`)
+
+15 completed games, via `scripts/probe.sh live MLB "" 2026-08-26`. Envelope `data.MLB`.
+
+### The one thing worth reading twice
+
+**The player box hangs off the GAME ROOT, not the team shell.**
+
+```
+game.player_box.{away_team|home_team}.{batting|pitching}.<PLAYER_ID> = { player, POS, AB, H, … }
+```
+
+Our first parser was written from the NBA hint in `rollingInsightsFieldMaps`
+(`playerBox: 'player_box'`, listed under the team shell) and looked for
+`full_box.<side>_team.player_box`. It found **zero games on a slate of fifteen**, while the
+provider returned HTTP 200 with no error — so nothing failed, the pipeline just wrote nothing.
+
+Three separate mistakes, all invisible:
+1. `player_box` is a SIBLING of `full_box`, not a child of the team node.
+2. The innermost level is an OBJECT KEYED BY PLAYER ID, not an array.
+3. The entry carries **no `player_id` field at all** — the key IS the identifier. A parser
+   requiring `player_id` drops every line even after it finds them.
+
+⚠ **The batting/pitching FIELD names were already correct** in
+`ROLLING_INSIGHTS_FIELD_MAPS.MLB`. What was missing was the SHELL PATH. A field map without a
+shell path cannot parse a payload, and having one is easy to mistake for having both.
+
+### Now pinned
+
+`__tests__/sports-data/rolling-insights-game-logs.test.ts` asserts the parser against this
+fixture, including "finds a game at all" — the exact silent failure above.
+
+### Still unverified: `/live` for NBA, NHL, NCAABB, NCAAFB, SOCCER
+
+`G-01`..`G-04` stay open. Those seasons were out of session on 2026-08-26, so probing then would
+have captured an empty slate and taught nothing — which is the re-probing trap this file exists to
+prevent. **Probe each on a game day for that sport.** The parser accepts both the id-keyed object
+form and an array form until each has its own fixture; do not narrow it to the MLB shape.

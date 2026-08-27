@@ -43,10 +43,30 @@ name: Cron fast tier
 # hole. This restores most of the cadence, not all of it — a 2-minute job is not guaranteed to be
 # 2 minutes late at worst, and nothing here should be relied on for correctness that a missed tick
 # would break.
+#
+# ⚠ TWO TRIGGERS, AND NEITHER IS AT :00 — THE LOOP WAS NEVER THE PROBLEM, THE TRIGGER WAS.
+# Measured 2026-08-27: only **7 scheduled runs fired in 24h against 24 expected**, with gaps of
+# 149/133/164/232/259/227 minutes between starts. Every run that DID fire completed its full window
+# (55.4-56.3m), so nothing was dying early — GitHub was simply dropping ~70% of the triggers, and
+# 7 x 55m is ≈27% coverage of the day.
+#
+# `0 * * * *` is the single most contended slot on GitHub's shared scheduler: everyone writes top
+# of the hour, and that is exactly when runs get delayed or dropped. Moving to :03/:33 leaves the
+# stampede, and the second trigger is redundancy — two chances per hour for one to land.
+#
+# ⚠ THIS CANNOT DOUBLE-FIRE, and that is what makes a second trigger safe rather than reckless:
+# `concurrency: cancel-in-progress` below guarantees exactly one loop at a time, so a :33 start
+# REPLACES a running :03 loop with a fresh 55m window instead of ticking alongside it. Runner cost
+# is unchanged (~60 min/hour of continuous single-loop coverage either way).
+#
+# ⚠ KEEP THE WINDOW AT 55m, NOT 30m, even though the triggers are now 30m apart. The 55m window is
+# what makes a DROPPED trigger survivable: if :33 never fires, the :03 run still covers the hour.
+# Shrinking it to match the trigger cadence would re-open the exact hole this change closes.
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "3 * * * *"
+    - cron: "33 * * * *"
   workflow_dispatch:
     inputs:
       window_minutes:

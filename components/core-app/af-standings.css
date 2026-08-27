@@ -419,3 +419,64 @@
     font-size: 25px;
   }
 }
+
+/* ── Past seasons ──────────────────────────────────────────────────────────
+   Imported final standings. Held visually apart from the live board because it
+   is a different kind of number: season totals a provider reported, with no
+   weeks behind them to recompute. Same tokens throughout, so it inherits both
+   themes rather than declaring its own colours. */
+.af-st-history {
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-st-history-title { color: var(--muted); }
+.af-st-history-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.af-st-history-season { margin-top: 14px; }
+.af-st-history-season-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+/* Wide content scrolls in its own container; the page body never does. */
+.af-st-history-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.af-st-history-table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.af-st-history-table th,
+.af-st-history-table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.af-st-history-table thead th {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  background: var(--chip);
+}
+.af-st-history-table tbody tr:last-child td { border-bottom: none; }
+/* Your own row, marked the way the live board marks it. */
+.af-st-history-table tbody tr[data-you='true'] {
+  background: var(--accent-soft);
+}
+.af-st-history-table tbody tr[data-you='true'] td { color: var(--accent-ink); }
+.af-st-history-table td.af-num { font-variant-numeric: tabular-nums; }

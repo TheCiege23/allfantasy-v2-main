@@ -87,6 +87,8 @@ export type LeagueStandingsData = {
   projection: SectionState<StandingsProjection>
   /** Weeks with at least one scored row. */
   scoredWeeks: number
+  /** Completed seasons from the import, newest first. Empty when none were imported. */
+  history: SeasonHistoryRow[]
 }
 
 /**
@@ -96,7 +98,42 @@ export type LeagueStandingsData = {
  * table that must not be drawn look identical to a screen, and only one of them
  * should render a heading with nothing under it.
  */
-export type StandingsUnavailable = { available: false; reason: string; leagueName: string }
+/**
+ * A completed season, as the import recorded it.
+ *
+ * ⚠ NOT A `StandingRow`, AND THAT IS THE POINT. `StandingRow.rosterId` is a NUMBER,
+ * which is a Sleeper roster id; a Fantrax team key is `fantrax-team:ciege82` and an
+ * ESPN one need not be numeric either. Forcing season history through that shape
+ * would coerce those to NaN and quietly drop every non-Sleeper league — so history
+ * carries the provider's own string key and is ranked by what was recorded, not by
+ * the week-by-week maths this module does for the live season.
+ */
+export type SeasonHistoryRow = {
+  season: number
+  /** The provider's team key — `LeagueTeam.externalId`, not a roster number. */
+  teamKey: string
+  name: string | null
+  isYou: boolean
+  /** As recorded at season end. Null when the provider did not report a finish. */
+  rank: number | null
+  wins: number
+  losses: number
+  ties: number
+  pointsFor: number
+  pointsAgainst: number
+}
+
+export type StandingsUnavailable = {
+  available: false
+  reason: string
+  leagueName: string
+  /*
+   * Present even here, and deliberately. A league whose current season has no scored
+   * weeks still has every completed season the import wrote — answering "nothing to
+   * rank" while holding ten finished seasons is the failure this field exists to end.
+   */
+  history: SeasonHistoryRow[]
+}
 
 export type LeagueStandingsResult =
   | ({ available: true } & LeagueStandingsData)
@@ -127,6 +164,88 @@ function rankBy(totals: Map<number, number>): Map<number, number> {
   return ranks
 }
 
+/**
+ * Completed seasons for this league, from `SeasonStandingFact` — written by every
+ * provider's historical backfill and, until now, read by nothing.
+ *
+ * Joined on `LeagueTeam.externalId`: the backfills write the provider's own team id
+ * into `teamId`, and the roster mappers write that same value into `source_team_id`,
+ * which is what `externalId` holds. Verified against the ESPN and Fantrax writers
+ * rather than assumed — this repo has a long history of id spaces that look
+ * interchangeable and are not.
+ *
+ * ⚠ Sleeper does NOT write this table. Its historical backfill persists standings
+ * through `persistStandings`/dynasty seasons instead, so a Sleeper league returning
+ * an empty history here is expected and not a fault to chase.
+ */
+async function loadSeasonHistory(leagueId: string, userId: string): Promise<SeasonHistoryRow[]> {
+  const [facts, teams, mine] = await Promise.all([
+    prisma.seasonStandingFact
+      .findMany({
+        where: { leagueId },
+        orderBy: [{ season: 'desc' }, { rank: 'asc' }],
+        select: {
+          season: true,
+          teamId: true,
+          wins: true,
+          losses: true,
+          ties: true,
+          pointsFor: true,
+          pointsAgainst: true,
+          rank: true,
+        },
+      })
+      .catch(() => []),
+    prisma.leagueTeam
+      .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
+      .catch(() => []),
+    prisma.leagueTeam
+      .findMany({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
+      .catch(() => []),
+  ])
+
+  if (facts.length === 0) return []
+
+  /*
+   * ⚠ AN UNPLAYED SEASON IS NOT A PAST SEASON. The ESPN backfill writes a
+   * SeasonStandingFact for every team whether or not the season finished — its
+   * `isFinished` gate gates `persistStandings`, and the fact upsert sits OUTSIDE it.
+   * So a league that has not kicked off yields a full set of 0-0 rows, and this
+   * screen printed the CURRENT season under "Past seasons" with every team ranked
+   * first. Observed on a live ESPN league.
+   *
+   * Filtered on the data rather than on a flag, because the flag is on the writer and
+   * the rows are already in the database: a season where no team has a win, a loss, a
+   * tie or a point has not been played, whatever the provider said about it.
+   */
+  const playedSeasons = new Set<number>()
+  for (const f of facts) {
+    if (f.wins > 0 || f.losses > 0 || f.ties > 0 || f.pointsFor > 0) playedSeasons.add(f.season)
+  }
+  const played = facts.filter((f) => playedSeasons.has(f.season))
+  if (played.length === 0) return []
+
+  const nameByKey = new Map<string, string>()
+  for (const t of teams) {
+    const label = t.teamName?.trim() || t.ownerName?.trim()
+    if (t.externalId && label) nameByKey.set(t.externalId, label)
+  }
+  const yours = new Set(mine.map((t) => t.externalId).filter(Boolean) as string[])
+
+  return played.map((f) => ({
+    season: f.season,
+    teamKey: f.teamId,
+    name: nameByKey.get(f.teamId) ?? null,
+    isYou: yours.has(f.teamId),
+    rank: f.rank ?? null,
+    wins: f.wins,
+    losses: f.losses,
+    ties: f.ties,
+    pointsFor: f.pointsFor,
+    pointsAgainst: f.pointsAgainst,
+  }))
+}
+
 export async function getLeagueStandings(
   leagueId: string,
   userId: string,
@@ -138,10 +257,18 @@ export async function getLeagueStandings(
 
   const leagueName = leagueDisplayName(league?.name)
 
+  /*
+   * Fetched before any early return, because every one of them is a state where the
+   * live board cannot be drawn and the imported seasons are exactly what the screen
+   * should show instead.
+   */
+  const history = league ? await loadSeasonHistory(league.id, userId) : []
+
   if (!league?.platformLeagueId) {
     return {
       available: false,
       leagueName,
+      history,
       reason:
         'this league has no platform id on file, and the weekly results this board is built from are stored against the provider’s id rather than ours',
     }
@@ -181,6 +308,7 @@ export async function getLeagueStandings(
     return {
       available: false,
       leagueName,
+      history,
       reason:
         'no weekly results have been synced for this league yet — the board is built from scored weeks, and there are none on file',
     }
@@ -188,7 +316,7 @@ export async function getLeagueStandings(
 
   const resolved = resolveCurrentWeekFrom(rows)
   if (!resolved) {
-    return { available: false, leagueName, reason: 'we could not work out which week this league is on' }
+    return { available: false, leagueName, history, reason: 'we could not work out which week this league is on' }
   }
 
   /*
@@ -200,6 +328,7 @@ export async function getLeagueStandings(
     return {
       available: false,
       leagueName,
+      history,
       reason: `nothing has been scored in ${resolved.season} yet. The full schedule is already on file, so there are rows for every week — but ranking them would order twelve teams that have all scored nothing.`,
     }
   }
@@ -382,5 +511,6 @@ export async function getLeagueStandings(
     recent,
     projection,
     scoredWeeks: resolved.scoredWeeks,
+    history,
   }
 }

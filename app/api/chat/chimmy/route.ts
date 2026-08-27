@@ -345,6 +345,15 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
   "You have tools that read this app's own data. Call them when a question needs league, schedule or live-stat facts.",
   'NEVER invent player stats, scores, standings, records or schedules. If a tool says it has no data, say that plainly and stop — do not fall back on general knowledge.',
   'A tool reporting an empty live feed means no games were polled, NOT that nobody scored. Never report that as a zero.',
+  /*
+   * ⚠ ADDED AFTER THE MODEL TURNED "NO LEAGUE SELECTED" INTO "YOUR LEAGUE HAS NO
+   * RECORDS". Observed in production on a 32-team league, alongside an invented
+   * "all 18 teams begin at 0-0 with equal FAAB budgets". The tool result already
+   * spells this out; the rule is repeated here because that failure is a
+   * paraphrase, and a paraphrase is exactly what a system prompt is for.
+   */
+  'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
+  'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
   'Answer in a few sentences. Name the data you used.',
 ].join(' ')
 
@@ -600,10 +609,26 @@ function requiresLeagueGrounding(args: {
     return true
   }
   if (['trade', 'waiver', 'roster'].includes(args.intent)) return true
-  if (args.intent === 'draft' && /\b(draft order|draft time|in\s+.+\s+league|my\s+draft|our\s+draft)\b/.test(message)) {
+  /*
+   * ⚠ `in\s+.+\s+league` USED TO 412 EVERY QUESTION ABOUT A REAL COMPETITION.
+   * It was written for "in my dynasty league", but `.+` happily spans "the
+   * champions", so "who scored in the Champions League last night?" was
+   * rejected as a team-specific planning request. Premier League, Major League
+   * Baseball and "best team in the league this year" all failed the same way.
+   *
+   * The `hasGlobalSportContext` escape hatch below DOES list `champions league`
+   * — it just sits underneath this branch and never got the chance. Rather than
+   * reorder (which would drop grounding from "draft order in my NFL league",
+   * since that reads as global too), the pattern now requires the POSSESSIVE it
+   * always meant: my / our / this. No competition on earth is called "my
+   * league", so this keeps every real one out while still catching the phrasing
+   * the rule exists for.
+   */
+  const inTheirOwnLeague = /\bin\s+(?:my|our|this)\s+[\w\s]*league\b/
+  if (args.intent === 'draft' && (/\b(draft order|draft time|my\s+draft|our\s+draft)\b/.test(message) || inTheirOwnLeague.test(message))) {
     return true
   }
-  if (/\b(draft order|draft time|waiver|trade|in\s+.+\s+league)\b/.test(message)) {
+  if (/\b(draft order|draft time|waiver|trade)\b/.test(message) || inTheirOwnLeague.test(message)) {
     return true
   }
   if (/\b(my team|my roster|my lineup|our team|future|next season|for my team)\b/.test(message)) {
@@ -1290,10 +1315,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
      * still costs nothing; only a refusal gets to look further.
      */
     if (deterministic.kind === 'refusal' && getChimmyFeatureFlags().liveSearchFallback) {
-      const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
-      const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
+      /*
+       * ⚠ THIS PATH SHIPPED FREE AND IT SHOULD NOT HAVE BEEN. It sits above the
+       * spend block, so a live search — the most expensive call we make — cost
+       * the platform real money and the reader nothing. With open signup that is
+       * an uncapped spend path.
+       *
+       * ORDER MATTERS IN BOTH DIRECTIONS:
+       *  - Check they CAN pay BEFORE searching, so we never buy a search for
+       *    somebody who cannot be charged for it.
+       *  - Charge only AFTER a sourced answer exists. The refusal below stays
+       *    free, which is the honest deal and what the copy already promises:
+       *    an unavailable-data answer "should not charge tokens". You pay for an
+       *    answer, never for us admitting we have none.
+       *
+       * An unconfirmed client falls through to the free refusal rather than
+       * getting a 409 here. This path used to always be free, and turning it
+       * into a new confirmation prompt would be a worse surprise than a refusal.
+       */
+      const spendService = new TokenSpendService()
+      const preview = userId
+        ? await spendService
+            .previewSpend(userId, 'ai_chimmy_chat_message', userEmail)
+            .catch(() => null)
+        : null
 
-      if (searched) {
+      const mayCharge = Boolean(userId && confirmTokenSpend && preview?.canSpend)
+
+      if (mayCharge) {
+        const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
+        const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
+
+        if (searched) {
+        /*
+         * The answer exists, so the search has already been paid for upstream.
+         * If the charge now fails — a balance race against the preview above —
+         * we serve it anyway with tokenSpend null rather than eat the provider
+         * cost AND withhold the answer. Losing the fee is bad; losing the fee
+         * and the answer is worse.
+         */
+        const ledger = await spendService
+          .spendTokensForRule({
+            userId: userId as string,
+            ruleCode: 'ai_chimmy_chat_message',
+            confirmed: confirmTokenSpend,
+            sourceType: 'chimmy_chat',
+            sourceId: conversationId,
+            description: 'Chimmy live web search answer',
+            metadata: { conversationId, source: source ?? null, path: LIVE_SEARCH_SOURCE },
+            userEmail,
+          })
+          .catch(() => null)
+
         const sourceLines = searched.citations.map((c) => `- ${c.label}: ${c.url}`).join('\n')
         const body = `${searched.text}\n\nSources consulted:\n${sourceLines}`
         return NextResponse.json({
@@ -1301,7 +1374,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           result: body,
           source: LIVE_SEARCH_SOURCE,
           sessionId,
-          tokenSpend: null,
+          tokenSpend:
+            ledger && preview
+              ? {
+                  ruleCode: preview.ruleCode,
+                  tokenCost: preview.tokenCost,
+                  balanceAfter: ledger.balanceAfter,
+                  ledgerId: ledger.id,
+                }
+              : undefined,
           citations: searched.citations,
           meta: {
             /*
@@ -1321,8 +1402,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             },
           },
         })
+        }
+        /* Nothing sourced came back. Fall through to the honest refusal. */
       }
-      /* Nothing sourced came back. Fall through to the honest refusal. */
+      /*
+       * Not chargeable — anonymous, unconfirmed, or out of balance. We do NOT
+       * search in that case: buying a provider call we cannot bill is the exact
+       * leak this block was added to close. The free refusal is still served.
+       */
     }
 
     const deterministicAnswer = deterministic.text

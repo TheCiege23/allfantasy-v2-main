@@ -71,7 +71,45 @@ const SYSTEM_PROMPT = [
   '4. If sources disagree, say so and give both. Do not silently pick one.',
   '5. NEVER give fantasy advice — no start/sit, no trade verdicts, no waiver picks, no rankings. You cannot see the user\'s roster or league settings. If asked for advice, answer only the factual part and say the advice needs their league loaded.',
   '6. Keep it under 120 words. This renders in a chat bubble.',
+  '7. Write PLAIN TEXT. No markdown: no **bold**, no [links](url), no bullets, no headings. The bubble does not render markdown, so the asterisks and brackets show up literally.',
+  '8. Do NOT add inline citation markers like [1] or [2]. Sources are listed separately, and nothing in the payload maps a source to a particular sentence, so a marker next to one claim asserts a link that does not exist.',
 ].join('\n')
+
+/**
+ * Strip the markdown the model emits anyway.
+ *
+ * ⚠ THE FIRST LIVE ANSWER RENDERED "**32 home runs**" WITH THE ASTERISKS
+ * SHOWING, and carried a "[[1]](https://…)" marker next to the number. The
+ * prompt now forbids both, but a prompt is a request and this is a guarantee —
+ * the bubble is plain text and the model is the one deciding what to send.
+ *
+ * ⚠ THE INLINE MARKER IS NOT COSMETIC. xAI returns `url_citation` annotations
+ * with `start_index` and `end_index` BOTH ZERO, so nothing maps a source to the
+ * span it supports. A `[1]` pinned to "32 home runs" claims exactly that
+ * mapping. The sources belong in the list under the answer, where they read as
+ * "consulted" rather than "this sentence came from here" — the same rule
+ * lib/ai/xNewsSearch.ts states for its own citations.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    /* [label](url) and the [[1]](url) shape → keep the label, drop the link. */
+    .replace(/\[\[(\d+)\]\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\(([^)]*)\)/g, '$1')
+    /* Bare inline markers left behind, e.g. "…15 games).[1]". */
+    .replace(/\[\d+\]/g, '')
+    /* Emphasis. Bold before italic, or the inner pass eats one asterisk. */
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
+    /* Headings and list bullets at the start of a line. */
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    /* Whitespace the removals leave behind, including before punctuation. */
+    .replace(/[ \t]+([.,;:!?])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+$/gm, '')
+    .trim()
+}
 
 /*
  * Questions where a day-old answer is wrong, not merely stale — these get X
@@ -163,7 +201,7 @@ export async function answerSportsQuestionFromSearch(
 
     if (!result || !result.ok) return null
 
-    const text = parseTextFromXaiResponse(result.json)?.trim()
+    const text = stripMarkdown(parseTextFromXaiResponse(result.json) ?? '')
     if (!text) return null
 
     const citations = toCitations(extractAnnotations(result.json))

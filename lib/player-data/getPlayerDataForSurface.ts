@@ -114,6 +114,25 @@ function sportsPlayerSourceRank(source: string | null | undefined): number {
   return 0
 }
 
+/**
+ * Two names for the same person, allowing for how differently sources spell them.
+ *
+ * Case, punctuation, accents and a generational suffix all vary between feeds — "Chau Smith-wade"
+ * against "Chau Smith-Wade", "James Williams Sr." against "James Williams".
+ */
+/** Exported for the regression test that pins this guard; not part of the surface API. */
+export function namesAgree(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) =>
+    String(s ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z]/g, '')
+      .replace(/(jr|sr|ii|iii|iv|v)$/, '')
+  const x = norm(a)
+  return x.length > 0 && x === norm(b)
+}
+
 function chooseBestSportsPlayerRow<T extends { imageUrl?: string | null; source?: string | null }>(
   current: T | undefined,
   candidate: T,
@@ -230,8 +249,29 @@ async function batchLoadCanonicalPlayerMedia(
     const rawId = rawIdToken.includes(':') ? rawIdToken.slice(rawIdToken.indexOf(':') + 1) : rawIdToken
     const strictKey = normalizeMediaKey(seed.name, seed.team, seed.position)
     const looseKey = normalizeLooseMediaKey(seed.name, seed.position)
+    /*
+     * ⚠ AN ID MATCH HAS TO AGREE WITH THE NAME, BECAUSE `rawId` IS NOT IN ONE ID SPACE.
+     *
+     * `sportsPlayerByExternalId` is keyed by BOTH `externalId` and `sleeperId`, and those are
+     * different namespaces that overlap numerically. `SportsPlayer.externalId` is 83% bare
+     * numerics, and those are Rolling Insights ids, not Sleeper ids: 42,032 of them collide with
+     * a Sleeper id, and 42,031 of those are a different person — one coincidental match in the
+     * whole table. `recordId` arrives as `SPORT:<rest>` and the strip above leaves a bare number
+     * whenever `<rest>` is one (`NFL:7873`), so it lands in that shared keyspace.
+     *
+     * `chooseBestSportsPlayerRow` then made it worse rather than better: it breaks ties on
+     * source rank, where `rolling_insights` outranks `sleeper`, so the impostor was FAVOURED.
+     * Measured before this guard: 212 records resolved to a different person — Matt Milano
+     * served Alex Singleton's row, Elijah Hicks served Chau Smith-Wade's.
+     *
+     * The guard is a name check rather than a namespace split because the namespaces differ per
+     * sport: the same bare-numeric lookup that is wrong for NFL is right for the 44,450 NCAAF
+     * records, which have no Sleeper ids at all. Rejecting a mismatched id match costs nothing —
+     * it falls through to the name-keyed maps below, which is where the right row was all along.
+     */
+    const idMatch = rawId ? sportsPlayerByExternalId.get(rawId) : undefined
     const sportsPlayerMatch =
-      (rawId ? sportsPlayerByExternalId.get(rawId) : undefined) ??
+      (idMatch && namesAgree(idMatch.name, seed.name) ? idMatch : undefined) ??
       sportsPlayerByStrictKey.get(strictKey) ??
       sportsPlayerByLooseKey.get(looseKey)
     const sportsPlayerHeadshot =

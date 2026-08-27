@@ -9,7 +9,8 @@
  * from "this app does not do hockey".
  */
 
-type SportCount = { sport: string; label: string; liveCount: number }
+/** `slateCount` is TODAY'S SLATE for the sport, not games in progress. */
+type SportCount = { sport: string; label: string; slateCount: number }
 
 export function SportTabs({
   counts,
@@ -28,7 +29,7 @@ export function SportTabs({
     >
       {counts.map((c) => {
         const isActive = c.sport === active
-        const isEmpty = c.liveCount === 0
+        const isEmpty = c.slateCount === 0
         return (
           <button
             key={c.sport}
@@ -51,9 +52,9 @@ export function SportTabs({
               style={{ color: isActive ? '#04222b' : isEmpty ? 'var(--faint)' : 'var(--muted)' }}
               // The count is decorative next to the label for sighted users, but
               // a screen reader needs it spelled out.
-              aria-label={`${c.liveCount} live`}
+              aria-label={`${c.slateCount} ${c.slateCount === 1 ? 'game' : 'games'} today`}
             >
-              {c.liveCount}
+              {c.slateCount}
             </span>
           </button>
         )

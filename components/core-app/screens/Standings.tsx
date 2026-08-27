@@ -1,5 +1,10 @@
 import Link from 'next/link'
-import type { LeagueStandingsResult, RankTrendPoint, StandingRow } from '@/lib/core-app/leagueStandings'
+import type {
+  LeagueStandingsResult,
+  RankTrendPoint,
+  SeasonHistoryRow,
+  StandingRow,
+} from '@/lib/core-app/leagueStandings'
 import '@/components/core-app/af-standings.css'
 
 /**
@@ -25,6 +30,74 @@ function n1(v: number): string {
   return v.toFixed(1)
 }
 
+
+/**
+ * Completed seasons, as the import recorded them.
+ *
+ * ⚠ SEPARATE FROM THE BOARD ABOVE, NOT AN EXTENSION OF IT. The live board is computed
+ * week by week — averages, movement, a projection. These rows are season totals a
+ * provider reported at the time; there are no weeks behind them to recompute, and
+ * presenting them in the same table would imply a precision they do not carry.
+ *
+ * Grouped by season, newest first, because "how did we finish" is asked one season at
+ * a time.
+ */
+function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
+  if (rows.length === 0) return null
+
+  const bySeason = new Map<number, SeasonHistoryRow[]>()
+  for (const row of rows) {
+    const bucket = bySeason.get(row.season)
+    if (bucket) bucket.push(row)
+    else bySeason.set(row.season, [row])
+  }
+  const seasons = [...bySeason.entries()].sort((a, b) => b[0] - a[0])
+
+  return (
+    <section className="af-st-history">
+      <h2 className="af-label af-st-history-title">Past seasons</h2>
+      <p className="af-st-history-note">
+        Imported final standings. {seasons.length}{' '}
+        {seasons.length === 1 ? 'season' : 'seasons'} on file.
+      </p>
+      {seasons.map(([season, teams]) => (
+        <div key={season} className="af-st-history-season">
+          <h3 className="af-st-history-season-title af-num">{season}</h3>
+          <div className="af-st-history-scroll">
+            <table className="af-st-history-table">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Team</th>
+                  <th scope="col">Record</th>
+                  <th scope="col">PF</th>
+                  <th scope="col">PA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teams.map((t) => (
+                  <tr key={`${season}:${t.teamKey}`} data-you={t.isYou ? 'true' : undefined}>
+                    {/* A provider that did not report a finish gets an em dash, not a
+                        fabricated position. */}
+                    <td className="af-num">{t.rank ?? '—'}</td>
+                    <td>{t.name ?? t.teamKey}</td>
+                    <td className="af-num">
+                      {t.wins}-{t.losses}
+                      {t.ties > 0 ? `-${t.ties}` : ''}
+                    </td>
+                    <td className="af-num">{Math.round(t.pointsFor)}</td>
+                    <td className="af-num">{Math.round(t.pointsAgainst)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 export function Standings({ data }: StandingsProps) {
   if (!data.available) {
     return (
@@ -39,11 +112,13 @@ export function Standings({ data }: StandingsProps) {
           </span>
           <p className="af-st-blocked-body">{data.reason}</p>
         </div>
+        {/* The live board cannot be drawn, but the imported seasons still can. */}
+        <SeasonHistory rows={data.history} />
       </div>
     )
   }
 
-  const { league, season, week, seasonComplete, teams, you, trend, recent, projection } = data
+  const { league, season, week, seasonComplete, teams, you, trend, recent, projection, history } = data
 
   return (
     <div className="af-st">
@@ -234,6 +309,7 @@ export function Standings({ data }: StandingsProps) {
         </Link>{' '}
         has the odds.
       </p>
+      <SeasonHistory rows={history} />
     </div>
   )
 }

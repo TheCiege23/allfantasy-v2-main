@@ -20,10 +20,12 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
+import { describeYahooRejection } from '@/lib/league-import/yahoo/yahooRejection'
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
 const SCREEN = read('components/core-app/screens/ImportV4.tsx')
 const ROUTE = read('app/api/leagues/import/discover/route.ts')
+const PIPELINE = read('lib/league-import/ImportedLeagueNormalizationPipeline.ts')
 
 describe('⚠ a typed id must skip the call that is failing', () => {
   it('wraps a bare league id into a game-qualified key', () => {
@@ -88,12 +90,55 @@ describe('⚠ the redirect loop', () => {
 })
 
 describe('⚠ Yahoo status is the diagnosis, and it was discarded', () => {
-  it('names a 403 as the missing fantasy permission', () => {
-    // A valid token for an account that never granted Fantasy Sports read. The
-    // fix is a checkbox at approval time, not a generic "try again".
-    expect(ROUTE).toContain('if (status === 403)')
-    expect(ROUTE).toContain('Fantasy Sports')
-    expect(ROUTE).toContain('if (status === 401)')
+  it('names BOTH causes of a 403, in the order they need checking', () => {
+    /*
+     * ⚠ THE FIRST VERSION OF THIS MESSAGE WAS WRONG, AND WRONG IN THE EXPENSIVE
+     * DIRECTION: it said reconnecting would not help, so it steered people away
+     * from the fix.
+     *
+     * Yahoo's OAuth2 takes no `scope` parameter — the authorize request accepts
+     * client_id, redirect_uri, response_type, state and language, and nothing
+     * else. Permissions come entirely from the app registration AS IT STOOD WHEN
+     * THE USER APPROVED, and that approval survives until it is removed in Yahoo
+     * account settings. So an app can hold Fantasy Sports read and still be
+     * refused, forever, on an approval granted before the permission existed —
+     * which is exactly what was measured on 2026-08-27: a token issued at
+     * 22:36:31, refused two seconds later.
+     */
+    const m = describeYahooRejection(403)
+    expect(m).toContain('Fantasy Sports read permission')
+    expect(m).toContain('developer console')
+    /* The stale-approval half is the one that was missing. */
+    expect(m).toContain('at the moment you approve')
+    expect(m).toContain('remove the app under your Yahoo account settings')
+    expect(m).toContain('reuses the old approval')
+  })
+
+  it('keeps 401 as the one that IS worth reconnecting', () => {
+    expect(describeYahooRejection(401)).toContain('Reconnect Yahoo')
+  })
+
+  it('does not blame the app for a league that is simply not there', () => {
+    expect(describeYahooRejection(404)).toContain('no league with that ID')
+  })
+
+  it('still names the status when it is one nobody has mapped', () => {
+    expect(describeYahooRejection(503)).toContain('HTTP 503')
+  })
+
+  it('is the single mapper both paths use, so they cannot drift', () => {
+    expect(ROUTE).toContain('describeYahooRejection(error.status)')
+    expect(PIPELINE).toContain('e instanceof YahooApiResponseError')
+    expect(PIPELINE).toContain('describeYahooRejection(e.status)')
+  })
+
+  it('stops handing the provider response body to the screen', () => {
+    /*
+     * A YahooApiResponseError carries Yahoo's raw body as its message, and the
+     * generic handler returned it verbatim — so an import rendered Yahoo's JSON,
+     * complete with our own API path, and explained nothing.
+     */
+    expect(PIPELINE).toContain("WITHOUT THIS, YAHOO'S RAW JSON REACHED THE SCREEN")
   })
 
   it('records the status in the log, where there was previously nothing', () => {

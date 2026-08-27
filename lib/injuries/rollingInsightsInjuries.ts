@@ -32,6 +32,8 @@ import 'server-only'
  */
 
 import { prisma } from '@/lib/prisma'
+import { riFetch } from '@/lib/workers/providers/rollingInsightsRest'
+import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 
 /** One row exactly as Rolling Insights returns it. */
 export interface RiInjuryRow {
@@ -225,6 +227,17 @@ export interface RiInjurySyncResult {
   unparseableStatus: number
   /** Legacy api_sports rows expired in the same run. */
   legacyExpired: number
+  /**
+   * The vendor does not document an injuries feed for this sport (NCAAFB, NCAABB, SOCCER).
+   * Distinct from "wrote nothing": there is nothing here to write, and a caller that reports it
+   * as a failure teaches its operator to ignore a red light that will never go green.
+   */
+  unsupported: boolean
+  /**
+   * A 304 survived the cache-busted retry, so the feed is UNCHANGED-or-empty and the contract
+   * does not say which. Existing rows are left alone. Never collapse this into `fetched: 0`.
+   */
+  notModified: boolean
   errors: string[]
 }
 
@@ -248,44 +261,31 @@ export async function syncRollingInsightsInjuriesToDb(opts?: {
     written: 0,
     unparseableStatus: 0,
     legacyExpired: 0,
+    unsupported: false,
+    notModified: false,
     errors: [],
   }
 
-  const token =
-    process.env.ROLLING_INSIGHTS_RSC_TOKEN?.trim() ||
-    process.env.ROLLING_INSIGHTS_RSC_TOKEN2?.trim() ||
-    process.env.ROLLING_INSIGHTS_CLIENT_SECRET?.trim()
-  if (!token) {
-    result.errors.push('Rolling Insights RSC token not configured')
+  // Refuse before the request rather than after a confusing 404. The support matrix says NCAAFB,
+  // NCAABB and SOCCER have no injuries endpoint at all; those sports need another source and the
+  // honest product answer is "not available from this provider".
+  if (!riSupports('injuries', sport)) {
+    result.unsupported = true
+    result.errors.push(`Rolling Insights documents no injuries feed for ${sport}`)
     return result
   }
 
-  const rawBase =
-    process.env.ROLLING_INSIGHTS_REST_BASE_URL?.trim() ||
-    process.env.ROLLING_INSIGHTS_REST_BASE?.trim() ||
-    'https://rest.datafeeds.rolling-insights.com/api/v1'
-  const trimmed = rawBase.replace(/\/+$/, '')
-  const base = /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v1`
-
-  const doFetch = opts?.fetchImpl ?? fetch
-  let payload: unknown
-  try {
-    const res = await doFetch(`${base}/injuries/${sport}?RSC_token=${encodeURIComponent(token)}`, {
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(30_000),
-    })
-    if (!res.ok) {
-      result.errors.push(`Rolling Insights injuries HTTP ${res.status}`)
-      return result
-    }
-    payload = await res.json()
-  } catch (e) {
-    result.errors.push(`Rolling Insights injuries fetch failed: ${e instanceof Error ? e.message : String(e)}`)
+  // One transport for every sport: cache-buster, no-cache headers, and a 304 that is retried once
+  // and then surfaced as UNCHANGED rather than laundered into an empty result set.
+  const outcome = await riFetch('injuries', { sport, fetchImpl: opts?.fetchImpl })
+  if (!outcome.ok) {
+    if (outcome.kind === 'not_modified') result.notModified = true
+    if (outcome.kind === 'unsupported') result.unsupported = true
+    result.errors.push(`Rolling Insights injuries: ${outcome.error}`)
     return result
   }
 
-  const rows = normalizeRiInjuries(payload, sport)
+  const rows = normalizeRiInjuries(outcome.payload, sport)
   result.fetched = rows.length
   if (rows.length === 0) {
     result.errors.push('Rolling Insights returned no injury rows')
