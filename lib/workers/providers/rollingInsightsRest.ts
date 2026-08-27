@@ -61,7 +61,8 @@ import {
  */
 
 export type RiOutcome =
-  | { ok: true; payload: unknown; status: number }
+  /** `credential` names WHICH of the two accounts answered — the only way entitlement is observable. */
+  | { ok: true; payload: unknown; status: number; credential?: 'primary' | 'secondary' }
   /**
    * A 304 that SURVIVED a cache-busted retry.
    *
@@ -117,17 +118,80 @@ export function riRestBase(): string {
   return /\/api\/v\d+$/.test(first) ? first : `${first}/api/v1`
 }
 
-/** The RSC token, under any of the spellings this repo has used. Never logged. */
+/**
+ * The RSC token, under any of the spellings this repo has used. Never logged.
+ *
+ * @deprecated Prefer {@link riCredentialsFor} — there are TWO Rolling Insights accounts and this
+ * returns whichever is listed first, which is how every non-NFL sport silently 304'd. Kept only
+ * for callers that genuinely need "is any credential configured at all".
+ */
 export function riToken(): string | null {
-  return (
+  return riCredentialsFor('NFL')[0]?.token ?? null
+}
+
+export interface RiCredential {
+  token: string
+  /** Which account answered. Reported on the outcome so entitlement is observable, never logged with the token. */
+  label: 'primary' | 'secondary'
+}
+
+/**
+ * ⚠ THERE ARE TWO ROLLING INSIGHTS ACCOUNTS AND THEY COVER DIFFERENT SPORTS.
+ *
+ * Rolling Insights bills additively per sport, and this deployment holds two subscriptions whose
+ * coverage is DISJOINT. Measured directly against `team-info` on 2026-08-27, same URL, same
+ * headers, same millisecond buster — only the credential differed:
+ *
+ *              NFL   MLB   NBA   NHL   NCAABB   NCAAFB   SOCCER(EPL/LALIGA/SERIEA)
+ *   primary    200   304   304   304    304      304      304
+ *   secondary  304   200   200   200    200      200      200
+ *
+ * That table is also the cleanest possible evidence for what a 304 means here: the SAME request
+ * returns 200 on one token and 304 on the other, so on this vendor a 304 can mean
+ * **"this account is not subscribed to this sport"** — a third reading neither the skill repo nor
+ * the OpenAPI spec documents. See `contracts/rolling-insights/GAPS.md`.
+ *
+ * ⚠ WHAT THIS REPLACED, AND WHY IT MATTERED. The previous reader returned the first token present
+ * and stopped. Since `ROLLING_INSIGHTS_RSC_TOKEN` is set, `..._TOKEN2` was NEVER tried, so all six
+ * sports on the second account answered 304 forever and the whole multi-sport pipeline wrote
+ * nothing while reporting itself healthy. The 304 rule kept it honest — it refused to write an
+ * emptiness — but honest about the wrong cause.
+ *
+ * `ROLLING_INSIGHTS_PRIMARY_SPORTS` overrides which sports prefer the first account (comma
+ * separated, default `NFL`). Preference only: BOTH credentials are always tried, so a subscription
+ * moving between accounts degrades to one extra request rather than to silence.
+ */
+export function riCredentialsFor(sport: string): RiCredential[] {
+  const primary =
     process.env.ROLLING_INSIGHTS_RSC_TOKEN?.trim() ||
-    process.env.ROLLING_INSIGHTS_RSC_TOKEN2?.trim() ||
     process.env.RSC_TOKEN?.trim() ||
     process.env.ROLLING_INSIGHTS_CLIENT_SECRET?.trim() ||
     process.env.ROLLING_INSIGHTS_API_KEY?.trim() ||
     process.env.ROLLING_INSIGHTS_KEY?.trim() ||
     null
-  )
+  const secondary =
+    process.env.ROLLING_INSIGHTS_RSC_TOKEN2?.trim() ||
+    process.env.ROLLING_INSIGHTS_CLIENT_SECRET2?.trim() ||
+    null
+
+  const primarySports = (process.env.ROLLING_INSIGHTS_PRIMARY_SPORTS?.trim() || 'NFL')
+    .split(',')
+    .map((s) => getRollingInsightsSportCode(s.trim()))
+    .filter(Boolean)
+
+  const prefersPrimary = primarySports.includes(getRollingInsightsSportCode(sport))
+
+  const ordered: Array<RiCredential | null> = prefersPrimary
+    ? [primary ? { token: primary, label: 'primary' } : null, secondary ? { token: secondary, label: 'secondary' } : null]
+    : [secondary ? { token: secondary, label: 'secondary' } : null, primary ? { token: primary, label: 'primary' } : null]
+
+  // Dedupe by token: a deployment with only one account set must not pay for two identical calls.
+  const seen = new Set<string>()
+  return ordered.filter((c): c is RiCredential => {
+    if (!c || seen.has(c.token)) return false
+    seen.add(c.token)
+    return true
+  })
 }
 
 function todayUtc(now = new Date()): string {
@@ -177,8 +241,10 @@ export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiO
     }
   }
 
-  const token = riToken()
-  if (!token) return { ok: false, kind: 'no_token', error: 'Rolling Insights RSC token not configured' }
+  const credentials = riCredentialsFor(req.sport)
+  if (credentials.length === 0) {
+    return { ok: false, kind: 'no_token', error: 'Rolling Insights RSC token not configured' }
+  }
 
   // SOCCER keys its response by LEAGUE and requires the league param on every call. Without it
   // the request is not merely degraded, it is malformed — refuse rather than send it.
@@ -205,9 +271,9 @@ export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiO
   const now = req.now ?? Date.now
   const timeoutMs = req.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-  const attempt = async (): Promise<RiOutcome> => {
+  const attempt = async (credential: RiCredential): Promise<RiOutcome> => {
     const url = new URL(`${riRestBase()}${path}`)
-    url.searchParams.set('RSC_token', token)
+    url.searchParams.set('RSC_token', credential.token)
     if (league) url.searchParams.set('league', league)
     if (req.teamId) url.searchParams.set('team_id', req.teamId)
     if (req.playerId) url.searchParams.set('player_id', req.playerId)
@@ -234,29 +300,60 @@ export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiO
         // Status and endpoint only. The URL carries the token and must never be interpolated.
         return { ok: false, kind: 'http', error: `HTTP ${res.status} ${endpoint}/${code}` }
       }
-      return { ok: true, payload: await res.json(), status: res.status }
+      return { ok: true, payload: await res.json(), status: res.status, credential: credential.label }
     } catch (e) {
       return { ok: false, kind: 'network', error: redactSecrets(e instanceof Error ? e.message : String(e)) }
     }
   }
 
-  const first = await attempt()
-  // Retry ONCE with a fresh buster. If it was a cache artifact, busting defeats it; if 304 really
-  // means "empty result set", we pay exactly one extra request. Correct under both readings.
-  if (!first.ok && first.kind === 'not_modified') {
-    const second = await attempt()
-    if (second.ok) return second
-    if (second.ok === false && second.kind === 'not_modified') {
-      return {
-        ok: false,
-        kind: 'not_modified',
-        error: `HTTP 304 after cache-busted retry ${endpoint}/${code} — treat as UNCHANGED, not empty`,
-      }
+  /*
+   * TWO NESTED ESCALATIONS, and they answer two DIFFERENT meanings of the same status code.
+   *
+   *   inner — retry once with a fresh millisecond buster, same credential.
+   *           Defeats 304-as-cache-artifact (the skill repo's reading).
+   *   outer — on a 304 that survived that, try the OTHER account.
+   *           Defeats 304-as-not-subscribed (measured 2026-08-27; see riCredentialsFor).
+   *
+   * Only when every credential has 304'd through its own busted retry do we say `not_modified` —
+   * which by then can only mean genuinely-unchanged or not-yet-started, e.g. `player-stats/2026`
+   * for NBA and NHL in August, where the prior-season bootstrap is the correct response.
+   *
+   * Cost in the normal case is ONE request: the sport's own account is tried first. The extra
+   * calls are paid only when a feed really is unchanged, and the vendor confirmed no rate limit.
+   */
+  let lastNotModified: RiOutcome | null = null
+
+  for (const credential of credentials) {
+    const first = await attempt(credential)
+    if (first.ok) return first
+    if (first.kind !== 'not_modified') {
+      // A real error (401/404/network) on the preferred account is worth reporting as itself
+      // rather than masking behind a second account's 304.
+      if (credentials.length === 1) return first
+      lastNotModified = lastNotModified ?? first
+      continue
     }
-    return second
+
+    const second = await attempt(credential)
+    if (second.ok) return second
+    if (second.ok === false && second.kind !== 'not_modified') {
+      lastNotModified = lastNotModified ?? second
+      continue
+    }
+    lastNotModified = {
+      ok: false,
+      kind: 'not_modified',
+      error: `HTTP 304 after cache-busted retry ${endpoint}/${code} — treat as UNCHANGED, not empty`,
+    }
   }
 
-  return first
+  return (
+    lastNotModified ?? {
+      ok: false,
+      kind: 'not_modified',
+      error: `HTTP 304 on every configured credential ${endpoint}/${code} — UNCHANGED or not subscribed`,
+    }
+  )
 }
 
 /**
@@ -268,7 +365,14 @@ export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiO
 export async function riFetchRows(
   endpoint: RiEndpoint,
   req: RiRequest,
-): Promise<{ rows: unknown[]; notModified: boolean; unsupported: boolean; error: string | null }> {
+): Promise<{
+  rows: unknown[]
+  notModified: boolean
+  unsupported: boolean
+  error: string | null
+  /** Which account served this, so a run report can show entitlement without exposing a token. */
+  credential?: 'primary' | 'secondary'
+}> {
   const out = await riFetch(endpoint, req)
   if (out.ok) {
     return {
@@ -276,6 +380,7 @@ export async function riFetchRows(
       notModified: false,
       unsupported: false,
       error: null,
+      credential: out.credential,
     }
   }
   return {
