@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { myRosterCandidates } from './myRoster'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 
 /**
@@ -254,7 +255,19 @@ export async function getWaiversData(leagueId: string, userId: string): Promise<
     select: { platformUserId: true, externalId: true },
   })
 
-  const candidates = [myTeam?.platformUserId, myTeam?.externalId].filter(Boolean) as string[]
+  /*
+   * ⚠ THIS WAS THE TWO-CANDIDATE JOIN, AND IT IS WHY ALL FOUR TILES READ "we cannot tell which
+   * roster in this league is yours" ON A LEAGUE THE MANAGER PLAYS IN. Measured on production and
+   * written up in `myRoster.ts`: with only `platformUserId` and `externalId`, 38 of 106 claimed
+   * teams joined to a roster; adding the caller's own user id takes it to 93, and matches more
+   * than one roster for exactly zero teams.
+   *
+   * It also no longer gives up when no LeagueTeam is CLAIMED. `Roster.platformUserId` sometimes
+   * holds our own User uuid directly, so a manager with an imported roster and an unclaimed team
+   * row is still findable — and telling him we cannot identify his roster, on the page whose
+   * whole job is his FAAB and his holes, is the worst place to be wrong.
+   */
+  const candidates = myRosterCandidates(myTeam ?? {}, userId)
 
   const allRosters = await prisma.roster.findMany({
     where: { leagueId },
