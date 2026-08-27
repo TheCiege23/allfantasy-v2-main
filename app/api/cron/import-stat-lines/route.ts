@@ -94,6 +94,36 @@ async function runOneSport(
   const startedAt = Date.now()
   const source = statSourceFor(sport)
 
+  /*
+   * ⚠ THE IDENTITY BACKFILL RUNS EVEN WHEN THERE IS NO STAT SOURCE, AND THAT ORDERING IS LOAD-BEARING.
+   *
+   * It used to sit below the `source === "none"` return, so SOCCER — the one sport with no player
+   * season-stats feed — never got an identity map at all. That was invisible here (this route
+   * correctly reported "no source") and surfaced two steps away, where the multi-sport game-log
+   * ingest refused with "identity map has no rollingInsightsId rows for this sport".
+   *
+   * The map is not a stat-lines private: game logs, injury resolution and news attribution all
+   * join through it. Build it for every sport that has provider-keyed players, then decide
+   * separately whether a stat feed exists.
+   */
+  const identity = skipIdentityBackfill
+    ? null
+    : await backfillIdentityMapForSport(sport, { limit: IDENTITY_SCAN_PER_RUN }).catch((e) => {
+        console.error(`[cron/import-stat-lines] ${sport} identity backfill failed:`, e)
+        return null
+      })
+
+  const identityReport = identity
+    ? {
+        scanned: identity.scanned,
+        created: identity.created,
+        linked: identity.linked,
+        alreadyMapped: identity.alreadyMapped,
+        ambiguous: identity.ambiguous,
+        errors: identity.errors.length ? identity.errors.slice(0, 3) : undefined,
+      }
+    : undefined
+
   if (source === "none") {
     return {
       body: {
@@ -101,6 +131,8 @@ async function runOneSport(
         sport,
         providerCoverage: "none",
         note: "no player season-stats feed exists for this sport at any configured provider",
+        /** Still reported: the map is what game logs and injury resolution join through. */
+        identityBackfill: identityReport,
         written: 0,
         durationMs: Date.now() - startedAt,
       },
@@ -129,11 +161,7 @@ async function runOneSport(
       }
     }
 
-    // Populate the join key before asking for rows that need it.
-    const identity = skipIdentityBackfill
-      ? null
-      : await backfillIdentityMapForSport(sport, { limit: IDENTITY_SCAN_PER_RUN })
-
+    // The join key was already populated above, before the source check — see the note there.
     const result = await syncRollingInsightsPlayerStatsToDb({ sport, season })
 
     /*
@@ -159,16 +187,7 @@ async function runOneSport(
         notModified: result.notModified || undefined,
         /** What the join key looked like going in — a stat sync that writes nothing because the
          *  map is still filling reads very differently from one whose provider went dark. */
-        identityBackfill: identity
-          ? {
-              scanned: identity.scanned,
-              created: identity.created,
-              linked: identity.linked,
-              alreadyMapped: identity.alreadyMapped,
-              ambiguous: identity.ambiguous,
-              errors: identity.errors.length ? identity.errors.slice(0, 3) : undefined,
-            }
-          : undefined,
+        identityBackfill: identityReport,
         fetched: result.fetched,
         written: result.written,
         resolvedDirect: result.resolvedDirect,
