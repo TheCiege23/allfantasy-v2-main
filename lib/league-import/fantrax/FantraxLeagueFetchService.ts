@@ -348,6 +348,8 @@ export async function fetchFantraxLeagueForImport(
   }
 
   const lookup = parseFantraxSourceInput(sourceInput)
+  let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
+  let liveScoringGaps: string[] = []
 
   /*
    * ⚠ A LIVE LEAGUE IS FETCHED HERE, THEN READ BACK AS A SNAPSHOT. Fantrax has a
@@ -376,6 +378,15 @@ export async function fetchFantraxLeagueForImport(
       throw new FantraxImportLeagueNotFoundError(outcome.error)
     }
     lookup.leagueRecordId = outcome.fantraxLeagueId
+    /*
+     * ⚠ CARRIED FROM THE IMPORT, NOT FROM THE SNAPSHOT. `scoringRules` was
+     * hardcoded to [] because the CSV export never contained scoring settings.
+     * The live API does, in the getLeagueInfo call the import already makes —
+     * and there is no settings column to put it in, so it rides along with this
+     * request. A CSV-sourced league still gets [], which is the truth for it.
+     */
+    liveScoringRules = outcome.scoringRules
+    liveScoringGaps = outcome.scoringGaps
   }
 
   const includeConfig = {
@@ -623,11 +634,14 @@ export async function fetchFantraxLeagueForImport(
     settings: {
       scoringType: leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: buildRosterPositionCounts(rosterPlayers),
-      scoringRules: [],
+      scoringRules: liveScoringRules.map((r) => ({ statKey: r.stat_key, points: r.points_value })),
       raw: {
         isDevy: leagueRecord.isDevy,
         sport: leagueRecord.sport,
         teamCount: leagueRecord.teamCount,
+        /* Categories the mapper could not place. Surfaced as coverage rather
+           than dropped: a scoring rule we silently skipped is a wrong score. */
+        ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),
       },
     },
     teams,

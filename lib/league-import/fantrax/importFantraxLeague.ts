@@ -12,6 +12,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
 import {
   flattenFantraxSchedule,
   getFantraxLeagueInfo,
@@ -32,6 +33,13 @@ export type FantraxImportOutcome =
       teamName: string
       resolved: number
       total: number
+      /**
+       * The league's scoring settings, read from the same getLeagueInfo call.
+       * Returned rather than stored: the snapshot has no column for settings,
+       * and the live path re-reads getLeagueInfo on every import anyway.
+       */
+      scoringRules: FantraxScoringRule[]
+      scoringGaps: string[]
     }
   | { ok: false; error: string; teams?: string[] }
 
@@ -115,6 +123,7 @@ export async function importFantraxLeague(args: {
   }
 
   const season = Number(info.data.seasonYear) || new Date().getFullYear()
+  const scoring = fantraxScoringRules(info.data)
 
   const fantraxUser = await prisma.fantraxUser.upsert({
     where: { fantraxUsername: mine.teamName },
@@ -209,6 +218,8 @@ export async function importFantraxLeague(args: {
     teamName: mine.teamName,
     resolved: mine.resolved,
     total: mine.total,
+    scoringRules: scoring.rules,
+    scoringGaps: scoring.gaps,
   }
 }
 
