@@ -976,7 +976,21 @@ export function ImportV4({
         the live API does not expose, and a league whose id will not read (a
         format the fxea API does not serve) has nowhere else to go.
       */}
-      {provider === 'fantrax' || defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
+      {/*
+        ⚠ COLLAPSED, NOT DELETED. As a always-open panel this was the first thing a
+        Fantrax importer met — a username field, a season, a sport, a file picker — and
+        its own heading told them the league-id path did not exist. On a phone, "export
+        CSVs from Fantrax and upload them" is where the import ends.
+        The capability is still worth keeping for exactly the reason above: an export
+        carries past seasons the live API does not expose, and a league whose id will not
+        read has nowhere else to go. So it stays one click away instead of in the way.
+      */}
+      {provider === 'fantrax' || defaultProvider === 'fantrax' ? (
+        <details className="af-im-fx-disclosure">
+          <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
+          <FantraxUpload />
+        </details>
+      ) : null}
 
       {/* ── Discovered leagues ──────────────────────────────────────── */}
       {leagues.length > 0 && phase.k !== 'done' ? (
