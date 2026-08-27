@@ -32,6 +32,12 @@ type LegacyRosterPlayer = {
   primaryPosition?: unknown
   position?: unknown
   nflTeam?: unknown
+  /**
+   * Which team owns him. Present on live-API imports, absent on CSV-era
+   * snapshots — a CSV only ever held the uploader's own squad, so an untagged
+   * row belongs to the uploader's team.
+   */
+  teamName?: unknown
 }
 
 type LegacyTransaction = {
@@ -388,6 +394,20 @@ export async function fetchFantraxLeagueForImport(
     userTeam,
   })
   const rosterPlayerMap = buildRosterPlayerMap(rosterPlayers)
+  /*
+   * ⚠ ROSTERS ARE PER TEAM NOW. Everything used to be attributed to the
+   * uploader's team because a CSV export contained nothing else; the live API
+   * returns all of them, so they are grouped by the `teamName` each row carries.
+   * An untagged row is a CSV-era roster and still falls to the uploader.
+   */
+  const rosterByTeam = new Map<string, LegacyRosterPlayer[]>()
+  for (const player of rosterPlayers) {
+    const label = normalizeTeamLabel(asString(player.teamName)) || normalizeTeamLabel(userTeam)
+    if (!label) continue
+    const bucket = rosterByTeam.get(label)
+    if (bucket) bucket.push(player)
+    else rosterByTeam.set(label, [player])
+  }
   const userTeamId = resolveTeamId(userTeam, teamMap)
   const standingsByNormalizedTeam = new Map<string, LegacyStanding>()
   for (const standing of standings) {
@@ -400,7 +420,13 @@ export async function fetchFantraxLeagueForImport(
     const standing = standingsByNormalizedTeam.get(normalizedLabel)
     const teamName = asString(standing?.team) || normalizedLabel
     const isUserTeam = normalizeTeamLabel(userTeam) === normalizedLabel
-    const rosterPlayerIds = isUserTeam ? Object.keys(rosterPlayerMap) : []
+    const ownPlayers = rosterByTeam.get(normalizedLabel) ?? []
+    const teamPlayerMap = ownPlayers.length
+      ? buildRosterPlayerMap(ownPlayers)
+      : isUserTeam
+        ? rosterPlayerMap
+        : {}
+    const rosterPlayerIds = Object.keys(teamPlayerMap)
     return {
       teamId,
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
@@ -418,7 +444,7 @@ export async function fetchFantraxLeagueForImport(
       rosterPlayerIds,
       starterPlayerIds: [],
       reservePlayerIds: rosterPlayerIds,
-      playerMap: isUserTeam ? rosterPlayerMap : {},
+      playerMap: teamPlayerMap,
     }
   })
 

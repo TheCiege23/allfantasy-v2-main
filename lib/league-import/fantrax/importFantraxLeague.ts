@@ -135,7 +135,21 @@ export async function importFantraxLeague(args: {
     teamCount: resolved.length,
     userTeam: mine.teamName,
     isDevy: best.isDevy,
-    roster: mine.players as unknown as object,
+    /*
+     * ⚠ EVERY TEAM'S ROSTER, NOT JUST THE IMPORTER'S. The CSV export only ever
+     * contained your own squad, so the column was shaped for one team and the
+     * fetch service gave the other eleven an empty roster. The live API returns
+     * all of them in the same call we already make, so throwing eleven away
+     * meant importing a league whose opponents had no players — and an opponent
+     * with no players cannot be scouted, matched up or traded with.
+     *
+     * Each row carries `teamName` so the reader can group them. A row without
+     * one is a CSV-era roster and still belongs to the uploader's team, which is
+     * how the old snapshots keep working.
+     */
+    roster: resolved.flatMap((r) =>
+      r.players.map((pl) => ({ ...pl, teamName: r.teamName })),
+    ) as unknown as object,
     standings: summarise(resolved) as unknown as object,
   }
 

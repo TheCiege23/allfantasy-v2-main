@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { parseFantraxLeagueId } from '@/lib/league-import/fantrax/fantraxApi'
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
@@ -69,5 +72,48 @@ describe('the tile is live, and the flow behind it exists', () => {
   it('claims both sports, which the measured sport detection backs up', () => {
     const fantrax = IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === 'fantrax')
     expect(fantrax?.supportedSports).toEqual(['NFL', 'NCAAF'])
+  })
+})
+
+const IMPORTER = readFileSync(
+  resolve(process.cwd(), 'lib/league-import/fantrax/importFantraxLeague.ts'),
+  'utf8',
+)
+const READER = readFileSync(
+  resolve(process.cwd(), 'lib/league-import/fantrax/FantraxLeagueFetchService.ts'),
+  'utf8',
+)
+
+/**
+ * ⚠ THE API RETURNED TWELVE ROSTERS AND THE STORE KEPT ONE. The `roster` column
+ * was shaped by the CSV export, which only ever contained your own squad, so
+ * every opponent imported with zero players — and an opponent with no players
+ * cannot be scouted, matched up or traded with.
+ *
+ * Measured on Cream Bowl after the fix: 12/12 teams populated, 466 players, 19
+ * unnamed (matching the 447/466 the CFB map resolves), and zero players
+ * appearing on two teams.
+ */
+describe('every team gets its own roster, not just the importer', () => {
+  it('stores all the rosters the API already returned, tagged by team', () => {
+    expect(IMPORTER).toMatch(/roster: resolved\.flatMap/)
+    expect(IMPORTER).toMatch(/teamName: r\.teamName/)
+    /* The old shape kept exactly one team's players. */
+    expect(IMPORTER).not.toMatch(/roster: mine\.players/)
+  })
+
+  it('groups them back out by team when reading', () => {
+    expect(READER).toMatch(/rosterByTeam/)
+    expect(READER).toMatch(/playerMap: teamPlayerMap/)
+    /* The line that gave eleven teams an empty roster. */
+    expect(READER).not.toMatch(/isUserTeam \? Object\.keys\(rosterPlayerMap\) : \[\]/)
+  })
+
+  /**
+   * ⚠ A CSV-ERA SNAPSHOT HAS NO teamName ON ANY ROW, and must keep working —
+   * those rows are the uploader's own squad.
+   */
+  it('still attributes untagged rows to the uploader team', () => {
+    expect(READER).toMatch(/normalizeTeamLabel\(asString\(player\.teamName\)\) \|\| normalizeTeamLabel\(userTeam\)/)
   })
 })
