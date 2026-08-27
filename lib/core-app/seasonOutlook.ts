@@ -334,6 +334,110 @@ type LeagueInput = {
   settings?: unknown
 }
 
+/** The row shape Season Outlook simulates from — `weeklyMatchup`, narrowed. */
+type OutlookMatchupRow = {
+  leagueId: string
+  seasonYear: number
+  week: number
+  rosterId: number
+  matchupId: number | null
+  pointsFor: number
+  pointsAgainst: number
+  win: number
+}
+
+/**
+ * Fold imported season history into the rows this screen fits its scoring model on.
+ *
+ * ⚠ THE HISTORY WAS ALWAYS BEING IMPORTED; NOTHING READ IT. Every provider's
+ * historical backfill writes `MatchupFact` (`dw_matchup_facts`), and no surface on the
+ * site queried that table. This screen fits each team's weekly scoring "from every
+ * completed week it has on file" — its own words — while every completed week from
+ * before the import was sitting one table away, unread.
+ *
+ * ⚠ TWO ID SPACES, AND THEY ARE NOT INTERCHANGEABLE. `WeeklyMatchup.leagueId` is the
+ * PROVIDER's league id; `MatchupFact.leagueId` is the AllFantasy uuid. They are joined
+ * through `LeagueInput` here rather than assumed equal — this repo has a long history of
+ * that assumption silently returning nothing.
+ *
+ * `teamA`/`teamB` are already canonical: the sync resolves each historical roster to the
+ * CURRENT season's `source_team_id` via the manager's id, which is exactly what
+ * `LeagueTeam.externalId` holds and what this screen keys `rosterId` on. Rosters it could
+ * not resolve fall back to the raw historical roster id, which will not parse to a
+ * current team and is dropped by the `Number.isFinite` guard below — correct, because
+ * attributing an unmatched roster's scoring to a current team would corrupt the fit.
+ *
+ * ⚠ ONLY FOR LEAGUES THAT ALREADY HAVE LIVE ROWS. A league with history but no current
+ * matchups must keep reporting "no matchups synced" rather than quietly simulating a
+ * season that finished years ago — the latest season on file is what this screen treats
+ * as the one being played.
+ *
+ * `matchupId` is null on every synthesised row. It exists to pair UNSCORED fixtures into
+ * a remaining schedule, and a completed historical week is never part of one; the
+ * schedule builder already skips null.
+ */
+function mergeImportedMatchupHistory(
+  /* Readonly on both inputs: the caller's `.catch(() => [[], [], [], []] as const)`
+     fallback produces readonly tuples, and widening here is honest — this function
+     never mutates what it is handed. */
+  live: readonly OutlookMatchupRow[],
+  facts: readonly {
+    leagueId: string
+    season: number | null
+    weekOrPeriod: number
+    teamA: string
+    teamB: string
+    scoreA: number
+    scoreB: number
+  }[],
+  leagues: readonly LeagueInput[],
+): OutlookMatchupRow[] {
+  if (facts.length === 0) return [...live]
+
+  const platformByLeagueId = new Map<string, string>()
+  for (const league of leagues) {
+    if (league.platformLeagueId) platformByLeagueId.set(league.id, league.platformLeagueId)
+  }
+
+  const leaguesWithLiveRows = new Set(live.map((r) => r.leagueId))
+  /* Live rows win every collision — an imported fact never overwrites a synced week. */
+  const seen = new Set(
+    live.map((r) => `${r.leagueId}|${r.seasonYear}|${r.week}|${r.rosterId}`),
+  )
+
+  const added: OutlookMatchupRow[] = []
+  for (const fact of facts) {
+    const platformLeagueId = platformByLeagueId.get(fact.leagueId)
+    if (!platformLeagueId || fact.season == null) continue
+    if (!leaguesWithLiveRows.has(platformLeagueId)) continue
+
+    const sides = [
+      { team: fact.teamA, pointsFor: fact.scoreA, pointsAgainst: fact.scoreB },
+      { team: fact.teamB, pointsFor: fact.scoreB, pointsAgainst: fact.scoreA },
+    ]
+    for (const side of sides) {
+      const rosterId = Number(side.team)
+      if (!Number.isFinite(rosterId)) continue
+      const key = `${platformLeagueId}|${fact.season}|${fact.weekOrPeriod}|${rosterId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      added.push({
+        leagueId: platformLeagueId,
+        seasonYear: fact.season,
+        week: fact.weekOrPeriod,
+        rosterId,
+        matchupId: null,
+        pointsFor: side.pointsFor,
+        pointsAgainst: side.pointsAgainst,
+        /* A tie is not a win. `win` is an Int on WeeklyMatchup, matched here. */
+        win: side.pointsFor > side.pointsAgainst ? 1 : 0,
+      })
+    }
+  }
+
+  return added.length > 0 ? [...live, ...added] : [...live]
+}
+
 function readPlayoffTeams(settings: unknown, teamCount: number): number {
   const slice = (settings as { playoff?: { playoffTeams?: unknown } } | null)?.playoff
   const raw = slice?.playoffTeams
@@ -470,7 +574,7 @@ export async function getSeasonOutlook(
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
   if (platformIds.length === 0) return empty
 
-  const [rows, teams, mine] = await Promise.all([
+  const [liveRows, teams, mine, importedHistory] = await Promise.all([
     prisma.weeklyMatchup.findMany({
       where: { leagueId: { in: platformIds } },
       select: {
@@ -497,7 +601,30 @@ export async function getSeasonOutlook(
       where: { league: { platformLeagueId: { in: platformIds } }, claimedByUserId: userId },
       select: { externalId: true, league: { select: { platformLeagueId: true } } },
     }),
-  ]).catch(() => [[], [], []] as const)
+    /*
+     * Imported season history. Keyed on the AllFantasy league id, NOT the provider id
+     * the three queries above use — see mergeImportedMatchupHistory for why those are
+     * different id spaces and how they are joined.
+     */
+    prisma.matchupFact.findMany({
+      where: { leagueId: { in: leagues.map((l) => l.id) } },
+      select: {
+        leagueId: true,
+        season: true,
+        weekOrPeriod: true,
+        teamA: true,
+        teamB: true,
+        scoreA: true,
+        scoreB: true,
+      },
+    }),
+  ]).catch(() => [[], [], [], []] as const)
+
+  /*
+   * History folded in before anything reads `rows`, so the scoring fit, the records and
+   * the schedule all see one set of weeks rather than two sources that disagree.
+   */
+  const rows = mergeImportedMatchupHistory(liveRows, importedHistory, leagues)
 
   if (rows.length === 0) return empty
 
