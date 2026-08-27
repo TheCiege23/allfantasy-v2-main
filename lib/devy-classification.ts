@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import {
   getCFBPlayerStats, getCFBTeamRoster,
-  getCFBDraftPicksResult, getCFBTeamRosterResult,
+  getCFBDraftPicksResult, getCFBTeamRosterResult, CfbdUnavailableError,
   getCFBRecruits, getCFBTransferPortal, getCFBReturningProduction,
   getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings,
   getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing,
@@ -132,8 +132,18 @@ export async function ingestCFBDRosters(
   const errors: string[] = []
   const teamsProcessed: string[] = []
 
-  const testRoster = await getCFBTeamRoster('Alabama', year)
-  if (testRoster.length === 0 && year === currentYear) {
+  /*
+   * Season probe. Uses the RESULT variant on purpose: `getCFBTeamRoster` answers
+   * `[]` for a quota wall exactly as it does for "this season is not published
+   * yet", so the `[]`-returning wrapper would silently drop us to last season on
+   * a provider outage — and then upsert a full roster under the wrong year.
+   * A refusal must abort the phase, not be read as a season signal.
+   */
+  const probe = await getCFBTeamRosterResult('Alabama', year)
+  if (!probe.ok) {
+    throw new CfbdUnavailableError(probe.failure.status ?? 0)
+  }
+  if (probe.data.length === 0 && year === currentYear) {
     year = currentYear - 1
     console.log(`[DevySync] Current year roster not available, falling back to ${year}`)
   }
@@ -141,8 +151,14 @@ export async function ingestCFBDRosters(
   for (const team of options?.teams ?? TOP_CFB_TEAMS) {
     if (options?.shouldStop?.()) break
     try {
-      const roster = await getCFBTeamRoster(team, year)
-      const fantasyPlayers = roster.filter(p => FANTASY_POSITIONS.has(p.position))
+      // Result variant again: an empty roster and a refused request must not
+      // both arrive as `[]`, or the run reports `upserted: 0, errors: 0` for a
+      // provider that answered nothing.
+      const rosterRes = await getCFBTeamRosterResult(team, year)
+      if (!rosterRes.ok) {
+        throw new CfbdUnavailableError(rosterRes.failure.status ?? 0)
+      }
+      const fantasyPlayers = rosterRes.data.filter(p => FANTASY_POSITIONS.has(p.position))
 
       for (const p of fantasyPlayers) {
         const normalizedName = normalizeName(p.fullName)
