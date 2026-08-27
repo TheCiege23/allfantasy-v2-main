@@ -389,6 +389,28 @@ export async function assertImportCommissioner(args: {
    * import it.
    */
   if (args.provider === 'espn' && base.isCommissioner === undefined && base.verification === 'api') {
+    /*
+     * ⚠ NOT REQUIRING AN ATTESTATION IS NOT THE SAME AS IGNORING A BAD ONE.
+     * This returned `member` unconditionally, which quietly retired the replay
+     * guard for ESPN: a payload claiming it was confirmed for Yahoo, or for a
+     * different league, was accepted without comment. It grants no access that
+     * proven membership had not already granted — but a mismatched claim is a
+     * client bug or a replayed one, and swallowing it hides both. The sibling
+     * branch below refuses exactly this and says why; ESPN now matches it.
+     */
+    if (args.attestation?.accepted === true && !attestationMatchesThisRequest(args.attestation, args)) {
+      return {
+        ...base,
+        ok: false,
+        isCommissioner: false,
+        reason: 'That confirmation was for a different league or provider.',
+      }
+    }
+    /*
+     * Stamped `member`, not `attestation`, even when one was supplied: the
+     * audit trail should record what was PROVEN — membership — rather than a
+     * commissioner claim that played no part in the decision.
+     */
     return { ...base, ok: true, verification: 'member' }
   }
 
