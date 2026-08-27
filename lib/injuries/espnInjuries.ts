@@ -25,9 +25,33 @@ import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
  * rather than conflict.
  */
 
+/**
+ * `sport/league` path segments for ESPN's site API.
+ *
+ * VERIFICATION STATUS DIFFERS BY ROW AND IS WORTH KNOWING. The two football codes were measured
+ * against `/injuries` directly (2026-08-15: NFL 32 team blocks / 800 injuries, NCAAF 3 / 3). The
+ * four added afterwards are the same site-API contract on paths whose `/scoreboard` sibling was
+ * verified 200 in `lib/providers/espnUrls.ts`, but their `/injuries` response has NOT been
+ * measured here. That is deliberately not hidden: a path that 404s records an error and writes
+ * nothing, and `injuriesSourceFor()` below is what stops a sport with no working source from
+ * being reported as a failing one.
+ *
+ * SOCCER IS ABSENT ON PURPOSE. ESPN scopes soccer per competition (`soccer/eng.1`,
+ * `soccer/esp.1`, …) with no all-competition injuries path, so there is no single URL to put
+ * here. Inventing one would produce a 404 every fifteen minutes and call it an outage.
+ */
 const ESPN_PATH: Record<string, string> = {
   NFL: 'football/nfl',
   NCAAF: 'football/college-football',
+  NBA: 'basketball/nba',
+  NCAAB: 'basketball/mens-college-basketball',
+  MLB: 'baseball/mlb',
+  NHL: 'hockey/nhl',
+}
+
+/** Does ESPN publish an injuries path for this sport? */
+export function espnHasInjuryFeed(sport: string): boolean {
+  return ESPN_PATH[sport.trim().toUpperCase()] != null
 }
 
 const ESPN_SOURCE = 'espn'
@@ -82,10 +106,11 @@ function resolveStatus(injury: Record<string, any>): string | null {
 }
 
 export async function syncEspnInjuriesToDb(opts: {
-  sport: 'NFL' | 'NCAAF'
+  /** Any sport with a row in {@link ESPN_PATH}; anything else returns a no-path error, not a throw. */
+  sport: string
   now?: Date
 }): Promise<EspnInjurySyncResult> {
-  const sport = opts.sport
+  const sport = opts.sport.trim().toUpperCase()
   const result: EspnInjurySyncResult = { sport, fetched: 0, written: 0, skippedNoPlayer: 0, errors: [] }
 
   const path = ESPN_PATH[sport]

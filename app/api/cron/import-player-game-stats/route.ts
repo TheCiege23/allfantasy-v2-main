@@ -19,6 +19,12 @@
  *   maxWeeks — cap weeks per run (default 6)
  *   limit    — cap player rows per week (smoke tests; such weeks stay `partial` by design)
  *   dryRun   — "true" to fetch/count without writing
+ *
+ *   multiSport — "1" switches to the Rolling Insights date sweep for MLB / NBA / NHL / NCAAB /
+ *                SOCCER and skips the whole NFL path above. See the block that reads it.
+ *   sport      — with multiSport=1, restrict to one of those sports
+ *   days       — with multiSport=1, how many days back to sweep (default 3, max 120)
+ *   from,to    — with multiSport=1, an explicit YYYY-MM-DD range for a historical backfill
  */
 
 import type { NextRequest } from "next/server"
@@ -26,6 +32,12 @@ import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
+import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
+import {
+  dateRange,
+  ingestRollingInsightsGameLogs,
+  recentDates,
+} from "@/lib/sports-data/rollingInsightsGameLogs"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import {
   SleeperWeeklyStatsFetcher,
@@ -45,6 +57,16 @@ export const maxDuration = 300
 
 const RUN_BUDGET_MS = 240_000
 const DEFAULT_MAX_WEEKS = 6
+
+/**
+ * Sports whose per-game player lines come from Rolling Insights `/live/{date}/{SPORT}`.
+ *
+ * NFL is absent because it already has a better source here: Sleeper's weekly stats, with a
+ * completion ledger and fantasy points already computed. NCAAF is absent because Rolling Insights
+ * carries no college football data at all — measured `fetched: 0` — which is the same reason
+ * `import-stat-lines` routes NCAAF to CollegeFootballData.
+ */
+const MULTI_SPORT_GAME_LOG_SPORTS = ["MLB", "NBA", "NHL", "NCAAB", "SOCCER"] as const
 
 type WeekOutcome = ImportWeekReport | {
   season: number
@@ -70,6 +92,71 @@ async function handle(req: NextRequest) {
       skipped: true,
       reason: "migration_pending: player_game_stats lacks the provider-telemetry columns; apply 20260721120000_player_game_stats_provider_telemetry",
       durationMs: Date.now() - startedAt,
+    })
+  }
+
+  /*
+   * MULTI-SPORT MODE — `?multiSport=1`, optionally narrowed with `?sport=`.
+   *
+   * ⚠ AN EXCLUSIVE MODE, ABOVE THE LOCK, ON PURPOSE. Everything below this point is
+   * NFL-by-construction: `SleeperWeeklyStatsFetcher` serves only NFL, the completion ledger is
+   * keyed by NFL week, and `acquireRunLock` is a single global lock this job holds for its whole
+   * run. Measured on production 2026-08-27, that is why `player_game_stats` held 252,768 rows and
+   * every one was NFL. Threading six more sports through the NFL ledger would mean either
+   * serialising them behind one lock or inventing a week number for sports that have no weeks.
+   *
+   * The other sports instead sweep DATES against Rolling Insights' `/live/{date}/{SPORT}`, which
+   * the contract describes as returning started AND finished events — so the same call is both
+   * the live tick and the historical backfill. Newest-first, budgeted, and resumable by simply
+   * running again: the upsert key is (playerId, sportType, gameId), so re-covering a date is free.
+   *
+   * NOT A NEW ROUTE, deliberately — the repo sits at Vercel's 2048-route ceiling and per-game
+   * player stats already have a home here.
+   */
+  if (url.searchParams.get("multiSport") === "1") {
+    const explicit = url.searchParams.get("sport")?.trim().toUpperCase()
+    const daysParam = Number(url.searchParams.get("days"))
+    const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(Math.floor(daysParam), 120) : 3
+    const fromDate = url.searchParams.get("from")
+    const toDate = url.searchParams.get("to")
+
+    const candidates = MULTI_SPORT_GAME_LOG_SPORTS.filter((s) => (explicit ? s === explicit : true))
+    const budget = createRunBudget(RUN_BUDGET_MS)
+    const perSport: Record<string, unknown> = {}
+    const deferred: string[] = []
+
+    // Rotated so a budget cut does not starve the same sport every night.
+    for (const s of rotateForFairness(candidates)) {
+      if (!explicit && budget.exhausted()) {
+        deferred.push(s)
+        continue
+      }
+      const dates =
+        fromDate && toDate ? dateRange(fromDate, toDate) : recentDates(days)
+      try {
+        perSport[s] = await ingestRollingInsightsGameLogs({
+          sport: s,
+          dates,
+          shouldStop: () => budget.exhausted(),
+        })
+      } catch (err) {
+        perSport[s] = { error: String(err).slice(0, 200) }
+      }
+    }
+
+    const written = Object.values(perSport).reduce<number>(
+      (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),
+      0,
+    )
+    return NextResponse.json({
+      ok: true,
+      mode: "multiSport",
+      provider: "rolling_insights",
+      written,
+      sports: perSport,
+      deferredForBudget: deferred.length ? deferred : undefined,
+      durationMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
     })
   }
 
