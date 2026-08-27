@@ -97,6 +97,7 @@ function normalise(value: string): string {
 export async function findLeagueByName(
   userId: string,
   query: string,
+  season?: number | null,
 ): Promise<LeagueNameLookup> {
   const wanted = normalise(query ?? '')
   const ids = await memberLeagueIds(userId)
@@ -118,12 +119,28 @@ export async function findLeagueByName(
 
   if (!wanted) return { kind: 'none', known: named.slice(0, MAX_SUGGESTIONS) }
 
+  /*
+   * ⚠ THE SAME LEAGUE APPEARS ONCE PER SEASON. `League` carries a `season`
+   * column and an import writes a row per season, so a long-running league is
+   * several rows sharing one name — "which of the two KBFL leagues did you
+   * mean?" was unanswerable because BOTH are called KBFL. A season narrows it
+   * without ever letting the model hand us an id.
+   */
+  const pool =
+    typeof season === 'number' && Number.isFinite(season)
+      ? (() => {
+          const inSeason = named.filter((l) => l.season === season)
+          /* Only narrow if it finds something; a wrong year must not erase the league. */
+          return inSeason.length > 0 ? inSeason : named
+        })()
+      : named
+
   /* Exact first — an exact name must never lose to a longer one containing it. */
-  const exact = named.filter((l) => normalise(l.name) === wanted)
+  const exact = pool.filter((l) => normalise(l.name) === wanted)
   if (exact.length === 1) return { kind: 'match', league: exact[0] }
   if (exact.length > 1) return { kind: 'ambiguous', candidates: exact.slice(0, MAX_SUGGESTIONS) }
 
-  const partial = named.filter((l) => {
+  const partial = pool.filter((l) => {
     const n = normalise(l.name)
     return n.includes(wanted) || wanted.includes(n)
   })

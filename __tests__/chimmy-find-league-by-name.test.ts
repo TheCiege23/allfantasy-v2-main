@@ -145,6 +145,49 @@ describe('findLeagueByName', () => {
     ])
   })
 
+  /*
+   * ⚠ THE REAL CASE, FROM PRODUCTION. `League` carries a `season` column and an
+   * import writes a row per season, so KBFL exists twice. Chimmy asked "which of
+   * the two KBFL leagues did you mean?" — unanswerable, because both are called
+   * KBFL. The year the user already said is what separates them.
+   */
+  it('resolves identically named leagues by the season the user gave', async () => {
+    leagueTeamFindMany.mockResolvedValue([{ leagueId: 'l-2025' }, { leagueId: 'l-2026' }])
+    withLeagues([
+      { id: 'l-2026', name: 'KBFL', season: 2026 },
+      { id: 'l-2025', name: 'KBFL', season: 2025 },
+    ])
+
+    /* Without a season it must still refuse to guess. */
+    expect((await findLeagueByName('user-1', 'KBFL')).kind).toBe('ambiguous')
+
+    const out = await findLeagueByName('user-1', 'KBFL', 2025)
+    expect(out.kind === 'match' && out.league.id).toBe('l-2025')
+  })
+
+  /*
+   * A year that matches nothing must not erase the league — better to ask which
+   * of the two than to claim a league they are plainly in does not exist.
+   */
+  it('falls back to asking when the season matches no row', async () => {
+    leagueTeamFindMany.mockResolvedValue([{ leagueId: 'l-2025' }, { leagueId: 'l-2026' }])
+    withLeagues([
+      { id: 'l-2026', name: 'KBFL', season: 2026 },
+      { id: 'l-2025', name: 'KBFL', season: 2025 },
+    ])
+
+    const out = await findLeagueByName('user-1', 'KBFL', 1999)
+    expect(out.kind).toBe('ambiguous')
+  })
+
+  it('carries the season through on a unique match so callers can show it', async () => {
+    rosterFindMany.mockResolvedValue([{ leagueId: 'l-1' }])
+    withLeagues([{ id: 'l-1', name: 'Solo League', season: 2024 }])
+
+    const out = await findLeagueByName('user-1', 'Solo League')
+    expect(out.kind === 'match' && out.league.season).toBe(2024)
+  })
+
   it('survives a user with no leagues at all', async () => {
     leagueFindMany.mockResolvedValue([])
     const out = await findLeagueByName('user-1', 'KBFL')
