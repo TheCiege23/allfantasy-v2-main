@@ -13,6 +13,16 @@ const transactionMock = vi.fn(async (ops: unknown[]) => Promise.all(ops as Promi
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: (...args: unknown[]) => leagueFindUnique(...args) },
+    /*
+     * ⚠ ADDED WHEN THE SERVICE STARTED READING ROSTERS. Without it the call hit
+     * undefined and the service caught its own TypeError, returning
+     * `{ attempted: true, error: "Cannot read properties of undefined (reading
+     * 'findMany')" }` — no `seasonsConsidered`, no provider calls, and an
+     * assertion that read as a completion-gate regression rather than a missing
+     * stub. The service catching its own failure is correct; the fake being
+     * short of a model is what made it look like a behaviour change.
+     */
+    roster: { findMany: (...args: unknown[]) => rosterFindMany(...args) },
     leagueSeason: { findFirst: (...args: unknown[]) => leagueSeasonFindFirst(...args) },
     draftFact: {
       findFirst: (...args: unknown[]) => draftFactFindFirst(...args),
@@ -48,6 +58,7 @@ import { getLeagueDrafts, getLeagueUsers, getLeagueRosters } from '@/lib/sleeper
 import { syncSleeperHistoricalDraftFactsAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalDraftSyncService'
 import { syncSleeperHistoricalSeasonStateAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalSeasonStateSyncService'
 
+const rosterFindMany = vi.fn(async () => [] as unknown[])
 const chainMock = vi.mocked(getSleeperHistoricalLeagueChain)
 
 function threeSeasonChain() {
