@@ -452,7 +452,33 @@ export function buildChimmyStructuredPromptPayloadFromBundle(
     standings: bundle.standings?.rows.length ? bundle.standings.rows : null,
     schedule,
     draftState: null,
-    availablePlayers: null,
+    /*
+     * ⚠ `ncaaf_devy_prospect_advice` REQUIRES `availablePlayers` AND THIS WAS
+     * ALWAYS NULL, so that answer mode could never satisfy its own contract --
+     * it was declared in ALL_ANSWER_MODES and REQUIRED_FIELDS_BY_MODE but
+     * structurally unanswerable regardless of what data existed.
+     *
+     * The devy board is precisely what "available players" means in a devy
+     * question, so it fills the field for THAT MODE ONLY. Draft and waiver
+     * advice also require this key and mean something completely different by
+     * it; handing them college prospects would be worse than the null.
+     *
+     * Null when the board is empty rather than an empty array, so the mode
+     * reports "missing required data" instead of silently answering off nothing.
+     */
+    availablePlayers:
+      answerMode === 'ncaaf_devy_prospect_advice' && bundle.devy?.topProspects?.length
+        ? {
+            prospects: bundle.devy.topProspects,
+            // Coverage travels WITH the list: the board ranks a minority of the
+            // pool, and "the best devy QB" is a different claim from "the best
+            // of the ones we can rank".
+            ranked: bundle.devy.ranked,
+            unranked: bundle.devy.unranked,
+            coverage: bundle.devy.coverage,
+            gaps: bundle.devy.gaps,
+          }
+        : null,
     projections: extractProjectionsFromBundle(bundle),
     injuries: null,
     recentStats: null,

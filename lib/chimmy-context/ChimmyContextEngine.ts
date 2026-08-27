@@ -21,6 +21,7 @@ import { LeagueContextProvider } from "@/lib/chimmy-context/providers/LeagueCont
 import { LeagueDifficultyContextProvider } from "@/lib/chimmy-context/providers/LeagueDifficultyContextProvider"
 import { MatchupContextProvider } from "@/lib/chimmy-context/providers/MatchupContextProvider"
 import { RankingContextProvider } from "@/lib/chimmy-context/providers/RankingContextProvider"
+import { DevyContextProvider } from '@/lib/chimmy-context/providers/DevyContextProvider'
 import { ReplayInsightContextProvider } from "@/lib/chimmy-context/providers/ReplayInsightContextProvider"
 import { RosterContextProvider } from "@/lib/chimmy-context/providers/RosterContextProvider"
 import { SportsScheduleContextProvider } from "@/lib/chimmy-context/providers/SportsScheduleContextProvider"
@@ -38,6 +39,7 @@ import type {
   ProviderResult,
   RankingContextSlice,
   ReplayInsightSlice,
+  DevyContextSlice,
   RosterContextSlice,
   SportsScheduleSlice,
   StandingsContextSlice,
@@ -67,6 +69,7 @@ export type ChimmyContextEngineOptions = {
     importedHistory?: ChimmyContextProvider<ImportedHistorySlice>
     sportsSchedule?: ChimmyContextProvider<SportsScheduleSlice>
     replayInsights?: ChimmyContextProvider<ReplayInsightSlice>
+    devy?: ChimmyContextProvider<DevyContextSlice>
   }
 }
 
@@ -115,6 +118,7 @@ export class ChimmyContextEngine {
     importedHistory: ChimmyContextProvider<ImportedHistorySlice>
     sportsSchedule: ChimmyContextProvider<SportsScheduleSlice>
     replayInsights: ChimmyContextProvider<ReplayInsightSlice>
+    devy: ChimmyContextProvider<DevyContextSlice>
   }
 
   constructor(options: ChimmyContextEngineOptions = {}) {
@@ -131,6 +135,7 @@ export class ChimmyContextEngine {
       importedHistory: options.providers?.importedHistory ?? new ImportHistoryContextProvider(),
       sportsSchedule: options.providers?.sportsSchedule ?? new SportsScheduleContextProvider(),
       replayInsights: options.providers?.replayInsights ?? new ReplayInsightContextProvider(),
+      devy: options.providers?.devy ?? new DevyContextProvider(),
     }
   }
 
@@ -198,6 +203,7 @@ export class ChimmyContextEngine {
       ["importedHistory", this.providers.importedHistory as AnyProvider],
       ["sportsSchedule", this.providers.sportsSchedule as AnyProvider],
       ["replayInsights", this.providers.replayInsights as AnyProvider],
+      ["devy", this.providers.devy as AnyProvider],
     ]
 
     const filter = options.onlyProviders ? new Set(options.onlyProviders) : null
@@ -243,6 +249,7 @@ export class ChimmyContextEngine {
     const historyResult = get<ImportedHistorySlice>("importedHistory")
     const scheduleResult = get<SportsScheduleSlice>("sportsSchedule")
     const replayResult = get<ReplayInsightSlice>("replayInsights")
+    const devyResult = get<DevyContextSlice>("devy")
 
     const bundle: ChimmyContextBundle = {
       user: userResult?.data ?? null,
@@ -257,6 +264,7 @@ export class ChimmyContextEngine {
       importedHistory: historyResult?.data ?? null,
       sportsSchedule: scheduleResult?.data ?? null,
       replayInsights: replayResult?.data ?? null,
+      devy: devyResult?.data ?? null,
       memoryRefs: [],
       meta: {
         builtAt: new Date().toISOString(),

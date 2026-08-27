@@ -399,6 +399,43 @@ export type MemoryRef = {
   summary: string
 }
 
+
+/**
+ * Devy / college prospect grounding.
+ *
+ * ⚠ COVERAGE IS PART OF THE SLICE, NOT A FOOTNOTE. Most of the devy pool has no
+ * scouting projection, so the board ranks a minority of it. Handing Chimmy a top
+ * ten without saying how much of the class it came from invites "the best devy
+ * QB available" when the honest claim is "the best of the 812 we can rank".
+ *
+ * `value` is board points and is NULL for an unranked player — never 0. A zero
+ * would say "worth nothing" where the truth is "nobody has scouted him", and
+ * those are opposite claims about a devy asset.
+ */
+export type DevyProspect = {
+  name: string
+  position: string | null
+  school: string | null
+  classYear: number | null
+  draftEligibleYear: number | null
+  /** 1 = best devy asset on the board. */
+  devyRank: number | null
+  /** Board points. Null when unranked. */
+  value: number | null
+}
+
+export type DevyContextSlice = {
+  /** Highest-ranked prospects, best first. */
+  topProspects: DevyProspect[]
+  /** How many of the pool carry a rank, and how many could not be ranked. */
+  ranked: number
+  unranked: number
+  /** ranked / (ranked + unranked). Shown so a short board is not read as a complete one. */
+  coverage: number
+  /** Everything the board could not evidence, carried through verbatim. */
+  gaps: string[]
+}
+
 /** Final aggregated bundle handed to consumers (chat route, debug endpoints). */
 export type ChimmyContextBundle = {
   user: UserContextSlice | null
@@ -414,6 +451,8 @@ export type ChimmyContextBundle = {
   sportsSchedule: SportsScheduleSlice | null
   /** Historical Replay insights (Phase 22) — observational only; null when disabled/unavailable. */
   replayInsights: ReplayInsightSlice | null
+  /** Devy/college prospect board. Null when the pool is empty or unrankable. */
+  devy: DevyContextSlice | null
   /** Future memory retrieval hook (vector store). Phase 2A: []. */
   memoryRefs: MemoryRef[]
   /** Provenance: which providers ran, succeeded, failed, were cached. */
