@@ -354,7 +354,12 @@ function ChimmyPanel({
           response?: string
           error?: string
           details?: { message?: string }
-          meta?: { leagueGrounding?: ChimmyGrounding; players?: ChimmyPlayerCard[] }
+          meta?: {
+            leagueGrounding?: ChimmyGrounding
+            players?: ChimmyPlayerCard[]
+            /** Answered without spending anything — do not print a price on it. */
+            free?: boolean
+          }
         }
         if (!res.ok) {
           /*
@@ -426,7 +431,12 @@ function ChimmyPanel({
             text: answer,
             isPublic: publicMode,
             handoff,
-            cost: tokenCost,
+            /*
+             * ⚠ WAS UNCONDITIONAL. Any 200 got the price label, including the
+             * off-topic deflection, which spends nothing — so the UI charged
+             * somebody 10 tokens for being told their question was filtered.
+             */
+            cost: payload.meta?.free ? null : tokenCost,
             grounding,
             players: payload.meta?.players ?? null,
           },
