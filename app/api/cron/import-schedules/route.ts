@@ -12,6 +12,10 @@
  *   source  — "rolling_insights" | "api_sports" | "all" (default: "all")
  *   rosters — "1" runs ONLY the TheSportsDB roster sweep and skips every other
  *             block. See the roster section below for why it is its own mode.
+ *   riProfiles — "1" runs ONLY the Rolling Insights team + player profile sweep, for all seven
+ *             sports. This is the pass that fills soccer badges and expands soccer to EPL /
+ *             LALIGA / SERIEA, and the one that keeps PlayerIdentityMap's join key fed. Also its
+ *             own mode, for the same budget reason as `rosters`.
  */
 
 import type { NextRequest } from "next/server"
@@ -31,6 +35,10 @@ import {
   ingestTeams,
   type IngestSport,
 } from "@/lib/sports-data/theSportsDbIngest"
+import {
+  syncRollingInsightsPlayersToDb,
+  syncRollingInsightsTeamsToDb,
+} from "@/lib/sports-data/rollingInsightsTeamsPlayers"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -46,6 +54,15 @@ export const maxDuration = 300
 
 /** Every league the TheSportsDB ingest covers. */
 const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
+
+/**
+ * Sports whose team + player profiles come from Rolling Insights under `?riProfiles=1`.
+ *
+ * All seven: `team_info` and `player_info` are the two endpoints the vendor's support matrix
+ * marks `true` for every sport, college and soccer included. That is precisely why this pass —
+ * and not the TheSportsDB one — is what makes the non-NFL sports whole.
+ */
+const RI_PROFILE_SPORTS: IngestSport[] = TSDB_SPORTS
 
 /**
  * Leagues whose teams come back from ONE `search_all_teams` call.
@@ -91,6 +108,14 @@ async function handle(req: NextRequest) {
   const season = url.searchParams.get("season") ?? undefined
   const source = (url.searchParams.get("source") ?? "all").toLowerCase()
   const rostersOnly = url.searchParams.get("rosters") === "1"
+  /** Exclusive mode, like `?rosters=1` — see the block that reads it for why it gets its own fire. */
+  const riProfilesOnly = url.searchParams.get("riProfiles") === "1"
+  /**
+   * The schedule/teams blocks run only in the DEFAULT mode. Both `?rosters=1` and `?riProfiles=1`
+   * are exclusive because each is a per-team or per-league sweep that needs the whole budget —
+   * this route has already returned a 300s edge 502 once by doing too much in one fire.
+   */
+  const runScheduleBlocks = !rostersOnly && !riProfilesOnly
 
   const startedAt = Date.now()
   const budget = createRunBudget()
@@ -98,7 +123,7 @@ async function handle(req: NextRequest) {
   const diagnostics: Record<string, unknown> = {}
 
   try {
-    if (!rostersOnly && (source === "all" || source === "rolling_insights") && sports.includes("NFL")) {
+    if (runScheduleBlocks && (source === "all" || source === "rolling_insights") && sports.includes("NFL")) {
       try {
         const riCount = await syncNFLScheduleToDb({ season })
         results.rolling_insights = { synced: riCount, sport: "NFL" }
@@ -107,7 +132,7 @@ async function handle(req: NextRequest) {
       }
     }
 
-    if (!rostersOnly && (source === "all" || source === "api_sports")) {
+    if (runScheduleBlocks && (source === "all" || source === "api_sports")) {
       // Per-sport isolation: a provider failure on one sport must not abandon the other, which is
       // a behaviour the two separate cron entries got for free by being separate fires.
       for (const s of sports) {
@@ -158,7 +183,7 @@ async function handle(req: NextRequest) {
      * six-hour cadence, not the default day, because this fires four times daily and a daily
      * rotation would give the same sport the lead on all four.
      */
-    if (!rostersOnly && url.searchParams.get('tsdb') !== '0') {
+    if (runScheduleBlocks && url.searchParams.get('tsdb') !== '0') {
       const tsdb: Record<string, unknown> = {}
       const deferred: string[] = []
       for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
@@ -249,6 +274,67 @@ async function handle(req: NextRequest) {
       }
       if (deferred.length) rosters.deferredSports = deferred
       results.thesportsdb_rosters = rosters
+    }
+
+    /*
+     * ROLLING INSIGHTS TEAM + PLAYER PROFILES — `?riProfiles=1`.
+     *
+     * ⚠ THIS IS WHAT MAKES SOCCER A THREE-LEAGUE PRODUCT AND FILLS ITS BADGES. Measured on
+     * production 2026-08-27, SOCCER had 968 team rows and 40 logos (4%): the 900 `clearsports`
+     * rows and 28 `rolling_insights` rows carried no badge, and the only 20 that did came from
+     * TheSportsDB — whose `LEAGUES.SOCCER` is pinned to league 4328, the English Premier League,
+     * because 4328 is the ONE soccer league id committed in `contracts/thesportsdb/`. La Liga and
+     * Serie A ids are not in that contract and CLAUDE.md forbids probing to find them.
+     *
+     * Rolling Insights addresses soccer by LEAGUE CODE (EPL / LALIGA / SERIEA), all three named in
+     * its committed contract, and its `team-info` payload carries the badge. So this pass expands
+     * soccer to three leagues and fills the logos without inventing an identifier.
+     *
+     * It is also the pass that keeps `PlayerIdentityMap` fed: the identity backfill copies
+     * `SportsPlayer.externalId` from exactly these `source: 'rolling_insights'` rows.
+     *
+     * ITS OWN MODE for the same reason `?rosters=1` is: this route has already hit the 300s edge
+     * 502 once, and profiles are up to three calls per sport.
+     */
+    if (riProfilesOnly) {
+      const profiles: Record<string, unknown> = {}
+      const deferred: string[] = []
+
+      for (const s of rotateForFairness(RI_PROFILE_SPORTS, 24 * 60 * 60 * 1000)) {
+        if (budget.exhausted()) {
+          deferred.push(s)
+          continue
+        }
+        try {
+          const teams = await syncRollingInsightsTeamsToDb({ sport: s })
+          // Re-checked before the second, much larger call — a player sweep started at 239s is
+          // exactly how this route reached the edge before.
+          const players = budget.exhausted()
+            ? null
+            : await syncRollingInsightsPlayersToDb({ sport: s })
+
+          const entry: Record<string, unknown> = {
+            teams: teams.written,
+            teamsWithLogo: teams.withLogo,
+            players: players?.written ?? 0,
+            playersWithImage: players?.withImage ?? 0,
+          }
+          // Soccer's per-league split is the whole point of this pass; showing only a total would
+          // hide two leagues returning nothing behind one league returning plenty.
+          if (s === 'SOCCER') {
+            entry.byLeague = { teams: teams.byLeague, players: players?.byLeague }
+          }
+          if (players == null) entry.playersDeferredForBudget = true
+          if (teams.notModified || players?.notModified) entry.notModified = true
+          const errs = [...teams.errors, ...(players?.errors ?? [])]
+          if (errs.length) entry.errors = errs.slice(0, 5)
+          profiles[s] = entry
+        } catch (err) {
+          profiles[s] = { error: String(err).slice(0, 120) }
+        }
+      }
+      if (deferred.length) profiles.deferredSports = deferred
+      results.rolling_insights_profiles = profiles
     }
 
     const totalSynced = Object.values(results)

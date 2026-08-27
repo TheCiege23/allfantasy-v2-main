@@ -1,0 +1,372 @@
+import 'server-only'
+
+import { redactSecrets } from '@/lib/security/redactSecrets'
+import {
+  getRollingInsightsSportCode,
+  type RollingInsightsVendorSport,
+} from '@/lib/providers/rollingInsightsFieldMaps'
+import {
+  normalizeSoccerLeague,
+  type RollingInsightsSoccerLeagueCode,
+} from '@/lib/providers/rollingInsightsSoccerLeague'
+
+/**
+ * ONE Rolling Insights REST transport, shared by every sport.
+ *
+ * WHY THIS EXISTS. Three call sites were each hand-rolling the same request and each getting a
+ * different part of `contracts/rolling-insights/ENDPOINTS.yaml` wrong:
+ *
+ *   lib/workers/providers/rolling-insights.ts   probes ~6 speculative paths per data type
+ *   lib/injuries/rollingInsightsInjuries.ts     no cache-buster, no no-cache headers
+ *   lib/stats/rollingInsightsPlayerStats.ts     treats 304 as an empty result set
+ *
+ * None of them sent the cache-buster or the no-cache headers the contract makes mandatory, and
+ * two of them turned a 304 into `[]` — which CLAUDE.md names as the one response that is wrong
+ * under BOTH readings of the unresolved `304_conflict`, because "no data" and "cache hit" become
+ * indistinguishable.
+ *
+ * WHAT THIS GUARANTEES, per call:
+ *   1. `Cache-Control: no-cache, no-store` + `Pragma: no-cache`   (transport.required_live_headers)
+ *   2. `_=<epoch milliseconds>` on EVERY endpoint, not just /live (transport.cache_buster)
+ *   3. A 304 is retried ONCE with a fresh buster, and if it persists it surfaces as its own
+ *      outcome kind — never as an empty array. See `RiOutcome`.
+ *   4. `RSC_token` never reaches a log line: no URL is ever logged, and every error string is
+ *      pushed through `redactSecrets` before it leaves this module.
+ *   5. Endpoint x sport combinations the vendor does not document are refused BEFORE the request,
+ *      so an unsupported sport reads as `unsupported`, not as a mysterious 404.
+ *
+ * db-first-exception: this is the provider ingestion transport itself — the module the DB-first
+ * boundary exists to funnel provider traffic THROUGH. Application read paths must call the
+ * database, never this file.
+ */
+
+/** Endpoints this transport can build. Names match `endpoints:` in ENDPOINTS.yaml. */
+export type RiEndpoint =
+  | 'schedule'
+  | 'schedule_week'
+  | 'schedule_season'
+  | 'live'
+  | 'play_by_play'
+  | 'team_info'
+  | 'team_stats'
+  | 'player_info'
+  | 'player_stats'
+  | 'injuries'
+  | 'depth_charts'
+
+/**
+ * `support_matrix` from ENDPOINTS.yaml, verbatim for the seven sports this product carries.
+ *
+ * `false` means the VENDOR DOES NOT DOCUMENT IT and instructs agents not to call it. Per
+ * GAPS.md that is not a 404 guarantee — but calling anyway costs a request and returns nothing
+ * useful, and the honest product answer for those cells is "not available from this provider",
+ * which is what refusing lets callers report.
+ */
+const SUPPORT: Record<RiEndpoint, Record<RollingInsightsVendorSport, boolean>> = {
+  schedule:        { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  schedule_week:   { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  schedule_season: { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  live:            { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  play_by_play:    { NFL: true, NBA: true, MLB: true, NHL: false, NCAABB: false, NCAAFB: false, SOCCER: false },
+  team_info:       { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  team_stats:      { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  player_info:     { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: true },
+  /** SOCCER has no player season stats — see support_consequences in the contract. */
+  player_stats:    { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: true,  NCAAFB: true,  SOCCER: false },
+  /** College has no injuries feed at all, and neither does soccer. */
+  injuries:        { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: false, NCAAFB: false, SOCCER: false },
+  depth_charts:    { NFL: true, NBA: true, MLB: true, NHL: true, NCAABB: false, NCAAFB: false, SOCCER: false },
+}
+
+/** Does the vendor document this endpoint for this sport? Accepts app or vendor sport codes. */
+export function riSupports(endpoint: RiEndpoint, sport: string): boolean {
+  return SUPPORT[endpoint]?.[getRollingInsightsSportCode(sport)] === true
+}
+
+/** Every endpoint the vendor documents for a sport, for capability reporting. */
+export function riSupportedEndpoints(sport: string): RiEndpoint[] {
+  const code = getRollingInsightsSportCode(sport)
+  return (Object.keys(SUPPORT) as RiEndpoint[]).filter((e) => SUPPORT[e][code])
+}
+
+export type RiOutcome =
+  | { ok: true; payload: unknown; status: number }
+  /**
+   * A 304 that SURVIVED a cache-busted retry.
+   *
+   * Deliberately NOT `ok: true` with an empty payload. `304_conflict` in the contract is
+   * unresolved — the skill repo calls it a cache artifact, the OpenAPI spec calls it an empty
+   * result set — so this transport refuses to decide. Callers must report "unchanged/unknown"
+   * and leave prior rows alone; anything that writes an emptiness on the strength of this is
+   * choosing one reading of a documented dispute.
+   */
+  | { ok: false; kind: 'not_modified'; error: string }
+  | { ok: false; kind: 'unsupported' | 'no_token' | 'bad_request' | 'http' | 'network'; error: string }
+
+export interface RiRequest {
+  /** App sport code (NFL/NBA/MLB/NHL/NCAAB/NCAAF/SOCCER) or a vendor code. */
+  sport: string
+  /** `YYYY` for season endpoints, `YYYY-MM-DD` for date endpoints. */
+  season?: number | string
+  date?: string
+  /** Required for SOCCER — EPL | LALIGA | SERIEA. */
+  league?: string
+  teamId?: string
+  playerId?: string
+  gameId?: string
+  fetchImpl?: typeof fetch
+  timeoutMs?: number
+  /** Epoch-ms source, injectable so tests can assert the buster changes between attempts. */
+  now?: () => number
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000
+
+/**
+ * Base URL resolution.
+ *
+ * CLAUDE.md records five observed spellings for the token and four for the base, because the env
+ * names drifted across sessions. Reading all of them here is not tidiness — setting only the
+ * contract's documented name (`ROLLING_INSIGHTS_BASE_URL`) is a MINORITY spelling in this repo,
+ * so a single-name reader silently no-ops on most deployments.
+ */
+export function riRestBase(): string {
+  const raw =
+    process.env.ROLLING_INSIGHTS_REST_BASE_URL?.trim() ||
+    process.env.ROLLING_INSIGHTS_REST_BASE?.trim() ||
+    process.env.ROLLING_INSIGHTS_BASE_URL?.trim() ||
+    process.env.ROLLING_INSIGHTS_API_BASE?.trim() ||
+    'https://rest.datafeeds.rolling-insights.com/api/v1'
+  // A comma-separated list is legal in ROLLING_INSIGHTS_REST_BASE_URL elsewhere in the repo.
+  const first = raw.split(',')[0]!.trim().replace(/\/+$/, '')
+  return /\/api\/v\d+$/.test(first) ? first : `${first}/api/v1`
+}
+
+/** The RSC token, under any of the spellings this repo has used. Never logged. */
+export function riToken(): string | null {
+  return (
+    process.env.ROLLING_INSIGHTS_RSC_TOKEN?.trim() ||
+    process.env.ROLLING_INSIGHTS_RSC_TOKEN2?.trim() ||
+    process.env.RSC_TOKEN?.trim() ||
+    process.env.ROLLING_INSIGHTS_CLIENT_SECRET?.trim() ||
+    process.env.ROLLING_INSIGHTS_API_KEY?.trim() ||
+    process.env.ROLLING_INSIGHTS_KEY?.trim() ||
+    null
+  )
+}
+
+/** Year the season STARTED — the only form `season` may take (identifiers.season_arg). */
+export function riSeasonArg(input: number | string | undefined, now = new Date()): string {
+  if (input != null) {
+    const s = String(input).trim()
+    if (/^\d{4}/.test(s)) return s.slice(0, 4)
+  }
+  // Aug onward belongs to the season named for the current year; before that, the previous one.
+  // Correct for NFL/NBA/NHL/NCAA (all span a new year) and harmless for MLB, whose season is
+  // wholly inside one calendar year and so is never asked for in Jan-Jul anyway.
+  const y = now.getUTCFullYear()
+  return String(now.getUTCMonth() + 1 >= 8 ? y : y - 1)
+}
+
+function todayUtc(now = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+/**
+ * Path for an endpoint. Paths are taken from `endpoints:` in ENDPOINTS.yaml and nothing else —
+ * the previous provider speculatively probed `projections/`, `average-draft-position/` and four
+ * other invented segments per call, none of which the vendor documents.
+ */
+function buildPath(endpoint: RiEndpoint, req: RiRequest, code: RollingInsightsVendorSport): string | null {
+  const season = riSeasonArg(req.season)
+  const date = req.date?.trim() || todayUtc()
+
+  switch (endpoint) {
+    case 'schedule':        return `/schedule/${date}/${code}`
+    case 'schedule_week':   return `/schedule-week/${date}/${code}`
+    case 'schedule_season': return `/schedule-season/${season}/${code}`
+    case 'live':            return `/live/${date}/${code}`
+    case 'play_by_play':    return `/play-by-play/${code}`
+    case 'team_info':       return `/team-info/${code}`
+    case 'team_stats':      return `/team-stats/${season}/${code}`
+    case 'player_info':     return `/player-info/${code}`
+    case 'player_stats':    return `/player-stats/${season}/${code}`
+    case 'injuries':        return `/injuries/${code}`
+    case 'depth_charts':    return `/depth-charts/${code}`
+    default:                return null
+  }
+}
+
+/**
+ * Fetch one documented Rolling Insights endpoint.
+ *
+ * Applies the contract's transport rules in full. The returned payload is the RAW body — call
+ * {@link resolveRiEnvelope} to unwrap it, because the envelope key is sport-dependent and getting
+ * it wrong is the single highest-risk parsing trap in this API (`soccer_trap`).
+ */
+export async function riFetch(endpoint: RiEndpoint, req: RiRequest): Promise<RiOutcome> {
+  const code = getRollingInsightsSportCode(req.sport)
+
+  if (!SUPPORT[endpoint]?.[code]) {
+    return {
+      ok: false,
+      kind: 'unsupported',
+      error: `Rolling Insights does not document ${endpoint} for ${code}`,
+    }
+  }
+
+  const token = riToken()
+  if (!token) return { ok: false, kind: 'no_token', error: 'Rolling Insights RSC token not configured' }
+
+  // SOCCER keys its response by LEAGUE and requires the league param on every call. Without it
+  // the request is not merely degraded, it is malformed — refuse rather than send it.
+  let league: RollingInsightsSoccerLeagueCode | null = null
+  if (code === 'SOCCER') {
+    league = normalizeSoccerLeague(req.league ?? '')
+    if (!league) {
+      return {
+        ok: false,
+        kind: 'bad_request',
+        error: 'SOCCER requires league (EPL | LALIGA | SERIEA) — soccer_league_param_required',
+      }
+    }
+  }
+
+  if (endpoint === 'play_by_play' && !req.gameId?.trim()) {
+    return { ok: false, kind: 'bad_request', error: 'play_by_play requires game_id' }
+  }
+
+  const path = buildPath(endpoint, req, code)
+  if (!path) return { ok: false, kind: 'bad_request', error: `no path for ${endpoint}` }
+
+  const doFetch = req.fetchImpl ?? fetch
+  const now = req.now ?? Date.now
+  const timeoutMs = req.timeoutMs ?? DEFAULT_TIMEOUT_MS
+
+  const attempt = async (): Promise<RiOutcome> => {
+    const url = new URL(`${riRestBase()}${path}`)
+    url.searchParams.set('RSC_token', token)
+    if (league) url.searchParams.set('league', league)
+    if (req.teamId) url.searchParams.set('team_id', req.teamId)
+    if (req.playerId) url.searchParams.set('player_id', req.playerId)
+    if (req.gameId) url.searchParams.set('game_id', req.gameId)
+    // Millisecond precision is REQUIRED: a seconds-precision buster does not defeat caching on
+    // sub-second polling, and this is applied to ALL endpoints, not just /live.
+    url.searchParams.set('_', String(now()))
+
+    try {
+      const res = await doFetch(url.toString(), {
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache, no-store',
+          Pragma: 'no-cache',
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+
+      if (res.status === 304) {
+        return { ok: false, kind: 'not_modified', error: `HTTP 304 ${endpoint}/${code}` }
+      }
+      if (!res.ok) {
+        // Status and endpoint only. The URL carries the token and must never be interpolated.
+        return { ok: false, kind: 'http', error: `HTTP ${res.status} ${endpoint}/${code}` }
+      }
+      return { ok: true, payload: await res.json(), status: res.status }
+    } catch (e) {
+      return { ok: false, kind: 'network', error: redactSecrets(e instanceof Error ? e.message : String(e)) }
+    }
+  }
+
+  const first = await attempt()
+  // Retry ONCE with a fresh buster. If it was a cache artifact, busting defeats it; if 304 really
+  // means "empty result set", we pay exactly one extra request. Correct under both readings.
+  if (!first.ok && first.kind === 'not_modified') {
+    const second = await attempt()
+    if (second.ok) return second
+    if (second.ok === false && second.kind === 'not_modified') {
+      return {
+        ok: false,
+        kind: 'not_modified',
+        error: `HTTP 304 after cache-busted retry ${endpoint}/${code} — treat as UNCHANGED, not empty`,
+      }
+    }
+    return second
+  }
+
+  return first
+}
+
+/**
+ * Unwrap `{ "data": { "<KEY>": [...] } }`.
+ *
+ * ⚠ THE KEY IS NOT THE PATH SEGMENT FOR SOCCER. You request `/…/SOCCER?league=EPL` and the
+ * response comes back keyed `data.EPL`. A parser that keys off the request path returns empty for
+ * every soccer call and looks like a provider outage. That is `soccer_trap`, named in the
+ * contract as its highest-risk parsing trap.
+ *
+ * Falls back to any array found under `data` so a vendor key we have not seen still yields rows
+ * rather than silence — but only after the documented keys have been tried in order.
+ */
+export function resolveRiEnvelope(
+  payload: unknown,
+  opts: { sport: string; league?: string },
+): unknown[] {
+  if (payload == null) return []
+  if (Array.isArray(payload)) return payload
+
+  const root = payload as Record<string, unknown>
+  const data = (root.data ?? root) as unknown
+  if (Array.isArray(data)) return data
+  if (!data || typeof data !== 'object') return []
+
+  const bag = data as Record<string, unknown>
+  const code = getRollingInsightsSportCode(opts.sport)
+
+  const keys: string[] = []
+  if (code === 'SOCCER') {
+    const league = normalizeSoccerLeague(opts.league ?? '')
+    if (league) keys.push(league)
+    keys.push('EPL', 'LALIGA', 'SERIEA')
+  }
+  keys.push(code)
+
+  for (const key of keys) {
+    const v = bag[key]
+    if (Array.isArray(v)) return v
+    // Some endpoints return an object map keyed by team/player id rather than an array.
+    if (v && typeof v === 'object') return Object.values(v as Record<string, unknown>)
+  }
+
+  for (const v of Object.values(bag)) {
+    if (Array.isArray(v)) return v
+  }
+  return []
+}
+
+/**
+ * Fetch + unwrap in one step, for the common case.
+ *
+ * `notModified` is carried separately from `rows` on purpose: a caller that collapses the two
+ * writes an emptiness it was never told about.
+ */
+export async function riFetchRows(
+  endpoint: RiEndpoint,
+  req: RiRequest,
+): Promise<{ rows: unknown[]; notModified: boolean; unsupported: boolean; error: string | null }> {
+  const out = await riFetch(endpoint, req)
+  if (out.ok) {
+    return {
+      rows: resolveRiEnvelope(out.payload, { sport: req.sport, league: req.league }),
+      notModified: false,
+      unsupported: false,
+      error: null,
+    }
+  }
+  return {
+    rows: [],
+    notModified: out.kind === 'not_modified',
+    unsupported: out.kind === 'unsupported',
+    error: redactSecrets(out.error),
+  }
+}

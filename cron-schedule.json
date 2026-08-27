@@ -37,11 +37,15 @@
       "schedule": "40 6 * * *"
     },
     {
+      "path": "/api/cron/import-player-game-stats?multiSport=1&days=3",
+      "schedule": "0 7 * * *"
+    },
+    {
       "path": "/api/cron/import-nfl-team-defense",
       "schedule": "50 6 * * *"
     },
     {
-      "path": "/api/cron/sync-player-images?sport=all",
+      "path": "/api/cron/sync-player-images?sport=all&limit=500",
       "schedule": "10 5 * * *"
     },
     {
@@ -54,7 +58,7 @@
     },
     {
       "path": "/api/cron/import-stat-lines",
-      "schedule": "30 7 * * *"
+      "schedule": "30 */6 * * *"
     },
     {
       "path": "/api/cron/compute-projections",
@@ -75,6 +79,10 @@
     {
       "path": "/api/cron/import-schedules?rosters=1",
       "schedule": "40 8 * * *"
+    },
+    {
+      "path": "/api/cron/import-schedules?riProfiles=1",
+      "schedule": "10 9 * * *"
     },
     {
       "path": "/api/cron/adp-refresh",

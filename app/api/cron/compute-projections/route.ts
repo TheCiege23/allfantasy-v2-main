@@ -21,6 +21,8 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
+import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
+import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import {
   writeAfProjectionSnapshots,
   type WriteSnapshotsResult,
@@ -82,9 +84,13 @@ function assess(r: WriteSnapshotsResult) {
   return { refusalRate, zeroRows, tooManyRefusals, noSourceSeasonYet, failed }
 }
 
-async function handle(req: NextRequest) {
-  const url = new URL(req.url)
-  const sport = (url.searchParams.get('sport') ?? 'NFL').toUpperCase()
+/**
+ * Compute and persist projections for ONE sport.
+ *
+ * Extracted from `handle` so the route can iterate every sport without duplicating the assessment
+ * and telemetry logic — the two things that must never disagree about whether a run was healthy.
+ */
+async function runOneSport(url: URL, sport: string): Promise<{ body: Record<string, unknown>; failed: boolean }> {
   const formatParam = (url.searchParams.get('format') ?? 'ppr').toLowerCase()
   const scoringFormat = (VALID_FORMATS as string[]).includes(formatParam)
     ? (formatParam as ScoringFormat)
@@ -155,8 +161,9 @@ async function handle(req: NextRequest) {
 
     const { refusalRate, zeroRows, tooManyRefusals, noSourceSeasonYet, failed } = assess(r)
 
-    return NextResponse.json(
-      {
+    return {
+      failed,
+      body: {
         // `ok` reports whether PROJECTIONS LANDED; `failed` drives the HTTP status and means
         // "retry this". They come apart only when the source season has not been played: ok:false
         // because nothing was written and claiming otherwise would be a false green, HTTP 200
@@ -203,16 +210,89 @@ async function handle(req: NextRequest) {
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
       },
-      { status: failed ? 500 : 200 },
-    )
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error('[cron/compute-projections] failed:', message)
-    return NextResponse.json(
-      { ok: false, sport, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
-      { status: 500 },
-    )
+
+    /*
+     * "no fantasy_stat_lines found for sport=X" is the writer's own precondition, not a fault.
+     *
+     * It is thrown for a sport whose stat-line base has not been ingested yet — which for five of
+     * the seven sports is the CURRENT state, because `PlayerIdentityMap` was NFL-only until the
+     * multi-sport backfill in import-stat-lines started filling it. Reporting that as a 500 every
+     * night would make this cron permanently red for reasons the operator cannot act on, and it
+     * would drown the one sport that IS genuinely broken. `ok:false` keeps it honest; HTTP 200
+     * says "no retry will help until the base exists".
+     */
+    const awaitingBase = /no fantasy_stat_lines found for sport=/i.test(message)
+    if (awaitingBase) {
+      console.warn(`[cron/compute-projections] ${sport}: awaiting stat-line base`)
+      return {
+        failed: false,
+        body: {
+          ok: false,
+          sport,
+          written: 0,
+          failureReason: 'awaiting_stat_line_base',
+          note: 'import-stat-lines has not yet written fantasy_stat_lines for this sport',
+          durationMs: Date.now() - startedAt,
+        },
+      }
+    }
+
+    console.error(`[cron/compute-projections] ${sport} failed:`, message)
+    return {
+      failed: true,
+      body: { ok: false, sport, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
+    }
   }
+}
+
+/**
+ * ⚠ OMITTING `sport` NOW RUNS EVERY SPORT.
+ *
+ * This route projected NFL and nothing else, so `AFProjectionSnapshot` held rows for exactly two
+ * sports (NFL 1,576 and NCAAF 4,528, the latter written by a manual backfill) while five others
+ * had none — even though the stat-line pipeline underneath is sport-parameterised and always was.
+ * An explicit `?sport=` still runs exactly that one and returns the original single-sport
+ * response, because admin and manual callers pass it.
+ */
+async function handle(req: NextRequest) {
+  const url = new URL(req.url)
+  const explicit = url.searchParams.get('sport')
+
+  if (explicit) {
+    const one = await runOneSport(url, explicit.toUpperCase())
+    return NextResponse.json(one.body, { status: one.failed ? 500 : 200 })
+  }
+
+  /*
+   * Rotated and budgeted for the same reason every other multi-sport cron here is: the loop is
+   * sequential, each sport reads its whole stat-line base, and a fixed order against a platform
+   * ceiling means the tail is never reached rather than merely late.
+   */
+  const budget = createRunBudget()
+  const results: Array<{ body: Record<string, unknown>; failed: boolean }> = []
+  const deferred: string[] = []
+
+  for (const sport of rotateForFairness(SUPPORTED_SPORTS.map((s) => String(s)))) {
+    if (budget.exhausted()) {
+      deferred.push(sport)
+      continue
+    }
+    results.push(await runOneSport(url, sport))
+  }
+
+  const anyFailed = results.some((r) => r.failed)
+  return NextResponse.json(
+    {
+      ok: !anyFailed,
+      sports: results.map((r) => r.body),
+      deferredForBudget: deferred.length ? deferred : undefined,
+      timestamp: new Date().toISOString(),
+    },
+    { status: anyFailed ? 500 : 200 },
+  )
 }
 
 export async function GET(req: NextRequest) {

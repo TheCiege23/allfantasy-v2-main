@@ -41,6 +41,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { resolveRiEnvelope, riFetch, riSupports } from '@/lib/sports-data/rollingInsightsRest'
 
 const RI_SOURCE = 'rolling_insights'
 /** Season aggregates refreshed daily by cron; a week of TTL tolerates cron
@@ -63,15 +64,16 @@ export interface RiPlayerStatsRow {
   postseason: Record<string, unknown> | null
 }
 
-/** Pure: flatten `{data:{NFL:[...]}}` into rows. Exported for tests. */
+/**
+ * Pure: flatten `{data:{NFL:[...]}}` into rows. Exported for tests.
+ *
+ * ⚠ THE ENVELOPE KEY IS THE VENDOR SPORT CODE, NOT THE APP ONE. `resolveRiEnvelope` translates
+ * (NCAAB -> NCAABB, NCAAF -> NCAAFB) and knows that SOCCER answers under its LEAGUE key. Keying
+ * off the app code directly, as this did, made `data.NCAABB` fall through to the object-of-one
+ * fallback and yield an array-of-arrays — rows that parse to nothing, silently.
+ */
 export function normalizeRiPlayerStats(payload: unknown, sport = 'NFL'): RiPlayerStatsRow[] {
-  const data = (payload as { data?: Record<string, unknown> })?.data ?? payload
-  const bySport = (data as Record<string, unknown>)?.[sport] ?? data
-  const rows: unknown[] = Array.isArray(bySport)
-    ? bySport
-    : bySport && typeof bySport === 'object'
-      ? Object.values(bySport)
-      : []
+  const rows = resolveRiEnvelope(payload, { sport })
 
   const out: RiPlayerStatsRow[] = []
   const seen = new Set<string>()
@@ -107,13 +109,7 @@ export interface RiPlayerInfo {
  * shape was probed for existence, not exhaustively for vocabulary.
  */
 export function normalizeRiPlayerInfo(payload: unknown, sport = 'NFL'): Map<string, RiPlayerInfo> {
-  const data = (payload as { data?: Record<string, unknown> })?.data ?? payload
-  const bySport = (data as Record<string, unknown>)?.[sport] ?? data
-  const rows: unknown[] = Array.isArray(bySport)
-    ? bySport
-    : bySport && typeof bySport === 'object'
-      ? Object.values(bySport)
-      : []
+  const rows = resolveRiEnvelope(payload, { sport })
 
   const map = new Map<string, RiPlayerInfo>()
   for (const raw of rows) {
@@ -147,6 +143,17 @@ export interface RiStatSyncResult {
   unresolved: number
   /** unresolved+ambiguous over fetched — the stop-the-rollout signal. */
   unresolvedRate: number
+  /**
+   * The vendor documents no player-stats feed for this sport (SOCCER). Not a failure to fix —
+   * a capability that does not exist, which callers must report as such rather than as zero rows.
+   */
+  unsupported: boolean
+  /**
+   * A 304 survived the cache-busted retry for at least one season attempt. Under the unresolved
+   * `304_conflict` that is "unchanged or not yet started", and the prior-season bootstrap is the
+   * intended response — not an empty result set to write.
+   */
+  notModified: boolean
   sampleUnresolved: string[]
   errors: string[]
 }
@@ -156,40 +163,15 @@ function currentSeason(now: Date): number {
   return now.getUTCMonth() + 1 >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
 }
 
-function riCredentials(): { token: string | null; base: string } {
-  const token =
-    process.env.ROLLING_INSIGHTS_RSC_TOKEN?.trim() ||
-    process.env.ROLLING_INSIGHTS_RSC_TOKEN2?.trim() ||
-    process.env.ROLLING_INSIGHTS_CLIENT_SECRET?.trim() ||
-    null
-  const rawBase =
-    process.env.ROLLING_INSIGHTS_REST_BASE_URL?.trim() ||
-    process.env.ROLLING_INSIGHTS_REST_BASE?.trim() ||
-    'https://rest.datafeeds.rolling-insights.com/api/v1'
-  const trimmed = rawBase.replace(/\/+$/, '')
-  const base = /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v1`
-  return { token, base }
-}
-
-async function fetchRiJson(
-  url: string,
-  doFetch: typeof fetch,
-): Promise<{ payload: unknown; status: number } | { error: string }> {
-  try {
-    const res = await doFetch(url, {
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(45_000),
-    })
-    // RI answers 304 for a season that has not kicked off — not an error, but
-    // not data either. Surface the status so the caller can fall back.
-    if (res.status === 304) return { payload: null, status: 304 }
-    if (!res.ok) return { error: `HTTP ${res.status}` }
-    return { payload: await res.json(), status: res.status }
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) }
-  }
-}
+/*
+ * Credentials and transport now live in `lib/sports-data/rollingInsightsRest.ts`.
+ *
+ * The private `fetchRiJson` that used to sit here sent no cache-buster and no no-cache headers,
+ * and read a 304 as a plain status the caller turned into `[]`. That is the ONE response the
+ * contract says is wrong under both readings of the unresolved `304_conflict`: it makes "the
+ * season has not kicked off" and "an intermediary served you a stale validator" indistinguishable.
+ * `riFetch` retries once with a fresh millisecond buster before it will say 304 at all.
+ */
 
 /**
  * Fetch + resolve + persist. Writes `FantasyStatLine` rows keyed by CANONICAL
@@ -220,36 +202,43 @@ export async function syncRollingInsightsPlayerStatsToDb(opts?: {
     ambiguous: 0,
     unresolved: 0,
     unresolvedRate: 0,
+    unsupported: false,
+    notModified: false,
     sampleUnresolved: [],
     errors: [],
   }
 
-  const { token, base } = riCredentials()
-  if (!token) {
-    result.errors.push('Rolling Insights RSC token not configured')
+  // SOCCER is the one supported sport with NO player season stats from this vendor
+  // (support_consequences). Refuse before the request so the caller can report "no source" rather
+  // than a mystery 404 every night.
+  if (!riSupports('player_stats', sport)) {
+    result.unsupported = true
+    result.errors.push(`Rolling Insights documents no player-stats feed for ${sport}`)
     return result
   }
+
   const doFetch = opts?.fetchImpl ?? fetch
 
   // --- player-stats, with explicit prior-season bootstrap ---
-  const statsUrl = (season: number) =>
-    `${base}/player-stats/${season}/${sport}?RSC_token=${encodeURIComponent(token)}`
-
   let rows: RiPlayerStatsRow[] = []
   for (const season of opts?.season != null ? [seasonRequested] : [seasonRequested, seasonRequested - 1]) {
-    const res = await fetchRiJson(statsUrl(season), doFetch)
-    if ('error' in res) {
+    const res = await riFetch('player_stats', { sport, season, fetchImpl: doFetch, timeoutMs: 45_000 })
+    if (!res.ok) {
+      // A 304 here has already survived a cache-busted retry, so it genuinely means
+      // "unchanged or not yet started" — which is exactly the case the prior-season bootstrap
+      // below exists to handle. Recorded, then the loop tries the earlier season.
+      if (res.kind === 'not_modified') result.notModified = true
       result.errors.push(`player-stats/${season}: ${res.error}`)
       continue
     }
-    const normalized = res.status === 304 ? [] : normalizeRiPlayerStats(res.payload, sport)
+    const normalized = normalizeRiPlayerStats(res.payload, sport)
     if (normalized.length > 0) {
       rows = normalized
       result.seasonUsed = season
       result.seasonFellBack = season !== seasonRequested
       break
     }
-    result.errors.push(`player-stats/${season}: 0 rows${res.status === 304 ? ' (HTTP 304 — season not started)' : ''}`)
+    result.errors.push(`player-stats/${season}: 0 rows`)
   }
   result.fetched = rows.length
   if (rows.length === 0) return result
@@ -257,10 +246,10 @@ export async function syncRollingInsightsPlayerStatsToDb(opts?: {
   // --- player-info for positions (best effort — stats rows carry none) ---
   let infoById = new Map<string, RiPlayerInfo>()
   {
-    const res = await fetchRiJson(`${base}/player-info/${sport}?RSC_token=${encodeURIComponent(token)}`, doFetch)
-    if ('error' in res) {
+    const res = await riFetch('player_info', { sport, fetchImpl: doFetch, timeoutMs: 45_000 })
+    if (!res.ok) {
       result.errors.push(`player-info: ${res.error} — matching proceeds on name+team only`)
-    } else if (res.payload != null) {
+    } else {
       infoById = normalizeRiPlayerInfo(res.payload, sport)
     }
   }
