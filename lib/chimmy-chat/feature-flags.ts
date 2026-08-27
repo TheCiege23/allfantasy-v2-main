@@ -6,6 +6,17 @@ export type ChimmyFeatureFlags = {
   dailyDigest: boolean
   voicePreview: boolean
   aiKpiEvents: boolean
+  /**
+   * Let the model CALL for grounding instead of only being handed it.
+   *
+   * Off by default and deliberately so: every other answer path in this route
+   * assembles context up front and refuses when it is missing, which is what
+   * makes the refusals trustworthy. A tool loop hands that judgement to the
+   * model, costs several provider calls per message where the spend rule
+   * charges for one, and is Grok-only. It gets proven behind a switch before it
+   * becomes the default for anybody.
+   */
+  toolLoop: boolean
 }
 
 const DEFAULT_FLAGS: ChimmyFeatureFlags = {
@@ -16,6 +27,7 @@ const DEFAULT_FLAGS: ChimmyFeatureFlags = {
   dailyDigest: false,
   voicePreview: false,
   aiKpiEvents: true,
+  toolLoop: false,
 }
 
 function parseBoolean(raw: string | undefined, fallback: boolean): boolean {
@@ -40,5 +52,6 @@ export function getChimmyFeatureFlags(): ChimmyFeatureFlags {
     dailyDigest: readFlagValue('CHIMMY_DAILY_DIGEST_ENABLED', DEFAULT_FLAGS.dailyDigest),
     voicePreview: readFlagValue('CHIMMY_VOICE_PREVIEW_ENABLED', DEFAULT_FLAGS.voicePreview),
     aiKpiEvents: readFlagValue('CHIMMY_AI_KPI_EVENTS_ENABLED', DEFAULT_FLAGS.aiKpiEvents),
+    toolLoop: readFlagValue('CHIMMY_TOOL_LOOP_ENABLED', DEFAULT_FLAGS.toolLoop),
   }
 }
