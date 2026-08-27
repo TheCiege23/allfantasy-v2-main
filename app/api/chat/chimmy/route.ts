@@ -98,7 +98,10 @@ import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
 import { buildChimmyAnswerContract } from '@/lib/chimmy-chat/response-contract'
 import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-events'
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
-import { tryDeterministicAnswer, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
+import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
+
+/** Provenance for an answer that came from the web, not from our rows. */
+const LIVE_SEARCH_SOURCE = 'live_web_search' as const
 import {
   buildLeagueDataUsageAnswer,
   buildLeagueSportsGroundingPacket,
@@ -1277,8 +1280,52 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const requestLocale = resolveLanguage(req.cookies.get('af_lang')?.value)
-  const deterministicAnswer = await tryDeterministicAnswer(message, requestLocale)
-  if (deterministicAnswer !== null) {
+  const deterministic = await tryDeterministicAnswerDetailed(message, requestLocale)
+  if (deterministic !== null) {
+    /*
+     * ⚠ A REFUSAL IS NOT A FINAL ANSWER — it is a statement that OUR DATABASE
+     * has nothing. Until now both kinds returned here identically, so "how many
+     * home runs were hit in the majors yesterday" dead-ended on a refusal while
+     * the answer sat on a public box score. A data-backed answer still wins and
+     * still costs nothing; only a refusal gets to look further.
+     */
+    if (deterministic.kind === 'refusal' && getChimmyFeatureFlags().liveSearchFallback) {
+      const { answerSportsQuestionFromSearch } = await import('@/lib/ai/liveSportsAnswer')
+      const searched = await answerSportsQuestionFromSearch(message).catch(() => null)
+
+      if (searched) {
+        const sourceLines = searched.citations.map((c) => `- ${c.label}: ${c.url}`).join('\n')
+        const body = `${searched.text}\n\nSources consulted:\n${sourceLines}`
+        return NextResponse.json({
+          response: body,
+          result: body,
+          source: LIVE_SEARCH_SOURCE,
+          sessionId,
+          tokenSpend: null,
+          citations: searched.citations,
+          meta: {
+            /*
+             * NOT 100. The deterministic answers claim total confidence because
+             * they are reading our own rows. This is a summary of pages we did
+             * not write, and saying otherwise would make the two look alike.
+             */
+            confidencePct: 70,
+            providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+            dataSources: [LIVE_SEARCH_SOURCE],
+            responseStructure: {
+              shortAnswer: searched.text,
+              caveats: [
+                'Answered from live web search, not from AllFantasy data.',
+                'Sources are what the search consulted — not evidence for any one sentence.',
+              ],
+            },
+          },
+        })
+      }
+      /* Nothing sourced came back. Fall through to the honest refusal. */
+    }
+
+    const deterministicAnswer = deterministic.text
     return NextResponse.json({
       response: deterministicAnswer,
       result: deterministicAnswer,
