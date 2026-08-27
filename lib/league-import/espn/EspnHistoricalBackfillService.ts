@@ -4,6 +4,10 @@ import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
 import { rebuildHallOfFame } from '@/lib/rankings-engine/hall-of-fame'
 import { persistDynastySeason, persistStandings } from '@/lib/dynasty-import/normalize-historical'
 import { fetchEspnLeagueForImport } from './EspnLeagueFetchService'
+import {
+  normalizeSportKey,
+  selectIngestableIdentities,
+} from '@/lib/league-import/providerPlayerIdentities'
 import type { EspnImportPayload, EspnImportTeam } from '@/lib/league-import/adapters/espn/types'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
@@ -323,21 +327,38 @@ async function persistEspnSeasonWarehouseFacts(args: {
    * fail a draft import.
    */
   try {
-    const named = args.payload.draftPicks.filter((p) => p.playerName?.trim())
-    if (named.length > 0) {
-      const uniqueByPlayerId = new Map(named.map((p) => [p.playerId, p]))
+    /*
+     * ⚠ A TRUTHY NAME IS NOT A REAL NAME. This filtered on `playerName?.trim()`,
+     * which passes the parser's own placeholder: an unnamed ESPN player is filled
+     * in as `Player <id>` by the roster directory, and `resolveEspnPlayerSummary`
+     * reads that directory as its fallback. Storing one inverts the fix this block
+     * exists for — Draft HQ prints "Player 2577417" today as an openly unmapped
+     * pick, and would then print the same text as a RESOLVED name with nothing to
+     * distinguish the two. `selectIngestableIdentities` drops them, and dedupes.
+     */
+    const candidates = selectIngestableIdentities(
+      args.payload.draftPicks.map((p) => ({
+        providerPlayerId: p.playerId,
+        displayName: p.playerName,
+      })),
+    )
+    if (candidates.length > 0) {
       const existing = await prisma.playerProviderIdentity.findMany({
-        where: { provider: 'espn', providerPlayerId: { in: [...uniqueByPlayerId.keys()] } },
+        where: {
+          provider: 'espn',
+          providerPlayerId: { in: candidates.map((c) => c.providerPlayerId) },
+        },
         select: { providerPlayerId: true },
       })
       const known = new Set(existing.map((e) => e.providerPlayerId))
-      const rows = [...uniqueByPlayerId.values()]
-        .filter((p) => !known.has(p.playerId))
-        .map((p) => ({
+      const rows = candidates
+        .filter((c) => !known.has(c.providerPlayerId))
+        .map((c) => ({
           provider: 'espn',
-          providerPlayerId: p.playerId,
-          sportKey: String(args.payload.league.sport ?? 'nfl').toLowerCase(),
-          displayName: p.playerName as string,
+          providerPlayerId: c.providerPlayerId,
+          /* Uppercase, like every other row in this table — see normalizeSportKey. */
+          sportKey: normalizeSportKey(args.payload.league.sport),
+          displayName: c.displayName,
           source: 'espn-draft-import',
         }))
       if (rows.length > 0) {
