@@ -778,13 +778,52 @@ export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Da
   return pool[0]![1].rows
 }
 
+/**
+ * How far either side of now a row can sit and still be "live scores".
+ *
+ * ⚠ THIS QUERY WAS UNBOUNDED, AND WIDENING THE SOURCE LIST MADE THAT FATAL.
+ * With only rolling_insights/espn_live/api_sports it returned a few hundred rows
+ * per sport. Adding `thesportsdb` took NCAAF to 2,940 and MLB to 8,185 — roughly
+ * 21,000 rows across the seven sports the live page loads in one `Promise.all`,
+ * every one of them carrying the `raw` provider blob because there was no
+ * `select`. That is what took `/live` down to its error boundary.
+ *
+ * Two bounds fix it, and both are things this query should always have had: ask
+ * for the columns the mapper actually reads, and ask only for games near now. A
+ * live scoreboard has no use for last season's results.
+ */
+const LIVE_WINDOW_PAST_MS = 48 * 60 * 60 * 1000
+const LIVE_WINDOW_FUTURE_MS = 21 * 24 * 60 * 60 * 1000
+
 async function readCachedLiveScoreRows(options: {
   sport: LeagueSport
   team?: string | null
 }) {
   const team = options.team?.trim() || null
+  const now = Date.now()
   return prisma.sportsGame.findMany({
+    // Exactly what dbRowToLiveScore reads, plus `source` for the picker below.
+    // `raw` is deliberately absent: it is a full provider payload per row and
+    // nothing on this path reads it.
+    select: {
+      externalId: true,
+      homeTeam: true,
+      awayTeam: true,
+      homeScore: true,
+      awayScore: true,
+      status: true,
+      startTime: true,
+      venue: true,
+      week: true,
+      season: true,
+      fetchedAt: true,
+      source: true,
+    },
     where: {
+      startTime: {
+        gte: new Date(now - LIVE_WINDOW_PAST_MS),
+        lte: new Date(now + LIVE_WINDOW_FUTURE_MS),
+      },
       sport: options.sport,
       /*
        * ⚠ `thesportsdb` WAS EXCLUDED HERE AND IT IS THE ONLY NCAAF SCORE SOURCE.

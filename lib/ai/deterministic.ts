@@ -22,6 +22,7 @@ import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAg
 import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
+import { detectUpcomingIntent, findUpcomingGames } from '@/lib/ai/upcomingGames'
 
 /** US sports days are Eastern days; this is what "today" and "tonight" mean. */
 const SPORTS_DAY_TIMEZONE = 'America/New_York'
@@ -87,14 +88,22 @@ const RELIABLE_UNAVAILABLE_BY_LOCALE: Record<string, string> = {
   ar: "لا أملك بيانات موثوقة لذلك بعد.",
 }
 
+/*
+ * ⚠ ORDER IS LOAD-BEARING: `resolveSportFromMessage` returns the FIRST match.
+ * The college entries used to sit LAST, while the NFL pattern matches a bare
+ * "football" and the NBA pattern a bare "basketball" — so "when does the
+ * COLLEGE FOOTBALL season start?" resolved to NFL and answered about a
+ * different sport, and "college basketball" resolved to NBA. The specific
+ * leagues must be tested before the generic sport nouns contained within them.
+ */
 const SPORT_ALIASES: Array<{ sport: string; pattern: RegExp }> = [
+  { sport: 'NCAAF', pattern: /\b(ncaaf|college football|cfb)\b/i },
+  { sport: 'NCAAB', pattern: /\b(ncaab|college basketball|cbb|march madness)\b/i },
   { sport: 'NBA', pattern: /\b(nba|basketball|knicks|lakers|warriors|celtics|mavericks|thunder|nuggets|timberwolves|pacers)\b/i },
   { sport: 'MLB', pattern: /\b(mlb|baseball|yankees|mets|dodgers|red\s+sox|braves|cubs|phillies)\b/i },
   { sport: 'NHL', pattern: /\b(nhl|hockey|rangers|islanders|bruins|maple\s+leafs|panthers|oilers)\b/i },
   { sport: 'NFL', pattern: /\b(nfl|football|chiefs|mahomes|patrick\s+mahomes|cowboys|eagles|giants|jets|bills|ravens)\b/i },
   { sport: 'SOCCER', pattern: /\b(soccer|fifa|world\s+cup|mundial|copa\s+mundial|football tournament|futbol|f[uú]tbol)\b/i },
-  { sport: 'NCAAF', pattern: /\b(ncaaf|college football|cfb)\b/i },
-  { sport: 'NCAAB', pattern: /\b(ncaab|college basketball|cbb|march madness)\b/i },
 ]
 
 const TEAM_ALIASES: Record<string, Array<{ canonical: string; aliases: string[] }>> = {
@@ -316,6 +325,59 @@ async function buildTeamResultAnswer(message: string): Promise<string | null> {
     : `${won ? 'Yes' : 'No'} — ${team.canonical} ${won ? 'beat' : 'lost to'} ${opponent} ${teamScore}-${opponentScore}. ${finalNote}. Source: cached SportsGame row.`
 }
 
+/**
+ * "When is the next game" / "when does the season start".
+ *
+ * Runs BEFORE the cached-today path, because both questions look forward and
+ * that path only ever queries a single day window — which is exactly why they
+ * used to fall through to a model holding no schedule at all.
+ */
+async function buildUpcomingGamesAnswer(message: string): Promise<string | null> {
+  const intent = detectUpcomingIntent(message, resolveSportFromMessage)
+  if (!intent) return null
+
+  const { games, alreadyUnderway } = await findUpcomingGames(intent)
+
+  /*
+   * Nothing scheduled is a real answer, and a far better one than widening the
+   * search until something matches a question nobody asked.
+   */
+  if (games.length === 0) {
+    const what = [intent.seasonType === 'pre' ? 'preseason' : null, intent.sport]
+      .filter(Boolean)
+      .join(' ')
+    return `${reliableUnavailable()} I have no upcoming ${what || 'games'} on the schedule I can verify. Source: cached SportsGame rows.`
+  }
+
+  const describe = (game: any) => {
+    const kind = game.seasonType === 'pre' ? ' (preseason)' : ''
+    const week = typeof game.week === 'number' ? ` · Week ${game.week}` : ''
+    const where = game.venue ? ` · ${game.venue}` : ''
+    return `- ${game.awayTeam} @ ${game.homeTeam}${kind}${week} — ${formatEt(game.startTime)}${where}`
+  }
+
+  const first = games[0]
+  const label = `${first.sport}${intent.seasonType === 'pre' ? ' preseason' : ''}`
+
+  if (intent.kind === 'season-start') {
+    /*
+     * Saying "the season starts <next game>" about a season already running
+     * would be flatly wrong — so that case says which it is instead.
+     */
+    const opener = alreadyUnderway
+      ? `The ${first.season ?? ''} ${first.sport} regular season has already started. The next game I have is:`
+      : `The next ${label} game on my schedule — the earliest I can verify — is:`
+    return `${opener}
+${describe(first)}
+Source: cached SportsGame rows.`
+  }
+
+  const lines = games.map(describe)
+  return `Next ${label} ${games.length === 1 ? 'game' : `${games.length} games`} I can verify:
+${lines.join('\n')}
+Source: cached SportsGame rows.`
+}
+
 async function buildCachedGamesAnswer(message: string): Promise<string | null> {
   if (!detectScheduleQuestion(message) && !/\b(live scores?|scores?|games? today|tonight|playing now)\b/i.test(message)) {
     return null
@@ -532,6 +594,9 @@ export async function tryDeterministicAnswer(message: string, locale?: string): 
   if (news) return news
   const unsupportedStatEvent = buildUnsupportedStatEventAnswer(message, safeLocale)
   if (unsupportedStatEvent) return unsupportedStatEvent
+  /* Forward-looking first: the cached path below only knows about today. */
+  const upcoming = await buildUpcomingGamesAnswer(message)
+  if (upcoming) return upcoming
   const cachedGames = await buildCachedGamesAnswer(message)
   if (cachedGames) return cachedGames
   if (intentRoute.category === 'world_cup_scoring') {
