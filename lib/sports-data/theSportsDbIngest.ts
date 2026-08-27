@@ -236,11 +236,51 @@ export async function ingestTeams(sport: IngestSport, opts?: { season?: string }
  * are the most valuable thing here — `idESPN` and `idAPIfootball` let a canonical
  * player be joined to other feeds without name matching.
  */
-export async function ingestRosters(sport: IngestSport, opts?: { season?: string; maxTeams?: number }): Promise<{
+/**
+ * Order a league's teams so a BOUNDED run makes progress through the whole league.
+ *
+ * ⚠ ORDERING IS LOAD-BEARING FOR SCHEDULED RUNS — the same rule `ingestPlayerStats`
+ * documents, and for the same reason. `ingestRosters` used to slice `listTeams`
+ * order directly, which is right for the one-off script and wrong for a cron: a
+ * bounded run would re-sweep the same leading teams on every fire and never reach
+ * the tail, so the league would look "ingested" while half of it went stale forever.
+ *
+ * Teams with no ingested players yet sort first, then the least recently fetched.
+ * `sportsPlayer.teamId` holds the RAW TheSportsDB team id (see the upsert below),
+ * which is the same id `listTeams` returns, so these join directly.
+ */
+async function orderTeamsStaleFirst(sport: IngestSport, teams: TsdbTeam[]): Promise<TsdbTeam[]> {
+  const rows = await prisma.sportsPlayer.findMany({
+    where: { sport, source: SOURCE },
+    select: { teamId: true, fetchedAt: true },
+  })
+
+  const newestByTeam = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.teamId) continue
+    const at = r.fetchedAt ? r.fetchedAt.getTime() : 0
+    const prev = newestByTeam.get(r.teamId)
+    if (prev === undefined || at > prev) newestByTeam.set(r.teamId, at)
+  }
+
+  // -1 for "never ingested" so those sort ahead of everything with a timestamp.
+  const rank = (t: TsdbTeam): number => {
+    const id = str(t.idTeam)
+    if (!id) return -1
+    return newestByTeam.get(id) ?? -1
+  }
+  return [...teams].sort((a, b) => rank(a) - rank(b))
+}
+
+export async function ingestRosters(
+  sport: IngestSport,
+  opts?: { season?: string; maxTeams?: number; budgetMs?: number }
+): Promise<{
   teams: number
   players: number
   skippedNoPlayers: number
   coachesDropped: number
+  deferredTeams: number
   rosterQuality: 'full' | 'sparse'
 }> {
   const cfg = LEAGUES[sport]
@@ -249,6 +289,7 @@ export async function ingestRosters(sport: IngestSport, opts?: { season?: string
     players: 0,
     skippedNoPlayers: 0,
     coachesDropped: 0,
+    deferredTeams: 0,
     rosterQuality: (cfg.hasPlayers ? 'full' : 'sparse') as 'full' | 'sparse',
   }
 
@@ -256,7 +297,24 @@ export async function ingestRosters(sport: IngestSport, opts?: { season?: string
   const teams = await listTeams(sport, season)
   const now = new Date()
 
-  for (const team of teams.slice(0, opts?.maxTeams ?? teams.length)) {
+  /*
+   * ⚠ UNBOUNDED BY DEFAULT, ON PURPOSE — the same contract `ingestSchedule` keeps.
+   * scripts/ingest-thesportsdb.ts does a FULL sweep by hand and a default budget
+   * here would silently truncate it without telling the operator. The cron opts in
+   * because the cron is the one with a 300s edge ceiling over its head.
+   */
+  const budgetMs = opts?.budgetMs ?? Number.POSITIVE_INFINITY
+  const startedAt = Date.now()
+
+  const ordered = await orderTeamsStaleFirst(sport, teams)
+
+  for (const team of ordered.slice(0, opts?.maxTeams ?? ordered.length)) {
+    // Counted, not silently dropped: a partial sweep is progress, but it has to SAY
+    // so or a league that never finishes looks identical to one with nothing to write.
+    if (Date.now() - startedAt >= budgetMs) {
+      result.deferredTeams += 1
+      continue
+    }
     const teamId = str(team.idTeam)
     if (!teamId) continue
     result.teams += 1
@@ -669,7 +727,7 @@ export async function ingestSport(
   const rosters =
     opts?.includeRosters !== false
       ? await ingestRosters(sport, { season })
-      : { teams: 0, players: 0, skippedNoPlayers: 0, coachesDropped: 0, rosterQuality: 'full' as const }
+      : { teams: 0, players: 0, skippedNoPlayers: 0, coachesDropped: 0, deferredTeams: 0, rosterQuality: 'full' as const }
 
   return {
     sport,

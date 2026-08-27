@@ -10,6 +10,8 @@
  *   sport   — "NFL" (default) or "NCAAF"
  *   season  — 4-digit year string (defaults to current season)
  *   source  — "rolling_insights" | "api_sports" | "all" (default: "all")
+ *   rosters — "1" runs ONLY the TheSportsDB roster sweep and skips every other
+ *             block. See the roster section below for why it is its own mode.
  */
 
 import type { NextRequest } from "next/server"
@@ -23,6 +25,8 @@ import {
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
 import {
+  LEAGUES,
+  ingestRosters,
   ingestSchedule,
   ingestTeams,
   type IngestSport,
@@ -52,6 +56,16 @@ const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB'
  */
 const TSDB_FAST_TEAM_SPORTS: IngestSport[] = ['NFL', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
 
+/**
+ * Teams whose rosters one fire will sweep, per league.
+ *
+ * The four leagues with real rosters carry 30-32 teams each, so 40 finishes a
+ * league outright in the normal case and the cap only bites if the provider slows
+ * down. `ingestRosters` orders stale-first, so whatever a bounded run does not
+ * reach leads the next one.
+ */
+const ROSTER_TEAMS_PER_RUN = 40
+
 function resolveSport(param: string | null): "NFL" | "NCAAF" {
   if (param?.toUpperCase() === "NCAAF") return "NCAAF"
   return "NFL"
@@ -76,6 +90,7 @@ async function handle(req: NextRequest) {
   const sport = sports[0]
   const season = url.searchParams.get("season") ?? undefined
   const source = (url.searchParams.get("source") ?? "all").toLowerCase()
+  const rostersOnly = url.searchParams.get("rosters") === "1"
 
   const startedAt = Date.now()
   const budget = createRunBudget()
@@ -83,7 +98,7 @@ async function handle(req: NextRequest) {
   const diagnostics: Record<string, unknown> = {}
 
   try {
-    if ((source === "all" || source === "rolling_insights") && sports.includes("NFL")) {
+    if (!rostersOnly && (source === "all" || source === "rolling_insights") && sports.includes("NFL")) {
       try {
         const riCount = await syncNFLScheduleToDb({ season })
         results.rolling_insights = { synced: riCount, sport: "NFL" }
@@ -92,7 +107,7 @@ async function handle(req: NextRequest) {
       }
     }
 
-    if (source === "all" || source === "api_sports") {
+    if (!rostersOnly && (source === "all" || source === "api_sports")) {
       // Per-sport isolation: a provider failure on one sport must not abandon the other, which is
       // a behaviour the two separate cron entries got for free by being separate fires.
       for (const s of sports) {
@@ -143,7 +158,7 @@ async function handle(req: NextRequest) {
      * six-hour cadence, not the default day, because this fires four times daily and a daily
      * rotation would give the same sport the lead on all four.
      */
-    if (url.searchParams.get('tsdb') !== '0') {
+    if (!rostersOnly && url.searchParams.get('tsdb') !== '0') {
       const tsdb: Record<string, unknown> = {}
       const deferred: string[] = []
       for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
@@ -179,6 +194,61 @@ async function handle(req: NextRequest) {
       }
       if (deferred.length) tsdb.deferredSports = deferred
       results.thesportsdb = tsdb
+    }
+
+    /*
+     * TheSportsDB ROSTERS.
+     *
+     * ⚠ THIS EXISTED AND NOTHING RAN IT. `ingestRosters` had zero scheduled callers:
+     * this route imported `ingestSchedule` and `ingestTeams` individually,
+     * `import-season-stats` imports only `ingestPlayerStats`, and the only path that
+     * reaches rosters is `ingestSport`, called from scripts/ingest-thesportsdb.ts by
+     * hand. Measured on production 2026-08-27, SportsPlayer's TheSportsDB rows were
+     * last written 2026-08-16 — eleven days, exactly the gap since someone last ran
+     * the script. Schedules, teams and season stats were all same-day fresh.
+     *
+     * ITS OWN MODE, NOT AN EXTRA STEP IN THE BLOCK ABOVE. That block already returned
+     * HTTP 502 at ~300,200ms once (see the warning above it); rosters are one call per
+     * TEAM, so folding them in would push the same fire further past the edge. `?rosters=1`
+     * gets the whole 240s budget to itself on its own schedule.
+     *
+     * NOT A NEW ROUTE, deliberately — the repo sits at Vercel's 2048-route ceiling and a
+     * TheSportsDB ingest already has a home here.
+     *
+     * ONLY THE LEAGUES THAT HAVE ROSTERS. NCAAF and NCAAB are `hasPlayers: false`: the
+     * provider returns head coaches and the odd alumnus filed under his alma mater, not a
+     * current roster. Sweeping them would spend the budget to write nothing. Devy stays
+     * with CFBD.
+     */
+    if (rostersOnly) {
+      const rosters: Record<string, unknown> = {}
+      const deferred: string[] = []
+      const rosterSports = TSDB_SPORTS.filter((s) => LEAGUES[s].hasPlayers)
+
+      // Rotated on the cron's own daily period, so a league that falls past the cut is not
+      // the same league every single run — the starvation this repo already hit once.
+      for (const s of rotateForFairness(rosterSports, 24 * 60 * 60 * 1000)) {
+        if (budget.exhausted()) {
+          deferred.push(s)
+          continue
+        }
+        try {
+          const r = await ingestRosters(s, {
+            maxTeams: ROSTER_TEAMS_PER_RUN,
+            // Headroom for serialising the response, same shape as the schedule block.
+            budgetMs: Math.max(0, budget.remainingMs() - 15_000),
+          })
+          const entry: Record<string, unknown> = { teams: r.teams, players: r.players }
+          if (r.skippedNoPlayers > 0) entry.skippedNoPlayers = r.skippedNoPlayers
+          if (r.coachesDropped > 0) entry.coachesDropped = r.coachesDropped
+          if (r.deferredTeams > 0) entry.deferredTeams = r.deferredTeams
+          rosters[s] = entry
+        } catch (err) {
+          rosters[s] = { error: String(err).slice(0, 120) }
+        }
+      }
+      if (deferred.length) rosters.deferredSports = deferred
+      results.thesportsdb_rosters = rosters
     }
 
     const totalSynced = Object.values(results)

@@ -58,6 +58,7 @@ on:
     - cron: "30 7 * * *"
     - cron: "30 7 * * 2"
     - cron: "40 6 * * *"
+    - cron: "40 8 * * *"
     - cron: "50 6 * * *"
     - cron: "50 7 * * *"
   workflow_dispatch:
