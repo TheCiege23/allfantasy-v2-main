@@ -67,7 +67,26 @@ async function resolveImportedManagerUserIds(
  */
 export async function bootstrapLeagueFromNormalizedImport(
   leagueId: string,
-  normalized: NormalizedImportResult
+  normalized: NormalizedImportResult,
+  /**
+   * The person doing the import, and which manager they are on the source
+   * platform.
+   *
+   * ⚠ WITHOUT THIS, NO NON-SLEEPER IMPORT HAS EVER CLAIMED A TEAM.
+   * `resolveImportedManagerUserIds` only knows how to map Sleeper manager ids to
+   * AllFantasy accounts — there is no equivalent linkage for an ESPN member id, a
+   * Yahoo guid or a Fantrax team. So every ESPN, Yahoo, Fantrax, MFL and
+   * Fleaflicker league landed with `claimedByUserId` null on every row, and three
+   * surfaces are gated on that claim: `/core/portfolio` lists only leagues where
+   * the viewer has claimed a team, the Matchup Center 404s without one, and the
+   * Trade Center's counterparty layer never runs. The league imported perfectly
+   * and was invisible.
+   *
+   * The commissioner gate already resolves this — it has to, to decide whether
+   * the caller may import at all. `checkEspn` returns the viewer's team, and the
+   * value was simply dropped between there and here.
+   */
+  importer?: { userId: string; sourceManagerId?: string | null } | null,
 ): Promise<SleeperLeagueBootstrapResult> {
   const standingsByTeam = new Map(
     normalized.standings.map((s) => [s.source_team_id, s])
@@ -77,6 +96,20 @@ export async function bootstrapLeagueFromNormalizedImport(
     normalized.source.source_provider,
     normalized.rosters.map((r) => r.source_manager_id)
   )
+
+  /*
+   * ⚠ ONE TEAM, AND ONLY THE IMPORTER'S OWN. Every other manager in the league
+   * is a stranger to us — there is no linkage from their platform id to an
+   * AllFantasy account, and inventing one would hand someone else's team to
+   * whoever imported the league.
+   *
+   * Does NOT overwrite a mapping the resolver already made: on Sleeper the
+   * resolver is authoritative and knows more than this hint does.
+   */
+  const importerManagerId = importer?.sourceManagerId?.trim()
+  if (importer?.userId && importerManagerId && !managerUserIds.has(importerManagerId)) {
+    managerUserIds.set(importerManagerId, importer.userId)
+  }
 
   let leagueTeamsCreated = 0
   let rostersCreated = 0

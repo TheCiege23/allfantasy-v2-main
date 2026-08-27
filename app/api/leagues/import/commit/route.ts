@@ -106,6 +106,12 @@ export async function POST(req: NextRequest) {
       normalized: result.normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
+      /*
+       * The gate resolved this on the way in — it has to, to decide whether this
+       * caller may import at all — and it was dropped here. That is why every
+       * non-Sleeper import landed with no claimed team and went invisible.
+       */
+      importerSourceManagerId: gate.sourceManagerId ?? null,
     })
 
     // Stamp the attestation on the new league so the gate is auditable.
