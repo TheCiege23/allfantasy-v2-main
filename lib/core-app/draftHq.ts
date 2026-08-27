@@ -148,21 +148,56 @@ async function loadImportedDraftPicks(
    * SportsPlayer stays as the Sleeper-shaped fallback, and is the only one of the two
    * that carries position and team.
    */
+  /*
+   * ⚠ AN ID MEANS NOTHING WITHOUT THE PROVIDER THAT ISSUED IT, AND BOTH LOOKUPS
+   * USED TO OMIT IT. The comment above says this table is keyed on provider +
+   * providerPlayerId; the query matched on providerPlayerId ALONE, so an ESPN
+   * athlete id was compared against every provider's id space at once.
+   *
+   * Measured on production, on the first ESPN league ever imported:
+   *
+   *   pick 13.04 -> "Liutauras Lelevicius"  (rolling_insights 15013, NCAAB)
+   *   pick 4.15  -> "Carnell Tate"          (also present under cfbd/NCAAF)
+   *
+   * A basketball guard, rendered on an NFL draft board as a confident answer. The
+   * collision surface is not marginal: 12,074 provider_player_id values appear
+   * under two or more providers, and 16,710 under two or more sports.
+   *
+   * ⚠ THE SLEEPER LOOKUP HAD THE SAME HOLE, and it is easy to miss because the
+   * column name reads like a filter. `sleeperId` holds numeric strings, so an
+   * ESPN id can match one just as readily; scoping the query by provider is not
+   * enough if a second unscoped query runs beside it.
+   *
+   * A wrong name is worse than no name here. "(not yet mapped)" is a true
+   * statement about a pick we cannot resolve; a stranger's name is a false one,
+   * and the screen gives the reader no way to tell them apart.
+   */
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { platform: true },
+  })
+  const platform = (league?.platform ?? '').trim().toLowerCase()
+
   const playerIds = rows.map((r) => r.playerId)
-  const [identities, players] = await Promise.all([
-    prisma.playerProviderIdentity
-      .findMany({
-        where: { providerPlayerId: { in: playerIds } },
-        select: { providerPlayerId: true, displayName: true },
-      })
-      .catch(() => []),
-    prisma.sportsPlayer
-      .findMany({
-        where: { sleeperId: { in: playerIds } },
-        select: { sleeperId: true, name: true, position: true, team: true },
-      })
-      .catch(() => []),
-  ])
+  const identitiesP = platform
+    ? prisma.playerProviderIdentity
+        .findMany({
+          where: { provider: platform, providerPlayerId: { in: playerIds } },
+          select: { providerPlayerId: true, displayName: true },
+        })
+        .catch(() => [])
+    : Promise.resolve([])
+  /* Only a Sleeper league has Sleeper ids in its draft facts. */
+  const playersP =
+    platform === 'sleeper'
+      ? prisma.sportsPlayer
+          .findMany({
+            where: { sleeperId: { in: playerIds } },
+            select: { sleeperId: true, name: true, position: true, team: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([])
+  const [identities, players] = await Promise.all([identitiesP, playersP])
 
   const byPlayerId = new Map<string, { name: string; position: string | null; team: string | null }>()
   for (const p of players) {
