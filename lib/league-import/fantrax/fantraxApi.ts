@@ -84,6 +84,33 @@ export type FantraxTeamRoster = {
   rosterItems: FantraxRosterItem[]
 }
 
+export type FantraxScoringPeriod = {
+  number: number
+  startDate?: string | null
+  endDate?: string | null
+}
+
+/**
+ * ⚠ REAL PLAYOFF STRUCTURE, NOT AN INFERENCE. `firstPlayoffPeriod` and
+ * `numPlayoffTeams` are stated by the league rather than guessed from which
+ * weeks happen to carry a flag.
+ */
+export type FantraxPlayoffs = {
+  lastRegularSeasonPeriod?: number | null
+  firstPlayoffPeriod?: number | null
+  numPlayoffTeams?: number | null
+  mergePlayoffPeriods?: boolean | null
+  used?: boolean | null
+}
+
+export type FantraxPeriodMatchups = {
+  period: number
+  matchupList?: Array<{
+    away?: { name?: string; id?: string; shortName?: string } | null
+    home?: { name?: string; id?: string; shortName?: string } | null
+  }> | null
+}
+
 export type FantraxLeagueInfo = {
   leagueName: string
   seasonYear: string | number | null
@@ -95,6 +122,61 @@ export type FantraxLeagueInfo = {
   /** Present but sparse — eligiblePos and status only, no names. */
   playerInfo: Record<string, unknown>
   rosterInfo: Record<string, unknown>
+  /**
+   * ⚠ THE WHOLE SEASON SCHEDULE IS IN HERE, and it was being thrown away. One
+   * entry per scoring period, each with that period's pairings. The import
+   * fetched this object for the league name and discarded everything else, so
+   * every Fantrax league arrived with no schedule at all.
+   */
+  matchups?: FantraxPeriodMatchups[] | null
+  playoffs?: FantraxPlayoffs | null
+  scoringPeriods?: FantraxScoringPeriod[] | null
+  /** Real category weights (TE-premium, TD value, per-yard). Not yet consumed. */
+  scoringSystem?: Record<string, unknown> | null
+}
+
+/** One row of the stored schedule, in the shape the snapshot reader expects. */
+export type FantraxScheduleRow = {
+  week: number
+  awayTeam: string
+  homeTeam: string
+  isPlayoff: boolean
+}
+
+/**
+ * Flatten `getLeagueInfo.matchups` into per-pairing rows.
+ *
+ * ⚠ NO SCORES. `getLeagueInfo` carries the fixtures and not the results; those
+ * live on `getMatchupScores?period=N`, one request per period. The rows are
+ * deliberately left score-less rather than defaulted to 0, because a stored 0-0
+ * is indistinguishable from a real scoreless tie.
+ *
+ * ⚠ A BYE IS SKIPPED, NOT HALF-STORED. An odd team count leaves a pairing with
+ * only one side; writing it with an empty opponent would resolve to no team and
+ * read as a corrupt fixture.
+ */
+export function flattenFantraxSchedule(info: FantraxLeagueInfo): FantraxScheduleRow[] {
+  const firstPlayoff = info.playoffs?.used
+    ? Number(info.playoffs.firstPlayoffPeriod)
+    : Number.NaN
+
+  const rows: FantraxScheduleRow[] = []
+  for (const period of info.matchups ?? []) {
+    const week = Number(period?.period)
+    if (!Number.isFinite(week) || week < 1) continue
+    for (const pairing of period.matchupList ?? []) {
+      const away = pairing?.away?.name?.trim()
+      const home = pairing?.home?.name?.trim()
+      if (!away || !home) continue
+      rows.push({
+        week,
+        awayTeam: away,
+        homeTeam: home,
+        isPlayoff: Number.isFinite(firstPlayoff) && week >= firstPlayoff,
+      })
+    }
+  }
+  return rows
 }
 
 /**
