@@ -63,8 +63,45 @@ on:
   pull_request:
     # No `branches:` filter, matching ts-error-ratchet.yml: filtering PR runs to
     # base main silently skipped every stacked PR, so those merged uncovered.
-  push:
-    branches: [main]
+    #
+    # ⚠ NEVER ADD A `paths:`/`paths-ignore:` FILTER TO THIS TRIGGER. These four
+    # contexts are REQUIRED, and a workflow skipped by a path filter never
+    # reports — the PR then waits on a check that will never arrive. Measured
+    # separately: a filter would have skipped 1 of the last 52 commits anyway,
+    # so it buys ~1% and risks locking the repo.
+
+  # ⚠ `push: branches: [main]` WAS REMOVED, DELIBERATELY. It is the direct cause
+  # of main having no verdict, and no grouping fixes it — grouping only decides
+  # WHICH runs starve. Both options were measured on 2026-08-27 and both failed:
+  #
+  #   group per SHA   every push completes → saturates the account's concurrent
+  #                   JOB slots. 27 completed, 2 running, ELEVEN QUEUED, ~17 min
+  #                   before a run started. Ten workflows fire on every push here
+  #                   and this one contributes four shards to each.
+  #   one group       a started run finishes, but GitHub keeps only ONE pending
+  #                   run per group and cancels the older one when a newer commit
+  #                   arrives. At 111 pushes/day almost everything died PENDING:
+  #                   ten consecutive runs cancelled with jobs_started=0/0.
+  #
+  # Per-commit coverage was never actually available at this push rate. The file
+  # already concluded that — "a recent verdict or none" — so this makes it
+  # explicit instead of emergent.
+  schedule:
+    # Every 15 minutes, off the top of the hour. :00 is the most contended slot
+    # on GitHub's shared scheduler and the cron tier measured only 7 of 24 hourly
+    # triggers actually firing there.
+    #
+    # ⚠ FREQUENT IS SAFE HERE, AND THAT IS THE WHOLE POINT: cancellation stops
+    # mattering once the trigger is a clock rather than a commit. Every run tests
+    # whatever main is NOW, so a superseded run loses nothing, and `concurrency`
+    # below bounds it at one running plus one pending regardless of how many fire.
+    # GitHub also drops scheduled runs under load, so treat this as a floor.
+    - cron: "7,22,37,52 * * * *"
+
+  # So a verdict can be FORCED without pushing a commit. There was no way to do
+  # that during the incident this change came out of, which is why "is main
+  # green" stayed unanswerable for hours.
+  workflow_dispatch:
 
 # ⚠ THIS GROUPED EVERY PUSH TO MAIN UNDER ONE KEY AND CANCELLED IN PROGRESS, so
 # with 111 commits landing on main in a day the suite was killed by the next push
