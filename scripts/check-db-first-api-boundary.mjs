@@ -8,6 +8,33 @@ import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 
 const DATA_API_HOST_PATTERNS = [
   /(^|\.)api\.sleeper\.app$/i,
+  // ⚠ api.sleeper.COM IS A DIFFERENT HOST FROM api.sleeper.APP ABOVE, and it was
+  // unmonitored while its sibling was watched — the same near-collision that let
+  // api-sports.io hide behind api.sportsdata.io. Found by the outbound-host census
+  // in __tests__/db-first-host-census.test.ts, not by reading this list.
+  //
+  // It is the STATS host: /stats/nfl/..., /projections/nfl, and per-player weekly
+  // grouping. Five files read it, and adding this reports all five because none
+  // matches ALLOWED_PATH_PATTERNS — `^lib/.*(ingest|ingestion|sync)` does not match
+  // "import", so the two importers fall through.
+  //
+  // They are NOT equally bad, and the difference is worth keeping:
+  //   lib/sports-data/sleeperMarketService.ts  — the real violation. getSeasonBoard
+  //       and getWeekBoard are reached from app/api/league/live-roster and
+  //       app/api/players/profile, both REQUEST PATHS, so a Sleeper outage or rate
+  //       limit lands on a user waiting for a page.
+  //   lib/sports-os/PlayerGameLogImportService.ts — admin-only, reached from
+  //       app/api/admin/sports/{game-logs,sync}. Same shape as lib/api-football.ts,
+  //       which is allowlisted for exactly that reason.
+  //   lib/player-game-stats/importPlayerGameStats.ts and lib/redraft/teamDefenseProvider.ts
+  //       — cron-only ingestion, which the rule permits; they are reported solely
+  //       because the allowlist pattern says "ingest" and these say "import".
+  //   lib/live-scoring/nflLiveStatsProvider.ts — no route importer found; reached
+  //       indirectly, so its exposure is unproven either way.
+  //
+  // All five are left REPORTED rather than allowlisted, exactly as CFBD was: an
+  // allowlist entry earned before the migration is an assertion, not a fact.
+  /(^|\.)api\.sleeper\.com$/i,
   /(^|\.)fantasysports\.yahooapis\.com$/i,
   /(^|\.)newsapi\.org$/i,
   /(^|\.)api\.sportsdata\.io$/i,
