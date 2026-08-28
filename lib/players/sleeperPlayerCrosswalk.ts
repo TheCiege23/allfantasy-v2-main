@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { looksLikeSleeperExternalId } from '@/lib/draft-sports-models/player-asset-resolver'
 import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 /**
  * SLEEPER PLAYER ID -> CANONICAL IDENTITY.
@@ -16,11 +17,21 @@ import { sleeperHeadshotUrl } from '@/lib/player-media-urls'
  * So identity is reconstructed in two hops — id to NAME, then name to the
  * canonical row — and every hop is measured rather than assumed:
  *
- *   id -> name   `SportsPlayer.externalId` resolves 60 of 402 traded ids (15%).
- *                Our own `redraft_roster_players` rows, which store the Sleeper
- *                id and the name side by side, add another 108 for a combined
- *                168 of 402 (42%).
+ *   id -> name   `SportsPlayer` resolves 150 of 201 sampled roster ids (75%),
+ *                131 of them to the RIGHT player. Our own `redraft_roster_players`
+ *                rows, which store the Sleeper id and the name side by side, cover
+ *                the rest.
  *   name -> row  191 of 214 (89%), and every one of those has an image.
+ *
+ * ⚠ THE OLD NUMBERS HERE WERE MEASURED THROUGH A BROKEN QUERY AND FLATTERED IT.
+ * This used to record "60 of 402 (15%)" for the first hop. That hop matched Sleeper
+ * ids against `externalId`, which cannot reach a Sleeper-sourced row at all and
+ * instead hit Rolling Insights rows that happen to carry the same bare number. Re-run
+ * on 201 real roster ids: the old query resolved 121 and only 42 were the right
+ * player — 79 were STRANGERS. Mike Evans came back as Harlan Miller, Justin Jefferson
+ * as DaRon Bland, Jahmyr Gibbs as Mike Boone. Those names were going into grounding
+ * blocks presented as fact. A low resolution rate was never the problem; a confidently
+ * wrong one was.
  *
  * ⚠ 58% OF SLEEPER IDS STILL DO NOT RESOLVE, and the honest fix is ingesting
  * Sleeper's own ~12,200-entry player directory. Until that exists this returns
@@ -97,13 +108,32 @@ export async function resolveSleeperPlayerIdentities(
   const sportUpper = sport.toUpperCase()
 
   // ── Hop 1a: the provider-backed player table ───────────────────────────────
+  /*
+   * ⚠ THESE ARE SLEEPER IDS AND THEY MUST NOT BE MATCHED AGAINST `externalId`.
+   * This asked for `externalId: { in: ids }`, which cannot find a Sleeper-sourced row at all —
+   * those store `sleeper:8144`, not `8144` — and instead matched Rolling Insights rows, whose
+   * `externalId` IS a bare number. 42,032 bare ids collide with a Sleeper id and 42,031 of them
+   * are a different person, so this hop was naming players after strangers, then writing that
+   * name, position, team and photo into a grounding block presented as fact.
+   */
   try {
     const rows = await prisma.sportsPlayer.findMany({
-      where: { externalId: { in: ids }, sport: sportUpper },
-      select: { externalId: true, name: true, position: true, team: true, imageUrl: true },
+      where: sleeperIdWhere(ids, sportUpper),
+      select: {
+        externalId: true,
+        sleeperId: true,
+        name: true,
+        position: true,
+        team: true,
+        imageUrl: true,
+      },
     })
     for (const r of rows) {
-      const entry = byId.get(r.externalId)
+      // A row can arrive by either spelling; both resolve back to the bare Sleeper id we asked for.
+      const key =
+        r.sleeperId ?? (r.externalId.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null)
+      if (!key) continue
+      const entry = byId.get(key)
       if (!entry || !r.name) continue
       entry.name = r.name
       entry.position = r.position ?? null
