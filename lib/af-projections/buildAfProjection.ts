@@ -15,6 +15,11 @@ import {
   recencyWeightedPoints,
 } from './core'
 import { extractIdpComponents, isIdpEligiblePosition, scoreIdpComponents } from './idpScoring'
+import {
+  componentsForCategoryScoring,
+  getCategoryScoringRules,
+  scoreCategoryComponents,
+} from './categoryScoring'
 import type {
   IdpScoringBreakdown,
   ProjectionOutcome,
@@ -106,6 +111,12 @@ function scoreIdpWeekly(
 }
 
 export interface BuildProjectionInput {
+  /**
+   * Sport code. Only consulted to decide whether CATEGORY scoring applies (MLB / NBA / NHL);
+   * omitting it preserves the football-only behaviour this function had before, which is why it
+   * is optional rather than required.
+   */
+  sport?: string | null
   /** Raw `FantasyStatLine.stats` payload, or a pre-extracted aggregate. */
   statsJson?: unknown
   aggregate?: SeasonAggregate | null
@@ -218,6 +229,36 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     }
   }
 
+  /*
+   * --- Category scoring for MLB / NBA / NHL -----------------------------------------
+   *
+   * ⚠ PER-GAME FOR BOTH THE POINTS AND THE BREAKDOWN, for the reason recorded directly above:
+   * the IDP path once divided the points but left `componentAmounts` as season totals, and a
+   * downstream rescore then multiplied season counts by weekly weights — a measured ~17x
+   * inflation (Kamren Curl, 6.34/game stored, 211.44 on rescore). Everything persisted here
+   * shares one unit: per game.
+   */
+  let categorySeason: { perGame: number; breakdown: Record<string, number> } | null = null
+  {
+    const categoryRules = getCategoryScoringRules(input.sport)
+    if (categoryRules) {
+      const scored = scoreCategoryComponents({
+        components: componentsForCategoryScoring(aggregate),
+        rules: categoryRules,
+      })
+      // `scoreCategoryComponents` returns null when NO rule key matched — a stat-key rename
+      // upstream would otherwise score every player to exactly 0.0 and present it as a
+      // projection. A zero SCORE from matched keys is legitimate (a player who did nothing);
+      // zero MATCHES is a broken vocabulary, and refusing is the honest response.
+      if (scored) {
+        const perGame = (n: number) => Math.round((n / aggregate.gamesPlayed) * 1000) / 1000
+        const breakdown: Record<string, number> = {}
+        for (const [k, v] of Object.entries(scored.breakdown)) breakdown[k] = perGame(v)
+        categorySeason = { perGame: perGame(scored.points), breakdown }
+      }
+    }
+  }
+
   // --- Sleeper forward-looking projection (tiers 1-2) --------------------------------
   // A projection FOR the week being played beats any inference from completed games, so
   // these sit above every historical tier.
@@ -247,6 +288,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   let basis: ProjectionOutcomeBasis
   let weeklyWeeksUsed = 0
   let idpBreakdown: IdpScoringBreakdown | null = null
+  let categoryBreakdown: Record<string, number> | null = null
 
   if (sleeperIdp) {
     baselineProjection = sleeperIdp.points
@@ -275,12 +317,25 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     baselineProjection = idpSeason.points
     basis = 'season_idp_components'
     idpBreakdown = idpSeason.breakdown
+  } else if (categorySeason) {
+    /*
+     * LAST in the chain, deliberately.
+     *
+     * Every branch above is football, and each is a better signal than a season-total category
+     * score: a forward projection beats recent actuals, which beat a season rate. Placing this
+     * last means NFL resolution is bit-for-bit what it was — a football player reaches here only
+     * if it had already refused — while MLB, NBA and NHL, which can match none of the above, now
+     * have a basis instead of `no_scoring_basis`.
+     */
+    baselineProjection = categorySeason.perGame
+    basis = 'season_category_components'
+    categoryBreakdown = categorySeason.breakdown
   } else {
     return {
       ok: false,
       reason: 'no_scoring_basis',
       detail:
-        'No weekly points in the requested format, no scoreable IDP components, and no DraftKings points-per-game on the season aggregate.',
+        'No weekly points in the requested format, no scoreable IDP components, no DraftKings points-per-game on the season aggregate, and no category scoring rules for this sport.',
     }
   }
 

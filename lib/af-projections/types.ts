@@ -52,6 +52,12 @@ export type AfProjectionBasis =
    * season total carries no within-season role change — and its tackle split may be estimated.
    */
   | 'season_idp_components'
+  /**
+   * Season category totals scored per game under per-sport rules — MLB / NBA / NHL.
+   * LAST in the resolution chain: every football basis outranks it, so this can only be
+   * reached by a sport that has no football signal at all.
+   */
+  | 'season_category_components'
 
 /** Which vocabulary a raw stat map speaks. */
 export type IdpSourceKind = 'sleeper_weekly' | 'ri_season'
@@ -81,6 +87,17 @@ export interface SeasonAggregate {
   gamesPlayed: number
   /** Numeric components under `regular_season`, flattened one level. */
   components: Record<string, number>
+  /**
+   * Numeric components one level DEEPER, addressed `"<group>.<KEY>"` — e.g. `batting.HR`.
+   *
+   * ⚠ SEPARATE FROM `components` ON PURPOSE, for two independent reasons.
+   *   1. MLB reuses keys across groups with opposite meanings (`H` is a hit recorded under
+   *      `batting` and a hit ALLOWED under `pitching`). Merging would score one as the other.
+   *   2. NFL has a nested `snap_counts` object. Folding grouped keys into `components` would
+   *      change what every existing NFL consumer sees, for a change that has no business
+   *      touching football at all.
+   */
+  groupedComponents?: Record<string, number>
   position: string | null
   team: string | null
   playerName: string | null
