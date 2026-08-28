@@ -599,7 +599,18 @@ const ROSTER_INTENT = /roster|lineup|sit\b|bench|flex|\bstarts?\s+(?:him|her|the
 
 function classifyPecrIntent(message: string): string {
   if (/trade|swap|offer|deal|give|receiv/i.test(message)) return 'trade'
-  if (/waiver|wire|pickup|drop|add|free.?agent/i.test(message)) return 'waiver'
+  /*
+   * ⚠ `pickup` MATCHED ONLY THE CLOSED COMPOUND, so "who can I pick up?" — the
+   * most natural way to ask this — fell through to the draft branch below on the
+   * bare word `pick`, and intent `draft` does not force league grounding unless
+   * the message also says "draft order" or "in MY league". The one question
+   * `get_available_players` exists for could never reach it.
+   *
+   * Third time this exact shape has bitten: `hrs?` in the stat guard and bare
+   * `start` in ROSTER_INTENT. The formal spelling was covered and the human one
+   * was not.
+   */
+  if (/waiver|wire|pick\s*up|drop|add|free.?agent/i.test(message)) return 'waiver'
   if (ROSTER_INTENT.test(message)) return 'roster'
   if (/draft|pick|adp|tier|rank/i.test(message)) return 'draft'
   return 'general'

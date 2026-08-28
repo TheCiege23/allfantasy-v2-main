@@ -4,6 +4,7 @@ import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { detectStatFamily, readStatLeaders, FAMILY_LABEL } from '@/lib/live/playerStatLeaders'
 import { findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
+import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
 
 /**
@@ -71,6 +72,15 @@ export const CHIMMY_TOOL_SPECS = [
       name: 'get_my_roster',
       description:
         "The user's OWN team in the league in scope: starters, bench, injured reserve and taxi, with each player's position, NFL team and injury status. Use for 'who should I start', 'where am I weak', 'who should I drop', or any question about their players. Returns roster FACTS only — no projections or points. Says so plainly if their team is unclaimed or unsynced.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_available_players',
+      description:
+        "Ranked players who are on NOBODY's roster in the league in scope — use for 'who can I pick up', 'who is on waivers', 'best free agent', 'who should I add'. Returns the highest AllFantasy market values among unrostered players. It does NOT know who is claimable: unrostered is not the same as on-waivers, and the block says so. Returns a sentence saying so if rosters have not synced or every ranked player is taken.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -260,6 +270,11 @@ export async function executeChimmyTool(
           `Their leagues include: ${found.known.map((c) => `"${c.name}"`).join(', ')}.`,
           'Tell them the name did not match and offer those. Do NOT answer as though a league were selected.',
         ].join(' ')
+      }
+
+      case 'get_available_players': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        return buildAvailablePlayersContext(ctx.leagueId, ctx.userId)
       }
 
       case 'get_my_roster': {

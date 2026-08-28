@@ -57,6 +57,12 @@ describe('tool specs', () => {
        * returns roster facts with no projections attached.
        */
       'get_my_roster',
+      /*
+       * Subtracts the league's own rosters from our published value set. Reads
+       * only rows the session already reaches, writes nothing, and returns a
+       * ranking — never a claim that a player can be added.
+       */
+      'get_available_players',
       'get_league_standings',
       'get_head_to_head',
       'get_upcoming_games',

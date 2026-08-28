@@ -256,3 +256,66 @@ describe('calendar "start" is not lineup "start"', () => {
     }
   })
 })
+
+/*
+ * ⚠ "WHO CAN I PICK UP?" WAS A DRAFT QUESTION. The waiver branch matched only
+ * the closed compound `pickup`, so the open form fell through to the draft
+ * branch on the bare word `pick` — and intent `draft` does not force league
+ * grounding unless the message also says "draft order" or "in MY league". The
+ * one question `get_available_players` exists to answer could never reach it.
+ *
+ * Third instance of this shape after `hrs?` in the stat guard and bare `start`
+ * above: the formal spelling was covered and the human one was not.
+ */
+describe('a pickup question is a waiver question', () => {
+  const waiverMatch = ROUTE.match(/\((\/waiver\|[^\n]*?\/i)\.test\(message\)\) return 'waiver'/)
+  const draftMatch = ROUTE.match(/\((\/draft\|[^\n]*?\/i)\.test\(message\)\) return 'draft'/)
+
+  it('keeps both patterns where the test can read them', () => {
+    expect(waiverMatch).not.toBeNull()
+    expect(draftMatch).not.toBeNull()
+  })
+
+  /** Mirrors classifyPecrIntent's order: waiver is checked before draft. */
+  function classify(message: string): string {
+    const waiver: RegExp = eval(waiverMatch?.[1] ?? '/$^/')
+    const draft: RegExp = eval(draftMatch?.[1] ?? '/$^/')
+    if (waiver.test(message)) return 'waiver'
+    if (draft.test(message)) return 'draft'
+    return 'general'
+  }
+
+  it.each([
+    'who can i pick up in the zombie league?',
+    'who should i pick up',
+    'best pick up this week',
+    'anyone worth adding in the zombie league?',
+    'who is available on waivers?',
+    'best free agent available?',
+  ])('routes to waiver: %s', (q) => {
+    expect(classify(q)).toBe('waiver')
+  })
+
+  /*
+   * ⚠ AND THE DRAFT SENSE MUST SURVIVE. `pick` still belongs to draft — widening
+   * the waiver branch to a bare `pick` would have swallowed every draft question
+   * and demanded a league for "when is the NFL draft".
+   */
+  it.each([
+    'what pick am i in the draft',
+    'who should i draft at 1.03',
+    'what is his adp',
+  ])('still reads as draft: %s', (q) => {
+    expect(classify(q)).toBe('draft')
+  })
+
+  /*
+   * ⚠ INTENT `waiver` HARD-REQUIRES A LEAGUE, so anything swept in here that is
+   * NOT about the user's team comes back as a 412. This is why `available` was
+   * left out of the pattern: it adds nothing the other words miss, and it would
+   * have caught "what features are available?".
+   */
+  it('leaves a bare availability question out of the waiver branch', () => {
+    expect(classify('what features are available?')).toBe('general')
+  })
+})
