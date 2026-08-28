@@ -9,11 +9,25 @@ import { getUserTradeProfile } from '@/lib/trade-feedback-profile'
 import { executeSerperWebSearch, executeSerperNewsSearch } from '@/lib/serper'
 import { getFantasyCalcValuesDbFirst as fetchCalcValues } from '@/lib/fantasycalc-db'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { assertAiSpendAllowed, AiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 function getGrokClient() {
+  /*
+   * PROVIDER BOUNDARY. This route reached three providers with no spend check at
+   * all: two SDK clients and a direct fetch to api.x.ai below. It is also
+   * UNAUTHENTICATED - there is no session requirement anywhere in this file, and
+   * the only brake is rateLimit(ip, 5, 60s). With MAX_TOOL_TURNS = 6 a single
+   * request can drive several model calls, so the exposure was 5 tool loops per
+   * minute per IP with nothing metering the spend behind them.
+   *
+   * The guard belongs in the factory rather than at the handler entry so it
+   * still holds if a future path constructs a client somewhere else in the file.
+   */
+  assertAiSpendAllowed('improve-trade.grok')
+
   const apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
   if (!apiKey) {
     throw new Error("XAI_API_KEY/GROK_API_KEY is missing")
@@ -26,6 +40,8 @@ function getGrokClient() {
 }
 
 function getOpenAIClient() {
+  assertAiSpendAllowed('improve-trade.openai')
+
   const apiKey =
     process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
 
@@ -116,6 +132,11 @@ async function runGrokWithTools(systemPrompt: string): Promise<string> {
       } else if (fnName === 'news_search') {
         result = await executeSerperNewsSearch(args.query || 'NFL fantasy football news 2026', args.num || 10)
       } else if (fnName === 'x_keyword_search') {
+        // Deliberately outside the try below: that block turns any throw into a
+        // 'search unavailable' note, which would silently downgrade a spend
+        // refusal into a partial answer the caller cannot distinguish from a
+        // provider timeout.
+        assertAiSpendAllowed('improve-trade.x_keyword_search')
         try {
           const xRes = await fetch('https://api.x.ai/v1/tools/x_keyword_search', {
             method: 'POST',
@@ -718,6 +739,12 @@ Return ONLY valid JSON:
 
     return NextResponse.json({ suggestions })
   } catch (err: any) {
+    // A disabled spend switch is a payment state, not a fault. Reporting it as
+    // 'Something went wrong' with a 500 would read as an outage and send the
+    // next person debugging the provider instead of checking the flag.
+    if (err instanceof AiSpendDisabledError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.httpStatus })
+    }
     console.error('[improve-trade] Unexpected error:', err?.message || err)
     return NextResponse.json(
       { error: 'Something went wrong. Please try again.' },

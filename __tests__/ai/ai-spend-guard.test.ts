@@ -90,7 +90,25 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/deepseek-client.ts',
     'lib/ai/openai-route-client.ts',
     'lib/decision-os/three-brain/orchestrator.ts',
+    // A ROUTE can be a provider boundary too, and this list used to assume they
+    // could not be. improve-trade builds two OpenAI SDK clients and fetches
+    // api.x.ai directly, all inside the handler, so nothing under lib/ ever saw
+    // those calls. It is unauthenticated and rate-limited only by IP
+    // (5/60s), and MAX_TOOL_TURNS lets one request drive several model calls.
+    'app/api/instant/improve-trade/route.ts',
   ]
+
+  /**
+   * ⚠ THIS RATCHET ONLY WATCHES `lib/`. Three more routes call a provider inline
+   * and are tracked by neither list below, so they are invisible here rather than
+   * counted as debt:
+   *   app/api/chat/chimmy/route.ts
+   *   app/api/start-sit/chimmy/route.ts
+   *   app/api/waiver-ai/grok/route.ts
+   * Adding them would raise UNGUARDED_RATCHET past its bound, which reads as a
+   * regression rather than the census correction it would be — so that is a
+   * deliberate decision for whoever owns the number, not a silent edit.
+   */
 
   /**
    * Known-unguarded provider boundaries — a RATCHET, not an allowlist. Each still spends money on
