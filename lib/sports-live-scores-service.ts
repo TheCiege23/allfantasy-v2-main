@@ -9,6 +9,8 @@ import { fetchWithChain } from '@/lib/workers/api-chain'
 import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 import { normalizeGameStatus, type CanonicalGameStatus } from '@/lib/scores/gameScoreProviders'
+import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
+import { resolveCollegeTeamLogo } from '@/lib/sport-teams/collegeTeamIdentity'
 
 export const LIVE_SCORES_FRESHNESS_MS = 60 * 1000
 
@@ -854,6 +856,40 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
  * `topPerformer` is null here — the row is a real score with one fewer field,
  * not a reason to invent a performer from a table that does not have one.
  */
+/**
+ * Fill crests on rows that came from the database.
+ *
+ * `dbRowToLiveScore` returns empty logo strings because `SportsGame` stores no
+ * logo — on the LIVE path they arrive inside ESPN's own payload, so only the
+ * cached path is blank. That is the whole gap: a slate served from cache had no
+ * crests at all.
+ *
+ * ⚠ NCAAF ONLY, AND BY DESIGN. College is where team naming actually fractures:
+ * the 10-day slate carries 1,527 distinct strings for ~660 teams across three
+ * conventions at once. The professional leagues use one stable abbreviation set
+ * and do not need this.
+ *
+ * Never throws and never fetches. No index, no match, or a store failure all
+ * leave the logo exactly as it was — an empty crest is cosmetic, a scoreboard
+ * that fails to render is not.
+ */
+async function withCollegeTeamLogos(
+  sport: LeagueSport,
+  scores: LiveScoreRow[],
+): Promise<LiveScoreRow[]> {
+  if (sport !== 'NCAAF' || scores.length === 0) return scores
+  if (scores.every((s) => s.homeLogo && s.awayLogo)) return scores
+
+  const index = await loadCollegeTeamIndex()
+  if (!index) return scores
+
+  return scores.map((s) => ({
+    ...s,
+    homeLogo: s.homeLogo || resolveCollegeTeamLogo(s.homeTeamFull || s.homeTeam, index) || '',
+    awayLogo: s.awayLogo || resolveCollegeTeamLogo(s.awayTeamFull || s.awayTeam, index) || '',
+  }))
+}
+
 export function dbRowToLiveScore(g: {
   externalId: string
   homeTeam: string
@@ -1093,7 +1129,7 @@ export async function getCachedLiveScoresForSport(options: {
   // That blend is how one fixture rendered once per feed, and how a dead feed's
   // 0-0 rows sat beside a live one's real score.
   const useRows = pickFreshestSourceRows(cachedGames)
-  const scores = useRows.map(dbRowToLiveScore)
+  const scores = await withCollegeTeamLogos(sport, useRows.map(dbRowToLiveScore))
   const now = Date.now()
   const latestFetched =
     cachedGames
@@ -1229,7 +1265,7 @@ export async function getLiveScoresForSport(options: {
     // Same rule as the cached-only reader: one source, the freshest that ranks
     // highest, never a blend across feeds.
     const useRows = pickFreshestSourceRows(cachedGames)
-    scores = useRows.map(dbRowToLiveScore)
+    scores = await withCollegeTeamLogos(sport, useRows.map(dbRowToLiveScore))
     source = useRows[0]?.source === 'rolling_insights' ? 'db_cache_ri' : 'db_cache'
     fetchedAt = useRows[0]?.fetchedAt?.toISOString() ?? null
   }

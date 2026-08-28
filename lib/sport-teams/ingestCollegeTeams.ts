@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getCFBTeamDirectory } from '@/lib/cfb-player-data'
 import type { CollegeTeamRecord } from '@/lib/sport-teams/collegeTeamIdentity'
+import { COLLEGE_TEAM_DIRECTORY_CACHE_KEY } from '@/lib/sport-teams/collegeTeamIndexStore'
 
 /**
  * Ingest CFBD's team directory into `SportsTeam`, so college team identity and
@@ -109,6 +110,32 @@ export async function ingestCollegeTeams(): Promise<CollegeTeamIngestResult> {
     } catch {
       result.errors += 1
     }
+  }
+
+  /*
+   * The alias-rich directory, stored whole so read paths can build the identity
+   * index without a provider call.
+   *
+   * `SportsTeam` can only carry two aliases (name, shortName), which resolves
+   * 46.1% of the real slate. The full set including mascot and alternateNames
+   * resolves 81.7%. Rather than bend the team table into holding alias arrays,
+   * the directory lives in one cache row — see collegeTeamIndexStore.
+   *
+   * Written LAST, after the per-team upserts: if this fails, the team rows are
+   * still correct and the index simply stays on its previous version.
+   */
+  try {
+    await prisma.sportsDataCache.upsert({
+      where: { cacheKey: COLLEGE_TEAM_DIRECTORY_CACHE_KEY },
+      update: { data: teams as unknown as object, expiresAt },
+      create: {
+        cacheKey: COLLEGE_TEAM_DIRECTORY_CACHE_KEY,
+        data: teams as unknown as object,
+        expiresAt,
+      },
+    })
+  } catch {
+    result.errors += 1
   }
 
   return result
