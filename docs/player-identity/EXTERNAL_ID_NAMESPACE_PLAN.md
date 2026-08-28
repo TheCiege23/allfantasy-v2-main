@@ -325,3 +325,36 @@ MLB, NHL, NBA and SOCCER have no Sleeper counterpart at all in this product. The
 - Adding id columns to `SportsPlayer`. Use `PlayerIdentityMap`.
 - Deduplicating `SportsPlayer`. Real, separate, much larger.
 - `PlayerIdentityMismatchLog` — 787MB and nothing reads it. Do not wire this to it.
+
+---
+
+## Phase 3 weak tier, 2026-08-28 — and the population moved underneath it
+
+**Final state: 9,028 NFL pairs, 94.4% coverage, zero wrong-player pairings.**
+
+The weak tier as planned was 5,267 rows. By the time it was run, **49 were left**, because a
+bulk job wrote 5,759 pairs in a single second (03:29:54.535–03:29:55.273) between the strong-tier
+backfill and this one. It was not this lane's work.
+
+**That job's output was audited before building on it**, since the last bulk process to touch this
+table left 11 pairs naming the wrong player. It holds up: 5,748 of 5,748 resolvable pairs agree by
+name, and whole-table integrity is clean — no Sleeper id and no RI id on more than one pair. Only
+9 of the remaining 49 were still writable; the other 80 candidates had their Sleeper id claimed
+already. All 9 were inspected individually rather than trusted to the rule, and every one was the
+same person modulo a hyphen (`Ricky Jean Francois`/`Ricky Jean-Francois`).
+
+The 12 remaining name disagreements across all 9,028 pairs are **all** nickname or formal-name
+variants: Chigoziem/Chig Okonkwo, Josh/Joshua Metellus, Olaivavega/Vega Ioane, Cameron/Cam Ward.
+
+⚠ **AGE IS NOT A USABLE CONFIRMATION SIGNAL FOR THIS TIER, AND THE REASON IS STRUCTURAL.** With
+`SportsPlayer.age` repaired it looked like the independent check that would collapse the ~79-row
+risk estimate. Measured instead: requiring agreement within 2 years **wrongly refuses 30 of 187**
+known-good weak pairs (16%). The weak tier is disproportionately RETIRED players — that is *why*
+Sleeper states no team for them — and Sleeper's age is frozen at retirement while Rolling
+Insights' is current. The 9 rows written here show it plainly, a consistent +5: 40/35, 46/40,
+34/29, 35/30. Any age check would have rejected almost all of them.
+
+⚠ **`sleeperId === rollingInsightsId` IS A HEURISTIC FOR CORRUPTION, NOT PROOF.** One such row
+survives and is correct: Orlando Scandrick genuinely holds id 266 in both spaces. Checked by name
+before it was left alone. The 11 cleared earlier were all verified individually for the same
+reason — the shape is a reason to look, not a reason to delete.

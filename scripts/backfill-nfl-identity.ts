@@ -29,6 +29,13 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 const prisma = new PrismaClient()
 const WRITE = process.argv.includes('--write')
+/*
+ * Which tier to write. STRONG requires both sides to state a team and agree; WEAK accepts a
+ * unique name and matching position family when one side does not state a team. Weak measured
+ * 200/200 against pre-existing ground truth — but on a 200-case sample, so the tier is a
+ * deliberate choice at the command line rather than a default.
+ */
+const TIER: 'strong' | 'weak' = process.argv.includes('--tier=weak') ? 'weak' : 'strong'
 
 const normName = (s: string | null | undefined) =>
   String(s ?? '')
@@ -52,7 +59,7 @@ const fam = (p: string | null | undefined) =>
   FAMILY[String(p ?? '').toUpperCase().trim()] ?? String(p ?? '').toUpperCase().trim()
 
 async function main() {
-  console.log(WRITE ? '=== WRITE MODE ===' : '=== DRY RUN (pass --write to apply) ===')
+  console.log(`${WRITE ? '=== WRITE MODE ===' : '=== DRY RUN (pass --write to apply) ==='}  tier=${TIER}`)
 
   const ri = await prisma.sportsPlayer.findMany({
     where: { sport: 'NFL', source: 'rolling_insights' },
@@ -91,10 +98,16 @@ async function main() {
     if (!cands || cands.length !== 1) continue
     const c = cands[0]
     if (!c.sleeperId) continue
+    if (fam(c.position) !== fam(r.position)) continue
     const rt = tm(r.team)
     const ct = tm(c.team)
-    if (rt === null || ct === null || rt !== ct) continue // STRONG tier: both teams stated and equal
-    if (fam(c.position) !== fam(r.position)) continue
+    const bothTeamsKnown = rt !== null && ct !== null
+    if (bothTeamsKnown) {
+      if (rt !== ct) continue
+      if (TIER !== 'strong' && TIER !== 'weak') continue
+    } else if (TIER === 'strong') {
+      continue // strong requires a stated team on both sides
+    }
 
     if (seenSleeper.has(c.sleeperId) || seenRi.has(r.externalId)) { skippedDupBatch++; continue }
     seenSleeper.add(c.sleeperId)
@@ -109,7 +122,7 @@ async function main() {
       canonicalName,
       normalizedName: canonicalName.toLowerCase(),
       position: r.position ?? null,
-      currentTeam: rt,
+      currentTeam: rt ?? ct,
       sport: 'NFL',
     }
 
