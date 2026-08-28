@@ -1,5 +1,11 @@
 import { prisma } from '@/lib/prisma';
 import { decrypt, encrypt } from '@/lib/league-auth-crypto';
+import {
+  clearDeadYahooCredentials,
+  isTerminalGrantFailure,
+  parseOAuthErrorCode,
+  YAHOO_RECONNECT_MESSAGE,
+} from '@/lib/league-import/yahoo/yahooOAuthRecovery';
 import { XMLParser } from 'fast-xml-parser';
 
 export interface LeaguePayload {
@@ -200,7 +206,27 @@ async function refreshYahooToken(userId: string, refreshToken: string): Promise<
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error('[Yahoo Refresh] Failed:', errText);
+    /*
+     * This path already had the right MESSAGE and still left the user stuck.
+     * `invalid_grant` is terminal — only re-consent recovers it — but the dead
+     * credential stayed in the database, so every "is Yahoo connected?" check
+     * kept saying yes, the surface never offered a reconnect, and this same
+     * error repeated forever. Clearing it is what puts the Connect button back.
+     *
+     * Only on invalid_grant: a 5xx here is transient and must not cost a working
+     * connection. See lib/league-import/yahoo/yahooOAuthRecovery.ts — shared,
+     * because the other refresh implementation had drifted from this one.
+     */
+    if (isTerminalGrantFailure(errText)) {
+      await clearDeadYahooCredentials(userId);
+      throw new Error(YAHOO_RECONNECT_MESSAGE);
+    }
+    // Code and status only. The raw body is vendor free-text and this is a log.
+    console.error(
+      '[Yahoo Refresh] failed status=%d error=%s',
+      res.status,
+      parseOAuthErrorCode(errText) ?? 'unrecognised',
+    );
     throw new Error('Yahoo token refresh failed — please re-connect Yahoo in League Sync.');
   }
 

@@ -1,4 +1,10 @@
 import { decrypt, encrypt } from '@/lib/league-auth-crypto'
+import {
+  clearDeadYahooCredentials,
+  isTerminalGrantFailure,
+  parseOAuthErrorCode,
+  YAHOO_RECONNECT_MESSAGE,
+} from '@/lib/league-import/yahoo/yahooOAuthRecovery'
 import { prisma } from '@/lib/prisma'
 import type {
   YahooImportDraftPick,
@@ -349,7 +355,46 @@ async function refreshYahooAccessToken(context: YahooApiFetchContext): Promise<s
 
   if (!response.ok) {
     const body = await response.text()
-    throw new YahooImportConnectionError(`Yahoo token refresh failed: ${body || response.statusText}`)
+    const vendorError = parseOAuthErrorCode(body)
+
+    /*
+     * ⚠ `invalid_grant` IS TERMINAL, AND WAS BEING RETRIED FOREVER.
+     *
+     * Per OAuth2 it means the refresh token is expired, revoked, or already
+     * used — no amount of retrying recovers it, only re-consent does. This
+     * branch used to throw the vendor's raw JSON, so the user saw
+     *
+     *     Yahoo token refresh failed: {"error":"invalid_grant",
+     *     "error_description":"Invalid refresh token"}
+     *
+     * verbatim in the UI (the discover route returns `error.message` straight
+     * to the browser), while the dead credential stayed in the database. So
+     * `getYahooAuthForUser` kept finding an `oauthToken`, kept believing Yahoo
+     * was connected, and kept failing the same way — with no path back.
+     *
+     * Clearing the tokens is what turns this into a recoverable state: the
+     * stored value is already worthless, and its absence is exactly what makes
+     * the surface say "Connect Yahoo" and show the button again.
+     *
+     * 🛑 ONLY on `invalid_grant`. A 500 or a timeout from Yahoo is transient and
+     * must NOT cost the user their connection.
+     */
+    if (isTerminalGrantFailure(body)) {
+      await clearDeadYahooCredentials(context.userId)
+      throw new YahooImportConnectionError(YAHOO_RECONNECT_MESSAGE)
+    }
+
+    // Status and vendor code only. The body can carry token material, and this
+    // message is rendered to the user by the discover route.
+    console.warn(
+      '[Yahoo] token refresh failed status=%d error=%s',
+      response.status,
+      vendorError ?? 'unrecognised',
+    )
+    throw new YahooImportConnectionError(
+      `Yahoo could not refresh the connection (HTTP ${response.status}). ` +
+        'Try again in a moment; reconnect Yahoo in League Sync if it keeps happening.',
+    )
   }
 
   const tokens = await response.json()
