@@ -64,3 +64,36 @@ describe('the expired-link screen reports what happened', () => {
     expect(BAD_LINK_BLOCK).toMatch(/Sign in to resend/)
   })
 })
+
+/*
+ * ⚠ "SENT" WAS CLAIMED FOR A RESPONSE THE CLIENT DID NOT UNDERSTAND. Observed in
+ * production: the screen said "Sent" while NO verify token existed for any user
+ * and NO email reached Resend. `res.json().catch(() => ({}))` turned any
+ * non-JSON 200 into an empty object, which failed the alreadyVerified check and
+ * fell straight into the success branch.
+ */
+describe('success requires the server to say so', () => {
+  const HANDLER_AT = SRC.indexOf('async function handleSend')
+  const HANDLER = SRC.slice(HANDLER_AT, HANDLER_AT + 2600)
+
+  it('does not swallow a JSON parse failure into an empty object', () => {
+    expect(HANDLER).not.toContain('res.json().catch(() => ({}))')
+  })
+
+  /* `res.ok` means the server did not error — never that it did the thing. */
+  it('requires an explicit ok:true before reporting a sent email', () => {
+    expect(HANDLER).toMatch(/data\?\.ok === true/)
+    expect(HANDLER).not.toMatch(/if \(res\.ok\) \{\s*setOutcome\('sent'\)/)
+  })
+
+  it('treats an unrecognised 200 as an error rather than a delivery', () => {
+    const sentAt = HANDLER.indexOf("setOutcome('sent')")
+    const errAt = HANDLER.indexOf("setOutcome('error')")
+    expect(sentAt).toBeGreaterThan(-1)
+    expect(errAt).toBeGreaterThan(sentAt)
+  })
+
+  it('checks alreadyVerified strictly', () => {
+    expect(HANDLER).toMatch(/alreadyVerified === true/)
+  })
+})

@@ -131,7 +131,25 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ returnTo: safeReturnTo }),
       })
-      const data = await res.json().catch(() => ({}))
+      /*
+       * ⚠ AN UNPARSEABLE BODY MUST NOT READ AS SUCCESS. This was
+       * `.catch(() => ({}))`, so anything that answered 200 without the
+       * expected JSON — an HTML shell, a proxy page, a rewritten route —
+       * collapsed to `{}`, failed the `alreadyVerified` check, and fell into the
+       * "sent" branch. The screen then told the reader to go and wait for an
+       * email that no handler had ever been asked to send.
+       *
+       * Observed in production: "Sent" on screen with NO verify token created
+       * for any user and NO email reaching Resend. Whatever produced that
+       * response, the client should never have called it success — `res.ok`
+       * alone means the server did not error, not that it did the thing.
+       */
+      let data: Record<string, unknown> | null = null
+      try {
+        data = (await res.json()) as Record<string, unknown>
+      } catch {
+        data = null
+      }
 
       if (res.status === 401) {
         setOutcome('login_required')
@@ -145,13 +163,23 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
         cooldown.start(RESEND_COOLDOWN_SECONDS)
         return
       }
-      if (res.ok && data?.alreadyVerified) {
+      if (res.ok && data?.alreadyVerified === true) {
         setOutcome('already')
         return
       }
-      if (res.ok) {
+      /*
+       * The server must SAY it sent. `{ ok: true }` is the handler's success
+       * contract, so requiring it means a 200 from anything else can no longer
+       * be reported as a delivered email. Anything unrecognised is an error the
+       * reader can act on, not a promise we cannot keep.
+       */
+      if (res.ok && data?.ok === true) {
         setOutcome('sent')
         cooldown.start(RESEND_COOLDOWN_SECONDS)
+        return
+      }
+      if (res.ok) {
+        setOutcome('error')
         return
       }
       // 502 EMAIL_SEND_FAILED and anything else non-ok. No countdown: nothing was
