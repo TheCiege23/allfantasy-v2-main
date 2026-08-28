@@ -17,6 +17,32 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks
 }
 
+/**
+ * The player id for a row, or null when the provider gave us none.
+ *
+ * ⚠ `playerId` IS PART OF THE UPSERT'S UNIQUE KEY — (sport, playerId,
+ * reportDate, status). Defaulting a missing one to `''` did not merely store a
+ * bad id: every unresolved player sharing a sport, date and status collapsed
+ * onto ONE row, and because the upsert's `update` overwrites `playerName`, each
+ * collision erased the previous player's identity.
+ *
+ * Measured on production 2026-08-27: 1,047 of 1,358 rows held `playerId: ''`
+ * with `playerName: 'Unknown Player'`. That is NOT 1,047 players — it is an
+ * unknown and larger number compressed into 1,047 slots, and the identities
+ * were never stored. No backfill recovers them; only refusing the write stops
+ * the loss continuing.
+ *
+ * So an unidentifiable row is dropped, for exactly the reason the mapper below
+ * stopped inventing a status: a row we cannot identify is not a row.
+ */
+export function resolvePlayerId(injury: { playerId?: unknown; externalId?: unknown }): string | null {
+  for (const candidate of [injury.playerId, injury.externalId]) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') return candidate.trim()
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate)
+  }
+  return null
+}
+
 function inferCurrentWeek(): number | null {
   const day = new Date().getUTCDate()
   return Math.max(1, Math.min(18, Math.ceil(day / 7)))
@@ -30,13 +56,25 @@ export function isNflPriorityInjuryWindow(date: Date = new Date()): boolean {
 export async function runInjuryImporter(options?: {
   sports?: string[]
   week?: number
-}): Promise<{ imported: number; sports: string[]; priorityWindow: boolean }> {
+}): Promise<{
+  imported: number
+  sports: string[]
+  priorityWindow: boolean
+  /**
+   * Rows that stated a designation but carried no resolvable player id, so were
+   * refused rather than written under an empty key. Surfaced so the loss is
+   * visible: this number going up means a provider stopped sending ids, which
+   * previously showed as silent growth in 'Unknown Player' rows.
+   */
+  skippedNoId: number
+}> {
   const sports = Array.from(
     new Set((options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) => normalizeToSupportedSport(sport)))
   )
   const week = options?.week ?? inferCurrentWeek()
   const priorityWindow = isNflPriorityInjuryWindow()
   let imported = 0
+  let skippedNoId = 0
 
   for (const sport of sports) {
     let rows: Array<{
@@ -68,11 +106,16 @@ export async function runInjuryImporter(options?: {
        * at all — the Player Finder documents exactly that). A row with no
        * stated designation is dropped, not decorated.
        */
-      rows = response.data
-        .filter((injury: any) => typeof injury.status === 'string' && injury.status.trim().length > 0)
+      const stated = response.data.filter(
+        (injury: any) => typeof injury.status === 'string' && injury.status.trim().length > 0,
+      )
+      const identified = stated.filter((injury: any) => resolvePlayerId(injury) !== null)
+      skippedNoId += stated.length - identified.length
+
+      rows = identified
         .map((injury: any) => ({
           sport,
-          playerId: String(injury.playerId ?? injury.externalId ?? ''),
+          playerId: resolvePlayerId(injury) as string,
           playerName: String(injury.playerName ?? injury.player ?? 'Unknown Player'),
           team: normalizeTeamAbbrev(injury.team) ?? injury.team ?? 'FA',
           status: String(injury.status),
@@ -90,12 +133,20 @@ export async function runInjuryImporter(options?: {
         take: 1000,
       })
 
-      rows = legacyRows
-        // Same rule as the live branch: no stated designation, no row.
-        .filter((injury) => typeof injury.status === 'string' && injury.status.trim().length > 0)
+      // Same two rules as the live branch: no stated designation, no row; and
+      // no resolvable id, no row. This path had no `?? ''`, so an unidentified
+      // row reached the upsert as null rather than empty string — a different
+      // shape, the same corruption of the unique key.
+      const legacyStated = legacyRows.filter(
+        (injury) => typeof injury.status === 'string' && injury.status.trim().length > 0,
+      )
+      const legacyIdentified = legacyStated.filter((injury) => resolvePlayerId(injury) !== null)
+      skippedNoId += legacyStated.length - legacyIdentified.length
+
+      rows = legacyIdentified
         .map((injury) => ({
           sport,
-          playerId: injury.playerId ?? injury.externalId,
+          playerId: resolvePlayerId(injury) as string,
           playerName: injury.playerName,
           team: injury.team ?? 'FA',
           status: injury.status as string,
@@ -182,5 +233,9 @@ export async function runInjuryImporter(options?: {
     }
   }
 
-  return { imported, sports, priorityWindow }
+  if (skippedNoId > 0) {
+    console.warn(`[injury-importer] skipped ${skippedNoId} row(s) with no resolvable player id`)
+  }
+
+  return { imported, sports, priorityWindow, skippedNoId }
 }
