@@ -1,1 +1,11 @@
-{}
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "git": {
+    "deploymentEnabled": {
+      "dev": false
+    }
+  },
+
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ]; then echo \"build: production branch, proceeding\"; exit 1; else echo \"build: skipping non-production branch '$VERCEL_GIT_COMMIT_REF' (see vercel.json ignoreCommand)\"; exit 0; fi"
+}
