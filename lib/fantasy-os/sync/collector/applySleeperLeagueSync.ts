@@ -18,6 +18,7 @@
  * to an AF account) — the raw Sleeper manager id always remains in `Roster.playerData.source_manager_id`.
  */
 import type { Prisma } from '@prisma/client'
+import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import {
@@ -217,13 +218,22 @@ async function applyLeagueState(
       const r = normalized.rosters.find((row) => row.source_team_id === id)
       return r?.team_name?.trim() || r?.owner_name?.trim() || null
     }
+    /*
+     * Rank 1 of the CURRENT table is not the champion until the season is over —
+     * see lib/league-import/seasonPlacement.ts. Spread into BOTH branches: writing
+     * null on update is what clears the rows this cron already fabricated.
+     */
+    const placement = resolveSeasonPlacement({
+      leagueStatus: normalized.league.status,
+      championName: nameForTeamId(topStanding?.source_team_id),
+      runnerUpName: nameForTeamId(runnerUp?.source_team_id),
+    })
     await prisma.leagueSeason.upsert({
       where: { leagueId_season: { leagueId, season: seasonYear } } as never,
       create: {
         leagueId, season: seasonYear,
         platformLeagueId: normalized.source.source_league_id,
-        championName: nameForTeamId(topStanding?.source_team_id),
-        runnerUpName: nameForTeamId(runnerUp?.source_team_id),
+        ...placement,
         teamCount: normalized.rosters.length || normalized.league.leagueSize,
         scoringFormat: normalized.scoring?.scoring_format ?? null,
         isDynasty: normalized.league.isDynasty,
@@ -231,8 +241,7 @@ async function applyLeagueState(
       },
       update: {
         platformLeagueId: normalized.source.source_league_id,
-        championName: nameForTeamId(topStanding?.source_team_id),
-        runnerUpName: nameForTeamId(runnerUp?.source_team_id),
+        ...placement,
         teamCount: normalized.rosters.length || normalized.league.leagueSize,
         scoringFormat: normalized.scoring?.scoring_format ?? null,
         isDynasty: normalized.league.isDynasty,
