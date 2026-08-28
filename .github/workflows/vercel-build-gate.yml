@@ -1,0 +1,37 @@
+name: Vercel build gate
+
+# Builds are ~100% of this project's Vercel bill: the 2026-08-27 invoice was
+# $101.40, of which $100.90 was Build CPU Minutes (qty 34,338) and $0.50 was
+# everything else. `vercel.json` was `{}` until 979ae7cf4 added the gate that
+# skips non-production branches. Restoring `{}` restores the burn and NOTHING
+# FAILS — the only signal is a bill four weeks later. This is that signal.
+#
+# The usual way it breaks is not malice: any worktree branched before 979ae7cf4
+# still has the old `{}` on disk, and committing that copy reverts the gate
+# silently. Two protections were removed exactly that way on 2026-08-27 alone.
+
+on:
+  pull_request:
+    # No `branches:` filter, matching cron-budget.yml and i18n-placeholder-parity:
+    # filtering PR runs to main silently skipped every stacked PR, and a stale
+    # vercel.json is precisely the kind of change that arrives on one.
+  push:
+    branches: [main, master]
+
+jobs:
+  vercel-build-gate:
+    name: Vercel build gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # No `npm ci`. The check reads vercel.json with the Node standard library
+      # and has no dependencies, so installing would be most of the runtime for
+      # nothing — same reasoning as cron-budget.yml.
+      - name: Check the build gate is intact
+        run: node scripts/check-vercel-build-gate.mjs
