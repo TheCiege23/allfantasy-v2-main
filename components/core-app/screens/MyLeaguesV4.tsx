@@ -46,7 +46,8 @@ export type MyLeaguesV4Props = MyLeaguesData & {
   /** Where the "Import more" actions go. */
   importHref: string
   /** The add-league / re-sync surface this screen replaced at /leagues. */
-  syncHref: string
+  /** Optional: the account-wide sync page is retired, so callers may omit it. */
+  syncHref?: string | null
 }
 
 type ChipKey = 'needs' | 'playing' | 'commissioner' | 'drafting' | 'dynasty' | 'quiet'
@@ -185,9 +186,16 @@ export function MyLeaguesV4({
         </div>
 
         <div className="af-ml-actions">
-          <Link href={syncHref} className="af-ml-btn af-ml-btn--ghost">
-            Sync &amp; connect
-          </Link>
+          {/*
+            ⚠ ONLY WHEN THERE IS SOMEWHERE TO GO. /leagues/sync is retired, so
+            this renders nothing rather than pointing at /import beside a button
+            that already says "Import more".
+          */}
+          {syncHref ? (
+            <Link href={syncHref} className="af-ml-btn af-ml-btn--ghost">
+              Sync &amp; connect
+            </Link>
+          ) : null}
           <Link href={importHref} className="af-ml-btn">
             Import more
           </Link>

@@ -11,7 +11,8 @@
  * get-dashboard-league-list.ts) emits rows whose `id` is a **`LegacyLeague`** id with no row in
  * `leagues`, marked `hasUnifiedRecord: false`. For those rows every one of the fetches above is
  * dead on arrival — `/api/league/detail` 404s by construction, which is the same meaning
- * `LeagueSyncDashboard` already renders as `hasUnifiedRecord ? 'Open League' : 'Sync & Open'`.
+ * The retired `LeagueSyncDashboard` rendered this as
+ * `hasUnifiedRecord ? 'Open League' : 'Sync & Open'`; the distinction outlived that screen.
  *
  * Measured against production on a real account with **543** legacy leagues (2026-07-17):
  * ~2,000 requests per dashboard load, then a sustained ~6 req/s from the 90s activity poll for as

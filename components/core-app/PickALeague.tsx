@@ -127,7 +127,7 @@ export function PickALeague({ tabKey, title, blurb, issues, leagues }: PickALeag
           </div>
         ) : (
           <p className="af-pl-quiet">
-            No leagues are connected yet. <Link href="/leagues/sync">Connect a platform</Link> and
+            No leagues are connected yet. <Link href="/import">Connect a platform</Link> and
             this screen fills in.
           </p>
         )}

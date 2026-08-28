@@ -6,15 +6,15 @@ import { leagueDisplayName, type SectionState } from './leagueHome'
 /**
  * League Sync — is THIS league fresh, and what exactly did we read (38a·10).
  *
- * The account-wide `/leagues/sync` page stays: it owns connect, OAuth and
- * re-sync, and it is the only entry point to some of that. It cannot answer
- * "is this league current", which is the question you have when you are
- * standing inside one.
+ * ⚠ THE ACCOUNT-WIDE `/leagues/sync` PAGE IS RETIRED. It was a second import
+ * pipeline on the older `/api/league/*` endpoints, skipping the commissioner
+ * gate, the attestation step and the team claim; adding a league is /import's
+ * job and Yahoo OAuth starts there.
  *
- * ⚠ ADD-LEAGUE IS NO LONGER ON THAT PAGE — it moved to /import so there is one
- * import pipeline rather than two. Its own add-and-sync modal ran the older
- * `/api/league/*` endpoints and skipped the commissioner gate, the attestation
- * step and the team claim that `/api/leagues/import/*` applies.
+ * This screen is what remains of sync, and it answers a narrower question than
+ * that page did: "is THIS league current", which is what you want to know when
+ * you are standing inside one. It does not re-sync — `/api/league/sync` still
+ * exists and no UI calls it.
  *
  * ── Two honesty rules the schema itself states ───────────────────────────
  *
