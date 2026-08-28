@@ -1126,24 +1126,21 @@ export async function getCachedLiveScoresForSport(options: {
 }
 
 /**
- * DB-first live scores: prefer Rolling Insights (`fetchWithChain` scores), then ESPN, persisted under distinct `source` keys.
+ * DB-first live scores: ESPN first, then Rolling Insights, persisted under
+ * distinct `source` keys. See the ordering note in the refresh branch below.
  */
 export async function getLiveScoresForSport(options: {
   sport: string
   team?: string | null
   forceRefresh?: boolean
   /**
-   * Try ESPN before Rolling Insights on refresh.
+   * Try Rolling Insights before ESPN on refresh. Off by default.
    *
-   * ⚠ RI "HAS ROWS" IS NOT THE SAME AS RI "HAS A LIVE SLATE". For NFL its
-   * scoreboard returns the ENTIRE SEASON with no scores, no clock, no logos and
-   * no records — enough rows to satisfy the default `length > 0` check and win
-   * the race, while carrying none of the fields a live surface renders. Callers
-   * that need live game state opt into ESPN first; every existing caller keeps
-   * the RI-first order untouched, because their data is fine and changing it
-   * under them is not this flag's job.
+   * ⚠ "HAS ROWS" IS NOT THE SAME AS "HAS A LIVE SLATE", and the provider loop
+   * only knows the former. See the ordering note in the refresh branch for what
+   * was actually measured and what is still unexplained.
    */
-  preferEspn?: boolean
+  preferRollingInsights?: boolean
 }): Promise<{
   scores: LiveScoreRow[]
   source: string
@@ -1177,9 +1174,41 @@ export async function getLiveScoresForSport(options: {
      * every provider read through this function instead of letting a page fetch
      * a scoreboard on its own request path.
      */
-    const order: Array<'rolling_insights' | 'espn_live'> = options.preferEspn
-      ? ['espn_live', 'rolling_insights']
-      : ['rolling_insights', 'espn_live']
+    /*
+     * ⚠ ESPN FIRST, AND THE LOOP BELOW IS WHY IT HAS TO BE.
+     *
+     * The loop breaks on `rows.length === 0` — it falls through to the next
+     * provider only when this one returns NOTHING. It has no notion of a
+     * response that is present but useless, so whichever provider goes first
+     * effectively decides the slate, and a wrong first choice is silent.
+     *
+     * This ordering is about OBSERVED behaviour, not about vendor capability.
+     * Rolling Insights genuinely has a live feed and we are genuinely calling
+     * it: `dataType: 'scores'` maps to `live/{today}/{SPORT}` in
+     * `lib/workers/providers/rolling-insights.ts`, and the contract marks it
+     * PRIMARY for game day with NFL and NCAAFB supported at confidence: high.
+     *
+     * What was measured on 2026-08-28, during PIT @ BUF:
+     *   - espn_live carried the game in play (14-3, second quarter).
+     *   - rolling_insights wrote today's 4 NFL games at 00:30Z as `scheduled`
+     *     with null scores — CORRECT, three hours before kickoff — and then
+     *     returned nothing at 03:43Z and 03:47Z, mid-game. Had it returned
+     *     anything at all it would have won, being first.
+     *   - thesportsdb is not a candidate: 17,052 rows, every one terminal or
+     *     pre-game, never once in play.
+     *
+     * ⚠ WHY RI WENT EMPTY MID-GAME IS NOT ESTABLISHED. The leading candidate is
+     * the 304 rule in CLAUDE.md — returning [] on a 304 without a cache-busted
+     * retry reports "no data" for what may be a cache hit. Until that is run
+     * down, ESPN first is the safe default rather than a verdict on RI. If the
+     * live feed is fixed, revisit this ordering instead of assuming it settled.
+     *
+     * An older note here claimed RI "returns the whole season scoreless". That
+     * does not match the path mapping above and is NOT repeated as fact.
+     */
+    const order: Array<'rolling_insights' | 'espn_live'> = options.preferRollingInsights
+      ? ['rolling_insights', 'espn_live']
+      : ['espn_live', 'rolling_insights']
 
     for (const candidate of order) {
       const rows =

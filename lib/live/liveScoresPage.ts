@@ -291,14 +291,16 @@ function isInSlateWindow(row: LiveScoreRow, now: number): boolean {
  * it is fresh, refreshes when it is stale, and PERSISTS whatever it fetched, so
  * the next reader is served from our own store.
  *
- * `preferEspn` is the one thing this surface needs from it: Rolling Insights
- * returns the whole season scoreless for NFL, which satisfies the default
- * "has rows" check while carrying no clock, logos, records or leaders.
+ * This surface used to pass `preferEspn: true` to get ESPN ahead of Rolling
+ * Insights. That ordering is now the service default, so the flag is gone from
+ * here — nothing about this page's needs changed, every other caller just gets
+ * what this one already had. The reasoning, and what remains unexplained about
+ * RI's live feed, is recorded at the ordering note in `getLiveScoresForSport`.
  */
 async function loadActiveSlate(
   sport: LeagueSport,
 ): Promise<{ scores: LiveScoreRow[]; fetchedAt: string | null }> {
-  const result = await getLiveScoresForSport({ sport, team: null, preferEspn: true })
+  const result = await getLiveScoresForSport({ sport, team: null })
   /*
    * ⚠ THE SLATE NEEDS A WINDOW. A cached fallback can hold a whole season, and a
    * "live scores" page listing every fixture from August to January is not a live
