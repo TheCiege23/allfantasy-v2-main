@@ -65,8 +65,23 @@ name: Cron fast tier
 
 on:
   schedule:
+    # ⚠ FOUR ATTEMPTS AN HOUR, AND NONE OF THEM ON :00.
+    #
+    # Measured 2026-08-28: with two attempts (:03, :33) only 7-9 scheduled runs STARTED in 24h
+    # against 48 requested — roughly 27% coverage, with 1-5 hour holes. The loop itself is
+    # healthy (55.4, 55.4, 55.5, 55.5, 55.7, 56.3m windows); what fails is GitHub's shared
+    # scheduler DROPPING the trigger under load. Top of the hour is the most contended slot,
+    # which is why :00 is avoided entirely.
+    #
+    # More attempts cannot double-fire: `concurrency.cancel-in-progress` below means a later run
+    # REPLACES an earlier one. That replacement is a clean handoff, not a loss — measured
+    # 2026-08-26, runs cancelled at 45m and 51m were each superseded immediately and coverage was
+    # continuous 18:00-20:32Z. The cost of a truncated window is one restart; the cost of a
+    # dropped trigger is an hour of nothing.
     - cron: "3 * * * *"
+    - cron: "18 * * * *"
     - cron: "33 * * * *"
+    - cron: "48 * * * *"
   workflow_dispatch:
     inputs:
       window_minutes:
