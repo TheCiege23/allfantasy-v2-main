@@ -11,6 +11,7 @@ import { fetchOfficialStatuses } from '@/lib/autocoach/status-sources/OfficialAp
 import { fetchSleeperStatuses } from '@/lib/autocoach/status-sources/SleeperStatusAdapter'
 import { searchXForInjuryNews } from '@/lib/autocoach/status-sources/XGrokAdapter'
 import type { NormalizedStatusHit } from '@/lib/autocoach/status-sources/types'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 
 export type AggregatedPlayerStatus = {
   externalId: string
@@ -138,29 +139,67 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
   }
 
   if (settled[1]?.status === 'fulfilled' && (sk === 'NFL' || sk === 'NBA')) {
+    /*
+     * ⚠ THESE KEYS ARE SLEEPER IDS AND THIS WRITES A STATUS, SO A WRONG MATCH MARKS THE WRONG
+     * PLAYER INJURED.
+     *
+     * `fetchSleeperStatuses` returns Sleeper's own ids. They used to be looked up against
+     * `SportsPlayer.externalId`, which is 83% bare numerics written by Rolling Insights, CFBD and
+     * api_football — 42,032 of which collide with a Sleeper id, 42,031 of those being a DIFFERENT
+     * PERSON. The raw Sleeper id was then carried on the hit all the way to the `updateMany`
+     * below, so an unlucky collision did not just mislabel a lookup: it persisted an injury
+     * status onto a stranger's row and logged a `PlayerStatusEvent` against them.
+     *
+     * Resolved through the Sleeper space instead, and the hit now carries the RESOLVED row's own
+     * `externalId`. That establishes the invariant everything downstream depends on: every
+     * `hit.externalId` in this function is a provider-space id, so the lookups and the write at
+     * the bottom are all keyed correctly.
+     *
+     * An id we cannot resolve is DROPPED rather than passed through. A status signal we cannot
+     * attach to a known player is not actionable, and writing it against the raw Sleeper id is
+     * precisely how it would land on someone else.
+     */
     const map = settled[1].value
     const ids = [...map.keys()].slice(0, 12_000)
     const metaRows =
       ids.length > 0
         ? await prisma.sportsPlayer.findMany({
-            where: { sport: sk, externalId: { in: ids } },
-            select: { externalId: true, name: true, team: true },
+            where: sleeperIdWhere(ids, sk),
+            select: { externalId: true, sleeperId: true, name: true, team: true },
           })
         : []
-    const meta = new Map(metaRows.map((r) => [r.externalId, r]))
-    for (const [externalId, status] of map) {
-      const m = meta.get(externalId)
+    const meta = new Map(
+      metaRows
+        .map((r) => {
+          const sleeperKey =
+            r.sleeperId ?? (r.externalId.startsWith('sleeper:') ? r.externalId.slice('sleeper:'.length) : null)
+          return sleeperKey ? ([sleeperKey, r] as const) : null
+        })
+        .filter((entry): entry is readonly [string, (typeof metaRows)[number]] => entry !== null),
+    )
+    let unresolvedSleeperIds = 0
+    for (const [sleeperId, status] of map) {
+      const m = meta.get(sleeperId)
+      if (!m) {
+        unresolvedSleeperIds += 1
+        continue
+      }
       hits.push({
-        externalId,
-        playerName: m?.name ?? '',
+        externalId: m.externalId,
+        playerName: m.name,
         sport: sk,
         status,
-        teamAbbrev: m?.team ?? null,
+        teamAbbrev: m.team ?? null,
         source: 'sleeper_api',
         confidence: 0.95,
         rawText: status,
         gameDate,
       })
+    }
+    if (unresolvedSleeperIds > 0) {
+      console.warn(
+        `[PlayerStatusAggregator] ${unresolvedSleeperIds} Sleeper status ids had no ${sk} SportsPlayer row; dropped rather than written against an unmatched id.`,
+      )
     }
   } else if (settled[1]?.status === 'rejected') {
     console.warn('[PlayerStatusAggregator] sleeper failed:', settled[1].reason)
@@ -265,6 +304,14 @@ export async function aggregatePlayerStatuses(sport: string, gameDate: string): 
       },
     })
 
+    /*
+     * ⚠ THIS WRITE DEPENDS ON THE INVARIANT ESTABLISHED WHERE THE SLEEPER HITS ARE BUILT:
+     * every `externalId` reaching here is a provider-space id, because Sleeper-sourced ids are
+     * resolved to their row up there and unresolvable ones are dropped. If you add a status
+     * source that supplies ids in another space, resolve it there too — do not widen this
+     * `where`. A wrong match here does not mislabel a screen, it persists an injury status onto
+     * another player.
+     */
     await prisma.sportsPlayer.updateMany({
       where: { sport: sk, externalId: g.externalId },
       data: { status: g.canonical },

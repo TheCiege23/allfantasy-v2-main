@@ -152,9 +152,25 @@ describe('⚠ the list endpoint lies about pagination', () => {
     expect(INGEST).toContain('ASKS ABOUT OUR IDS, NOT ESPN')
   })
 
+  it('reads rosters as well as drafts, because a waiver add was never drafted', () => {
+    /*
+     * A draft-shaped query can never reach a player who was added off waivers.
+     * Measured after the draft-only pass: 253 distinct ESPN roster ids, 7 still
+     * unknown — exactly that class.
+     */
+    expect(INGEST).toContain(`jsonb_array_elements_text(r."playerData"->'players')`)
+    expect(INGEST).toContain('BOTH SURFACES, BECAUSE A DRAFT IS NOT A ROSTER')
+    expect(INGEST).toContain('union')
+  })
+
+  it('guards the JSON shape rather than trusting the column', () => {
+    // A roster whose playerData is not an array would abort the whole query.
+    expect(INGEST).toContain(`jsonb_typeof(r."playerData"->'players') = 'array'`)
+  })
+
   it('excludes negative ids from the fetch, since no fetch can answer them', () => {
     // Defences are derived; asking ESPN for -16012 would only waste a request.
-    expect(INGEST).toContain(`d."playerId" !~ '^-'`)
+    expect(INGEST).toContain(`where pid !~ '^-'`)
   })
 
   it('treats a 404 as a fact about that id, not a failed run', () => {

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { findSportsPlayersByLeagueIds } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
 export type PlayerStatusUpdate = {
   playerId: string
@@ -56,16 +57,20 @@ export async function fetchLatestPlayerStatuses(
 ): Promise<PlayerStatusUpdate[]> {
   if (playerIds.length === 0) return []
   const sk = sportKey(sport)
-  const rows = await prisma.sportsPlayer.findMany({
-    where: { sport: sk, externalId: { in: playerIds } },
-    select: { externalId: true, name: true, status: true, sport: true, updatedAt: true },
-  })
+  /*
+   * ⚠ `playerIds` ARE ROSTER IDS, SO SLEEPER IDS, AND THE ROW CARRIES `status`.
+   * Matched against `externalId` these hit Rolling Insights rows for other players, so the cron
+   * reported one player's injury under another's id. Resolved through the Sleeper space first.
+   */
+  const byLeagueId = await findSportsPlayersByLeagueIds(sk, playerIds)
   const out: PlayerStatusUpdate[] = []
-  for (const r of rows) {
+  for (const [leagueId, r] of byLeagueId) {
     const st = (r.status ?? '').trim()
     if (!st) continue
     out.push({
-      playerId: r.externalId,
+      // The id the caller asked with, not the provider id of the row we matched — the caller
+      // reads this back against its own roster.
+      playerId: leagueId,
       playerName: r.name,
       sport: r.sport,
       newStatus: st,

@@ -20,6 +20,9 @@ function play(over: Partial<PlayFeedItem> = {}): PlayFeedItem {
     type: 'TOUCHDOWN',
     playerName: 'Bijan Robinson',
     team: 'ATL',
+    // Null rather than a URL: this band never renders a badge, and a fixture
+    // that supplies one would imply a coupling the component does not have.
+    teamLogoUrl: null,
     imageUrl: null,
     position: 'RB',
     headline: 'Bijan Robinson ran for a touchdown',

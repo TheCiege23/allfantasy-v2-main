@@ -43,9 +43,19 @@ describe('buildLeagueTradeHistoryContext', () => {
     })
     mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }, { id: 'h2' }])
     mocks.tradeFindMany.mockResolvedValue([trade()])
+    /*
+     * ⚠ THIS FIXTURE ENCODED THE BUG. It gave a Sleeper player a BARE
+     * `externalId: '5859'` and no `sleeperId`, which is the shape the crosswalk
+     * used to look up — and matching a Sleeper id against a bare `externalId`
+     * reaches a different person: 42,032 bare ids collide with a Sleeper id and
+     * 42,031 of those are somebody else. The fixture passed while the code was
+     * wrong, and went red when the code was fixed.
+     *
+     * A real Sleeper-sourced row carries BOTH spellings.
+     */
     mocks.sportsPlayerFindMany.mockResolvedValue([
-      { externalId: '5859', name: 'Brian Thomas Jr.' },
-      { externalId: '2216', name: 'Old Reliable' },
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Old Reliable' },
     ])
   })
 
@@ -76,11 +86,33 @@ describe('buildLeagueTradeHistoryContext', () => {
     expect(out).toMatch(/do NOT state what any of them was worth/i)
   })
 
-  it('always filters the name lookup by sport', async () => {
+  /**
+   * ⚠ THIS ASSERTED THE BUG TOO — `where.externalId.in` containing BARE Sleeper
+   * ids is exactly the query that returns a stranger. Measured on real roster
+   * ids: this crosswalk resolved 121 players and only 42 correctly, so 79 were
+   * other people; Justin Jefferson came back as DaRon Bland. Those names reached
+   * AI grounding blocks as fact.
+   *
+   * The lookup now asks for both spellings a Sleeper-sourced row can carry, and
+   * the sport filter stays because `externalId` is unique only WITHIN a sport.
+   */
+  it('looks a Sleeper id up by both spellings, never bare, and always by sport', async () => {
     await buildLeagueTradeHistoryContext('lg1', 'user-1')
     const where = mocks.sportsPlayerFindMany.mock.calls[0][0].where
+
     expect(where.sport).toBe('NFL')
-    expect(where.externalId.in).toEqual(expect.arrayContaining(['5859', '2216']))
+
+    const or = where.OR as Array<Record<string, { in: string[] }>>
+    expect(or.find((c) => c.sleeperId)?.sleeperId.in).toEqual(
+      expect.arrayContaining(['5859', '2216']),
+    )
+    expect(or.find((c) => c.externalId)?.externalId.in).toEqual(
+      expect.arrayContaining(['sleeper:5859', 'sleeper:2216']),
+    )
+
+    /* The shape that reaches the wrong person must not come back. */
+    expect(where.externalId).toBeUndefined()
+    expect(JSON.stringify(where)).not.toMatch(/"externalId":\{"in":\["\d/)
   })
 
   it('counts unresolved players instead of guessing at them', async () => {

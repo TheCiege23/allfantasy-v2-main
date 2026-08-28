@@ -1,6 +1,14 @@
 import { prisma } from '@/lib/prisma'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import type { LiveEvent } from '@/lib/live/eventDetector'
+/*
+ * Imported from the registry DIRECTLY rather than through
+ * `draft-sports-models/player-asset-resolver`, whose `resolveTeamLogoUrlSync`
+ * wraps this same call but also pulls `lib/player-media` in with it. The
+ * registry is pure — no fetch anywhere in it — so this adds a lookup table, not
+ * a dependency on anything that talks to a provider.
+ */
+import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 
 /**
  * Turn the raw play feed into something renderable.
@@ -11,9 +19,11 @@ import type { LiveEvent } from '@/lib/live/eventDetector'
  * fetch went straight into a cache nothing rendered. Ingestion without a reader
  * looks identical to a broken feed from the outside.
  *
- * Two things the raw `LiveEvent` cannot answer on its own:
+ * Three things the raw `LiveEvent` cannot answer on its own:
  *   - a headshot: the event carries the Rolling Insights player id, not ours
  *   - a readable sentence: it carries `stat` + `delta`, not "ran for 17 yards"
+ *   - a team: `teamAbbr` is null on every play RI has ever sent us, so the
+ *     badge comes from our identity map rather than from the feed
  */
 
 export type PlayFeedItem = {
@@ -21,7 +31,20 @@ export type PlayFeedItem = {
   gameId: string
   type: LiveEvent['type']
   playerName: string
+  /**
+   * ⚠ ROLLING INSIGHTS NEVER SENDS THIS, so it is backfilled from our own
+   * identity map. Measured 2026-08-27: every one of the 12 events cached in
+   * prod had `team: null`. That is not a parser bug — `PLAY-BY-PLAY.yaml`
+   * declares `teamAbbr` as `[string, "null"]` with no example, and the parser
+   * passes through faithfully. The team has to come from somewhere else.
+   */
   team: string | null
+  /**
+   * ESPN CDN badge for `team`, or null when the team is unknown. Never a
+   * guessed URL: the registry builds a URL for ANY string handed to it, so a
+   * wrong abbreviation yields a confident 404 rather than an empty slot.
+   */
+  teamLogoUrl: string | null
   /** Null for the ~85% of players with no headshot on file. Render initials. */
   imageUrl: string | null
   position: string | null
@@ -44,8 +67,11 @@ export type PlayFeedItem = {
  */
 async function resolveHeadshots(
   riPlayerIds: string[],
-): Promise<Map<string, { imageUrl: string | null; position: string | null }>> {
-  const out = new Map<string, { imageUrl: string | null; position: string | null }>()
+): Promise<Map<string, { imageUrl: string | null; position: string | null; team: string | null }>> {
+  const out = new Map<
+    string,
+    { imageUrl: string | null; position: string | null; team: string | null }
+  >()
   // `name:<x>` is the parser's fallback when a play carries no player id at all.
   const ids = [...new Set(riPlayerIds.filter((id) => id && !id.startsWith('name:')))]
   if (ids.length === 0) return out
@@ -53,7 +79,21 @@ async function resolveHeadshots(
   try {
     const identities = await prisma.playerIdentityMap.findMany({
       where: { rollingInsightsId: { in: ids } },
-      select: { rollingInsightsId: true, canonicalName: true, position: true, sport: true },
+      /*
+       * `currentTeam` rides along on a query we were already making, so the
+       * team costs no extra round trip. It is also the RIGHT source rather
+       * than merely the cheap one: measured on prod, all 1,933 NFL identity
+       * rows carry BOTH `rollingInsightsId` and `currentTeam`, while the
+       * `Player` join below is lossy — D'Ernest Johnson resolves to a Player
+       * row whose `team` is null but whose identity row says "NE".
+       */
+      select: {
+        rollingInsightsId: true,
+        canonicalName: true,
+        position: true,
+        sport: true,
+        currentTeam: true,
+      },
     })
     if (identities.length === 0) return out
 
@@ -76,6 +116,7 @@ async function resolveHeadshots(
       out.set(identity.rollingInsightsId, {
         imageUrl: hit?.imageUrl ?? null,
         position: identity.position ?? hit?.position ?? null,
+        team: identity.currentTeam ?? null,
       })
     }
   } catch {
@@ -137,6 +178,15 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
   return events.map((event) => {
     const extra = headshots.get(event.playerId)
     const position = extra?.position ?? null
+    /*
+     * ⚠ THE PLAY'S OWN TEAM WINS, and the order is not arbitrary. `event.team`
+     * is the team the player was on FOR THIS PLAY; `currentTeam` is where the
+     * identity map thinks he is today. They diverge the moment someone is
+     * traded, and for a play that already happened the play is the truth. So
+     * the identity map is strictly a fallback for the null RI always sends —
+     * if RI ever starts populating `teamAbbr`, this needs no change.
+     */
+    const team = event.team ?? extra?.team ?? null
     return {
       // The parser's idempotency key is already game+sequence+type, so it is a
       // stable React key and survives the same play being re-read each poll.
@@ -144,7 +194,9 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
       gameId: event.gameId,
       type: event.type,
       playerName: event.playerName,
-      team: event.team,
+      team,
+      // Only ever derived from a team we actually resolved — see the field doc.
+      teamLogoUrl: team ? getPrimaryLogoUrlForTeam('NFL', team) : null,
       imageUrl: extra?.imageUrl ?? null,
       position,
       headline: headlineFor(event, position),

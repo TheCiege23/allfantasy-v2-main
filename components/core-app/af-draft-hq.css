@@ -227,3 +227,86 @@
     row-gap: 2px;
   }
 }
+
+
+/* -- Completed draft board -------------------------------------------------
+   Every team's picks, by round. Held apart from "What you drafted" because it
+   answers a different question: who took whom, in what order. Uses only tokens
+   already in this file, so both themes come for free. */
+.af-dh-boardfull { display: flex; flex-direction: column; gap: 6px; }
+.af-dh-board-meta { font-size: 11px; color: var(--faint); letter-spacing: 0.04em; }
+
+.af-dh-teamstrip {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-dh-teamchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  font-size: 11px;
+}
+.af-dh-teamchip[data-you='true'] {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.af-dh-teamchip-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-dh-teamchip-n { color: var(--faint); font-variant-numeric: tabular-nums; }
+.af-dh-teamchip[data-you='true'] .af-dh-teamchip-n { color: inherit; opacity: 0.75; }
+
+.af-dh-round { margin-top: 14px; }
+.af-dh-round-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Wide rounds scroll inside their own container; the page never scrolls sideways. */
+.af-dh-round-scroll { overflow-x: auto; }
+.af-dh-round-picks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 340px;
+}
+.af-dh-bpick {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(9rem, 1fr) 3rem minmax(6rem, 12rem);
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.af-dh-bpick:nth-child(odd) { background: var(--chip); }
+/* Your own picks, marked the way the rest of this screen marks them. */
+.af-dh-bpick[data-you='true'] { background: var(--accent-soft); color: var(--accent-ink); }
+.af-dh-bpick-player { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-dh-bpick-meta { font-size: 11px; color: var(--faint); }
+.af-dh-bpick[data-you='true'] .af-dh-bpick-meta { color: inherit; opacity: 0.75; }
+.af-dh-bpick-team {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-dh-bpick[data-you='true'] .af-dh-bpick-team { color: inherit; opacity: 0.85; }
+
+@media (max-width: 640px) {
+  .af-dh-bpick { grid-template-columns: 3.6rem 1fr; row-gap: 2px; }
+  .af-dh-bpick-meta, .af-dh-bpick-team { grid-column: 2; }
+}

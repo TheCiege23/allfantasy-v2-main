@@ -592,6 +592,14 @@
   font-weight: 700;
   color: var(--faint);
 }
+.af-live-play-logo {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  object-fit: contain;
+  /* Sized in CSS as well as via the width/height attributes, so a 500px ESPN
+     badge cannot blow out the row before it loads. */
+}
 .af-live-play-line {
   font-size: 11px;
   line-height: 1.35;

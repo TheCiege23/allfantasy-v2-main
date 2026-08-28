@@ -23,12 +23,12 @@ const FILE = readFileSync(resolve(process.cwd(), 'lib/core-app/draftHq.ts'), 'ut
 
 describe('⚠ an id is only meaningful alongside its provider', () => {
   it('scopes the identity lookup to the league platform', () => {
-    expect(FILE).toContain('where: { provider: platform, providerPlayerId: { in: playerIds } }')
+    expect(FILE).toContain('where: { provider: scoped, providerPlayerId: { in: playerIds } }')
   })
 
   it('reads the platform from the league rather than assuming one', () => {
     expect(FILE).toContain('select: { platform: true }')
-    expect(FILE).toContain("const platform = (league?.platform ?? '').trim().toLowerCase()")
+    expect(FILE).toContain("const scoped = String(platform ?? '').trim().toLowerCase()")
   })
 
   it('runs the Sleeper lookup ONLY for a Sleeper league', () => {
@@ -37,14 +37,52 @@ describe('⚠ an id is only meaningful alongside its provider', () => {
      * numeric strings, so an ESPN id matches one just as readily. Scoping the
      * first query achieves nothing while a second unscoped one runs beside it.
      */
-    expect(FILE).toContain("platform === 'sleeper'")
+    expect(FILE).toContain("scoped === 'sleeper'")
   })
 
   it('asks nothing at all when the platform is unknown', () => {
     // Querying with an empty provider would match no rows on a good day and is
     // meaningless on a bad one; not asking is the honest form of not knowing.
-    expect(FILE).toContain('const identitiesP = platform')
     expect(FILE).toContain('Promise.resolve([])')
+  })
+})
+
+describe('⚠ ONE resolver, because two drifted apart within a day', () => {
+  it('leaves no unscoped lookup anywhere in the file', () => {
+    /*
+     * This is the assertion that would have caught it. A refactor extracted a
+     * shared `resolvePlayerNames` for the full draft board and dropped the
+     * provider filter, while the personal pick list kept its own scoped copy —
+     * so the two surfaces reading the SAME DraftFact rows could name a pick
+     * differently, and the new helper's comment claimed they could not.
+     *
+     * Asserted on the exact query text, which appears in no comment.
+     */
+    expect(FILE).not.toContain('where: { providerPlayerId: { in: playerIds } }')
+  })
+
+  it('has exactly one Sleeper lookup, and it is behind the gate', () => {
+    /*
+     * Counted rather than asserted absent: the scoped query legitimately contains
+     * this text, so `not.toContain` would fail on the correct code — which is how
+     * the first version of this test failed. One gate, one query.
+     */
+    const gates = FILE.split("scoped === 'sleeper'").length - 1
+    const queries = FILE.split('sleeperId: { in: playerIds }').length - 1
+    expect(gates).toBe(1)
+    expect(queries).toBe(1)
+  })
+
+  it('defines the resolver exactly once', () => {
+    const defs = FILE.split('\n').filter((l) => l.includes('async function resolvePlayerNames'))
+    expect(defs).toHaveLength(1)
+  })
+
+  it('has both surfaces pass a platform into it', () => {
+    // The board and the personal list. Neither may call it bare.
+    expect(FILE).toContain("boardLeague?.platform ?? ''")
+    expect(FILE).toContain("league?.platform ?? ''")
+    expect(FILE).toContain('THE SHARED RESOLVER, NOT A SECOND COPY')
   })
 })
 

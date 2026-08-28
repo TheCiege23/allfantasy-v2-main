@@ -75,6 +75,19 @@ export const PROBES = {
   '/api/cron/import-injuries': { table: 'SportsInjury', column: 'fetchedAt' },
   '/api/cron/import-players': { table: 'sports_players', column: 'last_updated' },
   '/api/cron/import-projections': { table: 'fantasy_projections', column: 'fetched_at' },
+  /*
+   * PROMOTED FROM NO_PROBE 2026-08-27, once the route gained a heartbeat.
+   *
+   * ⚠ IT CANNOT BE AN OUTPUT PROBE. `ingestRosters` writes prisma.sportsPlayer —
+   * the same sports_players.last_updated that import-players probes, and that job
+   * runs far more often, so a table probe here would report this one healthy on
+   * another job's run. That is the false green that hid the dead fast tier for six
+   * days.
+   *
+   * The heartbeat wraps the WHOLE sweep, one row per fire. A per-sport wrap would
+   * record five runs a night and make a partial sweep look like a complete one.
+   */
+  '/api/cron/import-schedules?rosters=1': { heartbeat: 'cron-import-schedules-rosters' },
   '/api/cron/import-schedules?sport=all': {
     table: 'SportsGame',
     column: 'fetchedAt',
@@ -294,12 +307,6 @@ export const NO_PROBE = {
     'sports_players that import-players and ?rosters=1 already write, and those run more often, so ' +
     'any table probe here is satisfied by another job. Needs a heartbeat on the route, which is ' +
     'the same fix ?rosters=1 is waiting on.',
-  '/api/cron/import-schedules?rosters=1':
-    'writes prisma.sportsPlayer -- the SAME sports_players.last_updated that import-players probes, ' +
-    'and that job runs far more often, so a table probe here would report this one healthy on the ' +
-    'strength of a different job entirely. That is the exact false green that hid the dead fast tier ' +
-    'for six days. The route records no heartbeat yet; add one (withSyncJobRun) and promote this to a ' +
-    'heartbeat probe, rather than pointing it at a column it does not own.',
 
   // The eight CONDITIONAL jobs that used to live here -- waivers, redraft score-sync and
   // waiver-process, guillotine eliminate, tournament automation, draft-tick, legacy-import-drain
