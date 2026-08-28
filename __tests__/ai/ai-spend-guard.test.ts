@@ -134,6 +134,15 @@ describe('AI spend guard — provider boundary coverage', () => {
      * read as protected while a tool-loop turn still reached xAI unmetered.
      */
     'lib/chimmy/tools/chimmyToolLoop.ts',
+    /*
+     * Both guarded 2026-08-27. Each holds THREE providers: deepseekChat via
+     * the guarded @/lib/deepseek-client, plus an OpenAI and a Grok client
+     * built in the file and metered by nothing. Both were mis-read as
+     * covered by a census that asked what they import rather than what they
+     * construct — the same mistake ai-gm-intelligence hid behind.
+     */
+    'lib/fantasy-coach/CoachEvaluationAI.ts',
+    'lib/simulation-engine/MatchupSimulationInsightAI.ts',
   ]
 
   /**
@@ -158,13 +167,11 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/brackets/intelligence/ai-narrator.ts',
     'lib/brand-social/draftWithClaude.ts',
     'lib/draft/ai-claude.ts',
-    'lib/fantasy-coach/CoachEvaluationAI.ts',
     'lib/fantasy-news-aggregator/NewsSummarizerAI.ts',
     'lib/guillotine/ai/GuillotineAIService.ts',
     'lib/integrity/CollusionDetectionEngine.ts',
     'lib/integrity/TankingDetectionEngine.ts',
     'lib/salary-cap/ai/SalaryCapAIService.ts',
-    'lib/simulation-engine/MatchupSimulationInsightAI.ts',
     'lib/smart-trade-recommendations.ts',
     'lib/social-sharing/GrokShareCopyService.ts',
     'lib/survivor/ai/SurvivorAIService.ts',
@@ -189,7 +196,7 @@ describe('AI spend guard — provider boundary coverage', () => {
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.
-    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(18)
+    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(16)
   })
 
   it('every ratchet entry still exists (stale entries hide real coverage)', () => {
