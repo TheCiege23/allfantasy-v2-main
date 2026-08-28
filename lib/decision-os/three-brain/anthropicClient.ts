@@ -6,6 +6,7 @@
  * the underlying request (the SDK supports request cancellation), and it never browses or fetches anything.
  */
 import { resolveAnthropicModel } from '@/lib/ai/providerProfiles'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { rateLimitManager } from '@/lib/workers/rate-limit-manager'
 import type { ProviderChatRequest, ProviderChatResult } from '@/lib/ai-orchestration/types'
 import type { ThreeBrainChatOptions, ThreeBrainProviderClient } from './providerClient'
@@ -63,9 +64,27 @@ const failure = (model: string, error: string, timedOut = false): ProviderChatRe
 
 export function createAnthropicThreeBrainClient(): ThreeBrainProviderClient {
   return {
-    isAvailable: () => Boolean(apiKey()),
+    /*
+     * PROVIDER BOUNDARY. Reported, never thrown: `chat` returns a
+     * ProviderChatResult on every path and the orchestrator selects between
+     * brains on `isAvailable`, so throwing here would turn a configured state
+     * into an exception inside a fan-out that expects a result object.
+     *
+     * Declaring it unavailable is the stronger half — the orchestrator then
+     * never picks this brain at all, rather than picking it and failing. The
+     * check inside `chat` is defence in depth for anything constructing the
+     * client directly through three-brain/index.ts.
+     *
+     * Its sibling orchestrator.ts has enforced the guard for a while; this file
+     * did not, so the two halves of one subsystem disagreed about whether spend
+     * was checked.
+     */
+    isAvailable: () => Boolean(apiKey()) && isAiSpendEnabled(),
     async chat(request: ProviderChatRequest, opts?: ThreeBrainChatOptions): Promise<ProviderChatResult> {
       const model = resolveAnthropicModel('standard')
+      // Above the key check: when both are true the switch is the more
+      // actionable answer. Also above rateLimitManager, which does real work.
+      if (!isAiSpendEnabled()) return failure(model, 'AI spend disabled.')
       if (!apiKey()) return failure(model, 'Anthropic not configured.')
       const canCall = await rateLimitManager.canCall('anthropic', '/v1/messages').catch(() => true)
       if (!canCall) return failure(model, 'Anthropic safety rate limit reached.')
