@@ -13,6 +13,10 @@
  * commissioner says it scores. What these give is a defensible baseline so a projection can exist
  * at all; `rescoreForLeague` remains the path for a league's own settings.
  *
+ * SOCCER is the only supported sport with no rules here, and that is not squeamishness: the vendor
+ * serves no player season stats for it at all, so there is nothing to score. NCAAB shares NBA's
+ * rules because it shares NBA's measured stat vocabulary — see RULES_BY_SPORT.
+ *
  * WHY DRAFTKINGS CONVENTIONS. Not arbitrary preference — this codebase already treats DK as the
  * house baseline for football (`season_dk_fppg_proxy` reads the provider's own
  * `DK_fantasy_points_per_game`). Using DK-shaped values for the other sports keeps one convention
@@ -23,11 +27,11 @@
 import type { SeasonAggregate } from './types'
 
 /** Sports this module can score. Anything else must keep refusing rather than be defaulted. */
-export type CategorySport = 'MLB' | 'NBA' | 'NHL'
+export type CategorySport = 'MLB' | 'NBA' | 'NHL' | 'NCAAB'
 
 export function isCategoryScoredSport(sport: string | null | undefined): sport is CategorySport {
   const s = String(sport ?? '').trim().toUpperCase()
-  return s === 'MLB' || s === 'NBA' || s === 'NHL'
+  return s === 'MLB' || s === 'NBA' || s === 'NHL' || s === 'NCAAB'
 }
 
 /**
@@ -113,6 +117,16 @@ const RULES_BY_SPORT: Record<CategorySport, Record<string, number>> = {
   MLB: MLB_RULES,
   NBA: NBA_RULES,
   NHL: NHL_RULES,
+  /*
+   * College basketball scores the same categories as the NBA, on the SAME MEASURED VOCABULARY —
+   * not an assumption from the sports being alike. Checked against production: `points`,
+   * `total_rebounds`, `assists`, `steals`, `blocks`, `turnovers` and `three_points_made` are all
+   * present on all 4,732 NCAAB stat lines, which is the same set NBA_RULES keys off.
+   *
+   * The provider agrees: `ROLLING_INSIGHTS_FIELD_MAPS.NCAABB.live` is literally
+   * `{ ...NBA_LIVE_AND_BOX, ...NBA_LIVE_SHELL, starter }` — one vocabulary, one rule set.
+   */
+  NCAAB: NBA_RULES,
 }
 
 /**

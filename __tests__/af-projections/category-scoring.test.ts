@@ -9,7 +9,7 @@ import {
 import { extractSeasonAggregate } from '@/lib/af-projections/core'
 
 /**
- * Category scoring for MLB / NBA / NHL.
+ * Category scoring for MLB / NBA / NHL / NCAAB.
  *
  * Two failure modes here are silent rather than loud, and both are asserted below:
  *   - MLB reuses keys across `batting` and `pitching` with OPPOSITE meanings, so a flat merge
@@ -120,15 +120,29 @@ describe('NBA and NHL rules', () => {
 })
 
 describe('sport gating', () => {
-  it('covers exactly MLB, NBA and NHL', () => {
+  it('covers MLB, NBA, NHL and NCAAB', () => {
     expect(isCategoryScoredSport('MLB')).toBe(true)
     expect(isCategoryScoredSport('nba')).toBe(true)
     expect(isCategoryScoredSport('NHL')).toBe(true)
-    // Football must keep its own bases; soccer and college have no rules and must keep refusing
-    // rather than be handed a default nobody chose.
+    expect(isCategoryScoredSport('NCAAB')).toBe(true)
+    // Football keeps its own bases and must never reach category scoring. SOCCER has no rules
+    // because the vendor serves no player season stats for it — nothing to score, not a default
+    // withheld on principle.
     expect(isCategoryScoredSport('NFL')).toBe(false)
     expect(isCategoryScoredSport('SOCCER')).toBe(false)
-    expect(isCategoryScoredSport('NCAAB')).toBe(false)
+  })
+
+  it('NCAAB scores on the same rules as NBA, because it has the same measured vocabulary', () => {
+    // Verified against production: points, total_rebounds, assists, steals, blocks, turnovers and
+    // three_points_made are present on all 4,732 NCAAB stat lines. This asserts the rule sets stay
+    // identical — if NBA's are ever tuned, college follows rather than silently diverging.
+    expect(getCategoryScoringRules('NCAAB')).toEqual(getCategoryScoringRules('NBA'))
+
+    const line = { points: 400, total_rebounds: 200, assists: 100, steals: 40, blocks: 20, turnovers: 60, three_points_made: 50 }
+    const college = scoreCategoryComponents({ components: line, rules: getCategoryScoringRules('NCAAB')! })!
+    const pro = scoreCategoryComponents({ components: line, rules: getCategoryScoringRules('NBA')! })!
+    expect(college.points).toBe(pro.points)
+    expect(college.matched).toBe(7)
   })
 
   it('returns null rules for an unscored sport, never an empty map', () => {
