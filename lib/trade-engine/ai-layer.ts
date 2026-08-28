@@ -344,11 +344,18 @@ export function validateAIRiskResponse(response: any, offerId: string): AIRiskAn
 
 import OpenAI from 'openai'
 import { LeagueIntelSnapshot } from './types'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 let openai: OpenAI | null = null
 
 function getOpenAIClient(): OpenAI | null {
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
+  // already returns null when the key is absent, so a spend refusal behaves
+  // identically to an unconfigured provider. Above the key check because when
+  // both are missing the switch is the actionable one.
+  if (!isAiSpendEnabled()) return null
+
   if (!apiKey) return null
   if (!openai) {
     openai = new OpenAI({

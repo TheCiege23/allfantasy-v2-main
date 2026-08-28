@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { buildShareCopySystemPrompt, buildShareCopyUserPrompt } from './SocialSharePromptBuilder';
 import type { AchievementShareType, AchievementShareContext } from './types';
 import { getShareContent } from './AchievementShareGenerator';
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard';
 
 const GROK_BASE = 'https://api.x.ai/v1';
 const GROK_MODEL = 'grok-4-0709';
@@ -26,6 +27,12 @@ function getApiKey(): string | null {
 
 function getClient(): OpenAI | null {
   const apiKey = getApiKey();
+  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
+  // already returns null when the key is absent, so a spend refusal behaves
+  // identically to an unconfigured provider. Above the key check because when
+  // both are missing the switch is the actionable one.
+  if (!isAiSpendEnabled()) return null;
+
   if (!apiKey) return null;
   return new OpenAI({ apiKey, baseURL: GROK_BASE });
 }

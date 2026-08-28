@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { prisma } from '@/lib/prisma'
 import { redis } from '@/lib/queues/bullmq'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 export type MemoryEntryType =
   | 'user-message'
@@ -56,6 +57,12 @@ type AnthropicSummaryClient = InstanceType<AnthropicSdkModule['default']>
 let anthropicSummaryClientPromise: Promise<AnthropicSummaryClient | null> | null = null
 
 async function getAnthropicSummaryClient(): Promise<AnthropicSummaryClient | null> {
+  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
+  // already returns null when the key is absent, so a spend refusal behaves
+  // identically to an unconfigured provider. Above the key check because when
+  // both are missing the switch is the actionable one.
+  if (!isAiSpendEnabled()) return null
+
   if (!anthropicApiKey || !isServerRuntime) {
     return null
   }

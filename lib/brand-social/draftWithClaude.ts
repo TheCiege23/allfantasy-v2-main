@@ -6,6 +6,7 @@ import {
   type BrandDraftVariant,
   type BrandPlatform,
 } from './types'
+import { assertAiSpendAllowed } from '@/lib/ai/aiSpendGuard'
 
 /** Claude model used for brand-post drafting — Haiku for cost/latency on short posts. */
 const MODEL = 'claude-haiku-4-5-20251001'
@@ -50,6 +51,12 @@ export type BrandDraftResult = {
  */
 export async function draftBrandPostWithClaude(req: BrandDraftRequest): Promise<BrandDraftResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
+  // already throws when the key is absent, so a spend refusal behaves
+  // identically to an unconfigured provider. Above the key check because when
+  // both are missing the switch is the actionable one.
+  assertAiSpendAllowed('brand-social')
+
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
 
   if (!isPlatform(req.platform)) {
