@@ -206,8 +206,9 @@ describe('AI spend guard — provider boundary coverage', () => {
    *
    * The blind spot itself is NOT fixed. A new route that constructs a client in
    * its own handler would still be invisible here. Closing that means scanning
-   * app/api for provider access rather than enumerating lib/ paths, which is a
-   * different test from this one.
+   * for provider access rather than enumerating lib/ paths, which is the census
+   * at the bottom of this file — and it has to walk `server/` as well as
+   * `app/api`, because this repo serves route handlers out of both trees.
    */
 
   /**
@@ -282,7 +283,18 @@ describe('AI spend guard — provider boundary coverage', () => {
 describe('AI spend guard — provider boundary census', () => {
   const repo = process.cwd()
 
-  const ROOTS = ['lib', 'app/api']
+  /*
+   * ⚠ THIS REPO HAS ROUTE HANDLERS IN TWO TREES. `app/api/legacy/[...path]/route.ts`
+   * is a dispatcher that lazily imports modules under `server/api-route-modules/`,
+   * so those handlers are live request paths that no `app/api/**` sweep can see.
+   *
+   * `server/` was missed on the first pass and cost real coverage: two legacy
+   * routes — ai-coach (OpenAI) and share (xAI) — were calling a provider inline,
+   * unguarded, reachable by any gated caller. The same blind spot had already hidden
+   * an api.sleeper.com caller from the DB-first census, which is what prompted
+   * looking here at all. Adding a root is cheap; assuming a tree is not routed is not.
+   */
+  const ROOTS = ['lib', 'app/api', 'server']
   const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '__mocks__'])
 
   /** Constructing a provider SDK is a boundary on its own. */
@@ -356,6 +368,10 @@ describe('AI spend guard — provider boundary census', () => {
     // shrinking the census.
     expect(found.some((f) => f.file === 'lib/xai-client.ts')).toBe(true)
     expect(found.some((f) => f.file === 'lib/openai-client.ts')).toBe(true)
+    // One canary per ROOT, so dropping a root fails here rather than quietly
+    // shrinking the census to the trees someone happened to remember.
+    expect(found.some((f) => f.file.startsWith('app/api/'))).toBe(true)
+    expect(found.some((f) => f.file.startsWith('server/'))).toBe(true)
   })
 
   it('every provider boundary is wired to the spend guard, or a declared exception', () => {

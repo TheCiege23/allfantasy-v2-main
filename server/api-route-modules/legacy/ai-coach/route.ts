@@ -4,6 +4,7 @@ import { trackLegacyToolUsage } from "@/lib/analytics-server";
 import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity";
 import { getDecisionLogsForCoach, getDecisionSummary } from "@/lib/decision-log";
 import { getCachedDNA, formatDNAForPrompt } from "@/lib/manager-dna";
+import { isAiSpendEnabled } from "@/lib/ai/aiSpendGuard";
 
 type CoachInput = {
   sleeper_username: string;
@@ -102,6 +103,27 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "Lega
 
   if (!body) {
     return NextResponse.json({ error: "Missing request body" }, { status: 400 });
+  }
+
+  /*
+   * PROVIDER BOUNDARY. The fetch below is inline in this handler, so this IS the
+   * boundary — there is no client module further down to guard instead.
+   *
+   * Reported rather than thrown, and checked BEFORE the key: the fetch is wrapped
+   * in a catch that answers `OpenAI request failed (network)` with a 500, so a
+   * thrown AiSpendDisabledError would surface as a network fault and send the next
+   * person to check connectivity for a billing state. 402 is the status the guard's
+   * own error class documents. When spend is off, a missing key is not the reason
+   * the request stopped, so the guard answers first.
+   */
+  if (!isAiSpendEnabled()) {
+    return NextResponse.json(
+      {
+        error: "AI spend is disabled (AI_FEATURES_ENABLED is not 'true').",
+        code: "ai_spend_disabled",
+      },
+      { status: 402 }
+    );
   }
 
   const apiKey = (process.env.OPENAI_API_KEY || "").trim();

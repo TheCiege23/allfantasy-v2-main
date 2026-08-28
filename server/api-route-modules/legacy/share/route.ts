@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 type ShareType = 'legacy' | 'trade' | 'rankings' | 'exposure' | 'waiver'
 
@@ -287,6 +288,24 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/share", tool: "LegacyS
     })
     if (!gate.ok) return gate.response
     const sleeper_username = gate.identity.sleeperUsername.toLowerCase()
+
+    /*
+     * PROVIDER BOUNDARY. The fetch below is inline in this handler, so this IS the
+     * boundary — there is no client module further down to guard instead.
+     *
+     * Reported rather than thrown, and checked BEFORE the key: this whole handler
+     * sits in a catch that flattens everything to `Failed to generate share
+     * captions` with a 500, so a thrown AiSpendDisabledError would be reported as a
+     * generation fault with its cause buried in `details`. 402 is the status the
+     * guard's own error class documents. When spend is off, a missing key is not
+     * the reason the request stopped, so the guard answers first.
+     */
+    if (!isAiSpendEnabled()) {
+      return NextResponse.json(
+        { success: false, error: "AI spend is disabled (AI_FEATURES_ENABLED is not 'true').", code: 'ai_spend_disabled' },
+        { status: 402 }
+      )
+    }
 
     const xaiApiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
     if (!xaiApiKey) {
