@@ -204,9 +204,15 @@ export async function executeChimmyTool(
            */
           return [
             `More than one of their leagues matches "${asked}":`,
-            found.candidates.map((c) => `"${c.name}" (${c.sport}, ${c.season} season)`).join('; ') +
-              '.',
-            'Ask which one they mean AND NAME THE DIFFERENCE — the season or sport, not just the name, which is identical.',
+            found.candidates
+              .map(
+                (c) =>
+                  `"${c.name}" (${c.sport}, ${c.season} season${
+                    typeof c.teamCount === 'number' ? `, ${c.teamCount} teams imported` : ''
+                  })`,
+              )
+              .join('; ') + '.',
+            'Ask which one they mean AND NAME THE DIFFERENCE — season, sport, or how many teams each has. Never just repeat the name, which is identical for all of them.',
             'If they already said a year, call this tool again with that season instead of asking.',
             'Do NOT pick one, and do not answer about any of them yet.',
           ].join(' ')

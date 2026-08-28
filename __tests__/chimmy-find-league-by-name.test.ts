@@ -6,13 +6,14 @@ const leagueFindMany = vi.hoisted(() => vi.fn())
 const redraftMemberFindMany = vi.hoisted(() => vi.fn())
 const rosterFindMany = vi.hoisted(() => vi.fn())
 const leagueTeamFindMany = vi.hoisted(() => vi.fn())
+const leagueTeamCount = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findMany: leagueFindMany },
     redraftLeagueMember: { findMany: redraftMemberFindMany },
     roster: { findMany: rosterFindMany },
-    leagueTeam: { findMany: leagueTeamFindMany },
+    leagueTeam: { findMany: leagueTeamFindMany, count: leagueTeamCount },
   },
 }))
 
@@ -37,6 +38,7 @@ beforeEach(() => {
   redraftMemberFindMany.mockResolvedValue([])
   rosterFindMany.mockResolvedValue([])
   leagueTeamFindMany.mockResolvedValue([])
+  leagueTeamCount.mockResolvedValue(0)
 })
 
 describe('findLeagueByName', () => {
@@ -186,6 +188,63 @@ describe('findLeagueByName', () => {
 
     const out = await findLeagueByName('user-1', 'Solo League')
     expect(out.kind === 'match' && out.league.season).toBe(2024)
+  })
+
+  /*
+   * ⚠ THE REPO REALLY HOLDS DUPLICATE LEAGUE ROWS. KBFL resolved to two rows
+   * with the same name, sport AND season, so "which did you mean?" became a
+   * question with no answer — there is no difference for the reader to name.
+   */
+  describe('duplicate rows that name, sport and season cannot separate', () => {
+    beforeEach(() => {
+      leagueTeamFindMany.mockResolvedValue([{ leagueId: 'dup-a' }, { leagueId: 'dup-b' }])
+      withLeagues([
+        { id: 'dup-a', name: 'KBFL', season: 2026 },
+        { id: 'dup-b', name: 'KBFL', season: 2026 },
+      ])
+    })
+
+    /*
+     * Choosing the only row with teams is choosing the only row that can answer
+     * anything — the empty shell returns "no standings stored" whatever is
+     * asked. That is a resolution, not a guess.
+     */
+    it('picks the populated row when the other is an empty shell', async () => {
+      leagueTeamCount.mockImplementation(({ where }: any) =>
+        Promise.resolve(where.leagueId === 'dup-a' ? 0 : 32),
+      )
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+      expect(out.kind === 'match' && out.league.id).toBe('dup-b')
+    })
+
+    /* Two REAL leagues is a genuine choice, and still gets asked. */
+    it('still refuses when both rows have teams', async () => {
+      leagueTeamCount.mockResolvedValue(12)
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+      expect(out.kind).toBe('ambiguous')
+      expect(out.kind === 'ambiguous' && out.candidates.every((c) => c.teamCount === 12)).toBe(true)
+    })
+
+    /* Both empty: nothing to prefer, so ask rather than pick arbitrarily. */
+    it('asks when neither row has any teams', async () => {
+      leagueTeamCount.mockResolvedValue(0)
+      expect((await findLeagueByName('user-1', 'KBFL')).kind).toBe('ambiguous')
+    })
+
+    /* The counts are what let the model ask an answerable question. */
+    it('reports the team counts so the question can name a difference', async () => {
+      leagueTeamCount.mockImplementation(({ where }: any) =>
+        Promise.resolve(where.leagueId === 'dup-a' ? 8 : 32),
+      )
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+      /* Numeric sort: bare .sort() is lexicographic, so [32, 8] would "pass" unsorted. */
+      const counts =
+        out.kind === 'ambiguous' ? out.candidates.map((c) => c.teamCount ?? 0).sort((a, b) => a - b) : []
+      expect(counts).toEqual([8, 32])
+    })
   })
 
   it('survives a user with no leagues at all', async () => {

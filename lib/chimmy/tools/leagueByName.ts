@@ -33,6 +33,8 @@ export type NamedLeague = {
   name: string
   sport: string
   season: number
+  /** Teams imported into this row. 0 means an empty shell — see the tie-break. */
+  teamCount?: number
 }
 
 export type LeagueNameLookup =
@@ -138,14 +140,44 @@ export async function findLeagueByName(
   /* Exact first — an exact name must never lose to a longer one containing it. */
   const exact = pool.filter((l) => normalise(l.name) === wanted)
   if (exact.length === 1) return { kind: 'match', league: exact[0] }
-  if (exact.length > 1) return { kind: 'ambiguous', candidates: exact.slice(0, MAX_SUGGESTIONS) }
+  if (exact.length > 1) return settleDuplicates(exact)
 
   const partial = pool.filter((l) => {
     const n = normalise(l.name)
     return n.includes(wanted) || wanted.includes(n)
   })
   if (partial.length === 1) return { kind: 'match', league: partial[0] }
-  if (partial.length > 1) return { kind: 'ambiguous', candidates: partial.slice(0, MAX_SUGGESTIONS) }
+  if (partial.length > 1) return settleDuplicates(partial)
 
   return { kind: 'none', known: named.slice(0, MAX_SUGGESTIONS) }
+}
+
+/**
+ * Break a tie between rows that name, sport and season cannot separate.
+ *
+ * ⚠ THIS REPO REALLY DOES HOLD DUPLICATE LEAGUE ROWS. KBFL resolved to two rows
+ * with the same name, the same sport and the same 2026 season, so the honest
+ * "which did you mean?" became a question with no answer — the reader can see no
+ * difference either, because there isn't one to describe.
+ *
+ * ⚠ THIS IS NOT GUESSING, AND THE DISTINCTION MATTERS. Choosing the only row
+ * that has any teams in it is choosing the only row that can answer ANY
+ * question; the empty shell would return "no standings are stored" no matter
+ * what was asked. Picking between two POPULATED rows would be guessing, and
+ * that still refuses — now with the team counts, so the question it asks is one
+ * the user can actually act on.
+ */
+async function settleDuplicates(candidates: NamedLeague[]): Promise<LeagueNameLookup> {
+  const counted = await Promise.all(
+    candidates.slice(0, MAX_SUGGESTIONS).map(async (l) => ({
+      ...l,
+      teamCount: await prisma.leagueTeam.count({ where: { leagueId: l.id } }).catch(() => 0),
+    })),
+  )
+
+  const populated = counted.filter((l) => (l.teamCount ?? 0) > 0)
+  if (populated.length === 1) return { kind: 'match', league: populated[0] }
+
+  /* Nothing separates them, or several are real. Ask, and say what differs. */
+  return { kind: 'ambiguous', candidates: counted }
 }
