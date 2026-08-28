@@ -9,9 +9,64 @@ type AccessibleLeagueRow = {
   season: number
   platform: string
   platformLeagueId: string
+  userId: string | null
   timezone: string | null
   lastSyncedAt: Date | null
   teams: Array<{ ownerName: string; teamName: string }>
+}
+
+/**
+ * One real league imported twice is ONE league to the reader.
+ *
+ * ⚠ IT PRODUCED A QUESTION NOBODY COULD ANSWER. Asked "is Bauer Sharp on
+ * waivers in KBFL?", Chimmy replied: `I found more than one league that could
+ * match: "KBFL" (2026), "KBFL" (2026). Which of those do you mean?` — two
+ * identical labels and no way to pick between them, followed by "Chimmy could
+ * not read your league for this answer." The conversation simply dead-ended.
+ *
+ * Both rows carry `platformLeagueId` 1338541390891606016 and season 2026: the
+ * same Sleeper league imported by two different accounts. `getPortfolio` already
+ * collapses this exact case; the route-level resolver never learned to, so the
+ * league list and the chat disagreed about how many KBFLs exist.
+ *
+ * ⚠ COLLAPSE ON THE PROVIDER'S ID, NEVER THE NAME. Measured 2026-08-28: only two
+ * groups in production share a platform id, but SEVEN name+season groups exist —
+ * "AF Test ADP #002" has five copies with five DISTINCT platform ids. Those are
+ * genuinely different leagues and merging them would hide four.
+ */
+function collapseDuplicateImports(rows: AccessibleLeagueRow[], userId: string): AccessibleLeagueRow[] {
+  const byRealLeague = new Map<string, AccessibleLeagueRow>()
+  const out: AccessibleLeagueRow[] = []
+
+  for (const row of rows) {
+    /* No provider id means no evidence two rows are the same thing. */
+    if (!row.platformLeagueId) {
+      out.push(row)
+      continue
+    }
+    /*
+     * Platform is in the key as well as the id: provider id spaces are
+     * independent, so a Sleeper league and an ESPN league could in principle
+     * carry the same string, and nothing about that would make them one league.
+     */
+    const key = `${row.platform}|${row.platformLeagueId}|${row.season}`
+    const held = byRealLeague.get(key)
+    if (!held) {
+      byRealLeague.set(key, row)
+      out.push(row)
+      continue
+    }
+    /*
+     * Prefer the copy the reader imported — it is the one whose ids their other
+     * surfaces (portfolio, league home) already use.
+     */
+    if (row.userId === userId && held.userId !== userId) {
+      byRealLeague.set(key, row)
+      out[out.indexOf(held)] = row
+    }
+  }
+
+  return out
 }
 
 type LeagueAliasMap = Record<string, string>
@@ -102,7 +157,7 @@ function extractAliasMap(raw: unknown): LeagueAliasMap {
 }
 
 async function listAccessibleLeagues(userId: string): Promise<AccessibleLeagueRow[]> {
-  return prisma.league.findMany({
+  const rows = await prisma.league.findMany({
     where: {
       OR: [
         { userId },
@@ -119,6 +174,7 @@ async function listAccessibleLeagues(userId: string): Promise<AccessibleLeagueRo
       season: true,
       platform: true,
       platformLeagueId: true,
+      userId: true,
       timezone: true,
       lastSyncedAt: true,
       teams: {
@@ -130,6 +186,14 @@ async function listAccessibleLeagues(userId: string): Promise<AccessibleLeagueRo
     },
     orderBy: [{ updatedAt: 'desc' }],
   })
+
+  /*
+   * Collapsed at the single choke point, so EVERY downstream path benefits —
+   * scoring, the ambiguity branch, the "which league?" ask, and the
+   * fallback_single rule that only fires when exactly one league is accessible.
+   * Two copies of one league were enough to defeat that last one too.
+   */
+  return collapseDuplicateImports(rows, userId)
 }
 
 export async function resolveChimmyLeagueSelection(args: {
