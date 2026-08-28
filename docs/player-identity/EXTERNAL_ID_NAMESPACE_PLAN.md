@@ -228,12 +228,41 @@ can be resolved against a Sleeper row, **ten point at the wrong player** — Jay
 Howard's row resolves to Marc Anthony, Chigoziem Okonkwo's to Grayland Arnold. The
 other nine disagreements are benign nickname variants (Cameron Ward / Cam Ward).
 
-Those 11 are left in place deliberately: removing production rows is destructive and
-was not in scope for this phase. They are listed here so the decision is explicit
-rather than forgotten. They also validate the caveat recorded under Phase 2 — the
-"ground truth" that phase measured against contains known-wrong pairs, which is
-precisely why 99.9% was described as agreement with existing pairs rather than
-verification against reality.
+They also validate the caveat recorded under Phase 2 — the "ground truth" that phase
+measured against contains known-wrong pairs, which is precisely why 99.9% was
+described as agreement with existing pairs rather than verification against reality.
+
+#### Those 11 were cleared 2026-08-28
+
+`sleeperId` set to NULL on all 11. The ROW and its `rollingInsightsId` are kept: the
+RI side was correct in every case — the RI player row's name matches the map's
+`canonicalName` — so only the false Sleeper claim was removed, not the identity.
+
+Ten were proven wrong against a Sleeper row. The eleventh, `Trent Sherfield SR`
+(9419), could not be verified because no Sleeper row holds that id — so the pairing
+resolved to nothing either way, and it carried the identical structural defect. It
+was nulled with the others and is called out here as the one not individually proven.
+
+Reversal record — restore by setting `sleeperId` back to the value shown:
+
+| row id | sleeperId | rollingInsightsId | canonicalName |
+| --- | --- | --- | --- |
+| a3b0822c-9786-482e-ba8d-c1452ccaa00c | 1375 | 1375 | Jaye Howard |
+| 0d9689c2-f554-4d7c-bbb0-8f0232528122 | 7051 | 7051 | Chigoziem Okonkwo |
+| 77afad5d-60ef-4aa3-a1f7-c6a1d2c0226d | 5826 | 5826 | Nick Westbrook |
+| 2548d9a5-8c57-4951-aa98-15a77db36964 | 6648 | 6648 | Brian Gaither |
+| aae14879-164e-466c-9f94-98d4668b8f43 | 4252 | 4252 | Hollywood Brown |
+| 9a2f1e39-dd31-4176-9b21-d9152def831e | 7193 | 7193 | John Parker Romo |
+| 371fc7e2-4ab5-4236-9ed6-357e117b592f | 6616 | 6616 | Bam Knight |
+| 79282e62-f5be-4cbe-b3ef-b1d15e8b5389 | 9419 | 9419 | Trent Sherfield SR |
+| 14a587ca-5f19-427b-8688-6e10b0d78101 | 7696 | 7696 | Jaylen Moody |
+| 76350043-8eb4-48f7-b3c3-94b1e3389698 | 8753 | 8753 | Andres Borregales |
+| 0217ff3f-8ece-49a5-8988-af45a22703f6 | 3489 | 3489 | Trayvon Henderson |
+
+After: NFL fully-paired 3,263 -> 3,252, self-paired rows 0, and name disagreements
+across all NFL pairs 20 -> 10. **Every one of the remaining 10 is a benign nickname
+variant** — Cameron/Cam Ward, Zachary/Zach Carter, Camryn/Cam Bynum, Matthew/Matt
+Orzech — so the NFL identity map now holds no wrong-player pairing.
 
 ### Phase 4 — decide about the other sports (a decision, not a task)
 
