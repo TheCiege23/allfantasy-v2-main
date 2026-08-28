@@ -105,18 +105,21 @@ describe('AI spend guard — provider boundary coverage', () => {
     // Moved off the ratchet 2026-08-27. Reached from 18 route files, the widest
     // surface on that list at the time.
     'lib/ai/league-settings-ai/claude.ts',
+    // Moved off the ratchet 2026-08-27. Its sibling orchestrator.ts was
+    // already guarded, so the two halves of three-brain disagreed.
+    'lib/decision-os/three-brain/anthropicClient.ts',
   ]
 
   /**
-   * ⚠ THIS RATCHET ONLY WATCHES `lib/`. Three more routes call a provider inline
-   * and are tracked by neither list below, so they are invisible here rather than
-   * counted as debt:
-   *   app/api/chat/chimmy/route.ts
-   *   app/api/start-sit/chimmy/route.ts
-   *   app/api/waiver-ai/grok/route.ts
-   * Adding them would raise UNGUARDED_RATCHET past its bound, which reads as a
-   * regression rather than the census correction it would be — so that is a
-   * deliberate decision for whoever owns the number, not a silent edit.
+   * ⚠ THIS RATCHET ONLY WATCHES `lib/`, so a route that calls a provider inline
+   * is invisible to it — neither guarded nor counted as debt. Four such routes
+   * existed and were found by census rather than by this list; all four are now
+   * in GUARDED above.
+   *
+   * The blind spot itself is NOT fixed. A new route that constructs a client in
+   * its own handler would still be invisible here. Closing that means scanning
+   * app/api for provider access rather than enumerating lib/ paths, which is a
+   * different test from this one.
    */
 
   /**
@@ -130,7 +133,6 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/autocoach/status-sources/XGrokAdapter.ts',
     'lib/brackets/intelligence/ai-narrator.ts',
     'lib/brand-social/draftWithClaude.ts',
-    'lib/decision-os/three-brain/anthropicClient.ts',
     'lib/draft/ai-claude.ts',
     'lib/fantasy-coach/CoachEvaluationAI.ts',
     'lib/fantasy-news-aggregator/NewsSummarizerAI.ts',
@@ -163,7 +165,7 @@ describe('AI spend guard — provider boundary coverage', () => {
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.
-    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(21)
+    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(20)
   })
 
   it('every ratchet entry still exists (stale entries hide real coverage)', () => {
