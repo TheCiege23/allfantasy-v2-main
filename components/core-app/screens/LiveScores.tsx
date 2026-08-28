@@ -356,7 +356,26 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                         <span className="af-live-play-type af-num" data-tone={playTone(p.type)}>
                           {PLAY_TYPE_LABEL[p.type] ?? p.type}
                         </span>
-                        {p.team ? <span className="af-live-play-team af-num">{p.team}</span> : null}
+                        {/*
+                          Logo when we resolved one, the abbreviation when we
+                          only know the team, nothing when we know neither —
+                          the same ladder the headshot uses. `teamLogoUrl` is
+                          null unless a team was actually resolved, so this
+                          never renders a badge for a guessed abbreviation.
+                        */}
+                        {p.teamLogoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            className="af-live-play-logo"
+                            src={p.teamLogoUrl}
+                            alt={p.team ?? ''}
+                            width={14}
+                            height={14}
+                            loading="lazy"
+                          />
+                        ) : p.team ? (
+                          <span className="af-live-play-team af-num">{p.team}</span>
+                        ) : null}
                       </span>
                       {/*
                         `headline` already reads "Bijan Robinson (RB) ran for 17
