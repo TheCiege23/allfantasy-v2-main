@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { createDemoChimmyReply } from '@/lib/startSit/shared'
+import { rateLimit } from '@/lib/rate-limit'
 import { assertAiSpendAllowed, isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +15,41 @@ type Body = {
 }
 
 export async function POST(req: Request) {
+  /*
+   * SIGN-IN REQUIRED, AND IT COSTS NOTHING TO REQUIRE IT.
+   *
+   * This route reaches a paid completion. It previously had no session check and no
+   * rate limit, so the AI spend switch — a platform-wide on/off — was the only thing
+   * between an anonymous caller and gpt-4o-mini at 600 max_tokens a turn. Turning that
+   * switch off to stop abuse would also have taken the feature away from paying users,
+   * which is not a lever anyone wants to pull on a Sunday.
+   *
+   * The gate is free here because the ONLY caller is <StartSitPopup>, mounted through
+   * StartSitLauncher on the dashboard (app/dashboard/DashboardShell.tsx and
+   * components/dashboard/nocturne/NocturneDashboard.tsx) — and /dashboard already
+   * redirects anonymous visitors to /login. Every real user of this endpoint is signed
+   * in already; only a direct caller was not.
+   *
+   * Checked against a live probe first: anonymous POST returned 200, not 401.
+   */
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) {
+    return NextResponse.json({ reply: 'Sign in to ask Chimmy about your lineup.' }, { status: 401 })
+  }
+
+  /*
+   * Per-user, not per-IP: the IP bucket is the one an attacker rotates, and a signed-in
+   * id is the thing we actually meter. Household/office NAT would also share one IP.
+   */
+  const rl = rateLimit(`start-sit-chimmy:${userId}`, 20, 60_000)
+  if (!rl.success) {
+    return NextResponse.json(
+      { reply: 'You are asking faster than I can think. Give me a minute.' },
+      { status: 429 },
+    )
+  }
+
   let body: Body = {}
   try {
     body = (await req.json()) as Body
@@ -29,9 +67,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    // PROVIDER BOUNDARY. This route has no session check and no rate limit,
-    // so the spend switch is the only thing standing between an anonymous
-    // caller and a paid completion.
+    // PROVIDER BOUNDARY. The spend switch is no longer the only brake — the handler
+    // now requires a session and meters 20/min per user id (see the top of POST) — but
+    // it stays here rather than at the entry point so it still holds if a future path
+    // constructs a client somewhere else in this file.
     assertAiSpendAllowed('start-sit.chimmy')
     const openai = new OpenAI({
       apiKey: key,

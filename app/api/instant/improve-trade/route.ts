@@ -17,11 +17,14 @@ export const dynamic = "force-dynamic"
 function getGrokClient() {
   /*
    * PROVIDER BOUNDARY. This route reached three providers with no spend check at
-   * all: two SDK clients and a direct fetch to api.x.ai below. It is also
-   * UNAUTHENTICATED - there is no session requirement anywhere in this file, and
-   * the only brake is rateLimit(ip, 5, 60s). With MAX_TOOL_TURNS = 6 a single
-   * request can drive several model calls, so the exposure was 5 tool loops per
-   * minute per IP with nothing metering the spend behind them.
+   * all: two SDK clients and a direct fetch to api.x.ai below. It was ALSO
+   * unauthenticated — 5 tool loops per minute per IP, MAX_TOOL_TURNS = 6, and
+   * nothing metering the spend behind them. Production served one such request:
+   * a 200 in 11,895 ms with no session.
+   *
+   * POST now requires a session before either client is constructed, and the limiter
+   * keys on the user id. The guard stays in the factory rather than at the handler
+   * entry so it still holds if a future path constructs a client elsewhere in the file.
    *
    * The guard belongs in the factory rather than at the handler entry so it
    * still holds if a future path constructs a client somewhere else in the file.
@@ -316,11 +319,42 @@ function parseSuggestions(parsed: any) {
 
 export const POST = withApiUsage({ endpoint: '/api/instant/improve-trade', tool: 'ImproveTradeAI' })(async (req: Request) => {
   try {
+    /*
+     * SIGN-IN REQUIRED. This runs BEFORE the provider clients are constructed, so an
+     * anonymous caller never reaches a paid boundary at all.
+     *
+     * Why this is safe to require, rather than a funnel we are closing: the UI chain
+     * that called this route is DEAD. The only fetch of /api/instant/improve-trade is
+     * app/components/ImproveTradeModal.tsx, the only component that mounts that modal is
+     * app/components/InstantTradeAnalyzer.tsx, and NOTHING mounts InstantTradeAnalyzer —
+     * verified across static, relative and dynamic imports, with a positive control
+     * (StartSitLauncher) proving the same search does find real mounts. So the route was
+     * reachable only by direct HTTP.
+     *
+     * That matters, because production had already served one: ApiUsageEvent recorded a
+     * 200 at 11,895 ms — a real multi-turn tool loop — with no session behind it, plus
+     * four 429s from the IP limiter. MAX_TOOL_TURNS is 6 and this handler reaches three
+     * providers (Grok, OpenAI, Serper), so one unauthenticated request was worth several
+     * model calls.
+     *
+     * The IP limiter stays as a second layer, but it was never sufficient on its own: it
+     * is an in-process Map (lib/rate-limit.ts), so on Vercel every new function instance
+     * hands the same IP a fresh budget.
+     */
+    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+    const sessionUserId = session?.user?.id
+    if (!sessionUserId) {
+      return NextResponse.json(
+        { error: 'Sign in to use the trade improver.' },
+        { status: 401 }
+      )
+    }
+
     const grokClient = getGrokClient()
     const openaiClient = getOpenAIClient()
 
     const ip = getClientIp(req as any) || 'unknown'
-    const rl = rateLimit(`improve-trade:${ip}`, 5, 60_000)
+    const rl = rateLimit(`improve-trade:${sessionUserId}:${ip}`, 5, 60_000)
     if (!rl.success) {
       return NextResponse.json(
         { error: 'Too many requests. Please wait a minute and try again.' },
@@ -361,13 +395,11 @@ export const POST = withApiUsage({ endpoint: '/api/instant/improve-trade', tool:
 
     const percentDiff = typeof currentFairness === 'number' ? currentFairness : 0
 
+    // Reuses the session resolved at the top of the handler — it is now guaranteed to
+    // exist, so this no longer needs its own getServerSession round trip.
     let userPreferenceProfile: string | null = null
     try {
-      const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
-      const userId = session?.user?.id
-      if (userId) {
-        userPreferenceProfile = await getUserTradeProfile(userId)
-      }
+      userPreferenceProfile = await getUserTradeProfile(sessionUserId)
     } catch {}
 
     const fantasyCalcSnippet = await fetchFantasyCalcValuesForTrade(isDynasty, leagueSize, scoring)
