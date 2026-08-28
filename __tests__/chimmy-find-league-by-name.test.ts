@@ -20,13 +20,29 @@ vi.mock('@/lib/prisma', () => ({
 import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 
 /** `league.findMany` is called twice: once for owned ids, once to load names. */
-function withLeagues(rows: Array<{ id: string; name: string | null; season?: number }>) {
+function withLeagues(
+  rows: Array<{
+    id: string
+    name: string | null
+    season?: number
+    platformLeagueId?: string | null
+    userId?: string | null
+  }>,
+) {
   leagueFindMany.mockImplementation((args: any) => {
     if (args?.where?.id?.in) {
       return Promise.resolve(
         rows
           .filter((r) => args.where.id.in.includes(r.id))
-          .map((r) => ({ id: r.id, name: r.name, sport: 'NFL', season: r.season ?? 2026 })),
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            sport: 'NFL',
+            season: r.season ?? 2026,
+            /* Distinct by default, so existing cases are never collapsed. */
+            platformLeagueId: r.platformLeagueId ?? `platform-${r.id}`,
+            userId: r.userId ?? null,
+          })),
       )
     }
     return Promise.resolve([])
@@ -244,6 +260,73 @@ describe('findLeagueByName', () => {
       const counts =
         out.kind === 'ambiguous' ? out.candidates.map((c) => c.teamCount ?? 0).sort((a, b) => a - b) : []
       expect(counts).toEqual([8, 32])
+    })
+  })
+
+  /*
+   * ⚠ THE ACTUAL PRODUCTION CASE, CONFIRMED BY AUDIT. KBFL is ONE Sleeper
+   * league (platform id 1338541390891606016) imported TWICE — `leagues.userId`
+   * is the importer, so a league produces one row per manager who imports it.
+   * This user reaches their own copy as owner and a co-manager's copy through a
+   * claimed team. Both rows held an identical 32 teams and 32 rosters, so
+   * "which did you mean?" was unanswerable AND pointless: same league either way.
+   */
+  describe('one real league imported by two managers', () => {
+    beforeEach(() => {
+      leagueTeamFindMany.mockResolvedValue([{ leagueId: 'mine' }, { leagueId: 'theirs' }])
+      leagueTeamCount.mockResolvedValue(32)
+    })
+
+    it('collapses copies sharing a platform id instead of asking', async () => {
+      withLeagues([
+        { id: 'theirs', name: 'KBFL', season: 2026, platformLeagueId: '1338', userId: 'other' },
+        { id: 'mine', name: 'KBFL', season: 2026, platformLeagueId: '1338', userId: 'user-1' },
+      ])
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+
+      expect(out.kind).toBe('match')
+      /* And it is the user's OWN import that survives. */
+      expect(out.kind === 'match' && out.league.id).toBe('mine')
+    })
+
+    it('keeps a copy even when none of them is the user\'s own import', async () => {
+      withLeagues([
+        { id: 'a', name: 'KBFL', season: 2026, platformLeagueId: '1338', userId: 'other-1' },
+        { id: 'b', name: 'KBFL', season: 2026, platformLeagueId: '1338', userId: 'other-2' },
+      ])
+      leagueTeamFindMany.mockResolvedValue([{ leagueId: 'a' }, { leagueId: 'b' }])
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+      expect(out.kind).toBe('match')
+    })
+
+    /*
+     * ⚠ DIFFERENT SEASONS OF ONE LEAGUE SHARE A PLATFORM ID ON SOME PROVIDERS,
+     * and they are NOT the same thing — collapsing them would silently answer
+     * about the wrong year. The key includes the season for that reason.
+     */
+    it('does not collapse different seasons of the same platform league', async () => {
+      withLeagues([
+        { id: 's26', name: 'KBFL', season: 2026, platformLeagueId: '1338', userId: 'user-1' },
+        { id: 's25', name: 'KBFL', season: 2025, platformLeagueId: '1338', userId: 'user-1' },
+      ])
+      leagueTeamFindMany.mockResolvedValue([{ leagueId: 's26' }, { leagueId: 's25' }])
+
+      expect((await findLeagueByName('user-1', 'KBFL')).kind).toBe('ambiguous')
+      const out = await findLeagueByName('user-1', 'KBFL', 2025)
+      expect(out.kind === 'match' && out.league.id).toBe('s25')
+    })
+
+    /* No platform id means no evidence they are the same — never collapse. */
+    it('leaves rows without a platform id alone', async () => {
+      withLeagues([
+        { id: 'x', name: 'KBFL', season: 2026, platformLeagueId: null, userId: 'user-1' },
+        { id: 'y', name: 'KBFL', season: 2026, platformLeagueId: null, userId: 'user-1' },
+      ])
+      leagueTeamFindMany.mockResolvedValue([{ leagueId: 'x' }, { leagueId: 'y' }])
+
+      expect((await findLeagueByName('user-1', 'KBFL')).kind).toBe('ambiguous')
     })
   })
 

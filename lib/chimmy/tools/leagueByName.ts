@@ -35,6 +35,10 @@ export type NamedLeague = {
   season: number
   /** Teams imported into this row. 0 means an empty shell — see the tie-break. */
   teamCount?: number
+  /** The provider's own league id. Equal ids mean the SAME real-world league. */
+  platformLeagueId?: string | null
+  /** Who imported this copy. Used only to prefer the user's own row. */
+  ownerUserId?: string | null
 }
 
 export type LeagueNameLookup =
@@ -83,6 +87,48 @@ async function memberLeagueIds(userId: string): Promise<string[]> {
   return [...ids]
 }
 
+/**
+ * Collapse rows that are the SAME real-world league imported more than once.
+ *
+ * ⚠ THIS IS NOT DEDUPLICATION BY GUESSWORK — `platformLeagueId` IS THE PROVIDER'S
+ * OWN ID. Two rows carrying it are the same Sleeper league, not two leagues that
+ * happen to share a name. Confirmed against production: KBFL exists twice on
+ * platform id 1338541390891606016, both rows holding an identical 32 teams, 32
+ * rosters and 2 claimed teams.
+ *
+ * ⚠ AND IT IS NOT A DATA BUG SO MUCH AS MULTI-TENANCY. `leagues.userId` is the
+ * importer, so one Sleeper league produces one row PER MANAGER who imports it.
+ * A user reaches their own copy as owner and a co-manager's copy through a
+ * claimed team — which is exactly how one person ends up "in" the same league
+ * twice and why asking them to choose was unanswerable. Both copies describe the
+ * same 32 teams.
+ *
+ * Prefer the row the user imported; failing that the first, which the caller
+ * ordered newest-first. Rows with no platform id are never collapsed — without
+ * the provider's id there is no evidence they are the same thing.
+ */
+function collapseSameRealLeague(rows: NamedLeague[], userId: string): NamedLeague[] {
+  const byPlatform = new Map<string, NamedLeague>()
+  const out: NamedLeague[] = []
+
+  for (const row of rows) {
+    const key = row.platformLeagueId ? `${row.platformLeagueId}::${row.season}` : null
+    if (!key) {
+      out.push(row)
+      continue
+    }
+    const held = byPlatform.get(key)
+    if (!held) {
+      byPlatform.set(key, row)
+      continue
+    }
+    /* Their own import wins; otherwise keep the one already held (newest). */
+    if (held.ownerUserId !== userId && row.ownerUserId === userId) byPlatform.set(key, row)
+  }
+
+  return [...out, ...byPlatform.values()]
+}
+
 /** Fold case, punctuation and spacing so "KBFL!" matches "kbfl". */
 function normalise(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
@@ -108,16 +154,33 @@ export async function findLeagueByName(
     ? await prisma.league
         .findMany({
           where: { id: { in: ids } },
-          select: { id: true, name: true, sport: true, season: true },
-          orderBy: { season: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            sport: true,
+            season: true,
+            platformLeagueId: true,
+            userId: true,
+          },
+          orderBy: [{ season: 'desc' }, { createdAt: 'desc' }],
           take: MAX_LEAGUES,
         })
         .catch(() => [])
     : []
 
-  const named: NamedLeague[] = leagues
-    .filter((l) => l.name)
-    .map((l) => ({ id: l.id, name: l.name as string, sport: String(l.sport), season: l.season }))
+  const named: NamedLeague[] = collapseSameRealLeague(
+    leagues
+      .filter((l) => l.name)
+      .map((l) => ({
+        id: l.id,
+        name: l.name as string,
+        sport: String(l.sport),
+        season: l.season,
+        platformLeagueId: l.platformLeagueId ?? null,
+        ownerUserId: l.userId ?? null,
+      })),
+    userId,
+  )
 
   if (!wanted) return { kind: 'none', known: named.slice(0, MAX_SUGGESTIONS) }
 
