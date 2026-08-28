@@ -125,7 +125,71 @@ export function DraftHq({ data }: DraftHqProps) {
         )}
       </section>
 
-      {/* ── Lottery ─────────────────────────────────────────────────── */}
+      {/* -- The completed draft, every team -------------------------- */}
+      <section className="af-frame af-dh-section af-dh-boardfull">
+        <header className="af-dh-section-head">
+          <h2 className="af-label">Draft board</h2>
+          {data.board.available ? (
+            <span className="af-dh-board-meta af-num">
+              {data.board.data.season} &middot; {data.board.data.teams.length} teams &middot;{' '}
+              {data.board.data.totalPicks} picks
+            </span>
+          ) : null}
+        </header>
+
+        {data.board.available ? (
+          <>
+            {/*
+              Team strip first: a board is unreadable without knowing whose column is
+              whose, and yours is the one a person looks for.
+            */}
+            <ul className="af-dh-teamstrip">
+              {data.board.data.teams.map((t) => (
+                <li
+                  key={t.teamKey}
+                  className="af-dh-teamchip"
+                  data-you={t.isYou ? 'true' : undefined}
+                >
+                  <span className="af-dh-teamchip-name">{t.name ?? t.teamKey}</span>
+                  <span className="af-dh-teamchip-n af-num">{t.picks}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/*
+              Rounds in order, picks in pick order within each. The snake is only
+              visible this way -- grouping by team would hide the thing the board is for.
+            */}
+            {data.board.data.rounds.map((r) => (
+              <div key={r.round} className="af-dh-round">
+                <h3 className="af-dh-round-title af-num">Round {r.round}</h3>
+                <div className="af-dh-round-scroll">
+                  <ul className="af-dh-round-picks">
+                    {r.picks.map((p) => (
+                      <li
+                        key={`${p.round}:${p.overall}:${p.teamKey}`}
+                        className="af-dh-bpick"
+                        data-you={p.isYou ? 'true' : undefined}
+                      >
+                        <span className="af-dh-pick-label af-num">{p.label}</span>
+                        <span className="af-dh-bpick-player">{p.playerName}</span>
+                        <span className="af-dh-bpick-meta">
+                          {p.position !== '\u2014' ? p.position : ''}
+                        </span>
+                        <span className="af-dh-bpick-team">{p.teamName ?? p.teamKey}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </>
+        ) : (
+          <Unavailable reason={data.board.reason} />
+        )}
+      </section>
+
+      {/* -- Lottery -------------------------------------------------- */}
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
           <h2 className="af-label">Weighted lottery</h2>

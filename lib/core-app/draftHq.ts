@@ -43,6 +43,27 @@ export type MadePick = {
   team: string | null
 }
 
+/** One pick on the completed board - any team's, not just yours. */
+export type BoardPick = {
+  round: number
+  overall: number
+  label: string
+  teamKey: string
+  teamName: string | null
+  isYou: boolean
+  playerName: string
+  position: string
+}
+
+export type CompletedDraft = {
+  season: number
+  /** Rounds in order, each holding that round's picks in pick order. */
+  rounds: Array<{ round: number; picks: BoardPick[] }>
+  /** Distinct teams that made a pick, in first-pick order. */
+  teams: Array<{ teamKey: string; name: string | null; isYou: boolean; picks: number }>
+  totalPicks: number
+}
+
 export type DraftHqData = {
   league: { id: string; name: string; platform: string; format: string | null }
   session: SectionState<{
@@ -56,6 +77,14 @@ export type DraftHqData = {
   pickSlots: SectionState<PickSlot[]>
   /** What you actually drafted, when the draft has run. */
   madePicks: SectionState<MadePick[]>
+  /**
+   * The last completed draft, every team's picks by round.
+   *
+   * WHY SEPARATE FROM `madePicks`, WHICH IS YOURS ALONE: a draft that has already run
+   * is still the league's most-read page - who took whom, and in what order - and that
+   * is a different question from "what did I get". Both read the same DraftFact rows.
+   */
+  board: SectionState<CompletedDraft>
   lottery: UnavailableSection
   queue: UnavailableSection
   keepers: UnavailableSection
@@ -102,6 +131,153 @@ export function computePickSlots(
  * simply will not match here, which is the correct failure: nothing is shown rather than
  * the wrong thing.
  */
+/**
+ * Provider player id -> a displayable name, for any provider.
+ *
+ * `PlayerProviderIdentity` first because it is the only table covering non-Sleeper ids;
+ * `SportsPlayer` second because it is the only one carrying position and team. Shared by
+ * the personal pick list and the full board so the two can never disagree about who a
+ * pick was.
+ */
+async function resolvePlayerNames(
+  playerIds: string[],
+): Promise<Map<string, { name: string; position: string | null; team: string | null }>> {
+  const out = new Map<string, { name: string; position: string | null; team: string | null }>()
+  if (playerIds.length === 0) return out
+
+  const [identities, players] = await Promise.all([
+    prisma.playerProviderIdentity
+      .findMany({
+        where: { providerPlayerId: { in: playerIds } },
+        select: { providerPlayerId: true, displayName: true },
+      })
+      .catch(() => []),
+    prisma.sportsPlayer
+      .findMany({
+        where: { sleeperId: { in: playerIds } },
+        select: { sleeperId: true, name: true, position: true, team: true },
+      })
+      .catch(() => []),
+  ])
+
+  for (const pl of players) {
+    if (pl.sleeperId && !out.has(pl.sleeperId)) {
+      out.set(pl.sleeperId, { name: pl.name, position: pl.position, team: pl.team })
+    }
+  }
+  for (const i of identities) {
+    if (i.displayName && !out.has(i.providerPlayerId)) {
+      out.set(i.providerPlayerId, { name: i.displayName, position: null, team: null })
+    }
+  }
+  return out
+}
+
+/**
+ * Pick-in-round, decided from the numbers rather than the provider name.
+ *
+ * Sleeper writes `pick_no`, an OVERALL pick; ESPN writes the pick WITHIN the round. If
+ * subtracting completed rounds lands inside the round it was overall; if the value
+ * already sits inside a round it was a pick-in-round. Returns 0 when neither fits, and
+ * the caller then says only what it knows.
+ */
+function pickInRoundOf(round: number, pickNumber: number, teamCount: number): number {
+  if (teamCount <= 0) return 0
+  const derived = pickNumber - (round - 1) * teamCount
+  if (derived >= 1 && derived <= teamCount) return derived
+  if (pickNumber >= 1 && pickNumber <= teamCount) return pickNumber
+  return 0
+}
+
+/**
+ * The last completed draft in full - every team, every round.
+ *
+ * WHY ORDERED BY `pickNumber` AND NOT BY TEAM: a board is only legible in pick order.
+ * Grouping by team first loses the snake, which is the one thing a round view exists to
+ * show.
+ */
+async function loadCompletedDraftBoard(
+  leagueId: string,
+  userId: string,
+): Promise<SectionState<CompletedDraft>> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+
+  const facts = await prisma.draftFact
+    .findMany({
+      where: { leagueId },
+      orderBy: [{ season: 'desc' }, { round: 'asc' }, { pickNumber: 'asc' }],
+      select: { season: true, round: true, pickNumber: true, playerId: true, managerId: true },
+    })
+    .catch(() => [])
+  if (facts.length === 0) {
+    return unavailable('no completed draft has been imported for this league')
+  }
+
+  const season = facts[0]?.season ?? null
+  const rows = facts.filter((f) => f.season === season)
+
+  const [teams, mine, names] = await Promise.all([
+    prisma.leagueTeam
+      .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
+      .catch(() => []),
+    prisma.leagueTeam
+      .findMany({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
+      .catch(() => []),
+    resolvePlayerNames([...new Set(rows.map((r) => r.playerId))]),
+  ])
+
+  const teamCount = teams.length
+  const nameByKey = new Map<string, string>()
+  for (const t of teams) {
+    const label = t.teamName?.trim() || t.ownerName?.trim()
+    if (t.externalId && label) nameByKey.set(t.externalId, label)
+  }
+  const yours = new Set(mine.map((t) => t.externalId).filter(Boolean) as string[])
+
+  const byRound = new Map<number, BoardPick[]>()
+  const teamOrder: string[] = []
+  const teamPicks = new Map<string, number>()
+
+  for (const r of rows) {
+    const teamKey = r.managerId ?? ''
+    const inRound = pickInRoundOf(r.round, r.pickNumber, teamCount)
+    const hit = names.get(r.playerId)
+    const pick: BoardPick = {
+      round: r.round,
+      overall: inRound > 0 ? (r.round - 1) * teamCount + inRound : r.pickNumber,
+      label: inRound > 0 ? `${r.round}.${String(inRound).padStart(2, '0')}` : `Round ${r.round}`,
+      teamKey,
+      teamName: nameByKey.get(teamKey) ?? null,
+      isYou: yours.has(teamKey),
+      playerName: hit?.name ?? `Player ${r.playerId} (not yet mapped)`,
+      position: hit?.position ?? '\u2014',
+    }
+    const bucket = byRound.get(r.round)
+    if (bucket) bucket.push(pick)
+    else byRound.set(r.round, [pick])
+
+    if (teamKey && !teamPicks.has(teamKey)) teamOrder.push(teamKey)
+    teamPicks.set(teamKey, (teamPicks.get(teamKey) ?? 0) + 1)
+  }
+
+  return {
+    available: true,
+    data: {
+      season: season ?? 0,
+      rounds: [...byRound.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([round, picks]) => ({ round, picks })),
+      teams: teamOrder.map((teamKey) => ({
+        teamKey,
+        name: nameByKey.get(teamKey) ?? null,
+        isYou: yours.has(teamKey),
+        picks: teamPicks.get(teamKey) ?? 0,
+      })),
+      totalPicks: rows.length,
+    },
+  }
+}
+
 async function loadImportedDraftPicks(
   leagueId: string,
   userId: string,
@@ -288,8 +464,11 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     /* Session and slots genuinely do not exist — this app is not running a draft here,
        and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
-    const madePicks = await loadImportedDraftPicks(leagueId, userId).catch(() => none)
-    return { ...base, session: none, pickSlots: none, madePicks }
+    const [madePicks, board] = await Promise.all([
+      loadImportedDraftPicks(leagueId, userId).catch(() => none),
+      loadCompletedDraftBoard(leagueId, userId).catch(() => none),
+    ])
+    return { ...base, session: none, pickSlots: none, madePicks, board }
   }
 
   const myTeam = await prisma.leagueTeam.findFirst({
@@ -366,5 +545,12 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
               : 'no picks recorded for your team in this draft',
         }
 
-  return { ...base, session: sessionState, pickSlots, madePicks }
+  /* A live session and a completed board are not exclusive: a league can be mid-draft in
+     one season and hold a finished board from the last one. */
+  const board = await loadCompletedDraftBoard(leagueId, userId).catch(() => ({
+    available: false as const,
+    reason: 'no completed draft has been imported for this league',
+  }))
+
+  return { ...base, session: sessionState, pickSlots, madePicks, board }
 }

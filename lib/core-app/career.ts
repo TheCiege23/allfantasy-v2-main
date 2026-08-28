@@ -463,6 +463,84 @@ export async function getCareerData(
     importRows = []
   }
 
+  /* ── source 1b: imported season history (every provider, per season) ───────
+   *
+   * ⚠ SOURCE 1 CANNOT ANSWER "LAST SEASON", AND NOTHING ELSE WAS TRYING.
+   *
+   * The `import_*` columns above are written by exactly one route —
+   * `app/api/leagues/import/batch` — and never by the commit path every ESPN,
+   * Fantrax and Sleeper import actually goes through. They are also ONE row per
+   * league, so even when populated they cannot express more than a single season.
+   *
+   * `SeasonStandingFact` is per (league, season, team) and every provider's
+   * historical backfill writes it. Read here, "what was my record last season"
+   * becomes answerable for imported leagues — the question Chimmy declined
+   * because nothing on this path had the data.
+   *
+   * Joined through the CLAIMED team rather than league ownership: source 1 filters
+   * `leagues."userId"`, which is the league's owner, so a league you play in but do
+   * not run contributes nothing. A claim is the thing that says which team is yours.
+   */
+  let importedSeasons: Array<{
+    season: number
+    name: string
+    platform: string
+    sport: string | null
+    wins: number
+    losses: number
+    ties: number
+  }> = []
+  try {
+    const claimed = await prisma.leagueTeam.findMany({
+      where: { claimedByUserId: userId },
+      select: {
+        externalId: true,
+        league: { select: { id: true, name: true, platform: true, sport: true } },
+      },
+    })
+    const byLeagueId = new Map(
+      claimed
+        .filter((t) => t.league?.id && t.externalId)
+        .map((t) => [t.league!.id, { teamId: t.externalId as string, league: t.league! }]),
+    )
+    if (byLeagueId.size > 0) {
+      const facts = await prisma.seasonStandingFact.findMany({
+        where: { leagueId: { in: [...byLeagueId.keys()] } },
+        select: {
+          leagueId: true,
+          season: true,
+          teamId: true,
+          wins: true,
+          losses: true,
+          ties: true,
+          pointsFor: true,
+        },
+      })
+      importedSeasons = facts
+        .filter((f) => byLeagueId.get(f.leagueId)?.teamId === f.teamId)
+        /* An unplayed season is not a season. The ESPN backfill writes a fact row per
+           team whether or not the season ran, so a league that has not kicked off
+           yields a full set of 0-0 rows — crediting those would report seasons played
+           that never were. Same guard the standings history uses. */
+        .filter((f) => f.wins > 0 || f.losses > 0 || f.ties > 0 || f.pointsFor > 0)
+        .map((f) => {
+          const league = byLeagueId.get(f.leagueId)!.league
+          return {
+            season: f.season,
+            name: league.name ?? 'League',
+            platform: String(league.platform ?? 'unknown').toLowerCase(),
+            sport: league.sport ? String(league.sport) : null,
+            wins: f.wins,
+            losses: f.losses,
+            ties: f.ties,
+          }
+        })
+    }
+  } catch (err) {
+    console.error('[core-app/career] imported season history read failed:', err)
+    importedSeasons = []
+  }
+
   /* ── source 2: Sleeper legacy history (richer, single-platform) ────────── */
   let legacyLeagues: Array<{
     id: string
@@ -626,6 +704,33 @@ export async function getCareerData(
         settingsLabel: settingsLabel({ scoringType: row.scoring, sport: row.sport }),
       })
     }
+  }
+
+  for (const row of importedSeasons) {
+    const platform = row.platform
+    platformsSeen.add(platform)
+    if (wanted && platform !== wanted) continue
+    const k = key(platform, row.season, row.name)
+    if (seen.has(k)) continue
+    seen.add(k)
+    if (row.name.trim()) distinctNames.add(row.name.trim().toLowerCase())
+
+    const acc = bump(row.season)
+    acc.wins += row.wins
+    acc.losses += row.losses
+    acc.ties += row.ties
+    acc.leagues += 1
+    leaguesPlayed += 1
+    if (row.sport) sportsSeen.add(row.sport)
+
+    /*
+     * ⚠ NO CHAMPIONSHIP AND NO PLAYOFF BERTH IS CLAIMED HERE. `SeasonStandingFact`
+     * records a finishing RANK, and rank 1 is the regular-season leader — not the
+     * title. Crediting it would manufacture championships nobody won, and prestige
+     * is scored on that total. The same file already documents the sibling mistake:
+     * seeding was read as a playoff appearance and produced 25 berths across a
+     * season with no games played.
+     */
   }
 
   for (const league of legacyLeagues) {
