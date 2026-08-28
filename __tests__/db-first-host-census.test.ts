@@ -102,6 +102,13 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    */
   { name: 'cdn-media', why: 'image/asset host consumed as a src, not a data read', test: /(^|\.)(sleepercdn|espncdn|flagcdn|mlbstatic|nhle)\.com$/i },
   { name: 'cdn-media', why: 'image/asset host', test: /^(cdn\.nba\.com|cdn\.discordapp\.com|media\.api-sports\.io|img\.mlbstatic\.com|assets\.nhle\.com)$/i },
+  /*
+   * Weather ICONS only — /img/wn/<code>@2x.png. The weather DATA host is
+   * api.openweathermap.org, which the guard already monitors. Bare openweathermap.org
+   * sat in the data-API ledger on the strength of the name; every one of its call sites
+   * builds an icon URL.
+   */
+  { name: 'cdn-media', why: 'OpenWeather icon assets, not the weather API', test: /^openweathermap\.org$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|www\.youtube\.com|fancred\.app)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
@@ -111,9 +118,34 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * feed and is now monitored by the guard.
    */
   { name: 'share-link', why: 'Sleeper deep links handed to the user', test: /^sleeper\.com$/i },
+  /*
+   * FOUR MORE OF THE SAME SHAPE, moved out of DATA_API_UNMONITORED on 2026-08-28 by
+   * re-deriving that ledger. Every one is an href or a URL returned for the client to
+   * link to — "Open in ESPN", "Open in Yahoo", `providerLeagueUrl`, a "Pay LeagueSafe"
+   * button, a sign-in instruction in af-legacy copy. None is ever fetched.
+   *
+   * ⚠ THE HOSTNAME IS NOT THE EVIDENCE. api.myfantasyleague.com IS a real feed and stays
+   * in the ledger; www.myfantasyleague.com is one <a href> in a paragraph of copy. The
+   * ledger's own note also flagged fantasy.espn.com as an open ESPN gap beside
+   * lm-api-reads.fantasy.espn.com — only the latter is a feed, and that note is now
+   * corrected.
+   */
+  {
+    name: 'share-link',
+    why: 'platform deep links handed to the user, never fetched',
+    test: /^(www\.myfantasyleague\.com|fantasy\.espn\.com|football\.fantasysports\.yahoo\.com|www\.leaguesafe\.com)$/i,
+  },
   { name: 'oauth', why: 'authentication endpoint, not a data feed', test: /^(accounts\.spotify\.com|api\.login\.yahoo\.com|oauth2\.googleapis\.com|oauth\.reddit\.com|connect\.facebook\.net|js\.stripe\.com)$/i },
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
   { name: 'platform-infra', why: 'email, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
+  /*
+   * OUTBOUND PUBLISHING, moved out of the data-API ledger on 2026-08-28. We WRITE to
+   * these; they are not reads that Postgres could have served, which is what the
+   * DB-first rule is about. api.twitter.com is /2/tweets from the X publish providers,
+   * and graph.facebook.com is the Facebook/Instagram publishers plus Meta CAPI pixel
+   * events and the OAuth /me lookup.
+   */
+  { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|graph\.facebook\.com)$/i },
   { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|api\.klipy\.(com|ai))$/i },
   { name: 'chat-integration', why: 'Discord OAuth, bot API and deep links — a chat platform, not a data feed', test: /^discord\.com$/i },
   { name: 'namespace', why: 'an XML/JSON-LD namespace, never fetched', test: /^(schema\.org|www\.w3\.org|www\.sitemaps\.org)$/i },
@@ -160,28 +192,41 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
  * to be a deep link rather than a feed and was moved to CATEGORIES; that correction only
  * happened because someone read the call sites instead of trusting the hostname.
  *
- * ⚠ STILL OPEN, same shape: lm-api-reads.fantasy.espn.com and fantasy.espn.com are neither
- * api.espn.com nor site.api.espn.com, the two ESPN hosts that ARE monitored.
+ * ⚠ STILL OPEN, same shape: lm-api-reads.fantasy.espn.com is neither api.espn.com nor
+ * site.api.espn.com, the two ESPN hosts that ARE monitored. This note used to name
+ * fantasy.espn.com alongside it; that was wrong — see below.
+ *
+ * RE-DERIVED 2026-08-28, and EIGHT OF NINETEEN ENTRIES DID NOT BELONG. Two tests already
+ * asserted that each entry was still referenced and still unmonitored; neither asserted
+ * the thing the ledger actually claims, that the host is a DATA FEED. Reading the call
+ * sites found the sleeper.com shape over and over:
+ *
+ *   fantasy.espn.com, football.fantasysports.yahoo.com, www.myfantasyleague.com,
+ *   www.leaguesafe.com   -> share-link. hrefs and providerLeagueUrl values. Never fetched.
+ *   openweathermap.org, www.mlbstatic.com
+ *                        -> cdn-media. Weather ICONS and team logo SVGs.
+ *   api.twitter.com, graph.facebook.com
+ *                        -> platform-infra. We PUBLISH to these.
+ *
+ * ⚠ THE HOSTNAME IS NOT THE EVIDENCE, and two pairs here prove it:
+ * api.myfantasyleague.com is a feed while www.myfantasyleague.com is one <a href>, and
+ * api.openweathermap.org is a monitored feed while openweathermap.org serves icons.
+ *
+ * www.mlbstatic.com is the sharpest lesson: the cdn-media rule ALREADY matched it, and
+ * this ledger only won because classify() checks the ledger first. Order, not evidence.
+ * The test below now forbids that overlap outright.
  *
  * The list may shrink freely. It must not grow.
  */
 const DATA_API_UNMONITORED = [
   'api.myfantasyleague.com',
-  'www.myfantasyleague.com',
   'bleacherreport.com',
   'lm-api-reads.fantasy.espn.com',
-  'fantasy.espn.com',
-  'football.fantasysports.yahoo.com',
   'www.fantrax.com',
   'api.clearsportsapi.com',
   'www.fleaflicker.com',
-  'www.leaguesafe.com',
   'fantasyfootballcalculator.com',
   'www.theaudiodb.com',
-  'openweathermap.org',
-  'api.twitter.com',
-  'graph.facebook.com',
-  'www.mlbstatic.com',
   /*
    * ADDED 2026-08-28 BY WIDENING COVERAGE, NOT BY NEW DEBT — the distinction the
    * bound below depends on. Two came into view with the scripts/ root and one was
@@ -420,8 +465,30 @@ describe('DB-first boundary — outbound host census', () => {
      *
      * If you are raising this number for any other reason, you are recording new
      * debt as though it were new visibility. Say so in the commit, or do not raise it.
+     *
+     * 19 -> 11 on the same day, by RE-DERIVING the list rather than adding to it: eight
+     * entries were never data feeds. The bound comes down with it — a ratchet left loose
+     * after a cleanup has stopped ratcheting.
      */
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(19)
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(11)
+  })
+
+  it('no unmonitored entry is ALSO matched by a category', () => {
+    /*
+     * An overlap means classify() is deciding by ORDER rather than by evidence, and
+     * whichever list happens to come first silently supplies the reason. That is not
+     * hypothetical: www.mlbstatic.com sat in the data-API ledger for its whole life
+     * while the cdn-media rule already matched it, because the ledger is checked first.
+     * It reads as a deliberate filing and is actually a coin toss.
+     */
+    const overlapping = DATA_API_UNMONITORED.filter((h) => CATEGORIES.some((c) => c.test.test(h))).map(
+      (h) => `${h} -> also ${CATEGORIES.find((c) => c.test.test(h))!.name}`,
+    )
+    expect(
+      overlapping,
+      'A host is in DATA_API_UNMONITORED and also matches a CATEGORIES rule. Decide which ' +
+        'it is by reading the call sites, and remove it from the other one.',
+    ).toEqual([])
   })
 
   it('every unmonitored entry is still referenced, and still unmonitored', () => {
