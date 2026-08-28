@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
+
 /**
  * Google Custom Search JSON API — optional fallback for a single player lookup.
  */
@@ -7,6 +9,21 @@ export async function googlePlayerStatusSearch(
   playerName: string,
   sport: string
 ): Promise<{ status: string; confidence: number; sourceUrl: string } | null> {
+  /*
+   * PROVIDER BOUNDARY. Custom Search is METERED — it bills per query — so this is
+   * outbound spend even though Google is not an LLM vendor. The switch is named
+   * AI_FEATURES_ENABLED, but what it governs is whether the platform is buying
+   * anything to answer a request, and this adapter exists only to enrich an AI
+   * status lookup.
+   *
+   * Guard form matches this function's own contract and its guarded sibling
+   * XGrokAdapter: it already returns null when the key is absent, so a spend refusal
+   * behaves identically to an unconfigured provider and no caller learns a new
+   * failure mode. Above the key check because when both are missing the switch is
+   * the actionable one.
+   */
+  if (!isAiSpendEnabled()) return null
+
   const key = process.env.GOOGLE_SEARCH_API_KEY?.trim()
   const cx = process.env.GOOGLE_SEARCH_CX?.trim()
   if (!key || !cx || !playerName.trim()) {

@@ -328,8 +328,19 @@ describe('AI spend guard — provider boundary census', () => {
   /** Constructing a provider SDK is a boundary on its own. */
   const SDK_CONSTRUCT = /\bnew\s+(OpenAI|Anthropic)\s*\(/
   /** A provider host is only a boundary when the file also makes a call — config files name hosts too. */
+  /*
+   * METERED SEARCH COUNTS AS SPEND, decided 2026-08-28. Serper and Google Custom
+   * Search bill per query and exist here only to feed AI answers, so the switch that
+   * decides whether the platform is buying anything has to govern them too. Neither
+   * vendor is an LLM host, so a pattern list of LLM vendors could never have seen them:
+   * lib/serper.ts sat unguarded on two request paths, and GoogleSearchAdapter.ts sat
+   * unguarded beside a sibling that WAS guarded.
+   *
+   * `www.googleapis.com` is scoped to /customsearch on purpose. Bare googleapis.com is
+   * also the YouTube publishing base and the translation host, which are not this.
+   */
   const PROVIDER_HOST =
-    /https?:\/\/api\.(openai|anthropic|x\.ai|deepseek|groq)\.com|generativelanguage\.googleapis\.com|openrouter\.ai/
+    /https?:\/\/api\.(openai|anthropic|x\.ai|deepseek|groq)\.com|generativelanguage\.googleapis\.com|openrouter\.ai|google\.serper\.dev|www\.googleapis\.com\/customsearch/
   const MAKES_CALL = /\bfetch\s*\(|\.chat\.completions\.create\s*\(|\.messages\.create\s*\(/
   /*
    * Third signal, and the one that matters most. A boundary can resolve its base

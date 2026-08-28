@@ -1,4 +1,5 @@
 import { cachedFetch, cacheKey } from '@/lib/api-cache';
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard';
 
 const SERPER_BASE = 'https://google.serper.dev';
 const DEFAULT_TIMEOUT = 8000;
@@ -171,6 +172,33 @@ async function _serperSearchUncached(
     page?: number;
   } = {}
 ): Promise<SerperSearchResponse & { error?: string }> {
+  /*
+   * PROVIDER BOUNDARY. Serper is a METERED search API — it bills per query — so it is
+   * outbound spend on the same footing as Google Custom Search, which this codebase
+   * now guards in lib/autocoach/status-sources/GoogleSearchAdapter.ts.
+   *
+   * Deliberately in the UNCACHED path, not in serperSearch(): serving a cached answer
+   * spends nothing and should not be refused. Same placement, and the same reason, as
+   * _grokEnrichUncached in lib/ai-external/grok.ts.
+   *
+   * Reported, not thrown, because every failure path in this function returns an
+   * `error` string in the response shape. The message names the switch rather than
+   * reusing "Serper API key not configured", which would send the next person to check
+   * a credential for what is a billing state.
+   */
+  if (!isAiSpendEnabled()) {
+    return {
+      searchParameters: {},
+      organic: [],
+      answerBox: null,
+      knowledgeGraph: null,
+      topStories: [],
+      peopleAlsoAsk: [],
+      relatedSearches: [],
+      error: "AI spend is disabled (AI_FEATURES_ENABLED is not 'true').",
+    };
+  }
+
   const apiKey = getApiKey();
   if (!apiKey) {
     return {
@@ -260,6 +288,15 @@ async function _serperNewsUncached(
     tbs?: string;
   } = {}
 ): Promise<SerperNewsResponse & { error?: string }> {
+  /* PROVIDER BOUNDARY — second uncached path. See _serperSearchUncached above. */
+  if (!isAiSpendEnabled()) {
+    return {
+      searchParameters: {},
+      news: [],
+      error: "AI spend is disabled (AI_FEATURES_ENABLED is not 'true').",
+    };
+  }
+
   const apiKey = getApiKey();
   if (!apiKey) {
     return {
