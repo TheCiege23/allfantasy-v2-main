@@ -299,13 +299,38 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
       if (!home || !away) continue
 
       const existing = byId.get(externalId)
+      const status = str(r.status) ?? str(r.season_type) ?? existing?.status ?? null
+
+      /*
+       * ⚠ RI SENDS 0 BEFORE KICKOFF TOO — the same trap the ESPN block below
+       * already guards against, which this one never got. Measured on
+       * production: 100 future `rolling_insights` rows carrying a 0-0 that no
+       * one played, alongside 285 correctly NULL.
+       *
+       * Note what `status` can be here: it falls back to `season_type`, so an
+       * unmatched row can carry "Preseason", which normalizes to nothing. That
+       * lands as not-played and the score stays NULL — the right way to be
+       * wrong, because an unreadable state must never mint a result.
+       *
+       * `existing` is preserved rather than overwritten with null: this loop
+       * merges several endpoints into one row, and a schedule row arriving
+       * after a finished-game row must not erase a score that was really
+       * observed. This refuses to INVENT a score; it does not discard one.
+       */
+      const state = normalizeGameStatus(status)
+      const played = state === 'in_progress' || state === 'final'
+
       const game: ProviderGame = {
         externalId,
         homeTeam: home,
         awayTeam: away,
-        homeScore: num(r.home_score) ?? num(box.home_team?.score) ?? existing?.homeScore ?? null,
-        awayScore: num(r.away_score) ?? num(box.away_team?.score) ?? existing?.awayScore ?? null,
-        status: str(r.status) ?? str(r.season_type) ?? existing?.status ?? null,
+        homeScore: played
+          ? (num(r.home_score) ?? num(box.home_team?.score) ?? existing?.homeScore ?? null)
+          : (existing?.homeScore ?? null),
+        awayScore: played
+          ? (num(r.away_score) ?? num(box.away_team?.score) ?? existing?.awayScore ?? null)
+          : (existing?.awayScore ?? null),
+        status,
         startTime: toDate(r.game_time) ?? existing?.startTime ?? null,
         week: weekOrNull(r.week) ?? existing?.week ?? null,
         // RI states it outright ("Preseason" | "Regular Season" | "Postseason"),

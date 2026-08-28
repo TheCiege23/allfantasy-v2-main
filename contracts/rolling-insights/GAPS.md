@@ -225,3 +225,62 @@ fixture, including "finds a game at all" — the exact silent failure above.
 have captured an empty slate and taught nothing — which is the re-probing trap this file exists to
 prevent. **Probe each on a game day for that sport.** The parser accepts both the id-keyed object
 form and an array form until each has its own fixture; do not narrow it to the MLB shape.
+
+---
+
+## 📏 MEASURED 2026-08-28 — `/live/{date}` is keyed on the **US EASTERN** date
+
+**A UTC date blinds the live feed every game night.** `buildRestPathCandidates` in
+`lib/workers/providers/rolling-insights.ts` built the path from
+`new Date().toISOString()`. Between **00:00Z and 04:00Z** — 8pm to midnight Eastern — that is
+TOMORROW in the vendor's terms, and it answers:
+
+    404 {"error":"Bad Request",
+         "message":"You cannot request live data for future dates as there are no live games yet."}
+
+That window is NFL primetime and the entire evening college slate. The endpoint this contract
+calls PRIMARY for game day was dark exactly when games are played, every night, and the failure
+was indistinguishable from a vendor outage.
+
+Controlled, one variable, same token, same headers, same buster:
+
+| path | result |
+|---|---|
+| `/live/2026-08-28/NFL` (UTC today) | 404 future-dates |
+| `/live/2026-08-27/NFL` (Eastern today) | **200** — Steelers at Bills, `game_status: "1:50 2nd 4th & 10"` |
+
+Fixed by formatting the date in `America/New_York`, with the previous Eastern day kept as a
+fallback CANDIDATE — a late west-coast game runs past Eastern midnight and after the rollover
+belongs to yesterday's date.
+
+⚠ **The cache-buster was ruled out before the date was blamed.** Removing `_` left the 404
+unchanged, so this is not the buster and not `304_conflict`.
+
+## ✅ ANSWERS the open vendor question above — **`/live` DOES disambiguate entitlement**
+
+The `N-02` section asks: *"Should an unentitled sport return 401/403 rather than 304?"* On
+`team-info` it does not. **On `/live/{date}/{SPORT}` it does**, with an explicit message:
+
+    404 "You are not signed up for the sport you are requesting."
+
+Measured 2026-08-28 on a PAST date, both credentials, disjoint exactly as the `N-02` table says:
+
+| | `RSC_TOKEN` | `RSC_TOKEN2` |
+|---|---|---|
+| `/live/2026-08-27/NFL` | **200** (live game) | 404 not-signed-up |
+| `/live/2026-08-27/NCAAFB` | 404 not-signed-up | **304** (entitled; empty) |
+
+**So `/live` is the cheapest unambiguous entitlement probe this vendor offers** — a 404 with that
+message is a definite "no", where a 304 anywhere else could be cache, entitlement, or no-data.
+
+⚠ **ORDER OF CHECKS: the future-date check fires BEFORE the entitlement check.** Probing a FUTURE
+date returns the date message and hides entitlement entirely. Always probe a PAST date when the
+question is "are we subscribed".
+
+🛑 **A CORRECTION, RECORDED SO NOBODY REPEATS IT.** This session first concluded "the RI
+subscription does not include college football" — from a probe that hard-coded
+`ROLLING_INSIGHTS_RSC_TOKEN` and stopped. That is exactly the trap `N-02` already documents
+("the first reader took the first token present and stopped"). **NCAAFB IS entitled, on
+`RSC_TOKEN2`.** A single-credential probe cannot answer an entitlement question on this
+deployment — `riCredentialsFor` exists for this reason, and any ad-hoc probe must iterate
+credentials the same way.
