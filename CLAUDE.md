@@ -281,8 +281,25 @@ caught them.
 temporary, and a health probe is permanent. The probe is the recognised standing
 exception: checking whether a provider is up is the one job that *cannot* be done
 by reading Postgres, and the convention predates this note in
-`SystemHealthResolver.ts`. That is the only permanent use. Everything else the
-marker touches still needs a migration plan.
+`SystemHealthResolver.ts`. That is the only permanent use **of this marker**.
+Everything else `db-first-exception:` touches still needs a migration plan.
+
+**`db-first-auth-exchange:` is a SECOND permanent exception, and a SEPARATE marker
+on purpose.** An authentication call trades credentials for a session — Postgres
+cannot answer it by definition, so it is not debt and has no migration plan.
+Overloading `db-first-exception:` for it would blunt that marker for everyone,
+which is the mistake already made and corrected on the weather geocode above.
+
+It is **self-limiting**: the guard honours it only when the line also names an auth
+path segment (`/login`, `/oauth`, `/token`, `/authorize`, `/signin`), so pasting it
+onto a stats or league URL still reports the line. Extending `AUTH_ENDPOINT_PATH`
+is a deliberate, visible edit.
+
+The one use today is `app/api/auth/mfl/route.ts`, which POSTs a username and
+password to MyFantasyLeague's `/login` and stores the returned cookie. ⚠ The
+segment test runs against the **whole line**, not the parsed URL path, because the
+guard's URL matcher stops at `}` — a template URL like `.../${apiYear}/login` is
+captured as `.../${apiYear` and its pathname never contains `/login`.
 
 Treat both contracts' "the app never calls the vendor" line as the **target**
 architecture, not a description of current state.

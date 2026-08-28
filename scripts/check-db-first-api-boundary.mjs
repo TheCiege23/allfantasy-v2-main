@@ -252,6 +252,23 @@ const DATA_API_IDENTIFIERS = [
  * Scoped to explicit filenames rather than a `lib/providers/*` glob, so a real fetching client
  * dropped into that directory is still caught.
  */
+/**
+ * Path segments that make a URL an AUTHENTICATION endpoint rather than a data read.
+ * Gates the `db-first-auth-exchange:` marker — see the scan loop for why the marker is
+ * separate from `db-first-exception:` and why this is matched against the whole line.
+ *
+ * Kept deliberately short. Every addition widens what the marker can excuse, so it should
+ * be made one segment at a time, for a real endpoint someone has read.
+ */
+/*
+ * ⚠ Terminated by \b, not by a hand-listed set of closing characters. The first version
+ * listed `/`, `?`, backtick and end-of-line — which honoured the marker on a template
+ * literal ending in `/login\`` and silently REFUSED it on the far more common
+ * `"…/login")`. A positive control caught it; the enumeration was always going to miss a
+ * quote or a paren.
+ */
+const AUTH_ENDPOINT_PATH = /\/(login|logout|oauth|token|authorize|signin|sign-in)\b/i;
+
 const HOST_DEFINITION_FILES = [
   /^lib\/providers\/espnUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^lib\/providers\/theSportsDbUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
@@ -710,6 +727,32 @@ function collectViolations(rootDir, filesToScan, changedLines = null) {
         continue;
       }
 
+      /*
+       * `db-first-auth-exchange:` — a SECOND PERMANENT EXCEPTION, and deliberately NOT the
+       * `db-first-exception:` marker above.
+       *
+       * An authentication call trades credentials for a session. Postgres cannot answer it
+       * by definition, so it is not debt and has no migration plan — and CLAUDE.md reserves
+       * the other marker for TEMPORARY debt plus the one standing health-probe case.
+       * Overloading it here would blunt it for everyone, which is the mistake this repo
+       * already made and corrected on the weather geocode.
+       *
+       * ⚠ IT IS SELF-LIMITING BY DESIGN, because a marker anyone can paste anywhere is
+       * worth nothing. It is honoured only when the line ALSO names an auth path segment.
+       * Paste it onto a stats or league URL and the line is still reported — the marker
+       * cannot wave through a data read.
+       *
+       * ⚠ Tested against the LINE, not the parsed pathname, and that is forced rather than
+       * sloppy: the URL matcher stops at `}`, so a template URL like
+       * `https://api.myfantasyleague.com/${apiYear}/login` is captured as
+       * `https://api.myfantasyleague.com/${apiYear` and its pathname never contains
+       * `/login`. Checking the parsed path would silently never match.
+       *
+       * Fails toward reporting: an auth endpoint on an unusual path is NOT excused, and
+       * extending the segment list is then a deliberate, visible edit.
+       */
+      const authExchange = line.includes("db-first-auth-exchange") && AUTH_ENDPOINT_PATH.test(line);
+
       const matches = line.matchAll(/https?:\/\/[^\s"'`\\)\]}]+/gi);
       for (const match of matches) {
         const rawUrl = match[0];
@@ -718,6 +761,10 @@ function collectViolations(rootDir, filesToScan, changedLines = null) {
         try {
           hostname = new URL(rawUrl).hostname;
         } catch {
+          continue;
+        }
+
+        if (authExchange) {
           continue;
         }
 
