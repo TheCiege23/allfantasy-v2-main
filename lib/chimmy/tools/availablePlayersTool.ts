@@ -319,7 +319,23 @@ export async function buildAvailablePlayersContext(
    * answer, and otherwise it is replaced wholesale — never blended — and the
    * block names which source it used.
    */
-  if (available.length < MIN_USEFUL) {
+  /*
+   * ⚠ A CONCEPT MISMATCH IS A REASON TO SWITCH, NOT A REASON TO CAVEAT. Every
+   * one of our 165 published rows is `leagueConcept: 'dynasty'`, and Beta 1
+   * Zombie League is `isDynasty: false` — a redraft league being handed
+   * long-term asset values. The block already carried a sentence telling the
+   * model to mention that; the KBFL answer proved a caveat the model may drop
+   * is not a fix. FantasyCalc publishes a redraft board, so the honest move is
+   * to ask for the one that matches.
+   *
+   * Depth stays a reason to switch too — this widens when we fall back, it does
+   * not replace the depth rule.
+   */
+  const houseIsDynasty = concepts.includes('dynasty')
+  const conceptMismatch =
+    concepts !== 'market' && Boolean(league.isDynasty) !== houseIsDynasty
+
+  if (available.length < MIN_USEFUL || conceptMismatch) {
     const derived = fantasyCalcSettingsForLeague({
       isDynasty: league.isDynasty,
       scoring: league.scoring,
@@ -329,7 +345,14 @@ export async function buildAvailablePlayersContext(
     /* No roster positions on file means no basis to derive one — say so below. */
     const fcSettings = derived ?? { isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 }
     const deep = await deepPoolFromFantasyCalc(rostered, fcSettings)
-    if (deep && deep.available.length > available.length) {
+    /*
+     * On a concept mismatch any non-empty matching board beats a mismatched one,
+     * so depth is not required — but an EMPTY board never is, or the switch
+     * would trade a wrong-concept answer for no answer.
+     */
+    const worthSwitching =
+      deep && (deep.available.length > available.length || (conceptMismatch && deep.available.length > 0))
+    if (deep && worthSwitching) {
       const shown = deep.available.slice(0, MAX_SHOWN).map((p) => `${p.name} (${p.position}, rank #${p.overallRank})`)
       const more =
         deep.available.length > shown.length
@@ -339,7 +362,9 @@ export async function buildAvailablePlayersContext(
         `UNROSTERED PLAYERS in "${leagueName}", best FantasyCalc dynasty rank first:`,
         `${shown.join('; ')}${more}`,
         `That is ${deep.available.length} of the ${deep.total} ranked players FantasyCalc covers.`,
-        `Only ${available.length} of the ${valued.length} players AllFantasy publishes its own value for are unrostered here, so this list uses FantasyCalc's deeper set instead. Those are two different scales — do NOT compare a rank here against an AllFantasy value from another answer.`,
+        conceptMismatch
+          ? `AllFantasy publishes ${concepts} values only, and this is a ${league.isDynasty ? 'dynasty' : 'redraft'} league, so this list uses FantasyCalc's matching board instead of a mismatched house value. Those are two different scales — do NOT compare a rank here against an AllFantasy value from another answer.`
+          : `Only ${available.length} of the ${valued.length} players AllFantasy publishes its own value for are unrostered here, so this list uses FantasyCalc's deeper set instead. Those are two different scales — do NOT compare a rank here against an AllFantasy value from another answer.`,
         /*
          * ⚠ SAY WHICH BOARD THIS IS. The QB ladder moves hardest between a 1QB
          * and a superflex league, so the setting that produced the ranking has

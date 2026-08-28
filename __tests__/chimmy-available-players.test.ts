@@ -477,3 +477,104 @@ describe('a league with no roster positions keeps the honest caveat', () => {
     expect(out).toMatch(/no roster positions on file/)
   })
 })
+
+/*
+ * ⚠ A CONCEPT MISMATCH IS A REASON TO SWITCH, NOT A REASON TO CAVEAT.
+ *
+ * Every one of our 165 published rows is `leagueConcept: 'dynasty'`, and Beta 1
+ * Zombie League is `isDynasty: false` — a redraft league being handed long-term
+ * asset values. The block already carried a sentence telling the model to
+ * mention that. The KBFL answer proved a caveat the model may drop is not a
+ * fix: it was told to flag a superflex skew and it did not.
+ */
+const REDRAFT_LEAGUE = {
+  name: 'Beta 1 Zombie League',
+  sport: 'NFL',
+  isDynasty: false,
+  scoring: 'PPR Superflex TEP',
+  settings: { roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN', 'BN', 'BN'] },
+  _count: { teams: 20 },
+}
+const DYNASTY_HOUSE_VALUES = [
+  { ...value('12527', 'Ashton Jeanty', 'RB', 7219), leagueConcept: 'dynasty' },
+  { ...value('9493', 'Puka Nacua', 'WR', 7000), leagueConcept: 'dynasty' },
+  { ...value('9226', 'Devon Achane', 'RB', 6800), leagueConcept: 'dynasty' },
+  { ...value('7564', 'Jamarr Chase', 'WR', 6700), leagueConcept: 'dynasty' },
+  { ...value('9221', 'Jahmyr Gibbs', 'RB', 6600), leagueConcept: 'dynasty' },
+  { ...value('9509', 'Bijan Robinson', 'RB', 6500), leagueConcept: 'dynasty' },
+]
+
+describe('a redraft league is not answered with dynasty values', () => {
+  beforeEach(() => {
+    h.leagueFind.mockResolvedValue(REDRAFT_LEAGUE)
+    /* Only one player rostered, so the house set is DEEP — depth is not the reason to switch. */
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['12527'] } }])
+    h.valueFindMany.mockResolvedValue(DYNASTY_HOUSE_VALUES)
+    h.fantasyCalc.mockResolvedValue([fc('4034', 'Nick Chubb', 'RB', 40)])
+  })
+
+  it('switches to FantasyCalc even though the house set has plenty', async () => {
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+
+    expect(out).toContain('best FantasyCalc dynasty rank first')
+    expect(out).toContain('Nick Chubb')
+    expect(out).not.toContain('Puka Nacua')
+  })
+
+  it('asks FantasyCalc for the REDRAFT board', async () => {
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ isDynasty: false }))
+  })
+
+  it('says the mismatch is why it switched, not depth', async () => {
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toMatch(/publishes dynasty values only, and this is a redraft league/)
+    expect(out).not.toMatch(/so this list uses FantasyCalc.s deeper set/)
+  })
+
+  /*
+   * ⚠ SWITCHING TO NOTHING IS WORSE THAN A MISMATCH. If the matching board has
+   * no unrostered players, the house answer stands rather than vanishing.
+   */
+  it('keeps the house list when the matching board is empty', async () => {
+    h.fantasyCalc.mockResolvedValue([])
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toContain('highest AllFantasy market value first')
+    expect(out).toContain('Puka Nacua')
+  })
+})
+
+describe('a matching concept keeps the house values', () => {
+  /* A dynasty league and dynasty house values agree — no reason to switch. */
+  it('does not reach for FantasyCalc when the concepts line up', async () => {
+    h.leagueFind.mockResolvedValue({ ...REDRAFT_LEAGUE, isDynasty: true })
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['12527'] } }])
+    h.valueFindMany.mockResolvedValue(DYNASTY_HOUSE_VALUES)
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toContain('highest AllFantasy market value first')
+    expect(h.fantasyCalc).not.toHaveBeenCalled()
+  })
+
+  /*
+   * ⚠ ROWS WITH NO CONCEPT MUST NOT LOOK LIKE A MISMATCH. `leagueConcept` is
+   * nullable; treating an absent concept as "not dynasty" would send every
+   * dynasty league to FantasyCalc for no reason.
+   */
+  it('treats an unlabelled house set as no mismatch', async () => {
+    h.leagueFind.mockResolvedValue({ ...REDRAFT_LEAGUE, isDynasty: true })
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['12527'] } }])
+    h.valueFindMany.mockResolvedValue([
+      value('9493', 'Puka Nacua', 'WR', 7000),
+      value('9226', 'Devon Achane', 'RB', 6800),
+      value('7564', 'Jamarr Chase', 'WR', 6700),
+      value('9221', 'Jahmyr Gibbs', 'RB', 6600),
+      value('9509', 'Bijan Robinson', 'RB', 6500),
+    ])
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).not.toHaveBeenCalled()
+    expect(out).toContain('highest AllFantasy market value first')
+  })
+})
