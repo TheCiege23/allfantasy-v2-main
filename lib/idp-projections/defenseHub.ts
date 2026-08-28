@@ -40,6 +40,21 @@ export interface DefenseHubDefender {
   vorp: number | null
   positionRank: number | null
   value: number | null
+  /**
+   * True when `value` is the tier curve's FLOOR rather than a measured price.
+   *
+   * ⚠ THE CURVE SATURATES, AND THE RAW NUMBER HIDES IT. Measured on NFC Dreaming!
+   * 2026-08-28: of 250 priced defenders, 121 (48.4%) sit on the floor of 88, against a median
+   * of 106. Rendered as a bare number, a floor price is indistinguishable from a real one, so
+   * two floor-priced defenders read as equivalent assets and invite a trade graded on the
+   * difference between them. Same failure as a "C" trade grade that actually means no data.
+   *
+   * ⚠ THIS FLAG IS SPECIFIC TO THIS SURFACE'S VALUE SOURCE. `loadLeagueIdpVorp` prices only
+   * defenders the league could rank, so its curve bottoms out; `buildIdpKickerValueMap` —
+   * which waiver-intelligence and league-rankings-v2 use — does NOT saturate (measured the
+   * same day: 1 of 295 at the floor, 164 distinct values). Do not copy this flag onto those.
+   */
+  valueIsFloor: boolean
   /** Why the numbers above are absent, when they are. Null when they are present. */
   reason: string | null
   /**
@@ -289,6 +304,14 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     logsByPlayer.set(l.playerId, arr)
   }
 
+  /*
+   * The floor is a property of the WHOLE priced board, not of this manager's slice — taking
+   * the minimum over `myDefenders` would call his worst defender "floor" in a roster that
+   * happens to hold none.
+   */
+  const allValues = [...vorp.valueBySleeperId.values()]
+  const boardFloor = allValues.length > 0 ? Math.min(...allValues) : null
+
   const defenders: DefenseHubDefender[] = myDefenders.map((d) => {
     const projection = vorp.projectionBySleeperId.get(d.sleeperId) ?? null
     const v = vorp.vorpBySleeperId.get(d.sleeperId) ?? null
@@ -301,6 +324,8 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
       vorp: v,
       positionRank: vorp.positionRankBySleeperId.get(d.sleeperId) ?? null,
       value: vorp.valueBySleeperId.get(d.sleeperId) ?? null,
+      valueIsFloor:
+        boardFloor != null && (vorp.valueBySleeperId.get(d.sleeperId) ?? null) === boardFloor,
       /*
        * The two absences are different and a manager acts on them differently: a player with no
        * scored game yet will have one, a player the league's scoring cannot price never will.
