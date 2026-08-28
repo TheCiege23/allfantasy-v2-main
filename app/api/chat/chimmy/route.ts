@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import { z } from 'zod'
 import { getServerSession } from 'next-auth'
 import OpenAI from 'openai'
@@ -814,6 +815,11 @@ function resolveUsageLogTokensUsed(modelOutputs?: Array<{
 }
 
 function getVisionClient(): OpenAI | null {
+  // PROVIDER BOUNDARY. Non-throwing on purpose: this returns `OpenAI | null`
+  // and callers treat null as "vision unavailable", so a spend refusal
+  // degrades exactly the way a missing key already does rather than
+  // surfacing as a 500 from a chat turn.
+  if (!isAiSpendEnabled()) return null
   const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
   if (!key) return null
   try {

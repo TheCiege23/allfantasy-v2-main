@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createDemoChimmyReply } from '@/lib/startSit/shared'
+import { assertAiSpendAllowed, isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -28,6 +29,10 @@ export async function POST(req: Request) {
   }
 
   try {
+    // PROVIDER BOUNDARY. This route has no session check and no rate limit,
+    // so the spend switch is the only thing standing between an anonymous
+    // caller and a paid completion.
+    assertAiSpendAllowed('start-sit.chimmy')
     const openai = new OpenAI({
       apiKey: key,
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
@@ -52,6 +57,11 @@ export async function POST(req: Request) {
     const reply = completion.choices[0]?.message?.content?.trim() || createDemoChimmyReply(userText)
     return NextResponse.json({ reply })
   } catch (e) {
+    // A refusal is not a fault: fall back to the same demo reply the
+    // missing-key path returns, and do not log it as an error.
+    if (isAiSpendDisabledError(e)) {
+      return NextResponse.json({ reply: createDemoChimmyReply(userText) })
+    }
     console.error('[start-sit/chimmy]', e)
     return NextResponse.json({ reply: createDemoChimmyReply(userText) })
   }

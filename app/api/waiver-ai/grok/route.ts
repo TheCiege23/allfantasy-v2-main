@@ -8,10 +8,15 @@ import OpenAI from 'openai';
 import { executeSerperWebSearch, executeSerperNewsSearch } from '@/lib/serper';
 import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
+import { assertAiSpendAllowed, AiSpendDisabledError } from '@/lib/ai/aiSpendGuard';
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 function getGrokClient() {
+  // PROVIDER BOUNDARY. In the factory rather than at handler entry so it
+  // still holds if a future path builds a client elsewhere in the file.
+  assertAiSpendAllowed('waiver-ai.grok')
+
   const apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
   if (!apiKey) {
     throw new Error("XAI_API_KEY/GROK_API_KEY is missing")
@@ -24,6 +29,8 @@ function getGrokClient() {
 }
 
 function getOpenAIClient() {
+  assertAiSpendAllowed('waiver-ai.openai')
+
   const apiKey =
     process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
 
@@ -198,6 +205,10 @@ async function runGrokWithTools(systemPrompt: string, useRealTime: boolean): Pro
           newsEvidence.push({ source: 'news', metric: 'news_search', value: `${args.query || 'waiver news'} (${result.news.length} articles)` });
         }
       } else if (fnName === 'x_keyword_search') {
+        // Outside the try below: that block turns any throw into a
+        // 'search unavailable' note, which would downgrade a spend refusal
+        // into a partial answer indistinguishable from a provider timeout.
+        assertAiSpendAllowed('waiver-ai.x_keyword_search');
         try {
           const xRes = await fetch('https://api.x.ai/v1/tools/x_keyword_search', {
             method: 'POST',
@@ -465,6 +476,11 @@ Required format:
       factsUsed: deterministic.facts,
     });
   } catch (error) {
+    // A disabled spend switch is a payment state, not a fault. A 500 here
+    // would send the next person to debug the provider instead of the flag.
+    if (error instanceof AiSpendDisabledError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.httpStatus });
+    }
     console.error('[waiver-ai/grok]', error);
     return NextResponse.json({ error: 'Failed to generate waiver suggestions' }, { status: 500 });
   }

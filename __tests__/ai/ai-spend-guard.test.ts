@@ -96,6 +96,12 @@ describe('AI spend guard — provider boundary coverage', () => {
     // those calls. It is unauthenticated and rate-limited only by IP
     // (5/60s), and MAX_TOOL_TURNS lets one request drive several model calls.
     'app/api/instant/improve-trade/route.ts',
+    // The other three inline-provider routes, guarded 2026-08-27.
+    // start-sit/chimmy has NO session check and NO rate limit, so the spend
+    // switch is the only thing between an anonymous caller and a paid call.
+    'app/api/chat/chimmy/route.ts',
+    'app/api/start-sit/chimmy/route.ts',
+    'app/api/waiver-ai/grok/route.ts',
   ]
 
   /**
@@ -139,8 +145,17 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/agents/workers/api-health-monitor.ts',
   ]
 
-  it.each(GUARDED)('%s calls the spend guard', (file) => {
-    expect(read(file)).toMatch(/assertAiSpendAllowed\(/)
+  /*
+   * Either form counts as wired to the guard, and the choice is forced by the
+   * boundary's own contract rather than preference:
+   *   assertAiSpendAllowed - throws; correct where a missing key already throws.
+   *   isAiSpendEnabled     - returns false; correct where the caller returns a
+   *                          null/degraded value instead, as getVisionClient in
+   *                          chat/chimmy does. Making that one throw to satisfy
+   *                          a regex would turn a graceful fallback into a 500.
+   */
+  it.each(GUARDED)('%s is wired to the spend guard', (file) => {
+    expect(read(file)).toMatch(/assertAiSpendAllowed\(|isAiSpendEnabled\(/)
   })
 
   it('the unguarded ratchet has not grown', () => {
