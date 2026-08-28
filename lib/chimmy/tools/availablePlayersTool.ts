@@ -100,8 +100,12 @@ async function deepPoolFromFantasyCalc(
   /*
    * The repo-wide default, and one of the keys already cached — so this is
    * normally a DB read. A miss self-populates through one fetch rather than
-   * serving nulls. Note it is a SUPERFLEX (2QB) baseline, which is why the
-   * block says the values are not tuned to this league.
+   * serving nulls, which is the whole point of going through the DB-first
+   * accessor rather than the adapter.
+   *
+   * ⚠ IT IS A SUPERFLEX (2QB) BASELINE, and the caller states that in the block.
+   * Measured on this key, the top unrostered names come back as four straight
+   * quarterbacks — a 1QB league reading that as a pickup board is being misled.
    */
   const players = await getFantasyCalcValuesDbFirst({
     isDynasty: true,
@@ -271,6 +275,13 @@ export async function buildAvailablePlayersContext(
         `${shown.join('; ')}${more}`,
         `That is ${deep.available.length} of the ${deep.total} ranked players FantasyCalc covers.`,
         `Only ${available.length} of the ${valued.length} players AllFantasy publishes its own value for are unrostered here, so this list uses FantasyCalc's deeper set instead. Those are two different scales — do NOT compare a rank here against an AllFantasy value from another answer.`,
+        /*
+         * ⚠ THE BASELINE IS SUPERFLEX AND IT SHOWS. On the 2QB key the top
+         * available names come back as four straight quarterbacks. Handed to a
+         * 1QB league with no warning that is a distorted board, so the
+         * distortion is named rather than assumed harmless.
+         */
+        'These ranks come from a SUPERFLEX (2QB) dynasty baseline, not this league\'s own settings. If this is a 1QB league, quarterbacks are ranked higher here than they are worth to them — say so rather than recommending a quarterback off this list alone.',
       )
       lines.push(...limitLines('FantasyCalc dynasty'))
       return lines.join('\n')

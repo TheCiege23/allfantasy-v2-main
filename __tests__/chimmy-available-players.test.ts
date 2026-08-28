@@ -341,3 +341,31 @@ describe('the house set stays primary when it can answer', () => {
     expect(h.fantasyCalc).not.toHaveBeenCalled()
   })
 })
+
+describe('the fallback names the distortion in its own baseline', () => {
+  /*
+   * ⚠ THE DEFAULT KEY IS SUPERFLEX (2QB) AND IT SHOWS. Measured on that key,
+   * the top unrostered names come back as four straight quarterbacks. A 1QB
+   * league reading that as a pickup board is being misled, so the block says
+   * so rather than treating the distortion as harmless.
+   */
+  it('warns that the ranks are a superflex baseline', async () => {
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['9488', '9226', '12527'] } }])
+    h.fantasyCalc.mockResolvedValue([fc('4034', 'Nick Chubb', 'RB', 368)])
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toMatch(/SUPERFLEX \(2QB\) dynasty baseline/)
+    expect(out).toMatch(/If this is a 1QB league/)
+  })
+
+  /* The house-values path has no such skew, so it must not carry the warning. */
+  it('does not warn on the AllFantasy path', async () => {
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['x'] } }])
+    h.valueFindMany.mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => value(`p${i}`, `Player ${i}`, 'RB', 1000 - i)),
+    )
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).not.toMatch(/SUPERFLEX/)
+  })
+})
