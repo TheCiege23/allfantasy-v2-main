@@ -121,6 +121,64 @@ name). The first bucket is not a bug and must not be counted as a gap.
 Exit criterion: a number for "how many NFL rows are matchable", agreed before any
 matcher is tuned to hit it.
 
+#### RESULT, measured 2026-08-27
+
+Population: 7,672 NFL `rolling_insights` rows reachable by neither route (no
+`sleeperId` on the row, no `PlayerIdentityMap` pairing).
+
+| bucket | rows | share |
+| --- | ---: | ---: |
+| **Matchable — strong** (unique name, position family agrees, both teams known and equal) | **1,409** | 18.4% |
+| **Matchable — weak** (unique name, position family agrees, team unknown on one side) | **5,267** | 68.7% |
+| Ambiguous but narrowed to one candidate | 77 | 1.0% |
+| Real disagreement on team and/or position | 562 | 7.3% |
+| Still ambiguous — one name, several Sleeper players | 195 | 2.5% |
+| No Sleeper counterpart of that name at all | 162 | 2.1% |
+
+**The headline number is 6,676 — strong plus weak.** That would take NFL coverage
+from 19.8% to roughly 89% (1,891 + 6,676 of 9,563).
+
+#### The precision behind it, and the one tier to refuse
+
+The same matcher was run against the 1,890 pairs `PlayerIdentityMap` already
+asserts, where the right answer is known:
+
+| tier | attempted | correct | precision |
+| --- | ---: | ---: | ---: |
+| strong | 1,492 | 1,490 | **99.9%** |
+| weak | 200 | 200 | **100%** |
+| ambiguous-narrowed | 45 | 39 | **86.7%** |
+
+So **exclude the narrowed-ambiguous tier.** 86.7% means roughly one in seven
+wrong, and a wrong pairing here is invisible and permanent — exactly the failure
+`sleeperId @unique` cannot catch. The 77 rows it would add are not worth it.
+
+⚠ **THE VALIDATION IS FRIENDLY TO ITSELF AND THE NUMBER SHOULD BE READ AS A
+CEILING.** Those 1,890 ground-truth pairs were themselves produced by some earlier
+matching process, so measuring a name matcher against them is partly circular: it
+can only confirm agreement with whatever rule made them. Treat 99.9% as "does not
+contradict the existing pairs", not as "verified against reality". The signal
+worth trusting is the *relative* one — the narrowed-ambiguous tier failed 13% even
+on this friendly set, which is a floor on its error rate rather than a ceiling.
+
+⚠ **Two comparison artifacts nearly produced a wrong answer**, recorded so the next
+run does not repeat them. A first pass put 83.1% of the population in "team and/or
+position disagree", which is implausible on its face. Two causes: Rolling Insights
+stores `Jacksonville Jaguars` where Sleeper stores `JAX` (handled — `normalizeTeamAbbrev`
+does resolve full names), and more importantly **Sleeper's `team` is NULL on
+thousands of rows**, which is *unknown*, not a disagreement. Position taxonomies
+also differ — RI `DL` against Sleeper `DE`, RI `CB` against Sleeper `WR` for a
+player who genuinely converted — so positions must be compared as FAMILIES
+(DL/LB/DB/OL) rather than labels. Correcting both moved the disagreement bucket
+from 6,374 to 562.
+
+#### What this does NOT say
+
+This is NFL only. `PlayerIdentityMap` holds no NCAAF rows and no NBA/NHL/MLB
+`rollingInsightsId` pairs at all, so nothing here licenses a matcher for those
+sports — there is no ground truth to validate one against, which is a different
+and worse position than a low number.
+
 ### Phase 3 — backfill NFL, guarded
 
 Extend the pairing for NFL only, using the existing writers. Rules:
