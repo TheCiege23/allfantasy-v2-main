@@ -13,7 +13,14 @@ export const POST = withApiUsage({ endpoint: "/api/auth/mfl", tool: "AuthMfl" })
 
     const apiYear = year || new Date().getFullYear()
     
-    const loginUrl = `https://api.myfantasyleague.com/${apiYear}/login`
+    /*
+     * Trades MFL credentials for a session cookie. NOT a data read — Postgres cannot
+     * authenticate a user against MyFantasyLeague — so this is a permanent exception
+     * rather than debt awaiting a migration, and it carries the auth marker instead of
+     * `db-first-exception:`. The mFLConnection row written below is the RESULT of the
+     * exchange, and that part IS DB-first.
+     */
+    const loginUrl = `https://api.myfantasyleague.com/${apiYear}/login` // db-first-auth-exchange: credentials for a session
     const loginRes = await fetch(loginUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
