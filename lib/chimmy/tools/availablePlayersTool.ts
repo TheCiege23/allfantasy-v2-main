@@ -70,14 +70,60 @@ const MIN_USEFUL = 5
  * the FantasyCalc path carry them identically — a fallback that quietly drops
  * the caveats is worse than no fallback.
  */
-function limitLines(basis: string): string[] {
-  return [
+function limitLines(basis: string, unrankedStarterSlots: string[]): string[] {
+  const lines = [
     'LIMITS you must respect when using this block:',
     '1. "Unrostered" means on nobody\'s roster at our last sync. It does NOT mean "on waivers" or "free to add right now" — whether a player must clear waivers depends on the league\'s waiver rules and on when he was dropped, and we hold NO claim or drop timing at all.',
     '2. This covers only players the source ranks, so it lists the notable names rather than the full pool. Never say a player is unavailable just because he is missing here.',
     `3. These are ${basis} values — long-term asset worth, not a this-week start ranking. In a redraft league say so before recommending a rookie who is ranked here for years we have not played yet.`,
-    'You may recommend from this list and compare these players against the user\'s roster. Do NOT state that anyone is claimable, and do NOT invent FAAB bids or waiver priority.',
   ]
+
+  /*
+   * ⚠ NEITHER VALUE SOURCE RANKS IDP OR KICKERS, AND 70 OF 94 NFL LEAGUES START
+   * THEM. FantasyCalc publishes QB/RB/WR/TE (plus picks); our own published
+   * values are the same four. KBFL starts SEVEN defensive players and a kicker,
+   * so a manager whose hole is at linebacker gets a list of receivers and no
+   * indication that the position they asked about was never in scope. That is
+   * the same silent absence this whole block exists to prevent, so the gap is
+   * named whenever the league actually starts one of those slots.
+   */
+  if (unrankedStarterSlots.length > 0) {
+    lines.push(
+      `4. This league starts ${unrankedStarterSlots.join(', ')}, and NO source we have ranks those positions — the list above is quarterbacks, running backs, receivers and tight ends only. If the user asks about one of those positions, say plainly that we do not rank it rather than offering an offensive player instead.`,
+    )
+  }
+
+  lines.push(
+    'You may recommend from this list and compare these players against the user\'s roster. Do NOT state that anyone is claimable, and do NOT invent FAAB bids or waiver priority.',
+  )
+  return lines
+}
+
+/** Starting slots the league fills that neither value source can rank. */
+const RANKED_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'BN', 'IR', 'TAXI'])
+
+function unrankedStarterSlots(settings: unknown): string[] {
+  const raw = (settings ?? null) as Record<string, unknown> | null
+  const positions = raw?.roster_positions ?? raw?.rosterPositions
+  if (!Array.isArray(positions)) return []
+
+  const labels: Record<string, string> = {
+    DL: 'defensive linemen',
+    LB: 'linebackers',
+    DB: 'defensive backs',
+    IDP_FLEX: 'an IDP flex',
+    DEF: 'a team defense',
+    'D/ST': 'a team defense',
+    K: 'a kicker',
+  }
+  const seen = new Set<string>()
+  for (const p of positions) {
+    const slot = String(p).toUpperCase()
+    if (RANKED_POSITIONS.has(slot)) continue
+    const label = labels[slot]
+    if (label) seen.add(label)
+  }
+  return [...seen]
 }
 
 /**
@@ -247,6 +293,9 @@ export async function buildAvailablePlayersContext(
     return `Player values are only published for NFL, so there is no available-player ranking for "${leagueName}" (${league.sport}). Say that plainly; do not name anyone.`
   }
 
+  /* Starting slots this league fills that no source we hold can rank. */
+  const unranked = unrankedStarterSlots(league.settings)
+
   const rostered = await rosteredPlayerIds(leagueId)
 
   /*
@@ -375,7 +424,7 @@ export async function buildAvailablePlayersContext(
           ? `These ranks are FantasyCalc's ${derived.numQbs === 2 ? 'superflex (2QB)' : '1QB'}, ${derived.numTeams}-team, ${derived.ppr === 1 ? 'full PPR' : derived.ppr === 0.5 ? 'half PPR' : 'non-PPR'} ${derived.isDynasty ? 'dynasty' : 'redraft'} board, matched to this league's own roster settings.`
           : 'This league has no roster positions on file, so these ranks come from a SUPERFLEX (2QB), 12-team dynasty baseline rather than its own settings. If it is a 1QB league, quarterbacks are ranked higher here than they are worth to them — say so rather than recommending a quarterback off this list alone.',
       )
-      lines.push(...limitLines('FantasyCalc dynasty'))
+      lines.push(...limitLines(fcSettings.isDynasty ? 'FantasyCalc dynasty' : 'FantasyCalc redraft', unranked))
       return lines.join('\n')
     }
   }
@@ -405,7 +454,7 @@ export async function buildAvailablePlayersContext(
     )
   }
 
-  lines.push(...limitLines(concepts))
+  lines.push(...limitLines(concepts, unranked))
 
   return lines.join('\n')
 }

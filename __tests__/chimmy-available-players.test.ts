@@ -578,3 +578,82 @@ describe('a matching concept keeps the house values', () => {
     expect(out).toContain('highest AllFantasy market value first')
   })
 })
+
+/*
+ * ⚠ NEITHER VALUE SOURCE RANKS IDP OR KICKERS, AND 70 OF 94 NFL LEAGUES START
+ * THEM. Measured 2026-08-28 — FantasyCalc publishes RB, WR, TE, QB and PICK;
+ * our own published values are QB/RB/WR/TE. KBFL starts SEVEN defensive
+ * players (DL, DL, LB, LB, DB, DB, IDP_FLEX) and a kicker, so a manager whose
+ * hole is at linebacker gets a list of receivers with no sign that the
+ * position they asked about was never in scope.
+ */
+const IDP_LEAGUE = {
+  name: 'KBFL',
+  sport: 'NFL',
+  isDynasty: true,
+  scoring: 'PPR TEP',
+  settings: {
+    roster_positions: ['QB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'FLEX', 'K', 'DL', 'DL', 'LB', 'LB', 'DB', 'DB', 'IDP_FLEX', 'BN'],
+  },
+  _count: { teams: 32 },
+}
+
+describe('positions no source can rank are named, not silently dropped', () => {
+  beforeEach(() => {
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['x'] } }])
+    h.valueFindMany.mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => value(`p${i}`, `Player ${i}`, 'RB', 1000 - i)),
+    )
+  })
+
+  it('names every unrankable starting slot the league fills', async () => {
+    h.leagueFind.mockResolvedValue(IDP_LEAGUE)
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toContain('defensive linemen')
+    expect(out).toContain('linebackers')
+    expect(out).toContain('defensive backs')
+    expect(out).toContain('a kicker')
+    expect(out).toMatch(/NO source we have ranks those positions/)
+  })
+
+  it('tells the model to say so rather than substitute an offensive player', async () => {
+    h.leagueFind.mockResolvedValue(IDP_LEAGUE)
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toMatch(/say plainly that we do not rank it rather than offering an offensive player/)
+  })
+
+  /* An all-offense league has no gap, so it must not carry the warning. */
+  it('stays silent for a league that starts only ranked positions', async () => {
+    h.leagueFind.mockResolvedValue({
+      ...IDP_LEAGUE,
+      settings: { roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN', 'BN'] },
+    })
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).not.toMatch(/NO source we have ranks those positions/)
+  })
+
+  /* Bench, IR and taxi are not starting slots and are ranked positions anyway. */
+  it('does not count BN, IR or TAXI as a gap', async () => {
+    h.leagueFind.mockResolvedValue({
+      ...IDP_LEAGUE,
+      settings: { roster_positions: ['QB', 'RB', 'WR', 'BN', 'BN', 'IR', 'TAXI'] },
+    })
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).not.toMatch(/NO source we have ranks those positions/)
+  })
+
+  it('carries the gap down the FantasyCalc path too', async () => {
+    h.leagueFind.mockResolvedValue(IDP_LEAGUE)
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] } }])
+    h.fantasyCalc.mockResolvedValue([fc('4034', 'Nick Chubb', 'RB', 368)])
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toContain('best FantasyCalc dynasty rank first')
+    expect(out).toMatch(/NO source we have ranks those positions/)
+    expect(out).toContain('linebackers')
+  })
+})
