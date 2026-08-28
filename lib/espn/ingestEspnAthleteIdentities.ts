@@ -35,11 +35,25 @@ import {
  * ⚠ IT LINKS TO OUR CANONICAL PLAYER ONLY THROUGH A MATCHER THAT CAN REFUSE.
  * This file used to leave `playerId` null on principle, because the only signal it
  * kept was a name, and matching a provider id to a canonical player on a name is
- * what put a basketball guard on an NFL draft board. That principle has not moved —
- * what changed is the evidence. The athlete document already carried a position and
- * a birthday and the parser was throwing them away; it now keeps them, and
- * `matchProviderAthlete` requires one of them to corroborate the name before
- * anything is written. A name on its own still links nothing.
+ * what put a basketball guard on an NFL draft board. That principle has not moved:
+ * `matchProviderAthlete` requires a birthday or a position to corroborate the name,
+ * and a name on its own still links nothing.
+ *
+ * ⚠ FIRST PRODUCTION RUN, 2026-08-27 — 261 rows backfilled, 157 refused, 0 linked,
+ * and that is the guard working rather than failing. The v3 athlete document carries
+ * `dateOfBirth` and NO position (see `espnAthleteFetch`), while `Player.birthDate` is
+ * populated on 0 rows in every sport. So both sides hold a birthday-shaped hole: ESPN
+ * supplies one, the canonical record has none to compare it against, nothing
+ * corroborates the name, and every candidate is correctly refused.
+ *
+ * ⚠ THE UNLOCK IS A CANONICAL BIRTHDAY, NOT A LOOSER MATCHER. 309 of these ESPN names
+ * already have a birthday in `SportsPlayer` where source = 'thesportsdb'. Populating
+ * `Player.birthDate` from there is NOT circular, and the distinction matters: the
+ * thesportsdb rows reach `Player` through their own provider-identity links, which are
+ * 100% linked already — so the birthday arrives by id, not by the name it would then
+ * be used to corroborate. Deriving it through a NAME join instead would launder a name
+ * match into a "birthday-verified" one, which is the exact failure this module exists
+ * to prevent.
  */
 
 export type EspnIdentityIngestSummary = {

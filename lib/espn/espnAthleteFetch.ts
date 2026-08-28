@@ -43,14 +43,28 @@ export type EspnAthlete = {
   /**
    * The fields that let a name become an identity.
    *
-   * ⚠ THESE COST NOTHING EXTRA. The athlete document was already being fetched and
-   * these were already in it; the previous parser kept the name and dropped the rest,
-   * which is why linking a provider id to a canonical player was impossible.
+   * ⚠ WHAT THIS ENDPOINT ACTUALLY RETURNS, read from a live document on 2026-08-27
+   * rather than assumed. The complete key set for athlete 2577417 is:
    *
-   * Each is optional and each is allowed to be absent. `matchProviderAthlete` treats a
-   * missing field as no evidence rather than as agreement, so an unexpected payload
-   * shape costs us a link we would not otherwise have made - it can never cause a
-   * WRONG one. That asymmetry is why the parser below can afford to be tolerant.
+   *   active, age, birthPlace, dateOfBirth, displayHeight, displayName,
+   *   displayWeight, experience, firstName, fullName, guid, height, id, jersey,
+   *   lastName, shortName, uid, weight
+   *
+   * There is NO position and NO team, in any shape - not inline, not as a `$ref`.
+   * An earlier version of this comment claimed the document carried them and the
+   * parser was simply discarding them. That was wrong: `dateOfBirth` is the only
+   * corroborating field this endpoint has. Measured across 261 backfilled rows,
+   * every one came back `{"dob": ...}` and nothing else.
+   *
+   * `position` and `team` stay on the type and are still read, because ESPN's LEAGUE
+   * payloads do carry them as `defaultPositionId` / `proTeamId` and the same parser
+   * serves both surfaces.
+   *
+   * Each field is optional and allowed to be absent. `matchProviderAthlete` treats a
+   * missing field as no evidence rather than as agreement, so a shape we cannot read
+   * costs a link we would not otherwise have made - it can never cause a WRONG one.
+   * That asymmetry is why this parser can afford to be tolerant, and it is what made
+   * the first production run refuse 157 candidates instead of guessing at them.
    */
   position?: string | null
   team?: string | null
