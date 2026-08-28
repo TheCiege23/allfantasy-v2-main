@@ -22,7 +22,26 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const repo = process.cwd()
-const ROOTS = ['lib', 'app']
+/*
+ * ⚠ `server/` IS A THIRD SOURCE TREE OF LIVE REQUEST PATHS.
+ * `app/api/legacy/[...path]/route.ts` is a dispatcher that lazily imports handlers
+ * from `server/api-route-modules/`, so a provider call there is as reachable as one
+ * in `app/api` while being invisible to any `app/**` glob.
+ *
+ * The enforcing guard already walks it — it scans from the repo root — and reports
+ * three violations there today. This census did not, which is the asymmetry worth
+ * removing: the thing that CLASSIFIES saw less of the repo than the thing that
+ * ENFORCES, so a genuinely new host could have landed in `server/` already
+ * triaged-looking.
+ *
+ * Adding the root finds nothing today: `server/` names 7 hosts and all 7 are already
+ * classified from their `lib`/`app` call sites. That is the intended outcome for a
+ * preventive change — recorded here so the next reader does not mistake a quiet scan
+ * for an unnecessary one. The same blind spot DID cost real coverage twice on
+ * 2026-08-27: an api.sleeper.com caller in this tree, and two unguarded AI provider
+ * calls found by the sibling spend census.
+ */
+const ROOTS = ['lib', 'app', 'server']
 const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '__mocks__'])
 
 /** Pulled from the guard itself so the two cannot drift apart. */
@@ -165,6 +184,33 @@ describe('DB-first boundary — outbound host census', () => {
     const hosts = findHosts()
     expect(hosts.size).toBeGreaterThan(50)
     expect(hosts.has('api.sleeper.app')).toBe(true)
+
+    /*
+     * TWO separate failures to catch, and one assertion does not cover both.
+     *
+     * 1. A root that is listed but yields nothing — tree renamed, walk broken.
+     *    The per-root check below catches that. It is asserted on call-site
+     *    PATHS rather than on a named host, so migrating any single host away
+     *    does not falsely trip it.
+     */
+    const scanned = new Set<string>()
+    for (const h of hosts.values()) for (const f of h.files) scanned.add(f.split('/')[0])
+    for (const root of ROOTS) {
+      expect(scanned, `no host found under ${root}/ — is that root still being scanned?`).toContain(
+        root.split('/')[0],
+      )
+    }
+
+    /*
+     * 2. A root DELETED from ROOTS. The loop above shrinks along with the list,
+     *    so it would stay green — the deletion has to be pinned against a literal.
+     *    `server` is spelled out because it is the one that was missing, and the
+     *    one whose absence has already cost coverage twice.
+     */
+    expect(
+      ROOTS,
+      'a source tree was dropped from the census — see the note on ROOTS before changing this',
+    ).toEqual(['lib', 'app', 'server'])
   })
 
   it('reads the monitored list out of the guard, not a copy', () => {
