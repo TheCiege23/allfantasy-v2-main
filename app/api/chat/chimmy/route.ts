@@ -6,7 +6,7 @@ import OpenAI from 'openai'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseHomeSignals, renderHomeSignalsPrompt } from '@/lib/core-app/homeSignals'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
 import { runAiProtection } from '@/lib/ai-protection'
@@ -1017,7 +1017,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const verifiedAuth = await requireVerifiedUser()
+  /*
+   * ⚠ EMAIL VERIFICATION IS DELIBERATELY NOT REQUIRED HERE. It was, and it locked
+   * 17 of 48 production accounts — a third of signups — out of Chimmy entirely,
+   * answering an ordinary question with a raw VERIFICATION_REQUIRED code. The
+   * daily token grant could not reach them either: this guard runs ~400 lines
+   * ahead of it, so an unverified user never got as far as having a balance.
+   *
+   * Age IS still enforced (compliance, not UX), as is a signed-in session — so
+   * this is not an open endpoint. Spend stays bounded by the daily token floor,
+   * which is what makes relaxing verification safe HERE and would not make it
+   * safe on a surface that writes or spends without a cap.
+   */
+  const verifiedAuth = await requireAgeConfirmedUser()
   if (!verifiedAuth.ok) return verifiedAuth.response
 
   let formData: FormData
