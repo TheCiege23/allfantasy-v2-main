@@ -282,26 +282,86 @@ export function classifyImpact(text: string): 'high' | 'medium' | 'low' {
   return 'low'
 }
 
+const DEDUPE_WINDOW_MS = 4 * 60 * 60 * 1000
+
 /**
- * Persist a news item to the database, deduplicating by headline + player + time.
+ * How much two headlines must overlap to count as the same story.
+ *
+ * 0.7 separates the two cases that matter, measured on real output:
+ *   "… Schefter reports … is on the mend"   vs
+ *   "… Schefter reported that … is on the mend"   -> 0.79, same story
+ *   "Jeanty limited in practice Wednesday"  vs
+ *   "Jeanty limited in practice Thursday"         -> 0.60, different days
+ * Raising it re-admits phrasing drift; lowering it starts collapsing a week of
+ * practice reports into one row.
+ */
+const DEDUPE_SIMILARITY = 0.7
+
+/** Words of 3+ characters, lowercased, punctuation and smart quotes stripped. */
+function headlineTokens(headline: string): Set<string> {
+  return new Set(
+    headline
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2),
+  )
+}
+
+/**
+ * Jaccard overlap of two headlines, 0..1.
+ *
+ * Exported for tests. Deliberately not stemming: "reports"/"reported" differ by
+ * one token out of a dozen, so set overlap already absorbs it, and a stemmer
+ * would be a dependency plus a new class of surprise.
+ */
+export function headlineSimilarity(a: string, b: string): number {
+  const ta = headlineTokens(a)
+  const tb = headlineTokens(b)
+  if (ta.size === 0 || tb.size === 0) return 0
+  let shared = 0
+  for (const t of ta) if (tb.has(t)) shared++
+  return shared / (ta.size + tb.size - shared)
+}
+
+/**
+ * Persist a news item, deduplicating by player + similar headline + time.
+ *
+ * ⚠ Exact headline equality is not enough. Grok rephrases the same story between
+ * runs even at temperature 0 — an observed pair differed only by "reports" vs
+ * "reported that" — so an equality check let the same news land twice each time
+ * the cache expired. That is harmless on a button press and corrosive on a
+ * schedule, which is why this compares similarity instead.
  */
 async function persistNewsItem(item: XNewsItem): Promise<'new' | 'duplicate' | 'error'> {
   if (!item.headline.trim()) return 'error'
 
-  // Check for recent duplicate (same player + similar headline in last 4 hours)
-  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000)
-  const existing = await prisma.playerNewsRecord.findFirst({
-    where: {
-      sport: item.sport,
-      playerName: item.playerName ?? undefined,
-      headline: item.headline,
-      publishedAt: { gte: fourHoursAgo },
-    },
-  }).catch(() => null)
+  // An unattributed item has no player to scope the comparison to, and matching
+  // on headline alone would dedupe across different players. Previously the
+  // `?? undefined` here silently dropped the playerName filter entirely.
+  const playerName = item.playerName?.trim()
 
-  if (existing) return 'duplicate'
+  if (playerName) {
+    const since = new Date(Date.now() - DEDUPE_WINDOW_MS)
+    const recent = await prisma.playerNewsRecord
+      .findMany({
+        where: { sport: item.sport, playerName, publishedAt: { gte: since } },
+        select: { headline: true },
+        // Bounded: a player with more than this in four hours is already an
+        // anomaly, and the comparison is in-memory.
+        take: 50,
+      })
+      .catch(() => [] as { headline: string }[])
 
-  await prisma.playerNewsRecord.create({
+    const duplicate = recent.some(
+      (r) =>
+        r.headline === item.headline ||
+        headlineSimilarity(r.headline, item.headline) >= DEDUPE_SIMILARITY,
+    )
+    if (duplicate) return 'duplicate'
+  }
+
+  const inserted = await prisma.playerNewsRecord.create({
     data: {
       sport: item.sport,
       playerId: null,
@@ -317,11 +377,18 @@ async function persistNewsItem(item: XNewsItem): Promise<'new' | 'duplicate' | '
       source: item.source,
       publishedAt: item.publishedAt,
     },
-  }).catch((e) => {
-    console.warn('[x-news] Insert failed (likely duplicate):', e instanceof Error ? e.message : '')
-  })
+  }).then(
+    () => 'ok' as const,
+    (e: unknown) => {
+      // Was: swallow and return 'new' regardless, logged as "likely duplicate".
+      // That overstated newRecords and disguised real write errors — a headline
+      // over the VarChar(256) limit looked like successful deduplication.
+      console.warn('[x-news] Insert failed:', e instanceof Error ? e.message : String(e))
+      return 'failed' as const
+    },
+  )
 
-  return 'new'
+  return inserted === 'ok' ? 'new' : 'error'
 }
 
 /**
