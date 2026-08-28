@@ -41,9 +41,32 @@ export type NamedLeague = {
   ownerUserId?: string | null
 }
 
+/**
+ * A season that exists ONLY as a legacy import — format on file, no rosters.
+ *
+ * ⚠ THESE LIVE IN A DIFFERENT TABLE AND A DIFFERENT ID SPACE. `/leagues` renders
+ * KBFL for 2022-2026, but only 2026 is in `leagues`; 2022-2025 are `LegacyLeague`
+ * rows, and ZERO `leagues` rows carry a `legacyLeagueId`, so nothing joins the
+ * two. Chimmy was answering "no KBFL league exists for the 2025 season" about a
+ * league plainly listed on the user's own leagues page.
+ */
+export type LegacyLeagueFacts = {
+  name: string
+  season: number
+  sport: string
+  teamCount: number | null
+  leagueType: string | null
+  scoringType: string | null
+  isSuperflex: boolean | null
+  isTep: boolean | null
+  tepBonus: number | null
+}
+
 export type LeagueNameLookup =
   | { kind: 'match'; league: NamedLeague }
   | { kind: 'ambiguous'; candidates: NamedLeague[] }
+  /** Format is known; rosters and standings are NOT. Never bind this as scope. */
+  | { kind: 'legacy'; facts: LegacyLeagueFacts }
   | { kind: 'none'; known: NamedLeague[] }
 
 /** Nobody plays more than this many; the cap only stops a pathological account. */
@@ -212,7 +235,72 @@ export async function findLeagueByName(
   if (partial.length === 1) return { kind: 'match', league: partial[0] }
   if (partial.length > 1) return settleDuplicates(partial)
 
+  /*
+   * Nothing in `leagues`. Before declaring the league nonexistent, look in the
+   * legacy table — saying "no KBFL exists for 2025" about a league on the user's
+   * own leagues page is the worst answer available, and it was the live one.
+   */
+  const legacy = await findLegacyLeague(userId, wanted, season)
+  if (legacy) return { kind: 'legacy', facts: legacy }
+
   return { kind: 'none', known: named.slice(0, MAX_SUGGESTIONS) }
+}
+
+/**
+ * League format from the legacy import table, when the modern tables have none.
+ *
+ * ⚠ RETURNS FORMAT ONLY, AND THE CALLER MUST SAY SO. There are no rosters,
+ * standings or matchups behind these rows, and nothing joins them to the modern
+ * league id space — so this must never be bound as the conversation's scope.
+ * Selecting a league the other tools cannot read is precisely how the model was
+ * left with nothing and started inventing.
+ */
+async function findLegacyLeague(
+  userId: string,
+  wanted: string,
+  season?: number | null,
+): Promise<LegacyLeagueFacts | null> {
+  const rows = await prisma.legacyLeague
+    .findMany({
+      where: { userId },
+      select: {
+        name: true,
+        season: true,
+        sport: true,
+        teamCount: true,
+        leagueType: true,
+        scoringType: true,
+        isSF: true,
+        isTEP: true,
+        tepBonus: true,
+      },
+      orderBy: { season: 'desc' },
+      take: MAX_LEAGUES,
+    })
+    .catch(() => [])
+
+  const matches = rows.filter((r) => {
+    if (!r.name) return false
+    const n = normalise(r.name)
+    return n === wanted || n.includes(wanted) || wanted.includes(n)
+  })
+  if (matches.length === 0) return null
+
+  /* An asked-for season wins; otherwise the most recent on file. */
+  const picked =
+    (typeof season === 'number' ? matches.find((r) => r.season === season) : null) ?? matches[0]
+
+  return {
+    name: picked.name as string,
+    season: picked.season,
+    sport: String(picked.sport ?? 'NFL'),
+    teamCount: picked.teamCount ?? null,
+    leagueType: picked.leagueType ?? null,
+    scoringType: picked.scoringType ?? null,
+    isSuperflex: picked.isSF ?? null,
+    isTep: picked.isTEP ?? null,
+    tepBonus: picked.tepBonus ?? null,
+  }
 }
 
 /**

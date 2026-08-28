@@ -218,6 +218,30 @@ export async function executeChimmyTool(
           ].join(' ')
         }
 
+        /*
+         * ⚠ FORMAT ONLY, AND SAY SO. Legacy rows carry the settings but no
+         * rosters or standings, and nothing joins them to the modern league id
+         * space — so ctx.leagueId is deliberately NOT bound. Selecting a league
+         * the other tools cannot read is exactly how the model was left with
+         * nothing and began inventing.
+         */
+        if (found.kind === 'legacy') {
+          const f = found.facts
+          const bits = [
+            f.teamCount != null ? `${f.teamCount} teams` : null,
+            f.leagueType,
+            f.scoringType,
+            f.isSuperflex ? 'superflex' : null,
+            f.isTep ? `TEP +${f.tepBonus ?? '?'} for tight ends` : 'no TEP',
+          ].filter(Boolean)
+          return [
+            `"${f.name}" (${f.season} season) is on file as a LEGACY import.`,
+            `Its format: ${bits.join(', ')}.`,
+            'You may state that format. There are NO rosters, standings, records or matchups stored for it —',
+            'say that plainly if asked for any of those, and do not estimate them.',
+          ].join(' ')
+        }
+
         if (found.known.length === 0) {
           return 'This user has no leagues on file at all, so there is nothing to select. Say that; do not describe a league.'
         }

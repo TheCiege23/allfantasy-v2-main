@@ -7,6 +7,7 @@ const redraftMemberFindMany = vi.hoisted(() => vi.fn())
 const rosterFindMany = vi.hoisted(() => vi.fn())
 const leagueTeamFindMany = vi.hoisted(() => vi.fn())
 const leagueTeamCount = vi.hoisted(() => vi.fn())
+const legacyLeagueFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -14,6 +15,7 @@ vi.mock('@/lib/prisma', () => ({
     redraftLeagueMember: { findMany: redraftMemberFindMany },
     roster: { findMany: rosterFindMany },
     leagueTeam: { findMany: leagueTeamFindMany, count: leagueTeamCount },
+    legacyLeague: { findMany: legacyLeagueFindMany },
   },
 }))
 
@@ -55,6 +57,7 @@ beforeEach(() => {
   rosterFindMany.mockResolvedValue([])
   leagueTeamFindMany.mockResolvedValue([])
   leagueTeamCount.mockResolvedValue(0)
+  legacyLeagueFindMany.mockResolvedValue([])
 })
 
 describe('findLeagueByName', () => {
@@ -327,6 +330,65 @@ describe('findLeagueByName', () => {
       leagueTeamFindMany.mockResolvedValue([{ leagueId: 'x' }, { leagueId: 'y' }])
 
       expect((await findLeagueByName('user-1', 'KBFL')).kind).toBe('ambiguous')
+    })
+  })
+
+  /*
+   * ⚠ THE PAST SEASONS ARE IN A DIFFERENT TABLE AND A DIFFERENT ID SPACE.
+   * `/leagues` renders KBFL for 2022-2026, but only 2026 is in `leagues`;
+   * 2022-2025 are LegacyLeague rows, and ZERO `leagues` rows carry a
+   * `legacyLeagueId`, so nothing joins them. Chimmy said "no KBFL league exists
+   * for the 2025 season" about a league on the user's own leagues page.
+   */
+  describe('seasons that exist only as legacy imports', () => {
+    const legacyRow = (season: number) => ({
+      name: 'KBFL',
+      season,
+      sport: 'NFL',
+      teamCount: 32,
+      leagueType: 'Dynasty',
+      scoringType: 'PPR',
+      isSF: false,
+      isTEP: true,
+      tepBonus: 0.5,
+    })
+
+    it('finds the season the modern tables do not have', async () => {
+      leagueFindMany.mockResolvedValue([])
+      legacyLeagueFindMany.mockResolvedValue([legacyRow(2025), legacyRow(2024)])
+
+      const out = await findLeagueByName('user-1', 'KBFL', 2025)
+
+      expect(out.kind).toBe('legacy')
+      expect(out.kind === 'legacy' && out.facts.season).toBe(2025)
+      /* The format question that was previously unanswerable. */
+      expect(out.kind === 'legacy' && out.facts.isTep).toBe(true)
+      expect(out.kind === 'legacy' && out.facts.tepBonus).toBe(0.5)
+    })
+
+    /* A modern row must always win — it has rosters behind it. */
+    it('prefers a real league over a legacy row of the same name', async () => {
+      leagueTeamFindMany.mockResolvedValue([{ leagueId: 'live' }])
+      withLeagues([{ id: 'live', name: 'KBFL', season: 2026 }])
+      legacyLeagueFindMany.mockResolvedValue([legacyRow(2026)])
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+      expect(out.kind).toBe('match')
+    })
+
+    it('falls back to the newest legacy season when none is named', async () => {
+      leagueFindMany.mockResolvedValue([])
+      legacyLeagueFindMany.mockResolvedValue([legacyRow(2025), legacyRow(2022)])
+
+      const out = await findLeagueByName('user-1', 'KBFL')
+      expect(out.kind === 'legacy' && out.facts.season).toBe(2025)
+    })
+
+    it('still reports none when neither table knows the name', async () => {
+      leagueFindMany.mockResolvedValue([])
+      legacyLeagueFindMany.mockResolvedValue([legacyRow(2025)])
+
+      expect((await findLeagueByName('user-1', 'Premier League')).kind).toBe('none')
     })
   })
 
