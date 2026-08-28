@@ -99,6 +99,7 @@ import { buildChimmyAnswerContract } from '@/lib/chimmy-chat/response-contract'
 import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-events'
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
 import { tryDeterministicAnswerDetailed, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
+import { grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
 
 /** Provenance for an answer that came from the web, not from our rows. */
 const LIVE_SEARCH_SOURCE = 'live_web_search' as const
@@ -1304,6 +1305,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
     })
   }
+
+  /*
+   * ⚠ THE FREE FLOOR IS TOPPED UP HERE, AHEAD OF EVERY SPEND CHECK IN THIS
+   * ROUTE — and the position is the point. TWO paths price the balance: the
+   * live-search fallback a few lines below, and the main spend ~500 lines down.
+   * Granting before the later one but after the earlier one would refuse a user
+   * who is, moments later, able to pay. I made exactly that mistake first.
+   *
+   * A free account starts at zero and every Chimmy message costs 10, so the
+   * first question anybody ever asked failed on insufficient balance. Two a day
+   * was the intended free tier and had never been implemented.
+   */
+  await grantDailyFreeTokens(userId).catch(() => null)
 
   const requestLocale = resolveLanguage(req.cookies.get('af_lang')?.value)
   const deterministic = await tryDeterministicAnswerDetailed(message, requestLocale)
