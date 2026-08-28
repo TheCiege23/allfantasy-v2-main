@@ -342,30 +342,138 @@ describe('the house set stays primary when it can answer', () => {
   })
 })
 
-describe('the fallback names the distortion in its own baseline', () => {
-  /*
-   * ⚠ THE DEFAULT KEY IS SUPERFLEX (2QB) AND IT SHOWS. Measured on that key,
-   * the top unrostered names come back as four straight quarterbacks. A 1QB
-   * league reading that as a pickup board is being misled, so the block says
-   * so rather than treating the distortion as harmless.
-   */
-  it('warns that the ranks are a superflex baseline', async () => {
+/*
+ * ⚠ A FIXED DEFAULT PRODUCED A WRONG ANSWER IN PRODUCTION, not merely an
+ * imprecise one. The first cut asked FantasyCalc for a superflex (2QB),
+ * 12-team dynasty board for every league. Asked "who can I pick up in KBFL?",
+ * Chimmy returned Haynes King, Cole Payton and Jameis Winston — three
+ * quarterbacks in the top three — for a league whose roster positions start
+ * ["QB","RB","WR","WR","TE","FLEX","FLEX","K",...]: ONE quarterback slot across
+ * THIRTY-TWO teams. The caveat that shipped with it told the model to mention
+ * the skew; the model did not, so the skew reached a user as a recommendation.
+ *
+ * These are the real production settings for the leagues measured.
+ */
+const KBFL = {
+  name: 'KBFL',
+  sport: 'NFL',
+  isDynasty: true,
+  scoring: 'PPR TEP',
+  settings: {
+    roster_positions: ['QB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'FLEX', 'K', 'DL', 'DL', 'LB', 'LB', 'DB', 'DB', 'IDP_FLEX', 'IDP_FLEX', 'BN'],
+  },
+  _count: { teams: 32 },
+}
+const ZOMBIE = {
+  name: 'Beta 1 Zombie League',
+  sport: 'NFL',
+  isDynasty: false,
+  scoring: 'PPR Superflex TEP',
+  settings: { roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN', 'BN', 'BN'] },
+  _count: { teams: 20 },
+}
+
+describe('the FantasyCalc board matches the league, not a default', () => {
+  beforeEach(() => {
+    /* Every house-valued player rostered, so the fallback runs. */
     h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['9488', '9226', '12527'] } }])
     h.fantasyCalc.mockResolvedValue([fc('4034', 'Nick Chubb', 'RB', 368)])
-
-    const out = await buildAvailablePlayersContext(LEAGUE, USER)
-    expect(out).toMatch(/SUPERFLEX \(2QB\) dynasty baseline/)
-    expect(out).toMatch(/If this is a 1QB league/)
   })
 
-  /* The house-values path has no such skew, so it must not carry the warning. */
-  it('does not warn on the AllFantasy path', async () => {
-    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['x'] } }])
-    h.valueFindMany.mockResolvedValue(
-      Array.from({ length: 8 }, (_, i) => value(`p${i}`, `Player ${i}`, 'RB', 1000 - i)),
-    )
+  it('asks for a 1QB board for a 1QB league', async () => {
+    h.leagueFind.mockResolvedValue(KBFL)
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ numQbs: 1 }))
+  })
+
+  it('asks for a superflex board when SUPER_FLEX is a slot', async () => {
+    h.leagueFind.mockResolvedValue(ZOMBIE)
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ numQbs: 2 }))
+  })
+
+  /* Two QB slots is superflex even without the SUPER_FLEX spelling. */
+  it('treats two listed QB slots as superflex', async () => {
+    h.leagueFind.mockResolvedValue({ ...KBFL, settings: { roster_positions: ['QB', 'QB', 'RB', 'WR'] } })
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ numQbs: 2 }))
+  })
+
+  /*
+   * ⚠ FantasyCalc PUBLISHES A FIXED LADDER OF LEAGUE SIZES. KBFL has 32 teams
+   * and no such board exists, so it clamps to the deepest rather than asking
+   * for a key that cannot be served.
+   */
+  it('clamps an oversized league to the deepest published board', async () => {
+    h.leagueFind.mockResolvedValue(KBFL)
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ numTeams: 16 }))
+  })
+
+  it('rounds a normal league up to the next published size', async () => {
+    h.leagueFind.mockResolvedValue({ ...ZOMBIE, _count: { teams: 11 } })
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ numTeams: 12 }))
+  })
+
+  /* A redraft league must not be ranked on dynasty values. */
+  it('carries isDynasty from the league row', async () => {
+    h.leagueFind.mockResolvedValue(ZOMBIE)
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ isDynasty: false }))
+  })
+
+  it.each([
+    ['PPR TEP', 1],
+    ['Half PPR', 0.5],
+    ['Standard', 0],
+  ])('reads ppr from scoring text %s', async (scoring, ppr) => {
+    h.leagueFind.mockResolvedValue({ ...KBFL, scoring })
+
+    await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith(expect.objectContaining({ ppr }))
+  })
+
+  it('names the board it actually used', async () => {
+    h.leagueFind.mockResolvedValue(KBFL)
 
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
-    expect(out).not.toMatch(/SUPERFLEX/)
+    expect(out).toMatch(/FantasyCalc.s 1QB, 16-team, full PPR dynasty board/)
+    expect(out).toMatch(/matched to this league.s own roster settings/)
+    expect(out).not.toMatch(/SUPERFLEX \(2QB\), 12-team dynasty baseline/)
+  })
+})
+
+describe('a league with no roster positions keeps the honest caveat', () => {
+  /*
+   * ⚠ 22 OF 94 NFL LEAGUES CARRY NO `roster_positions`. There is genuinely no
+   * basis to derive a board for those, so the default is used AND declared —
+   * silently defaulting is what produced the KBFL answer.
+   */
+  beforeEach(() => {
+    h.rosterFindMany.mockResolvedValue([{ playerData: { players: ['9488', '9226', '12527'] } }])
+    h.fantasyCalc.mockResolvedValue([fc('4034', 'Nick Chubb', 'RB', 368)])
+  })
+
+  it('falls back to the default and declares it', async () => {
+    h.leagueFind.mockResolvedValue({ ...KBFL, settings: null })
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(h.fantasyCalc).toHaveBeenCalledWith({ isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 })
+    expect(out).toMatch(/no roster positions on file/)
+    expect(out).toMatch(/If it is a 1QB league/)
+  })
+
+  it('treats an empty positions array as no basis', async () => {
+    h.leagueFind.mockResolvedValue({ ...KBFL, settings: { roster_positions: [] } })
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).toMatch(/no roster positions on file/)
   })
 })

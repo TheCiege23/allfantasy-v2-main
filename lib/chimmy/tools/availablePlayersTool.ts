@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import type { FantasyCalcSettings } from '@/lib/fantasycalc'
 
 /**
  * PLAYERS NOT ON ANY ROSTER IN THE LEAGUE IN SCOPE.
@@ -80,6 +81,61 @@ function limitLines(basis: string): string[] {
 }
 
 /**
+ * The FantasyCalc board that matches THIS league, not a fixed default.
+ *
+ * ⚠ A FIXED DEFAULT PRODUCED A WRONG ANSWER IN PRODUCTION, not merely an
+ * imprecise one. The first cut asked for a superflex (2QB), 12-team dynasty
+ * board for every league. Asked "who can I pick up in KBFL?", Chimmy returned
+ * Haynes King, Cole Payton and Jameis Winston — three quarterbacks in the top
+ * three — for a league whose `roster_positions` start
+ * ["QB","RB","WR","WR","TE","FLEX","FLEX","K",...]: ONE quarterback slot across
+ * THIRTY-TWO teams, where a backup QB is close to worthless. The caveat that
+ * shipped with it told the model to mention the skew and the model did not, so
+ * the skew was reaching users as a recommendation.
+ *
+ * The settings were sitting in the league row the whole time —
+ * `settings.roster_positions` is populated on 72 of 94 NFL leagues.
+ *
+ * Returns null when the league does not carry roster positions, so the caller
+ * can keep the honest caveat for the 22 leagues that genuinely have no basis.
+ */
+function fantasyCalcSettingsForLeague(league: {
+  isDynasty?: boolean | null
+  scoring?: string | null
+  settings?: unknown
+  teamCount: number
+}): FantasyCalcSettings | null {
+  const raw = (league.settings ?? null) as Record<string, unknown> | null
+  const positions = raw?.roster_positions ?? raw?.rosterPositions
+  if (!Array.isArray(positions) || positions.length === 0) return null
+
+  const slots = positions.map((p) => String(p).toUpperCase())
+  /*
+   * SUPER_FLEX is the usual spelling, but a league can also reach two starting
+   * quarterbacks by simply listing QB twice — both are superflex to FantasyCalc.
+   */
+  const qbSlots = slots.filter((s) => s === 'QB').length
+  const numQbs = slots.includes('SUPER_FLEX') || qbSlots >= 2 ? 2 : 1
+
+  /*
+   * ⚠ FantasyCalc PUBLISHES A FIXED LADDER OF LEAGUE SIZES. KBFL has 32 teams
+   * and no such board exists, so it is clamped to the deepest one rather than
+   * requesting a key that cannot be served. Deeper is the right direction: it
+   * is the setting that most nearly reflects a thin waiver wire.
+   */
+  const SUPPORTED_TEAM_COUNTS = [8, 10, 12, 14, 16]
+  const numTeams =
+    SUPPORTED_TEAM_COUNTS.find((n) => n >= league.teamCount) ??
+    SUPPORTED_TEAM_COUNTS[SUPPORTED_TEAM_COUNTS.length - 1]
+
+  /* `scoring` is free text — "PPR TEP", "PPR Superflex TEP", "Half PPR". */
+  const scoring = String(league.scoring ?? '').toLowerCase()
+  const ppr = /half/.test(scoring) ? 0.5 : /ppr/.test(scoring) ? 1 : 0
+
+  return { isDynasty: Boolean(league.isDynasty), numQbs, numTeams, ppr }
+}
+
+/**
  * The deeper ranked pool, for leagues that have rostered every name we value.
  *
  * ⚠ EXCLUDES DRAFT PICKS, WHICH IS NOT OPTIONAL. FantasyCalc ranks picks as
@@ -96,23 +152,14 @@ function limitLines(basis: string): string[] {
  */
 async function deepPoolFromFantasyCalc(
   rostered: Set<string>,
+  settings: FantasyCalcSettings,
 ): Promise<{ available: Array<{ name: string; position: string; overallRank: number }>; total: number } | null> {
   /*
-   * The repo-wide default, and one of the keys already cached — so this is
-   * normally a DB read. A miss self-populates through one fetch rather than
-   * serving nulls, which is the whole point of going through the DB-first
-   * accessor rather than the adapter.
-   *
-   * ⚠ IT IS A SUPERFLEX (2QB) BASELINE, and the caller states that in the block.
-   * Measured on this key, the top unrostered names come back as four straight
-   * quarterbacks — a 1QB league reading that as a pickup board is being misled.
+   * Through the DB-first accessor, never the adapter: a cached key is a DB
+   * read, and a miss self-populates through one fetch rather than serving
+   * nulls. An uncached combination therefore costs latency, not correctness.
    */
-  const players = await getFantasyCalcValuesDbFirst({
-    isDynasty: true,
-    numQbs: 2,
-    numTeams: 12,
-    ppr: 1,
-  }).catch(() => [])
+  const players = await getFantasyCalcValuesDbFirst(settings).catch(() => [])
 
   const real = players.filter(
     (p) => String(p?.player?.position ?? '').toUpperCase() !== 'PICK' && p?.player?.sleeperId,
@@ -172,7 +219,17 @@ export async function buildAvailablePlayersContext(
   }
 
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { name: true, sport: true } })
+    .findUnique({
+      where: { id: leagueId },
+      select: {
+        name: true,
+        sport: true,
+        isDynasty: true,
+        scoring: true,
+        settings: true,
+        _count: { select: { teams: true } },
+      },
+    })
     .catch(() => null)
 
   if (!league) {
@@ -263,7 +320,15 @@ export async function buildAvailablePlayersContext(
    * block names which source it used.
    */
   if (available.length < MIN_USEFUL) {
-    const deep = await deepPoolFromFantasyCalc(rostered)
+    const derived = fantasyCalcSettingsForLeague({
+      isDynasty: league.isDynasty,
+      scoring: league.scoring,
+      settings: league.settings,
+      teamCount: league._count?.teams ?? 12,
+    })
+    /* No roster positions on file means no basis to derive one — say so below. */
+    const fcSettings = derived ?? { isDynasty: true, numQbs: 2, numTeams: 12, ppr: 1 }
+    const deep = await deepPoolFromFantasyCalc(rostered, fcSettings)
     if (deep && deep.available.length > available.length) {
       const shown = deep.available.slice(0, MAX_SHOWN).map((p) => `${p.name} (${p.position}, rank #${p.overallRank})`)
       const more =
@@ -276,12 +341,14 @@ export async function buildAvailablePlayersContext(
         `That is ${deep.available.length} of the ${deep.total} ranked players FantasyCalc covers.`,
         `Only ${available.length} of the ${valued.length} players AllFantasy publishes its own value for are unrostered here, so this list uses FantasyCalc's deeper set instead. Those are two different scales — do NOT compare a rank here against an AllFantasy value from another answer.`,
         /*
-         * ⚠ THE BASELINE IS SUPERFLEX AND IT SHOWS. On the 2QB key the top
-         * available names come back as four straight quarterbacks. Handed to a
-         * 1QB league with no warning that is a distorted board, so the
-         * distortion is named rather than assumed harmless.
+         * ⚠ SAY WHICH BOARD THIS IS. The QB ladder moves hardest between a 1QB
+         * and a superflex league, so the setting that produced the ranking has
+         * to be visible rather than implied — and when it could not be derived,
+         * the model must be told the ranking is not this league's.
          */
-        'These ranks come from a SUPERFLEX (2QB) dynasty baseline, not this league\'s own settings. If this is a 1QB league, quarterbacks are ranked higher here than they are worth to them — say so rather than recommending a quarterback off this list alone.',
+        derived
+          ? `These ranks are FantasyCalc's ${derived.numQbs === 2 ? 'superflex (2QB)' : '1QB'}, ${derived.numTeams}-team, ${derived.ppr === 1 ? 'full PPR' : derived.ppr === 0.5 ? 'half PPR' : 'non-PPR'} ${derived.isDynasty ? 'dynasty' : 'redraft'} board, matched to this league's own roster settings.`
+          : 'This league has no roster positions on file, so these ranks come from a SUPERFLEX (2QB), 12-team dynasty baseline rather than its own settings. If it is a 1QB league, quarterbacks are ranked higher here than they are worth to them — say so rather than recommending a quarterback off this list alone.',
       )
       lines.push(...limitLines('FantasyCalc dynasty'))
       return lines.join('\n')
