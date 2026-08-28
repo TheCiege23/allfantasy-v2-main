@@ -61,6 +61,28 @@ function monitoredPatterns(): RegExp[] {
 }
 
 /**
+ * The AI spend guard's declared exceptions, read out of its own test so the two files
+ * cannot drift apart — the same reason monitoredPatterns() reads the guard directly.
+ *
+ * ⚠ COMMENTS ARE STRIPPED FIRST, AND THAT IS NOT COSMETIC. A bare /'([^']+)'/ over this
+ * block returns 2 of 5 entries: the apostrophe in "the guard module's own docstring"
+ * pairs with the OPENING quote of the next entry, which shifts every pairing after it
+ * and silently swallows the rest. It fails quietly and in the direction that looks
+ * clean, so the count is asserted below rather than trusted.
+ */
+function spendGuardExceptions(): string[] {
+  const src = fs.readFileSync(path.join(repo, '__tests__/ai/ai-spend-guard.test.ts'), 'utf8')
+  const start = src.indexOf('const PERMANENT_EXCEPTIONS = [')
+  const raw = src
+    .slice(start, src.indexOf('\n]', start))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '')
+  return [...raw.matchAll(/'([^']+)'/g)]
+    .map((m) => m[1])
+    .filter((v) => /^[\w./-]+\.(tsx?|mjs|js)$/.test(v))
+}
+
+/**
  * Categories that are NOT data-API reads, with the reason each is exempt.
  * A host matching one of these is examined and dismissed, not ignored.
  */
@@ -326,6 +348,62 @@ describe('DB-first boundary — outbound host census', () => {
         'to the category that matches what the code does, or to DATA_API_UNMONITORED if it is ' +
         'a data feed. Do NOT relax this test: the claim is the whole reason the category exempts ' +
         'the host from the DB-first rule.',
+    ).toEqual([])
+  })
+
+  it('the ai-provider claim is true — every file reaching one is spend-guarded', () => {
+    /*
+     * The last category still resting on prose, and it was FALSE for months.
+     * ai-provider exempts a host from the DB-first rule by saying the AI spend guard
+     * covers it instead — a claim about a DIFFERENT file's contents, which is exactly
+     * the kind that rots unnoticed. lib/serper.ts sat classified as spend-guarded while
+     * being unguarded on two request paths.
+     *
+     * It survived a hand-written audit too: that check looked for a URL literal within
+     * three lines of a fetch, and serper's host is a const used as `${SERPER_BASE}`.
+     * Whole-file matching, as below, is what the census itself does and what catches it.
+     */
+    const aiProvider = CATEGORIES.filter((c) => c.name === 'ai-provider')
+    expect(aiProvider.length, 'the ai-provider category disappeared').toBeGreaterThan(0)
+
+    const exceptions = spendGuardExceptions()
+    expect(
+      exceptions.length,
+      'PERMANENT_EXCEPTIONS parsed suspiciously low — see the note on spendGuardExceptions; ' +
+        'an apostrophe in a comment silently truncates this list',
+    ).toBeGreaterThanOrEqual(3)
+
+    const WIRED = /assertAiSpendAllowed\(|isAiSpendEnabled\(/
+    const REACHES =
+      /\bfetch\s*\(|\.chat\.completions\.create\s*\(|\.messages\.create\s*\(|\bnew\s+(OpenAI|Anthropic)\s*\(/
+
+    const byFile = new Map<string, Set<string>>()
+    for (const h of findHosts().values()) {
+      if (!aiProvider.some((c) => c.test.test(h.host))) continue
+      for (const f of h.files) {
+        if (!byFile.has(f)) byFile.set(f, new Set())
+        byFile.get(f)!.add(h.host)
+      }
+    }
+    // Anti-vacuity: this codebase has many AI callers. A near-empty set means the
+    // scan or the category broke, not that the exposure vanished.
+    expect(byFile.size, 'almost no ai-provider files found — the scan is broken').toBeGreaterThan(10)
+
+    const unguarded: string[] = []
+    for (const [file, hosts] of byFile) {
+      const src = fs.readFileSync(path.join(repo, file), 'utf8')
+      // Naming a host is not reaching it — config and route maps list hosts too.
+      if (!REACHES.test(src)) continue
+      if (WIRED.test(src) || exceptions.includes(file)) continue
+      unguarded.push(`${file} [${[...hosts].sort().join(', ')}]`)
+    }
+
+    expect(
+      unguarded.sort(),
+      'A file reaches an AI provider without the spend guard, so the ai-provider category ' +
+        'is lying: it exempts these hosts from the DB-first rule on the grounds that a ' +
+        'different boundary covers them. Wire it to lib/ai/aiSpendGuard, or add it to ' +
+        'PERMANENT_EXCEPTIONS there with the reason.',
     ).toEqual([])
   })
 
