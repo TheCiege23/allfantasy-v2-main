@@ -22,6 +22,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
@@ -250,6 +251,43 @@ async function handle(req: NextRequest) {
       const deferred: string[] = []
       const rosterSports = TSDB_SPORTS.filter((s) => LEAGUES[s].hasPlayers)
 
+      /*
+       * ⚠ A HEARTBEAT, BECAUSE A TABLE PROBE ON THIS JOB WOULD BE A FALSE GREEN.
+       *
+       * This writes `sports_players` — the same `last_updated` that `import-players`
+       * probes, and that job runs far more often. A freshness probe pointed at this
+       * column would therefore report THIS cron healthy on the strength of a different
+       * one entirely, which is exactly the false green that hid the dead fast tier for
+       * six days. `scripts/cron-freshness-check.mjs` says so in its NO_PROBE entry for
+       * `?rosters=1` and names this fix.
+       *
+       * Wrapped around the whole sweep rather than per sport: one fire is one run, and a
+       * per-sport wrap would record five runs per night and make the cadence unreadable.
+       * A rotation that defers a sport still proves the job WOKE UP, which is what a
+       * heartbeat is for — deferral is the budget working, not a failure.
+       */
+      await withSyncJobRun(
+        { jobName: "cron-import-schedules-rosters", jobScope: rosterSports.join(","), trigger: "cron" },
+        async () => {
+          await runRosterSweep()
+          return rosters
+        },
+        (acc) => ({
+          rowsWritten: Object.values(acc).reduce<number>(
+            (n, v) =>
+              n + (v && typeof v === "object" && typeof (v as { players?: unknown }).players === "number"
+                ? ((v as { players: number }).players)
+                : 0),
+            0,
+          ),
+          errors: Object.entries(acc)
+            .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
+            .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+          metadata: { deferredSports: deferred },
+        }),
+      )
+
+      async function runRosterSweep() {
       // Rotated on the cron's own daily period, so a league that falls past the cut is not
       // the same league every single run — the starvation this repo already hit once.
       for (const s of rotateForFairness(rosterSports, 24 * 60 * 60 * 1000)) {
@@ -272,6 +310,8 @@ async function handle(req: NextRequest) {
           rosters[s] = { error: String(err).slice(0, 120) }
         }
       }
+      }
+
       if (deferred.length) rosters.deferredSports = deferred
       results.thesportsdb_rosters = rosters
     }
