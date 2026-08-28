@@ -64,6 +64,45 @@ function nextCacheBuster(): string {
   return String(Date.now() + riCacheBusterSeq)
 }
 
+/**
+ * The vendor's calendar day — US EASTERN, not UTC.
+ *
+ * 🛑 THIS WAS A UTC DATE, AND IT BLINDED THE LIVE FEED EVERY SINGLE GAME NIGHT.
+ *
+ * `/live/{date}` is keyed on the Eastern date. From 00:00Z — 8pm Eastern — until
+ * 04:00Z, a UTC date is TOMORROW in Eastern terms, and the vendor answers:
+ *
+ *     404 {"error":"Bad Request",
+ *          "message":"You cannot request live data for future dates as there are
+ *                     no live games yet."}
+ *
+ * That window is exactly NFL primetime and the whole evening college slate. So
+ * the one feed billed as PRIMARY for game day went dark precisely when games are
+ * played, every night, and looked like a provider outage.
+ *
+ * Measured 2026-08-28T00:34Z: `/live/2026-08-28/NFL` 404'd with the message
+ * above while `/live/2026-08-27/NFL` returned 200 with Steelers at Bills,
+ * `game_status: "1:50 2nd 4th & 10"` — the same game ESPN was serving.
+ *
+ * The previous Eastern day is kept as a fallback CANDIDATE rather than a
+ * replacement: a game that starts late on the west coast runs past Eastern
+ * midnight, and after the rollover it belongs to yesterday's date. The probe
+ * loop already tries candidates in order and falls through on a non-2xx, so
+ * ordering today first costs nothing when today is right.
+ */
+export function vendorToday(dayOffset = 0): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+  if (dayOffset === 0) return parts
+  const shifted = new Date(`${parts}T12:00:00Z`)
+  shifted.setUTCDate(shifted.getUTCDate() + dayOffset)
+  return shifted.toISOString().slice(0, 10)
+}
+
 function pathSegmentForDataType(dataType: string): string {
   if (DATA_TYPE_PATH[dataType]) return DATA_TYPE_PATH[dataType]
   if (dataType === 'games' || dataType === 'live_game') return 'scores'
@@ -140,7 +179,8 @@ function buildRestPathCandidates(
   const sportCodes = REST_SPORT_CODES[chainSport]
   const sportLower = SPORT_PATH[chainSport]
   const year = requestedYear
-  const today = new Date().toISOString().slice(0, 10)
+  const today = vendorToday()
+  const yesterday = vendorToday(-1)
 
   // Soccer endpoints are significantly less consistent; keep probes intentionally narrow
   // to avoid long tail timeouts from broad host/path permutations.
@@ -151,7 +191,7 @@ function buildRestPathCandidates(
       teams: [`team-info/${soccerCode}`],
       injuries: [`injuries/${soccerCode}`],
       schedule: [`schedule-season/${year}/${soccerCode}`, `schedule/${today}/${soccerCode}`],
-      scores: [`live/${today}/${soccerCode}`],
+      scores: [`live/${today}/${soccerCode}`, `live/${yesterday}/${soccerCode}`],
       standings: [`standings/${year}/${soccerCode}`],
       projections: [`player-stats/${year}/${soccerCode}`],
       adp: [`adp/${soccerCode}`],
@@ -172,7 +212,7 @@ function buildRestPathCandidates(
       teams: [`team-info/${soccerCode}`],
       injuries: [`injuries/${soccerCode}`],
       schedule: [`schedule-season/${year}/${soccerCode}`, `schedule/${today}/${soccerCode}`],
-      scores: [`live/${today}/${soccerCode}`],
+      scores: [`live/${today}/${soccerCode}`, `live/${yesterday}/${soccerCode}`],
       standings: [`standings/${year}/${soccerCode}`],
       projections: [`player-stats/${year}/${soccerCode}`],
       adp: [`adp/${soccerCode}`],
@@ -225,7 +265,7 @@ function buildRestPathCandidates(
       `player-adp/${sportCode}`,
       `draft-adp/${sportCode}`,
     ],
-    scores: [`live/${today}/${sportCode}`],
+    scores: [`live/${today}/${sportCode}`, `live/${yesterday}/${sportCode}`],
     schedule: [
       `schedule-season/${year}/${sportCode}`,
       `schedule-week/${today}/${sportCode}`,

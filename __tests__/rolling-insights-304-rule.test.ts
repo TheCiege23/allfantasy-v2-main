@@ -133,3 +133,45 @@ describe('Rolling Insights 304 handling', () => {
     }
   })
 })
+
+describe('vendorToday — the Eastern date the /live endpoint is keyed on', () => {
+  // The bug this pins: a UTC date is TOMORROW in Eastern terms from 00:00Z
+  // until 04:00Z, and the vendor answers 404 "You cannot request live data for
+  // future dates". That window is NFL primetime and the whole evening college
+  // slate, so the live feed went dark exactly when games are played.
+  it('returns the EASTERN day during primetime, not the UTC day', async () => {
+    vi.useFakeTimers()
+    try {
+      // 00:34Z = 8:34pm Eastern the PREVIOUS day. The measured failure.
+      vi.setSystemTime(new Date('2026-08-28T00:34:00Z'))
+      const { vendorToday } = await import('@/lib/workers/providers/rolling-insights')
+      expect(new Date().toISOString().slice(0, 10), 'sanity: UTC really is the 28th').toBe('2026-08-28')
+      expect(vendorToday()).toBe('2026-08-27')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('agrees with UTC during the day, when there is no offset to trip over', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-08-27T16:00:00Z')) // noon Eastern
+      const { vendorToday } = await import('@/lib/workers/providers/rolling-insights')
+      expect(vendorToday()).toBe('2026-08-27')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('offsets whole days without drifting across the month boundary', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-09-01T02:00:00Z')) // 10pm ET Aug 31
+      const { vendorToday } = await import('@/lib/workers/providers/rolling-insights')
+      expect(vendorToday()).toBe('2026-08-31')
+      expect(vendorToday(-1)).toBe('2026-08-30')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
