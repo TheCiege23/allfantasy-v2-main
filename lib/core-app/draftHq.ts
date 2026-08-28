@@ -87,11 +87,13 @@ export type DraftGrades = {
   totalPicks: number
   scale: string
   /**
-   * Set when the grade was computed from the stats feed's format aggregate rather
-   * than the league's own rules. Carried through to the screen rather than dropped:
-   * a grade built on an approximation has to say so where it is read.
+   * What the grade was computed FROM, when that needs saying — either that the
+   * league's own rules were unavailable and a format aggregate stood in, or that they
+   * were used but some could not be translated. Carried to the screen rather than
+   * dropped: a number whose basis needs a footnote has to carry it where it is read,
+   * not where it was computed.
    */
-  approximationNote: string | null
+  scoringNote: string | null
   teams: TeamDraftGrade[]
 }
 
@@ -326,7 +328,9 @@ async function loadDraftGrades(
       gradedPicks: season.gradedPicks,
       totalPicks: season.totalPicks,
       scale: report.gradeScale.description,
-      approximationNote: report.scoringBasis === 'format-approx' ? report.scoringNote : null,
+      /* Not gated on `format-approx`: league-scored with a tenth of the rules
+         missing also needs saying. */
+      scoringNote: report.scoringNote,
       teams: season.managers.map((m) => ({
         ownerId: m.ownerId,
         name: m.name,

@@ -83,9 +83,37 @@ export function resolveImportedScoring(
   const format: 'ppr' | 'half_ppr' | 'std' =
     reception >= 1 ? 'ppr' : reception >= 0.5 ? 'half_ppr' : 'std'
 
+  /*
+   * Rules the league actually scores that we could NOT translate.
+   *
+   * ⚠ AN UNRESOLVED RULE IS A SILENT ZERO, NOT A NO-OP. Its weight is simply absent
+   * from the map, so every player who accrues that stat is scored as though the league
+   * did not reward it. Counting only NON-ZERO rules matters: a league declaring a rule
+   * at 0 loses nothing by our not translating it, and including those would inflate
+   * the gap into noise nobody reads.
+   */
+  let unresolvedNonZero = 0
+  for (const [rawKey, rawValue] of Object.entries(rules ?? {})) {
+    if (typeof rawValue !== 'number' || rawValue === 0) continue
+    const key = rawKey.includes('_stat_')
+      ? resolveProviderScoringStatKey(rawKey)
+      : rawKey.toLowerCase()
+    if (!key) unresolvedNonZero += 1
+  }
+
   const covered = CORE_SCORING_KEYS.filter((k) => typeof translated[k] === 'number').length
   if (covered >= MIN_CORE_KEYS) {
-    return { settings: translated, format, basis: 'league-scored', note: null }
+    return {
+      settings: translated,
+      format,
+      basis: 'league-scored',
+      /* Said even though the basis is the league's own scoring, because "league-scored"
+         with a tenth of the rules missing is a claim that needs its own footnote. */
+      note:
+        unresolvedNonZero > 0
+          ? `Scored with this league's own rules for passing, rushing and receiving. ${unresolvedNonZero} of its scoring rules could not be translated — ESPN publishes them as numeric ids with no names, and the ones left are kicking and defensive scoring plays — so kickers and team defenses are understated here.`
+          : null,
+    }
   }
 
   return {
@@ -93,7 +121,7 @@ export function resolveImportedScoring(
     settings: {},
     format,
     basis: 'format-approx',
-    note: `Graded on standard ${format === 'half_ppr' ? 'half-PPR' : format === 'std' ? 'standard' : 'PPR'} scoring rather than this league's exact rules — ${platform} records its scoring as numeric stat ids with no names attached, and only ${covered} of them can be translated without guessing.`,
+    note: `Graded on standard ${format === 'half_ppr' ? 'half-PPR' : format === 'std' ? 'standard' : 'PPR'} scoring rather than this league's exact rules — ${platform} records its scoring as numeric stat ids with no names attached, and only ${covered} core rules could be translated without guessing.`,
   }
 }
 

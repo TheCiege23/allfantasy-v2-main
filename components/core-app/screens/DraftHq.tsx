@@ -144,8 +144,8 @@ export function DraftHq({ data }: DraftHqProps) {
               Said before the letters, not after. A reader who sees a B and then finds
               the caveat underneath has already formed the belief the caveat corrects.
             */}
-            {data.grades.data.approximationNote ? (
-              <p className="af-dh-grade-approx">{data.grades.data.approximationNote}</p>
+            {data.grades.data.scoringNote ? (
+              <p className="af-dh-grade-approx">{data.grades.data.scoringNote}</p>
             ) : null}
             <p className="af-dh-grade-scale">{data.grades.data.scale}</p>
 
