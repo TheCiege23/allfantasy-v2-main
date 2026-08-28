@@ -54,6 +54,62 @@ async function handle(req: NextRequest) {
 
   const startedAt = Date.now()
 
+  /*
+   * `?xnews=1` — X (xAI x_search) ingestion plus the notification dispatch that turns
+   * those rows into something a user actually sees.
+   *
+   * FOLDED INTO THIS ROUTE rather than given its own, because Vercel has a hard 2048-route
+   * ceiling this repo is already at. Same reason `?full=` and `?sport=` live here.
+   *
+   * ⚠ BOTH HALVES RUN IN ONE INVOCATION ON PURPOSE. Ingesting without dispatching just
+   * refreshes rows nobody sees; dispatching without ingesting notifies on stale rows.
+   *
+   * ⚠ SPEND. Each sport costs one xAI x_search call per configured query — roughly 20
+   * calls for all seven sports. It defaults to NFL alone so a scheduled run is bounded in
+   * both cost and wall-clock (maxDuration is 120s and a search is seconds, not
+   * milliseconds); widen deliberately via `?sport=`.
+   */
+  const xnewsParam = url.searchParams.get('xnews')
+  if (xnewsParam !== null && ['1', 'true', 'yes'].includes(xnewsParam.toLowerCase())) {
+    try {
+      const { runXNewsIngestion } = await import('@/lib/workers/x-news-ingestion')
+      const { dispatchPendingPlayerNewsNotifications } = await import(
+        '@/lib/notifications/PlayerNewsNotificationService'
+      )
+      /*
+       * ⚠ LOWERCASED. `sports` above is upper-cased for runNewsImporter, but
+       * SPORT_SEARCH_QUERIES is keyed lower-case and runXNewsIngestion `continue`s past a
+       * key it does not recognise — so passing "NFL" would ingest nothing and report a
+       * perfectly clean zero.
+       */
+      const xSports = (sports ?? ['NFL']).map((s) => s.toLowerCase())
+      const ingest = await runXNewsIngestion(xSports)
+      const dispatchResult = await dispatchPendingPlayerNewsNotifications()
+
+      return NextResponse.json(
+        {
+          ok: ingest.errors.length === 0,
+          mode: 'xnews',
+          sports: xSports,
+          ingest,
+          dispatch: dispatchResult,
+          durationMs: Date.now() - startedAt,
+          timestamp: new Date().toISOString(),
+        },
+        // Unlike the ESPN pass, zero new rows is a legitimate outcome here — X may simply
+        // have had nothing new in the window. Only a provider error is a failure.
+        { status: ingest.errors.length === 0 ? 200 : 500 }
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[cron/import-news] xnews failed:', message)
+      return NextResponse.json(
+        { ok: false, mode: 'xnews', error: message.slice(0, 240), durationMs: Date.now() - startedAt },
+        { status: 500 }
+      )
+    }
+  }
+
   try {
     // Ingest FIRST. runNewsImporter re-reads sports_news, so without a preceding
     // fetch it can only recycle whatever is already there — which is exactly how
