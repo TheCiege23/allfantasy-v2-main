@@ -73,7 +73,12 @@ const MIN_JOB_TIMEOUT_MS = 60_000
 const MAX_JOB_TIMEOUT_MS = 330_000
 
 /** Default window. Under the hour so a delayed next run cannot overlap this one for long. */
-const DEFAULT_WINDOW_MINUTES = 55
+/**
+ * ⚠ Must stay in step with `FAST_TIER_WINDOW_MINUTES` in .github/workflows/cron-fast-tier.yml,
+ * which is what the scheduled path actually passes. This default only applies to a hand-run
+ * invocation. 50 minutes against a 60-minute trigger leaves the window room to finish and re-arm.
+ */
+const DEFAULT_WINDOW_MINUTES = 50
 
 /** Scheduler resolution. Every job here is on a whole-minute cadence; 1s is ample. */
 const SCHEDULER_INTERVAL_MS = 1_000

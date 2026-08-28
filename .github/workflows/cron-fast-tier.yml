@@ -59,9 +59,14 @@ name: Cron fast tier
 # REPLACES a running :03 loop with a fresh 55m window instead of ticking alongside it. Runner cost
 # is unchanged (~60 min/hour of continuous single-loop coverage either way).
 #
-# ⚠ KEEP THE WINDOW AT 55m, NOT 30m, even though the triggers are now 30m apart. The 55m window is
-# what makes a DROPPED trigger survivable: if :33 never fires, the :03 run still covers the hour.
-# Shrinking it to match the trigger cadence would re-open the exact hole this change closes.
+# ⚠ THE WINDOW MUST FINISH INSIDE THE TRIGGER GAP. At 50m against a 60m trigger it completes with
+# ~7-10m of margin (the loop overshoots its requested window by a few minutes — measured 55.4-56.3m
+# for a 55m window, and 324s for a 2m one), so it reaches its re-arm threshold and books the
+# successor before the hourly trigger can preempt it.
+#
+# It was 55m, which left only ~4m of margin and meant a chain run starting off-phase was routinely
+# cancelled before it could re-arm — the chain then depended on the very scheduler it exists to
+# escape. Do NOT raise it back toward 60 without lowering the trigger cadence to match.
 
 on:
   schedule:
@@ -114,6 +119,13 @@ concurrency:
   group: cron-fast-tier
   cancel-in-progress: true
 
+# ONE source of truth for the window length. It was written as a literal `55` in TWO shell steps
+# (the tick and the re-arm), and that duplication is precisely the drift that produced the
+# unreachable-threshold bug: the re-arm computed its threshold from a default the tick step no
+# longer used. Both steps now read this.
+env:
+  FAST_TIER_WINDOW_MINUTES: "50"
+
 permissions:
   contents: read
   # Lets the re-arm step dispatch this workflow's successor. `wc-cron.yml` already uses the same
@@ -151,7 +163,7 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          WINDOW="${INPUT_WINDOW:-55}"
+          WINDOW="${INPUT_WINDOW:-$FAST_TIER_WINDOW_MINUTES}"
           case "$WINDOW" in
             ''|*[!0-9]*) echo "::error::window_minutes must be a positive integer"; exit 1 ;;
           esac
@@ -216,8 +228,8 @@ jobs:
           #
           # A short test window cannot seed a runaway: the successor is dispatched with NO inputs,
           # so it takes the 55-minute default. One 2-minute window begets a 55-minute one.
-          WINDOW_MIN="${INPUT_WINDOW:-55}"
-          case "$WINDOW_MIN" in ''|*[!0-9]*) WINDOW_MIN=55 ;; esac
+          WINDOW_MIN="${INPUT_WINDOW:-$FAST_TIER_WINDOW_MINUTES}"
+          case "$WINDOW_MIN" in ''|*[!0-9]*) WINDOW_MIN="$FAST_TIER_WINDOW_MINUTES" ;; esac
           ELAPSED=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
           MIN_ELAPSED=$(( WINDOW_MIN * 60 * 70 / 100 ))
           if [ "$ELAPSED" -lt "$MIN_ELAPSED" ]; then
