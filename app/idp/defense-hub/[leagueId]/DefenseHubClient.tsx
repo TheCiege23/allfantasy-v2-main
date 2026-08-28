@@ -282,7 +282,25 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-[12px]">
-                      {d.value != null ? d.value.toLocaleString() : <Dash />}
+                      {d.value == null ? (
+                        <Dash />
+                      ) : d.valueIsFloor ? (
+                        /*
+                         * A floor price is not a measured value — roughly half this board sits
+                         * on it. Rendered as a plain number it reads as a real price, so two
+                         * floor-priced defenders look like equivalent trade assets. Muted and
+                         * marked instead, with the explanation on hover.
+                         */
+                        <span
+                          className="text-[#8b93b7]"
+                          title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
+                        >
+                          {d.value.toLocaleString()}
+                          <span className="ml-1 text-[10px]">floor</span>
+                        </span>
+                      ) : (
+                        d.value.toLocaleString()
+                      )}
                     </td>
                   </>
                 )}

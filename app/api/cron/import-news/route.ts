@@ -128,6 +128,34 @@ async function handle(req: NextRequest) {
 
     const result = await runNewsImporter({ sports })
 
+    /*
+     * DISPATCH ON EVERY RUN, not just the xnews pass. This route is where ESPN, NewsAPI
+     * and ClearSports land — ~3,400 player_news rows a week against X's zero — so gating
+     * notifications on `?xnews=1` would have left almost all real news silent. Measured
+     * before wiring: 680 undispatched rows in 24h, of which 0 had EVER been dispatched.
+     *
+     * ⚠ SIX-HOUR LOOKBACK, not the 24 the xnews pass uses, and the difference is
+     * deliberate. This runs every 15 minutes, so a row would have to be missed 24 times
+     * to age out — while the shorter window caps how STALE a notification can be. Nobody
+     * gets pinged about yesterday's news because a backlog drained slowly.
+     *
+     * ⚠ ITS FAILURE MUST NOT FAIL THE IMPORT. Notification delivery is downstream of the
+     * job's actual purpose, and `ok` below is the freshness signal that went unnoticed for
+     * 107 days — folding a dispatch error into it would make that signal mean two things.
+     * Reported in the response instead.
+     */
+    let dispatch: unknown = null
+    let dispatchError: string | null = null
+    try {
+      const { dispatchPendingPlayerNewsNotifications } = await import(
+        '@/lib/notifications/PlayerNewsNotificationService'
+      )
+      dispatch = await dispatchPendingPlayerNewsNotifications({ lookbackHours: 6 })
+    } catch (err) {
+      dispatchError = err instanceof Error ? err.message : String(err)
+      console.error('[cron/import-news] notification dispatch failed:', dispatchError)
+    }
+
     // `imported` counts rows OFFERED to createMany, not rows inserted
     // (skipDuplicates), so it cannot stand in for freshness. `articlesFetched` is
     // the number that actually moves sports_news forward.
@@ -143,6 +171,8 @@ async function handle(req: NextRequest) {
         sourceError: fetchError,
         normalizedOffered: result.imported,
         sports: result.sports,
+        dispatch,
+        dispatchError,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
       },

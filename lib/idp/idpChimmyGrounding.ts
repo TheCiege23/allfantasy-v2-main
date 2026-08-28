@@ -120,7 +120,14 @@ export async function buildIdpContext(leagueId: string, userId: string): Promise
        */
       const projPart =
         typeof proj === 'number' ? `, ${proj.toFixed(1)} proj pts` : ', projection unavailable'
-      return `${name} (${pos}${team}${rankPart}): ${value}${projPart}`
+      /*
+       * Marked inline as well as stated in the header. The owned-defenders list below is the
+       * section most likely to drive a trade answer, and roughly half of it can be floor
+       * prices — requiring the model to match each number against the header's floor is an
+       * inference it does not need to make.
+       */
+      const floorPart = value === ranked[ranked.length - 1][1] ? ' [FLOOR PRICE, not a measured value]' : ''
+      return `${name} (${pos}${team}${rankPart}): ${value}${projPart}${floorPart}`
     }
 
     const lines: string[] = []
