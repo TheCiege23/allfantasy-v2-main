@@ -213,6 +213,49 @@ type ChimmyPlayerCard = {
   isStarter: boolean
 }
 
+/**
+ * Turn an API error CODE into something a person can act on.
+ *
+ * ⚠ THE RAW CODE WAS BEING RENDERED TO USERS. A non-admin account asking a
+ * perfectly ordinary question ("what games are on tonight in NFL?") saw
+ * "VERIFICATION_REQUIRED Nothing was charged." — an internal identifier, in red,
+ * with no hint that the fix is to verify an email and no way to get there. Every
+ * other consumer of this error in the app routes to /verify; the chat drawer
+ * alone printed the constant.
+ *
+ * ⚠ AND IT LOOKS LIKE A CRASH RATHER THAN A DOOR. That matters more than the
+ * wording: an unverified user cannot use Chimmy AT ALL, and the message gave
+ * them no reason to think verifying would change that. This repo has already
+ * lost a funnel to exactly this shape — a requireVerifiedUser handler behind a
+ * surface that never explained itself.
+ */
+const CHIMMY_ERROR_COPY: Record<string, string> = {
+  VERIFICATION_REQUIRED:
+    'Verify your email to use Chimmy — open Settings, or go to /verify. Your question was not sent.',
+  AGE_REQUIRED: 'Confirm your date of birth in Settings to use Chimmy. Your question was not sent.',
+  PROFILE_REQUIRED: 'Finish setting up your profile to use Chimmy. Your question was not sent.',
+  insufficient_token_balance:
+    'You are out of tokens, so this answer was not bought. Top up and ask again.',
+  token_confirmation_required: 'Confirm the token spend and ask again.',
+  ai_spend_disabled: 'AI answers are switched off right now. Nothing was attempted.',
+}
+
+function describeChimmyError(code: unknown): string {
+  if (typeof code !== 'string' || !code) return 'Chimmy could not answer that.'
+  const known = CHIMMY_ERROR_COPY[code]
+  if (known) return known
+  /*
+   * An UNKNOWN code is still not something to show raw. SCREAMING_SNAKE and
+   * lower_snake identifiers are internal by definition — if one reaches here it
+   * is a gap in the map above, and the reader should get a sentence rather than
+   * a constant while that gap is closed.
+   */
+  if (/^[A-Z][A-Z0-9_]*$/.test(code) || /^[a-z][a-z0-9_]*$/.test(code)) {
+    return 'Chimmy could not answer that.'
+  }
+  return code
+}
+
 function playerInitials(name: string): string {
   return name
     .split(/\s+/)
@@ -389,7 +432,7 @@ function ChimmyPanel({
             ])
             return
           }
-          throw new Error(payload.error ?? 'Chimmy could not answer that.')
+          throw new Error(describeChimmyError(payload.error))
         }
 
         /*
@@ -568,7 +611,19 @@ function ChimmyPanel({
           ))
         )}
         {busy ? <div className="af-cm-turn" data-role="chimmy"><p className="af-cm-turn-text af-cm-typing">Chimmy is thinking…</p></div> : null}
-        {error ? <p className="af-cm-error">{error} Nothing was charged.</p> : null}
+        {/*
+          * ⚠ "Nothing was charged." USED TO BE APPENDED TO EVERY ERROR, and it is
+          * not always true: route.ts:2848 returns a 500 AFTER the spend at 1883,
+          * so a charged request could report itself as free. A blanket
+          * reassurance about money is the one kind you cannot bluff.
+          *
+          * Each message in CHIMMY_ERROR_COPY now states the charge outcome only
+          * where it is KNOWN — the gates say the question was not sent, the
+          * balance case says the answer was not bought. The generic fallback
+          * says nothing about charging, which is the honest position when we
+          * genuinely do not know.
+          */}
+        {error ? <p className="af-cm-error">{error}</p> : null}
         <div ref={endRef} />
       </div>
 
