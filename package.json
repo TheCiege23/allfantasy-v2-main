@@ -150,6 +150,8 @@
     "sync:sports-foundation": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sync-sports-foundation.ts",
     "guard:db-first-api": "node scripts/check-db-first-api-boundary.mjs",
     "guard:external-id-namespace": "node scripts/check-external-id-namespace.mjs",
+    "guard:inflight-build": "node scripts/check-inflight-prod-build.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
     "audit:db-first-architecture": "tsx scripts/audit-db-first-architecture.ts",
     "player-card:cache:audit": "tsx scripts/player-card-cache-audit.ts",
     "ai-result-cache:audit": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-ai-result-cache.ts",

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Refuse a push to `main` while a production build is already running.
+#
+# The reasoning, the measurements and the fail-open policy all live in
+# scripts/check-inflight-prod-build.mjs. This file stays a thin shim on purpose:
+# it is COPIED into the active hooks directory by `npm run hooks:install`, so a
+# stale copy can survive there for a long time. Keeping the logic in the tracked
+# script means the installed shim never needs to change, and the behaviour is
+# always whatever the checkout says it is.
+#
+# ⚠ Every failure path here exits 0. A cost guard that can strand a deploy is
+# worse than the cost it saves.
+
+[ "$AF_SKIP_PREPUSH_HOOK" = "1" ] && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+# Absent in an old worktree that predates the guard, or in a checkout that has
+# not been updated. Not a reason to block anyone's push.
+[ -f "$root/scripts/check-inflight-prod-build.mjs" ] || exit 0
+
+command -v node >/dev/null 2>&1 || exit 0
+
+# exec so the pre-push stdin payload (<localRef> <localSha> <remoteRef>
+# <remoteSha>) reaches the script -- that is how it knows the push targets main.
+exec node "$root/scripts/check-inflight-prod-build.mjs"
