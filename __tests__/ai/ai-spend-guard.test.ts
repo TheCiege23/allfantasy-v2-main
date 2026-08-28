@@ -8,6 +8,30 @@ import {
   AiSpendDisabledError,
 } from '@/lib/ai/aiSpendGuard'
 
+/**
+ * PERMANENT exceptions — boundaries that must NEVER be guarded, with the reason.
+ * Module scope because both the enumerated coverage block and the census below
+ * consult it, and two copies would drift.
+ *
+ * Both are liveness probes: they answer "is this provider up", which cannot be
+ * read from Postgres. GUARDING ONE WOULD MAKE IT LIE — with spend off it would
+ * report a healthy provider as `down`, and a dashboard that shows an outage
+ * because a billing switch is off is worse than no dashboard.
+ */
+const PERMANENT_EXCEPTIONS = [
+  'lib/agents/workers/api-health-monitor.ts',
+  // Already self-documented, with `db-first-exception: live provider health probe`
+  // on each URL it probes.
+  'lib/admin-dashboard/SystemHealthResolver.ts',
+  /*
+   * NOT a probe — a ROUTER, and excepted for a different reason. It only
+   * chooses between clients that are themselves guarded, so guarding it would
+   * refuse callers that inject or mock a client and would therefore never
+   * have spent anything. The guard module's own docstring says so.
+   */
+  'lib/ai/providerRouter.ts',
+]
+
 const ENV = { ...process.env }
 beforeEach(() => { delete process.env.AI_FEATURES_ENABLED; delete process.env.NEXT_PHASE })
 afterEach(() => { process.env = { ...ENV } })
@@ -166,6 +190,12 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/survivor/ai/SurvivorAIService.ts',
     'lib/trade-engine/ai-layer.ts',
     'lib/zombie/ai/ZombieAIService.ts',
+    // Found by the census scan below rather than by any list — it was on no
+    // ratchet and in no GUARDED entry. That find is why the scan exists.
+    'lib/social-clips-grok/GrokSocialContentService.ts',
+    // Also found by the census, and only once it learned to spot a boundary
+    // that resolves its base URL from config instead of a literal.
+    'lib/ai-external/grok.ts',
   ]
 
   /**
@@ -200,7 +230,6 @@ describe('AI spend guard — provider boundary coverage', () => {
    * outage because a billing switch is off is worse than no dashboard. It is listed here so it
    * reads as a decision rather than as something the sweep missed.
    */
-  const PERMANENT_EXCEPTIONS = ['lib/agents/workers/api-health-monitor.ts']
 
   /*
    * Either form counts as wired to the guard, and the choice is forced by the
@@ -232,6 +261,124 @@ describe('AI spend guard — provider boundary coverage', () => {
     for (const file of PERMANENT_EXCEPTIONS) {
       expect(fs.existsSync(path.join(repo, file))).toBe(true)
       expect(read(file)).not.toMatch(/assertAiSpendAllowed\(|isAiSpendEnabled\(/)
+    }
+  })
+})
+
+/*
+ * A CENSUS, NOT A LIST.
+ *
+ * Everything above enumerates paths, which means it can only ever be a FLOOR:
+ * a boundary nobody added is invisible, neither guarded nor counted as debt.
+ * Three classes were found that way in one session — four app/api routes
+ * constructing clients inside their handlers, a lib module omitted outright,
+ * and three modules importing a GUARDED client while building an unguarded one
+ * of their own.
+ *
+ * This scans instead. It walks the source and asks what each file CONSTRUCTS,
+ * so a new provider boundary fails on the commit that adds it rather than
+ * whenever someone next runs a manual sweep.
+ */
+describe('AI spend guard — provider boundary census', () => {
+  const repo = process.cwd()
+
+  const ROOTS = ['lib', 'app/api']
+  const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '__mocks__'])
+
+  /** Constructing a provider SDK is a boundary on its own. */
+  const SDK_CONSTRUCT = /\bnew\s+(OpenAI|Anthropic)\s*\(/
+  /** A provider host is only a boundary when the file also makes a call — config files name hosts too. */
+  const PROVIDER_HOST =
+    /https?:\/\/api\.(openai|anthropic|x\.ai|deepseek|groq)\.com|generativelanguage\.googleapis\.com|openrouter\.ai/
+  const MAKES_CALL = /\bfetch\s*\(|\.chat\.completions\.create\s*\(|\.messages\.create\s*\(/
+  /*
+   * Third signal, and the one that matters most. A boundary can resolve its base
+   * URL from config and construct nothing — lib/xai-client.ts does exactly that,
+   * and the first two signals are blind to it despite it being one of the most
+   * used clients in the codebase. Reading a provider API key and then making a
+   * call is the shape that catches those. It found lib/ai-external/grok.ts,
+   * which every path-based and literal-based sweep had missed.
+   */
+  const PROVIDER_KEY_ENV = /\b(OPENAI|ANTHROPIC|XAI|GROK|DEEPSEEK)_API_KEY\b/
+
+  /** Either form counts — see the note on GUARDED for why both exist. */
+  const IS_WIRED = /assertAiSpendAllowed\(|isAiSpendEnabled\(/
+
+  function walk(dir: string, out: string[] = []): string[] {
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return out
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) {
+        if (!SKIP_DIR.has(e.name)) walk(p, out)
+      } else if (/\.tsx?$/.test(e.name) && !/\.d\.ts$/.test(e.name)) {
+        out.push(p)
+      }
+    }
+    return out
+  }
+
+  function findBoundaries() {
+    const found: Array<{ file: string; why: string; wired: boolean }> = []
+    for (const root of ROOTS) {
+      for (const abs of walk(path.join(repo, root))) {
+        const file = path.relative(repo, abs).split(path.sep).join('/')
+        const src = fs.readFileSync(abs, 'utf8')
+        const call = MAKES_CALL.test(src)
+        const sdk = SDK_CONSTRUCT.test(src)
+        const hostCall = PROVIDER_HOST.test(src) && call
+        const keyCall = PROVIDER_KEY_ENV.test(src) && call
+        if (!sdk && !hostCall && !keyCall) continue
+        const why = sdk
+          ? 'constructs an SDK client'
+          : hostCall
+            ? 'provider host + outbound call'
+            : 'provider API key + outbound call'
+        found.push({ file, why, wired: IS_WIRED.test(src) })
+      }
+    }
+    return found
+  }
+
+  it('finds boundaries at all (a scan that finds nothing always passes)', () => {
+    // Guards the guard: a broken walk or a typo in the patterns would make every
+    // assertion below vacuously true.
+    const found = findBoundaries()
+    expect(found.length).toBeGreaterThan(20)
+    // xai-client is the canary ON PURPOSE: it constructs nothing and names no
+    // host, so it is visible only to the third signal. If someone simplifies the
+    // patterns back to "SDK or literal host", this fails rather than quietly
+    // shrinking the census.
+    expect(found.some((f) => f.file === 'lib/xai-client.ts')).toBe(true)
+    expect(found.some((f) => f.file === 'lib/openai-client.ts')).toBe(true)
+  })
+
+  it('every provider boundary is wired to the spend guard, or a declared exception', () => {
+    const unaccounted = findBoundaries()
+      .filter((f) => !f.wired)
+      .filter((f) => !PERMANENT_EXCEPTIONS.includes(f.file))
+    expect(
+      unaccounted.map((f) => `${f.file} (${f.why})`),
+      'A new provider boundary shipped unguarded. Wire it to lib/ai/aiSpendGuard, ' +
+        'matching the guard form to the function contract: throw where a missing key ' +
+        'already throws, return null/[] where the caller expects a degraded value. ' +
+        'If it is a liveness probe, add it to PERMANENT_EXCEPTIONS with the reason.',
+    ).toEqual([])
+  })
+
+  it('every declared exception is still a real, still-unguarded boundary', () => {
+    // A stale exception is worse than none: it silently excuses a file that has
+    // moved on, or one that someone has since guarded.
+    const found = findBoundaries()
+    for (const exc of PERMANENT_EXCEPTIONS) {
+      const hit = found.find((f) => f.file === exc)
+      expect(hit, `${exc} is declared an exception but the scan no longer sees it as a boundary`).toBeTruthy()
+      expect(hit!.wired, `${exc} is now guarded — remove it from PERMANENT_EXCEPTIONS`).toBe(false)
     }
   })
 })

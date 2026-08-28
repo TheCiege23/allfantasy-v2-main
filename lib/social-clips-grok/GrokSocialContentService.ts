@@ -7,10 +7,17 @@ import OpenAI from 'openai';
 import { buildSocialSystemPrompt, buildSocialUserPrompt } from './SocialPromptBuilder';
 import type { SocialPromptBuildInput, GrokSocialOutput } from './types';
 import { getXaiConfigFromEnv } from '@/lib/provider-config';
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard';
 
 const DEFAULT_GROK_MODEL = 'grok-4-0709';
 
 function getClient(): { client: OpenAI; model: string } | null {
+  // PROVIDER BOUNDARY. Found by the census scan below, not by either list —
+  // it was on no ratchet and in no GUARDED entry, so nothing was watching it.
+  // Non-throwing to match the contract: this already returns null when the
+  // provider is unconfigured, and every caller handles that.
+  if (!isAiSpendEnabled()) return null;
+
   const cfg = getXaiConfigFromEnv();
   if (!cfg) return null;
   return {
