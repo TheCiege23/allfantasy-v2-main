@@ -12,7 +12,9 @@ import {
 } from '@/lib/league-import/providerPlayerIdentities'
 import {
   linkEspnIdentitiesToCanonical,
+  linkEspnIdentityMapByIdChain,
   type EspnLinkSummary,
+  type EspnIdentityMapSummary,
 } from '@/lib/espn/linkEspnIdentities'
 
 /**
@@ -67,6 +69,8 @@ export type EspnIdentityIngestSummary = {
   evidenceBackfilled: number
   /** Null until the linking pass runs; see `linkEspnIdentitiesToCanonical`. */
   link?: EspnLinkSummary
+  /** The ESPN -> Sleeper crosswalk, composed from id links rather than matched. */
+  crosswalk?: EspnIdentityMapSummary
   stoppedEarly: boolean
   error?: string
 }
@@ -313,6 +317,14 @@ export async function ingestEspnAthleteIdentities(options?: {
    * that fetched nothing new can still link rows whose evidence arrived last time.
    */
   summary.link = await linkEspnIdentitiesToCanonical({
+    sportKey,
+    isExhausted: options?.isExhausted,
+  }).catch(() => undefined)
+
+  /* Crosswalk last: it reads the links the pass above just wrote, so running it in
+     the same tick is worth more than a tick's delay would cost. Pure id composition,
+     so it is cheap even when it finds nothing new. */
+  summary.crosswalk = await linkEspnIdentityMapByIdChain({
     sportKey,
     isExhausted: options?.isExhausted,
   }).catch(() => undefined)

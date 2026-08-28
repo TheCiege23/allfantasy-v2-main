@@ -48,7 +48,19 @@ export type EspnLinkSummary = {
   /** Rows skipped because no ingest has captured position or birthday for them yet. */
   noEvidence: number
   identityRowsUpdated: number
-  identityMapRowsUpdated: number
+}
+
+export type EspnIdentityMapSummary = {
+  /** ESPN identity rows already linked to a canonical player. */
+  linkedEspnRows: number
+  /** Of those, the ones whose player also has a Sleeper identity. */
+  reachedSleeperId: number
+  /** Of those, the ones whose Sleeper id reaches a PlayerIdentityMap row. */
+  reachedIdentityMap: number
+  written: number
+  /** Skipped because the hop was not one-to-one, or the row already had an id. */
+  skippedAmbiguous: number
+  skippedAlreadySet: number
 }
 
 const EMPTY: EspnLinkSummary = {
@@ -59,7 +71,6 @@ const EMPTY: EspnLinkSummary = {
   unmatched: 0,
   noEvidence: 0,
   identityRowsUpdated: 0,
-  identityMapRowsUpdated: 0,
 }
 
 /** Evidence captured onto the identity row by a previous ingest, if any. */
@@ -118,27 +129,12 @@ export async function linkEspnIdentitiesToCanonical(options?: {
    * canonical normalizer produces "aj bouye". Querying that column with a normalized
    * string finds nothing, silently, for every punctuated name in the league.
    */
-  const [players, identityMap] = await Promise.all([
-    prisma.player
-      .findMany({
-        where: { sport: sportKey },
-        select: { id: true, name: true, position: true, team: true, birthDate: true, sport: true },
-      })
-      .catch(() => []),
-    prisma.playerIdentityMap
-      .findMany({
-        where: { sport: sportKey, espnId: null },
-        select: {
-          id: true,
-          canonicalName: true,
-          position: true,
-          currentTeam: true,
-          dob: true,
-          sport: true,
-        },
-      })
-      .catch(() => []),
-  ])
+  const players = await prisma.player
+    .findMany({
+      where: { sport: sportKey },
+      select: { id: true, name: true, position: true, team: true, birthDate: true, sport: true },
+    })
+    .catch(() => [])
 
   const playerPool = bucketByName(
     players.map((c) => ({
@@ -148,16 +144,6 @@ export async function linkEspnIdentitiesToCanonical(options?: {
       position: c.position,
       team: c.team,
       dob: c.birthDate,
-    })),
-  )
-  const mapPool = bucketByName(
-    identityMap.map((m) => ({
-      id: m.id,
-      name: m.canonicalName,
-      sport: m.sport,
-      position: m.position,
-      team: m.currentTeam,
-      dob: m.dob,
     })),
   )
 
@@ -211,32 +197,129 @@ export async function linkEspnIdentitiesToCanonical(options?: {
       continue
     }
 
-    /*
-     * Mirror onto PlayerIdentityMap, through the SAME matcher rather than a name
-     * lookup — so an ambiguous PIM name is refused here exactly as it is above.
-     *
-     * Update by id and never upsert: creating a PIM row would invent a canonical
-     * identity out of a match rather than an identity source, and a row holding an
-     * espnId with no sleeperId is no use to the grader in any case.
-     */
-    const mapBucket = mapPool.get(key) ?? []
-    if (mapBucket.length === 0) continue
-    const mapped = matchProviderAthlete(evidence, mapBucket)
-    if (!mapped.matched) continue
+  }
+
+  return summary
+}
+
+/**
+ * Fill `PlayerIdentityMap.espnId` by COMPOSING ESTABLISHED ID LINKS — no matching.
+ *
+ * ⚠ WHY THIS REPLACED A MATCHER-BASED MIRROR. The first version resolved the PIM row
+ * with `matchProviderAthlete`, and measured against production it linked exactly
+ * nothing, for a structural reason rather than a tuning one: PIM rows carry a
+ * position and no birthday, while ESPN evidence carries a birthday and no position
+ * (its athlete document has no position field at all). Nothing could ever
+ * corroborate, so every candidate was correctly refused, for ever. Two mechanisms
+ * where one is permanently inert is worse than one, so that path is gone.
+ *
+ * The chain here needs no matching at all, because every hop is an id:
+ *
+ *   espn identity.playerId  ->  the same player's SLEEPER identity
+ *                           ->  its providerPlayerId IS the Sleeper id
+ *                           ->  PlayerIdentityMap.sleeperId (a UNIQUE column)
+ *
+ * The result is the ESPN -> Sleeper crosswalk on a single PIM row, which is what the
+ * draft grader needs, and it inherits the confidence of the espn->player link rather
+ * than inventing a new one.
+ *
+ * ⚠ EVERY HOP IS CHECKED FOR FAN-OUT even though production currently shows none
+ * (exactly one Sleeper identity per linked player). A second Sleeper row on one
+ * player would otherwise pick whichever came back first and write a crosswalk to the
+ * wrong athlete — silently, and to the one table a live resolver already reads.
+ */
+export async function linkEspnIdentityMapByIdChain(options?: {
+  sportKey?: string
+  maxWrites?: number
+  isExhausted?: () => boolean
+}): Promise<EspnIdentityMapSummary> {
+  const sportKey = options?.sportKey ?? 'NFL'
+  const maxWrites = options?.maxWrites ?? 500
+  const summary: EspnIdentityMapSummary = {
+    linkedEspnRows: 0,
+    reachedSleeperId: 0,
+    reachedIdentityMap: 0,
+    written: 0,
+    skippedAmbiguous: 0,
+    skippedAlreadySet: 0,
+  }
+
+  const espnRows = await prisma.playerProviderIdentity
+    .findMany({
+      where: { provider: 'espn', sportKey, playerId: { not: null } },
+      select: { providerPlayerId: true, playerId: true },
+    })
+    .catch(() => [])
+  summary.linkedEspnRows = espnRows.length
+  if (espnRows.length === 0) return summary
+
+  /* Two ESPN ids resolving to one player is a contradiction, not a choice. Both are
+     dropped rather than letting one win by ordering. */
+  const espnByPlayer = new Map<string, string[]>()
+  for (const row of espnRows) {
+    if (!row.playerId) continue
+    const bucket = espnByPlayer.get(row.playerId)
+    if (bucket) bucket.push(row.providerPlayerId)
+    else espnByPlayer.set(row.playerId, [row.providerPlayerId])
+  }
+
+  const sleeperRows = await prisma.playerProviderIdentity
+    .findMany({
+      where: { provider: 'sleeper', sportKey, playerId: { in: [...espnByPlayer.keys()] } },
+      select: { providerPlayerId: true, playerId: true },
+    })
+    .catch(() => [])
+
+  const sleeperByPlayer = new Map<string, string[]>()
+  for (const row of sleeperRows) {
+    if (!row.playerId) continue
+    const bucket = sleeperByPlayer.get(row.playerId)
+    if (bucket) bucket.push(row.providerPlayerId)
+    else sleeperByPlayer.set(row.playerId, [row.providerPlayerId])
+  }
+
+  /* playerId -> the one Sleeper id, where both sides are unambiguous. */
+  const resolved = new Map<string, string>()
+  for (const [playerId, espnIds] of espnByPlayer) {
+    const sleeperIds = sleeperByPlayer.get(playerId)
+    if (!sleeperIds) continue
+    summary.reachedSleeperId += 1
+    if (espnIds.length !== 1 || sleeperIds.length !== 1) {
+      summary.skippedAmbiguous += 1
+      continue
+    }
+    resolved.set(sleeperIds[0]!, espnIds[0]!)
+  }
+  if (resolved.size === 0) return summary
+
+  const mapRows = await prisma.playerIdentityMap
+    .findMany({
+      where: { sport: sportKey, sleeperId: { in: [...resolved.keys()] } },
+      select: { id: true, sleeperId: true, espnId: true },
+    })
+    .catch(() => [])
+  summary.reachedIdentityMap = mapRows.length
+
+  for (const mapRow of mapRows) {
+    if (summary.written >= maxWrites) break
+    if (options?.isExhausted?.()) break
+    if (!mapRow.sleeperId) continue
+    const espnId = resolved.get(mapRow.sleeperId)
+    if (!espnId) continue
+    if (mapRow.espnId) {
+      /* Never overwrite. A row that already names a different ESPN id is a
+         disagreement to surface, not to silently resolve. */
+      summary.skippedAlreadySet += 1
+      continue
+    }
     try {
-      await prisma.playerIdentityMap.updateMany({
-        where: { id: mapped.id, espnId: null },
-        data: { espnId: row.providerPlayerId },
+      await prisma.playerIdentityMap.update({
+        where: { id: mapRow.id },
+        data: { espnId },
       })
-      summary.identityMapRowsUpdated += 1
-      /* Drop it from the pool so two ESPN ids can never claim the same PIM row
-         within one batch — the unique-ish invariant this table has no constraint for. */
-      mapPool.set(
-        key,
-        mapBucket.filter((c) => c.id !== mapped.id),
-      )
+      summary.written += 1
     } catch {
-      /* The identity link above is the durable one; this mirror is a bonus. */
+      /* One row must not cost the batch. */
     }
   }
 
