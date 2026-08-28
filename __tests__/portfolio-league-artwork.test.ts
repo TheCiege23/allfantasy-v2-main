@@ -103,3 +103,25 @@ describe('layout', () => {
     expect(CSS).toMatch(/\.af-pf-art-img\s*\{[\s\S]*?object-fit:\s*cover/)
   })
 })
+
+describe('the roster count says whose roster it is', () => {
+  /*
+   * ⚠ REPORTED AS A WRONG PLAYER COUNT, AND IT WAS NOT. "8 players" sat directly
+   * beside "20-team league", so two numbers about the same league disagreed by
+   * an order of magnitude and read as a bug. The count was always the USER'S
+   * roster; only the label was ambiguous.
+   */
+  it('no longer prints a bare "N players"', () => {
+    expect(COMPONENT).not.toMatch(/\{l\.rosterCount\} players/)
+  })
+
+  it('attributes the number to the reader', () => {
+    expect(COMPONENT).toMatch(/\{l\.rosterCount\}\s*on your roster/)
+  })
+
+  /* The two absent states stay distinct — null is not zero. */
+  it('keeps "not imported" and "imported but empty" as separate sentences', () => {
+    expect(COMPONENT).toContain('no roster imported')
+    expect(COMPONENT).toContain('no roster data')
+  })
+})

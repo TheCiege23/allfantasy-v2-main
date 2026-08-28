@@ -229,6 +229,12 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
                 reads as a broken row. Measured on production: 70 of 200 rosters
                 genuinely hold no players, so this is common enough that getting
                 the wording right matters more than the count does.
+
+                ⚠ AND IT SAYS WHOSE ROSTER. This read "8 players" directly beside
+                "20-team league", so the owner reported it as a wrong player
+                count — reasonably, since two numbers about the same league that
+                disagree by an order of magnitude look like a bug. The count was
+                always THEIR roster; only the label was ambiguous.
               */}
               <span className="af-pf-row-roster">
                 {l.rosterCount == null ? (
@@ -236,7 +242,9 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
                 ) : l.rosterCount === 0 ? (
                   <span className="af-pf-roster-none">no roster data</span>
                 ) : (
-                  <span className="af-num">{l.rosterCount} players</span>
+                  <span className="af-num">
+                    {l.rosterCount} on your roster
+                  </span>
                 )}
               </span>
             </Link>
