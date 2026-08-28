@@ -41,6 +41,23 @@ import type { InjuryDesignation } from '@/lib/injuries/rollingInsightsInjuries'
  */
 export const INJURY_STALE_AFTER_HOURS = 36
 
+/**
+ * Beyond this, a report cannot be describing the CURRENT season and is dropped
+ * outright rather than returned with a caveat.
+ *
+ * 120 days clears an offseason without touching in-season data. Measured against
+ * production when this was added: it keeps 1,224 of 1,230 live NFL rows, and drops
+ * exactly the archival items — the three NCAAF rows ESPN's college feed replays,
+ * whose reports are dated 2020-11-21, 2022-11-03 and 2022-11-26 yet were being
+ * served as today's college injury report on the eve of the season.
+ *
+ * ⚠ This is deliberately NOT `season`, which would be the obvious column: the
+ * ingest stamps the CURRENT season onto whatever it pulls, so all three of those
+ * 2020/2022 rows carry `season = 2026`. The report date is the only field on the
+ * row that has not been overwritten with something convenient.
+ */
+export const INJURY_PRIOR_SEASON_AFTER_HOURS = 120 * 24
+
 /** Source preference when the same player appears from multiple providers. */
 const SOURCE_RANK: Record<string, number> = {
   rolling_insights: 100,
@@ -61,8 +78,18 @@ export interface InjuryFact {
   date: Date | null
   week: number | null
   source: string
+  /** When WE last pulled this row. A fact about our ingest, not about the player. */
   fetchedAt: Date
+  /** When the provider REPORTED it (`date`, falling back to `fetchedAt`). */
+  reportedAt: Date
+  /**
+   * Age of the CLAIM in hours, measured from `reportedAt`. This is the number that
+   * answers "can this still be true?" — see the note in toFact for why it is not
+   * measured from `fetchedAt`.
+   */
   ageHours: number
+  /** Age of our INGEST in hours. Use for feed health ("has the importer stopped?"). */
+  fetchAgeHours: number
   /**
    * True when this row is older than INJURY_STALE_AFTER_HOURS. Callers should
    * suppress or caveat the status rather than render it plainly — a stale
@@ -101,8 +128,39 @@ interface InjuryRow {
   position: string | null
 }
 
+/**
+ * When was this claim MADE — not when did we last pull it down.
+ *
+ * `date` is the provider's report timestamp; `fetchedAt` is our ingest clock. They
+ * are only the same number for a report published between two ingest runs.
+ */
+function reportedAt(row: InjuryRow): Date {
+  return row.date ?? row.fetchedAt
+}
+
 function toFact(row: InjuryRow, now: Date): InjuryFact {
-  const ageHours = (now.getTime() - row.fetchedAt.getTime()) / 3_600_000
+  /*
+   * 🛑 AGE IS MEASURED FROM THE REPORT DATE, NOT FROM `fetchedAt`.
+   *
+   * This used to read `now - row.fetchedAt`, which measures how recently WE PULLED
+   * the row — a number the provider cannot influence and the reader does not care
+   * about. Re-fetching a 2020 report today made it "0 hours old" and therefore
+   * fresh, so `stale` was false for data that could not possibly describe today.
+   *
+   * That contradicted this field's own documented meaning ("callers should suppress
+   * or caveat the status ... a stale injury badge is a confident false statement"),
+   * so this is a restoration of the stated contract, not a change to it.
+   *
+   * Measured in production the day this was fixed: of the rows that read as fresh,
+   * 91.5% of NFL (1,231 of 1,346) and 100% of NBA, NHL and NCAAF were carrying
+   * reports older than the staleness horizon. The NCAAF feed served three items
+   * stamped with today's date whose reports were from 2020 and 2022.
+   *
+   * `fetchAgeHours` keeps the old number for feed-health callers, which is the one
+   * job it was ever right for: "has ingestion stopped?" is a question about us.
+   */
+  const fetchAgeHours = Math.max(0, (now.getTime() - row.fetchedAt.getTime()) / 3_600_000)
+  const ageHours = Math.max(0, (now.getTime() - reportedAt(row).getTime()) / 3_600_000)
   return {
     playerName: row.playerName,
     status: row.status,
@@ -112,7 +170,9 @@ function toFact(row: InjuryRow, now: Date): InjuryFact {
     week: row.week,
     source: row.source,
     fetchedAt: row.fetchedAt,
+    reportedAt: reportedAt(row),
     ageHours,
+    fetchAgeHours,
     stale: ageHours > INJURY_STALE_AFTER_HOURS,
   }
 }
@@ -123,6 +183,16 @@ function toFact(row: InjuryRow, now: Date): InjuryFact {
  * the tiebreak. Never array order — that is how "first hit wins" bugs start.
  */
 function preferred(a: InjuryRow, b: InjuryRow): InjuryRow {
+  /*
+   * REPORT DATE FIRST, for the same reason toFact measures it: "freshest wins" has
+   * to mean the freshest CLAIM. Ordering by `fetchedAt` alone meant that when two
+   * providers both carried a player, the one we happened to re-pull most recently
+   * won — so a provider replaying an archival item could outrank another provider's
+   * report from this morning.
+   */
+  const ad = reportedAt(a).getTime()
+  const bd = reportedAt(b).getTime()
+  if (ad !== bd) return ad > bd ? a : b
   const at = a.fetchedAt.getTime()
   const bt = b.fetchedAt.getTime()
   if (at !== bt) return at > bt ? a : b
@@ -273,6 +343,12 @@ export async function listInjuryFacts(args: {
   playerNameContains?: string | null
   /** Only rows fetched within this many hours (e.g. 48 for news tickers). */
   maxAgeHours?: number | null
+  /**
+   * Only rows whose REPORT is within this many hours. Defaults to
+   * INJURY_PRIOR_SEASON_AFTER_HOURS so no caller is served last season's news by
+   * accident. Pass null to opt out (historical/backfill readers only).
+   */
+  maxReportAgeHours?: number | null
   /** Only these designations (exact match against stored status). */
   statuses?: readonly string[] | null
   limit?: number
@@ -281,6 +357,11 @@ export async function listInjuryFacts(args: {
   const sport = args.sport.toUpperCase()
   const limit = Math.max(1, Math.min(args.limit ?? 300, 1000))
   const empty: InjuryFactList = { facts: [], newestFetchedAt: null, feedStale: true }
+
+  const maxReportAgeHours =
+    args.maxReportAgeHours === undefined ? INJURY_PRIOR_SEASON_AFTER_HOURS : args.maxReportAgeHours
+  const reportCutoff =
+    maxReportAgeHours == null ? null : new Date(now.getTime() - maxReportAgeHours * 3_600_000)
 
   let rows: Array<InjuryRow & { id: string }> = []
   try {
@@ -294,6 +375,18 @@ export async function listInjuryFacts(args: {
           : {}),
         ...(args.maxAgeHours != null
           ? { fetchedAt: { gte: new Date(now.getTime() - args.maxAgeHours * 3_600_000) } }
+          : {}),
+        /*
+         * Report-age horizon. `undefined` (the key absent) takes the default;
+         * an explicit `null` opts out, which is why this tests for undefined
+         * rather than using `!= null` like the fetch filter above.
+         *
+         * A row with no `date` is KEPT rather than dropped: ~6 NFL rows carry a
+         * null report date, and excluding them here would silently lose them.
+         * They still get judged by `stale`, which falls back to `fetchedAt`.
+         */
+        ...(reportCutoff
+          ? { AND: [{ OR: [{ date: null }, { date: { gte: reportCutoff } }] }] }
           : {}),
         ...(args.statuses && args.statuses.length > 0 ? { status: { in: [...args.statuses] } } : {}),
       },

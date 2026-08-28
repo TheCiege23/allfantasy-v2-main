@@ -15,16 +15,45 @@ function severityFromStatus(status: string | null | undefined): 'high' | 'medium
   return /out|ir|doubtful/i.test(status || '') ? 'high' : 'medium'
 }
 
-async function readIdentityBackedInjuries(dataSport: string) {
+/**
+ * This panel answers "who is hurt for THIS slate", so a report older than three
+ * weeks does not belong in it at any staleness caveat — a genuinely injured player
+ * gets re-reported inside that window, and anything that does not is describing a
+ * different week.
+ *
+ * ⚠ IT MUST BE APPLIED TO EVERY PATH BELOW, NOT JUST THE PORT. The fallbacks read
+ * `injuryReportRecord` via getInjuryReport, which has NO recency filter of its own
+ * (it returns the newest 250 by reportDate whatever their age) and a second fallback
+ * queries sportsInjury directly with none either. Filtering only the primary would
+ * have swapped the three 2020/2022 college rows for nine from April and looked fixed.
+ */
+const SLATE_REPORT_HORIZON_HOURS = 21 * 24
+
+function withinSlateHorizon(when: Date | string | null | undefined, now: Date): boolean {
+  if (!when) return false
+  const t = new Date(when).getTime()
+  if (!Number.isFinite(t)) return false
+  return now.getTime() - t <= SLATE_REPORT_HORIZON_HOURS * 3_600_000
+}
+
+async function readIdentityBackedInjuries(dataSport: string, now: Date) {
   const sourceRows = await prisma.sportsInjury.findMany({
     where: {
       sport: dataSport,
+      // Same slate horizon as every other path here. This query had no recency
+      // filter at all, and it is the one that resurfaced the 2020/2022 college
+      // rows even when the primary read had already excluded them. A null `date`
+      // is kept — it is judged by fetchedAt instead, as in the read port.
+      OR: [
+        { date: null },
+        { date: { gte: new Date(now.getTime() - SLATE_REPORT_HORIZON_HOURS * 3_600_000) } },
+      ],
       NOT: [
         { playerName: { equals: 'Unknown', mode: 'insensitive' } },
         { playerName: { equals: 'Unknown Player', mode: 'insensitive' } },
       ],
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { date: 'desc' },
     take: 250,
     select: {
       playerId: true,
@@ -33,6 +62,7 @@ async function readIdentityBackedInjuries(dataSport: string) {
       position: true,
       status: true,
       description: true,
+      date: true,
       updatedAt: true,
     },
   })
@@ -113,7 +143,9 @@ async function readIdentityBackedInjuries(dataSport: string) {
     return {
       player: playerName,
       source: 'Injury report DB',
-      time: new Date(row.updatedAt).toLocaleDateString(),
+      // Report date, falling back to our row timestamp — never `updatedAt` alone,
+      // which is when WE touched the row and is always ~now.
+      time: new Date(row.date ?? row.updatedAt).toLocaleDateString(),
       severity: severityFromStatus(row.status),
       text: detailParts.join(' — ').slice(0, 220),
     }
@@ -123,6 +155,7 @@ async function readIdentityBackedInjuries(dataSport: string) {
 export async function GET(req: Request) {
   const sport = new URL(req.url).searchParams.get('sport') || 'nfl'
   const dataSport = uiKeyToDataSport(sport)
+  const now = new Date()
 
   try {
     // Slice 18 follow-on — PRIMARY source is the canonical injury read port
@@ -130,7 +163,11 @@ export async function GET(req: Request) {
     // previous primary (`getInjuryReport` → injuryReportRecord) was measured
     // 103.8 days stale in prod on 2026-08-10, so this panel was rendering
     // three-month-old reports as if current.
-    const factList = await listInjuryFacts({ sport: dataSport, limit: 50 }).catch(() => null)
+    const factList = await listInjuryFacts({
+      sport: dataSport,
+      limit: 50,
+      maxReportAgeHours: SLATE_REPORT_HORIZON_HOURS,
+    }).catch(() => null)
     const portInjuries = (factList?.facts ?? [])
       .filter((f) => !isUnknownPlayerName(f.playerName))
       .slice(0, 14)
@@ -144,7 +181,12 @@ export async function GET(req: Request) {
         return {
           player: f.playerName,
           source: 'Injury report DB',
-          time: new Date(f.fetchedAt).toLocaleDateString(),
+          /*
+           * The REPORT date, not the fetch date. This showed `fetchedAt`, so every
+           * item carried today's date regardless of when it was actually reported —
+           * the college panel displayed "8/28/2026" on reports from 2020 and 2022.
+           */
+          time: new Date(f.reportedAt).toLocaleDateString(),
           severity: severityFromStatus(f.status),
           text: detailParts.join(' — ').slice(0, 220),
         }
@@ -155,18 +197,23 @@ export async function GET(req: Request) {
 
     // Fallback: legacy normalized table, then the identity-backed DB join.
     const rows = await getInjuryReport(dataSport)
-    let injuries = rows.slice(0, 14).map((r) => ({
-      player: r.playerName,
-      source: 'Injury report DB',
-      time: new Date(r.reportDate).toLocaleDateString(),
-      severity: severityFromStatus(r.status),
-      text: [r.status, r.notes].filter(Boolean).join(' — ').slice(0, 220),
-    }))
+    let injuries = rows
+      // getInjuryReport applies no recency filter of its own — see the note on
+      // SLATE_REPORT_HORIZON_HOURS. Without this, NCAAF served nine April rows.
+      .filter((r) => withinSlateHorizon(r.reportDate, now))
+      .slice(0, 14)
+      .map((r) => ({
+        player: r.playerName,
+        source: 'Injury report DB',
+        time: new Date(r.reportDate).toLocaleDateString(),
+        severity: severityFromStatus(r.status),
+        text: [r.status, r.notes].filter(Boolean).join(' — ').slice(0, 220),
+      }))
 
     // If the active normalized table is present but identity fields are degraded,
     // backfill from the DB injury table that carries player names.
     if (injuries.length > 0 && injuries.every((row) => isUnknownPlayerName(row.player))) {
-      const identityBacked = await readIdentityBackedInjuries(dataSport)
+      const identityBacked = await readIdentityBackedInjuries(dataSport, now)
       if (identityBacked.some((row) => !isUnknownPlayerName(row.player))) {
         injuries = identityBacked
       }
