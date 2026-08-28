@@ -117,6 +117,23 @@ describe('AI spend guard — provider boundary coverage', () => {
      * metered. Deleting the file would be the stronger fix.
      */
     'lib/ai/imageGenerator.ts',
+    /*
+     * Two providers in one module: it imports the GUARDED xai-client and also
+     * builds its own OpenAI client. Ask what a file CONSTRUCTS, never what it
+     * imports — a census on imports marks this one covered and moves on.
+     *
+     * Guarded 2026-08-27, then reverted the same day by 2c959164c, an
+     * unrelated draft-HQ commit that carried a stale copy of this file and of
+     * lib/ai-gm-intelligence.ts. Restored here.
+     */
+    'lib/ai-gm-intelligence.ts',
+    /*
+     * THE RATCHET DOES NOT DROP FOR THIS ONE: it was in neither list. Found by
+     * scanning for provider access. Its caller app/api/chat/chimmy/route.ts was
+     * already guarded — on getVisionClient(), a different client — so the route
+     * read as protected while a tool-loop turn still reached xAI unmetered.
+     */
+    'lib/chimmy/tools/chimmyToolLoop.ts',
   ]
 
   /**
@@ -136,7 +153,6 @@ describe('AI spend guard — provider boundary coverage', () => {
    * its own. The list must only ever shrink; adding to it means a new unguarded spend path shipped.
    */
   const UNGUARDED_RATCHET = [
-    'lib/ai-gm-intelligence.ts',
     'lib/ai/working-memory.ts',
     'lib/autocoach/status-sources/XGrokAdapter.ts',
     'lib/brackets/intelligence/ai-narrator.ts',
@@ -173,7 +189,7 @@ describe('AI spend guard — provider boundary coverage', () => {
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.
-    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(19)
+    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(18)
   })
 
   it('every ratchet entry still exists (stale entries hide real coverage)', () => {

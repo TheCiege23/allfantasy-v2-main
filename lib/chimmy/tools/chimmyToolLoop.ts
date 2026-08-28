@@ -1,6 +1,7 @@
 import 'server-only'
 import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 /**
  * A BOUNDED TOOL LOOP FOR CHIMMY, GROK ONLY, OFF BY DEFAULT.
@@ -51,21 +52,42 @@ export type ChimmyToolLoopResult = {
 }
 
 function grokClient(): OpenAI | null {
+  // Defence in depth. canRunChimmyToolLoop below is the real gate, but this is
+  // a provider boundary in its own right and should not depend on a caller
+  // having asked the right question first.
+  if (!isAiSpendEnabled()) return null
   const apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
   if (!apiKey?.trim()) return null
   return new OpenAI({ apiKey, baseURL: XAI_BASE_URL })
 }
 
-/** Whether the loop can run at all — flag on AND a key present. */
+/**
+ * Whether the loop can run at all — feature flag on, spend allowed, key present.
+ *
+ * ⚠ THIS BOUNDARY WAS TRACKED NOWHERE. It appeared in neither the GUARDED list
+ * nor the unguarded ratchet in __tests__/ai/ai-spend-guard.test.ts, because that
+ * ratchet enumerates known lib/ paths rather than scanning for provider access.
+ * Its caller, app/api/chat/chimmy/route.ts, WAS guarded — but on
+ * getVisionClient(), a different client entirely. So the route read as protected
+ * while a chimmy turn that ran the tool loop still reached xAI unmetered.
+ *
+ * Spend is checked here rather than only in grokClient because this is the
+ * predicate callers consult, and returning false means the push path is used
+ * instead — the same graceful degradation a missing key already produces.
+ */
 export function canRunChimmyToolLoop(enabled: boolean): boolean {
-  return enabled && Boolean((process.env.XAI_API_KEY || process.env.GROK_API_KEY)?.trim())
+  return (
+    enabled &&
+    isAiSpendEnabled() &&
+    Boolean((process.env.XAI_API_KEY || process.env.GROK_API_KEY)?.trim())
+  )
 }
 
 /**
  * Let the model fetch its own grounding, within a fixed number of turns.
  *
- * Returns null — never throws, never a half answer — when the flag is off, no
- * key is configured, the provider fails, or the loop runs out of turns without
+ * Returns null — never throws, never a half answer — when the flag is off, spend is
+ * disabled, no key is configured, the provider fails, or the loop runs out of turns without
  * producing text. Every one of those means "use the push path instead".
  */
 export async function runChimmyToolLoop(args: {
