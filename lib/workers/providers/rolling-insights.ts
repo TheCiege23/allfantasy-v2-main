@@ -48,6 +48,22 @@ const DATA_TYPE_PATH: Record<string, string> = {
   roster: 'rosters',
 }
 
+/**
+ * Fresh cache-buster for the `_` query parameter.
+ *
+ * The contract makes millisecond precision mandatory on EVERY endpoint, not
+ * just /live. A plain `Date.now()` is not quite enough here, because the 304
+ * rule requires an immediate retry and two back-to-back fetches can land in the
+ * SAME millisecond — which would resend an identical buster and make the retry
+ * meaningless. The counter keeps the value strictly increasing while staying
+ * numeric, which is the shape the compliant sibling client already sends.
+ */
+let riCacheBusterSeq = 0
+function nextCacheBuster(): string {
+  riCacheBusterSeq += 1
+  return String(Date.now() + riCacheBusterSeq)
+}
+
 function pathSegmentForDataType(dataType: string): string {
   if (DATA_TYPE_PATH[dataType]) return DATA_TYPE_PATH[dataType]
   if (dataType === 'games' || dataType === 'live_game') return 'scores'
@@ -535,6 +551,11 @@ export async function rollingInsightsProvider(params: ApiFetchParams): Promise<C
   try {
     const headers: Record<string, string> = {
       Accept: 'application/json',
+      // transport.required_live_headers in contracts/rolling-insights/ENDPOINTS.yaml.
+      // Mandatory on ALL endpoints, not just /live. These were missing entirely,
+      // which is half of why this client saw 304s the compliant sibling does not.
+      'Cache-Control': 'no-cache, no-store',
+      Pragma: 'no-cache',
     }
     const hasClientCredentials =
       Boolean(process.env.ROLLING_INSIGHTS_CLIENT_ID?.trim()) &&
@@ -547,6 +568,8 @@ export async function rollingInsightsProvider(params: ApiFetchParams): Promise<C
         if (v == null) return
         url.searchParams.set(k, String(v))
       })
+      // Same mandatory buster as the REST probe below; this branch had none either.
+      url.searchParams.set('_', nextCacheBuster())
 
       headers['x-api-key'] = process.env.ROLLING_INSIGHTS_API_KEY ?? ''
       const res = await fetch(url.toString(), {
@@ -602,30 +625,57 @@ export async function rollingInsightsProvider(params: ApiFetchParams): Promise<C
             break restProbe
           }
 
-          const url = new URL(`${restBase}/${restPath}`)
-          Object.entries(merged).forEach(([k, v]) => {
-            if (v == null) return
-            url.searchParams.set(k, String(v))
-          })
-          url.searchParams.set('RSC_token', rscToken)
+          /* A fresh buster per attempt — see `nextCacheBuster`. */
+          const buildUrl = (): string => {
+            const url = new URL(`${restBase}/${restPath}`)
+            Object.entries(merged).forEach(([k, v]) => {
+              if (v == null) return
+              url.searchParams.set(k, String(v))
+            })
+            url.searchParams.set('RSC_token', rscToken)
+            url.searchParams.set('_', nextCacheBuster())
+            return url.toString()
+          }
 
           try {
-            const res = await fetch(url.toString(), {
+            let res = await fetch(buildUrl(), {
               headers,
               cache: 'no-store',
               signal: AbortSignal.timeout(RI_REQUEST_TIMEOUT_MS),
             })
+
+            /*
+             * ⚠ A 304 IS NOT AN EMPTY RESULT SET, AND USED TO BE TREATED AS ONE.
+             *
+             * This branch previously returned `data: []` as a SUCCESS whenever
+             * `dataSeg` was 'scores' or 'schedule' — the live path. CLAUDE.md
+             * names that as the one response that is wrong under BOTH readings
+             * of the unresolved `304_conflict`: it reports "no data" for what
+             * may be a cache hit, and the two become the same value.
+             *
+             * It was also the EARLIEST possible surrender. Returning here
+             * abandoned every remaining base × path × token candidate — and the
+             * probe table earlier in this file is the evidence that mattered:
+             * the SAME request answers 200 on one token and 304 on the other.
+             * So the live feed, the one path where giving up costs the most,
+             * was the only one that refused to try the token that would have
+             * answered. Measured 2026-08-28: RI returned nothing mid-game while
+             * ESPN carried PIT 14 BUF 3.
+             *
+             * Now: retry ONCE with a fresh buster, and if it survives that,
+             * fall through to the next candidate like any other failure. A 304
+             * that outlives every candidate ends as `{ data: null, error }`,
+             * which a caller can tell apart from a real empty slate.
+             */
             if (res.status === 304) {
-              const isLiveLike = dataSeg === 'scores' || dataSeg === 'schedule'
-              if (isLiveLike) {
-                return {
-                  data: [] as ChainFetchResult['data'],
-                  fromCache: false,
-                  source: 'rolling_insights',
-                  latency: Date.now() - started,
-                }
-              }
-              lastHttpError = 'HTTP 304'
+              res = await fetch(buildUrl(), {
+                headers,
+                cache: 'no-store',
+                signal: AbortSignal.timeout(RI_REQUEST_TIMEOUT_MS),
+              })
+            }
+            if (res.status === 304) {
+              lastHttpError = 'HTTP 304 (survived a cache-busted retry)'
               continue
             }
             if (!res.ok) {
