@@ -120,14 +120,31 @@ async function handle(req: NextRequest) {
        */
       const { withSyncJobRun } = await import('@/lib/production-health/syncJobRunTelemetry')
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
-      const devyIntelSources = await withSyncJobRun(
+      const { refreshDevyHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+
+      const outcome = await withSyncJobRun(
         { jobName: 'cron-devy-intel-sources', jobScope: 'NCAAF', trigger: 'cron' },
-        async () => refreshDevyIntelSources(budget),
+        async () => {
+          const devyIntelSources = await refreshDevyIntelSources(budget)
+          /*
+           * Headshots run AFTER the intel feeds and on the leftover budget, on
+           * purpose. The intel feeds fill the columns draftProjectionScore
+           * reasons over — they change what the product KNOWS. A headshot only
+           * changes how a card looks. When the budget is short the picture is
+           * the right thing to defer, and it drains across ticks anyway.
+           *
+           * It is inside the same heartbeat because it is the same tick: one
+           * row per fire, whatever the tick managed to do.
+           */
+          const devyHeadshots = await refreshDevyHeadshots(budget)
+          return { devyIntelSources, devyHeadshots }
+        },
       )
+
       return NextResponse.json({
         ok: true,
         mode: 'intel',
-        devyIntelSources,
+        ...outcome,
         durationMs: Date.now() - startedAt,
       })
     }
