@@ -49,6 +49,33 @@ export async function POST(req: Request) {
       .findUnique({ where: { id: userId }, select: { username: true } })
       .catch(() => null)
     if ((current?.username ?? "").toLowerCase() !== profile.username.toLowerCase()) {
+      /*
+       * ⚠ THE DATABASE CANNOT BE THE ONLY UNIQUENESS CHECK HERE, BECAUSE IT IS
+       * CASE-SENSITIVE AND EVERY COMPARISON THAT MATTERS IS NOT.
+       *
+       * The index is `btree(username)`, so "Ada" and "ada" are two distinct rows and the
+       * P2002 catch below never fires for them. But every consumer that reads a username
+       * as an identity lowercases it first — isAllFantasyTestUsername (lib/auth/admin.ts)
+       * most consequentially. That gap let a caller take the differently-cased twin of an
+       * existing handle and be treated as that user by anything doing a case-insensitive
+       * match. /api/auth/register has always probed this way; this route did not.
+       *
+       * Until a `lower(username)` unique index exists, this probe IS the constraint, so
+       * it must run on the write path rather than only in the form's availability check.
+       */
+      const taken = await prisma.appUser.findFirst({
+        where: {
+          username: { equals: profile.username, mode: "insensitive" },
+          NOT: { id: userId },
+        },
+        select: { id: true },
+      })
+      if (taken) {
+        return NextResponse.json(
+          { error: "That username is already taken.", code: "USERNAME_TAKEN" },
+          { status: 409 }
+        )
+      }
       usernameToPersist = profile.username
     }
   }
