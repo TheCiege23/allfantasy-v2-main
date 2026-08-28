@@ -101,6 +101,25 @@ on:
   # So a verdict can be FORCED without pushing a commit. There was no way to do
   # that during the incident this change came out of, which is why "is main
   # green" stayed unanswerable for hours.
+  # ⚠ RESTORED 2026-08-28. The schedule above replaced this trigger, and as of
+  # 01:49Z it had not fired ONCE — five slots missed in eighty minutes, while
+  # `cron-fast-tier` and `cron-slow-tier` fired normally in the same window, the
+  # workflow reporting `state=active` and the cron verified well-formed on main.
+  # So main had NO automatic verdict at all: push did not trigger it and the
+  # clock had not started.
+  #
+  # ⚠ THIS IS NOT A REVERSAL OF WHY IT WAS REMOVED. Per-push runs could not get
+  # runners under a GROUP-PER-SHA concurrency rule, which let every push start a
+  # parallel run and saturate the account's job ceiling. That rule is gone — the
+  # group below is now a single `main` bucket holding one running plus one
+  # pending, so a push storm collapses to the same load the clock produces.
+  # Measured under exactly that rule: push-triggered runs completed at 00:03,
+  # 00:05, 00:08, 00:34 and 00:49.
+  #
+  # Kept ALONGSIDE the schedule, not instead of it. If the cron starts firing
+  # this costs nothing, and neither trigger is then a single point of failure.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 # ⚠ THIS GROUPED EVERY PUSH TO MAIN UNDER ONE KEY AND CANCELLED IN PROGRESS, so
