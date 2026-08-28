@@ -129,11 +129,28 @@ interface InjuryRow {
 }
 
 /**
- * When was this claim MADE — not when did we last pull it down.
+ * How fresh this claim can possibly be — the OLDER of when the provider says it was
+ * reported and when we last actually saw it.
  *
- * `date` is the provider's report timestamp; `fetchedAt` is our ingest clock. They
- * are only the same number for a report published between two ingest runs.
+ * ⚠ TAKING THE REPORT DATE ALONE IS WRONG, AND THE SUITE CAUGHT IT. Both bounds have
+ * to hold. `date` alone lets a provider that stamps a recent timestamp on a frozen
+ * row outrank a genuinely live one — the api_sports-vs-rolling_insights hazard that
+ * injury-read-port.test.ts pins with a row claiming a 1-hour-old report that was
+ * fetched 17 days ago. `fetchedAt` alone was the original bug: an importer re-pulling
+ * a 2020 report today made it zero hours old, which is how the college feed served
+ * three archival items as the current injury report.
+ *
+ * A row fetched 17 days ago cannot tell us anything about the last 17 days no matter
+ * what its `date` says, and a report written in 2020 is not news because we pulled it
+ * this morning. Taking the earlier of the two is the only reading under which both
+ * statements stay true.
  */
+function claimAsOf(row: InjuryRow): Date {
+  const reported = row.date ?? row.fetchedAt
+  return reported.getTime() < row.fetchedAt.getTime() ? reported : row.fetchedAt
+}
+
+/** The provider's stated report time, for display. Not a freshness signal on its own. */
 function reportedAt(row: InjuryRow): Date {
   return row.date ?? row.fetchedAt
 }
@@ -160,7 +177,7 @@ function toFact(row: InjuryRow, now: Date): InjuryFact {
    * job it was ever right for: "has ingestion stopped?" is a question about us.
    */
   const fetchAgeHours = Math.max(0, (now.getTime() - row.fetchedAt.getTime()) / 3_600_000)
-  const ageHours = Math.max(0, (now.getTime() - reportedAt(row).getTime()) / 3_600_000)
+  const ageHours = Math.max(0, (now.getTime() - claimAsOf(row).getTime()) / 3_600_000)
   return {
     playerName: row.playerName,
     status: row.status,
@@ -190,8 +207,8 @@ function preferred(a: InjuryRow, b: InjuryRow): InjuryRow {
    * won — so a provider replaying an archival item could outrank another provider's
    * report from this morning.
    */
-  const ad = reportedAt(a).getTime()
-  const bd = reportedAt(b).getTime()
+  const ad = claimAsOf(a).getTime()
+  const bd = claimAsOf(b).getTime()
   if (ad !== bd) return ad > bd ? a : b
   const at = a.fetchedAt.getTime()
   const bt = b.fetchedAt.getTime()
@@ -437,7 +454,19 @@ export async function listInjuryFacts(args: {
    * designations behind it.
    */
   const facts = [...bestByExact.values()]
-    .sort((a, b) => reportedAt(b).getTime() - reportedAt(a).getTime())
+    .sort((a, b) => {
+      const byClaim = claimAsOf(b).getTime() - claimAsOf(a).getTime()
+      if (byClaim !== 0) return byClaim
+      /*
+       * Ties are the COMMON case, not the edge case: an importer stamps one
+       * `fetchedAt` across everything it writes in a run, and rows from one provider
+       * frequently share a report date. Without this tiebreak the comparator returns
+       * 0 and the `.slice(limit)` below keeps whatever order the dedupe map happened
+       * to yield — which is how "the 50 most recent injuries" was really "50 rows in
+       * arbitrary order".
+       */
+      return b.fetchedAt.getTime() - a.fetchedAt.getTime()
+    })
     .slice(0, limit)
     .map((r) => ({
       ...toFact(r, now),

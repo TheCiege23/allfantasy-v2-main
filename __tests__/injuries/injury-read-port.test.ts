@@ -44,7 +44,16 @@ describe('resolveInjuryFacts', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('returns the fact for a matched player', async () => {
-    mocks.findMany.mockResolvedValue([row()])
+    /*
+     * `date: hoursAgo(2)` is explicit because this test asserts `stale === false`,
+     * and staleness is now measured from the REPORT time (bounded by fetchedAt), not
+     * from fetchedAt alone. The shared fixture's 48h-old report is deliberately older
+     * than INJURY_STALE_AFTER_HOURS (36) — under the old fetch-age reading that value
+     * was inert, and it is preserved for the tests below that rely on it. Here it
+     * would make a test about RESOLUTION fail on a staleness assertion incidental to
+     * its purpose, so this row gets a report as recent as its fetch.
+     */
+    mocks.findMany.mockResolvedValue([row({ date: hoursAgo(2) })])
     const res = await resolveInjuryFacts({ sport: 'NFL', players: [{ name: 'Ty Johnson' }], now: NOW })
     const fact = res.byPlayer.get('ty johnson')
     expect(fact?.status).toBe('Questionable')
