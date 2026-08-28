@@ -51,6 +51,14 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'cdn-media', why: 'image/asset host consumed as a src, not a data read', test: /(^|\.)(sleepercdn|espncdn|flagcdn|mlbstatic|nhle|cloudinary)\.com$/i },
   { name: 'cdn-media', why: 'image/asset host', test: /^(cdn\.nba\.com|cdn\.discordapp\.com|media\.api-sports\.io|img\.mlbstatic\.com|assets\.nhle\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|www\.youtube\.com|fancred\.app)$/i },
+  /*
+   * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
+   * /leagues/<id>/settings and "Open in Sleeper" buttons. It sat in the
+   * data-API ledger below until someone read the call sites; recorded here so
+   * it is not re-filed as debt. api.sleeper.com, the stats host, is a genuine
+   * feed and is now monitored by the guard.
+   */
+  { name: 'share-link', why: 'Sleeper deep links handed to the user', test: /^sleeper\.com$/i },
   { name: 'oauth', why: 'authentication endpoint, not a data feed', test: /^(accounts\.spotify\.com|api\.login\.yahoo\.com|oauth2\.googleapis\.com|oauth\.reddit\.com|connect\.facebook\.net|js\.stripe\.com)$/i },
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
   { name: 'platform-infra', why: 'email, analytics, media generation, translation', test: /^(api\.resend\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com)$/i },
@@ -70,20 +78,21 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
  * will report pre-existing violations when you do — that is the guard working, not a
  * regression you caused.
  *
- * ⚠ api.sleeper.com IS NOT api.sleeper.app. The guard monitors the .app host only, so every
- * read of the .com host bypasses it. This is the same near-collision CLAUDE.md records for
- * api-sports.io versus api.sportsdata.io, which is how that one hid too.
+ * RESOLVED, and left here as the worked example: api.sleeper.com is NOT api.sleeper.app.
+ * The guard watched the .app host only, so every read of the .com stats host bypassed it —
+ * the same near-collision CLAUDE.md records for api-sports.io versus api.sportsdata.io.
+ * This census found it, and it is now in DATA_API_HOST_PATTERNS. Bare sleeper.com turned out
+ * to be a deep link rather than a feed and was moved to CATEGORIES; that correction only
+ * happened because someone read the call sites instead of trusting the hostname.
  *
- * ⚠ lm-api-reads.fantasy.espn.com and fantasy.espn.com are neither api.espn.com nor
- * site.api.espn.com, the two ESPN hosts that ARE monitored.
+ * ⚠ STILL OPEN, same shape: lm-api-reads.fantasy.espn.com and fantasy.espn.com are neither
+ * api.espn.com nor site.api.espn.com, the two ESPN hosts that ARE monitored.
  *
  * The list may shrink freely. It must not grow.
  */
 const DATA_API_UNMONITORED = [
   'api.myfantasyleague.com',
   'www.myfantasyleague.com',
-  'api.sleeper.com',
-  'sleeper.com',
   'bleacherreport.com',
   'lm-api-reads.fantasy.espn.com',
   'fantasy.espn.com',
@@ -183,7 +192,7 @@ describe('DB-first boundary — outbound host census', () => {
   it('the unmonitored data-API list has not grown', () => {
     // Shrinks freely — moving a host into DATA_API_HOST_PATTERNS is the intended
     // direction and should lower this number in the same commit.
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(18)
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(16)
   })
 
   it('every unmonitored entry is still referenced, and still unmonitored', () => {
