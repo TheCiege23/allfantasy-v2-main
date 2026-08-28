@@ -7,6 +7,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { NormalizePlayerInput } from '@/lib/sports-data-normalization'
 import type { SportsPlayerRowInput } from '@/lib/sports-data-normalization/resolveNormalizedPlayerSportsProfiles'
 import { resolveNormalizedPlayerSportsProfiles } from '@/lib/sports-data-normalization'
+import { findSportsPlayerByLeagueId } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
 export type BenchCandidate = { id: string; name: string; position: string }
 
@@ -46,10 +47,9 @@ export async function pickBestBenchReplacementForAutoCoach(args: {
   const leagueScoring = ctx.ok && ctx.context ? ctx.context.scoring : null
 
   async function toInput(b: BenchCandidate): Promise<NormalizePlayerInput> {
-    const sp = await prisma.sportsPlayer.findFirst({
-      where: { sport: sk, externalId: b.id },
-      orderBy: { updatedAt: 'desc' },
-    })
+    // `b.id` is a roster id, i.e. a Sleeper id; see findSportsPlayerByLeagueId for why that must
+    // not be matched against `externalId`.
+    const sp = await findSportsPlayerByLeagueId(sk, b.id)
     const rec =
       sp &&
       (await prisma.sportsPlayerRecord.findFirst({

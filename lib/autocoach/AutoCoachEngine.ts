@@ -21,6 +21,7 @@ import { getPlayerGameLockStateForAutoCoach } from '@/lib/autocoach/playerGameLo
 import { pickBestBenchReplacementForAutoCoach } from '@/lib/autocoach/pickBestBenchReplacement'
 import { getServerNowUTC } from '@/lib/time-engine/serverClock'
 import type { AutoCoachSwapResult } from '@/lib/autocoach/types'
+import { findSportsPlayerByLeagueId, findSportsPlayersByLeagueIds } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 
 export { BESTBALL_VARIANTS, isBestBallLeague }
 
@@ -335,15 +336,14 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
       const starterIds = starters.map((s) => String(s.id))
       if (starterIds.length === 0) break
 
-      const statusRows = await prisma.sportsPlayer.findMany({
-        where: { sport, externalId: { in: starterIds } },
-        select: { externalId: true, name: true, status: true, position: true, team: true, updatedAt: true },
-      })
-      const statusById = new Map<string, (typeof statusRows)[0]>()
-      for (const r of statusRows) {
-        const cur = statusById.get(r.externalId)
-        if (!cur || r.updatedAt > cur.updatedAt) statusById.set(r.externalId, r)
-      }
+      /*
+       * ⚠ THESE ARE ROSTER IDS, SO THEY ARE SLEEPER IDS, AND THIS DECIDES WHO GETS BENCHED.
+       * Matched against `externalId` they hit Rolling Insights rows for other players — 42,032
+       * bare ids collide with a Sleeper id and 42,031 are a different person. The row carries
+       * `status`, so a collision benched a healthy starter on a stranger's injury. The map is
+       * keyed by the roster id, which is what the swap logic below reads it back with.
+       */
+      const statusById = await findSportsPlayersByLeagueIds(sport, starterIds)
 
       let swapped = false
       for (let i = 0; i < starters.length; i++) {
@@ -374,11 +374,9 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
         const eligibleBench: { id: string; name: string; position: string }[] = []
         for (const b of benchCandidates) {
           const bid = String(b.id)
-          const pRow = await prisma.sportsPlayer.findFirst({
-            where: { sport, externalId: bid },
-            orderBy: { updatedAt: 'desc' },
-            select: { status: true, name: true, position: true },
-          })
+          // Same Sleeper-id hazard as the starter read above: a collision here would call a
+          // healthy bench player unavailable and skip him as a replacement.
+          const pRow = await findSportsPlayerByLeagueId(sport, bid)
           const stB = pRow?.status ?? ''
           if (stB && isSwapEligibleStatus(stB)) continue
 

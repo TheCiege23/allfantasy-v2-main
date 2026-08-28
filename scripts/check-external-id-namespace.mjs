@@ -31,7 +31,7 @@ import path from 'node:path'
  * Lower this when you fix one. Never raise it: a new unscoped filter is the bug this exists to
  * catch, and there is a safe helper for every legitimate case.
  */
-const BASELINE = 41
+const BASELINE = 37
 
 const ROOTS = ['lib', 'app', 'components', 'scripts']
 const METHODS = [
@@ -116,8 +116,19 @@ for (const root of ROOTS) {
        */
       const whereAt = block.indexOf('where:')
       if (whereAt < 0) continue
-      const braceAt = block.indexOf('{', whereAt)
-      if (braceAt < 0) continue
+
+      /*
+       * ⚠ THE BRACE MUST BE THE VERY NEXT TOKEN, OR THIS READS THE `select` AS THE `where`.
+       * When the clause is built by a helper — `where: sleeperIdWhere(ids, sport)` — the next
+       * `{` in the call belongs to `select`, and every one of these queries selects
+       * `externalId`. Grabbing it flagged a site that had just been fixed BY the helper this
+       * guard recommends, which is the most misleading failure it could produce. A clause the
+       * guard cannot read as an object literal is left alone: helpers are the safe path.
+       */
+      const afterWhere = block.slice(whereAt + 'where:'.length)
+      const lead = afterWhere.length - afterWhere.trimStart().length
+      if (afterWhere.trimStart()[0] !== '{') continue
+      const braceAt = whereAt + 'where:'.length + lead
       const where = callBlock(block, braceAt)
       if (!where.includes('externalId:')) continue
       if (where.includes('source')) continue
