@@ -2,6 +2,7 @@
 import type { GrokChatRequest, GrokChatResponse, GrokEnrichmentRequest, GrokEnrichmentResult } from "./grok-types";
 import { validateAndSanitizeGrokJson } from "./grok-safety";
 import { cachedFetch, cacheKey } from "@/lib/api-cache";
+import { isAiSpendEnabled } from "@/lib/ai/aiSpendGuard";
 
 function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
@@ -86,6 +87,29 @@ async function _grokEnrichUncached(
   request: GrokEnrichmentRequest,
   cfg?: Partial<GrokClientConfig>
 ): Promise<GrokEnrichmentResult> {
+  /*
+   * PROVIDER BOUNDARY. Deliberately HERE and not in getGrokConfigFromEnv():
+   * that factory can be bypassed entirely, because the block below will build a
+   * usable config from a caller-supplied `cfg` when the env config is null. A
+   * guard on the factory would look right and protect nothing.
+   *
+   * Reported in this function's own result shape rather than thrown — every
+   * failure path here returns { ok: false, error }. The message names the switch
+   * instead of reusing "Grok not configured", which would send the next person
+   * to check GROK_BASE_URL for a billing state.
+   *
+   * Note this sits inside the cachedFetch MISS path, which is correct: serving a
+   * cached answer spends nothing and should not be refused.
+   */
+  if (!isAiSpendEnabled()) {
+    return {
+      ok: false,
+      kind: request.kind,
+      confidence: "low",
+      error: "AI spend is disabled (AI_FEATURES_ENABLED is not 'true').",
+    };
+  }
+
   const envCfg = getGrokConfigFromEnv();
   const finalCfg: GrokClientConfig | null = envCfg
     ? { ...envCfg, ...cfg, baseUrl: cfg?.baseUrl ?? envCfg.baseUrl, apiKey: cfg?.apiKey ?? envCfg.apiKey }
