@@ -108,6 +108,15 @@ describe('AI spend guard — provider boundary coverage', () => {
     // Moved off the ratchet 2026-08-27. Its sibling orchestrator.ts was
     // already guarded, so the two halves of three-brain disagreed.
     'lib/decision-os/three-brain/anthropicClient.ts',
+    /*
+     * Guarded 2026-08-27, but read this before treating the -1 as progress:
+     * NOTHING CALLS THIS FILE. Zero callers by module path, relative path,
+     * dynamic import, or any exported name; the only other mention in the repo
+     * was its own ratchet entry. Guarding it removed no live spend — it is
+     * insurance against someone wiring up a DALL-E path that was never
+     * metered. Deleting the file would be the stronger fix.
+     */
+    'lib/ai/imageGenerator.ts',
   ]
 
   /**
@@ -128,7 +137,6 @@ describe('AI spend guard — provider boundary coverage', () => {
    */
   const UNGUARDED_RATCHET = [
     'lib/ai-gm-intelligence.ts',
-    'lib/ai/imageGenerator.ts',
     'lib/ai/working-memory.ts',
     'lib/autocoach/status-sources/XGrokAdapter.ts',
     'lib/brackets/intelligence/ai-narrator.ts',
@@ -165,7 +173,7 @@ describe('AI spend guard — provider boundary coverage', () => {
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.
-    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(20)
+    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(19)
   })
 
   it('every ratchet entry still exists (stale entries hide real coverage)', () => {

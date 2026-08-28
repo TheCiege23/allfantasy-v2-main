@@ -1,8 +1,22 @@
 /**
  * AI Image Generation Service using OpenAI DALL-E 3.
  * Generates league banners, tribe logos, player avatars, and event graphics.
+ *
+ * ⚠ NOTHING CALLS THIS TODAY. Verified on 2026-08-27 against main by all four
+ * import forms — module path, relative path, dynamic `import()`, and every
+ * exported name (generateImage, generateTribeLogo, generateLeagueBanner,
+ * generateMergedTribeLogo, generateEventGraphic). The only other file in the
+ * repo that mentions it is the spend-guard ratchet that was tracking it.
+ *
+ * So the guard below buys nothing TODAY. It is here because DALL-E is the most
+ * expensive call per request in this codebase, and the failure mode for dead
+ * code is someone wiring it up later without noticing it was never metered.
+ * Deleting the file instead would be the stronger fix; that is a product call,
+ * not a cleanup.
  */
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
+// NB: read once at module load, not per call.
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY
 
 interface ImageGenerationOptions {
@@ -21,6 +35,15 @@ interface GeneratedImage {
  * Generate an image using DALL-E 3.
  */
 export async function generateImage(options: ImageGenerationOptions): Promise<GeneratedImage | null> {
+  // PROVIDER BOUNDARY. Non-throwing to match this function's contract: it
+  // returns `GeneratedImage | null` and already returns null when the key is
+  // absent, so callers have a null path and no catch path. Above the key check
+  // for the same reason as the other boundaries — when both are missing, the
+  // switch is the more actionable answer.
+  if (!isAiSpendEnabled()) {
+    console.warn('[imageGenerator] AI spend is disabled; not generating')
+    return null
+  }
   if (!OPENAI_API_KEY) {
     console.warn('[imageGenerator] No OPENAI_API_KEY configured')
     return null
