@@ -257,8 +257,29 @@ export async function loadPlayerMetadataRows(
 ): Promise<RawPlayerMetadataRow[]> {
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
-  const rows = await prisma.sportsPlayer.findMany({
-    where: { sport, OR: [{ externalId: { in: clean } }, { sleeperId: { in: clean } }] },
+  /*
+   * ⚠ AUTHORITATIVE FIRST, BECAUSE `externalId` AND `sleeperId` ARE DIFFERENT ID SPACES THAT
+   * COLLIDE. `SportsPlayer.externalId` is 83% bare numerics written by Rolling Insights, CFBD and
+   * api_football; 42,032 of them also exist as a Sleeper id and 42,031 of those are a DIFFERENT
+   * PERSON. A single `OR` over both columns therefore returns the right row and a stranger's row
+   * with equal standing, and `orderBy fetchedAt desc` picks between them by which feed happened
+   * to sync last.
+   *
+   * That matters more here than in a plain lookup: the projector in ./playerMetadata indexes each
+   * row under BOTH its `externalId` and its `sleeperId`, first row wins. So a colliding provider
+   * row could claim a Sleeper id's key and lock the real row out of it.
+   *
+   * These ids are mixed by design — provider ids for imported leagues, native ids for AF leagues
+   * — so the answer is order rather than exclusion. The Sleeper space is asked first and can never
+   * be a coincidence; the provider read then runs only for ids nothing in the Sleeper space
+   * claimed. Both keep `fetchedAt desc`, and the authoritative rows lead the returned array so the
+   * projector's first-write-wins resolves to them.
+   */
+  const bySleeper = await prisma.sportsPlayer.findMany({
+    where: {
+      sport,
+      OR: [{ sleeperId: { in: clean } }, { externalId: { in: clean.map((id) => `sleeper:${id}`) } }],
+    },
     orderBy: { fetchedAt: 'desc' },
     select: {
       externalId: true,
@@ -270,6 +291,29 @@ export async function loadPlayerMetadataRows(
       source: true,
     },
   })
+  const claimed = new Set<string>()
+  for (const r of bySleeper) {
+    if (r.sleeperId) claimed.add(r.sleeperId)
+    if (r.externalId.startsWith('sleeper:')) claimed.add(r.externalId.slice('sleeper:'.length))
+  }
+  const unclaimed = clean.filter((id) => !claimed.has(id))
+  const byProvider =
+    unclaimed.length > 0
+      ? await prisma.sportsPlayer.findMany({
+          where: { sport, externalId: { in: unclaimed } },
+          orderBy: { fetchedAt: 'desc' },
+          select: {
+            externalId: true,
+            sleeperId: true,
+            name: true,
+            position: true,
+            team: true,
+            status: true,
+            source: true,
+          },
+        })
+      : []
+  const rows = [...bySleeper, ...byProvider]
   return rows.map(
     (row: {
       externalId: string
@@ -526,8 +570,12 @@ export async function loadInjuryContextRows(
 ): Promise<RawInjuryContextRow[]> {
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
-  const rows = await prisma.sportsPlayer.findMany({
-    where: { sport, OR: [{ externalId: { in: clean } }, { sleeperId: { in: clean } }] },
+  // Same two-step, and the same reason, as `loadPlayerMetadataRows` above.
+  const bySleeper = await prisma.sportsPlayer.findMany({
+    where: {
+      sport,
+      OR: [{ sleeperId: { in: clean } }, { externalId: { in: clean.map((id) => `sleeper:${id}`) } }],
+    },
     orderBy: { fetchedAt: 'desc' },
     select: {
       externalId: true,
@@ -539,6 +587,29 @@ export async function loadInjuryContextRows(
       updatedAt: true,
     },
   })
+  const claimed = new Set<string>()
+  for (const r of bySleeper) {
+    if (r.sleeperId) claimed.add(r.sleeperId)
+    if (r.externalId.startsWith('sleeper:')) claimed.add(r.externalId.slice('sleeper:'.length))
+  }
+  const unclaimed = clean.filter((id) => !claimed.has(id))
+  const byProvider =
+    unclaimed.length > 0
+      ? await prisma.sportsPlayer.findMany({
+          where: { sport, externalId: { in: unclaimed } },
+          orderBy: { fetchedAt: 'desc' },
+          select: {
+            externalId: true,
+            sleeperId: true,
+            status: true,
+            source: true,
+            fetchedAt: true,
+            expiresAt: true,
+            updatedAt: true,
+          },
+        })
+      : []
+  const rows = [...bySleeper, ...byProvider]
   return rows.map(
     (row: {
       externalId: string

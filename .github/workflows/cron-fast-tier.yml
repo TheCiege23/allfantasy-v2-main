@@ -78,10 +78,23 @@ on:
     # 2026-08-26, runs cancelled at 45m and 51m were each superseded immediately and coverage was
     # continuous 18:00-20:32Z. The cost of a truncated window is one restart; the cost of a
     # dropped trigger is an hour of nothing.
-    - cron: "3 * * * *"
-    - cron: "18 * * * *"
-    - cron: "33 * * * *"
-    - cron: "48 * * * *"
+    # ⚠ EXACTLY ONE TRIGGER AN HOUR, AND THE COUNT IS LOAD-BEARING.
+    #
+    # This was briefly four (:03 :18 :33 :48) to buy more chances against a scheduler that drops
+    # triggers. That is incompatible with the self-re-arm below, and the combination was measured
+    # dead on 2026-08-28: `cancel-in-progress` means each trigger CANCELS the running window, four
+    # triggers put them 15 minutes apart, and the re-arm requires 40 minutes elapsed. Run
+    # 33132784156 was cancelled at 1245s and logged "NOT re-arming" — correctly. No window could
+    # ever reach the threshold, so the chain could never establish.
+    #
+    # With the chain working, extra triggers buy nothing anyway: only ONE has to land, ever, and
+    # from then on each window books its successor. More triggers is strictly worse — it converts
+    # a self-sustaining chain back into a scheduler-dependent one.
+    #
+    # Spacing rule if this is ever retuned: the gap between triggers must EXCEED the window
+    # (55m), or the window cannot finish and re-arm. 60 > 55 holds. :07 keeps it off the
+    # contended top of the hour.
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       window_minutes:
@@ -173,6 +186,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STARTED_EPOCH: ${{ steps.started.outputs.epoch }}
+          INPUT_WINDOW: ${{ inputs.window_minutes }}
           SELF_ARM: ${{ vars.FAST_TIER_SELF_ARM }}
           REPO: ${{ github.repository }}
           IS_DRY: ${{ inputs.dry_run }}
@@ -189,10 +203,23 @@ jobs:
               echo "::notice::FAST_TIER_SELF_ARM is off — not re-arming"; exit 0 ;;
           esac
 
+          # ⚠ THE THRESHOLD SCALES WITH THE WINDOW, AND THAT IS DELIBERATE.
+          #
+          # It was a hardcoded 2400s (40 min), which had two problems. It silently assumed the
+          # 55-minute default, so a dispatch with a smaller `window_minutes` could never re-arm
+          # even when it completed perfectly. And it made the whole mechanism untestable: proving
+          # the chain closes meant waiting out a full 55-minute window every attempt.
+          #
+          # 70% of the ACTUAL window keeps the safety property exactly — a crash or setup failure
+          # dies in seconds, nowhere near 70% of anything — while letting a deliberately short
+          # dispatch verify the dispatch path in minutes.
+          #
+          # A short test window cannot seed a runaway: the successor is dispatched with NO inputs,
+          # so it takes the 55-minute default. One 2-minute window begets a 55-minute one.
+          WINDOW_MIN="${INPUT_WINDOW:-55}"
+          case "$WINDOW_MIN" in ''|*[!0-9]*) WINDOW_MIN=55 ;; esac
           ELAPSED=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
-          # 40 minutes of a 55-minute window. Comfortably above any crash or setup failure, and
-          # below a window trimmed by the concurrency handoff.
-          MIN_ELAPSED=2400
+          MIN_ELAPSED=$(( WINDOW_MIN * 60 * 70 / 100 ))
           if [ "$ELAPSED" -lt "$MIN_ELAPSED" ]; then
             echo "::warning::window was only ${ELAPSED}s (<${MIN_ELAPSED}s) — NOT re-arming."
             echo "::warning::A short window means the run died early or was superseded; re-arming"

@@ -219,8 +219,8 @@ const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
  * "Link your Sleeper account…", "Connect Yahoo in League Sync…", "Reconnect ESPN…".
  * Observed live: the Sleeper commissioner check returns exactly that and the
  * screen had no way forward, which turns a solvable setup step into a dead end.
- * LeagueSyncDashboard (/leagues) is where every one of those connections is made,
- * so the message gets a destination.
+ * /leagues is where those messages point, so the message gets a destination.
+ * (It used to name LeagueSyncDashboard, which is retired — the route survives it.)
  *
  * Matched on the action words rather than on exact strings: these sentences come
  * from several gates and are edited independently, and a literal match would

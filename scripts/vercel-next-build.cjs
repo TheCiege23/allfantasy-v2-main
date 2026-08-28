@@ -259,6 +259,26 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'admin', 'sports', 'provider-team-reconciliation', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'ai', 'provider-health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'ai', 'audit-logs', 'route.ts').replace(/\\/g, '/'),
+  /*
+   * Usage-analytics + AI-outcome endpoints, restored 2026-08-28 after being
+   * mass-deleted by 25db02263 in April.
+   *
+   * ⚠ THE KEEP-LINE IS HALF THE RESTORE. Putting the files back on disk does
+   * nothing on its own: `app/api/admin` is disabled wholesale above, so a
+   * restored route without a keep-line ships as a 404 and looks like the
+   * deletion was never fixed. That is the trap this block exists to avoid.
+   *
+   * They earn the four routes because the callers are REAL and already shipping.
+   * `app/leagues/[leagueId]/admin/model` is not excluded and answers 307 in
+   * production today — a reachable page whose panels fetch these paths:
+   *   components/admin/UsageAnalyticsPanel.tsx        -> usage, usage/summary
+   *   components/admin/ai/AdminAIOutcomeDashboard.tsx -> ai/metrics
+   *   components/admin/ai/AIRecommendationTable.tsx   -> ai/recommendations
+   */
+  path.join('app', 'api', 'admin', 'usage', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'usage', 'summary', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'ai', 'metrics', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'ai', 'recommendations', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'world-cup', 'actions', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'fantasy-data', 'import', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'fantasy-data', 'status', 'route.ts').replace(/\\/g, '/'),

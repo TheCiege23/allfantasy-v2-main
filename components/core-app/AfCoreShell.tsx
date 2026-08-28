@@ -72,7 +72,6 @@ export type CoreNavKey =
   // active item — they are exits, not screens.
   | 'live-scores'
   | 'my-leagues'
-  | 'league-sync'
   | 'settings'
   /*
    * 38a. `live` is the league-dashboard entry to the cross-league live slate
@@ -88,10 +87,10 @@ export type CoreNavKey =
    * thing that happens to share the English word.
    */
   | 'standings'
-  /* 38a·10 — per-league sync. The account-wide /leagues/sync page keeps connect,
-     OAuth and re-sync; this answers "is THIS league current", which that page
-     structurally cannot. Adding a league belongs to /import — one import
-     pipeline, not two. */
+  /* 38a·10 — per-league sync, and now the ONLY sync entry. The account-wide
+     /leagues/sync page it used to sit beside is retired; connecting and adding a
+     league belong to /import. This answers "is THIS league current" and does not
+     re-sync — see the rail note for what that cost. */
   | 'sync'
 
 type NavItem = {
@@ -197,7 +196,7 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   },
   {
     label: 'You',
-    keys: ['career', 'rankings', 'notifications', 'commissioner', 'league-sync', 'tools', 'settings'],
+    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings'],
   },
 ]
 
@@ -318,12 +317,21 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         : '/core/draft-hq',
     },
     { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: inLeague('/core/portfolio') },
-    // 21a's My Leagues and the connect/re-sync dashboard it links to. League
-    // Sync is the ONLY entry point to the Yahoo OAuth handoff and per-league
-    // re-sync, so the shell must reach it or the /core cutover quietly removes
-    // both.
+    /*
+     * ⚠ LEAGUE SYNC IS GONE FROM THE RAIL, AND FROM THE APP. /leagues/sync was
+     * the account-wide connect/re-sync dashboard; it is retired because it was a
+     * SECOND import pipeline on the older `/api/league/*` endpoints, skipping the
+     * commissioner gate, the attestation step and the team claim that
+     * `/api/leagues/import/*` applies. Adding a league is /import's job, and
+     * Yahoo OAuth starts there too.
+     *
+     * ⚠ WHAT WENT WITH IT: the per-league RE-SYNC BUTTON. `/api/league/sync` and
+     * `/api/league/sleeper-sync` still exist and still work — nothing in the UI
+     * calls them now, and sleeper-sync has no caller at all. If re-sync wants a
+     * home again, the 'sync' entry below is it: /core/sync already owns "is THIS
+     * league current".
+     */
     { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/leagues' },
-    { key: 'league-sync', label: 'League Sync', glyph: '⟳', href: '/leagues/sync' },
     /*
      * Restored: 'career' was pulled from the rail while it rendered "this screen
      * has not been built yet" — an apology occupying prime real estate. The
@@ -431,7 +439,7 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       glyph: '↻',
       href: props.selectedLeagueId
         ? `/core/sync?league=${encodeURIComponent(props.selectedLeagueId)}`
-        : '/leagues/sync',
+        : '/leagues',
     },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
     // Full page outside /core, like My Leagues and League Sync above. This is
@@ -469,11 +477,11 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
     id: 'manage',
     heading: 'Manage',
     /*
-     * 'sync' is THIS league's freshness; 'league-sync' is the account-wide
-     * connect / OAuth / add-league page. Both are real and neither replaces
-     * the other, so both are listed rather than one quietly shadowing it.
+     * 'sync' is THIS league's freshness. The account-wide 'league-sync' page it
+     * used to sit beside is retired — see the rail note above — so this is now
+     * the only sync entry, and it answers a per-league question only.
      */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'league-sync', 'settings', 'tools'],
+    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'tools'],
   },
 ]
 

@@ -1465,7 +1465,7 @@ export default async function AfCorePage({
         )
       ) : activeKey === 'sync' ? (
         leagueSync ? (
-          <LeagueSync data={leagueSync} manageHref="/leagues/sync" />
+          <LeagueSync data={leagueSync} manageHref="/import" />
         ) : (
           <PickALeague
             tabKey="sync"

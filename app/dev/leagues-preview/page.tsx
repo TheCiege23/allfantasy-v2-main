@@ -146,7 +146,6 @@ export default function LeaguesPreviewPage() {
         ]}
         notice={null}
         importHref="/import"
-        syncHref="/leagues/sync"
       />
     </>
   )

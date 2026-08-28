@@ -8,11 +8,14 @@ import { buildMetadata, getSEOPageConfig } from "@/lib/seo"
 /**
  * /leagues — cut over to the 21a "My Leagues" view.
  *
- * ⚠ THE CONNECT/RE-SYNC TOOLING THAT USED TO BE HERE MOVED, IT WAS NOT DROPPED.
- * `LeagueSyncDashboard` now renders at /leagues/sync, and this screen links to
- * it from its header and its empty state. It is the only entry point to the
- * Yahoo OAuth handoff and the per-league re-sync, so replacing this page without
- * rehoming it would have quietly removed both.
+ * ⚠ THE CONNECT/RE-SYNC DASHBOARD THIS ONCE LINKED TO IS RETIRED. It moved to
+ * /leagues/sync when 21a took this route, and has now been removed outright:
+ * adding a league is /import's job, and it was a second import pipeline running
+ * the older `/api/league/*` endpoints. Yahoo OAuth starts from /import.
+ *
+ * ⚠ WHAT WENT WITH IT: the per-league RE-SYNC BUTTON. The endpoints still exist
+ * and still work; nothing in the UI calls them. Recorded rather than left to be
+ * discovered.
  *
  * ⚠ THIS PAGE STATES NO FIGURE OF ITS OWN. Every count, tier and chip number is
  * computed in `getMyLeaguesData` from rows read on the server. The handoff's
@@ -73,7 +76,6 @@ export default async function LeaguesPage() {
       coverage={data?.coverage ?? []}
       notice={data?.notice ?? null}
       importHref="/import"
-      syncHref="/leagues/sync"
     />
   )
 }
