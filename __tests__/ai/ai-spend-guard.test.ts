@@ -102,6 +102,9 @@ describe('AI spend guard — provider boundary coverage', () => {
     'app/api/chat/chimmy/route.ts',
     'app/api/start-sit/chimmy/route.ts',
     'app/api/waiver-ai/grok/route.ts',
+    // Moved off the ratchet 2026-08-27. Reached from 18 route files, the widest
+    // surface on that list at the time.
+    'lib/ai/league-settings-ai/claude.ts',
   ]
 
   /**
@@ -123,7 +126,6 @@ describe('AI spend guard — provider boundary coverage', () => {
   const UNGUARDED_RATCHET = [
     'lib/ai-gm-intelligence.ts',
     'lib/ai/imageGenerator.ts',
-    'lib/ai/league-settings-ai/claude.ts',
     'lib/ai/working-memory.ts',
     'lib/autocoach/status-sources/XGrokAdapter.ts',
     'lib/brackets/intelligence/ai-narrator.ts',
@@ -161,7 +163,7 @@ describe('AI spend guard — provider boundary coverage', () => {
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.
-    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(22)
+    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(21)
   })
 
   it('every ratchet entry still exists (stale entries hide real coverage)', () => {
