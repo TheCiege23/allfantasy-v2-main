@@ -76,6 +76,25 @@ describe('headlineSimilarity', () => {
     expect(headlineSimilarity(a, b)).toBeLessThan(THRESHOLD)
   })
 
+  it('ignores a url so dedupe does not depend on the citation strip having run', () => {
+    // Both are real stored headlines for the same Schefter story. The first
+    // predates stripInlineCitations. With the URL tokenised they scored 0.579
+    // and the story was written twice.
+    const withUrl =
+      'Adam Schefter reports Raiders HC Klint Kubiak said injured RB Ashton Jeanty is on the mend.[[2]](https://x.com/AdamSchefter/status/2092371465660236156)'
+    const clean =
+      'Adam Schefter reported that Raiders HC Klint Kubiak said injured RB Ashton Jeanty is on the mend.'
+    expect(headlineSimilarity(withUrl, clean)).toBeGreaterThanOrEqual(THRESHOLD)
+  })
+
+  it('keeps a short number, which can be the only thing separating two stories', () => {
+    // Long digit runs are dropped as ids; "week 1" vs "week 5" must not merge.
+    // (Both are under the 3-character floor anyway — this pins the intent.)
+    const a = 'Ruled out through Week 2024 of the regular season'
+    const b = 'Ruled out through Week 2025 of the regular season'
+    expect(headlineSimilarity(a, b)).toBeLessThan(1)
+  })
+
   it('is 0 when either side has no usable tokens', () => {
     expect(headlineSimilarity('', 'Ruled out')).toBe(0)
     expect(headlineSimilarity('a b c!', '')).toBe(0)

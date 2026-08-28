@@ -297,14 +297,29 @@ const DEDUPE_WINDOW_MS = 4 * 60 * 60 * 1000
  */
 const DEDUPE_SIMILARITY = 0.7
 
-/** Words of 3+ characters, lowercased, punctuation and smart quotes stripped. */
+/**
+ * Words of 3+ characters, lowercased, punctuation and smart quotes stripped.
+ *
+ * URLs are removed WHOLE before tokenising. Left in, one link contributes
+ * "https", "com", the handle and a 19-digit status id — four to five tokens of
+ * pure noise that dilute the overlap. Measured on real stored rows: two
+ * recordings of the same Schefter story scored 0.579 and were judged distinct
+ * purely because one predated the citation strip and still carried its URL.
+ *
+ * That coupling is the point of doing this: without it, dedupe silently depends
+ * on stripInlineCitations having run first, and any future path that stores a
+ * headline with a link in it gets duplicate rows with no failing test.
+ */
 function headlineTokens(headline: string): Set<string> {
   return new Set(
     headline
       .toLowerCase()
+      .replace(/https?:\/\/\S+/g, ' ')
       .replace(/[^a-z0-9\s]/g, ' ')
       .split(/\s+/)
-      .filter((w) => w.length > 2),
+      // Long digit runs are ids, not content. Short ones stay: a year or a week
+      // number can be the only thing separating two stories.
+      .filter((w) => w.length > 2 && !/^\d{5,}$/.test(w)),
   )
 }
 
@@ -393,9 +408,15 @@ async function persistNewsItem(item: XNewsItem): Promise<'new' | 'duplicate' | '
 
 /**
  * Create/update an injury record from a news item.
+ *
+ * Returns the unique key of the row it touched, or null if it skipped or failed.
+ * The caller needs this because the write is an UPSERT: two news items about one
+ * player that derive the same status on the same day land on the SAME row, so
+ * counting calls overstates rows. Measured 2026-08-27 — two bullets reported as
+ * "2 injury records" produced exactly one row.
  */
-async function persistInjuryFromNews(item: XNewsItem): Promise<void> {
-  if (!item.playerName) return
+async function persistInjuryFromNews(item: XNewsItem): Promise<string | null> {
+  if (!item.playerName) return null
 
   const lower = item.headline.toLowerCase() + ' ' + item.body.toLowerCase()
 
@@ -419,7 +440,7 @@ async function persistInjuryFromNews(item: XNewsItem): Promise<void> {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  await prisma.injuryReportRecord.upsert({
+  return await prisma.injuryReportRecord.upsert({
     where: {
       uniq_injury_reports_player_report_status: {
         sport: item.sport,
@@ -444,7 +465,10 @@ async function persistInjuryFromNews(item: XNewsItem): Promise<void> {
       notes: item.headline,
       team: item.team ?? 'UNKNOWN',
     },
-  }).catch(() => {})
+  }).then(
+    () => `${item.sport}|${item.playerName}|${today.toISOString().slice(0, 10)}|${status}`,
+    () => null,
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -573,6 +597,12 @@ export async function ingestXNewsForPlayers(input: {
   skipped: number
   newRecords: number
   duplicatesSkipped: number
+  /**
+   * Distinct InjuryReportRecord rows touched — NOT the number of injury bullets.
+   * That write is an upsert keyed on (sport, playerId, reportDate, status), so
+   * two bullets about one player deriving the same status on one day land on a
+   * single row. Counting calls reported 2 for a row count of 1.
+   */
   injuryRecords: number
   /** Searched successfully and there was genuinely nothing to report. Not errors. */
   noNews: string[]
@@ -598,7 +628,7 @@ export async function ingestXNewsForPlayers(input: {
 
   let newRecords = 0
   let duplicatesSkipped = 0
-  let injuryRecords = 0
+  const injuryRowKeys = new Set<string>()
   const noNews: string[] = []
   const errors: string[] = []
 
@@ -626,15 +656,15 @@ export async function ingestXNewsForPlayers(input: {
     }
 
     for (const item of toNewsItems(result, { sport, name, team: player.team ?? null })) {
-      // Counts come from persistNewsItem, which reports 'new' even when its
-      // insert is rejected — headlines are truncated above so this path should
-      // not be reached, but the number is optimistic by inheritance.
       const persisted = await persistNewsItem(item)
       if (persisted === 'new') {
         newRecords++
         if (item.category === 'injury') {
-          await persistInjuryFromNews(item)
-          injuryRecords++
+          // Distinct keys, not calls: the injury write is an upsert, so two
+          // bullets about one player with the same derived status on the same
+          // day touch ONE row. Counting calls reported 2 for a single row.
+          const key = await persistInjuryFromNews(item)
+          if (key) injuryRowKeys.add(key)
         }
       } else if (persisted === 'duplicate') {
         duplicatesSkipped++
@@ -647,7 +677,7 @@ export async function ingestXNewsForPlayers(input: {
     skipped: subjects.length - targets.length,
     newRecords,
     duplicatesSkipped,
-    injuryRecords,
+    injuryRecords: injuryRowKeys.size,
     noNews,
     errors,
   }
