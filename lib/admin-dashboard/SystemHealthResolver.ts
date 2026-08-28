@@ -16,8 +16,8 @@ const ENDPOINTS: Record<string, string> = {
   mfl: "https://api.myfantasyleague.com/2024/export",
   fantrax: "https://www.fantrax.com",
   fantasycalc: "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=1&numTeams=12&ppr=1", // db-first-exception: live provider health probe
-  thesportsdb: `https://www.thesportsdb.com/api/v1/json/${getTheSportsDbApiKeyOrFallback('123')}/all_leagues.php`,
-  theaudiodb: `https://www.theaudiodb.com/api/v1/json/${getTheAudioDbApiKeyOrFallback('2')}/album.php?i=112024`,
+  thesportsdb: `https://www.thesportsdb.com/api/v1/json/${getTheSportsDbApiKeyOrFallback('123')}/all_leagues.php`, // db-first-exception: live provider health probe
+  theaudiodb: `https://www.theaudiodb.com/api/v1/json/${getTheAudioDbApiKeyOrFallback('2')}/album.php?i=112024`, // db-first-exception: live provider health probe
   espn: `${ESPN_SITE_API_BASE}/football/nfl/scoreboard`, // db-first-exception: live provider health probe
   openai: "https://api.openai.com/v1/models",
   grok: "https://api.x.ai/v1/models",

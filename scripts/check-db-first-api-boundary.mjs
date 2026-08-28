@@ -89,6 +89,69 @@ const DATA_API_HOST_PATTERNS = [
   // OpenWeatherMap. Weather rather than sport, but it is a rate-limited keyed
   // vendor on the same request paths and the rule is the same.
   /(^|\.)api\.openweathermap\.org$/i,
+  /*
+   * ADDED 2026-08-28 by re-deriving DATA_API_UNMONITORED in
+   * __tests__/db-first-host-census.test.ts. Every one was a CONFIRMED feed sitting
+   * outside this list; the impact of each was measured before adding, not assumed.
+   *
+   *   raw.githubusercontent.com   0 new violations. DynastyProcess values/ids and
+   *                               nflverse games.csv; both call sites already sit under
+   *                               allowlist patterns (dynastyProcessSync matches
+   *                               `lib/.*sync`, ingest-coaches-nflverse matches the
+   *                               scripts verb list). Free coverage.
+   *   coaching-tree.app           0 new violations, same reason.
+   *   lm-api-reads.fantasy.espn.com  2 — lib/espn-client.ts and
+   *                               lib/league-import/espn/EspnLeagueFetchService.ts.
+   *                               The census advertised this as an open ESPN gap for
+   *                               good reason: it is neither api.espn.com nor
+   *                               site.api.espn.com, so neither ESPN pattern saw it.
+   *                               "league-import" does not match `ingest|ingestion|sync`.
+   *   api.clearsportsapi.com      2 — provider base URLs in lib/provider-config.ts and
+   *                               lib/providers/clearSportsFieldMaps.ts.
+   *   bleacherreport.com          7 — all RSS feeds in one file,
+   *                               lib/autocoach/status-sources/BleacherReportAdapter.ts.
+   *   www.theaudiodb.com          2 — app/api/music/{artists,track-info} fetch the vendor
+   *                               straight from a REQUEST PATH. A third hit, the health
+   *                               probe in SystemHealthResolver, takes the standing
+   *                               `db-first-exception: live provider health probe` marker
+   *                               in this same change, which is why it is 2 and not 3.
+   *   fantasyfootballcalculator.com  1 — lib/adp-data.ts.
+   *
+   * Arithmetic, stated exactly because a number in a comment is a claim: 89 baseline,
+   * +14 from these patterns = 103, then -1 because the pre-existing unmarked thesportsdb
+   * health probe in SystemHealthResolver took its marker in the same change. 102 total.
+   *
+   * Left REPORTED, not allowlisted, exactly as CFBD and api.sleeper.com were: an
+   * allowlist entry earned before the migration is an assertion, not a fact.
+   */
+  /(^|\.)raw\.githubusercontent\.com$/i,
+  /(^|\.)coaching-tree\.app$/i,
+  /(^|\.)lm-api-reads\.fantasy\.espn\.com$/i,
+  /(^|\.)api\.clearsportsapi\.com$/i,
+  /(^|\.)bleacherreport\.com$/i,
+  /(^|\.)theaudiodb\.com$/i,
+  /(^|\.)fantasyfootballcalculator\.com$/i,
+  /*
+   * ⚠ FOUR CONFIRMED FEEDS DELIBERATELY NOT ADDED, each measured. Three are blocked by
+   * the same limitation and it is worth stating plainly: THIS GUARD DOES NOT SKIP
+   * COMMENTS. The census in __tests__/db-first-host-census.test.ts does. So a
+   * documentation URL in a docblock is invisible to one tool and a violation in the
+   * other.
+   *
+   *   github.com          dual-use. nflverse release downloads ARE a feed, but
+   *                       playwright.config.ts:5 links to github.com/motdotla/dotenv in a
+   *                       docblock. Host matching cannot separate a release download
+   *                       from a doc link.
+   *   www.fleaflicker.com one real API base, and types.ts:3 citing
+   *                       /api-docs/index.html in a docblock.
+   *   www.fantrax.com     the FXEA base is a feed, but /fantasy/league/<id>/home is a
+   *                       user-facing deep link, and one hit is a test fixture.
+   *   api.myfantasyleague.com  7, two of them health probes in api-health-monitor and
+   *                       SystemHealthResolver that would each need a marker first.
+   *
+   * These stay in DATA_API_UNMONITORED with the same reasons. Adding them today would
+   * import exactly the noise that got media.api-sports.io excluded above.
+   */
 ];
 
 /**

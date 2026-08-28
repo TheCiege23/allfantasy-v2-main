@@ -216,32 +216,34 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
  * this ledger only won because classify() checks the ledger first. Order, not evidence.
  * The test below now forbids that overlap outright.
  *
+ * SEVEN MORE RESOLVED the same day, in the intended direction: raw.githubusercontent.com,
+ * coaching-tree.app, lm-api-reads.fantasy.espn.com, api.clearsportsapi.com,
+ * bleacherreport.com, www.theaudiodb.com and fantasyfootballcalculator.com are now in
+ * DATA_API_HOST_PATTERNS. Each was measured before adding rather than assumed; the guard
+ * went 89 -> 106 reported, which is the guard working. That leaves this list at FOUR.
+ *
  * The list may shrink freely. It must not grow.
  */
 const DATA_API_UNMONITORED = [
-  'api.myfantasyleague.com',
-  'bleacherreport.com',
-  'lm-api-reads.fantasy.espn.com',
-  'www.fantrax.com',
-  'api.clearsportsapi.com',
-  'www.fleaflicker.com',
-  'fantasyfootballcalculator.com',
-  'www.theaudiodb.com',
   /*
-   * ADDED 2026-08-28 BY WIDENING COVERAGE, NOT BY NEW DEBT — the distinction the
-   * bound below depends on. Two came into view with the scripts/ root and one was
-   * sitting in the wrong category all along. No new unguarded code shipped.
-   *
-   * nflverse release downloads — play-by-play, weekly player stats, players.csv.
-   * Reached only from ingestion scripts, which the DB-first rule permits; listed
-   * because the HOST is still an unwatched data feed, and a directory is not a
-   * classification.
+   * ⚠ THE FOUR THAT COULD NOT BE ADDED CLEANLY, and three of them fail for ONE shared
+   * reason worth knowing before you try again: THE GUARD DOES NOT SKIP COMMENTS, while
+   * this census does. A documentation URL in a docblock is invisible here and a
+   * violation there, so adding these hosts imports false positives — precisely the noise
+   * that got media.api-sports.io excluded from the guard.
    */
+
+  /* 7 hits. Two are health probes (api-health-monitor, SystemHealthResolver) that each
+   * need a `db-first-exception:` marker before this host can be added. */
+  'api.myfantasyleague.com',
+  /* FXEA base is a real feed, but /fantasy/league/<id>/home is a user-facing deep link
+   * and one hit is a test fixture. The hostname cannot separate them. */
+  'www.fantrax.com',
+  /* One real API base, plus types.ts:3 citing /api-docs/index.html in a docblock. */
+  'www.fleaflicker.com',
+  /* Dual-use: nflverse release downloads ARE a feed, but playwright.config.ts:5 links to
+   * github.com/motdotla/dotenv in a docblock. */
   'github.com',
-  /* DynastyProcess values/ids (lib, via sportsDataCache) and nflverse games.csv. */
-  'raw.githubusercontent.com',
-  /* MCP endpoint behind scripts/ingest-coaches-coaching-tree.ts — head-coach history. */
-  'coaching-tree.app',
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -466,11 +468,12 @@ describe('DB-first boundary — outbound host census', () => {
      * If you are raising this number for any other reason, you are recording new
      * debt as though it were new visibility. Say so in the commit, or do not raise it.
      *
-     * 19 -> 11 on the same day, by RE-DERIVING the list rather than adding to it: eight
-     * entries were never data feeds. The bound comes down with it — a ratchet left loose
-     * after a cleanup has stopped ratcheting.
+     * 19 -> 11 -> 4 on the same day. The first drop was RE-DERIVING: eight entries were
+     * never data feeds. The second was the intended direction, seven hosts moving into
+     * DATA_API_HOST_PATTERNS where the guard can actually block them. The bound comes
+     * down with each — a ratchet left loose after a cleanup has stopped ratcheting.
      */
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(11)
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(4)
   })
 
   it('no unmonitored entry is ALSO matched by a category', () => {
