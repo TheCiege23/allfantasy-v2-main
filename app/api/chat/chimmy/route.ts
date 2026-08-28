@@ -610,7 +610,18 @@ function classifyPecrIntent(message: string): string {
    * `start` in ROSTER_INTENT. The formal spelling was covered and the human one
    * was not.
    */
-  if (/waiver|wire|pick\s*up|drop|add|free.?agent/i.test(message)) return 'waiver'
+  /*
+   * ⚠ AND THE BIDDING VOCABULARY WAS MISSING TOO. "How much FAAB should I bid
+   * on him?" and "should I claim him?" are the questions this branch exists for
+   * — they are asking about waiver MECHANICS, the exact thing we cannot see and
+   * must refuse honestly — and neither matched, so both fell through to
+   * `general` and never even acquired league context. The refusal could not
+   * fire because the question never reached the surface that would refuse.
+   *
+   * `claim` is deliberately narrow: bare `claim` also means "claim my team",
+   * which is an import action, so it is scoped to a player pronoun.
+   */
+  if (/waiver|wire|pick\s*up|drop|add|free.?agent|faab|\bbids?\b|\bbidding\b|claim\s+(?:him|her|them)/i.test(message)) return 'waiver'
   if (ROSTER_INTENT.test(message)) return 'roster'
   if (/draft|pick|adp|tier|rank/i.test(message)) return 'draft'
   return 'general'
