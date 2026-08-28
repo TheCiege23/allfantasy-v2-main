@@ -196,6 +196,45 @@ Extend the pairing for NFL only, using the existing writers. Rules:
 Exit criterion: NFL coverage materially up, name agreement still ~100%, zero new
 collisions.
 
+#### RESULT — strong tier applied to production 2026-08-28
+
+`scripts/backfill-nfl-identity-strong-tier.ts` (dry run by default, `--write` to apply).
+
+| | before | after |
+| --- | ---: | ---: |
+| `PlayerIdentityMap` rows | 33,308 | 34,674 |
+| NFL rows | 1,933 | 3,299 |
+| NFL fully paired | 1,890 | 3,263 |
+| **NFL RI coverage** | **19.8%** | **34.1%** |
+
+1,366 created, 7 updated, 0 failed. 23 skipped because the Sleeper id was already
+claimed, 13 skipped as duplicates inside the batch — both are the same underlying
+fact, that **Rolling Insights holds two rows for one player** ("Harold Landry" and
+"Harold Landry Iii" are separate RI ids resolving to Sleeper 5030). `sleeperId
+@unique` stops the second and that is correct; it is counted, never forced.
+
+Verified after: 0 Sleeper ids used by more than one pair, 0 RI ids used by more than
+one pair, 0 rows breaking the `normalizedName` convention, and the collision probe
+still 0 with the guard in place.
+
+**All 1,373 new pairs agree by name.** The weak tier (5,267 rows) was NOT run.
+
+⚠ **THE BACKFILL FOUND PRE-EXISTING CORRUPTION IT DID NOT CAUSE.** Checking name
+agreement across ALL NFL pairs afterwards found 20 that disagree — every one of them
+older than the backfill, none written by it. Eleven are the same defect this whole
+document is about, committed to the identity table itself: `sleeperId` **equals**
+`rollingInsightsId`, i.e. someone copied an id across two namespaces. Of the ten that
+can be resolved against a Sleeper row, **ten point at the wrong player** — Jaye
+Howard's row resolves to Marc Anthony, Chigoziem Okonkwo's to Grayland Arnold. The
+other nine disagreements are benign nickname variants (Cameron Ward / Cam Ward).
+
+Those 11 are left in place deliberately: removing production rows is destructive and
+was not in scope for this phase. They are listed here so the decision is explicit
+rather than forgotten. They also validate the caveat recorded under Phase 2 — the
+"ground truth" that phase measured against contains known-wrong pairs, which is
+precisely why 99.9% was described as agreement with existing pairs rather than
+verification against reality.
+
 ### Phase 4 — decide about the other sports (a decision, not a task)
 
 NCAAF is 68,517 rows at 0% coverage, and **no id survives college→pro** — that is a
