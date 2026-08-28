@@ -358,3 +358,61 @@ Insights' is current. The 9 rows written here show it plainly, a consistent +5: 
 survives and is correct: Orlando Scandrick genuinely holds id 266 in both spaces. Checked by name
 before it was left alone. The 11 cleared earlier were all verified individually for the same
 reason — the shape is a reason to look, not a reason to delete.
+
+---
+
+## Phase 4 — ANSWERED 2026-08-28. The other sports need nothing.
+
+The phase asked: which surface actually needs a non-NFL row to reach a Sleeper id? **None
+does**, and the identity map is now self-maintaining for the sport that does.
+
+### It maintains itself
+
+The 5,759 pairs that appeared mid-session were written by `/api/cron/import-players`, whose
+identity phase runs `repairSleeperIds` and then `backfillSleeperIds` for NFL. It is scheduled
+`0 */6 * * *` in `cron-schedule.json` and demonstrably alive — five runs in three hours, more
+than the schedule, because other sessions trigger it too. So **94.4% NFL coverage does not decay**,
+and there is a repair pass ahead of every backfill. Nothing further is needed here.
+
+### The per-sport split settles the rest
+
+| sport | map rows | paired |
+| --- | ---: | ---: |
+| NCAAF | 20,000 | 0 |
+| NCAAB | 18,209 | 0 |
+| **NFL** | 9,563 | **9,028** |
+| MLB | 7,295 | 0 |
+| SOCCER | 4,214 | 0 |
+| NHL | 4,115 | 0 |
+| NBA | 1,756 | 0 |
+
+The rows exist for every sport — the multi-sport writer runs. They are unpaired because **Sleeper
+has no counterpart to pair them to**. For NCAAF, NCAAB, MLB, NHL and SOCCER that is the end of it:
+0% is the correct answer, not a gap.
+
+### NBA looked like the exception and is not
+
+Sleeper does support NBA, and `backfillSleeperIds` is called with `{ sport: 'NFL' }` hard-coded,
+so NBA is never attempted. That looks like an oversight until you check the consumers:
+
+- **All 10 NBA leagues are empty shells.** `platform=manual`, all created 2026-05-22, and they
+  hold **0 rosters, 0 `LeagueTeam` rows and no player data.** Nothing resolves an NBA player id
+  because no NBA roster exists.
+- **None is Sleeper-platform**, so even with rosters the ids would not be Sleeper's.
+- **0 of 1,756 NBA `SportsPlayer` rows carry a `sleeperId`.**
+- The one code path that reaches for Sleeper NBA data — `PlayerStatusAggregator`, which fetches
+  Sleeper statuses for `NFL` and `NBA` — feeds `findLeagueIdsWithPlayerAsStarter(sport, ...)`.
+  With no NBA rosters that returns nothing whatever the ids say.
+
+**So NBA's 0% is deliberate, not neglected.** Enabling it would populate a column nothing reads,
+against a matcher validated only on NFL, for leagues with no players in them. If NBA leagues are
+ever imported for real — with a Sleeper platform and populated rosters — revisit this by rerunning
+the Phase 2 measurement for NBA first. Do not simply widen the hard-coded sport.
+
+⚠ **A METHOD NOTE, BECAUSE IT NEARLY PRODUCED THE WRONG ANSWER TWICE.** `import-stat-lines` has
+ZERO rows in `SyncJobRun`, which reads as a dead cron. It is not: `fantasy_stat_lines.fetched_at`
+was minutes old when checked. Absence from a job log is not absence of the job — check the table
+the job writes. Separately, a `findMany` filtering `sport: { in: ['NBA','nba'] }` returned 0 while
+`groupBy` reported 10, because the lowercase value is an invalid enum and a `.catch(() => [])`
+swallowed the error into an empty result. A defensive catch around a query turns a type error into
+a confident wrong answer.
