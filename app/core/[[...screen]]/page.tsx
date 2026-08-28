@@ -81,6 +81,14 @@ import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import LiveScores from '@/components/core-app/screens/LiveScores'
+/*
+ * Model Admin's two panels, reused verbatim from the page this replaced. They
+ * are client components that fetch their own data, so moving them onto the core
+ * shell needs no new loader — only the admin gate below.
+ */
+import { V3WeightsPanel } from '@/components/admin/V3WeightsPanel'
+import { UsageAnalyticsPanel } from '@/components/admin/UsageAnalyticsPanel'
+import { getAdminAccessState } from '@/lib/adminAuth'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
@@ -148,6 +156,13 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
    */
   discord: 'commissioner',
   /*
+   * Model Admin rides the commissioner nav key for the same reason `discord`
+   * does — it is an admin surface, not a manager one, and it must not add a
+   * rail entry that 403s almost everyone who clicks it. Moved here from
+   * /leagues/[leagueId]/admin/model, which now redirects.
+   */
+  'model-admin': 'commissioner',
+  /*
    * 28a. ONE segment for every sport — the sport is a query parameter
    * (?sport=mlb), not a route. That is the "one shell, every sport" constraint
    * expressed in the routing layer too, and it keeps six sports at zero
@@ -201,6 +216,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   share: { title: 'Career Share', description: 'A shareable card of your fantasy career.' },
   notifications: { title: 'Notifications', description: 'Trades, waivers, lineups and commissioner alerts.' },
   discord: { title: 'Discord bridge', description: 'Connect a league to a Discord channel.' },
+  'model-admin': { title: 'Model Admin', description: 'V3 scoring weights, drift monitoring and API usage.' },
   bracket: { title: 'Bracket Challenge', description: 'Fill a bracket and track it against the field.' },
   live: { title: 'Live Scores', description: 'Live scores across every sport, scored against your rosters.' },
   standings: { title: 'Standings', description: 'This league ranked by points scored, not by record.' },
@@ -551,6 +567,21 @@ export default async function AfCorePage({
    * `scope` and `sport` are read from the URL so a shared link lands on the same
    * slate the sender was looking at; the client takes over from there.
    */
+  /*
+   * ⚠ EVALUATED ONLY ON ITS OWN SEGMENT. `getAdminAccessState` reads cookies and
+   * the session; running it on every /core render would put an extra auth read
+   * in front of every screen in the product to decorate one admin page.
+   *
+   * Defaults to FALSE — an errored gate denies rather than admits. This is the
+   * AllFantasy admin allowlist, not league commissionership.
+   */
+  const modelAdminAllowed =
+    segment === 'model-admin'
+      ? await getAdminAccessState()
+          .then((s) => s.status === 'admin')
+          .catch(() => false)
+      : false
+
   const liveScores =
     activeKey === 'live'
       ? await getLivePageData({
@@ -1499,6 +1530,56 @@ export default async function AfCorePage({
               leagues={rail}
             />
           )
+        )
+      ) : segment === 'model-admin' ? (
+        /*
+         * Model Admin, moved off `/leagues/[leagueId]/admin/model` so it runs on
+         * the core shell like everything else.
+         *
+         * ⚠ MATCHED ON `segment`, NOT `activeKey`. It shares the commissioner
+         * nav key — same reason /core/discord does — so the rail highlights
+         * Commissioner while you are here, and no rail entry is added. That is
+         * deliberate: the gate is the AllFantasy admin ALLOWLIST, not league
+         * commissionership, so a visible nav item would show a door to every
+         * user and 403 almost all of them.
+         *
+         * ⚠ THE PANELS ARE LEAGUE-SCOPED, so this needs a held league. Without
+         * one it says so rather than rendering empty weight boxes against no
+         * league — the same rule the rest of the shell follows.
+         */
+        !modelAdminAllowed ? (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 620 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22 }}>Model Admin</h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              This account is not on the AllFantasy admin allowlist.
+            </p>
+          </div>
+        ) : !selectedLeagueId ? (
+          <PickALeague
+            tabKey="model-admin"
+            title="Model Admin"
+            blurb="V3 weights and drift are stored per league, so this needs one held."
+            issues={issues}
+            leagues={rail}
+          />
+        ) : (
+          <div className="space-y-4">
+            <header className="af-frame" style={{ padding: 16 }}>
+              <p className="af-label" style={{ color: 'var(--muted)' }}>Admin</p>
+              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+                Model Admin
+              </h1>
+              <p className="af-num" style={{ marginTop: 4, fontSize: 12, color: 'var(--muted)' }}>
+                League {selectedLeagueId}
+              </p>
+            </header>
+            <V3WeightsPanel
+              leagueId={selectedLeagueId}
+              season={String(new Date().getFullYear())}
+              defaultWeek={1}
+            />
+            <UsageAnalyticsPanel leagueId={selectedLeagueId} />
+          </div>
         )
       ) : activeKey === 'live' ? (
         liveScores ? (
