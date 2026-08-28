@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 
 /**
@@ -57,6 +58,73 @@ export type PortfolioData = {
   commissionedCount: number
 }
 
+type CollapseKey = {
+  platformLeagueId: string | null
+  season: number | null
+  importedByMe: boolean
+}
+
+/**
+ * One row per REAL league, not per import of it.
+ *
+ * ⚠ THE SAME LEAGUE APPEARS ONCE PER MANAGER WHO IMPORTED IT. `leagues.userId`
+ * is the IMPORTER, so KBFL exists twice — once from its commissioner and once
+ * from a co-manager — and a user who is in both copies saw two identical KBFL
+ * rows. It is NOT a repeated import: same user + same platformLeagueId occurs
+ * ZERO times in production. The importer upserts correctly; the LIST was
+ * counting views of one league as separate leagues.
+ *
+ * ⚠ COLLAPSE ON THE PROVIDER'S ID, NEVER ON THE NAME. `platformLeagueId` is
+ * Sleeper's own id, so equal ids ARE the same league by definition — while two
+ * leagues can share a name and be genuinely different. The season is in the key
+ * because some providers reuse one league id across years, and merging those
+ * would silently hide a whole season.
+ *
+ * Prefer the copy the reader imported themselves; failing that, whichever has a
+ * roster behind it, since the other is a view they cannot act on.
+ */
+function collapseSameRealLeague(
+  rows: PortfolioLeague[],
+  keys: CollapseKey[],
+): PortfolioLeague[] {
+  const byPlatform = new Map<string, number>()
+  const kept: PortfolioLeague[] = []
+  const keptKeys: CollapseKey[] = []
+
+  rows.forEach((row, i) => {
+    const key = keys[i]
+    /* No provider id means no evidence two rows are the same thing. */
+    if (!key?.platformLeagueId) {
+      kept.push(row)
+      keptKeys.push(key)
+      return
+    }
+    const id = `${key.platformLeagueId}::${key.season ?? ''}`
+    const at = byPlatform.get(id)
+    if (at === undefined) {
+      byPlatform.set(id, kept.length)
+      kept.push(row)
+      keptKeys.push(key)
+      return
+    }
+
+    const heldKey = keptKeys[at]
+    const held = kept[at]
+    const preferIncoming =
+      (key.importedByMe && !heldKey.importedByMe) ||
+      (key.importedByMe === heldKey.importedByMe &&
+        held.rosterCount == null &&
+        row.rosterCount != null)
+
+    if (preferIncoming) {
+      kept[at] = row
+      keptKeys[at] = key
+    }
+  })
+
+  return kept
+}
+
 function recordOf(t: { wins: number; losses: number; ties: number } | null): string | null {
   if (!t) return null
   if (t.wins === 0 && t.losses === 0 && t.ties === 0) return null
@@ -85,6 +153,8 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
           sport: true,
           season: true,
           avatarUrl: true,
+          platformLeagueId: true,
+          userId: true,
         },
       },
     },
@@ -109,12 +179,21 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
   const teamCountBy = new Map(counts.map((c) => [c.leagueId, c._count._all]))
 
   const out: PortfolioLeague[] = []
+  /* Parallel to `out`; kept off PortfolioLeague so the public shape is unchanged. */
+  const collapseKeys: CollapseKey[] = []
   for (const t of teams) {
-    const candidates = [t.platformUserId, t.externalId, userId].filter(Boolean) as string[]
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId: t.leagueId, platformUserId: { in: candidates } },
-      select: { playerData: true },
-    })
+    /*
+     * ⚠ MATCHING ON `Roster.platformUserId` FINDS ALMOST NOBODY. Measured on
+     * production: of 98 claimed teams it reaches 13. `Roster.platformUserId`
+     * holds the RESOLVED AllFantasy id once a manager links their account,
+     * while `LeagueTeam.platformUserId` keeps the raw platform id — so this
+     * lookup silently missed every linked manager, and got worse as more people
+     * linked. `findRosterForTeam` tries the durable `source_manager_id` first
+     * and falls back to the direct column, reaching 96 of 98.
+     */
+    const roster = t.platformUserId
+      ? await findRosterForTeam(t.leagueId, t.platformUserId)
+      : null
 
     /*
      * ⚠ NULL WHEN NO ROSTER IS IMPORTED, NOT 0. Zero would read as an empty team
@@ -123,9 +202,8 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
      */
     let rosterCount: number | null = null
     if (roster) {
-      const pd = (roster.playerData ?? {}) as Record<string, unknown>
-      const players = Array.isArray(pd.players) ? pd.players : []
-      rosterCount = players.length
+      const ids = rosterPlayerIds(roster.playerData)
+      rosterCount = ids ? ids.length : 0
     }
 
     out.push({
@@ -146,7 +224,14 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
       isCommissioner: Boolean(t.isCommissioner),
       rosterCount,
     })
+    collapseKeys.push({
+      platformLeagueId: t.league?.platformLeagueId ?? null,
+      season: t.league?.season ?? null,
+      importedByMe: t.league?.userId === userId,
+    })
   }
+
+  const deduped = collapseSameRealLeague(out, collapseKeys)
 
   /*
    * Commissioned leagues first — running a league carries obligations that being
@@ -154,13 +239,13 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
    * Then alphabetical, which is stable across refreshes; sorting by "recent
    * activity" would reshuffle the list under the reader between visits.
    */
-  out.sort((a, b) => {
+  deduped.sort((a, b) => {
     if (a.isCommissioner !== b.isCommissioner) return a.isCommissioner ? -1 : 1
     return a.leagueName.localeCompare(b.leagueName)
   })
 
   return {
-    leagues: { available: true, data: out },
-    commissionedCount: out.filter((l) => l.isCommissioner).length,
+    leagues: { available: true, data: deduped },
+    commissionedCount: deduped.filter((l) => l.isCommissioner).length,
   }
 }
