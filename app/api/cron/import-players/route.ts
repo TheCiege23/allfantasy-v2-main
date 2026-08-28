@@ -371,6 +371,36 @@ async function handle(req: NextRequest) {
      * athletes while reporting 20,874 seen. Asking about our own unknown ids is
      * both correct and far smaller: 252 across every imported ESPN league.
      */
+    /*
+     * Birthdays BEFORE the ESPN matcher, deliberately, and in the same tick.
+     *
+     * `matchProviderAthlete` refuses to link on a name alone and treats an agreeing
+     * birthday as near decisive. ESPN's athlete document supplies a birthday and
+     * nothing else — no position, no team — so with `Player.birthDate` empty the
+     * first production run refused all 157 candidates it looked at. Running this
+     * first means the birthdays it writes are available to the matcher immediately
+     * rather than a tick later.
+     */
+    let canonicalBirthdays: unknown = { skipped: true }
+    if (!dryRun && wantsNfl && budget.exhausted()) {
+      deferredPhases.push('canonicalBirthdays')
+    } else if (!dryRun && wantsNfl) {
+      try {
+        const { backfillCanonicalBirthdays } = await import(
+          '@/lib/player-identity/backfillCanonicalBirthdays'
+        )
+        canonicalBirthdays = await backfillCanonicalBirthdays({
+          sport: 'NFL',
+          isExhausted: () => budget.exhausted(),
+        })
+      } catch (dobErr) {
+        /* Enrichment must never fail the import it rides on. */
+        canonicalBirthdays = {
+          error: dobErr instanceof Error ? dobErr.message.slice(0, 160) : 'birthday backfill failed',
+        }
+      }
+    }
+
     let espnIdentities: unknown = { skipped: true }
     if (!dryRun && wantsNfl && budget.exhausted()) {
       deferredPhases.push('espnIdentities')
@@ -417,6 +447,7 @@ async function handle(req: NextRequest) {
       devyIntelSources,
       devyIntel,
       sleeperRows,
+      canonicalBirthdays,
       espnIdentities,
       psychProfiles,
       sports: result.sports,
