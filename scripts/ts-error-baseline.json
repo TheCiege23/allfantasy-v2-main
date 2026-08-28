@@ -1,6 +1,6 @@
 {
   "_comment": "Pre-existing tsc --noEmit error counts, per file. Ratchet fails if any file gains errors or a new file appears. Run `npm run ts:ratchet:update` after legitimately changing the count. DO NOT hand-edit up.",
-  "total": 156,
+  "total": 154,
   "byFile": {
     "app/ai-chat/page.tsx": 1,
     "app/api/admin/world-cup/actions/route.ts": 3,
@@ -32,8 +32,6 @@
     "lib/chimmy-context/prompt/PromptComposer.ts": 1,
     "lib/chimmy-context/structuredPromptPayload.ts": 2,
     "lib/chimmy-context/telemetry/recordFeedback.ts": 1,
-    "lib/chimmy-orchestration/intent-classifier.ts": 1,
-    "lib/chimmy-trade/tradeIntelligenceTools.ts": 1,
     "lib/decision-os/world/adpEnrichedWorld.ts": 1,
     "lib/decision-os/world/injuryEnrichedWorld.ts": 1,
     "lib/decision-os/world/newsEnrichedWorld.ts": 3,
