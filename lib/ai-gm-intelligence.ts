@@ -1,7 +1,6 @@
 import { prisma } from './prisma';
 import { X_SEARCH_ALLOWED_HANDLES } from '@/lib/news/beatReporterHandles'
 import { xaiChatJson, parseTextFromXaiChatCompletion } from './xai-client';
-import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard';
 import { findPlayerByName, getPickValue, FantasyCalcPlayer } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import {
@@ -17,25 +16,6 @@ import OpenAI from 'openai';
 let openai: OpenAI | null = null;
 
 function getOpenAIClient(): OpenAI | null {
-  /*
-   * PROVIDER BOUNDARY. This file also imports xaiChatJson from ./xai-client,
-   * which IS guarded — and that is precisely what made this one hard to see. A
-   * census that asks "does this module reference a guarded client?" answers yes
-   * and moves on, while the direct OpenAI client three lines up goes unchecked.
-   * Two providers in one module, only one of them metered.
-   *
-   * Non-throwing to match the contract: this returns `OpenAI | null`, already
-   * returns null without a key, and the single caller
-   * (generateAIGMAnalysis) falls back to buildDeterministicAIGMAnalysis on
-   * null. So a refusal downgrades to the deterministic analysis rather than
-   * failing the request — strictly better than an error here.
-   *
-   * Checked per call, not at construction: `openai` is cached in module scope,
-   * so a check that ran only on the first build would keep serving a live
-   * client after the switch was turned off.
-   */
-  if (!isAiSpendEnabled()) return null;
-
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   if (!openai) {

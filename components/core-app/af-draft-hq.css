@@ -310,3 +310,56 @@
   .af-dh-bpick { grid-template-columns: 3.6rem 1fr; row-gap: 2px; }
   .af-dh-bpick-meta, .af-dh-bpick-team { grid-column: 2; }
 }
+
+
+/* -- Draft grades ----------------------------------------------------------
+   Sits above the board: the verdict first, the evidence under it. Letter colours
+   come from tokens already defined in this file, so both themes work unchanged. */
+.af-dh-grades { display: flex; flex-direction: column; gap: 8px; }
+.af-dh-grade-scale { margin: 0; font-size: 11px; color: var(--faint); }
+.af-dh-grade-partial { margin: 0; font-size: 12px; color: var(--muted); }
+
+.af-dh-gradelist {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 8px;
+}
+.af-dh-gradecard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--chip-line);
+  border-radius: 9px;
+  background: var(--chip);
+}
+.af-dh-grade-letter {
+  flex: 0 0 auto;
+  width: 2.1rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 17px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+/* A and B read as earned, D and F as a warning, C as neutral - C is also what this
+   product uses for "not enough signal", so it must never look like praise. */
+.af-dh-grade-letter[data-grade='A'] { background: var(--good-soft); color: var(--good); }
+.af-dh-grade-letter[data-grade='B'] { background: var(--accent-soft); color: var(--accent-ink); }
+.af-dh-grade-letter[data-grade='C'] { background: var(--chip); color: var(--muted); border: 1px solid var(--chip-line); }
+.af-dh-grade-letter[data-grade='D'] { background: var(--warn-soft); color: var(--warn); }
+.af-dh-grade-letter[data-grade='F'] { background: var(--bad-soft); color: var(--bad); }
+
+.af-dh-grade-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+.af-dh-grade-team { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-dh-grade-sub { font-size: 11px; color: var(--faint); }
+.af-dh-grade-trend { flex: 0 0 auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.af-dh-grade-trend[data-trend='improved'] { color: var(--good, var(--muted)); }
+.af-dh-grade-trend[data-trend='declined'] { color: var(--bad, var(--muted)); }

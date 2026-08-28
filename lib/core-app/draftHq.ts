@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 
 /**
@@ -64,6 +65,29 @@ export type CompletedDraft = {
   totalPicks: number
 }
 
+/** One team's grade for the completed draft. */
+export type TeamDraftGrade = {
+  ownerId: string
+  name: string
+  teamName: string | null
+  picks: number
+  /** Value over the round median, as drafted. */
+  initialGrade: DraftGradeLetter
+  /** The same recomputed on points scored since (identical in redraft). */
+  currentGrade: DraftGradeLetter
+  trend: 'improved' | 'declined' | 'steady'
+}
+
+export type DraftGrades = {
+  season: string
+  /** True when some picks could not be graded - stated on screen, never hidden. */
+  partial: boolean
+  gradedPicks: number
+  totalPicks: number
+  scale: string
+  teams: TeamDraftGrade[]
+}
+
 export type DraftHqData = {
   league: { id: string; name: string; platform: string; format: string | null }
   session: SectionState<{
@@ -85,6 +109,18 @@ export type DraftHqData = {
    * is a different question from "what did I get". Both read the same DraftFact rows.
    */
   board: SectionState<CompletedDraft>
+  /**
+   * A grade per team for that same completed draft.
+   *
+   * WHY THIS IS SLEEPER-ONLY TODAY, and why the reason is carried in the payload rather
+   * than left to be rediscovered: the grade is value-over-round computed from REAL
+   * SCORED POINTS, and that stats board is keyed on Sleeper player ids. An imported ESPN
+   * or Fantrax pick carries the provider's own id, and nothing links the two -
+   * `ingestEspnAthleteIdentities` deliberately refuses to link on a name, having measured
+   * what that does. A fabricated letter would be worse than none: in this product a "C"
+   * already means "no data".
+   */
+  grades: SectionState<DraftGrades>
   lottery: UnavailableSection
   queue: UnavailableSection
   keepers: UnavailableSection
@@ -225,6 +261,59 @@ function pickInRoundOf(round: number, pickNumber: number, teamCount: number): nu
  * Grouping by team first loses the snake, which is the one thing a round view exists to
  * show.
  */
+/**
+ * Per-team grades for the last completed draft.
+ *
+ * `getDraftReport` already does the work - value over round median, regraded on points
+ * accrued since - and caches it on a 6h cycle. This surfaces it on the screen where the
+ * board it grades is actually shown.
+ */
+async function loadDraftGrades(
+  platform: string,
+  platformLeagueId: string | null,
+): Promise<SectionState<DraftGrades>> {
+  const unavailable = (reason: string) => ({ available: false as const, reason })
+
+  if (platform !== 'sleeper') {
+    return unavailable(
+      `draft grades are computed from real scored points, and that stats board is keyed on Sleeper player ids — an imported ${platform} draft carries the provider’s own player ids, and nothing links the two yet, so a grade here would be invented rather than measured`,
+    )
+  }
+  if (!platformLeagueId) {
+    return unavailable('this league has no Sleeper id on file, and the grader is keyed on one')
+  }
+
+  const report = await getDraftReport(platformLeagueId).catch(() => null)
+  if (!report) return unavailable('the draft report could not be built for this league')
+
+  /* The payload holds the whole season chain; a screen headed "this draft" answers for
+     the most recent one. */
+  const season = [...report.seasons].sort((a, b) => Number(b.season) - Number(a.season))[0]
+  if (!season || season.managers.length === 0) {
+    return unavailable('no completed draft has been graded for this league yet')
+  }
+
+  return {
+    available: true,
+    data: {
+      season: season.season,
+      partial: season.partial,
+      gradedPicks: season.gradedPicks,
+      totalPicks: season.totalPicks,
+      scale: report.gradeScale.description,
+      teams: season.managers.map((m) => ({
+        ownerId: m.ownerId,
+        name: m.name,
+        teamName: m.teamName,
+        picks: m.picks,
+        initialGrade: m.initialGrade,
+        currentGrade: m.currentGrade,
+        trend: m.trend,
+      })),
+    },
+  }
+}
+
 async function loadCompletedDraftBoard(
   leagueId: string,
   userId: string,
@@ -439,7 +528,7 @@ async function loadImportedDraftPicks(
 export async function getDraftHqData(leagueId: string, userId: string): Promise<DraftHqData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true },
+    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true },
   })
   if (!league) return null
 
@@ -474,9 +563,10 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     /* Session and slots genuinely do not exist — this app is not running a draft here,
        and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
-    const [madePicks, board] = await Promise.all([
+    const [madePicks, board, grades] = await Promise.all([
       loadImportedDraftPicks(leagueId, userId).catch(() => none),
       loadCompletedDraftBoard(leagueId, userId).catch(() => none),
+      loadDraftGrades(league.platform, league.platformLeagueId ?? null).catch(() => none),
     ])
 
     /*
@@ -505,7 +595,7 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
         }
       : none
 
-    return { ...base, session: noSession, pickSlots: noSession, madePicks, board }
+    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades }
   }
 
   const myTeam = await prisma.leagueTeam.findFirst({
@@ -589,5 +679,12 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     reason: 'no completed draft has been imported for this league',
   }))
 
-  return { ...base, session: sessionState, pickSlots, madePicks, board }
+  const grades = await loadDraftGrades(league.platform, league.platformLeagueId ?? null).catch(
+    () => ({
+      available: false as const,
+      reason: 'the draft report could not be built for this league',
+    }),
+  )
+
+  return { ...base, session: sessionState, pickSlots, madePicks, board, grades }
 }

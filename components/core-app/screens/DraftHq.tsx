@@ -126,6 +126,61 @@ export function DraftHq({ data }: DraftHqProps) {
       </section>
 
       {/* -- The completed draft, every team -------------------------- */}
+      {/* -- Draft grades, one card per team ------------------------- */}
+      <section className="af-frame af-dh-section af-dh-grades">
+        <header className="af-dh-section-head">
+          <h2 className="af-label">Draft grades</h2>
+          {data.grades.available ? (
+            <span className="af-dh-board-meta af-num">
+              {data.grades.data.season} &middot; {data.grades.data.gradedPicks}/
+              {data.grades.data.totalPicks} picks graded
+            </span>
+          ) : null}
+        </header>
+
+        {data.grades.available ? (
+          <>
+            <p className="af-dh-grade-scale">{data.grades.data.scale}</p>
+
+            {/*
+              Partial coverage is said out loud. A grade built on two thirds of a draft is
+              still worth showing -- silently presenting it as complete is not.
+            */}
+            {data.grades.data.partial ? (
+              <p className="af-dh-grade-partial">
+                Some picks could not be graded, so these letters cover only the picks that
+                could be.
+              </p>
+            ) : null}
+
+            <ul className="af-dh-gradelist">
+              {data.grades.data.teams.map((t) => (
+                <li key={t.ownerId} className="af-dh-gradecard">
+                  <span className="af-dh-grade-letter" data-grade={t.currentGrade}>
+                    {t.currentGrade}
+                  </span>
+                  <span className="af-dh-grade-who">
+                    <span className="af-dh-grade-team">{t.teamName ?? t.name}</span>
+                    <span className="af-dh-grade-sub af-num">{t.picks} picks</span>
+                  </span>
+                  {/*
+                    Only shown when it moved. In redraft the two grades are the same by
+                    construction, and a permanent "steady" badge would be noise.
+                  */}
+                  {t.trend !== 'steady' ? (
+                    <span className="af-dh-grade-trend" data-trend={t.trend}>
+                      {t.trend === 'improved' ? '↑' : '↓'} from {t.initialGrade}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <Unavailable reason={data.grades.reason} />
+        )}
+      </section>
+
       <section className="af-frame af-dh-section af-dh-boardfull">
         <header className="af-dh-section-head">
           <h2 className="af-label">Draft board</h2>
