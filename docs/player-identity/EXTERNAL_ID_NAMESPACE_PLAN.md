@@ -153,6 +153,32 @@ So **exclude the narrowed-ambiguous tier.** 86.7% means roughly one in seven
 wrong, and a wrong pairing here is invisible and permanent — exactly the failure
 `sleeperId @unique` cannot catch. The 77 rows it would add are not worth it.
 
+#### Re-validated 2026-08-28, after the 11 corrupted pairs were cleared
+
+The original run measured the strong tier at 99.9% — two errors in 1,492. **Both were
+the corrupted pairs**, not matcher mistakes. Re-run against pre-existing pairs only
+(my own 1,366 strong-tier writes excluded, because validating the weak rule against
+pairs the strong rule created would be circular):
+
+| tier | attempted | correct | precision |
+| --- | ---: | ---: | ---: |
+| strong | 1,497 | 1,497 | **100%** |
+| weak | 200 | 200 | **100%** |
+
+⚠ **THE WEAK SAMPLE IS 200 AGAINST A 5,267-ROW WRITE.** 200 of 200 with zero failures
+puts the 95% upper bound on the error rate near 1.5% (rule of three), which across
+5,267 rows is roughly **79 pairings that could be wrong** — invisible once written,
+and `sleeperId @unique` cannot catch them because a wrong id is still a free id.
+100% is not the same as safe at this ratio, and the number to argue about is 79.
+
+There is also a representativeness gap worth stating: the 200 ground-truth weak cases
+are players some earlier process already paired, which skews prominent. The 5,267
+candidates are unpaired precisely because they are more obscure. The specific failure
+mode to worry about is an RI player whose name is unique in the Sleeper set only
+because Sleeper is missing HIM, so the unique match lands on a different player of the
+same name. The A bucket (162 rows, 2.1%, no Sleeper counterpart at all) suggests
+Sleeper's coverage is near-complete, which bounds but does not eliminate it.
+
 ⚠ **THE VALIDATION IS FRIENDLY TO ITSELF AND THE NUMBER SHOULD BE READ AS A
 CEILING.** Those 1,890 ground-truth pairs were themselves produced by some earlier
 matching process, so measuring a name matcher against them is partly circular: it
