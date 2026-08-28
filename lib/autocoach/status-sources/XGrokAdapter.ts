@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { NormalizedStatusHit } from './types'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 function sportQuery(sport: string): string {
   const s = sport.toUpperCase()
@@ -62,6 +63,12 @@ function parseGrokJson(content: string, defaultSport: string): NormalizedStatusH
  */
 export async function searchXForInjuryNews(sport: string, gameDate: string): Promise<NormalizedStatusHit[]> {
   const apiKey = process.env.XAI_API_KEY?.trim() || process.env.GROK_API_KEY?.trim()
+  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
+  // already returns [] when the key is absent, so a spend refusal behaves
+  // identically to an unconfigured provider. Above the key check because when
+  // both are missing the switch is the actionable one.
+  if (!isAiSpendEnabled()) return []
+
   if (!apiKey) {
     return []
   }

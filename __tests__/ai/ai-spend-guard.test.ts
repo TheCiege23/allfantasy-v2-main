@@ -143,6 +143,29 @@ describe('AI spend guard — provider boundary coverage', () => {
      */
     'lib/fantasy-coach/CoachEvaluationAI.ts',
     'lib/simulation-engine/MatchupSimulationInsightAI.ts',
+    /*
+     * The remainder of the ratchet, cleared 2026-08-27. Guard FORM per file is
+     * dictated by that file's existing contract, never by preference:
+     * a factory that already throws without a key gets assertAiSpendAllowed;
+     * one that returns null or [] gets isAiSpendEnabled and returns the same.
+     * A refusal therefore behaves exactly like an unconfigured provider,
+     * which every caller already handles.
+     */
+    'lib/ai/working-memory.ts',
+    'lib/autocoach/status-sources/XGrokAdapter.ts',
+    'lib/brackets/intelligence/ai-narrator.ts',
+    'lib/brand-social/draftWithClaude.ts',
+    'lib/draft/ai-claude.ts',
+    'lib/fantasy-news-aggregator/NewsSummarizerAI.ts',
+    'lib/guillotine/ai/GuillotineAIService.ts',
+    'lib/integrity/CollusionDetectionEngine.ts',
+    'lib/integrity/TankingDetectionEngine.ts',
+    'lib/salary-cap/ai/SalaryCapAIService.ts',
+    'lib/smart-trade-recommendations.ts',
+    'lib/social-sharing/GrokShareCopyService.ts',
+    'lib/survivor/ai/SurvivorAIService.ts',
+    'lib/trade-engine/ai-layer.ts',
+    'lib/zombie/ai/ZombieAIService.ts',
   ]
 
   /**
@@ -160,25 +183,24 @@ describe('AI spend guard — provider boundary coverage', () => {
   /**
    * Known-unguarded provider boundaries — a RATCHET, not an allowlist. Each still spends money on
    * its own. The list must only ever shrink; adding to it means a new unguarded spend path shipped.
+   *
+   * EMPTY as of 2026-08-27. Every boundary this list ever named is now guarded.
+   * Keep the list and the bound: an empty ratchet is the assertion that no NEW
+   * unguarded path has shipped, which is the only thing it was ever really for.
    */
-  const UNGUARDED_RATCHET = [
-    'lib/ai/working-memory.ts',
-    'lib/autocoach/status-sources/XGrokAdapter.ts',
-    'lib/brackets/intelligence/ai-narrator.ts',
-    'lib/brand-social/draftWithClaude.ts',
-    'lib/draft/ai-claude.ts',
-    'lib/fantasy-news-aggregator/NewsSummarizerAI.ts',
-    'lib/guillotine/ai/GuillotineAIService.ts',
-    'lib/integrity/CollusionDetectionEngine.ts',
-    'lib/integrity/TankingDetectionEngine.ts',
-    'lib/salary-cap/ai/SalaryCapAIService.ts',
-    'lib/smart-trade-recommendations.ts',
-    'lib/social-sharing/GrokShareCopyService.ts',
-    'lib/survivor/ai/SurvivorAIService.ts',
-    'lib/trade-engine/ai-layer.ts',
-    'lib/zombie/ai/ZombieAIService.ts',
-    'lib/agents/workers/api-health-monitor.ts',
-  ]
+  const UNGUARDED_RATCHET: string[] = []
+
+  /**
+   * PERMANENT exception, not debt. lib/agents/workers/api-health-monitor.ts probes whether a
+   * provider is UP, which is the one job that cannot be answered from Postgres — the same
+   * standing exception CLAUDE.md records for SystemHealthResolver.
+   *
+   * ⚠ GUARDING IT WOULD MAKE IT LIE. With spend off it would report every provider as `down`,
+   * when the provider is fine and we simply are not buying. A health dashboard that reports an
+   * outage because a billing switch is off is worse than no dashboard. It is listed here so it
+   * reads as a decision rather than as something the sweep missed.
+   */
+  const PERMANENT_EXCEPTIONS = ['lib/agents/workers/api-health-monitor.ts']
 
   /*
    * Either form counts as wired to the guard, and the choice is forced by the
@@ -196,11 +218,20 @@ describe('AI spend guard — provider boundary coverage', () => {
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.
-    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(16)
+    expect(UNGUARDED_RATCHET.length).toBeLessThanOrEqual(0)
   })
 
   it('every ratchet entry still exists (stale entries hide real coverage)', () => {
     const missing = UNGUARDED_RATCHET.filter((f) => !fs.existsSync(path.join(repo, f)))
     expect(missing).toEqual([])
+  })
+
+  it('the permanent exception is deliberately NOT guarded', () => {
+    // Asserted, not assumed: if someone "helpfully" guards the health probe, this
+    // fails and tells them why instead of letting the dashboard start lying.
+    for (const file of PERMANENT_EXCEPTIONS) {
+      expect(fs.existsSync(path.join(repo, file))).toBe(true)
+      expect(read(file)).not.toMatch(/assertAiSpendAllowed\(|isAiSpendEnabled\(/)
+    }
   })
 })

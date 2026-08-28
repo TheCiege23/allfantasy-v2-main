@@ -11,6 +11,7 @@ import { normalizeToSupportedSport } from "@/lib/sport-scope"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { COLLUSION_VALUE_GAP_PCT, normalizeSensitivity } from "./sensitivity"
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 
 export type CollusionEvidence = {
   tradeTransactionId: string
@@ -272,6 +273,12 @@ async function runClaudeCollusionPrompt(payload: {
   redFlags: string[]
 } | null> {
   const key = process.env.ANTHROPIC_API_KEY?.trim()
+  // PROVIDER BOUNDARY. Guard form matches this function's own contract: it
+  // already returns null when the key is absent, so a spend refusal behaves
+  // identically to an unconfigured provider. Above the key check because when
+  // both are missing the switch is the actionable one.
+  if (!isAiSpendEnabled()) return null
+
   if (!key) return null
 
   /*
