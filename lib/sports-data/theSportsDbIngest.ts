@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
+import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 
 /**
  * TheSportsDB ingestion — everything the provider actually serves.
@@ -343,13 +344,13 @@ export async function ingestRosters(
       }
 
       const born = str(p.dateBorn)
-      const age = (() => {
-        if (!born) return null
-        const d = new Date(born)
-        if (Number.isNaN(d.getTime())) return null
-        const years = (now.getTime() - d.getTime()) / (365.25 * 24 * 3600 * 1000)
-        return years > 0 && years < 120 ? Math.floor(years) : null
-      })()
+      /*
+       * `dateBorn` is a real date, so this parse was right — but `years > 0 && years < 120`
+       * admits a five-year-old and a centenarian. 31 rows from this source hold an impossible
+       * age because of that bound. `coercePlayerAge` applies the same 14-60 window every ingest
+       * now shares, and returns null rather than a number nobody can use.
+       */
+      const age = born ? coercePlayerAge(born, now) : null
 
       const data = {
         name,

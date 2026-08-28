@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ageFromRollingInsightsValue } from '@/lib/sports-data/rollingInsightsAge'
+import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 
 /**
  * The field Rolling Insights calls `age` is not one, and the old ingest turned it into an integer
@@ -11,7 +11,7 @@ import { ageFromRollingInsightsValue } from '@/lib/sports-data/rollingInsightsAg
 
 // Fixed so the expectations do not drift with the clock.
 const NOW = new Date('2026-08-28T00:00:00.000Z')
-const age = (v: unknown) => ageFromRollingInsightsValue(v, NOW)
+const age = (v: unknown) => coercePlayerAge(v, NOW)
 
 describe('ageFromRollingInsightsValue', () => {
   it('recovers the year from the separator-stripped digits actually in the column', () => {

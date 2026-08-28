@@ -1,5 +1,12 @@
 /**
- * Turn Rolling Insights' `age` field into an actual age.
+ * Turn whatever a vendor put in an `age` field into an actual age, or nothing.
+ *
+ * Every provider ingest reached for its own ad-hoc parse and each failed differently: one stripped
+ * a date to digits, one passed the vendor's value straight through unchecked, one validated but
+ * with a bound so loose it admitted a five-year-old. This is the single coercion they now share,
+ * so a vendor changing shape produces a NULL rather than a number that means nothing.
+ *
+ * The worked example below is Rolling Insights, because it was the total failure.
  *
  * ⚠ THE FIELD IS NOT AN AGE, AND THE INGEST TURNED IT INTO A NUMBER THAT LOOKS LIKE ONE.
  * `rollingInsightsTeamsPlayers` stored it with a generic `intOf`, which does
@@ -39,7 +46,7 @@ const MAX_PLAUSIBLE_AGE = 60
  * Returns null rather than guessing — an unknown age is honest, and a wrong one silently
  * mis-tiers a player in every age curve that reads it.
  */
-export function ageFromRollingInsightsValue(
+export function coercePlayerAge(
   raw: unknown,
   now: Date = new Date(),
 ): number | null {
@@ -90,6 +97,9 @@ export function ageFromRollingInsightsValue(
 /**
  * The birth DATE, when the vendor actually sent one.
  *
+ * Generic, though only the Rolling Insights ingest needs it today — it is the one whose date was
+ * arriving and being destroyed before anything could store it.
+ *
  * ⚠ THE INGEST HAS BEEN DISCARDING THIS EVERY SYNC. `dob` is written from `p.dob ?? p.birth_date
  * ?? p.date_of_birth` and is populated on 5 of 9,563 NFL rows — the vendor does not use those
  * keys, it puts the date in `age`. So the full date arrives, `intOf` strips it to digits, and the
@@ -99,7 +109,7 @@ export function ageFromRollingInsightsValue(
  *
  * Returns an ISO `YYYY-MM-DD`, or null when the value is not a date — a bare age is not one.
  */
-export function rollingInsightsBirthDate(raw: unknown): string | null {
+export function birthDateFromVendorValue(raw: unknown): string | null {
   if (raw == null) return null
   const s = String(raw).trim()
   // No separators means the date is already destroyed, or it was never a date.

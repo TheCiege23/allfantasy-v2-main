@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
 import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
-import { ageFromRollingInsightsValue, rollingInsightsBirthDate } from '@/lib/sports-data/rollingInsightsAge'
+import { coercePlayerAge, birthDateFromVendorValue } from '@/lib/sports-data/playerAge'
 
 /**
  * Teams and player profiles from Rolling Insights REST, for every supported sport.
@@ -252,13 +252,13 @@ export async function syncRollingInsightsPlayersToDb(opts: {
          * the digits — "2/9/1996" became 291996 and every one of the 13,763 rows carrying an age
          * held a value like that. See `rollingInsightsAge.ts`.
          */
-        age: ageFromRollingInsightsValue(p.age),
+        age: coercePlayerAge(p.age),
         height: str(p.height),
         weight: str(p.weight),
         college: str(p.college ?? p.school),
         ...(imageUrl ? { imageUrl } : {}),
         // The vendor does not use these keys — it puts the date in `age`, so salvage it from there.
-        dob: str(p.dob ?? p.birth_date ?? p.date_of_birth) ?? rollingInsightsBirthDate(p.age),
+        dob: str(p.dob ?? p.birth_date ?? p.date_of_birth) ?? birthDateFromVendorValue(p.age),
         status: str(p.status),
         fetchedAt: now,
         expiresAt,

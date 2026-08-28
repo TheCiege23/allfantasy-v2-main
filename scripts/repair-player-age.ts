@@ -1,5 +1,5 @@
 /**
- * Repair `SportsPlayer.age` on Rolling Insights rows, where it holds a mangled date.
+ * Repair `SportsPlayer.age` wherever it holds something that is not an age.
  *
  * ⚠ WRITES TO WHATEVER `DATABASE_URL` POINTS AT. Requires `--write`; without it this is a dry run.
  *
@@ -20,7 +20,7 @@
 
 import { PrismaClient } from '@prisma/client'
 
-import { ageFromRollingInsightsValue } from '@/lib/sports-data/rollingInsightsAge'
+import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 
 const prisma = new PrismaClient()
 const WRITE = process.argv.includes('--write')
@@ -29,21 +29,33 @@ const BATCH = 500
 async function main() {
   console.log(WRITE ? '=== WRITE MODE ===' : '=== DRY RUN (pass --write to apply) ===')
 
+  /*
+   * Every source, not just Rolling Insights. RI was the total failure — 13,763 of 13,763 — but
+   * TheSportsDB admits 31 impossible ages through a `years < 120` bound, api_football holds a
+   * bare year (2025), and Sleeper has two. Same column, same question: is this a plausible age.
+   */
   const rows = await prisma.sportsPlayer.findMany({
-    where: { source: 'rolling_insights', age: { not: null } },
-    select: { id: true, sport: true, age: true, name: true },
+    where: { age: { not: null } },
+    select: { id: true, sport: true, source: true, age: true, name: true },
   })
-  console.log(`rolling_insights rows with a non-null age: ${rows.length}`)
+  console.log(`rows with a non-null age: ${rows.length}`)
 
   const repairs: { id: string; from: number; to: number | null }[] = []
   let alreadySane = 0
   for (const r of rows) {
     const current = r.age as number
     if (current >= 14 && current <= 60) { alreadySane++; continue }
-    repairs.push({ id: r.id, from: current, to: ageFromRollingInsightsValue(current) })
+    repairs.push({ id: r.id, from: current, to: coercePlayerAge(current) })
   }
   const resolvable = repairs.filter((x) => x.to !== null)
   const unresolvable = repairs.filter((x) => x.to === null)
+  const bySource = new Map<string, number>()
+  for (const r of rows) {
+    const a = r.age as number
+    if (a >= 14 && a <= 60) continue
+    bySource.set(r.source ?? 'null', (bySource.get(r.source ?? 'null') ?? 0) + 1)
+  }
+  console.log(`  impossible by source:`, [...bySource].sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}:${v}`).join('  ') || 'none')
   console.log(`  already a sane age, untouched : ${alreadySane}`)
   console.log(`  impossible, recoverable       : ${resolvable.length}`)
   console.log(`  impossible, NOT recoverable   : ${unresolvable.length}  -> set to NULL`)
@@ -51,7 +63,11 @@ async function main() {
   const dist = new Map<number, number>()
   for (const x of resolvable) dist.set(x.to as number, (dist.get(x.to as number) ?? 0) + 1)
   const ages = [...dist.keys()].sort((a, b) => a - b)
-  console.log(`  resulting age range: ${ages[0]}..${ages[ages.length - 1]}`)
+  console.log(
+    ages.length
+      ? `  resulting age range: ${ages[0]}..${ages[ages.length - 1]}`
+      : '  resulting age range: n/a (nothing recoverable this run)',
+  )
   console.log('  samples:', repairs.slice(0, 6).map((x) => `${x.from}->${x.to}`).join('  '))
 
   if (!WRITE) { await prisma.$disconnect(); return }

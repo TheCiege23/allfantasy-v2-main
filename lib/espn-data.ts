@@ -6,6 +6,7 @@ import {
   shouldIncludeInjuryInFanoutBatch,
   type InjurySyncFanoutRow,
 } from '@/lib/realtime-events/injuryFanoutPolicy';
+import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 
 const SITE_API = `${ESPN_SITE_API_BASE}/football/nfl`; // db-first-exception: provider adapter layer
 const CORE_API = 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl'; // db-first-exception: provider adapter layer
@@ -428,7 +429,13 @@ export async function syncESPNRostersToDb(teamAbbrevs?: string[]): Promise<{ syn
                 position: a.position?.abbreviation || null,
                 team: abbrev,
                 number: a.jersey ? parseInt(a.jersey) || null : null,
-                age: a.age || null,
+                /*
+                 * The vendor's value, coerced rather than trusted. This wrote `a.age` straight
+                 * through, so anything ESPN sent — a date, a string, a nonsense number — landed
+                 * in the column unexamined. See lib/sports-data/playerAge.ts for what that cost
+                 * on another provider.
+                 */
+                age: coercePlayerAge(a.age),
                 height: a.height ? String(a.height) : null,
                 weight: a.weight ? String(a.weight) : null,
                 college: a.college?.name || null,
