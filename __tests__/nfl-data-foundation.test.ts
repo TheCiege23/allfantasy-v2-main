@@ -245,8 +245,22 @@ describe('NFL data foundation', () => {
     )
     expect(draftPoolCacheVersion).toContain('nflfoundation_v1')
     expect(draftRoute).toContain('buildDraftPoolCacheKey')
-    expect(waiverRoute).toContain('getCanonicalNflRosteredIdentityKeysForLeague')
-    expect(waiverRoute).toContain('playerMatchesRosteredKeys')
+    /*
+     * ⚠ THE WAIVER SURFACE IS DELIBERATELY NOT ON THE CANONICAL NFL FOUNDATION, AND THESE
+     * ASSERTIONS USED TO CLAIM IT WAS. It was, for five days: 62e9dd198 wired it on 2026-06-18
+     * and asserted `getCanonicalNflRosteredIdentityKeysForLeague` and `playerMatchesRosteredKeys`
+     * here; 092940879 rebuilt the route onto the pool resolver on 2026-06-23 and removed all four
+     * foundation imports. Confirmed intentional 2026-08-28.
+     *
+     * The assertions stayed and went red for 66 days without anyone hearing about it, because the
+     * vitest ratchet reports a file that WAS passing and now fails — a file that goes red and
+     * stays red is indistinguishable from the baseline it was admitted into. So this is replaced
+     * rather than deleted: asserting the resolver the route actually uses keeps the surface
+     * covered and states the choice, so nobody "restores" the foundation wiring believing an
+     * omission was an accident.
+     */
+    expect(waiverRoute).toContain('getPlayerPoolForLeague')
+    expect(waiverRoute).not.toContain('nfl-data-foundation')
     expect(tradeContext).toContain('weeklyProjectionDelta')
     expect(tradeContext).toContain('fantasyCalcValue')
     expect(matchupRoute).toContain('getCanonicalNflMatchupContext')
