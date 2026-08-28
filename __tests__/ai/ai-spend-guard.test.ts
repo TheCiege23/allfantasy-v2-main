@@ -30,7 +30,35 @@ const PERMANENT_EXCEPTIONS = [
    * have spent anything. The guard module's own docstring says so.
    */
   'lib/ai/providerRouter.ts',
+  /*
+   * HAND-RUN DIAGNOSTICS, added with the scripts/ root on 2026-08-28. Both really do
+   * call a provider and both are deliberately unguarded, for the reason the health
+   * probe already carries: a tool whose entire job is to find out whether a provider
+   * answers cannot do that job with spend switched off. Guarding these would not save
+   * money — nothing invokes them but a developer typing the command — it would only
+   * make them report a provider outage when the truth is a billing switch.
+   *
+   * Neither is reachable from a request path; neither is in package.json or CI.
+   * This is the same reasoning CLAUDE.md records for scripts/compare-player-apis.ts
+   * under the DB-first rule: a comparison tool cannot compare without calling.
+   */
+  'scripts/ai-smoke.mjs',
+  'scripts/x-news-probe.mjs',
 ]
+
+/**
+ * FLAGGED BY THE SCAN, NOT ACTUALLY A BOUNDARY — kept apart from PERMANENT_EXCEPTIONS
+ * on purpose. Those are real provider calls we have decided not to guard; these do not
+ * call a provider at all. Filing a heuristic false positive as a deliberate exception
+ * would make the exception list mean two different things, and the next person could
+ * not tell which entries represent real money.
+ *
+ * scripts/legacy-qa-report.mjs trips `provider key + outbound call` because it names
+ * OPENAI_API_KEY and XAI_API_KEY in a required-secrets ARRAY and separately fetches
+ * http://127.0.0.1:3000. It reads no value — `present: Boolean(process.env[key])` —
+ * and sends nothing anywhere. That is an env checklist, not a spend path.
+ */
+const SCAN_FALSE_POSITIVES = ['scripts/legacy-qa-report.mjs']
 
 const ENV = { ...process.env }
 beforeEach(() => { delete process.env.AI_FEATURES_ENABLED; delete process.env.NEXT_PHASE })
@@ -294,7 +322,7 @@ describe('AI spend guard — provider boundary census', () => {
    * an api.sleeper.com caller from the DB-first census, which is what prompted
    * looking here at all. Adding a root is cheap; assuming a tree is not routed is not.
    */
-  const ROOTS = ['lib', 'app/api', 'server']
+  const ROOTS = ['lib', 'app/api', 'server', 'scripts']
   const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '__mocks__'])
 
   /** Constructing a provider SDK is a boundary on its own. */
@@ -328,7 +356,16 @@ describe('AI spend guard — provider boundary census', () => {
       const p = path.join(dir, e.name)
       if (e.isDirectory()) {
         if (!SKIP_DIR.has(e.name)) walk(p, out)
-      } else if (/\.tsx?$/.test(e.name) && !/\.d\.ts$/.test(e.name)) {
+      } else if (/\.(tsx?|mjs|js)$/.test(e.name) && !/\.d\.ts$/.test(e.name)) {
+        /*
+         * ⚠ .mjs AND .js ARE IN SCOPE, and adding the scripts/ root without them
+         * would have been worse than not adding it: both real provider boundaries
+         * under scripts/ are .mjs (ai-smoke, x-news-probe), so a .tsx?-only walk
+         * would have reported a clean new root and manufactured confidence.
+         *
+         * Cheap elsewhere — no .mjs/.js under lib, app or server touches a provider,
+         * so this widens the net without widening the noise.
+         */
         out.push(p)
       }
     }
@@ -372,12 +409,24 @@ describe('AI spend guard — provider boundary census', () => {
     // shrinking the census to the trees someone happened to remember.
     expect(found.some((f) => f.file.startsWith('app/api/'))).toBe(true)
     expect(found.some((f) => f.file.startsWith('server/'))).toBe(true)
+    expect(found.some((f) => f.file.startsWith('scripts/'))).toBe(true)
+
+    /*
+     * The canaries above catch a root that yields nothing; they CANNOT catch a root
+     * deleted from ROOTS, because the checks are written per-root and would simply
+     * stop running. That case has to be pinned against a literal.
+     */
+    expect(
+      ROOTS,
+      'a source tree was dropped from the census — see the note on ROOTS before changing this',
+    ).toEqual(['lib', 'app/api', 'server', 'scripts'])
   })
 
   it('every provider boundary is wired to the spend guard, or a declared exception', () => {
     const unaccounted = findBoundaries()
       .filter((f) => !f.wired)
       .filter((f) => !PERMANENT_EXCEPTIONS.includes(f.file))
+      .filter((f) => !SCAN_FALSE_POSITIVES.includes(f.file))
     expect(
       unaccounted.map((f) => `${f.file} (${f.why})`),
       'A new provider boundary shipped unguarded. Wire it to lib/ai/aiSpendGuard, ' +
@@ -395,6 +444,22 @@ describe('AI spend guard — provider boundary census', () => {
       const hit = found.find((f) => f.file === exc)
       expect(hit, `${exc} is declared an exception but the scan no longer sees it as a boundary`).toBeTruthy()
       expect(hit!.wired, `${exc} is now guarded — remove it from PERMANENT_EXCEPTIONS`).toBe(false)
+    }
+  })
+
+  it('every declared false positive is still only a false positive', () => {
+    /*
+     * The dismissal is pinned to its REASON, not taken on trust. Each of these is
+     * flagged solely by the key-name signal, so it must name no provider host and
+     * construct no SDK client. The day one of them grows a real provider call, this
+     * fails and the file has to be re-argued instead of coasting on a stale note.
+     */
+    for (const file of SCAN_FALSE_POSITIVES) {
+      const abs = path.join(repo, file)
+      expect(fs.existsSync(abs), `${file} no longer exists — remove it`).toBe(true)
+      const src = fs.readFileSync(abs, 'utf8')
+      expect(SDK_CONSTRUCT.test(src), `${file} now constructs a provider client`).toBe(false)
+      expect(PROVIDER_HOST.test(src), `${file} now names a provider host`).toBe(false)
     }
   })
 })

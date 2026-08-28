@@ -41,7 +41,7 @@ const repo = process.cwd()
  * 2026-08-27: an api.sleeper.com caller in this tree, and two unguarded AI provider
  * calls found by the sibling spend census.
  */
-const ROOTS = ['lib', 'app', 'server']
+const ROOTS = ['lib', 'app', 'server', 'scripts']
 const SKIP_DIR = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '__mocks__'])
 
 /** Pulled from the guard itself so the two cannot drift apart. */
@@ -86,7 +86,18 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   { name: 'namespace', why: 'an XML/JSON-LD namespace, never fetched', test: /^(schema\.org|www\.w3\.org|www\.sitemaps\.org)$/i },
   { name: 'geo-ip', why: 'request-time geolocation, not sports data', test: /^(proxycheck\.io|ipapi\.co|ip-api\.com)$/i },
   { name: 'test-fixture', why: 'appears only in fixtures and examples', test: /(^|\.)(example\.(com|org)|example|invalid)$/i },
-  { name: 'test-fixture', why: 'fixture host', test: /^(placeholder\.invalid|evil\.example|widgets\.enterprise-demo\.example\.com|raw\.githubusercontent\.com|www\.googleapis\.com)$/i },
+  /*
+   * ⚠ raw.githubusercontent.com WAS IN THIS LIST and did not belong. It is not a
+   * fixture host: lib/trade-intel/dynastyProcessSync.ts reads DynastyProcess player
+   * values and id mappings from it through a sportsDataCache read-through, and
+   * scripts/ingest-coaches-nflverse.ts pulls nflverse games.csv. It has moved to the
+   * unmonitored data-API ledger below.
+   *
+   * Worth noting HOW it hid: the misclassification predates the scripts/ root — the
+   * lib/ call site was always in scope. A wrong category is more durable than a
+   * missing one, because the host reads as examined.
+   */
+  { name: 'test-fixture', why: 'fixture host', test: /^(placeholder\.invalid|evil\.example|widgets\.enterprise-demo\.example\.com|www\.googleapis\.com)$/i },
 ]
 
 /**
@@ -126,6 +137,21 @@ const DATA_API_UNMONITORED = [
   'api.twitter.com',
   'graph.facebook.com',
   'www.mlbstatic.com',
+  /*
+   * ADDED 2026-08-28 BY WIDENING COVERAGE, NOT BY NEW DEBT — the distinction the
+   * bound below depends on. Two came into view with the scripts/ root and one was
+   * sitting in the wrong category all along. No new unguarded code shipped.
+   *
+   * nflverse release downloads — play-by-play, weekly player stats, players.csv.
+   * Reached only from ingestion scripts, which the DB-first rule permits; listed
+   * because the HOST is still an unwatched data feed, and a directory is not a
+   * classification.
+   */
+  'github.com',
+  /* DynastyProcess values/ids (lib, via sportsDataCache) and nflverse games.csv. */
+  'raw.githubusercontent.com',
+  /* MCP endpoint behind scripts/ingest-coaches-coaching-tree.ts — head-coach history. */
+  'coaching-tree.app',
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -210,7 +236,7 @@ describe('DB-first boundary — outbound host census', () => {
     expect(
       ROOTS,
       'a source tree was dropped from the census — see the note on ROOTS before changing this',
-    ).toEqual(['lib', 'app', 'server'])
+    ).toEqual(['lib', 'app', 'server', 'scripts'])
   })
 
   it('reads the monitored list out of the guard, not a copy', () => {
@@ -236,9 +262,20 @@ describe('DB-first boundary — outbound host census', () => {
   })
 
   it('the unmonitored data-API list has not grown', () => {
-    // Shrinks freely — moving a host into DATA_API_HOST_PATTERNS is the intended
-    // direction and should lower this number in the same commit.
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(16)
+    /*
+     * Shrinks freely — moving a host into DATA_API_HOST_PATTERNS is the intended
+     * direction and should lower this number in the same commit.
+     *
+     * 16 → 19 on 2026-08-28. THE ONLY LEGITIMATE REASON TO RAISE THIS IS WIDER
+     * COVERAGE, and it applied here: adding the scripts/ root brought github.com and
+     * coaching-tree.app into view, and raw.githubusercontent.com moved out of a
+     * test-fixture category it never belonged in. No new unguarded code shipped —
+     * the repo did not get worse, the census got bigger.
+     *
+     * If you are raising this number for any other reason, you are recording new
+     * debt as though it were new visibility. Say so in the commit, or do not raise it.
+     */
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(19)
   })
 
   it('every unmonitored entry is still referenced, and still unmonitored', () => {
