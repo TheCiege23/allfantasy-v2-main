@@ -8,6 +8,7 @@
 
 import OpenAI from 'openai'
 import { deepseekChat } from '@/lib/deepseek-client'
+import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
 import type {
   MatchupProviderInsights,
   MatchupSimulationOutput,
@@ -15,6 +16,20 @@ import type {
 } from './types'
 
 function getOpenAIClient(): OpenAI | null {
+  /*
+   * PROVIDER BOUNDARY. Three providers live in this file: deepseekChat comes
+   * from the GUARDED @/lib/deepseek-client, while this OpenAI client and the
+   * Grok one below were built here and metered by nothing. A census asking
+   * whether a module references a guarded client answers yes and moves on —
+   * ask what a file CONSTRUCTS instead.
+   *
+   * Non-throwing to match the contract, and to match this file's own header:
+   * the factories return `OpenAI | null` and the callers fall back to
+   * deterministic output when a provider is unavailable. A spend refusal is
+   * exactly that case, so it degrades rather than fails.
+   */
+  if (!isAiSpendEnabled()) return null
+
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
   if (!apiKey) return null
   return new OpenAI({
@@ -27,6 +42,10 @@ function getOpenAIClient(): OpenAI | null {
 }
 
 function getGrokClient(): OpenAI | null {
+  // Same boundary, second provider. Guarded separately because either factory
+  // can be reached without the other.
+  if (!isAiSpendEnabled()) return null
+
   const apiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
   if (!apiKey) return null
   return new OpenAI({
