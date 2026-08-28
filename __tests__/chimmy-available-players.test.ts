@@ -614,14 +614,29 @@ describe('positions no source can rank are named, not silently dropped', () => {
     expect(out).toContain('linebackers')
     expect(out).toContain('defensive backs')
     expect(out).toContain('a kicker')
-    expect(out).toMatch(/NO source we have ranks those positions/)
+    expect(out).toMatch(/the rankings behind this list do not cover those positions/)
   })
 
   it('tells the model to say so rather than substitute an offensive player', async () => {
     h.leagueFind.mockResolvedValue(IDP_LEAGUE)
 
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
-    expect(out).toMatch(/say plainly that we do not rank it rather than offering an offensive player/)
+    expect(out).toMatch(/say plainly that this list does not rank it rather than offering an offensive player/)
+  })
+
+  /*
+   * ⚠ THE EARLIER WORDING SAID "NO source we have ranks those positions" AND
+   * THAT IS FALSE. `lib/idp-projections/leagueIdpVorp.ts` builds a VORP-based
+   * IDP board keyed on sleeperId, already used by three surfaces. It is not
+   * wired into THIS tool -- a capability we have and have not connected must
+   * not reach the user as one we lack. Chimmy repeated the false claim verbatim.
+   */
+  it('never claims AllFantasy cannot value the position at all', async () => {
+    h.leagueFind.mockResolvedValue(IDP_LEAGUE)
+
+    const out = await buildAvailablePlayersContext(LEAGUE, USER)
+    expect(out).not.toMatch(/NO source we have/)
+    expect(out).toMatch(/Do NOT tell them AllFantasy cannot value the position at all/)
   })
 
   /* An all-offense league has no gap, so it must not carry the warning. */
@@ -632,7 +647,7 @@ describe('positions no source can rank are named, not silently dropped', () => {
     })
 
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
-    expect(out).not.toMatch(/NO source we have ranks those positions/)
+    expect(out).not.toMatch(/the rankings behind this list do not cover those positions/)
   })
 
   /* Bench, IR and taxi are not starting slots and are ranked positions anyway. */
@@ -643,7 +658,7 @@ describe('positions no source can rank are named, not silently dropped', () => {
     })
 
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
-    expect(out).not.toMatch(/NO source we have ranks those positions/)
+    expect(out).not.toMatch(/the rankings behind this list do not cover those positions/)
   })
 
   it('carries the gap down the FantasyCalc path too', async () => {
@@ -653,7 +668,7 @@ describe('positions no source can rank are named, not silently dropped', () => {
 
     const out = await buildAvailablePlayersContext(LEAGUE, USER)
     expect(out).toContain('best FantasyCalc dynasty rank first')
-    expect(out).toMatch(/NO source we have ranks those positions/)
+    expect(out).toMatch(/the rankings behind this list do not cover those positions/)
     expect(out).toContain('linebackers')
   })
 })

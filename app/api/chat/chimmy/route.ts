@@ -80,6 +80,7 @@ import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
 import { buildCommissionerContext } from '@/lib/chimmy/commissionerGrounding'
 import { buildLiveSlateContext } from '@/lib/chimmy/liveSlateGrounding'
+import { buildIdpContext } from '@/lib/idp/idpChimmyGrounding'
 import { applyGroundingBudget } from '@/lib/chimmy/groundingBudget'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
@@ -2353,6 +2354,21 @@ ${draftCtx}`
 
 ${waiverCtx}`
                   : waiverCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * IDP values, for the ~10 leagues that genuinely roster defenders. The builder
+               * self-gates on the STRICT scoring predicate and returns null everywhere else,
+               * so this costs a resolved league read and nothing more for the other ~100.
+               */
+              const idpCtx = await buildIdpContext(planInput.leagueId, planInput.userId)
+              if (idpCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${idpCtx}`
+                  : idpCtx
               }
             } catch { /* non-fatal */ }
             try {

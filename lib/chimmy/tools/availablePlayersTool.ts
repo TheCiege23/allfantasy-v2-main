@@ -79,17 +79,32 @@ function limitLines(basis: string, unrankedStarterSlots: string[]): string[] {
   ]
 
   /*
-   * ⚠ NEITHER VALUE SOURCE RANKS IDP OR KICKERS, AND 70 OF 94 NFL LEAGUES START
-   * THEM. FantasyCalc publishes QB/RB/WR/TE (plus picks); our own published
-   * values are the same four. KBFL starts SEVEN defensive players and a kicker,
-   * so a manager whose hole is at linebacker gets a list of receivers and no
-   * indication that the position they asked about was never in scope. That is
-   * the same silent absence this whole block exists to prevent, so the gap is
-   * named whenever the league actually starts one of those slots.
+   * ⚠ NEITHER VALUE SOURCE THIS TOOL USES RANKS IDP OR KICKERS. FantasyCalc
+   * publishes QB/RB/WR/TE (plus picks); our own published values are the same
+   * four. KBFL starts seven defensive players and a kicker, so a manager whose
+   * hole is at linebacker gets a list of receivers and no indication that the
+   * position they asked about was never in scope — the same silent absence this
+   * whole block exists to prevent.
+   *
+   * ⚠ BUT DO NOT SAY "NO SOURCE RANKS THEM". THAT IS FALSE, and the earlier
+   * wording here said it: `lib/idp-projections/leagueIdpVorp.ts` and
+   * `lib/idp-kicker-values.ts` build a VORP-based IDP board keyed on sleeperId,
+   * already used by `decision-os/world/port`, `ai-tools-waiver` and
+   * `idp/ai/idpChimmy`. It is simply not wired into THIS tool — it prices only
+   * players already on a roster, so a pickup list needs its building blocks
+   * (`loadIdpProjections`, `buildIdpValuations`) driven over the unrostered
+   * pool instead. A capability we have and have not connected must not be
+   * reported to the user as a capability we lack.
+   *
+   * ⚠ AND THE SCOPE IS SMALL: 10 of 94 NFL leagues carry real IDP roster slots,
+   * 19 carry a kicker. An earlier note here claimed 70, from a grep that matched
+   * the SCORING block — every Sleeper league ships `sack`/`int`/`ff` keys
+   * whether or not it rosters defenders. `detectIdpLeague` in
+   * `lib/idp-kicker-values.ts` is the strict predicate; prefer it over a grep.
    */
   if (unrankedStarterSlots.length > 0) {
     lines.push(
-      `4. This league starts ${unrankedStarterSlots.join(', ')}, and NO source we have ranks those positions — the list above is quarterbacks, running backs, receivers and tight ends only. If the user asks about one of those positions, say plainly that we do not rank it rather than offering an offensive player instead.`,
+      `4. This league starts ${unrankedStarterSlots.join(', ')}, and the rankings behind this list do not cover those positions — it is quarterbacks, running backs, receivers and tight ends only. If the user asks about one of those positions, say plainly that this list does not rank it rather than offering an offensive player instead. Do NOT tell them AllFantasy cannot value the position at all.`,
     )
   }
 

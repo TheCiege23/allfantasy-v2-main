@@ -16,6 +16,8 @@
 import { prisma } from '@/lib/prisma'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
 
 type OptionalPlayerNewsNotificationModel = {
   findFirst?: (args: unknown) => Promise<unknown>
@@ -269,4 +271,127 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
     where: { userId, isRead: false },
   })
   return typeof count === 'number' ? count : 0
+}
+
+/* ------------------------------------------------------------------------- *
+ * THE PATH THAT ACTUALLY DELIVERS
+ *
+ * ⚠ EVERYTHING ABOVE IS INERT. It reads `prisma.playerNewsNotification`, and that model
+ * exists in NEITHER schema.prisma NOR the production database — verified against prod
+ * 2026-08-28, where the notification tables are TradeNotification, notification_outbox,
+ * platform_notifications, survivor_notifications and zombie_commissioner_notifications.
+ * `getPlayerNewsNotificationModel()` therefore returns undefined and every function above
+ * returns 0 on the first line, silently, forever.
+ *
+ * This one uses what is already deployed instead, which is why it needs no migration:
+ *   - `PlayerNewsRecord.notificationDispatchedAt` — a column PURPOSE-BUILT for this, with
+ *     the dedupe semantics spelled out in its own schema doc-comment, already present in
+ *     production `player_news`.
+ *   - `dispatchNotification` — the one wired entry point (live callers in league/chat,
+ *     commissioner/broadcast, global-broadcast, cron/alert-sweep). It handles in-app +
+ *     email + SMS against each user's category preferences and delivery availability,
+ *     which the table-based path above never did.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Notify rostering managers about player news that has not been dispatched yet.
+ *
+ * Source-side dedupe is the `notificationDispatchedAt` stamp; recipient-side dedupe is
+ * `dedupePrefix`, which collapses repeat in-app rows for the same story and user.
+ */
+export async function dispatchPendingPlayerNewsNotifications(input?: {
+  limit?: number
+  lookbackHours?: number
+  sources?: string[]
+}): Promise<{ scanned: number; notified: number; recipients: number; noRoster: number }> {
+  const limit = input?.limit ?? 40
+  const lookbackHours = input?.lookbackHours ?? 24
+  const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000)
+
+  const rows = await prisma.playerNewsRecord
+    .findMany({
+      where: {
+        notificationDispatchedAt: null,
+        createdAt: { gte: since },
+        // Only news worth interrupting someone for. Mirrors the rule the inert path
+        // used: skip low impact unless it is an injury, which is classified below.
+        ...(input?.sources?.length ? { source: { in: input.sources } } : {}),
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true, sport: true, playerName: true, team: true,
+        headline: true, body: true, impact: true,
+      },
+    })
+    .catch(() => [])
+
+  let notified = 0
+  let recipients = 0
+  let noRoster = 0
+  const stamped: string[] = []
+
+  for (const row of rows) {
+    /*
+     * ⚠ STAMPED WHETHER OR NOT ANYONE IS NOTIFIED, and that is deliberate. `player_news`
+     * holds 11,765 rows and gains ~3,400 a week; if unmatched rows stayed unstamped the
+     * scan would re-examine the same backlog on every run forever and the cost would grow
+     * without bound. The stamp means "considered", not "delivered".
+     */
+    stamped.push(row.id)
+
+    const category = classifyPlayerNewsCategory(row.headline, row.body)
+    const isInjury = category === 'injury'
+    if (row.impact !== 'high' && !isInjury) continue
+
+    const rosterPlayers = await prisma.redraftRosterPlayer
+      .findMany({
+        where: { playerName: { contains: row.playerName, mode: 'insensitive' }, droppedAt: null },
+        select: { roster: { select: { ownerId: true, leagueId: true } } },
+        take: 500,
+      })
+      .catch(() => [])
+
+    if (rosterPlayers.length === 0) { noRoster++; continue }
+
+    // dispatchNotification takes ONE leagueId, so group recipients by league rather than
+    // calling it per user — one call per league instead of one per manager.
+    const byLeague = new Map<string, Set<string>>()
+    for (const rp of rosterPlayers) {
+      const userId = rp.roster?.ownerId
+      const leagueId = rp.roster?.leagueId
+      if (!userId || !leagueId) continue
+      if (!byLeague.has(leagueId)) byLeague.set(leagueId, new Set())
+      byLeague.get(leagueId)!.add(userId)
+    }
+    if (byLeague.size === 0) { noRoster++; continue }
+
+    const icon = CATEGORY_ICONS[category] ?? '📰'
+    const label = CATEGORY_LABELS[category] ?? 'News'
+    const title = `${icon} ${label}: ${row.playerName}`.slice(0, 256)
+
+    for (const [leagueId, userIds] of byLeague) {
+      await dispatchNotification({
+        userIds: [...userIds],
+        category: isInjury ? 'injury_alerts' : 'league_announcements',
+        type: isInjury ? 'player_injury_update' : 'player_news_update',
+        title,
+        body: row.headline.slice(0, 500),
+        leagueId,
+        severity: isInjury ? 'high' : 'medium',
+        dedupePrefix: `player-news:${row.id}`,
+        meta: { playerName: row.playerName, team: row.team, sport: row.sport, newsCategory: category },
+      }).catch(() => {})
+      recipients += userIds.size
+    }
+    notified++
+  }
+
+  if (stamped.length > 0) {
+    await prisma.playerNewsRecord
+      .updateMany({ where: { id: { in: stamped } }, data: { notificationDispatchedAt: new Date() } })
+      .catch(() => {})
+  }
+
+  return { scanned: rows.length, notified, recipients, noRoster }
 }
