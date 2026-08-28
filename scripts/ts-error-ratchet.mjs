@@ -62,6 +62,35 @@ function getTscOutput() {
     ['--max-old-space-size=8192', './node_modules/typescript/lib/tsc.js', '--noEmit'],
     { cwd: root, encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 }
   )
+
+  /*
+   * ⚠ A COMPILER THAT NEVER RAN LOOKS EXACTLY LIKE A CLEAN ONE.
+   *
+   * This used to `return ${r.stdout}${r.stderr}` with no check at all. Every way tsc can
+   * fail to produce a real analysis — spawn failure, OOM kill, maxBuffer overflow —
+   * yields empty or truncated output, which parses to ZERO errors. Zero then satisfies
+   * "no file gained errors" and the gate PASSES. `--update` is worse: it would overwrite
+   * the committed baseline with nothing, silently retiring the ratchet for everyone.
+   *
+   * Observed 2026-08-28: `npx tsc --noEmit` returned exit 127 with zero bytes under heavy
+   * machine load, and the wrapper reported success. The only reason it was caught was a
+   * positive control — asking the run to reproduce the KNOWN error count and noticing it
+   * came back 0. That control is now encoded below rather than left to whoever remembers.
+   *
+   * tsc's own exit codes: 0 = no errors, 1 = errors found. Anything else (2 = config
+   * error, 134 = heap OOM, 137 = SIGKILL, null = killed by signal) means the check did
+   * not complete, and must fail loudly instead of reading as clean.
+   */
+  if (r.error) {
+    throw new Error(`tsc failed to start: ${r.error.message}`)
+  }
+  if (r.signal) {
+    throw new Error(`tsc was killed by signal ${r.signal} — the check did not complete`)
+  }
+  if (r.status !== 0 && r.status !== 1) {
+    const tail = `${r.stdout || ''}${r.stderr || ''}`.trim().split(/\r?\n/).slice(-5).join('\n')
+    throw new Error(`tsc exited ${r.status}, which is neither 0 (clean) nor 1 (errors found).\n${tail}`)
+  }
   return `${r.stdout || ''}${r.stderr || ''}`
 }
 
@@ -97,6 +126,42 @@ function writeBaseline(parsed) {
 
 function main() {
   const parsed = parse(getTscOutput())
+
+  /*
+   * ANTI-VACUITY: the positive control, encoded.
+   *
+   * The spawn guards above catch a compiler that crashed. They cannot catch one that ran
+   * and produced output this script failed to PARSE — a tsc format change, a locale that
+   * localises the word "error", a `--from` log pointing at the wrong file. Every one of
+   * those also yields zero errors and a passing gate.
+   *
+   * ⚠ NOR ARE THE STATUS GUARDS ENOUGH ON THEIR OWN, measured rather than assumed: point
+   * the spawn at a module that does not exist and node exits **1** — which is tsc's own
+   * "errors found" code, so `r.status` sails through. THIS check is what caught that case
+   * in testing. If you are ever tempted to drop it as belt-and-braces, that is the
+   * scenario you would be re-opening.
+   *
+   * So: if the committed baseline says this repo has known errors and we just found NONE,
+   * disbelieve the run. Reaching genuine zero is possible and welcome, which is why there
+   * is an explicit opt-out rather than a hard stop — but it must be a deliberate claim by
+   * a human, not the default reading of an empty buffer.
+   */
+  const baselineForSanity = loadBaseline()
+  if (
+    baselineForSanity &&
+    baselineForSanity.total > 0 &&
+    parsed.total === 0 &&
+    !has('--allow-zero')
+  ) {
+    console.error(
+      `✗ tsc reported 0 errors but the baseline records ${baselineForSanity.total}.\n` +
+        '  A check that cannot fail is worse than no check, so this is treated as a BROKEN RUN,\n' +
+        '  not a clean one. Usual causes: the compiler did not really run, or its output was not\n' +
+        '  parsed. If the repo has genuinely reached zero, re-run with --allow-zero (and then\n' +
+        '  `npm run ts:ratchet:update` to re-snapshot).'
+    )
+    process.exit(2)
+  }
 
   // --- redraft-scoped strict gate -----------------------------------------
   if (valOf('--scope') === 'redraft') {
