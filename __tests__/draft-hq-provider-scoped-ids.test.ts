@@ -108,3 +108,34 @@ describe('⚠ a wrong name is worse than no name', () => {
     expect(FILE).toContain('16,710')
   })
 })
+
+describe('⚠ "no draft has been set up" sat above fourteen drafted picks', () => {
+  it('names which draft it means when results are on screen', () => {
+    /*
+     * Two true statements that read as nonsense together. `session`/`pickSlots`
+     * describe a draft THIS APP would run — an imported league has never had one —
+     * while `madePicks`/`board` read the draft the provider already ran. The old
+     * copy named neither, so "no draft" sat on top of that draft's results.
+     */
+    expect(FILE).toContain('no upcoming draft is scheduled in AllFantasy')
+    expect(FILE).toContain('the picks below are from the draft this league already ran')
+  })
+
+  it('only draws the distinction when there is something to contradict', () => {
+    // On a genuinely empty screen, "no draft has been set up" is the whole truth
+    // and qualifying it would add words for nothing.
+    expect(FILE).toContain(
+      'const importedDraftExists = madePicks.available === true || board.available === true',
+    )
+    expect(FILE).toContain('no draft has been set up for this league')
+  })
+
+  it('applies the same sentence to both panels that make the claim', () => {
+    // session and pickSlots are the two that describe an upcoming draft.
+    expect(FILE).toContain('session: noSession, pickSlots: noSession')
+  })
+
+  it('records where it was reported, so the copy is not "simplified" back', () => {
+    expect(FILE).toContain('SAT DIRECTLY ABOVE FOURTEEN DRAFTED PICKS')
+  })
+})
