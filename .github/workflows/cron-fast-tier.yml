@@ -103,6 +103,9 @@ concurrency:
 
 permissions:
   contents: read
+  # Lets the re-arm step dispatch this workflow's successor. `wc-cron.yml` already uses the same
+  # grant with GITHUB_TOKEN for Actions API calls.
+  actions: write
 
 jobs:
   tick:
@@ -123,6 +126,10 @@ jobs:
       # Every ${{ }} value goes through `env:` and is referenced as "$VAR", never interpolated into
       # the script text. A workflow_dispatch input is attacker-controlled text as far as the shell
       # is concerned, and this repo is public.
+      - name: Record window start
+        id: started
+        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Tick fast-tier crons
         env:
           APP_URL: ${{ vars.APP_URL }}
@@ -138,3 +145,65 @@ jobs:
           DRY=""
           if [ "${INPUT_DRY_RUN:-false}" = "true" ]; then DRY="--dry-run"; fi
           node scripts/cron-fast-tier-loop.mjs --window-minutes "$WINDOW" $DRY
+
+      # ── SELF-RE-ARM ────────────────────────────────────────────────────────────────────────
+      #
+      # WHY. Measured 2026-08-28, GitHub's shared scheduler DROPS most of our triggers: the fast
+      # tier got 7-9 starts against 48 requested, and the slow tier landed its hourly slot in only
+      # 6 of 24 hours. The loop is healthy every time it runs (55.4-56.3m windows) — the START is
+      # what fails, and no amount of scheduling harder fixes a scheduler that drops. So the last
+      # act of a completed window is to book the next one, and after the first start the chain no
+      # longer depends on the scheduler at all. The `schedule:` triggers above stay as the
+      # RESTARTER for when the chain breaks.
+      #
+      # ⚠ THE ELAPSED CHECK IS THE RUNAWAY GUARD, AND IT IS THE WHOLE SAFETY STORY.
+      # A job that dies in its first seconds and still re-arms would dispatch itself in a tight
+      # loop, burning runners until somebody noticed. Re-arming ONLY after a genuine window means
+      # a crash-loop cannot sustain itself: a fast failure simply does not re-arm, and the chain
+      # falls back to the schedule. Never relax this into an unconditional dispatch.
+      #
+      # Runs on failure too (`always()`), deliberately: the fast tier's jobs fail routinely — an
+      # `import-scores` timeout sets the run's conclusion without meaning the window was bad — and
+      # letting a red conclusion break the chain would put us straight back on the scheduler.
+      #
+      # KILL SWITCH: set repo variable FAST_TIER_SELF_ARM to 0/false/off and the chain stops after
+      # the current window, without editing this file or disabling the schedule.
+      - name: Re-arm the next window
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STARTED_EPOCH: ${{ steps.started.outputs.epoch }}
+          SELF_ARM: ${{ vars.FAST_TIER_SELF_ARM }}
+          REPO: ${{ github.repository }}
+          IS_DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # A dispatched dry run must not spawn a real successor.
+          if [ "${IS_DRY:-false}" = "true" ]; then
+            echo "::notice::dry run — not re-arming"; exit 0
+          fi
+
+          case "$(printf '%s' "${SELF_ARM:-1}" | tr '[:upper:]' '[:lower:]')" in
+            0|false|off|no)
+              echo "::notice::FAST_TIER_SELF_ARM is off — not re-arming"; exit 0 ;;
+          esac
+
+          ELAPSED=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
+          # 40 minutes of a 55-minute window. Comfortably above any crash or setup failure, and
+          # below a window trimmed by the concurrency handoff.
+          MIN_ELAPSED=2400
+          if [ "$ELAPSED" -lt "$MIN_ELAPSED" ]; then
+            echo "::warning::window was only ${ELAPSED}s (<${MIN_ELAPSED}s) — NOT re-arming."
+            echo "::warning::A short window means the run died early or was superseded; re-arming"
+            echo "::warning::that would be a dispatch loop. The schedule triggers will restart it."
+            exit 0
+          fi
+
+          # ⚠ EXPECT THIS RUN'S CONCLUSION TO BE `cancelled`, AND DO NOT "FIX" THAT.
+          # The successor starts while this step is finishing, and `cancel-in-progress` in the
+          # concurrency group above cancels us as it takes over. The dispatch call has already
+          # returned by then, so the chain is intact — a cancelled conclusion here means the
+          # handoff worked, not that the window failed.
+          echo "window ran ${ELAPSED}s — booking the next one"
+          gh workflow run cron-fast-tier.yml --repo "$REPO"
