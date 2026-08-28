@@ -325,11 +325,37 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
                 : 'Nothing was changed on your account. Send a new link and try once more.'}
           </RecoverySub>
 
-          {outcome === 'send_failed' ? (
+          {/*
+            * ⚠ THIS BRANCH ONLY EVER REPORTED `send_failed`, so every OTHER
+            * outcome was invisible here. The full-page handlers for 'sent',
+            * 'rate_limited' and 'already' sit BELOW this early return and are
+            * unreachable once the link is expired or invalid.
+            *
+            * The consequence was reported as "no new link was sent": a
+            * successful send showed no confirmation at all, and a rate-limited
+            * one showed nothing either — the button just relabelled itself to
+            * "Resend in 59s". Clicking again then burned the 3-per-2-minutes
+            * allowance, still silently. Nothing on screen could distinguish
+            * "sent, check your inbox" from "we refused to send".
+            *
+            * Every outcome now says what happened, on the screen the user is
+            * actually looking at.
+            */}
+          {outcome ? (
             <div style={{ marginTop: 18 }}>
               <RecoveryAlert
                 mark={<BangGlyph />}
-                title="We couldn't send the verification email right now. Please try again."
+                title={
+                  outcome === 'sent'
+                    ? `Sent. Check ${email || 'your inbox'} for a fresh link — it lasts one hour.`
+                    : outcome === 'rate_limited'
+                      ? 'Too many requests just now. Wait for the countdown, then try once more — nothing was sent.'
+                      : outcome === 'already'
+                        ? 'This address is already verified. You can carry on.'
+                        : outcome === 'login_required'
+                          ? 'Sign in first, then send yourself a new link.'
+                          : "We couldn't send the verification email right now. Please try again."
+                }
               />
             </div>
           ) : null}
