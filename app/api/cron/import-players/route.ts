@@ -296,6 +296,38 @@ async function handle(req: NextRequest) {
       }
     }
 
+    /*
+     * ⚠ AN ESPN LEAGUE COULD IMPORT PERFECTLY AND NAME NOBODY. Measured on the
+     * first one ever imported: 252 draft facts and zero rows in the identity table
+     * with `provider = 'espn'`, so Draft HQ rendered fourteen picks as
+     * "(not yet mapped)". The import path cannot supply the names — `mRoster`
+     * returned bare ids for that league, leaving a directory of `Player <id>`
+     * placeholders with nothing to harvest.
+     *
+     * ESPN's core athlete list needs no credential and its ids ARE the fantasy
+     * ids, verified against that board (4430737 -> Kyren Williams). Twenty-one
+     * pages covers the league; the budget check between pages is what actually
+     * bounds it, and a partial run is useful because the next one only asks about
+     * ids still unknown.
+     */
+    let espnIdentities: unknown = { skipped: true }
+    if (!dryRun && wantsNfl && budget.exhausted()) {
+      deferredPhases.push('espnIdentities')
+    } else if (!dryRun && wantsNfl) {
+      try {
+        const { ingestEspnAthleteIdentities } = await import('@/lib/espn/ingestEspnAthleteIdentities')
+        espnIdentities = await ingestEspnAthleteIdentities({
+          maxPages: 25,
+          isExhausted: () => budget.exhausted(),
+        })
+      } catch (espnErr) {
+        /* Enrichment must never fail the import it rides on. */
+        espnIdentities = {
+          error: espnErr instanceof Error ? espnErr.message.slice(0, 160) : 'espn identity ingest failed',
+        }
+      }
+    }
+
     let psychProfiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
     // Last phase, so it is the first to be dropped — and the cheapest to drop, since
     // refreshStaleLeagueProfiles already drains stalest-first and simply resumes next run.
@@ -324,6 +356,7 @@ async function handle(req: NextRequest) {
       devyIntelSources,
       devyIntel,
       sleeperRows,
+      espnIdentities,
       psychProfiles,
       sports: result.sports,
       identity,

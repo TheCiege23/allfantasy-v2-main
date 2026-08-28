@@ -69,7 +69,12 @@ const ESPN_POSITION_LABELS: Record<number, string> = {
   16: 'D/ST',
 }
 
-const ESPN_TEAM_ABBREVIATIONS: Record<number, string> = {
+/**
+ * Exported for `buildEspnDefenceIdentities`: a D/ST carries a negative id
+ * (`-16000 - proTeamId`) and appears in no athlete list, so the only way to name
+ * one is arithmetic over this table.
+ */
+export const ESPN_TEAM_ABBREVIATIONS: Record<number, string> = {
   1: 'ATL',
   2: 'BUF',
   3: 'CHI',
