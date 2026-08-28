@@ -267,20 +267,43 @@ export function assertTeamCodeFits(code: string | null): string | null {
   return code
 }
 
+/** Generational suffix tokens. Matched whole-token, never as a substring. */
+const GENERATIONAL_SUFFIX = /^(jr|sr|ii|iii|iv|v)$/i
+
+/**
+ * ⚠ THE SUFFIX STRIP MUST SKIP TOKEN 0 — a suffix is never a person's first name,
+ * but "J.R." is. The previous implementation used unanchored `\bjr\.?\b` etc., so
+ * it deleted the FIRST NAME of every J.R./JR player: `'J.R. Sweezy'` normalized to
+ * `'sweezy'`, and likewise J.R. Smith, J.R. Graham, JR Ritchie, JR Pace. Measured
+ * on production 2026-08-28 that corrupted 24 rows across six sports into
+ * surname-only keys. None collided with another player yet — but `'smith'` and
+ * `'justice'` as identity keys are collisions waiting to happen.
+ *
+ * Position, not end-anchoring, is the correct rule. Anchoring the strip to
+ * end-of-string was tried and rejected: it regresses provider names that carry a
+ * MID-name suffix, of which production has several (`'Larry Jr. Allen'`,
+ * `'Elvin IV Edmonds'`, `'Wilguens Jr. Exacte'`). Those must keep folding to
+ * `'larry allen'` / `'elvin edmonds'` / `'wilguens exacte'`, and under a
+ * skip-token-0 rule they do, while `'JR Pace'` correctly keeps its first name.
+ *
+ * ⚠ CHANGING THIS FUNCTION IS A DATA MIGRATION. `PlayerIdentityMap.normalizedName`
+ * is STAMPED with it by `lib/sports-data/multiSportIdentityMap.ts`, and the sync's
+ * update path does NOT rewrite that column — only its create path does. A change
+ * here therefore needs `scripts/backfill-normalized-name.ts` run alongside it, or
+ * readers compute one key while the table still stores the old one.
+ */
 export function normalizePlayerName(name: string): string {
-  return name
+  const base = name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9\s'-]/gi, '')
     .replace(/\s+/g, ' ')
-    .replace(/\bjr\.?\b/i, '')
-    .replace(/\bsr\.?\b/i, '')
-    .replace(/\bii+\b/i, '')
-    .replace(/\biii\b/i, '')
-    .replace(/\biv\b/i, '')
-    .replace(/\bv\b/i, '')
-    .replace(/\s+/g, ' ')
     .trim()
+  if (!base) return ''
+  return base
+    .split(' ')
+    .filter((token, index) => index === 0 || !GENERATIONAL_SUFFIX.test(token))
+    .join(' ')
 }
 
 export function playerNamesMatch(nameA: string, nameB: string): boolean {

@@ -82,6 +82,8 @@ scripts/.orphan-player-images-snapshot-*.json
 scripts/.fixture-accounts-snapshot-*.json
 # Full row dumps of the fixture users/leagues/players deleted by cleanup-fixture-data.
 scripts/.fixture-data-snapshot-*.json
+# Prior PlayerIdentityMap.normalizedName values, for reverting backfill-normalized-name.
+scripts/.normalized-name-snapshot-*.json
 
 # Player value reference docs (local updates; folder tracked via .gitkeep)
 app/player-values/*.md

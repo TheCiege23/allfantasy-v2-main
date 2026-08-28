@@ -1,15 +1,29 @@
 /**
  * Resolve external source player ids (Sleeper, ESPN, Yahoo, MFL, Fantrax,
- * Fleaflicker) to AF's canonical PlayerIdentityMap rows. Used by scoring
- * lookups to match imported roster entries against weekly stats.
+ * Fleaflicker) to AF's canonical PlayerIdentityMap rows.
  *
  * Strategy:
  *   1. Direct lookup by the provider-specific id column on PlayerIdentityMap.
  *   2. Fallback to normalized-name match when the provider column is unset.
  *   3. Record a warning when no match (caller decides whether to surface).
+ *
+ * ⚠ THIS MODULE HAS NO PRODUCTION CALLERS. It previously claimed here that it was
+ * "used by scoring lookups to match imported roster entries against weekly stats";
+ * that was not true and is corrected rather than deleted so the next reader does
+ * not re-derive it. Censused 2026-08-28 across all four import forms (`@/lib/…`,
+ * relative, `require(`, dynamic `import(`) plus re-export facades: the only
+ * importer is `lib/shared-services/identity/PlayerIdentityService.ts`, which is
+ * itself imported by nothing but its own test. Prefer
+ * `lib/shared-services/player-identity/PlayerIdentityResolver.ts`, which is live,
+ * disambiguates multiple candidates, and reports tie counts.
+ *
+ * ⚠ The name fallback below does NOT filter by sport, and 3,091 normalized names
+ * / 7,347 rows exist in more than one sport. Anything wiring this up must pass a
+ * sport through first.
  */
 
 import { prisma } from '@/lib/prisma'
+import { normalizePlayerName } from '@/lib/team-abbrev'
 import type { ImportProvider } from './types'
 
 export interface PlayerIdResolveResult {
@@ -27,8 +41,14 @@ const PROVIDER_COLUMN: Partial<Record<ImportProvider, ProviderColumn>> = {
   // yahoo / fantrax have no dedicated column yet — fallback to name match.
 }
 
+/**
+ * Must be the writer's normalizer. `[^a-z0-9]` was stripping the space that
+ * `lib/sports-data/multiSportIdentityMap.ts` keeps, so this matched 4 of 9,563 NFL
+ * rows (127 of 65,152 across all sports) — see the same note on
+ * `normalizePlayerNameForResolution` in the live resolver.
+ */
 function normalizeName(s: string | null | undefined): string {
-  return (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
+  return normalizePlayerName(s ?? '')
 }
 
 /**
