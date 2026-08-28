@@ -38,6 +38,18 @@ export type PortfolioLeague = {
   isCommissioner: boolean
   /** Roster size we hold, or null when no roster is imported. */
   rosterCount: number | null
+  /**
+   * The league's artwork, when the platform gave us one.
+   *
+   * ⚠ `avatarUrl`, NOT `logoUrl`. Measured on production: `logoUrl` is null on
+   * all 115 leagues and has never been written, while `avatarUrl` is populated
+   * on 48. Reading the empty column is why no league art has ever appeared.
+   *
+   * Null for the other 67, which is a real state and NOT an error — those
+   * leagues have no avatar on the platform either, so the row falls back to a
+   * monogram rather than a broken image.
+   */
+  avatarUrl: string | null
 }
 
 export type PortfolioData = {
@@ -66,7 +78,14 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
       externalId: true,
       isCommissioner: true,
       league: {
-        select: { id: true, name: true, platform: true, sport: true, season: true },
+        select: {
+          id: true,
+          name: true,
+          platform: true,
+          sport: true,
+          season: true,
+          avatarUrl: true,
+        },
       },
     },
   })
@@ -112,6 +131,7 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
     out.push({
       leagueId: t.leagueId,
       leagueName: leagueDisplayName(t.league?.name ?? null),
+      avatarUrl: t.league?.avatarUrl ?? null,
       platform: String(t.league?.platform ?? 'manual').toLowerCase(),
       sport: String(t.league?.sport ?? 'NFL'),
       season: t.league?.season != null ? String(t.league.season) : null,

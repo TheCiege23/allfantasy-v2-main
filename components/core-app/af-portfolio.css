@@ -44,7 +44,12 @@
 
 .af-pf-row {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) auto;
+  /*
+   * The artwork column is FIXED and first. A fractional unit would let a long
+   * league name squeeze the badge into an ellipse on narrow rows, and a round
+   * mark that is not round reads as broken rather than as tight.
+   */
+  grid-template-columns: 32px minmax(0, 2fr) minmax(0, 1.2fr) auto;
   gap: 16px;
   align-items: center;
   padding: 13px 16px;
@@ -233,4 +238,41 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+}
+
+/* ── League artwork ───────────────────────────────────────────────────────
+ *
+ * ⚠ THE MONOGRAM IS THE BASE LAYER, NOT THE ERROR STATE. 67 of 115 leagues
+ * have no avatar on the platform, so "no image" is the common case. The mark
+ * is always painted and the image sits ON TOP of it — which also means a CDN
+ * url that 404s reveals the monogram underneath by simply removing itself,
+ * with no error handling on the layout side.
+ */
+.af-pf-row-art {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--line2);
+}
+
+.af-pf-art-mark {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim, rgba(255, 255, 255, 0.62));
+  user-select: none;
+}
+
+.af-pf-art-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

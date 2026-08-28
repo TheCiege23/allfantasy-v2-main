@@ -31,6 +31,19 @@ import '@/components/core-app/af-portfolio.css'
  * How each platform is named to a person. The row chip prints the raw key, which is
  * fine as a mark but wrong as a heading — "mfl" is not a word.
  */
+/**
+ * One or two letters standing in for a league with no avatar.
+ *
+ * Two initials when the name has separate words ("Beta 1 Zombie League" -> BZ,
+ * skipping the digit), otherwise the first two characters ("KBFL" -> KB), so a
+ * single-word name still reads as a mark rather than one lonely letter.
+ */
+function leagueMonogram(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => /[a-z]/i.test(w))
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return (words[0] ?? name).slice(0, 2).toUpperCase()
+}
+
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
   espn: 'ESPN',
@@ -135,6 +148,35 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
         {rows.map((l) => (
           <li key={l.leagueId} className="af-pf-item">
             <Link href={`/core?league=${l.leagueId}`} className="af-pf-row">
+              {/*
+                ⚠ NO ARTWORK ELEMENT EXISTED AT ALL, which is why no league image
+                has ever rendered here — the field was never selected and nothing
+                would have drawn it if it had been.
+
+                ⚠ A MONOGRAM, NOT A PLACEHOLDER IMAGE. 67 of 115 leagues have no
+                avatar on the platform, so a missing one is the COMMON case, not
+                a failure — a broken-image glyph on more than half the rows would
+                read as the page being broken. The initial is derived from the
+                name we already show, so it is never wrong.
+
+                A CDN url that 404s removes itself and reveals the same monogram
+                beneath, the way the comms drawer handles player headshots.
+              */}
+              <span className="af-pf-row-art" aria-hidden>
+                <span className="af-pf-art-mark">{leagueMonogram(l.leagueName)}</span>
+                {l.avatarUrl ? (
+                  <img
+                    className="af-pf-art-img"
+                    src={l.avatarUrl}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.remove()
+                    }}
+                  />
+                ) : null}
+              </span>
+
               <span className="af-pf-row-main">
                 <span className="af-pf-row-name">
                   {l.isCommissioner ? (
