@@ -60,17 +60,86 @@ export function normalizeScoringStatKey(
  * `yahoo_stat_<id>` (see EspnAdapter / YahooAdapter) — resolved to the Sleeper
  * projection stat keys `computeLeagueProjectedPoints` consumes.
  *
- * HONESTY CONTRACT: only verifiable mappings appear here. ESPN ships no
- * stat-id dictionary in this repo; the single id the capture code itself
- * verifies is 53 = receptions (`espn-client` detectScoringType and
- * EspnAdapter detectEspnScoringFormat both key PPR detection on it). Yahoo
- * ids are league-scoped and unverifiable statically — but the import captures
- * each league's OWN stat names (`stat_categories`), so Yahoo keys resolve
- * through those captured names instead. Anything unresolved returns null and
- * the caller must keep the provider key (surfaced as uncovered), never guess.
+ * HONESTY CONTRACT, UNCHANGED IN SPIRIT AND NOW MUCH BETTER SUPPLIED: only verifiable
+ * mappings appear here. What changed is that they became verifiable.
+ *
+ * ESPN still ships no stat dictionary — its `scoringItems` carry `{statId, points}`
+ * and nothing that names the stat — so for a long time this table held exactly ONE
+ * entry, `53` = receptions, the id the PPR-detection code independently keys on. The
+ * rest were left unresolved rather than guessed, correctly: a guessed scoring key
+ * silently mis-scores every player in a league, and `sleeperMarketService` records the
+ * shape of that failure, where keys that matched nothing fell through to `pts_ppr` and
+ * understated defenders ~14x.
+ *
+ * The entries below were DERIVED FROM EVIDENCE, not recalled. Both ESPN and Sleeper
+ * publish the same season for the same players, so where an ESPN stat id and a Sleeper
+ * key hold the same value for the same player — across 1,277 player-seasons spanning
+ * 2024 and 2025, with NOT ONE player-season where they disagree — that is evidence
+ * they name the same quantity. Names that are not unique on both sides are dropped
+ * before joining, because the NFL has two Maurice Alexanders and two Tony Adamses and
+ * pairing one man's stat line with another's would manufacture a contradiction that
+ * disqualifies a true mapping.
+ *
+ * Reproduce with `node scripts/compare-espn-sleeper-stat-ids.mjs`; the evidence,
+ * including per-mapping agreement counts, is committed at
+ * `lib/scoring-defaults/espn-stat-id-evidence.json`. Regenerate it in the same change
+ * as any edit here, so the mapping and its proof never drift apart.
+ *
+ * Two checks worth knowing the derivation passed:
+ *   - It independently reproduced `53` = receptions, the one mapping that was already
+ *     verified by other means. A positive control.
+ *   - Pooling two seasons means an id that meant one thing in 2024 and another in 2025
+ *     produces contradictions and is rejected automatically. None were.
+ *
+ * ⚠ STILL DELIBERATELY ABSENT: defensive, IDP and team-defense ids. They did not clear
+ * the evidence bar, so they are not here. A league scoring them has those weights
+ * DROPPED rather than guessed, which understates kickers and team defenses — stated by
+ * `resolveImportedScoring`, never silently. Anything unresolved returns null and the
+ * caller must keep the provider key, never guess.
+ *
+ * Comment shows agreeing player-seasons out of 1,277.
  */
 const ESPN_STAT_ID_TO_SLEEPER_KEY: Record<string, string> = {
-  '53': 'rec',
+  '0': 'pass_att',              // 179
+  '1': 'pass_cmp',              // 158
+  '2': 'pass_inc',              // 161
+  '3': 'pass_yd',               // 158
+  '4': 'pass_td',               // 121
+  '15': 'pass_td_40p',          // 72
+  '16': 'pass_td_50p',          // 56
+  '17': 'bonus_pass_yd_300',    // 60
+  '19': 'pass_2pt',             // 51
+  '20': 'pass_int',             // 116
+  '23': 'rush_att',             // 607
+  '24': 'rush_yd',              // 594
+  '25': 'rush_td',              // 246
+  '26': 'rush_2pt',             // 28
+  '35': 'rush_td_40p',          // 44
+  '36': 'rush_td_50p',          // 30
+  '37': 'bonus_rush_yd_100',    // 70
+  '41': 'rec',                  // 861
+  '42': 'rec_yd',               // 861
+  '43': 'rec_td',               // 481
+  '44': 'rec_2pt',              // 62
+  '46': 'rec_td_50p',           // 75
+  '53': 'rec',                  // 861
+  '56': 'bonus_rec_yd_100',     // 142
+  '64': 'pass_sack',            // 134
+  '68': 'fum',                  // 415
+  '72': 'fum_lost',             // 288
+  '74': 'fgm_50p',              // 75
+  '76': 'fgmiss_50p',           // 67
+  '77': 'fgm_40_49',            // 81
+  '83': 'fgm',                  // 84
+  '84': 'fga',                  // 84
+  '85': 'fgmiss',               // 77
+  '86': 'xpm',                  // 84
+  '87': 'xpa',                  // 84
+  '88': 'xpmiss',               // 51
+  '114': 'kr_yd',               // 258
+  '158': 'kick_pts',            // 84
+  '198': 'fgm_50_59',           // 74
+  '200': 'fgmiss_50_59',        // 66
 }
 
 /**

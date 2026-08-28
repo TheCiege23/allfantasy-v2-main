@@ -30,7 +30,16 @@ function makeLeague(overrides: Partial<{
     name: overrides.name ?? 'Dynasty Kings',
     season: overrides.season ?? 2026,
     platform: overrides.platform ?? 'sleeper',
-    platformLeagueId: overrides.platformLeagueId ?? 'pl-1',
+    /*
+     * ⚠ THIS DEFAULTED TO A SHARED 'pl-1' FOR EVERY LEAGUE, which is not what
+     * production looks like: `platformLeagueId` is the PROVIDER's league id and
+     * is unique per league. Once the resolver started collapsing duplicate
+     * imports on that id, the shared default made three distinct leagues in a
+     * fixture read as one. Deriving it from the id keeps distinct leagues
+     * distinct; tests that mean to model one league imported twice set it
+     * explicitly.
+     */
+    platformLeagueId: overrides.platformLeagueId ?? `pl-${overrides.id ?? 'league-1'}`,
     timezone: overrides.timezone ?? 'America/New_York',
     lastSyncedAt: overrides.lastSyncedAt ?? new Date('2026-04-25T12:00:00.000Z'),
     teams: overrides.teams ?? [{ ownerName: 'Alex Kim', teamName: 'Kings Court' }],
@@ -213,5 +222,137 @@ describe('chimmy staleness and source references', () => {
         { label: 'Trade Center', href: '/league/league-123?tab=trades' },
       ]),
     )
+  })
+})
+
+/*
+ * ⚠ ONE REAL LEAGUE IMPORTED TWICE PRODUCED A QUESTION NOBODY COULD ANSWER.
+ *
+ * Asked "is Bauer Sharp on waivers in KBFL?", Chimmy replied:
+ *   I found more than one league that could match: "KBFL" (2026), "KBFL" (2026).
+ *   Which of those do you mean?
+ * followed by "Chimmy could not read your league for this answer." Two identical
+ * labels, no way to choose, conversation dead-ended.
+ *
+ * Both production rows carry platformLeagueId 1338541390891606016 and season
+ * 2026 — the same Sleeper league imported by two different accounts.
+ * `getPortfolio` already collapsed this; the resolver never learned to.
+ */
+describe('one real league imported twice is one league', () => {
+  const READER = 'user-1'
+
+  function kbfl(over: Record<string, unknown> = {}) {
+    return makeLeague({
+      id: 'kbfl-mine',
+      name: 'KBFL',
+      season: 2026,
+      platformLeagueId: '1338541390891606016',
+      ...over,
+    } as never)
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getAiMemoryMock.mockResolvedValue(null)
+  })
+
+  it('does not ask the reader to choose between two identical labels', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      { ...kbfl({ id: 'kbfl-theirs' }), userId: 'someone-else' },
+      { ...kbfl(), userId: READER },
+    ])
+
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({
+      userId: READER,
+      message: 'is Bauer Sharp on waivers in KBFL?',
+    })
+
+    expect(result.kind).toBe('selected')
+    if (result.kind !== 'selected') throw new Error('expected selected')
+    expect(result.leagueId).toBe('kbfl-mine')
+  })
+
+  /* The reader's own import is the one their other surfaces already use. */
+  it('keeps the copy the reader imported', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      { ...kbfl({ id: 'kbfl-theirs' }), userId: 'someone-else' },
+      { ...kbfl(), userId: READER },
+    ])
+
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({ userId: READER, message: 'KBFL' })
+    if (result.kind !== 'selected') throw new Error('expected selected')
+    expect(result.leagueId).toBe('kbfl-mine')
+  })
+
+  /*
+   * ⚠ TWO COPIES ALSO DEFEATED `fallback_single`, the rule that answers without
+   * a name when the reader has exactly one league. Collapsing at the loader
+   * restores it.
+   */
+  it('restores the single-league fallback', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      { ...kbfl(), userId: READER },
+      { ...kbfl({ id: 'kbfl-theirs' }), userId: 'someone-else' },
+    ])
+
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({
+      userId: READER,
+      message: 'what happened this week?',
+    })
+
+    expect(result.kind).toBe('selected')
+    if (result.kind !== 'selected') throw new Error('expected selected')
+    expect(result.source).toBe('fallback_single')
+  })
+
+  /*
+   * ⚠ COLLAPSE ON THE PROVIDER'S ID, NEVER THE NAME. Measured 2026-08-28: only
+   * two production groups share a platform id, but SEVEN name+season groups
+   * exist — "AF Test ADP #002" has five copies with five DISTINCT platform ids.
+   * Those are real separate leagues and merging them would hide four.
+   */
+  it('does not merge same-named leagues with different platform ids', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      { ...makeLeague({ id: 'a', name: 'AF Test ADP #002', platformLeagueId: 'p-1' } as never), userId: READER },
+      { ...makeLeague({ id: 'b', name: 'AF Test ADP #002', platformLeagueId: 'p-2' } as never), userId: READER },
+    ])
+
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({ userId: READER, message: 'AF Test ADP #002' })
+
+    expect(result.kind).not.toBe('selected')
+    if (result.kind === 'selected') throw new Error('must stay ambiguous')
+    expect(result.choices.length).toBe(2)
+  })
+
+  /* Season is in the key: a provider reusing an id across years is two leagues. */
+  it('keeps different seasons of the same platform league', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      { ...kbfl(), userId: READER },
+      { ...kbfl({ id: 'kbfl-2025', season: 2025 }), userId: READER },
+    ])
+
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({ userId: READER, message: 'KBFL' })
+
+    if (result.kind === 'selected') throw new Error('two seasons must not collapse')
+    expect(result.choices.length).toBe(2)
+  })
+
+  /* No provider id means no evidence two rows are the same thing. */
+  it('never collapses rows with no platformLeagueId', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      { ...makeLeague({ id: 'a', name: 'KBFL', platformLeagueId: '' } as never), userId: READER },
+      { ...makeLeague({ id: 'b', name: 'KBFL', platformLeagueId: '' } as never), userId: READER },
+    ])
+
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({ userId: READER, message: 'KBFL' })
+
+    if (result.kind === 'selected') throw new Error('must stay ambiguous')
+    expect(result.choices.length).toBe(2)
   })
 })

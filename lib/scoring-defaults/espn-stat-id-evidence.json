@@ -1,0 +1,181 @@
+{
+  "derivedAt": "2026-08-28T13:26:01.787Z",
+  "seasons": [
+    2025,
+    2024
+  ],
+  "method": "exact-value agreement between ESPN fantasy season totals (statSourceId 0, statSplitTypeId 0) and Sleeper season stats, joined only on names unique to both sources, pooled across seasons",
+  "thresholds": {
+    "minAgreeingPlayerSeasons": 25,
+    "maxContradictions": 0
+  },
+  "playerSeasonsJoined": 1277,
+  "playerSeasonsByYear": {
+    "2024": 638,
+    "2025": 639
+  },
+  "namesDroppedAsNonUnique": 8,
+  "mappings": {
+    "0": {
+      "sleeperKey": "pass_att",
+      "agreeingPlayerSeasons": 179
+    },
+    "1": {
+      "sleeperKey": "pass_cmp",
+      "agreeingPlayerSeasons": 158
+    },
+    "2": {
+      "sleeperKey": "pass_inc",
+      "agreeingPlayerSeasons": 161
+    },
+    "3": {
+      "sleeperKey": "pass_yd",
+      "agreeingPlayerSeasons": 158
+    },
+    "4": {
+      "sleeperKey": "pass_td",
+      "agreeingPlayerSeasons": 121
+    },
+    "15": {
+      "sleeperKey": "pass_td_40p",
+      "agreeingPlayerSeasons": 72
+    },
+    "16": {
+      "sleeperKey": "pass_td_50p",
+      "agreeingPlayerSeasons": 56
+    },
+    "17": {
+      "sleeperKey": "bonus_pass_yd_300",
+      "agreeingPlayerSeasons": 60
+    },
+    "19": {
+      "sleeperKey": "pass_2pt",
+      "agreeingPlayerSeasons": 51
+    },
+    "20": {
+      "sleeperKey": "pass_int",
+      "agreeingPlayerSeasons": 116
+    },
+    "23": {
+      "sleeperKey": "rush_att",
+      "agreeingPlayerSeasons": 607
+    },
+    "24": {
+      "sleeperKey": "rush_yd",
+      "agreeingPlayerSeasons": 594
+    },
+    "25": {
+      "sleeperKey": "rush_td",
+      "agreeingPlayerSeasons": 246
+    },
+    "26": {
+      "sleeperKey": "rush_2pt",
+      "agreeingPlayerSeasons": 28
+    },
+    "35": {
+      "sleeperKey": "rush_td_40p",
+      "agreeingPlayerSeasons": 44
+    },
+    "36": {
+      "sleeperKey": "rush_td_50p",
+      "agreeingPlayerSeasons": 30
+    },
+    "37": {
+      "sleeperKey": "bonus_rush_yd_100",
+      "agreeingPlayerSeasons": 70
+    },
+    "41": {
+      "sleeperKey": "rec",
+      "agreeingPlayerSeasons": 861
+    },
+    "42": {
+      "sleeperKey": "rec_yd",
+      "agreeingPlayerSeasons": 861
+    },
+    "43": {
+      "sleeperKey": "rec_td",
+      "agreeingPlayerSeasons": 481
+    },
+    "44": {
+      "sleeperKey": "rec_2pt",
+      "agreeingPlayerSeasons": 62
+    },
+    "46": {
+      "sleeperKey": "rec_td_50p",
+      "agreeingPlayerSeasons": 75
+    },
+    "53": {
+      "sleeperKey": "rec",
+      "agreeingPlayerSeasons": 861
+    },
+    "56": {
+      "sleeperKey": "bonus_rec_yd_100",
+      "agreeingPlayerSeasons": 142
+    },
+    "64": {
+      "sleeperKey": "pass_sack",
+      "agreeingPlayerSeasons": 134
+    },
+    "68": {
+      "sleeperKey": "fum",
+      "agreeingPlayerSeasons": 415
+    },
+    "72": {
+      "sleeperKey": "fum_lost",
+      "agreeingPlayerSeasons": 288
+    },
+    "74": {
+      "sleeperKey": "fgm_50p",
+      "agreeingPlayerSeasons": 75
+    },
+    "76": {
+      "sleeperKey": "fgmiss_50p",
+      "agreeingPlayerSeasons": 67
+    },
+    "77": {
+      "sleeperKey": "fgm_40_49",
+      "agreeingPlayerSeasons": 81
+    },
+    "83": {
+      "sleeperKey": "fgm",
+      "agreeingPlayerSeasons": 84
+    },
+    "84": {
+      "sleeperKey": "fga",
+      "agreeingPlayerSeasons": 84
+    },
+    "85": {
+      "sleeperKey": "fgmiss",
+      "agreeingPlayerSeasons": 77
+    },
+    "86": {
+      "sleeperKey": "xpm",
+      "agreeingPlayerSeasons": 84
+    },
+    "87": {
+      "sleeperKey": "xpa",
+      "agreeingPlayerSeasons": 84
+    },
+    "88": {
+      "sleeperKey": "xpmiss",
+      "agreeingPlayerSeasons": 51
+    },
+    "114": {
+      "sleeperKey": "kr_yd",
+      "agreeingPlayerSeasons": 258
+    },
+    "158": {
+      "sleeperKey": "kick_pts",
+      "agreeingPlayerSeasons": 84
+    },
+    "198": {
+      "sleeperKey": "fgm_50_59",
+      "agreeingPlayerSeasons": 74
+    },
+    "200": {
+      "sleeperKey": "fgmiss_50_59",
+      "agreeingPlayerSeasons": 66
+    }
+  },
+  "ambiguousNotAccepted": {}
+}

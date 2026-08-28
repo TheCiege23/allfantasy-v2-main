@@ -319,3 +319,62 @@ describe('a pickup question is a waiver question', () => {
     expect(classify('what features are available?')).toBe('general')
   })
 })
+
+/*
+ * ⚠ FOURTH INSTANCE OF THE SAME SHAPE, and the most consequential. The waiver
+ * branch knew "waiver" and "pick up" but not the BIDDING vocabulary — so "how
+ * much FAAB should I bid on him?" and "should I claim him?" classified as
+ * `general`, never acquired league context, and never reached the surface whose
+ * whole job is to refuse them.
+ *
+ * That matters more than the earlier gaps. `waiver_claims` holds 0 rows, so a
+ * FAAB question is precisely the one we must answer with "we cannot see that".
+ * The refusal could not fire because the question never got there.
+ *
+ * Prior instances: `hrs?` in the stat guard, bare `start` in ROSTER_INTENT, and
+ * the closed compound `pickup`.
+ */
+describe('the bidding vocabulary reaches the waiver branch', () => {
+  const waiverMatch = ROUTE.match(/\((\/waiver\|[^\n]*?\/i)\.test\(message\)\) return 'waiver'/)
+  const draftMatch = ROUTE.match(/\((\/draft\|[^\n]*?\/i)\.test\(message\)\) return 'draft'/)
+
+  function classify(message: string): string {
+    const waiver: RegExp = eval(waiverMatch?.[1] ?? '/$^/')
+    const draft: RegExp = eval(draftMatch?.[1] ?? '/$^/')
+    if (waiver.test(message)) return 'waiver'
+    if (draft.test(message)) return 'draft'
+    return 'general'
+  }
+
+  it.each([
+    'how much FAAB should I bid on Bauer Sharp?',
+    'what should I bid on him?',
+    'should I claim him?',
+    'what is my FAAB budget?',
+  ])('routes to waiver: %s', (q) => {
+    expect(classify(q)).toBe('waiver')
+  })
+
+  /*
+   * ⚠ `claim` IS DELIBERATELY NARROW. Bare `claim` also means "claim my team",
+   * which is an import action on a different surface — and intent `waiver` hard
+   * requires a league, so sweeping it in would 412 people trying to claim.
+   */
+  it('leaves team-claiming out of the waiver branch', () => {
+    expect(classify('how do I claim my team?')).toBe('general')
+    expect(classify('I need to claim my team in KBFL')).toBe('general')
+  })
+
+  /* Word boundaries: `bid` must not fire inside another word. */
+  it('does not match bid inside a longer word', () => {
+    expect(classify('what is the forbidden zone')).toBe('general')
+  })
+
+  /* And the draft sense still survives, as it did through the pickup fix. */
+  it.each(['when is the NFL draft', 'what pick am i', 'who should i draft at 1.03'])(
+    'still reads as draft: %s',
+    (q) => {
+      expect(classify(q)).toBe('draft')
+    },
+  )
+})

@@ -94,16 +94,79 @@ describe('gradePicks', () => {
 })
 
 describe('resolveImportedScoring', () => {
-  it('refuses to score on a fragment when only one ESPN key resolves', () => {
-    /* espn_stat_53 is the ONE verified id. Scoring on it alone would rank every
-       player by receptions while reporting itself as league-scored. */
+  it('now scores an ESPN league on its own rules, because the ids are derived', () => {
+    /* Before the stat dictionary this was the fragment case: only espn_stat_53
+       resolved, so the whole map was dropped. These ids are now evidence-derived
+       from 1,277 player-seasons, so the league's real weights are used. */
     const r = resolveImportedScoring(
-      { espn_stat_3: 0.04, espn_stat_4: 4, espn_stat_53: 1, espn_stat_42: 0.1 },
+      {
+        espn_stat_3: 0.04,
+        espn_stat_4: 4,
+        espn_stat_24: 0.1,
+        espn_stat_25: 6,
+        espn_stat_42: 0.1,
+        espn_stat_43: 6,
+        espn_stat_53: 1,
+      },
+      'espn',
+    )
+    expect(r.basis).toBe('league-scored')
+    expect(r.settings.pass_yd).toBe(0.04)
+    expect(r.settings.rush_td).toBe(6)
+    expect(r.settings.rec).toBe(1)
+  })
+
+  it('still refuses a fragment when the rules that resolve are not core ones', () => {
+    /* Defensive and team-defense ids did NOT clear the evidence bar and are absent
+       on purpose. A league whose only translatable rule is receptions must still
+       fall back rather than rank every player by catches. */
+    const r = resolveImportedScoring(
+      { espn_stat_53: 1, espn_stat_101: 6, espn_stat_102: 6, espn_stat_201: 6 },
       'espn',
     )
     expect(r.basis).toBe('format-approx')
     expect(r.settings).toEqual({})
-    expect(r.note).toMatch(/only 1 of them can be translated/)
+  })
+
+  it('says so when scoring on league rules with some rules untranslatable', () => {
+    /* "league-scored" with a tenth of the rules missing is a claim needing its own
+       footnote — those weights become silent zeros for whoever accrues them. */
+    const r = resolveImportedScoring(
+      {
+        espn_stat_3: 0.04,
+        espn_stat_4: 4,
+        espn_stat_24: 0.1,
+        espn_stat_25: 6,
+        espn_stat_42: 0.1,
+        espn_stat_43: 6,
+        espn_stat_53: 1,
+        espn_stat_101: 6,
+        espn_stat_201: 6,
+      },
+      'espn',
+    )
+    expect(r.basis).toBe('league-scored')
+    expect(r.note).toMatch(/2 of its scoring rules could not be translated/)
+    expect(r.note).toMatch(/kickers and team defenses are understated/)
+  })
+
+  it('does not count a zero-weight rule as an untranslatable gap', () => {
+    /* A league declaring a rule at 0 loses nothing by our not translating it. */
+    const r = resolveImportedScoring(
+      {
+        espn_stat_3: 0.04,
+        espn_stat_4: 4,
+        espn_stat_24: 0.1,
+        espn_stat_25: 6,
+        espn_stat_42: 0.1,
+        espn_stat_43: 6,
+        espn_stat_53: 1,
+        espn_stat_101: 0,
+        espn_stat_201: 0,
+      },
+      'espn',
+    )
+    expect(r.note).toBeNull()
   })
 
   it('scores on the league rules when a real set of keys resolves', () => {
