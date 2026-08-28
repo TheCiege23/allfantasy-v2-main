@@ -581,10 +581,24 @@ function compactRecord<T extends Record<string, unknown>>(record: T): Record<str
   return Object.fromEntries(entries)
 }
 
+/*
+ * ⚠ `start` MADE "WHEN DOES THE SEASON START?" A ROSTER QUESTION, and a roster
+ * intent hard-requires league context — so one of the most ordinary questions
+ * anybody can ask came back as a 412 telling them to open a league. Measured
+ * against production: "When does the college football season start?" 412'd.
+ *
+ * The word is meant as "start a player". It is also the ordinary English verb,
+ * and it appears in "season start", "when do the playoffs start", "start of the
+ * week". Requiring a lineup-shaped neighbour keeps the fantasy sense and drops
+ * the calendar one. `sit` and `bench` need no such guard — they have no common
+ * schedule meaning.
+ */
+const ROSTER_INTENT = /roster|lineup|sit\b|bench|flex|\bstarts?\s+(?:him|her|them|over|instead)|(?:who|should\s+i|do\s+i|would\s+you)\s+start\b|start\s*\/?\s*sit/i
+
 function classifyPecrIntent(message: string): string {
   if (/trade|swap|offer|deal|give|receiv/i.test(message)) return 'trade'
   if (/waiver|wire|pickup|drop|add|free.?agent/i.test(message)) return 'waiver'
-  if (/roster|lineup|start|sit|bench|flex/i.test(message)) return 'roster'
+  if (ROSTER_INTENT.test(message)) return 'roster'
   if (/draft|pick|adp|tier|rank/i.test(message)) return 'draft'
   return 'general'
 }
@@ -599,7 +613,14 @@ function requiresLeagueGrounding(args: {
 }): boolean {
   const message = args.message.toLowerCase()
   const source = String(args.source ?? '').toLowerCase()
-  const hasGlobalSportContext = /\b(nfl|nba|mlb|nhl|ncaaf|ncaab|soccer|world\s+cup|champions\s+league|fifa|ncaa)\b/.test(
+  /*
+   * ⚠ THIS LISTED ONLY THE ABBREVIATIONS, so "college football" — the way people
+   * actually write NCAAF — was not global sport context and the escape hatch
+   * never fired for it. Same gap as `hrs?` in the stat guard: the formal
+   * spelling was covered and the human one was not. Spelled-out league and sport
+   * names added.
+   */
+  const hasGlobalSportContext = /\b(nfl|nba|mlb|nhl|ncaaf|ncaab|soccer|world\s+cup|champions\s+league|premier\s+league|major\s+league|college\s+(?:football|basketball)|football|basketball|baseball|hockey|fifa|ncaa)\b/.test(
     message
   )
 

@@ -202,3 +202,57 @@ describe('tool loop system prompt', () => {
     expect(prompt).toMatch(/NOT that nobody scored/i)
   })
 })
+
+/*
+ * ⚠ "WHEN DOES THE SEASON START?" WAS A ROSTER QUESTION. `classifyPecrIntent`
+ * matched a bare `start`, a roster intent hard-requires league context, and so
+ * one of the most ordinary questions anybody can ask came back as a 412 telling
+ * them to open a league. Measured against production: "When does the college
+ * football season start?" returned 412.
+ *
+ * The word is meant as "start a player" and is also the ordinary English verb.
+ */
+describe('calendar "start" is not lineup "start"', () => {
+  const match = ROUTE.match(/const ROSTER_INTENT = (\/.*\/i)/)
+
+  it('keeps the intent pattern where the test can read it', () => {
+    expect(match).not.toBeNull()
+  })
+
+  const pattern: RegExp = eval(match?.[1] ?? '/$^/')
+
+  it.each([
+    'when does the college football season start?',
+    'when does the season start',
+    'when do the playoffs start',
+    'what time does the game start tonight',
+  ])('does NOT demand a league for: %s', (q) => {
+    expect(pattern.test(q)).toBe(false)
+  })
+
+  /* The fantasy sense must still be caught — that is what the rule is for. */
+  it.each([
+    'who should i start at flex?',
+    'should i start josh allen',
+    'start or sit mahomes',
+    'do i start him over hurts',
+    'look at my roster',
+    'who do i bench this week',
+  ])('still reads as roster: %s', (q) => {
+    expect(pattern.test(q)).toBe(true)
+  })
+
+  /*
+   * ⚠ THE ESCAPE HATCH LISTED ONLY ABBREVIATIONS. "college football" is how
+   * people write NCAAF, and it was not global sport context — the same gap as
+   * `hrs?` in the stat guard: formal spelling covered, human spelling not.
+   */
+  it('treats spelled-out sport names as global context', () => {
+    const globals = ROUTE.match(/const hasGlobalSportContext = (\/.*\/)\.test/)
+    expect(globals).not.toBeNull()
+    const re: RegExp = eval(globals![1])
+    for (const q of ['college football', 'premier league', 'major league baseball', 'basketball']) {
+      expect(re.test(q), q).toBe(true)
+    }
+  })
+})
