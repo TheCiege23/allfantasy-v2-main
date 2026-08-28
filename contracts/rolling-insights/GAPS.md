@@ -284,3 +284,43 @@ subscription does not include college football" — from a probe that hard-coded
 `RSC_TOKEN2`.** A single-credential probe cannot answer an entitlement question on this
 deployment — `riCredentialsFor` exists for this reason, and any ad-hoc probe must iterate
 credentials the same way.
+
+---
+
+## `age` on the player payload is a DATE, not an age — inferred, not documented
+
+**Status: UNRESOLVED in the contract. Inferred from production data, never probed.**
+`ENDPOINTS.yaml` does not describe the player object's `age` field.
+
+`lib/sports-data/rollingInsightsTeamsPlayers` stored it with a generic `intOf`, which does
+`parseInt(s.replace(/[^0-9-]/g, ''))` — it strips every separator and keeps the digits. Measured
+on production 2026-08-28, **all 13,763 RI rows carrying an age held an impossible value** (9,550
+NFL, 4,213 SOCCER; 0.0% impossible for Sleeper, 0.6% for TheSportsDB). Nothing rejected them
+because `291996` is a perfectly good integer.
+
+The shape is unmistakable once seen:
+
+| stored | reads as |
+|---|---|
+| `291996` | `2/9/1996` |
+| `41988` | `4/…/1988` |
+| `312001` | `3/1/2001` |
+
+**The year is recoverable; the day and month are not.** Separator positions are gone and the
+components are variable-width, so `41988` is `4/19/88` or `4/1/988` or `4/1988` with no way to
+choose. Validated by taking the last four digits as a birth year and comparing against Sleeper's
+own age across 3,091 known-good pairs: **93.9% land within one year**, in a bimodal 0/1 split,
+which is exactly what a correct birth year looks like depending on whether the birthday has passed.
+
+⚠ **`dob` was arriving and being thrown away.** The ingest writes `dob` from
+`p.dob ?? p.birth_date ?? p.date_of_birth`; those keys are populated on **5 of 9,563** NFL rows.
+The vendor puts the date in `age`, so the full date reached us every sync and `intOf` destroyed it
+before anything could store it. The ingest now salvages `dob` from `age` when it parses as a date,
+so rows ingested from now on carry an exact birth date and a later backfill can compute an exact
+age. Rows already in the table can only ever be ±1 year.
+
+**What is still unknown, and what would settle it:** whether the field is documented anywhere,
+whether the format is stable across sports (NFL and SOCCER both show it; the other sports have no
+ages at all), and whether the vendor also exposes a real `birth_date` on an endpoint we do not
+call. Per the repo rule this was NOT probed — resolving it needs `scripts/probe.sh` on a new
+endpoint/sport pair with the fixture committed in the same change, or an answer from the vendor.

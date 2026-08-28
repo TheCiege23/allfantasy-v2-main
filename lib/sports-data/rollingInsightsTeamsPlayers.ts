@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
 import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
+import { ageFromRollingInsightsValue, rollingInsightsBirthDate } from '@/lib/sports-data/rollingInsightsAge'
 
 /**
  * Teams and player profiles from Rolling Insights REST, for every supported sport.
@@ -246,12 +247,18 @@ export async function syncRollingInsightsPlayersToDb(opts: {
         team: str(p.team_name ?? teamObj?.team ?? teamObj?.name) ?? (teamObj ? null : str(p.team)),
         teamId: str(p.team_id ?? p.teamId) ?? str(teamObj?.id ?? teamObj?.team_id),
         number: intOf(p.number ?? p.jersey ?? p.jersey_number),
-        age: intOf(p.age),
+        /*
+         * ⚠ NOT `intOf`. The vendor's `age` is a DATE, and `intOf` strips the separators and keeps
+         * the digits — "2/9/1996" became 291996 and every one of the 13,763 rows carrying an age
+         * held a value like that. See `rollingInsightsAge.ts`.
+         */
+        age: ageFromRollingInsightsValue(p.age),
         height: str(p.height),
         weight: str(p.weight),
         college: str(p.college ?? p.school),
         ...(imageUrl ? { imageUrl } : {}),
-        dob: str(p.dob ?? p.birth_date ?? p.date_of_birth),
+        // The vendor does not use these keys — it puts the date in `age`, so salvage it from there.
+        dob: str(p.dob ?? p.birth_date ?? p.date_of_birth) ?? rollingInsightsBirthDate(p.age),
         status: str(p.status),
         fetchedAt: now,
         expiresAt,
