@@ -1308,6 +1308,64 @@ export default async function AfCorePage({
           // the row the screen shows.
           issues={issues.filter((i) => i.leagueId === leagueHome.league.id)}
         />
+      ) : segment === 'model-admin' ? (
+        /*
+         * Model Admin, moved off `/leagues/[leagueId]/admin/model` so it runs on
+         * the core shell like everything else.
+         *
+         * ⚠ THIS BRANCH MUST STAY ABOVE EVERY `activeKey` BRANCH, beside
+         * `bracket` and `discord`. It shares the commissioner nav key, so
+         * `activeKey === 'commissioner'` matches it too — and that branch is
+         * lower down the same ternary. Placed after it, /core/model-admin
+         * silently renders the Commissioner screen instead ("Commissioners and
+         * co-commissioners only"), which is what it did on first deploy. Every
+         * segment-matched screen sits at the top of this chain for this reason.
+         *
+         * ⚠ MATCHED ON `segment`, NOT `activeKey`. It shares the commissioner
+         * nav key — same reason /core/discord does — so the rail highlights
+         * Commissioner while you are here, and no rail entry is added. That is
+         * deliberate: the gate is the AllFantasy admin ALLOWLIST, not league
+         * commissionership, so a visible nav item would show a door to every
+         * user and 403 almost all of them.
+         *
+         * ⚠ THE PANELS ARE LEAGUE-SCOPED, so this needs a held league. Without
+         * one it says so rather than rendering empty weight boxes against no
+         * league — the same rule the rest of the shell follows.
+         */
+        !modelAdminAllowed ? (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 620 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22 }}>Model Admin</h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              This account is not on the AllFantasy admin allowlist.
+            </p>
+          </div>
+        ) : !selectedLeagueId ? (
+          <PickALeague
+            tabKey="model-admin"
+            title="Model Admin"
+            blurb="V3 weights and drift are stored per league, so this needs one held."
+            issues={issues}
+            leagues={rail}
+          />
+        ) : (
+          <div className="space-y-4">
+            <header className="af-frame" style={{ padding: 16 }}>
+              <p className="af-label" style={{ color: 'var(--muted)' }}>Admin</p>
+              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+                Model Admin
+              </h1>
+              <p className="af-num" style={{ marginTop: 4, fontSize: 12, color: 'var(--muted)' }}>
+                League {selectedLeagueId}
+              </p>
+            </header>
+            <V3WeightsPanel
+              leagueId={selectedLeagueId}
+              season={String(new Date().getFullYear())}
+              defaultWeek={1}
+            />
+            <UsageAnalyticsPanel leagueId={selectedLeagueId} />
+          </div>
+        )
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <MyTeam data={myTeam} />
@@ -1530,56 +1588,6 @@ export default async function AfCorePage({
               leagues={rail}
             />
           )
-        )
-      ) : segment === 'model-admin' ? (
-        /*
-         * Model Admin, moved off `/leagues/[leagueId]/admin/model` so it runs on
-         * the core shell like everything else.
-         *
-         * ⚠ MATCHED ON `segment`, NOT `activeKey`. It shares the commissioner
-         * nav key — same reason /core/discord does — so the rail highlights
-         * Commissioner while you are here, and no rail entry is added. That is
-         * deliberate: the gate is the AllFantasy admin ALLOWLIST, not league
-         * commissionership, so a visible nav item would show a door to every
-         * user and 403 almost all of them.
-         *
-         * ⚠ THE PANELS ARE LEAGUE-SCOPED, so this needs a held league. Without
-         * one it says so rather than rendering empty weight boxes against no
-         * league — the same rule the rest of the shell follows.
-         */
-        !modelAdminAllowed ? (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 620 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22 }}>Model Admin</h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              This account is not on the AllFantasy admin allowlist.
-            </p>
-          </div>
-        ) : !selectedLeagueId ? (
-          <PickALeague
-            tabKey="model-admin"
-            title="Model Admin"
-            blurb="V3 weights and drift are stored per league, so this needs one held."
-            issues={issues}
-            leagues={rail}
-          />
-        ) : (
-          <div className="space-y-4">
-            <header className="af-frame" style={{ padding: 16 }}>
-              <p className="af-label" style={{ color: 'var(--muted)' }}>Admin</p>
-              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-                Model Admin
-              </h1>
-              <p className="af-num" style={{ marginTop: 4, fontSize: 12, color: 'var(--muted)' }}>
-                League {selectedLeagueId}
-              </p>
-            </header>
-            <V3WeightsPanel
-              leagueId={selectedLeagueId}
-              season={String(new Date().getFullYear())}
-              defaultWeek={1}
-            />
-            <UsageAnalyticsPanel leagueId={selectedLeagueId} />
-          </div>
         )
       ) : activeKey === 'live' ? (
         liveScores ? (
