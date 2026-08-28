@@ -15,40 +15,45 @@ name: Unit tests
 # scripts/vitest-failure-baseline.json, and fail only when a file that was
 # PASSING starts failing. The debt cannot grow; it can only be driven down.
 #
-# ⚠ THIS JOB IS NOT A REQUIRED CHECK YET.
+# ⚠ ALL FOUR SHARDS ARE REQUIRED CHECKS ON MAIN. VERIFIED, NOT ASSUMED:
 #
-# The standard for adding a required context is written in playwright.yml and it
-# is a good one: the four required Playwright lanes were "measured green on five
-# consecutive completed runs across main and four different feature branches
-# before being added". The same doc records what happens otherwise -- the three
-# core shards were required while red and "would block every merge in the repo
-# rather than protect anything".
+#   gh api repos/TheCiege23/allfantasy-v2-main/branches/main/protection #     --jq '.required_status_checks.contexts'
 #
-# Its health is no longer unknown. Measured 2026-08-27:
+#   → [... "Unit tests (1/4)", "(2/4)", "(3/4)", "(4/4)"], strict: true
+#
+# ⚠ THIS BLOCK SAID "NOT A REQUIRED CHECK YET" LONG AFTER IT WAS ONE, and a peer
+# session told its user this job was advisory on the strength of that sentence.
+# Whoever promoted it did so via the API — exactly as this file instructs — and
+# left the prose behind. If you change the protection, change these lines in the
+# same commit; this comment is the first thing anyone reads and it was wrong for
+# most of a day.
+#
+# ⚠ DIRECT PUSHES TO MAIN STILL SUCCEED because enforce_admins is false. That is
+# not the gate being lenient — it means every push straight to main bypasses four
+# required checks, and a PR is blocked by exactly what a push sails past.
+#
+# Health, measured 2026-08-27:
 #
 #   ~5 minutes a shard in CI, not the 25-minute timeout this file allows
-#   green on main at 3b461765c and 1a6435d0a, the first two clean runs it has had
+#   green on main at 3b461765c and 1a6435d0a
 #
-# Everything before those two failed on 11 files that were red OUTSIDE the
-# baseline — 8 guard drift, 1 test that expired with the calendar, 2 real
-# defects. All fixed. The bar is unchanged and deliberately conservative: several
-# consecutive COMPLETED runs, observed, before any context is required.
+# 22 files were red outside the baseline that day: 20 were tests that had
+# stopped matching correct code, 2 were real defects. The lopsidedness is the
+# point — an unenforced gate does not merely miss regressions, it accumulates
+# false ones until the signal is unreadable.
 #
-# ⚠ A LOCAL RUN IS NOT EVIDENCE FOR THIS. On a machine shared with other
-# sessions, vitest fails to start workers under load and reports healthy files as
-# failures — measured, 7 of 12 in one run. CI is the only trustworthy verdict,
-# and `vitest-ratchet.mjs --update` must never be run from a local full suite:
-# it would write those 7 in as permanent allowances.
+# ⚠ A LOCAL RUN IS NOT EVIDENCE ABOUT THIS SUITE. On a machine shared with other
+# sessions, vitest reports healthy files as failures — measured, 7 of 12 in one
+# run. Three different causes wear the same "Failed to start forks worker" mask:
+# CPU contention, MEMORY exhaustion (concurrent `tsc --noEmit` at ~4 GB each is
+# the usual culprit), and a REAL error hidden underneath, most often
+# `DATABASE_URL is not set` because lib/prisma builds its client at module scope.
+# Re-run alone, and if it still fails, READ THE ERROR. CI is the trustworthy
+# verdict, and `vitest-ratchet.mjs --update` must never be run from a local full
+# suite: it would write those false positives in as permanent allowances.
 #
-# To promote it, add these four contexts (all of them -- a shard left out is a
-# hole) via the API, never by editing a comment:
-#
-#   gh api repos/OWNER/REPO/branches/main/protection/required_status_checks
-#
-#   Unit tests (1/4)
-#   Unit tests (2/4)
-#   Unit tests (3/4)
-#   Unit tests (4/4)
+# If you change the shard count, the context NAMES change with it and the old
+# names become un-reportable. Update branch protection in the same change.
 #
 # ⚠ A required context that never reports blocks every PR in the repo, forever.
 # If you change the shard count, the context NAMES change with it, and the old
