@@ -132,6 +132,27 @@ const DATA_API_HOST_PATTERNS = [
   /(^|\.)theaudiodb\.com$/i,
   /(^|\.)fantasyfootballcalculator\.com$/i,
   /*
+   * UNBLOCKED by teaching this guard to skip comments (see the scan loop). Both were
+   * confirmed feeds held out only because a docblock citation would have been reported:
+   *
+   *   github.com           4 — nflverse release downloads in scripts/derive-team-tendencies
+   *                        and derive-team-defense-tendencies. The false positive that
+   *                        blocked this, playwright.config.ts linking motdotla/dotenv in a
+   *                        docblock, is now correctly ignored.
+   *   www.fleaflicker.com  1 — lib/league-import/fleaflicker/FleaflickerLeagueFetchService.ts.
+   *                        Its sibling types.ts cites /api-docs/index.html in a docblock and
+   *                        is no longer reported.
+   *
+   * The four github hits are the VERB-GAP class, not real exposure: they are ingestion by
+   * nature, and the rule permits ingestion to call providers — the allowlist simply says
+   * `ingest|import|sync|...` and these say "derive". Left REPORTED rather than adding a
+   * verb, for the same reason the api.sleeper.com block above left its import-vs-ingest
+   * cases reported: widening the allowlist to silence a report is an assertion about code
+   * nobody has migrated.
+   */
+  /(^|\.)github\.com$/i,
+  /(^|\.)fleaflicker\.com$/i,
+  /*
    * ⚠ FOUR CONFIRMED FEEDS DELIBERATELY NOT ADDED, each measured. Three are blocked by
    * the same limitation and it is worth stating plainly: THIS GUARD DOES NOT SKIP
    * COMMENTS. The census in __tests__/db-first-host-census.test.ts does. So a
@@ -621,6 +642,32 @@ function collectViolations(rootDir, filesToScan, changedLines = null) {
       }
 
       if (line.includes("db-first-exception")) {
+        continue;
+      }
+
+      /*
+       * A URL IN A COMMENT IS DOCUMENTATION, NOT A CALL. Without this, citing a
+       * vendor's API docs in a docblock is a CI-blocking violation, which pushed real
+       * feeds out of DATA_API_HOST_PATTERNS to avoid the noise: github.com could not be
+       * added because playwright.config.ts links github.com/motdotla/dotenv, and
+       * www.fleaflicker.com because its types.ts cites /api-docs/index.html.
+       *
+       * ⚠ DO NOT "IMPROVE" THIS BY STRIPPING `//` FROM ANYWHERE IN THE LINE. Every URL
+       * this guard exists to find contains `//` — `https://api.sleeper.app` truncates to
+       * `https:` and the guard silently stops finding anything. The check is anchored to
+       * the START of the trimmed line for exactly that reason.
+       *
+       * Deliberately the same line-level heuristic as __tests__/db-first-host-census.test.ts,
+       * so the tool that CLASSIFIES and the tool that ENFORCES agree on what counts as a
+       * reference. They disagreed until now.
+       *
+       * It is conservative on purpose. A URL on a bare line inside a block comment —
+       * one starting with neither `*` nor `/*` — is still reported. That is the safe
+       * direction for a guard: over-reporting is noise, under-reporting is a missed
+       * credential leak on a request path.
+       */
+      const trimmed = line.trim();
+      if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
         continue;
       }
 

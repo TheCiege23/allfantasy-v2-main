@@ -226,24 +226,20 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
  */
 const DATA_API_UNMONITORED = [
   /*
-   * ⚠ THE FOUR THAT COULD NOT BE ADDED CLEANLY, and three of them fail for ONE shared
-   * reason worth knowing before you try again: THE GUARD DOES NOT SKIP COMMENTS, while
-   * this census does. A documentation URL in a docblock is invisible here and a
-   * violation there, so adding these hosts imports false positives — precisely the noise
-   * that got media.api-sports.io excluded from the guard.
+   * TWO LEFT. github.com and www.fleaflicker.com were here until the guard was taught to
+   * skip comments — both were held out ONLY because a docblock citation would have been
+   * reported as a violation, and both are now monitored. The remaining two are blocked by
+   * something a comment rule cannot fix.
    */
 
-  /* 7 hits. Two are health probes (api-health-monitor, SystemHealthResolver) that each
-   * need a `db-first-exception:` marker before this host can be added. */
+  /* 7 hits. Two are health probes (api-health-monitor, SystemHealthResolver) that would
+   * each need a `db-first-exception:` marker before this host can be added. */
   'api.myfantasyleague.com',
-  /* FXEA base is a real feed, but /fantasy/league/<id>/home is a user-facing deep link
-   * and one hit is a test fixture. The hostname cannot separate them. */
+  /* The FXEA base is a real feed, but /fantasy/league/<id>/home is a user-facing deep
+   * link in CODE, not a comment, and one hit is a test fixture. A hostname pattern cannot
+   * separate a feed from a deep link on the same host — the same reason bare sleeper.com
+   * is a share-link while api.sleeper.com is monitored. */
   'www.fantrax.com',
-  /* One real API base, plus types.ts:3 citing /api-docs/index.html in a docblock. */
-  'www.fleaflicker.com',
-  /* Dual-use: nflverse release downloads ARE a feed, but playwright.config.ts:5 links to
-   * github.com/motdotla/dotenv in a docblock. */
-  'github.com',
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -468,12 +464,13 @@ describe('DB-first boundary — outbound host census', () => {
      * If you are raising this number for any other reason, you are recording new
      * debt as though it were new visibility. Say so in the commit, or do not raise it.
      *
-     * 19 -> 11 -> 4 on the same day. The first drop was RE-DERIVING: eight entries were
-     * never data feeds. The second was the intended direction, seven hosts moving into
-     * DATA_API_HOST_PATTERNS where the guard can actually block them. The bound comes
-     * down with each — a ratchet left loose after a cleanup has stopped ratcheting.
+     * 19 -> 11 -> 4 -> 2 on the same day. First by RE-DERIVING (eight entries were never
+     * data feeds), then by moving seven hosts into DATA_API_HOST_PATTERNS where the guard
+     * can actually block them, then two more once the guard stopped reporting URLs in
+     * comments — which was the only thing holding those two out. The bound comes down
+     * with each: a ratchet left loose after a cleanup has stopped ratcheting.
      */
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(4)
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(2)
   })
 
   it('no unmonitored entry is ALSO matched by a category', () => {
