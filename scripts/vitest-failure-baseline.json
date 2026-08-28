@@ -1,6 +1,6 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 101,
+  "count": 97,
   "failingFiles": [
     "__tests__/active-nav-state-resolver.test.ts",
     "__tests__/admin-page-render.test.tsx",
@@ -15,7 +15,6 @@
     "__tests__/auth-provider-oauth-route-contract.test.ts",
     "__tests__/awards-routes-contract.test.ts",
     "__tests__/bracket-home-p2021.test.tsx",
-    "__tests__/cfbd-ncaaf-player-import.test.ts",
     "__tests__/chimmy-global-routing.test.ts",
     "__tests__/commentary-routes-contract.test.ts",
     "__tests__/commissioner-control-center-timer-ui.test.tsx",
@@ -83,7 +82,6 @@
     "__tests__/token-pricing-matrix-policy.test.ts",
     "__tests__/trade-league-analyze-api.test.ts",
     "__tests__/user-contact-email-route-contract.test.ts",
-    "__tests__/user-me-entitlements-route.test.ts",
     "__tests__/user-notifications-test-route-contract.test.ts",
     "__tests__/user-os/userOsContext.test.ts",
     "__tests__/vercel-build-admin-routes.test.ts",
@@ -91,9 +89,7 @@
     "__tests__/world-cup-ai-language-chimmy.test.ts",
     "__tests__/world-cup-ai-language-explain.test.ts",
     "__tests__/world-cup-ai-token-policy.test.ts",
-    "__tests__/world-cup-chat-route.test.ts",
     "__tests__/world-cup-chimmy-intents.test.ts",
-    "__tests__/world-cup-chimmy-private-reply.test.ts",
     "__tests__/world-cup-chimmy-rate-limit.test.ts",
     "__tests__/world-cup-chimmy-stabilization.test.ts",
     "__tests__/world-cup-commissioner-brain.test.ts",
