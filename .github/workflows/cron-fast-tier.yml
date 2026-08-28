@@ -78,10 +78,23 @@ on:
     # 2026-08-26, runs cancelled at 45m and 51m were each superseded immediately and coverage was
     # continuous 18:00-20:32Z. The cost of a truncated window is one restart; the cost of a
     # dropped trigger is an hour of nothing.
-    - cron: "3 * * * *"
-    - cron: "18 * * * *"
-    - cron: "33 * * * *"
-    - cron: "48 * * * *"
+    # ⚠ EXACTLY ONE TRIGGER AN HOUR, AND THE COUNT IS LOAD-BEARING.
+    #
+    # This was briefly four (:03 :18 :33 :48) to buy more chances against a scheduler that drops
+    # triggers. That is incompatible with the self-re-arm below, and the combination was measured
+    # dead on 2026-08-28: `cancel-in-progress` means each trigger CANCELS the running window, four
+    # triggers put them 15 minutes apart, and the re-arm requires 40 minutes elapsed. Run
+    # 33132784156 was cancelled at 1245s and logged "NOT re-arming" — correctly. No window could
+    # ever reach the threshold, so the chain could never establish.
+    #
+    # With the chain working, extra triggers buy nothing anyway: only ONE has to land, ever, and
+    # from then on each window books its successor. More triggers is strictly worse — it converts
+    # a self-sustaining chain back into a scheduler-dependent one.
+    #
+    # Spacing rule if this is ever retuned: the gap between triggers must EXCEED the window
+    # (55m), or the window cannot finish and re-arm. 60 > 55 holds. :07 keeps it off the
+    # contended top of the hour.
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       window_minutes:
