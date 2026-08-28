@@ -326,3 +326,44 @@ underneath you mid-task. Stage explicit paths, never `git add -A`, and verify th
 staged set before committing.
 
 **This repo is public.** Secret-scan before every push.
+
+## Deploys cost money, and pushes are the meter
+
+🛑 **A PUSH TO `main` IS A DEPLOY. A COMMIT IS NOT.** Commit as often as you like;
+push at the end of a work unit.
+
+This is not style. The Vercel invoice paid 2026-08-27 was **$101.40, of which
+$100.90 was one line: Build CPU Minutes (34,338)**. Deployment storage and
+transfer were $0.50 combined. Builds are the entire bill, and `main` was taking
+**~71 production builds a day** because several sessions read "commit straight to
+main" as "push each change as it lands". That instruction is silent on push
+cadence; this section is the missing half.
+
+⚠ **Count deployments, not commits.** Estimating push volume from git timestamps
+undercounts by ~45% (it read as ~39/day against a true ~71). Use
+`vercel ls --environment production --limit 100 --json` — `buildingAt`/`ready`
+give real build duration, and the CLI is installed and authenticated.
+
+### What is enforced for you, and what is not
+
+- **`vercel.json` gates builds to `main` only.** `ignoreCommand` skips every
+  other ref, so feature branches cost seconds instead of ~4.6 minutes. This is
+  server-side and needs no cooperation.
+  🛑 **Never commit a working-tree `vercel.json`.** Most checkouts here predate
+  the gate and still hold `{}`; committing one silently reverts it and restores
+  ~$26/mo, with nothing failing or warning. Rebuild from
+  `git show origin/main:vercel.json` and re-apply your edit.
+- **A pre-push hook refuses a push to `main` while a production build is running**
+  (`.githooks/pre-push`, installed by `npm run hooks:install`). It fails open on
+  every error, and only ever inspects pushes whose *remote* ref is
+  `refs/heads/main`. **Waiting is the intended response.** Reaching straight for
+  `AF_ALLOW_CONCURRENT_PUSH=1` / `AF_SKIP_PREPUSH_HOOK=1` turns the guard back
+  into decoration by hand — they exist for a genuine emergency.
+  ⚠ The hook lives in `.git/hooks`, which is **not** version-controlled. A fresh
+  clone has no hook until `npm run hooks:install` is run. Existing worktrees are
+  already covered, because `core.hooksPath` is one absolute shared directory.
+- **Batching itself is NOT enforced, and cannot be.** The hook delays a push, it
+  does not cancel a build; two overlapping builds are both billed whether they
+  run concurrently or serially. Measured, blocking would merge only **3%** of
+  pushes into an existing build, because the overlap is cross-session. The money
+  therefore depends on you actually batching, not on the guard catching you.

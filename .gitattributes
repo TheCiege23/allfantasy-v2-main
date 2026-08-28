@@ -1,0 +1,12 @@
+# Git hooks are shell scripts and MUST check out with LF endings.
+#
+# `core.autocrlf` is true on the Windows checkouts this repo runs from, which
+# would otherwise give `.githooks/pre-push` a CRLF shebang. The kernel then
+# reads the interpreter as `/bin/sh\r` and the hook fails with "bad
+# interpreter" on macOS and Linux -- and a pre-push hook that cannot execute
+# makes git ABORT THE PUSH rather than skip the hook.
+#
+# scripts/install-git-hooks.mjs also normalises to LF when it writes, so the
+# guard survives a checkout that ignores this file. Both are deliberate: this
+# rule fixes the working copy, the installer fixes what actually runs.
+.githooks/** text eol=lf

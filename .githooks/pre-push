@@ -1,0 +1,43 @@
+#!/bin/sh
+# Refuse a push to `main` while a production build is already running.
+#
+# The reasoning, the measurements and the fail-open policy all live in
+# scripts/check-inflight-prod-build.mjs. This file stays a thin shim on purpose:
+# it is COPIED into the active hooks directory by `npm run hooks:install`, so a
+# stale copy can survive there for a long time. Keeping the logic in the tracked
+# script means the installed shim never needs to change, and the behaviour is
+# always whatever the checkout says it is.
+#
+# ⚠ Every failure path here exits 0. A cost guard that can strand a deploy is
+# worse than the cost it saves.
+
+[ "$AF_SKIP_PREPUSH_HOOK" = "1" ] && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+script="$root/scripts/check-inflight-prod-build.mjs"
+
+# 🛑 FALL BACK TO THE PRIMARY CHECKOUT, OR THIS GUARD IS DECORATIVE.
+# This repo runs from ~70 worktrees, and the sessions that push to `main` build
+# their commit against origin/main with a temporary index -- which never updates
+# the worktree. Those checkouts therefore sit on old commits indefinitely and do
+# NOT contain this script, so a local-only lookup would silently no-op for
+# exactly the sessions doing the pushing. That is the same invisible failure the
+# guard exists to prevent. The shared hooks directory already belongs to the
+# primary checkout, so borrowing its copy adds no new dependency.
+# No glob-matching on the path: deciding "is this absolute?" with a case pattern
+# has to handle POSIX roots, `F:/...` drive letters and backslashes at once, and
+# the first version of this silently produced `C:/worktree/F:/primary/...` and
+# resolved to nothing. `-d` answers the same question without a pattern.
+if [ ! -f "$script" ]; then
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
+  [ -d "$common" ] || common=$(git rev-parse --git-common-dir 2>/dev/null) || common=""
+  [ -d "$common" ] || exit 0
+  script="$(dirname "$common")/scripts/check-inflight-prod-build.mjs"
+fi
+
+[ -f "$script" ] || exit 0
+command -v node >/dev/null 2>&1 || exit 0
+
+# exec so the pre-push stdin payload (<localRef> <localSha> <remoteRef>
+# <remoteSha>) reaches the script -- that is how it knows the push targets main.
+exec node "$script"
