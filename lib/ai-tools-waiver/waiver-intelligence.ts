@@ -281,15 +281,52 @@ async function enrichPicksWithRollingInsights(
   }
 }
 
+/** Everything any call site below needs, so one lookup serves them all. */
+const SPORTS_PLAYER_FIELDS = {
+  externalId: true,
+  sleeperId: true,
+  name: true,
+  position: true,
+  team: true,
+  age: true,
+  imageUrl: true,
+} as const
+
+/**
+ * A league-space player id resolved to its `SportsPlayer` row, AUTHORITATIVE MATCH FIRST.
+ *
+ * ⚠ THE IDS IN THIS FILE ARE SLEEPER IDS AND `externalId` IS NOT THE SLEEPER SPACE.
+ * Candidates here are keyed the way the league keys them — they are tested against `rostered`
+ * and handed to `buildIdpKickerValueMap`, which resolves them through Sleeper's own player
+ * index. But `SportsPlayer.externalId` is 83% bare numerics written by Rolling Insights, CFBD
+ * and api_football; 42,032 of those collide with a Sleeper id and 42,031 are a DIFFERENT
+ * PERSON. Matching a Sleeper id against `externalId` therefore returns a stranger, and the
+ * same mistake in `sleeperPlayerCrosswalk` was returning Justin Jefferson as DaRon Bland.
+ *
+ * ⚠ ORDER, NOT EXCLUSION, BECAUSE ONLY NFL HAS BOTH SPACES. `sleeperId` is populated for NFL
+ * rows and essentially nowhere else, so for NCAAF, MLB, NHL and the rest a bare `externalId`
+ * IS the right key and there is no Sleeper row to collide with. Asking the Sleeper space first
+ * fixes NFL without breaking every other sport: where a real Sleeper row exists it now always
+ * wins, and the fallback only runs where nothing in the Sleeper space claims the id.
+ */
+async function findSportsPlayerForLeagueId(sport: string, leaguePlayerId: string) {
+  const authoritative = await prisma.sportsPlayer.findFirst({
+    where: { sport, OR: [{ sleeperId: leaguePlayerId }, { externalId: `sleeper:${leaguePlayerId}` }] },
+    select: SPORTS_PLAYER_FIELDS,
+  })
+  if (authoritative) return authoritative
+  return prisma.sportsPlayer.findFirst({
+    where: { sport, externalId: leaguePlayerId },
+    select: SPORTS_PLAYER_FIELDS,
+  })
+}
+
 async function resolveSportsPlayerRecord(sport: string, rosterPlayerId: string): Promise<SportsPlayerRecord | null> {
   const direct = await prisma.sportsPlayerRecord.findUnique({ where: { id: rosterPlayerId } })
   if (direct) return direct
-  const sp = await prisma.sportsPlayer.findFirst({
-    where: {
-      sport,
-      OR: [{ externalId: rosterPlayerId }, { sleeperId: rosterPlayerId }, { id: rosterPlayerId }],
-    },
-  })
+  const sp =
+    (await findSportsPlayerForLeagueId(sport, rosterPlayerId)) ??
+    (await prisma.sportsPlayer.findFirst({ where: { sport, id: rosterPlayerId }, select: SPORTS_PLAYER_FIELDS }))
   if (!sp) return null
   return prisma.sportsPlayerRecord.findFirst({
     where: { sport, name: { equals: sp.name, mode: 'insensitive' } },
@@ -653,18 +690,22 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       const trending = await getTrendingPlayers(sk, 'add', 48, 60)
       for (const t of trending) {
         if (!t?.player_id || rostered.has(t.player_id)) continue
-        const row = await prisma.sportsPlayer.findFirst({
-          where: { sport: sportStr, externalId: t.player_id },
-          select: { externalId: true, name: true, position: true, team: true, age: true, imageUrl: true },
-        })
+        /*
+         * `t.player_id` is Sleeper's own id, straight from their trending endpoint, so it is
+         * resolved through the Sleeper space rather than against `externalId`.
+         */
+        const row = await findSportsPlayerForLeagueId(sportStr, t.player_id)
         if (!row) {
           dataGaps.push(`No SportsPlayer row for trending id ${String(t.player_id).slice(0, 8)}… (${sportStr})`)
           continue
         }
-        if (seen.has(row.externalId)) continue
-        seen.add(row.externalId)
+        if (seen.has(t.player_id)) continue
+        seen.add(t.player_id)
         candidates.push({
-          externalId: row.externalId,
+          // The league's own id for this player, NOT `row.externalId` — that is the provider's
+          // id for the row we happened to match, and downstream IDP valuation resolves these
+          // through Sleeper's index.
+          externalId: t.player_id,
           name: row.name,
           position: (row.position ?? '—').toUpperCase(),
           team: row.team ?? 'FA',
@@ -711,15 +752,19 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       const trending = await getTrendingPlayers(sleeperSportKey(sportStr), 'add', 48, args.multiSportSlice ? 25 : 80)
       for (const t of trending) {
         if (!t?.player_id) continue
-        const row = await prisma.sportsPlayer.findFirst({
-          where: { sport: sportStr, externalId: t.player_id },
-          select: { externalId: true, name: true, position: true, team: true, age: true, imageUrl: true },
-        })
+        /*
+         * `t.player_id` is Sleeper's own id, straight from their trending endpoint, so it is
+         * resolved through the Sleeper space rather than against `externalId`.
+         */
+        const row = await findSportsPlayerForLeagueId(sportStr, t.player_id)
         if (!row) continue
-        if (seen.has(row.externalId)) continue
-        seen.add(row.externalId)
+        if (seen.has(t.player_id)) continue
+        seen.add(t.player_id)
         candidates.push({
-          externalId: row.externalId,
+          // The league's own id for this player, NOT `row.externalId` — that is the provider's
+          // id for the row we happened to match, and downstream IDP valuation resolves these
+          // through Sleeper's index.
+          externalId: t.player_id,
           name: row.name,
           position: (row.position ?? '—').toUpperCase(),
           team: row.team ?? '—',
@@ -798,10 +843,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
 
   for (const c of candidates) {
     if (args.rookiesOnly) {
-      const sp = await prisma.sportsPlayer.findFirst({
-        where: { sport: sportStr, externalId: c.externalId },
-        select: { age: true },
-      })
+      const sp = await findSportsPlayerForLeagueId(sportStr, c.externalId)
       if (!isRookieHeuristic(sportStr, sp?.age ?? null)) continue
     }
 
@@ -856,10 +898,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
         imageUrl = headshotUrl
         if (row.injuryStatus) injuryStatus = row.injuryStatus
       } else {
-        const sp = await prisma.sportsPlayer.findFirst({
-          where: { sport: sportStr, externalId: c.externalId },
-          select: { imageUrl: true },
-        })
+        const sp = await findSportsPlayerForLeagueId(sportStr, c.externalId)
         imageUrl = sp?.imageUrl ?? null
       }
     }
@@ -892,10 +931,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
 
     waiverScore = Math.min(100, Math.round(waiverScore))
 
-    const ageRow = await prisma.sportsPlayer.findFirst({
-      where: { sport: sportStr, externalId: c.externalId },
-      select: { age: true, imageUrl: true },
-    })
+    const ageRow = await findSportsPlayerForLeagueId(sportStr, c.externalId)
     const isRk = isRookieHeuristic(sportStr, ageRow?.age ?? null)
     if (!imageUrl && ageRow?.imageUrl) imageUrl = ageRow.imageUrl
 
