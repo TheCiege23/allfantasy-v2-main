@@ -7,22 +7,27 @@ export type AllFantasyEntitlementUser = {
 const STATIC_ALL_ACCESS_EMAILS = ["cjabar.henson@gmail.com"]
 
 /*
- * 🛑 THERE IS NO STATIC USERNAME ALLOWLIST, AND ADDING ONE BACK IS A VULNERABILITY.
+ * ⚠ A PUBLISHED HANDLE IS A WEAK CREDENTIAL — BUT IT IS NOT WHAT MADE THE ESCALATION
+ * POSSIBLE, AND REMOVING IT LOCKS THE FOUNDER OUT OF A REAL SIGN-IN PATH.
  *
- * This repo is PUBLIC, so any handle written here is a published credential: the only
- * thing standing between a stranger and site admin becomes their ability to acquire that
- * string. It has been acquirable twice. Once through `user.name` (an OAuth display name
- * the user edits in their own Google account — see the comment on hasAllFantasyTestAccess
- * below), and once through next-auth's session-update trigger, which handed the username
- * field straight from a request body into the token without writing a row at all.
+ * This was deleted on 2026-08-28 as defence-in-depth after the session-update
+ * escalation, and RESTORED the same day because the suite showed the reasoning was
+ * wrong. `admin-access-state.test.ts` covers the founder signing in with
+ * `email: "theciege@example.com"` — an address deliberately NOT on
+ * STATIC_ALL_ACCESS_EMAILS — where this handle is the only thing that grants access.
+ * The production row happens to carry the allowlisted email, which is what the removal
+ * was justified on; that says nothing about a second sign-in provider.
  *
- * An email is a different kind of claim: it is verified by the identity provider, and the
- * user cannot mint one on demand. That is why STATIC_ALL_ACCESS_EMAILS survives and this
- * did not. The founder's account is covered by it — verified against production before
- * this line was removed, so nobody lost access.
+ * What actually closed the hole is upstream of this file and unchanged: lib/auth.ts no
+ * longer takes `username` from the session-update payload (it re-reads from the
+ * database), and /api/auth/complete-profile now probes case-insensitively before
+ * writing one. The handle can no longer be self-assigned, so matching on it is safe.
  *
- * ALL_ACCESS_USERNAMES (env) still works for temporary grants. Env vars are not published.
+ * ✅ THE CLEAN END STATE IS TO MOVE THIS HANDLE INTO `ALL_ACCESS_USERNAMES` (env) AND
+ * DELETE THE LITERAL — same capability, not published in a public repo. That needs an
+ * env var set in Vercel, so it is the operator's action, not a code change.
  */
+const STATIC_ALL_ACCESS_USERNAMES = ["theciege26"]
 
 
 function parseList(value: string | undefined): string[] {
@@ -56,6 +61,7 @@ export function isAllFantasyTestEmail(email: string | null | undefined): boolean
 export function isAllFantasyTestUsername(username: string | null | undefined): boolean {
   const normalized = String(username ?? "").trim().toLowerCase()
   if (!normalized) return false
+  if (STATIC_ALL_ACCESS_USERNAMES.includes(normalized)) return true
   return parseUsernameList(process.env.ALL_ACCESS_USERNAMES).includes(normalized)
 }
 
@@ -78,13 +84,16 @@ export function hasAllFantasyTestAccess(user: AllFantasyEntitlementUser | null |
   // app-owned unique column. That is true of the column and was never true of the
   // FIELD: lib/auth.ts's jwt callback let next-auth's session-update trigger write
   // `session.user.username` from a request body without touching the database, so the
-  // same rename attack worked against the field this function actually reads. Both
-  // halves are now closed — the update trigger re-reads from the database, and the
-  // published static handle is gone (see the note at the top of this file).
+  // same rename attack worked against the field this function actually reads.
   //
-  // The rule that survives: a credential must be something the user cannot mint on
-  // demand. Provider-verified email qualifies. A self-chosen handle does not, which is
-  // why the remaining username path is env-configured and deliberately not published.
+  // Closed on 2026-08-28, and note WHERE: lib/auth.ts now re-reads the username from
+  // the database on that trigger, and /api/auth/complete-profile probes
+  // case-insensitively before writing one. Both fixes are upstream of this file.
+  //
+  // The rule that survives: a credential must be something the user cannot MINT ON
+  // DEMAND. Provider-verified email qualifies. A self-chosen handle qualifies only for
+  // as long as the write paths above stay gated — which is why deleting either of those
+  // fixes silently re-opens this, and why the handle belongs in env rather than here.
   return isAllFantasyTestEmail(user?.email) ||
     isAllFantasyTestUsername(user?.username)
 }

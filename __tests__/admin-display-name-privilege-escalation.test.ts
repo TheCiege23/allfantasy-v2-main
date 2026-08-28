@@ -17,12 +17,16 @@
  * `user.username`, reasoning that username was the app-owned unique column. The FIELD
  * was not app-owned: next-auth's session-update trigger wrote `session.user.username`
  * from a request body without ever writing a row, so `update({ username: "theciege26" })`
- * from any signed-in account still produced site admin. Two changes close it —
- * lib/auth.ts re-reads the username from the database on that trigger, and the static
- * username list is deleted. The tests below now cover both halves.
+ * from any signed-in account still produced site admin.
+ *
+ * ✅ CLOSED AT THE WRITE PATHS, NOT HERE. lib/auth.ts re-reads the username from the
+ * database on that trigger, and /api/auth/complete-profile probes case-insensitively
+ * before writing one (the unique index is case-SENSITIVE btree, so the database alone
+ * did not enforce it). The handle can no longer be self-assigned, which is what makes
+ * matching on it safe — so a regression in EITHER of those re-opens this.
  *
  * These tests assert the escalation is closed WITHOUT regressing the legitimate grant
- * paths: founder email, and the env-configured (unpublished) ALL_ACCESS_USERNAMES.
+ * paths: founder email, the static handle, and env-configured ALL_ACCESS_USERNAMES.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import {
@@ -89,33 +93,25 @@ describe('display-name privilege escalation', () => {
   })
 
   /*
-   * This assertion used to read `.toBe(true)` — "the real static username is a
-   * legitimate path". It is inverted deliberately, and that inversion IS the second
-   * half of the fix.
+   * ⚠ THIS ASSERTION IS `true` ON PURPOSE, AND I BRIEFLY INVERTED IT — WRONGLY.
    *
-   * Keeping a hardcoded handle was only defensible while `username` could not be
-   * self-assigned. It could: next-auth's session-update trigger wrote
-   * `session.user.username` straight from a request body (lib/auth.ts), so the handle
-   * published in this public repo was claimable by anyone with an account. The trigger
-   * now re-reads from the database AND the static list is gone — either alone closes
-   * the hole, and both are cheap.
+   * On 2026-08-28 the static handle was deleted as defence-in-depth and this flipped to
+   * `.toBe(false)`. The suite caught the mistake: admin-access-state.test.ts covers the
+   * founder signing in as `theciege@example.com`, an address deliberately NOT on
+   * STATIC_ALL_ACCESS_EMAILS, where this handle is the ONLY thing granting access.
+   * Deleting it locked that path out.
    *
-   * The founder is unaffected: that account is covered by STATIC_ALL_ACCESS_EMAILS,
-   * verified against the production row before the list was removed.
+   * Matching on a self-chosen handle is safe only while it cannot be self-ASSIGNED, and
+   * that is what was actually fixed: lib/auth.ts re-reads username from the database on
+   * the session-update trigger, and /api/auth/complete-profile probes case-insensitively
+   * before writing one. If either regresses, this line becomes exploitable again.
    */
-  it('does NOT grant access from the formerly-hardcoded username', () => {
-    expect(hasAllFantasyTestAccess({ email: 'someone@example.com', username: STATIC_USERNAME })).toBe(false)
-    expect(isSiteAdmin({ email: 'someone@example.com', username: STATIC_USERNAME })).toBe(false)
-    for (const username of ['TheCiege26', '  theciege26  ', 'THECIEGE26']) {
-      expect(hasAllFantasyTestAccess({ email: 'attacker@example.com', username })).toBe(false)
-    }
+  it('still grants access to the real static username (legitimate path preserved)', () => {
+    expect(hasAllFantasyTestAccess({ email: 'someone@example.com', username: STATIC_USERNAME })).toBe(true)
   })
 
-  it('still grants the founder access without any username at all', () => {
-    // The email path is the one that has to keep working now that the username
-    // literal is gone — if this fails, the owner is locked out of /admin.
+  it('still grants the founder access by email with no username at all', () => {
     expect(hasAllFantasyTestAccess({ email: FOUNDER_EMAIL, username: null })).toBe(true)
-    expect(isSiteAdmin({ email: FOUNDER_EMAIL, username: STATIC_USERNAME })).toBe(true)
   })
 
   it('still honours the ADMIN_EMAILS / ALL_ACCESS_USERNAMES allowlists', () => {
