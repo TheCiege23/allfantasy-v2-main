@@ -89,8 +89,13 @@ export function UsageAnalyticsPanel(props: {
     return list.sort((a, b) => Number(b.p95 ?? 0) - Number(a.p95 ?? 0)).slice(0, topN)
   }, [summary, topN])
 
+  /*
+   * `af-frame` rather than a bare `--bg` background: this sits alongside the
+   * weights and drift panels, and a card painted in the page's own background
+   * colour reads as a gap between them rather than a third panel.
+   */
   return (
-    <div className="rounded-2xl p-4 space-y-3" style={{ background: "var(--bg)" }}>
+    <div className="af-frame space-y-3" style={{ padding: 16 }}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="text-xl font-bold" style={{ color: "var(--text)" }}>Usage Analytics</div>
@@ -159,7 +164,14 @@ export function UsageAnalyticsPanel(props: {
         </div>
       </div>
 
-      {error ? <div className="text-sm" style={{ color: "var(--muted)" }}>Error: {error}</div> : null}
+      {/* ⚠ Styled as a fault, not as muted body text. Rendered in `--muted` it sat
+          at the same weight as the filter labels above an all-zero table, so a
+          failed fetch and a genuinely quiet window looked the same. */}
+      {error ? (
+        <div className="af-issue" data-severity="bad">
+          Usage could not be read: {error}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
         <Stat label="Total" value={totals.count} />
