@@ -21,6 +21,10 @@ vi.mock('@/lib/prisma', () => ({
       findMany: (...a: unknown[]) => findMany(...a),
       update: (...a: unknown[]) => update(...a),
     },
+    sportsPlayer: {
+      findMany: (...a: unknown[]) => findMany(...a),
+      update: (...a: unknown[]) => update(...a),
+    },
   },
 }))
 
@@ -136,5 +140,38 @@ describe('devy headshots', () => {
 
     expect(r.deferred).toBe(true)
     expect(fetchMock, 'made requests it had no budget to finish').not.toHaveBeenCalled()
+  })
+})
+
+describe('college SportsPlayer headshots', () => {
+  it('only touches CFBD-sourced rows — RI ids are a DIFFERENT id space', async () => {
+    // SportsPlayer.externalId means different things per source. CFBD rows hold
+    // the ESPN athlete id; the 68,637 Rolling Insights rows hold RI's own
+    // internal id (e.g. '340'). Feeding an RI id to the ESPN CDN either 404s or
+    // resolves to somebody else entirely.
+    findMany.mockResolvedValue([])
+    vi.stubGlobal('fetch', vi.fn())
+
+    const { refreshCollegeSportsPlayerHeadshots } = await import(
+      '@/lib/devy/devyHeadshotRefresh'
+    )
+    await refreshCollegeSportsPlayerHeadshots(budget() as never)
+
+    const where = (findMany.mock.calls[0]?.[0] as { where?: Record<string, unknown> })?.where
+    expect(where?.source, 'would have fed RI ids to the ESPN CDN').toBe('cfbd')
+    expect(where?.sport).toBe('NCAAF')
+    expect(where?.imageUrl).toBeNull()
+  })
+
+  it('still refuses a URL the CDN did not serve as an image', async () => {
+    findMany.mockResolvedValue([{ id: 'sp1', externalId: '5194306' }])
+    vi.stubGlobal('fetch', vi.fn(async () => headResponse(404, 'text/html', '1')))
+
+    const { refreshCollegeSportsPlayerHeadshots } = await import(
+      '@/lib/devy/devyHeadshotRefresh'
+    )
+    const r = await refreshCollegeSportsPlayerHeadshots(budget() as never)
+    expect(r.written).toBe(0)
+    expect(update).not.toHaveBeenCalled()
   })
 })

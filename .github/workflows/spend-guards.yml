@@ -1,4 +1,4 @@
-name: Vercel build gate
+name: Spend guards
 
 # Builds are ~100% of this project's Vercel bill: the 2026-08-27 invoice was
 # $101.40, of which $100.90 was Build CPU Minutes (qty 34,338) and $0.50 was
@@ -19,8 +19,8 @@ on:
     branches: [main, master]
 
 jobs:
-  vercel-build-gate:
-    name: Vercel build gate
+  spend-guards:
+    name: Spend guards
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -33,5 +33,9 @@ jobs:
       # No `npm ci`. The check reads vercel.json with the Node standard library
       # and has no dependencies, so installing would be most of the runtime for
       # nothing — same reasoning as cron-budget.yml.
-      - name: Check the build gate is intact
+      - name: Check the Vercel build gate is intact
         run: node scripts/check-vercel-build-gate.mjs
+
+      # Separate step so the log says WHICH guard broke without reading the diff.
+      - name: Check no AI provider boundary lost its spend guard
+        run: node scripts/check-ai-spend-guard-count.mjs

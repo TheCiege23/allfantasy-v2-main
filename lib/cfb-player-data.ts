@@ -1036,3 +1036,70 @@ export async function getCFBPlayerWEPARushing(year: number, team?: string): Prom
 
   return result || []
 }
+
+export interface CFBTeamDirectoryEntry {
+  /** ESPN team id — CFBD sources its ids from ESPN. */
+  id: number
+  school: string
+  mascot: string | null
+  abbreviation: string | null
+  alternateNames: string[] | null
+  conference: string | null
+  classification: string | null
+  logo: string | null
+}
+
+/**
+ * CFBD's full team directory — every division, with the alias forms needed to
+ * resolve a team name that arrived from some other feed.
+ *
+ * Lives HERE because this module is the allowlisted CFBD adapter: every export
+ * is a live fetch and its only runtime importers are ingestion modules. Putting
+ * the call in the ingestion module instead would have introduced a second CFBD
+ * client and taken the provider from zero DB-first violations to one.
+ *
+ * 🛑 THROWS ON A NON-2xx RATHER THAN RETURNING []. An empty directory is
+ * indistinguishable from "college football has no teams", and a caller that
+ * rebuilt its index from it would silently stop resolving every team. That is
+ * the 429-read-as-no-players failure this file already guards against with
+ * `assertCfbdAvailable`; the same reasoning applies to the whole payload.
+ */
+export async function getCFBTeamDirectory(): Promise<CFBTeamDirectoryEntry[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const directory = await getCachedOrFetch<CFBTeamDirectoryEntry[]>('cfbd-team-directory', THIRTY_DAYS, async () => {
+    const response = await fetch(`${CFBD_BASE}/teams`, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) {
+      throw new Error(`CFBD /teams responded ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!Array.isArray(data)) throw new Error('CFBD /teams returned a non-array payload')
+
+    return data
+      .filter((r: any) => typeof r?.id === 'number' && r?.school)
+      .map((r: any) => ({
+        id: r.id as number,
+        school: String(r.school),
+        mascot: r.mascot ?? null,
+        abbreviation: r.abbreviation ?? null,
+        alternateNames: Array.isArray(r.alternateNames) ? r.alternateNames : null,
+        conference: r.conference ?? null,
+        classification: r.classification ?? null,
+        logo: Array.isArray(r.logos) && r.logos.length > 0 ? r.logos[0] : null,
+      }))
+  })
+
+  /*
+   * `getCachedOrFetch` widens to `T | null`. Coercing that to [] would hand the
+   * caller an empty directory, which reads as "college football has no teams"
+   * and would silently stop every team from resolving. Unknown must stay
+   * unknown.
+   */
+  if (!directory) throw new Error('CFBD team directory unavailable')
+  return directory
+}

@@ -273,6 +273,29 @@ describe('AI spend guard — provider boundary coverage', () => {
     expect(read(file)).toMatch(/assertAiSpendAllowed\(|isAiSpendEnabled\(/)
   })
 
+  it('the GUARDED list has not SHRUNK — a boundary cannot be quietly unlisted', () => {
+    /*
+     * 🛑 THE HOLE THIS CLOSES, AND IT WAS EXPLOITED FOR REAL.
+     *
+     * Every assertion above is driven BY this list, so removing an entry removes
+     * the assertion with it. On 2026-08-27:
+     *
+     *   16ae895fb  guarded lib/ai-gm-intelligence.ts
+     *   2c959164c  deleted the guard AND this file's entry for it, in one commit,
+     *              bundled with an unrelated draft-hq feature
+     *   e5e173acf  restored it hours later
+     *
+     * The suite stayed green the whole time, over an unguarded OpenAI client. A
+     * list-driven check cannot catch its own list shrinking — so the length is
+     * asserted separately, the same way UNGUARDED_RATCHET has a ceiling.
+     *
+     * Raise this when you guard a new boundary. Lower it ONLY when a boundary is
+     * genuinely deleted, and say which one in the commit — that sentence is the
+     * difference between a deletion and a silent revert.
+     */
+    expect(GUARDED.length).toBeGreaterThanOrEqual(33)
+  })
+
   it('the unguarded ratchet has not grown', () => {
     // If this fails high, an unguarded provider boundary was added. If it fails low, someone
     // guarded one — lower the number, that is the point.

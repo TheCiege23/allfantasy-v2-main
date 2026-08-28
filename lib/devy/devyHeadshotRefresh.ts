@@ -144,3 +144,76 @@ export async function refreshDevyHeadshots(
   await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
   return result
 }
+
+/**
+ * The same derivation for `SportsPlayer`, which is the table the player cards
+ * and search actually read — the devy pool is only 1,718 of 73,883 NCAAF rows.
+ *
+ * ⚠ CFBD-SOURCED ROWS ONLY, AND THAT LIMIT IS THE POINT. `SportsPlayer.externalId`
+ * means different things per `source`: CFBD rows carry the ESPN athlete id
+ * (7 digits, verified 12/12 against the CDN), while the 68,637 Rolling Insights
+ * rows carry RI's own internal id (2-5 digits, e.g. `340`). Feeding an RI id to
+ * this URL either 404s or — far worse — resolves to a DIFFERENT person who
+ * happens to own that ESPN id.
+ *
+ * 🛑 DO NOT "FIX" THE RI ROWS BY MATCHING ON NAME. This repo already learned
+ * that from the player dedupe: same name is not a safe key. The live example is
+ * the card that prompted this work — `Josh Allen`, CB, Temple, an RI row. Name
+ * matching would hand him Buffalo's quarterback's headshot with total
+ * confidence. An empty card is honest; a confidently wrong face is not.
+ */
+export async function refreshCollegeSportsPlayerHeadshots(
+  budget: RunBudget,
+  limit = 400,
+): Promise<DevyHeadshotRefreshResult> {
+  const result: DevyHeadshotRefreshResult = {
+    checked: 0,
+    written: 0,
+    missing: 0,
+    errors: 0,
+    deferred: false,
+  }
+
+  if (budget.exhausted() || budget.remainingMs() < MIN_RUNWAY_MS) {
+    return { ...result, deferred: true, skipped: 'no runway' }
+  }
+
+  const candidates = await prisma.sportsPlayer.findMany({
+    where: { sport: 'NCAAF', source: 'cfbd', imageUrl: null },
+    select: { id: true, externalId: true },
+    orderBy: { fetchedAt: 'asc' },
+    take: limit,
+  })
+
+  if (candidates.length === 0) return result
+
+  let cursor = 0
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor++
+      if (index >= candidates.length) return
+      if (budget.exhausted() || budget.remainingMs() < MIN_RUNWAY_MS) {
+        result.deferred = true
+        return
+      }
+      const player = candidates[index]
+      if (!player.externalId) continue
+
+      result.checked += 1
+      const url = await resolveHeadshot(player.externalId)
+      if (!url) {
+        result.missing += 1
+        continue
+      }
+      try {
+        await prisma.sportsPlayer.update({ where: { id: player.id }, data: { imageUrl: url } })
+        result.written += 1
+      } catch {
+        result.errors += 1
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
+  return result
+}

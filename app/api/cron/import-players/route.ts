@@ -120,7 +120,9 @@ async function handle(req: NextRequest) {
        */
       const { withSyncJobRun } = await import('@/lib/production-health/syncJobRunTelemetry')
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
-      const { refreshDevyHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+      const { refreshDevyHeadshots, refreshCollegeSportsPlayerHeadshots } = await import(
+        '@/lib/devy/devyHeadshotRefresh',
+      )
 
       const outcome = await withSyncJobRun(
         { jobName: 'cron-devy-intel-sources', jobScope: 'NCAAF', trigger: 'cron' },
@@ -137,7 +139,10 @@ async function handle(req: NextRequest) {
            * row per fire, whatever the tick managed to do.
            */
           const devyHeadshots = await refreshDevyHeadshots(budget)
-          return { devyIntelSources, devyHeadshots }
+          // SportsPlayer is what the player cards and search actually read —
+          // the devy pool is 1,718 of 73,883 NCAAF rows.
+          const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
+          return { devyIntelSources, devyHeadshots, collegeHeadshots }
         },
       )
 
