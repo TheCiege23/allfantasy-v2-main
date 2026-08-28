@@ -9,12 +9,18 @@ import { buildMetadata } from "@/lib/seo"
  *
  * ⚠ THIS IS A MOVE, NOT A REWRITE. /leagues became the 21a "My Leagues" view,
  * which is a browsing surface and carries none of the connect/re-sync tooling
- * this component provides: the add-league discovery modal (Sleeper by username,
- * ESPN by league id, Yahoo OAuth via /api/league/yahoo-auth), the per-league
+ * this component provides: Yahoo OAuth via /api/league/yahoo-auth, the per-league
  * re-sync, and "Sync & Open" for rows with no unified record yet. Deleting the
  * old page would have taken all of that with it — those are the only entry
  * points to some of it — so it lives here and 21a links to it from the header
- * and from its empty state. `LeagueSyncDashboard` itself is unchanged.
+ * and from its empty state.
+ *
+ * ⚠ ADDING A LEAGUE IS NO LONGER ONE OF THEM. This page used to carry its own
+ * add-and-sync modal plus a "Discover Existing Leagues" panel, both running the
+ * OLDER `/api/league/*` endpoints while /import runs `/api/leagues/import/*` —
+ * two ways in, different code, and only one of them applies the commissioner
+ * gate, the attestation step and the team claim. Both were removed and the Add
+ * League controls now link to /import. What stays is what /import cannot do.
  */
 export const metadata = buildMetadata({
   title: "League Sync | AllFantasy",

@@ -89,8 +89,9 @@ export type CoreNavKey =
    */
   | 'standings'
   /* 38a·10 — per-league sync. The account-wide /leagues/sync page keeps connect,
-     OAuth and add-league; this answers "is THIS league current", which that page
-     structurally cannot. */
+     OAuth and re-sync; this answers "is THIS league current", which that page
+     structurally cannot. Adding a league belongs to /import — one import
+     pipeline, not two. */
   | 'sync'
 
 type NavItem = {

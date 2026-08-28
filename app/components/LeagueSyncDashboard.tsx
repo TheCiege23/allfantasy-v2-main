@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, RefreshCw, AlertCircle, CheckCircle, Loader2, X, Shield, ExternalLink, Search } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Plus, RefreshCw, AlertCircle, CheckCircle, Loader2, Shield, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { groupLeaguesBySport } from '@/lib/dashboard/DashboardSportGroupingService';
 import { useUserTimezone } from '@/hooks/useUserTimezone';
 
@@ -130,17 +131,9 @@ export default function LeagueSyncDashboard() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
 
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [platform, setPlatform] = useState('sleeper');
-  const [leagueId, setLeagueId] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
   const [yahooConnected, setYahooConnected] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(false);
 
-  const [sleeperUsername, setSleeperUsername] = useState('');
-  const [discovering, setDiscovering] = useState(false);
-  const [discoveredLeagues, setDiscoveredLeagues] = useState<any[]>([]);
-  const [discoverPlatform, setDiscoverPlatform] = useState('sleeper');
 
   const fetchLeagues = async () => {
     try {
@@ -179,10 +172,14 @@ export default function LeagueSyncDashboard() {
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === 'yahoo_connected') {
-      toast.success('Yahoo account connected! Now enter your league key to sync.');
+      /*
+        ⚠ THE OLD COPY POINTED AT A MODAL THAT NO LONGER EXISTS. It said "now
+        enter your league key to sync" and opened this page's own add-and-sync
+        form; adding a league is /import's job, and Yahoo needs no league key
+        there because it lists leagues from the connected account.
+      */
+      toast.success('Yahoo account connected. Import a Yahoo league from the Import page.');
       setYahooConnected(true);
-      setShowAddModal(true);
-      setPlatform('yahoo');
       window.history.replaceState({}, '', window.location.pathname);
     }
     if (params.get('error')?.startsWith('yahoo')) {
@@ -207,27 +204,6 @@ export default function LeagueSyncDashboard() {
       body: JSON.stringify({ platform: plat, platformLeagueId: lgId }),
     });
     return res.json();
-  };
-
-  const addLeague = async () => {
-    if (!leagueId.trim()) return;
-    setIsAdding(true);
-    try {
-      const data = await syncLeague(platform, leagueId.trim());
-
-      if (data.success) {
-        toast.success(`League "${data.name || data.leagueName}" synced!`);
-        setShowAddModal(false);
-        setLeagueId('');
-        await fetchLeagues();
-      } else {
-        toast.error(data.error || 'Failed to sync league');
-      }
-    } catch {
-      toast.error('Network error — please try again');
-    } finally {
-      setIsAdding(false);
-    }
   };
 
   const reSync = async (league: League) => {
@@ -295,12 +271,20 @@ export default function LeagueSyncDashboard() {
           <h1 className="text-2xl md:text-3xl font-bold">League Sync</h1>
           <p className="text-sm text-slate-400 mt-1">Connect your fantasy leagues for AI-powered analysis</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
+        {/*
+          ⚠ ADDING A LEAGUE LIVES AT /import, AND ONLY THERE. This page used to
+          carry its own add-and-sync modal running the OLDER `/api/league/*`
+          pipeline, while /import runs `/api/leagues/import/*` — two ways in,
+          different code, and only one of them gets the commissioner gate, the
+          attestation step and the team claim. This page keeps what /import
+          cannot do: connect, OAuth, and re-syncing a league already imported.
+        */}
+        <Link
+          href="/import"
           className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 rounded-xl flex items-center gap-2 font-medium transition-colors text-sm"
         >
           <Plus className="w-4 h-4" /> Add League
-        </button>
+        </Link>
       </div>
 
       {loading ? (
@@ -318,13 +302,13 @@ export default function LeagueSyncDashboard() {
           <p className="text-slate-500 text-sm mb-6">
             Add your first league to unlock roster-aware AI features
           </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-medium transition-colors"
+          <Link
+            href="/import"
+            className="inline-block px-6 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-medium transition-colors"
           >
             <Plus className="w-4 h-4 inline mr-2" />
             Add Your First League
-          </button>
+          </Link>
         </motion.div>
       ) : (
         <DashboardSportGroups
@@ -337,248 +321,6 @@ export default function LeagueSyncDashboard() {
         />
       )}
 
-      <div className="mt-12 rounded-2xl bg-slate-900/60 border border-slate-700/50 p-6">
-        <h3 className="text-xl font-bold mb-4">Discover Existing Leagues</h3>
-
-        <label className="block text-sm text-slate-400 mb-1.5">Platform</label>
-        <select
-          value={discoverPlatform}
-          onChange={(e) => { setDiscoverPlatform(e.target.value); setDiscoveredLeagues([]); }}
-          className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 mb-4 text-sm focus:outline-none focus:border-cyan-500"
-        >
-          <option value="sleeper">Sleeper</option>
-          <option value="mfl">MyFantasyLeague (MFL)</option>
-          <option value="yahoo">Yahoo</option>
-          <option value="espn">ESPN</option>
-          <option value="fantrax">Fantrax</option>
-        </select>
-
-        {discoverPlatform === 'sleeper' && (
-          <input
-            type="text"
-            placeholder="Your Sleeper username"
-            value={sleeperUsername}
-            onChange={(e) => setSleeperUsername(e.target.value)}
-            className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 mb-4 text-sm focus:outline-none focus:border-cyan-500"
-            onKeyDown={(e) => e.key === 'Enter' && !discovering && sleeperUsername.trim() && document.getElementById('discover-btn')?.click()}
-          />
-        )}
-
-        {discoverPlatform === 'mfl' && (
-          <p className="text-xs text-slate-500 mb-4">MFL discovery requires your API key. Use "Add League" above with your league ID instead.</p>
-        )}
-        {discoverPlatform === 'yahoo' && (
-          <p className="text-xs text-slate-500 mb-4">
-            {yahooConnected
-              ? 'Yahoo connected — discovery coming soon. Use "Add League" with your league key for now.'
-              : 'Connect your Yahoo account first via "Add League" above.'}
-          </p>
-        )}
-        {discoverPlatform === 'espn' && (
-          <p className="text-xs text-slate-500 mb-4">ESPN discovery requires cookies. Use "Add League" above with your league ID.</p>
-        )}
-        {discoverPlatform === 'fantrax' && (
-          <p className="text-xs text-amber-400/80 mb-4">Fantrax discovery is coming soon.</p>
-        )}
-
-        <button
-          id="discover-btn"
-          onClick={async () => {
-            if (discoverPlatform === 'sleeper' && !sleeperUsername.trim()) {
-              return toast.error('Enter your Sleeper username');
-            }
-            setDiscovering(true);
-            setDiscoveredLeagues([]);
-            try {
-              const credentials: any = {};
-              if (discoverPlatform === 'sleeper') credentials.username = sleeperUsername.trim();
-
-              const res = await fetch('/api/league/discover', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ platform: discoverPlatform, credentials }),
-              });
-              const data = await res.json();
-              if (data.success && data.discovered) {
-                setDiscoveredLeagues(data.discovered);
-                toast.success(`Found ${data.discovered.length} league${data.discovered.length !== 1 ? 's' : ''}!`);
-              } else {
-                toast.error(
-                  data.error === 'VERIFICATION_REQUIRED'
-                    ? 'Verify your email or phone before discovering leagues.'
-                    : data.error === 'AGE_REQUIRED'
-                      ? 'Confirm that you are 18+ before discovering leagues.'
-                      : data.error || 'Discovery failed'
-                );
-              }
-            } catch {
-              toast.error('Failed to discover leagues');
-            } finally {
-              setDiscovering(false);
-            }
-          }}
-          disabled={discovering || (discoverPlatform === 'sleeper' && !sleeperUsername.trim()) || ['mfl', 'espn', 'fantrax'].includes(discoverPlatform) || (discoverPlatform === 'yahoo' && !yahooConnected)}
-          className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl flex items-center justify-center gap-2 font-medium disabled:opacity-50 transition-all text-sm"
-        >
-          {discovering ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Search className="w-5 h-5" />
-          )}
-          {discovering ? 'Searching...' : 'Discover Leagues'}
-        </button>
-
-        {discoveredLeagues.length > 0 && (
-          <div className="mt-6">
-            <h4 className="text-sm font-medium text-slate-400 mb-3">
-              Found {discoveredLeagues.length} league{discoveredLeagues.length !== 1 ? 's' : ''}
-            </h4>
-            <div className="grid gap-4 md:grid-cols-2">
-              {discoveredLeagues.map((l: any, idx: number) => (
-                <div key={l.league_id || l.leagueId || idx} className="p-5 rounded-2xl bg-slate-800/60 border border-slate-700">
-                  <h4 className="font-semibold">{l.name || 'Unnamed League'}</h4>
-                  <p className="text-sm text-slate-400 mt-1">
-                    {l.total_rosters || l.totalTeams || '?'}-team &bull;{' '}
-                    {l.settings?.type === 2 || l.isDynasty ? 'Dynasty' : 'Redraft'}
-                    {l.season ? ` \u2022 ${l.season}` : ''}
-                  </p>
-                  <button
-                    onClick={async () => {
-                      const lgId = l.league_id || l.leagueId || l.sleeperLeagueId;
-                      try {
-                        const isSleeper = discoverPlatform === 'sleeper';
-                        const endpoint = isSleeper ? '/api/league/sleeper-sync' : '/api/league/sync';
-                        const body = isSleeper
-                          ? { sleeperLeagueId: lgId }
-                          : { platform: discoverPlatform, platformLeagueId: lgId };
-
-                        const res = await fetch(endpoint, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(body),
-                        });
-                        const d = await res.json();
-                        if (d.success) {
-                          toast.success(`Added ${l.name || 'League'}`);
-                          await fetchLeagues();
-                        } else {
-                          toast.error(d.error || 'Sync failed');
-                        }
-                      } catch {
-                        toast.error('Failed to sync league');
-                      }
-                    }}
-                    className="mt-3 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm transition-colors"
-                  >
-                    Add & Sync
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-slate-700"
-            >
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-xl font-bold">Add a League</h3>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="p-1 hover:bg-white/10 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-
-              <label className="block text-sm text-slate-400 mb-1.5">Platform</label>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 mb-4 text-sm focus:outline-none focus:border-cyan-500"
-              >
-                <option value="sleeper">Sleeper</option>
-                <option value="mfl">MyFantasyLeague (MFL)</option>
-                <option value="yahoo">Yahoo</option>
-                <option value="espn">ESPN</option>
-                <option value="fantrax">Fantrax</option>
-              </select>
-
-              {platform === 'yahoo' && !yahooConnected ? (
-                <div className="mb-4">
-                  <p className="text-sm text-slate-300 mb-3">
-                    Connect your Yahoo account first, then enter your league key to sync.
-                  </p>
-                  <a
-                    href="/api/league/yahoo-auth"
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Connect Yahoo Account
-                  </a>
-                </div>
-              ) : (
-                <>
-                  <label className="block text-sm text-slate-400 mb-1.5">
-                    {platform === 'yahoo' ? 'League Key' : 'League ID'}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={
-                      platform === 'sleeper'
-                        ? 'e.g. 1048345678901234567'
-                        : platform === 'yahoo'
-                        ? 'e.g. nfl.l.123456'
-                        : 'Enter your league ID'
-                    }
-                    value={leagueId}
-                    onChange={(e) => setLeagueId(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 mb-2 text-sm focus:outline-none focus:border-cyan-500"
-                    onKeyDown={(e) => e.key === 'Enter' && addLeague()}
-                  />
-                  {platform === 'sleeper' && (
-                    <p className="text-xs text-slate-500 mb-4">
-                      Find this in the Sleeper app under League Settings &rarr; General
-                    </p>
-                  )}
-                  {platform === 'yahoo' && yahooConnected && (
-                    <p className="text-xs text-emerald-400/80 mb-4">
-                      Yahoo connected &#10003; &mdash; Enter your league key (e.g. nfl.l.123456)
-                    </p>
-                  )}
-                  {platform === 'fantrax' && (
-                    <p className="text-xs text-amber-400/80 mb-4">
-                      Fantrax sync is coming soon.
-                    </p>
-                  )}
-
-                  <button
-                    onClick={addLeague}
-                    disabled={isAdding || !leagueId.trim() || (platform === 'fantrax')}
-                    className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    {isAdding ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Syncing...
-                      </>
-                    ) : (
-                      'Add & Sync League'
-                    )}
-                  </button>
-                </>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

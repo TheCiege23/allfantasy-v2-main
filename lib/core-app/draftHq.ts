@@ -478,7 +478,34 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
       loadImportedDraftPicks(leagueId, userId).catch(() => none),
       loadCompletedDraftBoard(leagueId, userId).catch(() => none),
     ])
-    return { ...base, session: none, pickSlots: none, madePicks, board }
+
+    /*
+     * ⚠ "NO DRAFT HAS BEEN SET UP" SAT DIRECTLY ABOVE FOURTEEN DRAFTED PICKS.
+     *
+     * Both statements were true and together they read as nonsense. They answer
+     * different questions: `session` and `pickSlots` describe a draft THIS APP
+     * WOULD RUN — an imported league has never had one — while `madePicks` and
+     * `board` read the draft that already happened on the provider. The old copy
+     * named neither, so a reader saw "no draft" on top of that draft's results
+     * and reasonably concluded the screen was broken.
+     *
+     * Reported on a real ESPN league whose fourteen picks were listed, correctly
+     * and by name, immediately underneath.
+     *
+     * The distinction is only worth drawing when there IS something below to
+     * contradict — otherwise "no draft has been set up" is the whole truth and
+     * qualifying it would add words to an empty screen.
+     */
+    const importedDraftExists = madePicks.available === true || board.available === true
+    const noSession = importedDraftExists
+      ? {
+          available: false as const,
+          reason:
+            'no upcoming draft is scheduled in AllFantasy — the picks below are from the draft this league already ran',
+        }
+      : none
+
+    return { ...base, session: noSession, pickSlots: noSession, madePicks, board }
   }
 
   const myTeam = await prisma.leagueTeam.findFirst({
