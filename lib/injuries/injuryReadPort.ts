@@ -426,8 +426,18 @@ export async function listInjuryFacts(args: {
     bestByExact.set(key, existing ? (preferred(existing, r) as InjuryRow & { id: string }) : r)
   }
 
+  /*
+   * Sort by REPORT date, not `fetchedAt` — the same clock toFact and preferred use.
+   *
+   * This mattered more than it looks: an importer stamps `fetchedAt` on everything it
+   * writes in a run, so among rows from the same run this comparator was returning 0
+   * and the `.slice(limit)` below kept an arbitrary subset. A caller asking for the
+   * "50 most recent" injuries was getting 50 rows in whatever order the collapse map
+   * happened to yield, which is how a panel of practice notes could hide the
+   * designations behind it.
+   */
   const facts = [...bestByExact.values()]
-    .sort((a, b) => b.fetchedAt.getTime() - a.fetchedAt.getTime())
+    .sort((a, b) => reportedAt(b).getTime() - reportedAt(a).getTime())
     .slice(0, limit)
     .map((r) => ({
       ...toFact(r, now),

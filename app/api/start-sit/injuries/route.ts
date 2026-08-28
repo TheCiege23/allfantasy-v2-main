@@ -11,8 +11,39 @@ function isUnknownPlayerName(name: string | null | undefined): boolean {
   return !normalized || normalized === 'unknown' || normalized === 'unknown player'
 }
 
+/**
+ * How much a designation should outrank another for a START/SIT decision.
+ *
+ * ⚠ THE PROVIDER FEED IS NOT ALL INJURIES. Measured on the rows this panel could
+ * serve for NFL: Questionable 475 (41.4%), **Active 452 (39.4%)**, IR 156, Out 23,
+ * Suspension 5, Doubtful 1. "Active" rows are practice and transaction notes ESPN
+ * mixes into the same feed ("the Dolphins signed Bennett", "played 18 snaps"), and
+ * because they are published constantly they are always the newest thing in the
+ * table. Ordered by recency alone they filled all 14 slots and buried 475
+ * Questionable and 156 IR players — the panel was newest-first, not most-relevant.
+ *
+ * Rank is by what the manager has to DECIDE, so tier beats recency; recency only
+ * breaks ties inside a tier.
+ */
+function designationRank(status: string | null | undefined): number {
+  const s = String(status ?? '').trim().toLowerCase()
+  if (!s) return 1
+  // Cannot play. Nothing outranks these.
+  if (/\b(out|ir|injured reserve|suspend|suspension|pup|nfi|doubtful)\b/.test(s)) return 4
+  // Genuinely in doubt — the actual start/sit question.
+  if (/\b(questionable|game.?time|day.?to.?day|limited|probable)\b/.test(s)) return 3
+  // "Active"/"Healthy" is the ABSENCE of an injury. It is news, not a designation,
+  // and it ranks below a row with no stated status at all — which is at least a row
+  // the provider bothered to file about someone's availability.
+  if (/\b(active|healthy|cleared|full)\b/.test(s)) return 0
+  return 2
+}
+
 function severityFromStatus(status: string | null | undefined): 'high' | 'medium' | 'low' {
-  return /out|ir|doubtful/i.test(status || '') ? 'high' : 'medium'
+  const rank = designationRank(status)
+  if (rank >= 4) return 'high'
+  if (rank === 0) return 'low' // "Active" is not a medium-severity injury; it is not one.
+  return 'medium'
 }
 
 /**
@@ -123,7 +154,16 @@ async function readIdentityBackedInjuries(dataSport: string, now: Date) {
     }
   }
 
-  return sourceRows.slice(0, 14).map((row) => {
+  return sourceRows
+    // Same ranking as the other two paths — designation first, then report date.
+    .slice()
+    .sort((a, b) => {
+      const byRank = designationRank(b.status) - designationRank(a.status)
+      if (byRank !== 0) return byRank
+      return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime()
+    })
+    .slice(0, 14)
+    .map((row) => {
     const playerId = String(row.playerId ?? '').trim()
     const sportsPlayer = playerId ? sportsPlayerById.get(playerId) : undefined
     const identity = playerId ? identityByAnyExternalId.get(playerId) : undefined
@@ -163,13 +203,28 @@ export async function GET(req: Request) {
     // previous primary (`getInjuryReport` → injuryReportRecord) was measured
     // 103.8 days stale in prod on 2026-08-10, so this panel was rendering
     // three-month-old reports as if current.
+    /*
+     * ⚠ THE LIMIT HAS TO BE WIDE ENOUGH TO RANK WITHIN.
+     *
+     * listInjuryFacts sorts by report recency and then slices to `limit`, so asking
+     * for 50 and ranking afterwards would only ever reorder the 50 NEWEST rows —
+     * and the newest rows are exactly the "Active" transaction notes that caused
+     * this bug. Ranking has to happen over the whole slate, so the port is asked
+     * for the slate and this route picks the 14 that matter.
+     */
     const factList = await listInjuryFacts({
       sport: dataSport,
-      limit: 50,
+      limit: 400,
       maxReportAgeHours: SLATE_REPORT_HORIZON_HOURS,
     }).catch(() => null)
     const portInjuries = (factList?.facts ?? [])
       .filter((f) => !isUnknownPlayerName(f.playerName))
+      // Designation first, then most recently reported. See designationRank.
+      .sort((a, b) => {
+        const byRank = designationRank(b.status) - designationRank(a.status)
+        if (byRank !== 0) return byRank
+        return new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
+      })
       .slice(0, 14)
       .map((f) => {
         const detailParts = [f.status, f.description].filter(Boolean) as string[]
@@ -201,6 +256,13 @@ export async function GET(req: Request) {
       // getInjuryReport applies no recency filter of its own — see the note on
       // SLATE_REPORT_HORIZON_HOURS. Without this, NCAAF served nine April rows.
       .filter((r) => withinSlateHorizon(r.reportDate, now))
+      // Same ranking as the primary path, so a fallback does not silently reorder
+      // the panel into newest-first practice notes.
+      .sort((a, b) => {
+        const byRank = designationRank(b.status) - designationRank(a.status)
+        if (byRank !== 0) return byRank
+        return new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime()
+      })
       .slice(0, 14)
       .map((r) => ({
         player: r.playerName,
