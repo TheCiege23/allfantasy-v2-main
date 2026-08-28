@@ -314,6 +314,9 @@ export async function writeAfProjectionSnapshots(
     if (!sleeperId) result.withoutWeeklyData++
 
     const buildInput: BuildProjectionInput = {
+      // Without this the category basis is unreachable and MLB/NBA/NHL keep refusing
+      // `no_scoring_basis` no matter how many stat lines they have.
+      sport,
       aggregate,
       weekly: sleeperId ? obsBySleeper.get(sleeperId) ?? [] : [],
       weeklyRaw: sleeperId ? rawBySleeper.get(sleeperId) ?? [] : [],

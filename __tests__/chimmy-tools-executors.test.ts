@@ -42,6 +42,15 @@ describe('tool specs', () => {
   it('exposes only read-only lookups', () => {
     const names = CHIMMY_TOOL_SPECS.map((t) => t.function.name)
     expect(names).toEqual([
+      /*
+       * ⚠ ADDED WHEN THE TOOL WAS. This list is hardcoded and ordered, so
+       * shipping `find_league_by_name` turned it red — the assertion's job is to
+       * make a new tool a deliberate edit, and that worked exactly as intended.
+       * It stays a literal list on purpose: deriving it from CHIMMY_TOOL_SPECS
+       * would assert the specs against themselves and could never catch a
+       * write-capable tool being added.
+       */
+      'find_league_by_name',
       'get_league_standings',
       'get_head_to_head',
       'get_upcoming_games',

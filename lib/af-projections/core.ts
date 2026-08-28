@@ -56,9 +56,30 @@ export function extractSeasonAggregate(statsJson: unknown): SeasonAggregate | nu
   if (gamesPlayed == null || gamesPlayed <= 0) return null
 
   const components: Record<string, number> = {}
+  /**
+   * One level deeper, PREFIXED and kept apart from `components`.
+   *
+   * MLB puts its real production under `regular_season.batting` / `.pitching`, so the flat pass
+   * above sees only `games_played`, `E` and `PO` for a baseball player — every hit, home run and
+   * strikeout dropped. The prefix is not decoration: `H` exists in BOTH groups and means a hit
+   * recorded in one and a hit allowed in the other.
+   *
+   * This does NOT widen `components`. NFL has a nested `snap_counts` object, and adding its keys
+   * to the flat map would change a live football path for a baseball fix.
+   */
+  const groupedComponents: Record<string, number> = {}
   for (const [key, raw] of Object.entries(regular)) {
     const n = finiteNumber(raw)
-    if (n != null) components[key] = n
+    if (n != null) {
+      components[key] = n
+      continue
+    }
+    const nested = asRecord(raw)
+    if (!nested) continue
+    for (const [innerKey, innerRaw] of Object.entries(nested)) {
+      const innerN = finiteNumber(innerRaw)
+      if (innerN != null) groupedComponents[`${key}.${innerKey}`] = innerN
+    }
   }
 
   const position = typeof stats.position === 'string' && stats.position.trim() ? stats.position.trim() : null
@@ -69,6 +90,8 @@ export function extractSeasonAggregate(statsJson: unknown): SeasonAggregate | nu
   return {
     gamesPlayed,
     components,
+    // Omitted entirely when empty, so an NFL aggregate is byte-identical to what it was before.
+    ...(Object.keys(groupedComponents).length > 0 ? { groupedComponents } : {}),
     position,
     team,
     playerName,

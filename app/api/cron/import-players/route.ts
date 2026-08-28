@@ -304,11 +304,14 @@ async function handle(req: NextRequest) {
      * returned bare ids for that league, leaving a directory of `Player <id>`
      * placeholders with nothing to harvest.
      *
-     * ESPN's core athlete list needs no credential and its ids ARE the fantasy
-     * ids, verified against that board (4430737 -> Kyren Williams). Twenty-one
-     * pages covers the league; the budget check between pages is what actually
-     * bounds it, and a partial run is useful because the next one only asks about
-     * ids still unknown.
+     * ESPN's per-athlete endpoint needs no credential and its ids ARE the fantasy
+     * ids, verified against that board (4430737 -> Kyren Williams).
+     *
+     * ⚠ DRIVEN BY THE IDS WE HOLD, NOT ESPN'S CATALOGUE. The list endpoint reports
+     * `pageCount: 21` and then serves the same first rows for every page, ignores
+     * `offset`, and caps `limit` at 1000 — a first version walked it and wrote 994
+     * athletes while reporting 20,874 seen. Asking about our own unknown ids is
+     * both correct and far smaller: 252 across every imported ESPN league.
      */
     let espnIdentities: unknown = { skipped: true }
     if (!dryRun && wantsNfl && budget.exhausted()) {
@@ -317,7 +320,7 @@ async function handle(req: NextRequest) {
       try {
         const { ingestEspnAthleteIdentities } = await import('@/lib/espn/ingestEspnAthleteIdentities')
         espnIdentities = await ingestEspnAthleteIdentities({
-          maxPages: 25,
+          maxPlayers: 300,
           isExhausted: () => budget.exhausted(),
         })
       } catch (espnErr) {

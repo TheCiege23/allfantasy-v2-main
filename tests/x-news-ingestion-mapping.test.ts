@@ -16,7 +16,12 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { readFileSync } from 'node:fs'
-import { classifyImpact, stripInlineCitations, toNewsItems } from '@/lib/workers/x-news-ingestion'
+import {
+  classifyImpact,
+  headlineSimilarity,
+  stripInlineCitations,
+  toNewsItems,
+} from '@/lib/workers/x-news-ingestion'
 import type { XNewsResult } from '@/lib/ai/xNewsSearch'
 
 const SEARCHED_AT = '2026-08-27T15:00:00.000Z'
@@ -41,6 +46,41 @@ const ok = (over: Partial<Extract<XNewsResult, { ok: true }>> = {}) =>
   }) as Extract<XNewsResult, { ok: true }>
 
 const ctx = { sport: 'NFL', name: 'Ashton Jeanty', team: 'LV' }
+
+describe('headlineSimilarity', () => {
+  const THRESHOLD = 0.7
+
+  it('treats the model rephrasing the same story as a duplicate', () => {
+    // Both observed from live runs on 2026-08-27, same news, temperature 0.
+    // Exact-equality dedupe let this through and wrote the story twice.
+    const a = 'Adam Schefter reports Raiders HC Klint Kubiak said injured RB Ashton Jeanty is on the mend.'
+    const b = 'Adam Schefter reported that Raiders HC Klint Kubiak said injured RB Ashton Jeanty is on the mend.'
+    expect(headlineSimilarity(a, b)).toBeGreaterThanOrEqual(THRESHOLD)
+  })
+
+  it('keeps genuinely different days apart', () => {
+    // The failure mode in the other direction: a threshold low enough to be
+    // safe against drift must not collapse a week of practice reports.
+    const a = 'Ashton Jeanty limited in practice Wednesday'
+    const b = 'Ashton Jeanty limited in practice Thursday'
+    expect(headlineSimilarity(a, b)).toBeLessThan(THRESHOLD)
+  })
+
+  it('is 1 for identical text and ignores punctuation and case', () => {
+    expect(headlineSimilarity('Ruled out for Sunday.', 'ruled out for sunday')).toBe(1)
+  })
+
+  it('is low for unrelated stories about the same player', () => {
+    const a = 'Ashton Jeanty ruled out with an ankle injury'
+    const b = 'Ashton Jeanty signs a four year rookie contract extension'
+    expect(headlineSimilarity(a, b)).toBeLessThan(THRESHOLD)
+  })
+
+  it('is 0 when either side has no usable tokens', () => {
+    expect(headlineSimilarity('', 'Ruled out')).toBe(0)
+    expect(headlineSimilarity('a b c!', '')).toBe(0)
+  })
+})
 
 describe('classifyImpact', () => {
   describe('the four keywords that were dead until 2026-08-27', () => {

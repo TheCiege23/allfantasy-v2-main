@@ -31,7 +31,7 @@ import path from 'node:path'
  * Lower this when you fix one. Never raise it: a new unscoped filter is the bug this exists to
  * catch, and there is a safe helper for every legitimate case.
  */
-const BASELINE = 46
+const BASELINE = 41
 
 const ROOTS = ['lib', 'app', 'components', 'scripts']
 const METHODS = [
@@ -121,6 +121,14 @@ for (const root of ROOTS) {
       const where = callBlock(block, braceAt)
       if (!where.includes('externalId:')) continue
       if (where.includes('source')) continue
+
+      /*
+       * A literal namespace PREFIX in the value is scoping too, and stricter than `source`.
+       * An externalId compared against a sleeper:-prefixed value can only ever match a
+       * Sleeper-sourced row, which is exactly the discipline this guard asks for. Without this
+       * it flags the helper written to fix the bug, which is the wrong lesson for the next reader.
+       */
+      if (where.includes('sleeper:') || where.includes('tsdb_')) continue
 
       violations.push({
         file: file.split(path.sep).join('/'),
