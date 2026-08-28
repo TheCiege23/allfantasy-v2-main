@@ -59,6 +59,25 @@ function quoteRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/*
+ * ⚠ "league" IS IN THE QUESTION AND IN NEARLY EVERY LEAGUE NAME, so scoring it
+ * as a match was noise that drowned the signal. "who should I start in the
+ * zombie league?" scored "Beta 1 Zombie League" at 2/4 — because `league`
+ * counted, and the distinctive word `zombie` was diluted to a quarter — while
+ * "World Football League" and "Last League Left" each collected free points for
+ * containing the same generic word. Everything looked equally plausible.
+ */
+const GENERIC_NAME_TOKENS = new Set([
+  'league', 'fantasy', 'football', 'the', 'and', 'for', 'my', 'our', 'this',
+  'season', 'team', 'teams', 'dynasty league', 'redraft',
+])
+
+function distinctiveTokens(leagueName: string): string[] {
+  return leagueName
+    .split(' ')
+    .filter((token) => token.length >= 3 && !GENERIC_NAME_TOKENS.has(token))
+}
+
 function startsOrContainsWord(text: string, value: string): boolean {
   if (!value) return false
   const escaped = quoteRegex(value)
@@ -170,10 +189,17 @@ export async function resolveChimmyLeagueSelection(args: {
       else if (leagueName.includes(inputText) && inputText.length >= 4) score = 0.88
       else if (inputText.includes(leagueName) && leagueName.length >= 4) score = 0.9
       else {
-        const tokens = leagueName.split(' ').filter(Boolean)
-        const hitCount = tokens.filter((token) => token.length >= 3 && startsOrContainsWord(inputText, token)).length
+        /*
+         * ⚠ THIS PATH COULD NEVER SELECT ANYTHING. It capped at 0.82 while the
+         * threshold is 0.85, so every question that did not match a name
+         * exactly or by containment fell through to "ambiguous" no matter how
+         * clearly it named a league. The cap is now above the threshold, and
+         * only DISTINCTIVE tokens count toward it.
+         */
+        const tokens = distinctiveTokens(leagueName)
+        const hitCount = tokens.filter((token) => startsOrContainsWord(inputText, token)).length
         if (tokens.length > 0) {
-          score = Math.min(0.82, hitCount / tokens.length)
+          score = Math.min(0.93, hitCount / tokens.length)
         }
       }
 
@@ -198,8 +224,42 @@ export async function resolveChimmyLeagueSelection(args: {
 
     return {
       kind: 'ask',
-      message: 'Which league do you want me to use for this question?',
+      message: `Which league do you want me to use? Yours are: ${choices
+        .map((c) => `"${c.leagueName}"`)
+        .join(', ')}.`,
       choices,
+      leagues,
+    }
+  }
+
+  /*
+   * ⚠ A WORD THAT APPEARS IN EXACTLY ONE OF THIS USER'S LEAGUE NAMES IS AN
+   * ANSWER, not a hint. "zombie" names precisely one of these six leagues, so
+   * "who should I start in the zombie league?" has one correct reading — and it
+   * was being returned as "I found multiple league matches" because the generic
+   * word `league` made three others look partially plausible.
+   *
+   * Checked BEFORE the score threshold because a distinctive word beats a
+   * fractional overlap: it is evidence about which league, not about how much of
+   * a name was typed.
+   */
+  const discriminators = new Map<string, string[]>()
+  for (const league of leagues) {
+    for (const token of distinctiveTokens(normalizeToken(league.name ?? ''))) {
+      if (!startsOrContainsWord(inputText, token)) continue
+      discriminators.set(token, [...(discriminators.get(token) ?? []), league.id])
+    }
+  }
+  for (const [token, ids] of discriminators) {
+    if (ids.length !== 1) continue
+    const match = leagues.find((league) => league.id === ids[0])
+    if (!match) continue
+    return {
+      kind: 'selected',
+      leagueId: match.id,
+      confidence: 0.95,
+      source: 'explicit_name',
+      matchedLabel: `${match.name ?? 'Unnamed league'} (matched "${token}")`,
       leagues,
     }
   }
@@ -226,9 +286,18 @@ export async function resolveChimmyLeagueSelection(args: {
     platform: row.league.platform,
   }))
 
+  /*
+   * ⚠ THE NAMES WERE COMPUTED AND THEN THROWN AWAY. `ambiguousChoices` has
+   * carried `leagueName` all along while the message said only "multiple league
+   * matches" — a question the reader cannot answer, because nothing on screen
+   * says which leagues were meant. Same shape as the "which of the two KBFL
+   * leagues did you mean?" that named neither.
+   */
   return {
     kind: 'ambiguous',
-    message: 'I found multiple league matches. Tell me which exact league to use.',
+    message: `I found more than one league that could match: ${ambiguousChoices
+      .map((c) => `"${c.leagueName}"${c.season ? ` (${c.season})` : ''}`)
+      .join(', ')}. Which of those do you mean?`,
     choices: ambiguousChoices,
     leagues,
   }

@@ -84,7 +84,17 @@ describe('chimmy league resolution', () => {
     expect(result.kind).toBe('ambiguous')
     if (result.kind !== 'ambiguous') throw new Error('expected ambiguous')
     expect(result.choices.length).toBeGreaterThan(1)
-    expect(result.message).toMatch(/multiple league matches/i)
+    /*
+     * ⚠ THE MESSAGE MUST NAME THEM. It used to say only "I found multiple
+     * league matches", which is a question the reader cannot answer — the
+     * candidate names were computed into `choices` and then thrown away. This
+     * asserts the INTENT (the names are in the sentence) rather than a fixed
+     * wording, so improving the phrasing does not turn it red again.
+     */
+    for (const choice of result.choices) {
+      expect(result.message).toContain(choice.leagueName)
+    }
+    expect(result.message).toMatch(/which of those/i)
   })
 
   it('falls back to the only accessible league when no textual match', async () => {
