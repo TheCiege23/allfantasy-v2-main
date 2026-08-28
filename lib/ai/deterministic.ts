@@ -23,6 +23,7 @@ import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { detectUpcomingIntent, findUpcomingGames } from '@/lib/ai/upcomingGames'
+import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
 import {
   detectStatFamily,
   findPlayerInText,
@@ -409,22 +410,17 @@ async function buildCachedGamesAnswer(message: string): Promise<string | null> {
   if (!games.length) return null
 
   /*
-   * ⚠ THE SAME FIXTURE IS STORED SEVERAL TIMES. Production carries duplicate
-   * `SportsGame` rows per fixture — tonight's Steelers @ Bills appears three
-   * times, differing only in `seasonType` and `status` — so listing rows
-   * verbatim reads as three separate games. Collapse on the pairing and
-   * kickoff, preferring whichever copy actually carries a score.
+   * ⚠ THIS DE-DUPLICATION USED TO DO NOTHING, and the reason is worth keeping.
+   * The key included `awayTeam`, so the four provider rows for one fixture —
+   * "PIT" from espn_live and "Pittsburgh Steelers" from the other three —
+   * hashed apart and every one survived. A user was shown six games for three
+   * fixtures, with contradictory scores for each.
+   *
+   * Team identity now compares the NAMES, because there is no id to join on:
+   * `homeTeamId` is null on every source but TheSportsDB, which uses its own
+   * id space. See lib/sports/dedupeFixtures.ts.
    */
-  const unique = new Map<string, any>()
-  for (const game of games) {
-    const key = `${game.sport}|${game.awayTeam}|${game.homeTeam}|${new Date(game.startTime).getTime()}`
-    const held = unique.get(key)
-    const hasScore = typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
-    const heldScored = held && typeof held.awayScore === 'number' && typeof held.homeScore === 'number'
-    if (!held || (hasScore && !heldScored)) unique.set(key, game)
-  }
-
-  const lines = [...unique.values()].map((game: any) => {
+  const lines = dedupeFixtures(games as any[]).map((game: any) => {
     const score =
       typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
         ? `${game.awayScore}-${game.homeScore}`
