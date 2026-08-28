@@ -226,28 +226,23 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
  */
 const DATA_API_UNMONITORED = [
   /*
-   * ONE LEFT, and it is the only one of the nineteen this list started with that has no
-   * known fix. Everything else was either never a data feed, or moved into
-   * DATA_API_HOST_PATTERNS once the thing blocking it was removed: a docblock false
-   * positive for github.com and www.fleaflicker.com, a missing health-probe marker for
-   * api.myfantasyleague.com.
+   * EMPTY, from nineteen entries on 2026-08-28. Every host that was ever here is now
+   * either monitored by the guard or correctly classified as something other than a data
+   * read. Keep the list and the bound: an empty ledger is the assertion that no NEW
+   * unmonitored data feed has appeared, which is the only thing it was ever really for.
+   * That is the same reason UNGUARDED_RATCHET in the AI spend test is kept at zero.
    *
-   * ⚠ THE REMAINING ONE IS NOT WAITING ON EFFORT. A hostname pattern cannot express it,
-   * so do not "finish the job" by adding it.
+   * ⚠ THE LAST ENTRY WAS RESOLVED BY A CORRECTION, WHICH IS WORTH KNOWING. www.fantrax.com
+   * was recorded here as UNEXPRESSIBLE: its FXEA feed and its user-facing deep links share
+   * one hostname. That measurement was taken before the guard learned to skip comments,
+   * and two of the three deep-link hits were docblocks. The real conflict was a single
+   * test literal, which is accepted and documented at the fantrax pattern in the guard.
+   *
+   * The lesson is not about Fantrax. A "cannot be done" note recorded against tooling is
+   * only true of the tooling AS IT WAS — re-measure before trusting one, especially if the
+   * tooling has changed since. A helper module was very nearly built on the strength of
+   * that stale note; nothing in the codebase would have imported it.
    */
-
-  /* The FXEA base (/fxea/general) is a real feed, but /fantasy/league/<id>/home on the
-   * SAME HOST is a user-facing deep link in CODE — not a comment, so comment-skipping
-   * does not help — and a further hit is a test fixture. This is the sleeper.com split
-   * without the convenience of a separate hostname: there, the feed lived on
-   * api.sleeper.com and the deep links on sleeper.com, so the guard could tell them
-   * apart. Here they share one host. Adding it buys one real finding and imports two
-   * false ones permanently.
-   *
-   * The fix is a code change, not a list change: move the deep-link construction behind a
-   * helper on a path the guard allows, or accept the split is unexpressible and leave it
-   * here. Recorded so the next reader does not re-derive this and reach for the list. */
-  'www.fantrax.com',
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -472,17 +467,19 @@ describe('DB-first boundary — outbound host census', () => {
      * If you are raising this number for any other reason, you are recording new
      * debt as though it were new visibility. Say so in the commit, or do not raise it.
      *
-     * 19 -> 11 -> 4 -> 2 -> 1 on the same day. First by RE-DERIVING (eight entries were
-     * never data feeds), then by moving seven hosts into DATA_API_HOST_PATTERNS where the
-     * guard can actually block them, then two more once the guard stopped reporting URLs
-     * in comments, then MFL once its health probes took the marker their neighbours
-     * already had. The bound comes down with each: a ratchet left loose after a cleanup
-     * has stopped ratcheting.
+     * 19 -> 11 -> 4 -> 2 -> 1 -> 0 on the same day. First by RE-DERIVING (eight entries
+     * were never data feeds), then by moving seven hosts into DATA_API_HOST_PATTERNS where
+     * the guard can actually block them, then two more once the guard stopped reporting
+     * URLs in comments, then MFL once its health probes took the marker their neighbours
+     * already had, then Fantrax once the "unexpressible" note was re-measured and found
+     * stale. The bound comes down with each: a ratchet left loose after a cleanup has
+     * stopped ratcheting.
      *
-     * ⚠ IT SHOULD NOT REACH ZERO BY EFFORT. The last entry is blocked by something a
-     * hostname pattern cannot express, not by work nobody has done — see its note above.
+     * At zero this asserts that no NEW unmonitored data feed has shipped. Adding an entry
+     * is still the right move when one appears and cannot be monitored yet — raise this
+     * bound deliberately and say which it is, debt or coverage.
      */
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(1)
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(0)
   })
 
   it('no unmonitored entry is ALSO matched by a category', () => {

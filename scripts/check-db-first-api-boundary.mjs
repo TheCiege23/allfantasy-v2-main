@@ -167,6 +167,31 @@ const DATA_API_HOST_PATTERNS = [
    */
   /(^|\.)api\.myfantasyleague\.com$/i,
   /*
+   * Fantrax. This one was written off as UNEXPRESSIBLE — the FXEA feed
+   * (/fxea/general) and a user-facing deep link (/fantasy/league/<id>/home) share one
+   * hostname, so a hostname pattern cannot tell them apart. That was measured BEFORE this
+   * guard learned to skip comments, and two of the three deep-link hits turned out to be
+   * DOCBLOCKS (fantraxApi.ts:484, scripts/import-fantrax-league.ts:12). Once those stopped
+   * being reported, the conflict was one line, not three.
+   *
+   * A deep-link HELPER was investigated as the fix and rejected: nothing in lib/, app/ or
+   * server/ constructs a Fantrax league URL. Fantrax is not even in the "Open in <platform>"
+   * switch in lib/core-app/outstandingIssues.ts that Sleeper, ESPN and Yahoo use. The
+   * helper would have had zero consumers — infrastructure built to satisfy a linter.
+   *
+   * 2 hits:
+   *   lib/league-import/fantrax/fantraxApi.ts:29  the FXEA base. The genuine finding, and
+   *                                               the reason to add this host at all.
+   *   __tests__/fantrax-live-import-wiring.test.ts:30  one test literal, ACCEPTED.
+   *
+   * ⚠ DO NOT "FIX" THAT TEST LINE. It asserts parseFantraxLeagueId handles the URL a user
+   * copies out of their address bar — its own docblock says nothing on Fantrax ever shows
+   * the bare id. Rebuilding that string from a constant we own would change the test from
+   * "handles what a user pastes" to "handles what we generate", which is the assertion
+   * that matters least. One reported line in a test is cheaper than a weaker test.
+   */
+  /(^|\.)fantrax\.com$/i,
+  /*
    * ⚠ FOUR CONFIRMED FEEDS DELIBERATELY NOT ADDED, each measured. Three are blocked by
    * the same limitation and it is worth stating plainly: THIS GUARD DOES NOT SKIP
    * COMMENTS. The census in __tests__/db-first-host-census.test.ts does. So a

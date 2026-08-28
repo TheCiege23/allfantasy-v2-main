@@ -301,7 +301,7 @@ async function buildProviderHealth(): Promise<Record<string, HealthProviderEntry
     checkPublicApi('https://fantasysports.yahooapis.com', 2000), // db-first-exception: live provider health probe
     checkPublicApi(`${ESPN_SITE_API_BASE}/football/nfl/scoreboard`, 2000), // db-first-exception: live provider health probe
     checkPublicApi('https://api.myfantasyleague.com/2024/export?TYPE=rules', 2000), // db-first-exception: live provider health probe
-    checkPublicApi('https://www.fantrax.com', 2000),
+    checkPublicApi('https://www.fantrax.com', 2000), // db-first-exception: live provider health probe
     checkPrimaryDatabase(),
     checkSupabase(),
     checkResend(),
