@@ -6,7 +6,7 @@ const {
   mockAiAdpFindMany,
   mockCareerProjectionFindFirst,
   mockSportsInjuryFindMany,
-  mockIdentityFindFirst,
+  mockIdentityFindMany,
   mockSportsPlayerFindFirst,
   mockSportsGameFindMany,
   mockTeamSeasonStatsFindMany,
@@ -16,7 +16,7 @@ const {
   mockAiAdpFindMany: vi.fn(),
   mockCareerProjectionFindFirst: vi.fn(),
   mockSportsInjuryFindMany: vi.fn(),
-  mockIdentityFindFirst: vi.fn(),
+  mockIdentityFindMany: vi.fn(),
   mockSportsPlayerFindFirst: vi.fn(),
   mockSportsGameFindMany: vi.fn(),
   mockTeamSeasonStatsFindMany: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: mockSportsInjuryFindMany,
     },
     playerIdentityMap: {
-      findFirst: mockIdentityFindFirst,
+      findMany: mockIdentityFindMany,
     },
     sportsPlayer: {
       findFirst: mockSportsPlayerFindFirst,
@@ -73,7 +73,7 @@ describe("PlayerStatsResolver", () => {
     mockAiAdpFindMany.mockResolvedValue([])
     mockCareerProjectionFindFirst.mockResolvedValue(null)
     mockSportsInjuryFindMany.mockResolvedValue([])
-    mockIdentityFindFirst.mockResolvedValue(null)
+    mockIdentityFindMany.mockResolvedValue([])
     mockSportsPlayerFindFirst.mockResolvedValue(null)
     mockSportsGameFindMany.mockResolvedValue([])
     mockTeamSeasonStatsFindMany.mockResolvedValue([])
@@ -131,6 +131,51 @@ describe("PlayerStatsResolver", () => {
       ["Josh Allen"],
       expect.objectContaining({ ppr: 0.5 })
     )
+  })
+
+  /**
+   * Regression: PlayerIdentityMap holds 178 duplicate-name groups in NFL, and the
+   * twins split the provider ids. The old `findFirst` had no `orderBy`, so landing
+   * on the id-less twin reported an available player as unavailable. The row that
+   * actually carries the sleeperId is deliberately placed SECOND here — a resolver
+   * that only looks at the first candidate fails this test.
+   */
+  it("reports sleeper availability from the populated twin when a name is duplicated", async () => {
+    mockIdentityFindMany.mockResolvedValue([
+      {
+        id: "id-a",
+        canonicalName: "Tony Adams",
+        normalizedName: "tony adams",
+        position: "DB",
+        currentTeam: "TEN",
+        sport: "NFL",
+        sleeperId: null,
+        espnId: null,
+        mflId: null,
+        fleaflickerId: null,
+      },
+      {
+        id: "id-b",
+        canonicalName: "Tony Adams",
+        normalizedName: "tony adams",
+        position: "DB",
+        currentTeam: "TEN",
+        sport: "NFL",
+        sleeperId: "8860",
+        espnId: null,
+        mflId: null,
+        fleaflickerId: null,
+      },
+    ])
+
+    const result = await resolvePlayerStats("Tony Adams", { sport: "nfl" })
+
+    expect(result?.sourceFlags.sleeper).toBe(true)
+    // All candidates must be considered, and in a stable order.
+    expect(mockIdentityFindMany).toHaveBeenCalledTimes(1)
+    expect(mockIdentityFindMany.mock.calls[0]?.[0]?.orderBy).toEqual({ id: "asc" })
+    // The id-less twin must not have short-circuited into the SportsPlayer fallback.
+    expect(mockSportsPlayerFindFirst).not.toHaveBeenCalled()
   })
 
   it("returns null for empty input", async () => {

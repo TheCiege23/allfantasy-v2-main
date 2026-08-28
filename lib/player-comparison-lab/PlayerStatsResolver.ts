@@ -22,6 +22,10 @@ import type {
   InjurySignal,
 } from './types';
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope';
+import {
+  disambiguate,
+  IDENTITY_MAP_SELECT,
+} from '@/lib/shared-services/player-identity/PlayerIdentityResolver';
 
 const HISTORICAL_SEASONS_LIMIT = 5;
 
@@ -147,7 +151,7 @@ export async function resolvePlayerStats(
       resolveInternalAdp(name, sport, options?.scoringFormat),
       resolveInternalProjectionPoints(name, sport, historicalResolved.rollingInsightsPlayerId),
       resolveInjurySignal(name, sport),
-      resolveSleeperSignal(name, sport),
+      resolveSleeperSignal(name, sport, historicalResolved.team),
       resolveScheduleDifficultyScore(
         sport,
         historicalResolved.team ??
@@ -405,18 +409,42 @@ async function resolveInjurySignal(
   };
 }
 
+/**
+ * ⚠ `PlayerIdentityMap` HOLDS MORE THAN ONE ROW PER NAME, so this cannot use
+ * `findFirst`. Measured on production 2026-08-28: NFL has 178 duplicate
+ * `normalizedName` groups covering 373 rows, and the twins routinely split the
+ * provider ids — one row carries the `sleeperId` while the other carries none.
+ * `findFirst` with no `orderBy` lets Postgres return either, so this reported a
+ * player as unavailable roughly half the time for those names, purely on which
+ * row the planner happened to hand back.
+ *
+ * The duplicates are NOT safely mergeable (some are real homonyms — two Kyle
+ * Williamses, both WR, both NE, distinguishable only by birthday, and `dob` is
+ * unpopulated on every row in every sport), so the fix is at the read: take all
+ * candidates and let the shared scorer choose.
+ *
+ * `teamHint` is passed but a position hint deliberately is NOT — see the warning
+ * on `disambiguate`, whose -3 mismatch penalty would fire on a third of correct
+ * rows given this caller's fine-grained RI position vocabulary.
+ */
 async function resolveSleeperSignal(
   playerName: string,
-  sport: string
+  sport: string,
+  teamHint: string | null
 ): Promise<{ available: boolean; sleeperAdp: number | null }> {
   const normalized = normalizePlayerName(playerName);
-  const identity = await prisma.playerIdentityMap.findFirst({
+  const candidates = await prisma.playerIdentityMap.findMany({
     where: {
       normalizedName: normalized,
       sport,
     },
-    select: { sleeperId: true },
+    select: IDENTITY_MAP_SELECT,
+    // Stable input order so a scoring tie resolves the same way on every call.
+    orderBy: { id: 'asc' },
   });
+  const identity = candidates.length
+    ? disambiguate(candidates, null, teamHint).best
+    : null;
 
   const adp = sport === 'NFL' ? findMultiADP(playerName)?.redraft?.sleeper ?? null : null;
   if (identity?.sleeperId || adp != null) {

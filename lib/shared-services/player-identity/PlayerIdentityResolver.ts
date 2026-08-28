@@ -27,6 +27,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { normalizePlayerName, normalizePositionForSport } from '@/lib/team-abbrev'
 import { getProviderCapability } from './ProviderAdapters'
 import { defaultResolutionCache, type InMemoryResolutionCache } from './ResolutionCache'
 import type {
@@ -43,7 +44,7 @@ export interface ResolveOptions {
   aliasMap?: AliasMap
 }
 
-type PlayerIdentityMapRow = {
+export type PlayerIdentityMapRow = {
   id: string
   canonicalName: string
   normalizedName: string
@@ -56,7 +57,7 @@ type PlayerIdentityMapRow = {
   fleaflickerId: string | null
 }
 
-const IDENTITY_MAP_SELECT = {
+export const IDENTITY_MAP_SELECT = {
   id: true,
   canonicalName: true,
   normalizedName: true,
@@ -69,8 +70,31 @@ const IDENTITY_MAP_SELECT = {
   fleaflickerId: true,
 } as const
 
+/**
+ * ⚠ THIS MUST STAY THE WRITER'S FUNCTION, NOT A LOOKALIKE. `normalizedName` is
+ * produced by `normalizePlayerName` in `lib/team-abbrev.ts` — that is what
+ * `lib/sports-data/multiSportIdentityMap.ts` stamps on every row it ingests. A
+ * reader that normalizes even slightly differently matches nothing at all.
+ *
+ * This function previously stripped `[^a-z0-9]`, which removes the SPACE that the
+ * writer keeps. Measured on production 2026-08-28, that made `resolveByName` dead
+ * on arrival: of 9,563 NFL rows only **4** had a `normalizedName` it could ever
+ * produce (and those 4 only by accident — see the J.R. note below). Across all
+ * 65,152 rows the reachable total was 127. Delegating to the writer's own
+ * function takes NFL to 9,425/9,563 and every other sport to 100%.
+ *
+ * The residual 138 NFL rows are a second, older writer's convention that keeps
+ * periods (`'a.j. terrell'`, `'james pearce jr.'`); they need a data backfill, not
+ * a weaker normalizer here — loosening this to match them would re-break the 9,425.
+ *
+ * ⚠ Known upstream defect, deliberately NOT worked around here: the writer's
+ * suffix strip is unanchored, so a player whose FIRST name is "J.R." loses it —
+ * `'J.R. Sweezy'` is stored as `'sweezy'`. Four NFL rows are affected. Because we
+ * now share the writer's function we still match those rows exactly; fixing the
+ * anchor is a writer change plus a re-sync, not a read-side patch.
+ */
 export function normalizePlayerNameForResolution(name: string | null | undefined): string {
-  return (name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
+  return normalizePlayerName(name ?? '')
 }
 
 function toCanonicalPlayer(row: PlayerIdentityMapRow): CanonicalPlayer {
@@ -104,8 +128,21 @@ function unresolvedResult(input: ProviderPlayerRef, reason: string): ResolutionR
 /**
  * Real disambiguation scoring — adapted from `lib/unified-player-service.ts`'s
  * `disambiguateCandidate`, kept provider-neutral and dependency-free here.
+ *
+ * ⚠ A POSITION MISMATCH SCORES -3, so a hint in a different vocabulary actively
+ * selects the WRONG row rather than merely failing to help. Both sides are
+ * therefore folded through `normalizePositionForSport` — the same function the
+ * ingest writer applies — before they are compared. Measured 2026-08-28 against
+ * `player_season_stats` (Rolling Insights, the finest-grained vocabulary in the
+ * repo): raw comparison agreed with `PlayerIdentityMap.position` on 1,326 of 1,973
+ * NFL names, because the stats table carries CB/S/OT/DT where the identity map
+ * carries the coarse DB/OL buckets. Folding both sides takes that to 1,911/1,973.
+ * The residue is genuine tweener reclassification (LB↔DL) plus `G`, which
+ * `POSITION_CANONICAL` does not map.
+ *
+ * `teamHint` has no penalty branch (+4 or 0), so it is safe to pass raw.
  */
-function disambiguate(
+export function disambiguate(
   candidates: PlayerIdentityMapRow[],
   positionHint?: string | null,
   teamHint?: string | null
@@ -121,7 +158,11 @@ function disambiguate(
   for (const c of candidates) {
     let score = 0
     if (positionHint && c.position) {
-      score += c.position.toUpperCase() === positionHint.toUpperCase() ? 5 : -3
+      // Fold to the writer's vocabulary on BOTH sides; comparing raw would penalise
+      // a correct row purely for being stored as DB rather than CB.
+      const hint = normalizePositionForSport(c.sport, positionHint)
+      const stored = normalizePositionForSport(c.sport, c.position)
+      score += stored === hint ? 5 : -3
     }
     if (teamHint && c.currentTeam) {
       score += c.currentTeam.toUpperCase() === teamHint.toUpperCase() ? 4 : 0
