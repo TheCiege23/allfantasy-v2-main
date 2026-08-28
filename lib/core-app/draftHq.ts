@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
+import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 
 /**
@@ -85,6 +86,12 @@ export type DraftGrades = {
   gradedPicks: number
   totalPicks: number
   scale: string
+  /**
+   * Set when the grade was computed from the stats feed's format aggregate rather
+   * than the league's own rules. Carried through to the screen rather than dropped:
+   * a grade built on an approximation has to say so where it is read.
+   */
+  approximationNote: string | null
   teams: TeamDraftGrade[]
 }
 
@@ -269,28 +276,46 @@ function pickInRoundOf(round: number, pickNumber: number, teamCount: number): nu
  * board it grades is actually shown.
  */
 async function loadDraftGrades(
+  leagueId: string,
   platform: string,
   platformLeagueId: string | null,
 ): Promise<SectionState<DraftGrades>> {
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
-  if (platform !== 'sleeper') {
-    return unavailable(
-      `draft grades are computed from real scored points, and that stats board is keyed on Sleeper player ids — an imported ${platform} draft carries the provider’s own player ids, and nothing links the two yet, so a grade here would be invented rather than measured`,
-    )
-  }
-  if (!platformLeagueId) {
-    return unavailable('this league has no Sleeper id on file, and the grader is keyed on one')
+  /*
+   * Two sources, one shape. Sleeper grades live through its own API; every other
+   * platform grades from the DraftFact rows we imported, through the same
+   * `gradePicks`. Both return a `DraftReportPayload`, so everything below is common.
+   */
+  const report =
+    platform === 'sleeper'
+      ? platformLeagueId
+        ? await getDraftReport(platformLeagueId).catch(() => null)
+        : null
+      : await buildImportedDraftReport(leagueId).catch(() => null)
+
+  if (!report) {
+    if (platform === 'sleeper' && !platformLeagueId) {
+      return unavailable('this league has no Sleeper id on file, and the grader is keyed on one')
+    }
+    return unavailable('no completed draft has been graded for this league yet')
   }
 
-  const report = await getDraftReport(platformLeagueId).catch(() => null)
-  if (!report) return unavailable('the draft report could not be built for this league')
-
-  /* The payload holds the whole season chain; a screen headed "this draft" answers for
-     the most recent one. */
   const season = [...report.seasons].sort((a, b) => Number(b.season) - Number(a.season))[0]
   if (!season || season.managers.length === 0) {
     return unavailable('no completed draft has been graded for this league yet')
+  }
+
+  /*
+   * A season with nothing scored yet is refused rather than shown. Every median would
+   * be zero, every value-over would be zero, and every manager would come out a C —
+   * which in this product is what "no data" already looks like. Publishing that as a
+   * grade is worse than saying there is no grade.
+   */
+  if (season.gradedPicks === 0) {
+    return unavailable(
+      `the ${season.season} season has not produced scoring yet, so there is nothing to grade a pick against`,
+    )
   }
 
   return {
@@ -301,6 +326,7 @@ async function loadDraftGrades(
       gradedPicks: season.gradedPicks,
       totalPicks: season.totalPicks,
       scale: report.gradeScale.description,
+      approximationNote: report.scoringBasis === 'format-approx' ? report.scoringNote : null,
       teams: season.managers.map((m) => ({
         ownerId: m.ownerId,
         name: m.name,
@@ -566,7 +592,7 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     const [madePicks, board, grades] = await Promise.all([
       loadImportedDraftPicks(leagueId, userId).catch(() => none),
       loadCompletedDraftBoard(leagueId, userId).catch(() => none),
-      loadDraftGrades(league.platform, league.platformLeagueId ?? null).catch(() => none),
+      loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(() => none),
     ])
 
     /*
@@ -679,7 +705,7 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     reason: 'no completed draft has been imported for this league',
   }))
 
-  const grades = await loadDraftGrades(league.platform, league.platformLeagueId ?? null).catch(
+  const grades = await loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(
     () => ({
       available: false as const,
       reason: 'the draft report could not be built for this league',

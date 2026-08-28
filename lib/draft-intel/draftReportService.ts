@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { gradePicks, type GradablePick } from './gradeDraftPicks'
+import type { DraftGradeLetter, DraftPickGrade, DraftManagerCard } from './gradeDraftPicks'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import {
   getSeasonStatsBoard,
@@ -68,36 +70,9 @@ type WireDraftPick = {
   } | null
 }
 
-export type DraftGradeLetter = 'A' | 'B' | 'C' | 'D' | 'F'
-
-export type DraftPickGrade = {
-  pickNo: number
-  round: number
-  playerId: string | null
-  playerName: string
-  position: string | null
-  byOwnerId: string | null
-  byName: string
-  /** Draft-year points and value-over-round-median (the initial read). */
-  initialPoints: number | null
-  initialValueOver: number | null
-  /** Cumulative since the draft (equals initial in redraft leagues). */
-  currentPoints: number | null
-  currentValueOver: number | null
-}
-
-export type DraftManagerCard = {
-  ownerId: string
-  name: string
-  avatar: string | null
-  teamName: string | null
-  picks: number
-  initialScore: number
-  currentScore: number
-  initialGrade: DraftGradeLetter
-  currentGrade: DraftGradeLetter
-  trend: 'improved' | 'declined' | 'steady'
-}
+/* The grading maths and its types live in `gradeDraftPicks`, shared with the
+   imported-league path. Re-exported here so existing importers are unaffected. */
+export type { DraftGradeLetter, DraftPickGrade, DraftManagerCard } from './gradeDraftPicks'
 
 export type DraftReportSeason = {
   season: string
@@ -117,6 +92,14 @@ export type DraftReportPayload = {
   staleAsOf: string | null
   sleeperLeagueId: string
   dynastyLike: boolean
+  /**
+   * Whether points came from the league's OWN scoring rules or from the stats feed's
+   * format aggregate. Carried in the payload rather than inferred, because a grade
+   * computed on an approximation must say so wherever it is shown.
+   */
+  scoringBasis: 'league-scored' | 'format-approx'
+  /** Shown to the reader when the basis is an approximation. Null when it is not. */
+  scoringNote: string | null
   gradeScale: {
     description: string
     thresholds: { letter: DraftGradeLetter; minAvgPerPick: number | null }[]
@@ -125,20 +108,6 @@ export type DraftReportPayload = {
   missing: string[]
 }
 
-function letterFor(avgPerPick: number): DraftGradeLetter {
-  if (avgPerPick >= 25) return 'A'
-  if (avgPerPick >= 10) return 'B'
-  if (avgPerPick > -10) return 'C'
-  if (avgPerPick > -25) return 'D'
-  return 'F'
-}
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
-}
 
 async function buildDraftReport(sleeperLeagueId: string): Promise<DraftReportPayload | null> {
   const missing: string[] = []
@@ -222,21 +191,9 @@ async function buildDraftReport(sleeperLeagueId: string): Promise<DraftReportPay
       return { p, playerId, initialPoints, currentPoints }
     })
 
-    // Round medians (initial + cumulative) from picks with data.
-    const initialMedianByRound = new Map<number, number>()
-    const currentMedianByRound = new Map<number, number>()
-    const rounds = Math.max(...picks.map((p) => p.round))
-    for (let r = 1; r <= rounds; r += 1) {
-      const inRound = rawPicks.filter((x) => x.p.round === r)
-      const mi = median(inRound.map((x) => x.initialPoints).filter((v): v is number => v != null))
-      const mc = median(inRound.map((x) => x.currentPoints).filter((v): v is number => v != null))
-      if (mi != null) initialMedianByRound.set(r, mi)
-      if (mc != null) currentMedianByRound.set(r, mc)
-    }
-
-    const gradedPicksList: DraftPickGrade[] = rawPicks.map(({ p, playerId, initialPoints, currentPoints }) => {
-      const mi = initialMedianByRound.get(p.round)
-      const mc = currentMedianByRound.get(p.round)
+    /* Normalized away from Sleeper's wire shape, then graded by the shared core —
+       the same call the imported-league path makes, so an A means one thing. */
+    const gradable: GradablePick[] = rawPicks.map(({ p, playerId, initialPoints, currentPoints }) => {
       const byUser = p.picked_by ? usersById.get(p.picked_by) : undefined
       return {
         pickNo: p.pick_no,
@@ -247,73 +204,24 @@ async function buildDraftReport(sleeperLeagueId: string): Promise<DraftReportPay
         position: p.metadata?.position?.toUpperCase() ?? null,
         byOwnerId: p.picked_by ?? null,
         byName: byUser?.display_name ?? 'Manager',
+        teamName: byUser?.metadata?.team_name?.trim() || null,
+        avatar: byUser?.avatar ?? null,
         initialPoints,
-        initialValueOver:
-          initialPoints != null && mi != null ? Math.round((initialPoints - mi) * 10) / 10 : null,
         currentPoints,
-        currentValueOver:
-          currentPoints != null && mc != null ? Math.round((currentPoints - mc) * 10) / 10 : null,
       }
     })
-
-    // Per-manager cards.
-    const byOwner = new Map<string, DraftPickGrade[]>()
-    for (const g of gradedPicksList) {
-      if (!g.byOwnerId) continue
-      const list = byOwner.get(g.byOwnerId) ?? []
-      list.push(g)
-      byOwner.set(g.byOwnerId, list)
-    }
-    const managers: DraftManagerCard[] = [...byOwner.entries()]
-      .map(([ownerId, list]) => {
-        const gradable = list.filter((g) => g.initialValueOver != null)
-        const initialScore =
-          Math.round(gradable.reduce((a, g) => a + (g.initialValueOver ?? 0), 0) * 10) / 10
-        const currentScore =
-          Math.round(list.reduce((a, g) => a + (g.currentValueOver ?? 0), 0) * 10) / 10
-        const perPickInitial = gradable.length > 0 ? initialScore / gradable.length : 0
-        const perPickCurrent = gradable.length > 0 ? currentScore / gradable.length : 0
-        const user = usersById.get(ownerId)
-        return {
-          ownerId,
-          name: user?.display_name ?? 'Manager',
-          avatar: user?.avatar ?? null,
-          teamName: user?.metadata?.team_name?.trim() || null,
-          picks: list.length,
-          initialScore,
-          currentScore,
-          initialGrade: letterFor(perPickInitial),
-          currentGrade: letterFor(perPickCurrent),
-          trend:
-            perPickCurrent > perPickInitial + 3
-              ? ('improved' as const)
-              : perPickCurrent < perPickInitial - 3
-                ? ('declined' as const)
-                : ('steady' as const),
-        }
-      })
-      .sort((a, b) => b.currentScore - a.currentScore)
-
-    const withCurrent = gradedPicksList.filter((g) => g.currentValueOver != null)
-    const steals = [...withCurrent]
-      .sort((a, b) => (b.currentValueOver ?? 0) - (a.currentValueOver ?? 0))
-      .slice(0, 3)
-      .filter((g) => (g.currentValueOver ?? 0) > 0)
-    const busts = [...withCurrent]
-      .sort((a, b) => (a.currentValueOver ?? 0) - (b.currentValueOver ?? 0))
-      .slice(0, 3)
-      .filter((g) => (g.currentValueOver ?? 0) < 0)
+    const graded = gradePicks(gradable)
 
     seasonsOut.push({
       season: league.season,
       draftId: draft.draft_id,
-      rounds,
+      rounds: graded.rounds,
       totalPicks: picks.length,
-      gradedPicks: gradedPicksList.filter((g) => g.initialValueOver != null).length,
+      gradedPicks: graded.gradedPicks.filter((g) => g.initialValueOver != null).length,
       partial,
-      managers,
-      steals,
-      busts,
+      managers: graded.managers,
+      steals: graded.steals,
+      busts: graded.busts,
     })
   }
   seasonsOut.reverse() // newest first
@@ -324,6 +232,9 @@ async function buildDraftReport(sleeperLeagueId: string): Promise<DraftReportPay
     staleAsOf: null,
     sleeperLeagueId,
     dynastyLike,
+    /* Sleeper supplies its own scoring settings, so this path is always exact. */
+    scoringBasis: 'league-scored',
+    scoringNote: null,
     gradeScale: {
       description:
         'Value over round: each pick’s league-scored points minus the MEDIAN produced by that round’s picks. Grade = average value-over per pick. Recompute any letter from the numbers shown.',
