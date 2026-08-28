@@ -191,6 +191,25 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/cfb-player-data\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
+   * `lib/espn/espnAthleteFetch.ts` — the ESPN core athlete list, and the same
+   * adapter/ingestion split CFBD is the worked example of. Every export is a live
+   * fetch or a pure helper for one; the writing lives in
+   * `lib/espn/ingestEspnAthleteIdentities.ts`, which the `lib/.*(ingest|sync)`
+   * rule above already covers.
+   *
+   * ⚠ NOTE THE HOST WAS ALREADY WATCHED, which is why this needed an entry at all:
+   * `sports.core.api.espn.com` ends in `api.espn.com`, so the existing pattern
+   * matches it and no host list needed widening. Adding it reported exactly ONE
+   * file — this adapter — and nothing pre-existing.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. Valid only while the ingestion module is the
+   * sole runtime importer. Censused on 2026-08-27 across all four forms
+   * (`from '@/lib/espn/espnAthleteFetch'`, relative, `require(`, `await import(`):
+   * the ingestion module and its test, nothing else. A request path importing it
+   * for a value retires the exemption.
+   */
+  /^lib\/espn\/espnAthleteFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
    * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
    * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`
    * performs the request, so it is allowlisted here with the other clients

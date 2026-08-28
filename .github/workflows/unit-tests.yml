@@ -74,16 +74,24 @@ on:
 #                 pushed again, and the run that matters is the one on the head
 #                 you are asking to merge. Grouping by PR NUMBER (not by ref)
 #                 keeps that precise.
-#   push to main  do NOT cancel. Every commit gets its own group, so nothing
-#                 supersedes anything and every push produces a real verdict.
-#                 Each commit is a distinct question — "is main green at this
-#                 sha" — and cancelling it discards the only answer.
+#   push to main  ONE group, and never cancel a run that has STARTED. GitHub runs
+#                 one per group and keeps at most one pending, dropping an older
+#                 pending run when a newer commit arrives. So a started run always
+#                 finishes and reports, while the backlog is bounded at one.
 #
-# The cost of not cancelling is runner minutes, and this repo is PUBLIC, so
-# standard-runner minutes are free. At ~5 minutes a shard (measured, not the
-# 25-minute timeout) that is well inside the concurrency ceiling.
+# ⚠ A GROUP PER SHA WAS THE FIRST ATTEMPT AND IT WAS WRONG. It made every push
+# run to completion, which removed the cancellations — and then saturated the
+# account's concurrent-job ceiling instead. Measured: 27 completed, 2 in progress
+# and ELEVEN QUEUED, with runs sitting ~17 minutes before starting. Runner minutes
+# are free on a public repo; concurrent JOB SLOTS are not, and nine workflows fire
+# on every push here, this one contributing four shards each. A required check
+# that queues for 17 minutes is barely better than one that gets cancelled.
+#
+# ⚠ THE TRADE, STATED: main gets a verdict on RECENT commits, not on every one.
+# At 111 pushes a day against a 5-minute suite, per-commit coverage was never
+# actually available — the choice is between a recent verdict and none.
 concurrency:
-  group: unit-tests-${{ github.event.pull_request.number || github.sha }}
+  group: unit-tests-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

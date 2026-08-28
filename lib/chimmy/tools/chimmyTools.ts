@@ -54,6 +54,11 @@ export const CHIMMY_TOOL_SPECS = [
             type: 'string',
             description: "The league name as the user wrote it. Do not guess or expand it.",
           },
+          season: {
+            type: 'number',
+            description:
+              'The year, if the user named one ("my record in KBFL in 2025" -> 2025). The same league exists once per season, so this is usually what separates two identically named leagues. Omit it if they did not say a year.',
+          },
         },
         required: ['name'],
       },
@@ -173,7 +178,9 @@ export async function executeChimmyTool(
           return 'I cannot tell who is signed in, so I cannot look up their leagues. Say that; do not name a league.'
         }
         const asked = typeof args.name === 'string' ? args.name : ''
-        const found = await findLeagueByName(ctx.userId, asked)
+        const askedSeason =
+          typeof args.season === 'number' && Number.isFinite(args.season) ? args.season : null
+        const found = await findLeagueByName(ctx.userId, asked, askedSeason)
 
         if (found.kind === 'match') {
           ctx.leagueId = found.league.id
@@ -189,10 +196,25 @@ export async function executeChimmyTool(
            * several called "Dynasty something", and a confident answer about the
            * wrong one is indistinguishable from a right one.
            */
+          /*
+           * ⚠ LIST WHAT DIFFERS, NOT JUST THE NAME. The first version rendered
+           * only names, so two rows both called "KBFL" produced "which of the
+           * two KBFL leagues did you mean?" — a question the reader cannot
+           * possibly answer. Season and sport are what actually separate them.
+           */
           return [
             `More than one of their leagues matches "${asked}":`,
-            found.candidates.map((c) => `"${c.name}"`).join(', ') + '.',
-            'Ask which one they mean. Do NOT pick one, and do not answer about any of them yet.',
+            found.candidates
+              .map(
+                (c) =>
+                  `"${c.name}" (${c.sport}, ${c.season} season${
+                    typeof c.teamCount === 'number' ? `, ${c.teamCount} teams imported` : ''
+                  })`,
+              )
+              .join('; ') + '.',
+            'Ask which one they mean AND NAME THE DIFFERENCE — season, sport, or how many teams each has. Never just repeat the name, which is identical for all of them.',
+            'If they already said a year, call this tool again with that season instead of asking.',
+            'Do NOT pick one, and do not answer about any of them yet.',
           ].join(' ')
         }
 

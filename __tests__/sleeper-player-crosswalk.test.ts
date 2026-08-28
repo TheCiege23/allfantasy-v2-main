@@ -26,7 +26,7 @@ describe('resolveSleeperPlayerIdentities', () => {
 
   it('resolves through SportsPlayer and on to the canonical row', async () => {
     mocks.sportsPlayerFindMany.mockResolvedValue([
-      { externalId: '5859', name: 'Brian Thomas Jr.', position: 'WR', team: 'JAX', imageUrl: null },
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.', position: 'WR', team: 'JAX', imageUrl: null },
     ])
     mocks.playerFindMany.mockResolvedValue([
       { id: 'nfl-brian-thomas-abc', name: 'Brian Thomas Jr.', imageUrl: 'https://img/bt.png', position: 'WR', team: 'JAX' },
@@ -57,7 +57,7 @@ describe('resolveSleeperPlayerIdentities', () => {
 
   it('only asks the roster table about ids SportsPlayer could not name', async () => {
     mocks.sportsPlayerFindMany.mockResolvedValue([
-      { externalId: '5859', name: 'Brian Thomas Jr.', position: 'WR', team: 'JAX', imageUrl: null },
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.', position: 'WR', team: 'JAX', imageUrl: null },
     ])
 
     await resolveSleeperPlayerIdentities(['5859', '2216'], 'nfl')
@@ -66,12 +66,31 @@ describe('resolveSleeperPlayerIdentities', () => {
   })
 
   /*
+   * ⚠ THE COLLISION THIS HOP EXISTS TO SURVIVE. A Rolling Insights row carries a BARE numeric
+   * `externalId`, and 42,032 of those are also valid Sleeper ids belonging to someone else.
+   * Measured on 201 real roster ids, the old query resolved 121 and 79 were strangers — Mike
+   * Evans came back as Harlan Miller, Justin Jefferson as DaRon Bland. A row that matches only
+   * by bare `externalId` must never be accepted as a Sleeper id.
+   */
+  it('refuses a provider row whose bare externalId happens to equal the Sleeper id', async () => {
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: '6794', sleeperId: null, name: 'DaRon Bland', position: 'CB', team: 'DAL', imageUrl: null },
+    ])
+
+    const { byId, resolved } = await resolveSleeperPlayerIdentities(['6794'], 'nfl')
+
+    expect(resolved).toBe(0)
+    expect(byId.get('6794')?.name).toBeNull()
+    expect(byId.get('6794')?.source).toBe('unresolved')
+  })
+
+  /*
    * `externalId` is unique only within a sport — `340` is five different athletes
    * across five sports. An unfiltered query returns an arbitrary one.
    */
   it('filters every lookup by sport', async () => {
     mocks.sportsPlayerFindMany.mockResolvedValue([
-      { externalId: '340', name: 'Someone', position: 'WR', team: 'NE', imageUrl: null },
+      { externalId: 'sleeper:340', sleeperId: '340', name: 'Someone', position: 'WR', team: 'NE', imageUrl: null },
     ])
 
     await resolveSleeperPlayerIdentities(['340'], 'nfl')
@@ -101,7 +120,7 @@ describe('resolveSleeperPlayerIdentities', () => {
 
   it('matches canonical rows case-insensitively, since two pipelines populate them', async () => {
     mocks.sportsPlayerFindMany.mockResolvedValue([
-      { externalId: '1', name: 'de’Von Achane', position: 'RB', team: 'MIA', imageUrl: null },
+      { externalId: 'sleeper:1', sleeperId: '1', name: 'de’Von Achane', position: 'RB', team: 'MIA', imageUrl: null },
     ])
     mocks.playerFindMany.mockResolvedValue([
       { id: 'nfl-devon-achane', name: 'De’Von Achane', imageUrl: 'https://img/a.png', position: 'RB', team: 'MIA' },
