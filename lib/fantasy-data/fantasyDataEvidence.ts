@@ -123,6 +123,39 @@ async function getAdpEvidence(sport: string) {
 }
 
 async function getInjuryEvidence(sport: string) {
+  /*
+   * ⚠ THIS COUNT INCLUDES ROWS THAT IDENTIFY NOBODY. A healthy number here
+   * is not evidence of a healthy injury feed, and for two sports it is evidence
+   * of the opposite.
+   *
+   * `injury_reports.playerId` carries TWO placeholder conventions when a
+   * provider supplies no id: `''` alongside playerName 'Unknown Player', and
+   * `'unk:…'` alongside playerName 'Unknown'. A predicate that catches only
+   * the blank one undercounts by the second — that is how two measurements of
+   * this table on the same day disagreed by 56 rows.
+   *
+   * Measured on production 2026-08-27, predicate
+   *   playerId = '' OR playerId LIKE 'unk:%'   (equivalently playerName ILIKE '%unknown%')
+   *
+   *   total 1,358 · no usable identity 1,047 (77%)
+   *   blank id by sport: NBA 273/273 · MLB 244/244 · NHL 250/251 · NFL 224/573
+   *
+   * So NBA and MLB report as healthy here while being 100% unidentifiable: the
+   * upstream feeds send no ids for those sports at all. Resolving through
+   * PlayerIdentityMap does not rescue them either — it covers 19.8% of NFL and
+   * 0% of NBA, NHL and MLB.
+   *
+   * The blank id also sits INSIDE the table's unique key
+   * (sport, playerId, reportDate, status), so those rows overwrite one another
+   * on upsert. The count therefore understates how many reports arrived while
+   * overstating how many are usable.
+   *
+   * If this number ever drops sharply for a sport, check whether ids started
+   * being required before treating it as an outage — refusing id-less rows was
+   * implemented and then deliberately reverted (branch
+   * injury-importer-require-player-id). This note describes the DATA, and stays
+   * true whichever way that decision goes.
+   */
   try {
     const count = await (prisma as any).injuryReportRecord.count({
       where: { sport },
