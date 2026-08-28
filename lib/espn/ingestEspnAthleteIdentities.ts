@@ -140,19 +140,31 @@ export async function ingestEspnAthleteIdentities(options?: {
   let unknown: Array<{ pid: string }> = []
   try {
     /*
-     * Driven by draft facts, which is the surface that reported the problem.
-     * Roster player ids live inside a JSON column and are a separate, larger job —
-     * recorded rather than silently skipped.
+     * ⚠ BOTH SURFACES, BECAUSE A DRAFT IS NOT A ROSTER. Draft facts reported the
+     * problem, but a player added off waivers was never drafted and would have
+     * stayed nameless on every roster screen. Measured after the draft-only pass
+     * landed: 253 distinct ESPN roster ids, 7 of them still unknown — small,
+     * because a drafted player is usually still rostered, and precisely the ones a
+     * draft-shaped query can never reach.
      */
     unknown = await prisma.$queryRaw<Array<{ pid: string }>>`
-      select distinct d."playerId" as pid
-      from dw_draft_facts d
-      join leagues l on l.id = d."leagueId"
-      where lower(l.platform) = 'espn'
-        and d."playerId" !~ '^-'
+      with ids as (
+        select distinct d."playerId" as pid
+        from dw_draft_facts d
+        join leagues l on l.id = d."leagueId"
+        where lower(l.platform) = 'espn'
+        union
+        select distinct jsonb_array_elements_text(r."playerData"->'players') as pid
+        from rosters r
+        join leagues l on l.id = r."leagueId"
+        where lower(l.platform) = 'espn'
+          and jsonb_typeof(r."playerData"->'players') = 'array'
+      )
+      select pid from ids
+      where pid !~ '^-'
         and not exists (
           select 1 from sports_core_player_provider_identities i
-          where i.provider = 'espn' and i.provider_player_id = d."playerId"
+          where i.provider = 'espn' and i.provider_player_id = ids.pid
         )
       limit ${maxPlayers}
     `
