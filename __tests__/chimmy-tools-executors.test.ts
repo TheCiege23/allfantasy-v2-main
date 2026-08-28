@@ -51,6 +51,12 @@ describe('tool specs', () => {
        * write-capable tool being added.
        */
       'find_league_by_name',
+      /*
+       * Reads the user's OWN team, resolved through LeagueTeam.claimedByUserId
+       * from the session — no id crosses the model boundary. Read-only, and it
+       * returns roster facts with no projections attached.
+       */
+      'get_my_roster',
       'get_league_standings',
       'get_head_to_head',
       'get_upcoming_games',

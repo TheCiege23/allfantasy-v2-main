@@ -4,6 +4,7 @@ import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { detectStatFamily, readStatLeaders, FAMILY_LABEL } from '@/lib/live/playerStatLeaders'
 import { findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
+import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -62,6 +63,15 @@ export const CHIMMY_TOOL_SPECS = [
         },
         required: ['name'],
       },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_roster',
+      description:
+        "The user's OWN team in the league in scope: starters, bench, injured reserve and taxi, with each player's position, NFL team and injury status. Use for 'who should I start', 'where am I weak', 'who should I drop', or any question about their players. Returns roster FACTS only — no projections or points. Says so plainly if their team is unclaimed or unsynced.",
+      parameters: { type: 'object', properties: {}, required: [] },
     },
   },
   {
@@ -250,6 +260,11 @@ export async function executeChimmyTool(
           `Their leagues include: ${found.known.map((c) => `"${c.name}"`).join(', ')}.`,
           'Tell them the name did not match and offer those. Do NOT answer as though a league were selected.',
         ].join(' ')
+      }
+
+      case 'get_my_roster': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        return buildMyRosterContext(ctx.leagueId, ctx.userId)
       }
 
       case 'get_league_standings': {

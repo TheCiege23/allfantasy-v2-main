@@ -355,6 +355,7 @@ const CHIMMY_TOOL_LOOP_SYSTEM_PROMPT = [
    * paraphrase, and a paraphrase is exactly what a system prompt is for.
    */
   'If the question names a league — "KBFL", "my dynasty league" — call find_league_by_name FIRST, then the league tools. Without it nothing is selected and they read nothing.',
+  'For start/sit, drop, or "where am I weak" questions, call get_my_roster. It returns roster FACTS only — positions, teams, injury status — and NO projections or points, so reason about roles and health and never state projected scores or a ranking you did not receive.',
   'CRITICAL: "no league is selected" means NOTHING WAS CHECKED. It is never evidence that a league is empty. Never turn it into "no records/standings/roster are stored" for a named league, and never state a team count, scoring rule or FAAB figure you did not receive from a tool. Ask the user to pick a league instead.',
   'When a tool says its list is truncated, do not count from it, do not say who is last, and do not say anyone is missing.',
   'Answer in a few sentences. Name the data you used.',
