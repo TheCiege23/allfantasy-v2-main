@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 
 /**
  * PLAYERS NOT ON ANY ROSTER IN THE LEAGUE IN SCOPE.
@@ -51,6 +52,79 @@ function shortPosition(raw: string | null): string | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   return POSITION_SHORT[trimmed.toLowerCase()] ?? trimmed.toUpperCase()
+}
+
+/**
+ * Below this the house set is not an answer, so the deeper source is tried.
+ * Measured: World Football League yields 0 and KBFL yields 1 from our own
+ * values, and a one-name pickup list reads as a broken feature.
+ */
+const MIN_USEFUL = 5
+
+/**
+ * ⚠ THE LIMITS TRAVEL WITH THE LIST, for the same reason the waiver-rules block
+ * carries its own refusal: a bare ranked list reads as a complete pickup board,
+ * and the model will then say "he is on waivers, put a claim in" about a player
+ * whose availability we never checked. Shared so both the house-values path and
+ * the FantasyCalc path carry them identically — a fallback that quietly drops
+ * the caveats is worse than no fallback.
+ */
+function limitLines(basis: string): string[] {
+  return [
+    'LIMITS you must respect when using this block:',
+    '1. "Unrostered" means on nobody\'s roster at our last sync. It does NOT mean "on waivers" or "free to add right now" — whether a player must clear waivers depends on the league\'s waiver rules and on when he was dropped, and we hold NO claim or drop timing at all.',
+    '2. This covers only players the source ranks, so it lists the notable names rather than the full pool. Never say a player is unavailable just because he is missing here.',
+    `3. These are ${basis} values — long-term asset worth, not a this-week start ranking. In a redraft league say so before recommending a rookie who is ranked here for years we have not played yet.`,
+    'You may recommend from this list and compare these players against the user\'s roster. Do NOT state that anyone is claimable, and do NOT invent FAAB bids or waiver priority.',
+  ]
+}
+
+/**
+ * The deeper ranked pool, for leagues that have rostered every name we value.
+ *
+ * ⚠ EXCLUDES DRAFT PICKS, WHICH IS NOT OPTIONAL. FantasyCalc ranks picks as
+ * tradeable assets and they dominate the top of the list — the first four
+ * unrostered entries in all three leagues measured were "2026 Pick 1.01", "2026
+ * Pick 1.02", "2027 1st (Early)" and "2026 Pick 1.03". Offered as waiver
+ * pickups those are nonsense, and confidently so. They carry `position: 'PICK'`
+ * and a synthetic id (`DP_0_0`, `FP_2027_early_0`), so the position is the exact
+ * discriminator — 78 of 474 entries — and beats parsing the name.
+ *
+ * ⚠ ITS ids ARE ALREADY THE ROSTER ID SPACE. `player.sleeperId` is populated on
+ * all 474 entries, so no PlayerIdentityMap join is involved and none of that
+ * table's known duplicate-group hazards apply here.
+ */
+async function deepPoolFromFantasyCalc(
+  rostered: Set<string>,
+): Promise<{ available: Array<{ name: string; position: string; overallRank: number }>; total: number } | null> {
+  /*
+   * The repo-wide default, and one of the keys already cached — so this is
+   * normally a DB read. A miss self-populates through one fetch rather than
+   * serving nulls. Note it is a SUPERFLEX (2QB) baseline, which is why the
+   * block says the values are not tuned to this league.
+   */
+  const players = await getFantasyCalcValuesDbFirst({
+    isDynasty: true,
+    numQbs: 2,
+    numTeams: 12,
+    ppr: 1,
+  }).catch(() => [])
+
+  const real = players.filter(
+    (p) => String(p?.player?.position ?? '').toUpperCase() !== 'PICK' && p?.player?.sleeperId,
+  )
+  if (real.length === 0) return null
+
+  const available = real
+    .filter((p) => !rostered.has(String(p.player.sleeperId)))
+    .sort((a, b) => a.overallRank - b.overallRank)
+    .map((p) => ({
+      name: p.player.name,
+      position: String(p.player.position ?? '').toUpperCase(),
+      overallRank: p.overallRank,
+    }))
+
+  return { available, total: real.length }
 }
 
 /** Roster player ids for EVERY team in the league, not just the reader's. */
@@ -170,6 +244,39 @@ export async function buildAvailablePlayersContext(
 
   const lines: string[] = []
 
+  /*
+   * ⚠ THE HOUSE SET RUNS OUT EXACTLY WHERE THE QUESTION MATTERS MOST. Measured
+   * 2026-08-28: our 165 published values leave KBFL (32 teams) with ONE
+   * available player and World Football League with NONE, because a deep league
+   * has rostered every notable name. "Our rankings are exhausted" is true and
+   * useless. FantasyCalc's cached set is 474 deep and covers the tail, and after
+   * excluding picks it leaves KBFL 14 and WFL 19 — real answers.
+   *
+   * ⚠ ONE SCALE PER ANSWER, NEVER INTERLEAVED. An AllFantasy market value and a
+   * FantasyCalc value are different scales; ordering one list by both would
+   * misrank silently. So the house set is used whenever it yields a usable
+   * answer, and otherwise it is replaced wholesale — never blended — and the
+   * block names which source it used.
+   */
+  if (available.length < MIN_USEFUL) {
+    const deep = await deepPoolFromFantasyCalc(rostered)
+    if (deep && deep.available.length > available.length) {
+      const shown = deep.available.slice(0, MAX_SHOWN).map((p) => `${p.name} (${p.position}, rank #${p.overallRank})`)
+      const more =
+        deep.available.length > shown.length
+          ? ` (+${deep.available.length - shown.length} more ranked players available)`
+          : ''
+      lines.push(
+        `UNROSTERED PLAYERS in "${leagueName}", best FantasyCalc dynasty rank first:`,
+        `${shown.join('; ')}${more}`,
+        `That is ${deep.available.length} of the ${deep.total} ranked players FantasyCalc covers.`,
+        `Only ${available.length} of the ${valued.length} players AllFantasy publishes its own value for are unrostered here, so this list uses FantasyCalc's deeper set instead. Those are two different scales — do NOT compare a rank here against an AllFantasy value from another answer.`,
+      )
+      lines.push(...limitLines('FantasyCalc dynasty'))
+      return lines.join('\n')
+    }
+  }
+
   if (available.length === 0) {
     lines.push(
       `Every one of the ${valued.length} players we publish a value for is already rostered in "${leagueName}".`,
@@ -195,19 +302,7 @@ export async function buildAvailablePlayersContext(
     )
   }
 
-  /*
-   * ⚠ THE LIMITS TRAVEL WITH THE LIST, for the same reason the waiver-rules
-   * block carries its own refusal: a bare ranked list reads as a complete
-   * pickup board, and the model will then say "he is on waivers, put a claim
-   * in" about a player whose availability we never checked.
-   */
-  lines.push(
-    'LIMITS you must respect when using this block:',
-    '1. "Unrostered" means on nobody\'s roster at our last sync. It does NOT mean "on waivers" or "free to add right now" — whether a player must clear waivers depends on the league\'s waiver rules and on when he was dropped, and we hold NO claim or drop timing at all.',
-    '2. This covers only players we publish a market value for, so it ranks the notable names rather than the full pool. Never say a player is unavailable just because he is missing here.',
-    `3. These are ${concepts} values — long-term asset worth, not a this-week start ranking. In a redraft league say so before recommending a rookie who is ranked here for years we have not played yet.`,
-    'You may recommend from this list and compare these players against the user\'s roster. Do NOT state that anyone is claimable, and do NOT invent FAAB bids or waiver priority.',
-  )
+  lines.push(...limitLines(concepts))
 
   return lines.join('\n')
 }
