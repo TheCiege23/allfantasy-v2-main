@@ -228,7 +228,23 @@ describe('NFL data foundation', () => {
     const commissionerHub = fs.readFileSync(path.join(root, 'lib/commissioner-hub/commissionerHubHealth.ts'), 'utf8')
 
     expect(draftRoute).toContain('enrichCanonicalNflDraftPoolEntries')
-    expect(draftRoute).toContain('nflfoundation_v1')
+    /*
+     * ⚠ THE MARKER MOVED, THE WIRING DID NOT. `nflfoundation_v1` was inline in this route's
+     * cache key until 6fad57e47 hoisted it into DRAFT_POOL_CACHE_VERSION in
+     * lib/draft-room/ensureDraftPoolReady. Asserting on the route's own text then failed while
+     * the feature was entirely intact — the same trap CLAUDE.md records for provider URLs, where
+     * hoisting a literal into a shared constant retires the check that guarded it.
+     *
+     * Assert on the definition site AND on the route consuming it, so the check survives the
+     * next refactor of the same shape. The route reaches the version through
+     * `buildDraftPoolCacheKey`, which encapsulates it — not through the constant directly.
+     */
+    const draftPoolCacheVersion = fs.readFileSync(
+      path.join(root, 'lib/draft-room/ensureDraftPoolReady.ts'),
+      'utf8',
+    )
+    expect(draftPoolCacheVersion).toContain('nflfoundation_v1')
+    expect(draftRoute).toContain('buildDraftPoolCacheKey')
     expect(waiverRoute).toContain('getCanonicalNflRosteredIdentityKeysForLeague')
     expect(waiverRoute).toContain('playerMatchesRosteredKeys')
     expect(tradeContext).toContain('weeklyProjectionDelta')
