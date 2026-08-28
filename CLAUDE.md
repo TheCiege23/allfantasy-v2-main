@@ -42,6 +42,34 @@ The contract's documented names (`RSC_TOKEN`, `ROLLING_INSIGHTS_BASE_URL`) are
 **minority spellings in this repo**. Setting only those will silently no-op on
 most call paths.
 
+🛑 **THERE ARE TWO ROLLING INSIGHTS ACCOUNTS AND THEIR SPORTS DO NOT OVERLAP.**
+`ROLLING_INSIGHTS_RSC_TOKEN` and `ROLLING_INSIGHTS_RSC_TOKEN2` (also
+`..._CLIENT_ID2` / `..._CLIENT_SECRET2`) are **different subscriptions**, and the
+list above is spellings of the FIRST one — not the whole credential set.
+
+| | `RSC_TOKEN` | `RSC_TOKEN2` |
+|---|---|---|
+| NFL | ✅ | ❌ |
+| MLB · NBA · NHL · NCAABB · **NCAAFB** · SOCCER | ❌ | ✅ |
+
+**A single-credential call cannot answer "do we have this sport".** Take the
+first token present and every sport on the other account looks unavailable —
+`lib/workers/providers/rollingInsightsRest.ts` has `riCredentialsFor` for exactly
+this reason, and any new call path or ad-hoc probe must iterate credentials the
+same way.
+
+This has now caused the same wrong conclusion twice: `GAPS.md` `N-02` records a
+reader that took the first token and left six sports 304'ing forever while
+reporting itself healthy, and on 2026-08-28 a probe using only the first token
+concluded "RI has no college football" — it does, on `TOKEN2`. Both were
+confident, both were wrong, and `GAPS.md` had already named the trap.
+
+Two related vendor behaviours, both in `contracts/rolling-insights/GAPS.md`:
+`/live/{date}` is keyed on the **US Eastern** date (a UTC date 404s through NFL
+primetime), and `/live` on a **past** date is the cheapest unambiguous
+entitlement probe — an unentitled sport returns `404 "You are not signed up for
+the sport you are requesting"` where `team-info` returns an ambiguous `304`.
+
 ### DB-first boundary
 
 The intended architecture is that application code reads from Postgres and only
