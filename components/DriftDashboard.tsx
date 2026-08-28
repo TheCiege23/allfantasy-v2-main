@@ -3,11 +3,22 @@
 import React, { useEffect, useState } from "react"
 import { apiGet } from "@/lib/api"
 
+/**
+ * \u26a0 AN ABSENT METRIC RENDERS AN EM DASH, NEVER A ZERO. `0.0` is a measured
+ * calibration error; "we have no reading" is a different fact, and on a drift
+ * monitor the two lead opposite ways.
+ */
 function MetricRow(props: { label: string; value: any }) {
+  const missing = props.value === null || props.value === undefined
   return (
-    <div className="flex justify-between text-sm text-gray-300">
-      <span>{props.label}</span>
-      <span className="font-semibold">{props.value ?? "\u2014"}</span>
+    <div className="af-row" style={{ justifyContent: 'space-between', fontSize: 13 }}>
+      <span style={{ color: 'var(--muted)' }}>{props.label}</span>
+      <span
+        className="af-num"
+        style={{ fontWeight: 700, color: missing ? 'var(--faint)' : 'var(--text)' }}
+      >
+        {missing ? "\u2014" : props.value}
+      </span>
     </div>
   )
 }
@@ -36,39 +47,77 @@ export function DriftDashboard(props: { leagueId: string }) {
   const latest = rows.length ? rows[rows.length - 1] : null
 
   return (
-    <div className="rounded-2xl bg-zinc-950 border border-gray-800 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold text-white">Drift Monitoring</h2>
-        <span className="text-xs text-gray-500">last 60 days</span>
+    <section className="af-frame" style={{ padding: 16 }}>
+      <div className="af-row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 className="af-label">Drift Monitoring</h2>
+        <span className="af-label" style={{ color: 'var(--faint)' }}>last 60 days</span>
       </div>
 
-      {error ? <div className="text-sm text-red-400">Error: {error}</div> : null}
+      {/*
+        \u26a0 A FAILED READ SAYS SO. An error here used to render beside empty metric
+        rows, which reads as "no drift" \u2014 the opposite of what an unread monitor
+        means. Same rule the live surfaces follow: could-not-load and nothing-to-
+        show are different claims.
+      */}
+      {error ? (
+        <div className="af-issue" data-severity="bad" style={{ marginBottom: 12 }}>
+          Drift could not be read: {error}
+        </div>
+      ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-zinc-900 p-4">
-          <div className="font-bold text-white mb-2">Latest</div>
-          <div className="space-y-1">
+      {/* Layout stays Tailwind; only surfaces and colour move to af-core tokens,
+          which is what the light-mode clamp actually keys on. */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="af-card">
+          <div className="af-label" style={{ marginBottom: 8 }}>Latest</div>
+          <div style={{ display: 'grid', gap: 4 }}>
             <MetricRow label="ECE" value={latest?.ece} />
             <MetricRow label="Brier" value={latest?.brier} />
             <MetricRow label="AUC" value={latest?.auc} />
-            <MetricRow label="PSI" value={latest?.psiJson ? "see raw" : "\u2014"} />
+            <MetricRow label="PSI" value={latest?.psiJson ? "see raw" : null} />
             <MetricRow label="Narrative fail rate" value={latest?.narrativeFailRate} />
           </div>
         </div>
 
-        <div className="rounded-2xl bg-zinc-900 p-4">
-          <div className="font-bold text-white mb-2">Series (raw)</div>
-          <div className="text-xs text-gray-500 mb-2">Hook this into charts later (Recharts) once you confirm fields.</div>
-          <div className="max-h-56 overflow-auto text-xs">
-            {rows.slice(-20).map((r, i) => (
-              <div key={i} className="flex justify-between border-b border-zinc-800 py-1 text-gray-400">
-                <span>{String(r.day).slice(0, 10)}</span>
-                <span>ECE {r.ece ?? "\u2014"} &bull; Brier {r.brier ?? "\u2014"}</span>
-              </div>
-            ))}
-          </div>
+        {/*
+          The raw series is kept deliberately. It carried a developer note \u2014
+          "hook this into charts later (Recharts)" \u2014 which shipped to admins for
+          as long as the panel existed; the note is gone, the data is not. These
+          twenty rows are the only place the day-by-day movement is legible, and
+          an admin reading them is the panel working, not a placeholder.
+        */}
+        <div className="af-card">
+          <div className="af-label" style={{ marginBottom: 8 }}>Series (raw)</div>
+          {rows.length === 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
+              {error
+                ? 'Not loaded \u2014 see the error above.'
+                : 'No drift readings in the last 60 days for this league.'}
+            </p>
+          ) : (
+            <div style={{ maxHeight: 224, overflow: 'auto' }}>
+              {rows.slice(-20).map((r, i) => (
+                <div
+                  key={i}
+                  className="af-row"
+                  style={{
+                    justifyContent: 'space-between',
+                    borderBottom: '1px solid var(--line2)',
+                    padding: '4px 0',
+                    fontSize: 12,
+                    color: 'var(--muted)',
+                  }}
+                >
+                  <span className="af-num">{String(r.day).slice(0, 10)}</span>
+                  <span className="af-num">
+                    ECE {r.ece ?? "\u2014"} &bull; Brier {r.brier ?? "\u2014"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

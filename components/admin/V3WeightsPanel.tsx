@@ -4,10 +4,23 @@ import React, { useMemo, useState } from "react"
 import { useV3ModelAdmin } from "@/hooks/useV3ModelAdmin"
 import { DriftDashboard } from "@/components/DriftDashboard"
 
+/**
+ * ⚠ FIELD COLOURS ARE TOKENS, NOT `bg-zinc-*`/`bg-white`. The global light-mode
+ * `.mode-readable` clamp keys on tokens; a literal Tailwind background survives
+ * it and inverts to unreadable in light mode. Layout classes are fine — it is
+ * colour and surface that must go through `var(--…)`.
+ */
+const fieldStyle: React.CSSProperties = {
+  background: 'var(--surface2)',
+  border: '1px solid var(--line)',
+  color: 'var(--text)',
+}
+
 function NumberInput(props: { value: number; onChange: (v: number) => void }) {
   return (
     <input
-      className="w-20 rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm"
+      className="af-num w-20 rounded-xl px-3 py-2 text-sm"
+      style={fieldStyle}
       type="number"
       step="0.01"
       value={props.value}
@@ -41,68 +54,72 @@ export function V3WeightsPanel(props: { leagueId: string; season: string; defaul
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-zinc-900 p-4">
-        <div className="flex items-center justify-between mb-3">
+      <section className="af-frame" style={{ padding: 16 }}>
+        <div className="af-row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <div>
-            <div className="font-bold">V3 weights snapshots</div>
-            <div className="text-xs opacity-70">Season {props.season} • stored snapshots + drift monitoring</div>
+            <div className="af-label">V3 weights snapshots</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Season {props.season} · stored snapshots + drift monitoring
+            </div>
           </div>
-          <button
-            className="rounded-xl bg-zinc-800 px-4 py-2 font-bold disabled:opacity-60"
-            disabled={admin.loading}
-            onClick={() => admin.refresh()}
-          >
-            Refresh
+          <button className="af-btn af-btn--ghost" disabled={admin.loading} onClick={() => admin.refresh()}>
+            {admin.loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
 
-        {admin.error ? <div className="text-sm opacity-80 mb-3">Error: {admin.error}</div> : null}
+        {/*
+          ⚠ A FAILED LOAD IS NOT AN EMPTY LIST. This used to render as dimmed
+          body text above "No snapshots yet.", so a read failure and a league
+          with no snapshots looked identical. Severity styling makes the
+          difference visible.
+        */}
+        {admin.error ? (
+          <div className="af-issue" data-severity="bad" style={{ marginBottom: 12 }}>
+            Snapshots could not be read: {admin.error}
+          </div>
+        ) : null}
 
-        <div className="rounded-2xl bg-zinc-950 p-4">
-          <div className="font-bold mb-2">Create snapshot</div>
+        <div className="af-card">
+          <div className="af-label" style={{ marginBottom: 8 }}>Create snapshot</div>
 
-          <div className="flex flex-wrap gap-2 items-center mb-3">
-            <div className="text-xs opacity-70">Week</div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="af-label" style={{ color: 'var(--muted)' }}>Week</div>
             <input
-              className="w-24 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm"
+              className="af-num w-24 rounded-xl px-3 py-2 text-sm"
+              style={fieldStyle}
               type="number"
               value={week}
               onChange={(e) => setWeek(Number(e.target.value))}
             />
-            <div className="text-xs opacity-70 ml-2">Reason</div>
+            <div className="af-label ml-2" style={{ color: 'var(--muted)' }}>Reason</div>
             <input
-              className="min-w-[240px] flex-1 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm"
+              className="min-w-[240px] flex-1 rounded-xl px-3 py-2 text-sm"
+              style={fieldStyle}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-center">
-            <div>
-              <div className="text-xs opacity-70 mb-1">win</div>
-              <NumberInput value={win} onChange={setWin} />
-            </div>
-            <div>
-              <div className="text-xs opacity-70 mb-1">power</div>
-              <NumberInput value={power} onChange={setPower} />
-            </div>
-            <div>
-              <div className="text-xs opacity-70 mb-1">luck</div>
-              <NumberInput value={luck} onChange={setLuck} />
-            </div>
-            <div>
-              <div className="text-xs opacity-70 mb-1">market</div>
-              <NumberInput value={market} onChange={setMarket} />
-            </div>
-            <div>
-              <div className="text-xs opacity-70 mb-1">skill</div>
-              <NumberInput value={skill} onChange={setSkill} />
-            </div>
+          <div className="grid grid-cols-2 items-center gap-2 md:grid-cols-5">
+            {([
+              ['win', win, setWin],
+              ['power', power, setPower],
+              ['luck', luck, setLuck],
+              ['market', market, setMarket],
+              ['skill', skill, setSkill],
+            ] as const).map(([label, value, onChange]) => (
+              <div key={label}>
+                <div className="af-label" style={{ color: 'var(--muted)', marginBottom: 4 }}>{label}</div>
+                <NumberInput value={value} onChange={onChange} />
+              </div>
+            ))}
           </div>
 
           <div className="mt-3">
+            {/* ⚠ `af-btn`, never `bg-white text-black` — that literal was the exact
+                shape the light-mode clamp cannot reach. */}
             <button
-              className="rounded-xl bg-white text-black px-4 py-2 font-bold disabled:opacity-60"
+              className="af-btn"
               disabled={admin.loading}
               onClick={() =>
                 admin.createSnapshot({
@@ -118,30 +135,42 @@ export function V3WeightsPanel(props: { leagueId: string; season: string; defaul
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl bg-zinc-950 p-4">
-          <div className="font-bold mb-2">Recent snapshots</div>
+        <div className="af-card" style={{ marginTop: 16 }}>
+          <div className="af-label" style={{ marginBottom: 8 }}>Recent snapshots</div>
           <div className="max-h-64 overflow-auto text-sm">
             {(admin.weights?.rows ?? []).map((r: any) => (
-              <div key={String(r.id)} className="border-b border-zinc-800 py-2 flex justify-between">
-                <div className="opacity-90">
-                  <div className="font-semibold">
-                    {r.season} • Week {r.week}
+              <div
+                key={String(r.id)}
+                className="af-row"
+                style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--line2)', padding: '8px 0' }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                    {r.season} · Week {r.week}
                   </div>
-                  <div className="text-xs opacity-70">{r.reason ?? "—"}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{r.reason ?? "—"}</div>
                 </div>
-                <div className="text-xs opacity-70 text-right">
+                <div className="af-num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>
                   <div>win {r.weights?.win ?? "—"}</div>
                   <div>power {r.weights?.power ?? "—"}</div>
                   <div>market {r.weights?.market ?? "—"}</div>
                 </div>
               </div>
             ))}
-            {(!admin.weights?.rows?.length && !admin.loading) ? (
-              <div className="text-xs opacity-70">No snapshots yet.</div>
+            {/*
+              ⚠ ONLY CLAIMED WHEN KNOWN. Rendered only once loading has finished
+              AND no error is set — otherwise "No snapshots yet" states an
+              absence we have not established, which is the same confident lie
+              the live surfaces refuse to tell.
+            */}
+            {!admin.loading && !admin.error && !admin.weights?.rows?.length ? (
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                No snapshots recorded for this league yet.
+              </div>
             ) : null}
           </div>
         </div>
-      </div>
+      </section>
 
       <DriftDashboard leagueId={props.leagueId} />
     </div>
