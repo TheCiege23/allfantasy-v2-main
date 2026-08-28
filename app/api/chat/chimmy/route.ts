@@ -80,7 +80,6 @@ import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
 import { buildCommissionerContext } from '@/lib/chimmy/commissionerGrounding'
 import { buildLiveSlateContext } from '@/lib/chimmy/liveSlateGrounding'
-import { buildIdpContext } from '@/lib/idp/idpChimmyGrounding'
 import { applyGroundingBudget } from '@/lib/chimmy/groundingBudget'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
@@ -2142,6 +2141,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
+              /*
+               * IDP values, for the ~10 leagues that genuinely roster defenders. The builder
+               * self-gates on the STRICT scoring predicate and returns null everywhere else,
+               * so this costs a resolved league read and nothing more for the other ~100.
+               *
+               * ⚠ THIS IS THE ONLY IDP GROUNDING CALL. A second, identical block was added
+               * further down importing `buildIdpContext` from '@/lib/idp/idpChimmyGrounding'
+               * — a module that does not exist, and a symbol that does not exist either; the
+               * real export is `buildIdpContextForChimmy`, already imported above. Had it
+               * resolved it would have appended the SAME context to the prompt twice and
+               * paid for the league read twice. Removed; its comment is the one you are
+               * reading.
+               */
               const idpCtx = await buildIdpContextForChimmy(planInput.leagueId, planInput.userId)
               if (idpCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
@@ -2354,21 +2366,6 @@ ${draftCtx}`
 
 ${waiverCtx}`
                   : waiverCtx
-              }
-            } catch { /* non-fatal */ }
-            try {
-              /*
-               * IDP values, for the ~10 leagues that genuinely roster defenders. The builder
-               * self-gates on the STRICT scoring predicate and returns null everywhere else,
-               * so this costs a resolved league read and nothing more for the other ~100.
-               */
-              const idpCtx = await buildIdpContext(planInput.leagueId, planInput.userId)
-              if (idpCtx) {
-                legacyEnrichmentContext = legacyEnrichmentContext
-                  ? `${legacyEnrichmentContext}
-
-${idpCtx}`
-                  : idpCtx
               }
             } catch { /* non-fatal */ }
             try {

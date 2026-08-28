@@ -77,9 +77,22 @@ function getTscOutput() {
    * positive control — asking the run to reproduce the KNOWN error count and noticing it
    * came back 0. That control is now encoded below rather than left to whoever remembers.
    *
-   * tsc's own exit codes: 0 = no errors, 1 = errors found. Anything else (2 = config
-   * error, 134 = heap OOM, 137 = SIGKILL, null = killed by signal) means the check did
-   * not complete, and must fail loudly instead of reading as clean.
+   * ⚠ tsc EXITS 2 WHEN IT FINDS ERRORS — that is "diagnostics were reported", its normal
+   * errors-found path, NOT a failure to run. The first version of this guard allowed only
+   * 0 and 1 and therefore rejected every ordinary run of a repo that carries known errors,
+   * i.e. this one. It was caught within the hour by dogfooding the ratchet on a real
+   * change, but it was live on main and would have failed CI for everybody.
+   *
+   * Accepted: 0 (clean), 1, 2 (errors reported). Rejected: 3+ (config/project errors —
+   * the check never analysed the code), any signal kill, and a spawn failure. 134 and 137
+   * land in that rejected set, which is the heap-OOM false clean this exists to stop.
+   *
+   * Note the ACCEPTED set is deliberately generous, because status is the weak signal
+   * here: the anti-vacuity check below is what actually distinguishes a real run from a
+   * broken one, and it does so without having to enumerate a compiler's exit codes
+   * correctly. Being wrong in this direction fails a working build; being wrong in the
+   * other direction passes a broken one. Neither is acceptable, so the two guards cover
+   * each other.
    */
   if (r.error) {
     throw new Error(`tsc failed to start: ${r.error.message}`)
@@ -87,9 +100,11 @@ function getTscOutput() {
   if (r.signal) {
     throw new Error(`tsc was killed by signal ${r.signal} — the check did not complete`)
   }
-  if (r.status !== 0 && r.status !== 1) {
+  if (r.status !== 0 && r.status !== 1 && r.status !== 2) {
     const tail = `${r.stdout || ''}${r.stderr || ''}`.trim().split(/\r?\n/).slice(-5).join('\n')
-    throw new Error(`tsc exited ${r.status}, which is neither 0 (clean) nor 1 (errors found).\n${tail}`)
+    throw new Error(
+      `tsc exited ${r.status}; 0/1/2 are the codes that mean it actually ran.\n${tail}`
+    )
   }
   return `${r.stdout || ''}${r.stderr || ''}`
 }
