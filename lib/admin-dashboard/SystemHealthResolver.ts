@@ -13,7 +13,7 @@ const API_KEYS = ["sleeper", "yahoo", "mfl", "fantrax", "fantasycalc", "thesport
 const ENDPOINTS: Record<string, string> = {
   sleeper: "https://api.sleeper.app/v1/state/nfl", // db-first-exception: live provider health probe
   yahoo: "https://fantasysports.yahooapis.com", // db-first-exception: live provider health probe
-  mfl: "https://api.myfantasyleague.com/2024/export",
+  mfl: "https://api.myfantasyleague.com/2024/export", // db-first-exception: live provider health probe
   fantrax: "https://www.fantrax.com",
   fantasycalc: "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=1&numTeams=12&ppr=1", // db-first-exception: live provider health probe
   thesportsdb: `https://www.thesportsdb.com/api/v1/json/${getTheSportsDbApiKeyOrFallback('123')}/all_leagues.php`, // db-first-exception: live provider health probe

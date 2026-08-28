@@ -226,19 +226,27 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
  */
 const DATA_API_UNMONITORED = [
   /*
-   * TWO LEFT. github.com and www.fleaflicker.com were here until the guard was taught to
-   * skip comments — both were held out ONLY because a docblock citation would have been
-   * reported as a violation, and both are now monitored. The remaining two are blocked by
-   * something a comment rule cannot fix.
+   * ONE LEFT, and it is the only one of the nineteen this list started with that has no
+   * known fix. Everything else was either never a data feed, or moved into
+   * DATA_API_HOST_PATTERNS once the thing blocking it was removed: a docblock false
+   * positive for github.com and www.fleaflicker.com, a missing health-probe marker for
+   * api.myfantasyleague.com.
+   *
+   * ⚠ THE REMAINING ONE IS NOT WAITING ON EFFORT. A hostname pattern cannot express it,
+   * so do not "finish the job" by adding it.
    */
 
-  /* 7 hits. Two are health probes (api-health-monitor, SystemHealthResolver) that would
-   * each need a `db-first-exception:` marker before this host can be added. */
-  'api.myfantasyleague.com',
-  /* The FXEA base is a real feed, but /fantasy/league/<id>/home is a user-facing deep
-   * link in CODE, not a comment, and one hit is a test fixture. A hostname pattern cannot
-   * separate a feed from a deep link on the same host — the same reason bare sleeper.com
-   * is a share-link while api.sleeper.com is monitored. */
+  /* The FXEA base (/fxea/general) is a real feed, but /fantasy/league/<id>/home on the
+   * SAME HOST is a user-facing deep link in CODE — not a comment, so comment-skipping
+   * does not help — and a further hit is a test fixture. This is the sleeper.com split
+   * without the convenience of a separate hostname: there, the feed lived on
+   * api.sleeper.com and the deep links on sleeper.com, so the guard could tell them
+   * apart. Here they share one host. Adding it buys one real finding and imports two
+   * false ones permanently.
+   *
+   * The fix is a code change, not a list change: move the deep-link construction behind a
+   * helper on a path the guard allows, or accept the split is unexpressible and leave it
+   * here. Recorded so the next reader does not re-derive this and reach for the list. */
   'www.fantrax.com',
 ]
 
@@ -464,13 +472,17 @@ describe('DB-first boundary — outbound host census', () => {
      * If you are raising this number for any other reason, you are recording new
      * debt as though it were new visibility. Say so in the commit, or do not raise it.
      *
-     * 19 -> 11 -> 4 -> 2 on the same day. First by RE-DERIVING (eight entries were never
-     * data feeds), then by moving seven hosts into DATA_API_HOST_PATTERNS where the guard
-     * can actually block them, then two more once the guard stopped reporting URLs in
-     * comments — which was the only thing holding those two out. The bound comes down
-     * with each: a ratchet left loose after a cleanup has stopped ratcheting.
+     * 19 -> 11 -> 4 -> 2 -> 1 on the same day. First by RE-DERIVING (eight entries were
+     * never data feeds), then by moving seven hosts into DATA_API_HOST_PATTERNS where the
+     * guard can actually block them, then two more once the guard stopped reporting URLs
+     * in comments, then MFL once its health probes took the marker their neighbours
+     * already had. The bound comes down with each: a ratchet left loose after a cleanup
+     * has stopped ratcheting.
+     *
+     * ⚠ IT SHOULD NOT REACH ZERO BY EFFORT. The last entry is blocked by something a
+     * hostname pattern cannot express, not by work nobody has done — see its note above.
      */
-    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(2)
+    expect(DATA_API_UNMONITORED.length).toBeLessThanOrEqual(1)
   })
 
   it('no unmonitored entry is ALSO matched by a category', () => {

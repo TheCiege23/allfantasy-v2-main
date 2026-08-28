@@ -153,6 +153,20 @@ const DATA_API_HOST_PATTERNS = [
   /(^|\.)github\.com$/i,
   /(^|\.)fleaflicker\.com$/i,
   /*
+   * MyFantasyLeague. Held out until its two health probes carried the standing
+   * `db-first-exception: live provider health probe` marker, added in this same change —
+   * their neighbours in both files (sleeper, yahoo, espn, fantasycalc) already had it and
+   * MFL simply never did.
+   *
+   * 7 hits, 2 suppressed by those markers, leaving 5. THREE ARE REQUEST PATHS fetching
+   * MFL live: app/api/mfl/leagues, app/api/mfl/import and app/api/auth/mfl. The other two
+   * are lib/league-import/mfl/MflLeagueFetchService.ts, which is the verb-gap class again
+   * — "league-import" does not match `ingest|ingestion|sync`.
+   *
+   * The three request paths are real exposure, not bookkeeping, and are left REPORTED.
+   */
+  /(^|\.)api\.myfantasyleague\.com$/i,
+  /*
    * ⚠ FOUR CONFIRMED FEEDS DELIBERATELY NOT ADDED, each measured. Three are blocked by
    * the same limitation and it is worth stating plainly: THIS GUARD DOES NOT SKIP
    * COMMENTS. The census in __tests__/db-first-host-census.test.ts does. So a
