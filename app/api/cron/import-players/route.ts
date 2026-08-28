@@ -35,6 +35,33 @@ async function handle(req: NextRequest) {
   const sportParam = url.searchParams.get("sport")
   const dryRun = url.searchParams.get("dryRun") === "true"
   const seedPageSizeParam = Number(url.searchParams.get("seedPageSize"))
+  /*
+   * `?intel=1` — run ONLY the four CFBD intel feeds, with the whole budget.
+   *
+   * 🛑 WHY THIS MODE HAS TO EXIST. The intel phase sits behind
+   * `runSportsDataImporter` plus the devy pool and stats phases, and it refuses
+   * to start with less than MIN_RUNWAY_MS (150s) left of a 240s budget — a
+   * deliberate guard, because its slowest feed measured 137s and a phase killed
+   * mid-write is worse than one deferred. The arithmetic never worked: the
+   * three phases ahead of it do not finish inside 90s, so it was skipped BEFORE
+   * running, every single tick.
+   *
+   * Measured on production 2026-08-28: `devy_pool_refresh:2025`,
+   * `devy_pool_refresh:2026` and `devy_stats_refresh:2025` markers all present
+   * and fresh; `devy_intel_refresh:*` — NONE, EVER. Not a failure, a starvation.
+   * The columns it owns were still empty across all 1,718 rows: usageOverall 0,
+   * ppaTotal 0, teamSpRating 0, returningProdPct 0, portalStatus 0.
+   *
+   * ⚠ It is the SAME shape as `ingestCFBDStats` and `ingestRosters` before it —
+   * correct code that nothing ever reached — and it is fixed the same way
+   * `ingestRosters` was: a mode on an EXISTING cron route with its own schedule,
+   * never a new route (the build excludes new cron routes at the route budget).
+   *
+   * A dedicated tick also means the phase gets the full 240s rather than the
+   * remainder, so its own per-feed cadence gating is what limits work, which is
+   * what that gating was written to do.
+   */
+  const intelOnly = url.searchParams.get("intel") === "1"
 
   const sports = sportParam
     ? sportParam
@@ -70,6 +97,37 @@ async function handle(req: NextRequest) {
         dryRun: true,
         sports: sports ?? "all",
         message: "Dry run — no DB writes performed (identity sync also skipped).",
+        durationMs: Date.now() - startedAt,
+      })
+    }
+
+    if (intelOnly) {
+      /*
+       * Heartbeat, not a table probe — and the distinction is the whole point.
+       *
+       * This phase writes `DevyPlayer` columns, and the main import-players run
+       * writes `DevyPlayer` too, far more often. A table probe here would be
+       * satisfied by THAT job's run and report this one healthy while it did
+       * nothing — the same false green `?rosters=1` and `?riProfiles=1` are
+       * documented as waiting on in cron-freshness-check.mjs, and the shape that
+       * hid a dead fast tier for six days.
+       *
+       * The heartbeat wraps the whole sweep, one row per fire, so a tick that
+       * cadence-gates every phase still records that it RAN. That matters here:
+       * "all four feeds were inside their cadence" and "the job never fired" are
+       * the two states this job spends most of its life in, and only one is a
+       * problem.
+       */
+      const { withSyncJobRun } = await import('@/lib/production-health/syncJobRunTelemetry')
+      const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
+      const devyIntelSources = await withSyncJobRun(
+        { jobName: 'cron-devy-intel-sources', jobScope: 'NCAAF', trigger: 'cron' },
+        async () => refreshDevyIntelSources(budget),
+      )
+      return NextResponse.json({
+        ok: true,
+        mode: 'intel',
+        devyIntelSources,
         durationMs: Date.now() - startedAt,
       })
     }

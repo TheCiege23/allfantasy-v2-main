@@ -88,6 +88,27 @@ export const PROBES = {
    * record five runs a night and make a partial sweep look like a complete one.
    */
   '/api/cron/import-schedules?rosters=1': { heartbeat: 'cron-import-schedules-rosters' },
+  /*
+   * The four CFBD intel feeds, split onto their own tick 2026-08-28.
+   *
+   * ⚠ HEARTBEAT, NOT A TABLE PROBE, for the same reason as ?rosters=1 above:
+   * this writes DevyPlayer columns, and the main import-players run writes
+   * DevyPlayer far more often, so a table probe here would be satisfied by that
+   * job and report this one healthy while it did nothing.
+   *
+   * It also has to be a heartbeat because of what "healthy" means here. Every
+   * feed is cadence-gated (12h to 7d) and the tick caps at one phase, so a
+   * correct run frequently writes NOTHING. An output probe would read that as
+   * dead. The heartbeat records that the sweep FIRED, which is the only thing
+   * this job can honestly promise every six hours.
+   *
+   * Why it exists at all: the phase was starved, never broken. It sat behind
+   * runSportsDataImporter plus the pool and stats phases and required 150s of a
+   * 240s budget to start, so it was skipped before running on every tick since
+   * it shipped — zero `devy_intel_refresh:*` markers in production, ever, while
+   * the pool and stats markers were fresh.
+   */
+  '/api/cron/import-players?intel=1': { heartbeat: 'cron-devy-intel-sources' },
   '/api/cron/import-schedules?sport=all': {
     table: 'SportsGame',
     column: 'fetchedAt',
