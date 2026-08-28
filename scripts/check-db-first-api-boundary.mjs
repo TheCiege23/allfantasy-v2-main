@@ -431,6 +431,19 @@ function getAllSourceFiles(rootDir) {
   const stack = [rootDir];
   const EXCLUDED_DIRS = new Set([
     '.git',
+    /*
+     * ⚠ `.claude/worktrees/` HOLDS FULL COPIES OF THIS REPO — one per concurrent
+     * session — so every provider URL in the real source is duplicated once per
+     * worktree. Measured 2026-08-27: a full scan reported 4,409 violations, of
+     * which 4,320 (98%) came from `.claude/worktrees/` and 89 from real source.
+     *
+     * This is the same failure the `.next-dev-3101` note below describes, and
+     * the same fix. It is worse in one respect: a build directory is obviously
+     * generated, whereas a worktree path looks exactly like real source, so the
+     * duplicates read as genuine findings and someone triaging them wastes the
+     * effort on another session's checkout of code they may not even own.
+     */
+    '.claude',
     'node_modules',
     'dist',
     'build',
