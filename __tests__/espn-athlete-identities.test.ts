@@ -57,10 +57,16 @@ describe('⚠ most of ESPN’s athlete list is not people', () => {
     expect(parseEspnAthlete({ id: '2577417', displayName: 'Dak Prescott' }, '2577417')).toEqual({
       id: '2577417',
       displayName: 'Dak Prescott',
+      position: null,
+      team: null,
+      dob: null,
     })
     expect(parseEspnAthlete({ id: '12483', fullName: 'Matthew Stafford' }, '12483')).toEqual({
       id: '12483',
       displayName: 'Matthew Stafford',
+      position: null,
+      team: null,
+      dob: null,
     })
   })
 
@@ -69,7 +75,59 @@ describe('⚠ most of ESPN’s athlete list is not people', () => {
     expect(parseEspnAthlete({ displayName: 'Puka Nacua' }, '4426515')).toEqual({
       id: '4426515',
       displayName: 'Puka Nacua',
+      position: null,
+      team: null,
+      dob: null,
     })
+  })
+
+  it('keeps the position, team and birthday that make a name an identity', () => {
+    /*
+     * These were always in the document and the parser used to drop them, which is
+     * the single reason ESPN ids could never be linked to a canonical player.
+     */
+    expect(
+      parseEspnAthlete(
+        {
+          id: '2577417',
+          displayName: 'Dak Prescott',
+          position: { abbreviation: 'QB' },
+          team: { abbreviation: 'DAL' },
+          dateOfBirth: '1993-07-29T07:00Z',
+        },
+        '2577417',
+      ),
+    ).toEqual({
+      id: '2577417',
+      displayName: 'Dak Prescott',
+      position: 'QB',
+      team: 'DAL',
+      dob: '1993-07-29T07:00Z',
+    })
+  })
+
+  it('reads the numeric league shapes through the same tables the importer uses', () => {
+    /* ESPN is not consistent with itself: the athlete document carries an object,
+       league payloads carry `defaultPositionId` / `proTeamId`. Both must resolve, and
+       through one mapping — two copies is how they come to disagree. */
+    const parsed = parseEspnAthlete(
+      { id: '3139477', displayName: 'Patrick Mahomes', defaultPositionId: 1, proTeamId: 12 },
+      '3139477',
+    )
+    expect(parsed?.position).toBe('QB')
+    expect(parsed?.team).toBe('KC')
+  })
+
+  it('reports an unreadable shape as unknown rather than as an empty string', () => {
+    /* The whole safety argument rests on this: an unexpected payload must yield NO
+       evidence, so the matcher refuses. An empty string could compare equal. */
+    const parsed = parseEspnAthlete(
+      { id: '1', displayName: 'Someone', position: {}, team: {}, dateOfBirth: '' },
+      '1',
+    )
+    expect(parsed?.position).toBeNull()
+    expect(parsed?.team).toBeNull()
+    expect(parsed?.dob).toBeNull()
   })
 
   it('survives a payload that is nothing like the contract', () => {

@@ -29,10 +29,33 @@
  *   12483   -> Matthew Stafford
  */
 
+import {
+  ESPN_POSITION_LABELS,
+  ESPN_TEAM_ABBREVIATIONS,
+} from '@/lib/league-import/espn/EspnLeagueFetchService'
+
 /** db-first-exception: provider adapter, sole importer is the ingestion module. */
 const ESPN_CORE_ATHLETES = 'https://sports.core.api.espn.com/v3/sports/football/nfl/athletes'
 
-export type EspnAthlete = { id: string; displayName: string }
+export type EspnAthlete = {
+  id: string
+  displayName: string
+  /**
+   * The fields that let a name become an identity.
+   *
+   * ⚠ THESE COST NOTHING EXTRA. The athlete document was already being fetched and
+   * these were already in it; the previous parser kept the name and dropped the rest,
+   * which is why linking a provider id to a canonical player was impossible.
+   *
+   * Each is optional and each is allowed to be absent. `matchProviderAthlete` treats a
+   * missing field as no evidence rather than as agreement, so an unexpected payload
+   * shape costs us a link we would not otherwise have made - it can never cause a
+   * WRONG one. That asymmetry is why the parser below can afford to be tolerant.
+   */
+  position?: string | null
+  team?: string | null
+  dob?: string | null
+}
 
 /**
  * ⚠ ESPN'S ATHLETE SPACE CONTAINS THINGS THAT ARE NOT PEOPLE — pseudo-athletes for
@@ -69,6 +92,55 @@ export function espnDefenseIdentity(
   return { id: String(n), displayName: `${abbreviation} D/ST` }
 }
 
+/** First non-empty string among several candidate shapes, or null. */
+function firstString(...values: unknown[]): string | null {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim()) return v.trim()
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  }
+  return null
+}
+
+function nested(row: Record<string, unknown>, key: string, inner: string): unknown {
+  const value = row[key]
+  if (!value || typeof value !== 'object') return undefined
+  return (value as Record<string, unknown>)[inner]
+}
+
+/**
+ * The athlete's position, from whichever shape this document happens to use.
+ *
+ * ESPN is not consistent across its own surfaces: the athlete document carries a
+ * `position` object, while league payloads carry a numeric `defaultPositionId`. Both
+ * are accepted here, the numeric one through the SAME table the league importer
+ * already uses - restating that mapping is how two parts of one codebase come to
+ * disagree about what position 16 is.
+ */
+export function readEspnPosition(row: Record<string, unknown>): string | null {
+  const direct = firstString(
+    nested(row, 'position', 'abbreviation'),
+    nested(row, 'position', 'displayName'),
+    typeof row.position === 'string' ? row.position : undefined,
+  )
+  if (direct) return direct
+  const id = Number(row.defaultPositionId)
+  if (Number.isInteger(id) && ESPN_POSITION_LABELS[id]) return ESPN_POSITION_LABELS[id]!
+  return null
+}
+
+/** The athlete's pro team abbreviation, same tolerance, same shared table. */
+export function readEspnTeam(row: Record<string, unknown>): string | null {
+  const direct = firstString(
+    nested(row, 'team', 'abbreviation'),
+    row.proTeamAbbrev,
+    typeof row.team === 'string' ? row.team : undefined,
+  )
+  if (direct) return direct
+  const id = Number(row.proTeamId)
+  if (Number.isInteger(id) && ESPN_TEAM_ABBREVIATIONS[id]) return ESPN_TEAM_ABBREVIATIONS[id]!
+  return null
+}
+
 /** Shape one athlete document, tolerating anything unexpected. */
 export function parseEspnAthlete(payload: unknown, requestedId: string): EspnAthlete | null {
   if (!payload || typeof payload !== 'object') return null
@@ -79,7 +151,13 @@ export function parseEspnAthlete(payload: unknown, requestedId: string): EspnAth
      response that omits it is still usable against the id we hold. */
   const id = String(row.id ?? requestedId).trim()
   if (!id) return null
-  return { id, displayName }
+  return {
+    id,
+    displayName,
+    position: readEspnPosition(row),
+    team: readEspnTeam(row),
+    dob: firstString(row.dateOfBirth, row.birthDate, row.dob),
+  }
 }
 
 /**

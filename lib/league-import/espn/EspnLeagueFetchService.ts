@@ -60,7 +60,12 @@ const ESPN_SLOT_LABELS: Record<number, string> = {
   24: 'EDR',
 }
 
-const ESPN_POSITION_LABELS: Record<number, string> = {
+/**
+ * Exported so the athlete adapter maps `defaultPositionId` through the SAME table.
+ * Restating this mapping elsewhere is how two parts of one codebase come to
+ * disagree about what position 16 is.
+ */
+export const ESPN_POSITION_LABELS: Record<number, string> = {
   1: 'QB',
   2: 'RB',
   3: 'WR',

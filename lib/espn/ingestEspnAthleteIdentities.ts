@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ESPN_TEAM_ABBREVIATIONS } from '@/lib/league-import/espn/EspnLeagueFetchService'
 import {
@@ -9,6 +10,10 @@ import {
   normalizeSportKey,
   selectIngestableIdentities,
 } from '@/lib/league-import/providerPlayerIdentities'
+import {
+  linkEspnIdentitiesToCanonical,
+  type EspnLinkSummary,
+} from '@/lib/espn/linkEspnIdentities'
 
 /**
  * Give the ESPN player ids we actually hold a name.
@@ -27,11 +32,14 @@ import {
  * in our own tables is both correct and smaller: 252 across every imported ESPN
  * league, against a catalogue of 20,277.
  *
- * ⚠ IT DELIBERATELY DOES NOT LINK TO OUR CANONICAL PLAYER. `playerId` stays null.
- * The only signal here is a name, and matching a provider id to a canonical player
- * on a name is what put a basketball guard on an NFL draft board. Provider id ->
- * the provider's own name is a fact; anything beyond that is a guess, and belongs
- * to a matcher that can check a birthday and a position.
+ * ⚠ IT LINKS TO OUR CANONICAL PLAYER ONLY THROUGH A MATCHER THAT CAN REFUSE.
+ * This file used to leave `playerId` null on principle, because the only signal it
+ * kept was a name, and matching a provider id to a canonical player on a name is
+ * what put a basketball guard on an NFL draft board. That principle has not moved —
+ * what changed is the evidence. The athlete document already carried a position and
+ * a birthday and the parser was throwing them away; it now keeps them, and
+ * `matchProviderAthlete` requires one of them to corroborate the name before
+ * anything is written. A name on its own still links nothing.
  */
 
 export type EspnIdentityIngestSummary = {
@@ -41,6 +49,10 @@ export type EspnIdentityIngestSummary = {
   unresolved: number
   defencesWritten: number
   inserted: number
+  /** Existing rows given the position/birthday an earlier parser discarded. */
+  evidenceBackfilled: number
+  /** Null until the linking pass runs; see `linkEspnIdentitiesToCanonical`. */
+  link?: EspnLinkSummary
   stoppedEarly: boolean
   error?: string
 }
@@ -60,11 +72,78 @@ export function buildEspnDefenceIdentities(): EspnAthlete[] {
   return out
 }
 
+/**
+ * The corroborating fields, or null when the athlete carried none.
+ *
+ * Returning null rather than `{}` matters: a row with an empty evidence object looks
+ * processed, and the backfill below would skip it for ever.
+ */
+function espnEvidence(athlete: EspnAthlete | undefined): {
+  position?: string
+  team?: string
+  dob?: string
+} | null {
+  if (!athlete) return null
+  const out: { position?: string; team?: string; dob?: string } = {}
+  if (athlete.position) out.position = athlete.position
+  if (athlete.team) out.team = athlete.team
+  if (athlete.dob) out.dob = athlete.dob
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
+ * Give already-stored rows the evidence the previous parser discarded.
+ *
+ * ⚠ WITHOUT THIS THE MATCHER NEVER FIRES ON A SINGLE EXISTING ROW. All 1,257 ESPN
+ * identities were written by a parser that kept only the name, and the ingest above
+ * asks exclusively about ids it CANNOT name — so none of them would ever be fetched
+ * again, and the linking pass would report "no evidence" for every one of them, for
+ * ever. Bounded and resumable: each run shortens the list for the next.
+ */
+async function backfillEspnEvidence(
+  sportKey: string,
+  maxRows: number,
+  isExhausted?: () => boolean,
+): Promise<number> {
+  if (maxRows <= 0) return 0
+  const stale = await prisma.playerProviderIdentity
+    .findMany({
+      where: { provider: 'espn', sportKey, playerId: null, rawPayload: { equals: Prisma.DbNull } },
+      select: { id: true, providerPlayerId: true },
+      take: maxRows,
+    })
+    .catch(() => [])
+
+  let updated = 0
+  for (const row of stale) {
+    if (isExhausted?.()) break
+    /* Negative ids are derived defences; no athlete document exists for them and
+       asking costs a request to learn nothing. */
+    if (row.providerPlayerId.startsWith('-')) continue
+    try {
+      const athlete = await fetchEspnAthleteById(row.providerPlayerId)
+      const evidence = espnEvidence(athlete ?? undefined)
+      if (!evidence) continue
+      await prisma.playerProviderIdentity.update({
+        where: { id: row.id },
+        data: { rawPayload: evidence },
+      })
+      updated += 1
+    } catch {
+      /* One id must not end the pass. */
+    }
+  }
+  return updated
+}
+
 /** Insert only what is not already stored. Never throws. */
 async function insertIdentities(rows: EspnAthlete[], sportKey: string): Promise<number> {
   const candidates = selectIngestableIdentities(
     rows.map((r) => ({ providerPlayerId: r.id, displayName: r.displayName })),
   )
+  /* `selectIngestableIdentities` returns only id and name, so the evidence has to be
+     carried alongside rather than through it. */
+  const evidenceById = new Map(rows.map((r) => [r.id, r]))
   if (candidates.length === 0) return 0
 
   let inserted = 0
@@ -90,6 +169,12 @@ async function insertIdentities(rows: EspnAthlete[], sportKey: string): Promise<
           providerPlayerId: c.providerPlayerId,
           sportKey,
           displayName: c.displayName,
+          /* Stored so the linking pass need not re-fetch what we already had in
+             hand. `null` where the payload did not carry it — an absent field must
+             read as "unknown", never as an empty string that could match. */
+          /* `Prisma.DbNull`, not `null`: a nullable Json column distinguishes SQL NULL
+             from the JSON value `null`, and plain null is not assignable to either. */
+          rawPayload: espnEvidence(evidenceById.get(c.providerPlayerId)) ?? Prisma.DbNull,
           source: 'espn-core-athletes',
           confidence: 1,
           /* verified:false — nothing was verified. No canonical player was matched
@@ -130,6 +215,7 @@ export async function ingestEspnAthleteIdentities(options?: {
     unresolved: 0,
     defencesWritten: 0,
     inserted: 0,
+    evidenceBackfilled: 0,
     stoppedEarly: false,
   }
 
@@ -184,7 +270,10 @@ export async function ingestEspnAthleteIdentities(options?: {
     summary.attempted += 1
     try {
       const athlete = await fetchEspnAthleteById(row.pid)
-      if (athlete) resolved.push({ id: row.pid, displayName: athlete.displayName })
+      /* The whole athlete, not just its name — the position and birthday on it are
+         exactly what the linking pass needs, and dropping them here is what made
+         linking impossible before. `id` is forced to the id we asked about. */
+      if (athlete) resolved.push({ ...athlete, id: row.pid })
       else summary.unresolved += 1
     } catch (error) {
       /* A provider hiccup on one id must not end the run. */
@@ -195,5 +284,24 @@ export async function ingestEspnAthleteIdentities(options?: {
 
   summary.resolved = resolved.length
   summary.inserted += await insertIdentities(resolved, sportKey)
+
+  /* Whatever naming did not spend goes to backfilling evidence onto older rows. */
+  if (!options?.isExhausted?.()) {
+    summary.evidenceBackfilled = await backfillEspnEvidence(
+      sportKey,
+      Math.max(0, maxPlayers - summary.attempted),
+      options?.isExhausted,
+    )
+  }
+
+  /*
+   * Link last, and always — it is cheap, reads only what is already stored, and a run
+   * that fetched nothing new can still link rows whose evidence arrived last time.
+   */
+  summary.link = await linkEspnIdentitiesToCanonical({
+    sportKey,
+    isExhausted: options?.isExhausted,
+  }).catch(() => undefined)
+
   return summary
 }
