@@ -50,15 +50,30 @@ export type AIAccessStatus = {
 
 const FEATURE_ID = 'ai_chat' as const
 
+/**
+ * The ONE definition of "this account is inside its free AI trial".
+ *
+ * ⚠ EXPORTED SO THE TOKEN GRANT ASKS THE SAME QUESTION THIS RESOLVER DOES. A
+ * second copy of `createdAt + AI_TRIAL_MS > now` living next to the grant would
+ * be two definitions of the trial, free to drift — and the visible symptom of
+ * that drift is a badge reading "Trial · 3d left" above a balance that quietly
+ * stopped being topped up, which is precisely the mismatch the grant exists to
+ * remove.
+ */
+export function isInAiTrial(createdAt: Date | null | undefined, now: Date): boolean {
+  if (!createdAt) return false
+  return createdAt.getTime() + AI_TRIAL_MS > now.getTime()
+}
+
 function computeTrial(createdAt: Date | null | undefined, now: Date): AIAccessStatus['trial'] {
   if (!createdAt) {
     return { inTrial: false, daysRemaining: 0, endsAt: null }
   }
   const ends = new Date(createdAt.getTime() + AI_TRIAL_MS)
-  const remainingMs = ends.getTime() - now.getTime()
-  if (remainingMs <= 0) {
+  if (!isInAiTrial(createdAt, now)) {
     return { inTrial: false, daysRemaining: 0, endsAt: ends.toISOString() }
   }
+  const remainingMs = ends.getTime() - now.getTime()
   const daysRemaining = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)))
   return { inTrial: true, daysRemaining, endsAt: ends.toISOString() }
 }

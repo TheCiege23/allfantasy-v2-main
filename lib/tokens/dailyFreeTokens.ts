@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { TOKEN_ENTRY_TYPES } from '@/lib/tokens/constants'
+import { AI_TRIAL_DAYS, isInAiTrial } from '@/lib/ai-access/AIAccessResolver'
 
 /**
  * A DAILY FLOOR OF FREE TOKENS, SO A SIGNED-IN USER IS NEVER AT ZERO.
@@ -27,6 +28,30 @@ import { TOKEN_ENTRY_TYPES } from '@/lib/tokens/constants'
 export const DAILY_FREE_TOKENS = 20
 
 /**
+ * The trial floor: five answers a day for the first `AI_TRIAL_DAYS`.
+ *
+ * ⚠ THE TRIAL WAS ADVERTISED AND NEVER GRANTED ANYTHING. `AIAccessResolver`
+ * computed it from account age and the shell rendered "Trial · Nd left", but
+ * the chat route never consulted the resolver — so a user inside their trial
+ * hit the same empty balance as everyone else. The UI promised access the
+ * backend did not give.
+ *
+ * ⚠ THIS NUMBER IS A SPEND DECISION, NOT A TECHNICAL ONE, and it is deliberately
+ * one constant. Worst case per new account is AI_TRIAL_DAYS x this = 500 tokens,
+ * and with open signup that is the exposure to weigh. 2.5x the free floor is
+ * enough for a trial to demonstrate something; raise or lower it here.
+ */
+export const TRIAL_DAILY_FREE_TOKENS = 50
+
+/** Tokens a given account should be floored at today. */
+export function dailyFloorFor(createdAt: Date | null | undefined, now: Date): number {
+  return isInAiTrial(createdAt, now) ? TRIAL_DAILY_FREE_TOKENS : DAILY_FREE_TOKENS
+}
+
+/** Re-exported so callers can describe the trial without a second constant. */
+export { AI_TRIAL_DAYS }
+
+/**
  * ⚠ THE DAY IS EASTERN, NOT UTC. This app already defines a sports day as an
  * Eastern day (`SPORTS_DAY_TIMEZONE` in lib/ai/deterministic.ts), and a US
  * fantasy audience resetting its free questions at 7pm local would read as a
@@ -49,6 +74,8 @@ export function dailyGrantIdempotencyKey(userId: string, now: Date): string {
 }
 
 export type DailyGrantResult = {
+  /** Which floor applied — lets a caller say "trial" without recomputing it. */
+  floor?: number
   /** Tokens actually added. 0 when already at or above the floor. */
   granted: number
   /** Balance after this call, whether or not anything was added. */
@@ -104,9 +131,20 @@ export async function grantDailyFreeTokens(
         select: { id: true, balance: true },
       })
 
+      /*
+       * The floor depends on whether this account is still inside its trial, so
+       * the grant needs the signup date. `isInAiTrial` is imported rather than
+       * re-derived — one definition of the trial, shared with the resolver that
+       * renders the badge.
+       */
+      const account = await tx.appUser
+        .findUnique({ where: { id: userId }, select: { createdAt: true } })
+        .catch(() => null)
+      const floor = dailyFloorFor(account?.createdAt ?? null, now)
+
       const balanceBefore = Number(balanceRow.balance ?? 0)
       /* A floor, so somebody already above it receives nothing. */
-      const granted = Math.max(0, DAILY_FREE_TOKENS - balanceBefore)
+      const granted = Math.max(0, floor - balanceBefore)
       const balanceAfter = balanceBefore + granted
 
       if (granted > 0) {
@@ -132,11 +170,14 @@ export async function grantDailyFreeTokens(
           sourceType: 'daily_free_grant',
           sourceId: grantDayKey(now),
           idempotencyKey,
-          description: `Daily free allowance (${DAILY_FREE_TOKENS} token floor)`,
+          description:
+            floor === TRIAL_DAILY_FREE_TOKENS
+              ? `Daily trial allowance (${floor} token floor)`
+              : `Daily free allowance (${floor} token floor)`,
         },
       })
 
-      return { granted, balance: balanceAfter, alreadyGrantedToday: false }
+      return { granted, balance: balanceAfter, alreadyGrantedToday: false, floor }
     })
   } catch {
     /*

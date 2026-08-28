@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const h = vi.hoisted(() => ({
+  appUserFindUnique: vi.fn(),
   ledgerFindUnique: vi.fn(),
   ledgerCreate: vi.fn(),
   balanceUpsert: vi.fn(),
@@ -20,6 +21,8 @@ vi.mock('@/lib/prisma', () => ({
 
 import {
   DAILY_FREE_TOKENS,
+  TRIAL_DAILY_FREE_TOKENS,
+  dailyFloorFor,
   grantDailyFreeTokens,
   grantDayKey,
   dailyGrantIdempotencyKey,
@@ -35,6 +38,7 @@ function withTx() {
         update: h.balanceUpdate,
         findUnique: h.balanceFindUnique,
       },
+      appUser: { findUnique: h.appUserFindUnique },
     }),
   )
 }
@@ -43,6 +47,8 @@ beforeEach(() => {
   vi.resetAllMocks()
   withTx()
   h.ledgerFindUnique.mockResolvedValue(null)
+  /* Default: an old account, so the FREE floor applies unless a test says otherwise. */
+  h.appUserFindUnique.mockResolvedValue({ createdAt: new Date('2020-01-01T00:00:00Z') })
   h.ledgerCreate.mockResolvedValue({})
   h.balanceUpdate.mockResolvedValue({})
 })
@@ -158,5 +164,70 @@ describe('grantDailyFreeTokens', () => {
 
   it('buys exactly two Chimmy answers at the current price', () => {
     expect(DAILY_FREE_TOKENS).toBe(20)
+  })
+})
+
+/*
+ * ⚠ THE TRIAL WAS ADVERTISED AND GRANTED NOTHING. The shell rendered
+ * "Trial · Nd left" from AIAccessResolver while the chat route never consulted
+ * it, so a trialling user hit the same empty balance as everyone else.
+ */
+describe('the trial floor', () => {
+  const inTrial = new Date('2026-08-25T00:00:00Z') // 3 days old; trial is 10
+  const expired = new Date('2020-01-01T00:00:00Z')
+  const now = new Date('2026-08-28T15:00:00Z')
+
+  it('is higher than the free floor, and expires with the trial', () => {
+    expect(TRIAL_DAILY_FREE_TOKENS).toBeGreaterThan(DAILY_FREE_TOKENS)
+    expect(dailyFloorFor(inTrial, now)).toBe(TRIAL_DAILY_FREE_TOKENS)
+    expect(dailyFloorFor(expired, now)).toBe(DAILY_FREE_TOKENS)
+  })
+
+  /* An unknown signup date must not silently buy the richer floor. */
+  it('falls back to the free floor when the signup date is unknown', () => {
+    expect(dailyFloorFor(null, now)).toBe(DAILY_FREE_TOKENS)
+  })
+
+  it('tops a trialling account up to the trial floor', async () => {
+    h.appUserFindUnique.mockResolvedValue({ createdAt: inTrial })
+    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
+
+    const out = await grantDailyFreeTokens('u1', now)
+
+    expect(out.granted).toBe(TRIAL_DAILY_FREE_TOKENS)
+    expect(out.floor).toBe(TRIAL_DAILY_FREE_TOKENS)
+  })
+
+  it('drops back to the free floor once the trial ends', async () => {
+    h.appUserFindUnique.mockResolvedValue({ createdAt: expired })
+    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
+
+    const out = await grantDailyFreeTokens('u1', now)
+
+    expect(out.granted).toBe(DAILY_FREE_TOKENS)
+  })
+
+  /*
+   * ⚠ A LAPSED TRIAL MUST NOT CLAW ANYTHING BACK. The floor only ever adds, so
+   * someone who ends their trial holding 50 keeps all 50.
+   */
+  it('never removes tokens when the floor drops', async () => {
+    h.appUserFindUnique.mockResolvedValue({ createdAt: expired })
+    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 50 })
+
+    const out = await grantDailyFreeTokens('u1', now)
+
+    expect(out.granted).toBe(0)
+    expect(out.balance).toBe(50)
+    expect(h.balanceUpdate).not.toHaveBeenCalled()
+  })
+
+  it('labels the ledger entry as the trial allowance', async () => {
+    h.appUserFindUnique.mockResolvedValue({ createdAt: inTrial })
+    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
+
+    await grantDailyFreeTokens('u1', now)
+
+    expect(h.ledgerCreate.mock.calls[0][0].data.description).toMatch(/trial/i)
   })
 })
