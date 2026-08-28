@@ -535,9 +535,19 @@ function ChimmyPanel({
             </button>
           ))}
         </div>
+        {/*
+          * ⚠ "ONLY" WAS A PROMISE THE SYSTEM DELIBERATELY DOES NOT KEEP. Scoped
+          * to KBFL and asked "who can I pick up in the zombie league?", Chimmy
+          * answers about Beta 1 Zombie League — `find_league_by_name` rebinds
+          * the scope after verifying membership, which is the RIGHT call: a
+          * league named in the question is a clearer signal than a chip left
+          * selected from earlier. The behaviour is correct and the copy was
+          * wrong, so the copy moved. It now also teaches the override, which
+          * the "All leagues" line beside it already advertised.
+          */}
         <p className="af-cm-scope-note">
           {scope
-            ? `Answers are grounded in ${scope.name} only — its scoring, its roster rules, its schedule.`
+            ? `Answers default to ${scope.name} — its scoring, its roster rules, its schedule. Name another of your leagues in the question to ask about that one instead.`
             : 'Answers cover every league you play. Ask about one by name, or pick it above.'}
         </p>
       </div>
