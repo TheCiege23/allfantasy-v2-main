@@ -304,12 +304,38 @@ async function loadActiveSlate(
   /*
    * ⚠ THE SLATE NEEDS A WINDOW. A cached fallback can hold a whole season, and a
    * "live scores" page listing every fixture from August to January is not a live
-   * scores page. ESPN's own response is already today's slate, so this only ever
-   * trims the fallback.
+   * scores page.
    */
   const now = Date.now()
   const inWindow = result.scores.filter((row) => isInSlateWindow(row, now))
-  return { scores: inWindow, fetchedAt: result.fetchedAt }
+  if (inWindow.length > 0) return { scores: inWindow, fetchedAt: result.fetchedAt }
+
+  /*
+   * 🛑 A PROVIDER RESPONSE CAN BE NON-EMPTY AND STILL HAVE NOTHING FOR TODAY,
+   * AND THAT USED TO ERASE A PERFECTLY GOOD CACHED SLATE.
+   *
+   * The comment above used to claim "ESPN's own response is already today's
+   * slate, so this only ever trims the fallback". That is true for the pro
+   * leagues and FALSE for college football. Measured 2026-08-29T00:43Z: ESPN's
+   * college-football scoreboard returned 25 events whose EARLIEST kickoff was
+   * 08-29 19:00Z — seventeen minutes past the end of the window — with the rest
+   * on September 4-5. Meanwhile `SportsGame` held nine in-window NCAAF games.
+   *
+   * `getLiveScoresForSport` breaks its provider loop on `rows.length === 0`, so
+   * 25 out-of-window rows count as success, replace the cached rows, and the
+   * window then removes all of them. The tab reads "No games on this slate"
+   * while the games sit in our own table. NFL never showed it because tonight's
+   * NFL games happen to fall inside the window.
+   *
+   * So: prefer the live response, but when windowing empties it, ask the cache
+   * rather than reporting nothing. An empty slate must mean "no games near now",
+   * never "the provider answered about a different day".
+   */
+  const cached = await getCachedLiveScoresForSport({ sport, team: null })
+  const cachedInWindow = (cached?.scores ?? []).filter((row) => isInSlateWindow(row, now))
+  if (cachedInWindow.length === 0) return { scores: [], fetchedAt: result.fetchedAt }
+
+  return { scores: cachedInWindow, fetchedAt: cached?.fetchedAt ?? result.fetchedAt }
 }
 
 /** Build the page payload. `userId` null = signed out; tie-ins are simply absent. */
