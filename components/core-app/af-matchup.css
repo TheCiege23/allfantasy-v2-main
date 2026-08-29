@@ -500,6 +500,25 @@
     grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
     gap: 5px;
   }
+  /*
+   * ⚠ THE SLOT LABEL DOES NOT CLIP, IT SPILLS. The centre column narrows to
+   * 44px here while `.af-mu-slot` carries `overflow: visible` and no break
+   * rule, so an unbreakable label overflows its box instead of being cut:
+   * measured at 360px, "SUPER_FLEX" renders 58px wide and bleeds ~7px into the
+   * player half on EACH side, over the names it sits between. A page-overflow
+   * check cannot see this — nothing crosses the viewport edge — which is why it
+   * survived the 780px pass.
+   *
+   * Breaking anywhere lets it wrap inside its own column. The label is two
+   * short lines rather than one line written over its neighbours.
+   */
+  .af-mu-slot {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
+
   .af-mu-portrait,
   .af-mu-face,
   .af-mu-portrait--empty {

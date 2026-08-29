@@ -504,6 +504,17 @@ export async function getMatchupPulse(
     let total = 0
     let from = 0
     let yetToPlay = 0
+    /*
+     * Starters we actually placed against a fixture.
+     *
+     * ⚠ WITHOUT THIS, "NOBODY LEFT TO PLAY" AND "WE COULD NOT CHECK" ARE THE
+     * SAME VALUE. `yetToPlay` alone cannot tell them apart — both come out 0 —
+     * and the caller was resolving that ambiguity by suppressing the count
+     * whenever it hit zero, which throws away the true zero along with the
+     * unknown. On Monday night "0 left to play" is the most useful thing this
+     * row can say, and it was the one thing it could not say.
+     */
+    let placed = 0
     for (const id of ids) {
       const p = projections.get(id)
       if (!p) continue
@@ -522,9 +533,11 @@ export async function getMatchupPulse(
       const info = getTeamInfo(p.team)
       if (!info) continue
       const at = kickoffs.get(info.fullName.trim().toLowerCase())
-      if (at && at.getTime() > now.getTime()) yetToPlay += 1
+      if (!at) continue
+      placed += 1
+      if (at.getTime() > now.getTime()) yetToPlay += 1
     }
-    return { total, from, of: ids.length, yetToPlay }
+    return { total, from, of: ids.length, yetToPlay, placed }
   }
 
   const ranked: PulseRow[] = []
@@ -569,9 +582,16 @@ export async function getMatchupPulse(
      * Only stated when a real fixture placed at least one starter. A league
      * whose lineup we could not join to the regular-season schedule at all gets
      * null — see the field note on `startersLeft`.
+     *
+     * ⚠ THE GATE IS `placed`, NOT `yetToPlay`. Gating on `yetToPlay > 0` reads
+     * as the same rule and is not: it also suppresses a lineup that HAS been
+     * placed and has genuinely finished, so "0 left to play" — the whole of
+     * Sunday evening — rendered as though we had never looked. That is the
+     * exact "null is not zero" confusion this field's own doc warns about,
+     * running in the opposite direction.
      */
     const startersLeft =
-      String(p.sport ?? 'NFL').toUpperCase() === 'NFL' && you && you.yetToPlay > 0
+      String(p.sport ?? 'NFL').toUpperCase() === 'NFL' && you && you.placed > 0
         ? you.yetToPlay
         : null
 
