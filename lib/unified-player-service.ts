@@ -2,6 +2,7 @@ import { prisma } from './prisma'
 import { normalizeTeamAbbrev, normalizePosition, normalizePlayerName, playerNamesMatch } from './team-abbrev'
 import { type FantasyCalcPlayer } from './fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { findLiveAdp } from './adp/liveAdpFallback'
 import { findMultiADP, getConsensusADP, type ADPConsensus } from './multi-platform-adp'
 import { getTeamLogoUrl as resolveTeamLogoUrl } from './player-media-urls'
 
@@ -52,6 +53,18 @@ export interface MultiPlatformADPData {
   dynasty2QBADP: number | null
   aav: number | null
   health: { status: string | null; injury: string | null } | null
+  /**
+   * Where `consensusADP` came from. `csv` is the static multi-platform export;
+   * `live-adp` is lib/adp/liveAdpFallback.ts, which serves the players that export
+   * predates — it is dated 2026-03-08, before the April 2026 draft, so the whole 2026
+   * class resolves through the fallback. Optional so existing constructors stay valid.
+   */
+  origin?: 'csv' | 'live-adp'
+  /**
+   * The sources behind `consensusADP` when `origin` is `live-adp`. A rookie is typically
+   * priced by `ffc` alone, and `platformCount: 1` must not be read as five boards agreeing.
+   */
+  providers?: string[]
 }
 
 export interface UnifiedValuation {
@@ -311,7 +324,33 @@ export async function enrichWithValuation(
     })
   }
 
-  const multiADP = buildMultiPlatformADPData(player.canonicalName, player.position || undefined, player.currentTeam || undefined)
+  let multiADP = buildMultiPlatformADPData(player.canonicalName, player.position || undefined, player.currentTeam || undefined)
+
+  /*
+   * ⚠ A CSV MISS IS NOT PROOF THE PLAYER IS UNRANKED. The export behind
+   * buildMultiPlatformADPData is dated 2026-03-08 — before the April 2026 draft — so the
+   * entire 2026 class misses, and without this the player falls through both branches
+   * below and is returned with NO valuation at all. adp_data already carries them.
+   */
+  if (!multiADP) {
+    const live = await findLiveAdp(player.canonicalName).catch(() => null)
+    if (live) {
+      multiADP = {
+        consensusADP: live.adp,
+        platformCount: live.providerCount,
+        adpSpread: live.adpSpread,
+        tier: null,
+        // None of the five static columns priced this player; saying so beats inventing one.
+        redraft: { fantrax: null, sleeper: null, espn: null, mfl: null, nffc: null },
+        dynastyADP: null,
+        dynasty2QBADP: null,
+        aav: null,
+        health: null,
+        origin: 'live-adp',
+        providers: live.providers,
+      }
+    }
+  }
 
   if (match) {
     return {
@@ -362,6 +401,7 @@ function buildMultiPlatformADPData(name: string, position?: string, team?: strin
     dynasty2QBADP: entry.dynasty2QB.sleeper,
     aav: entry.aav.mfl ?? entry.aav.espn ?? null,
     health: entry.health.status || entry.health.injury ? entry.health : null,
+    origin: 'csv',
   }
 }
 

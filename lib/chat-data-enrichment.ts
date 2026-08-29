@@ -7,6 +7,7 @@ import { calculateWeatherImpact } from '@/lib/weather/weatherImpactEngine'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { findPlayerByName, getTrendingPlayers, getValueTier, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { getLiveAdpByName, lookupLiveAdp, type LiveAdpEntry } from '@/lib/adp/liveAdpFallback'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 import { getTrendingAdds, getTrendingDrops, getPlayerName, getAllPlayers } from '@/lib/sleeper-client'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -478,6 +479,17 @@ export async function enrichChatWithData(
         const trendingUp = getTrendingPlayers(allValues, 'up', 5)
         const trendingDown = getTrendingPlayers(allValues, 'down', 5)
 
+        /*
+         * ⚠ THE CSV BEHIND getConsensusADP PREDATES THE 2026 DRAFT, so every rookie returns
+         * null below and loses its ADP clause entirely. That is not a visible gap — the
+         * clause simply is not appended, so Chimmy describes a rookie with no draft cost
+         * beside veterans that carry one. adp_data already holds them (from ffc), so read
+         * that instead of printing nothing.
+         */
+        const liveAdp = matched.length > 0
+          ? await getLiveAdpByName().catch(() => new Map<string, LiveAdpEntry>())
+          : new Map<string, LiveAdpEntry>()
+
         if (matched.length > 0) {
           enrichSourcesUsed.push('valuations')
           sources.valuations = matched
@@ -489,6 +501,18 @@ export async function enrichChatWithData(
               if (consensus.dynastyADP) line += ` DynADP:${consensus.dynastyADP.toFixed(1)}`
               if (consensus.aav) line += ` AAV:$${consensus.aav.toFixed(1)}`
               if (consensus.injury) line += ` ⚠${consensus.injury}`
+            } else {
+              /*
+               * Name the sources rather than saying "platforms". A rookie priced by ffc
+               * alone must not read like the agreement of five boards — that is the exact
+               * confusion the CSV's absence would otherwise create.
+               */
+              const live = lookupLiveAdp(liveAdp, p.name)
+              if (live) {
+                const who = live.providers.length > 0 ? `: ${live.providers.join(', ')}` : ''
+                const unit = live.providerCount === 1 ? 'source' : 'sources'
+                line += ` | ConsensusADP: ${live.adp.toFixed(1)} (${live.providerCount} ${unit}${who})`
+              }
             }
             return line
           }).join('\n')}`)
