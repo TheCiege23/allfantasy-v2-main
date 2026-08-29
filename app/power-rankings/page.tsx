@@ -13,6 +13,7 @@ import {
   type SupportedSport,
 } from "@/lib/sport-scope";
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
+import { KickerValuationBand, type KickerValuationView } from "./KickerValuationBand";
 
 type LeagueFormat = "redraft" | "dynasty" | "keeper";
 type RankingView = "power" | "dynasty" | "composite";
@@ -147,6 +148,10 @@ interface RankingsResponse {
     sample: number;
     label: string;
   }>;
+  isKickerLeague?: boolean;
+  meta?: {
+    kickerValuation?: KickerValuationView | null;
+  };
 }
 
 interface RankExplanationView {
@@ -195,9 +200,12 @@ interface PositionValuesView {
   RB: number;
   WR: number;
   TE: number;
+  /** Present whenever the league rosters kickers; already inside starterValue/benchDepth. */
+  K: number;
   starterValue: number;
   benchDepth: number;
 }
+
 
 interface NextStepView {
   label: string;
@@ -486,6 +494,7 @@ function buildPositionValues(team: RawTeam): PositionValuesView {
     RB: team.positionValues.RB?.total ?? 0,
     WR: team.positionValues.WR?.total ?? 0,
     TE: team.positionValues.TE?.total ?? 0,
+    K: team.positionValues.K?.total ?? 0,
     starterValue: team.starterValue,
     benchDepth: team.benchValue,
   };
@@ -901,11 +910,14 @@ function ExpandedTeamDetail({
   currentJob,
   onCoach,
   onRoadmap,
+  kickerValuation,
 }: {
   team: TeamRanking;
   currentJob: ActiveJob | null;
   onCoach: (team: TeamRanking) => void;
   onRoadmap: (team: TeamRanking) => void;
+  /* League-level, so it is threaded from the page rather than read off `team`. */
+  kickerValuation: KickerValuationView | null;
 }) {
   const { t, tInterpolate } = useLanguage();
   const rankExplanation = team.rankExplanation;
@@ -1118,6 +1130,19 @@ function ExpandedTeamDetail({
                   </div>
                 ))}
               </div>
+              {/*
+                * Kickers get their own band rather than a fifth tile, because the number means
+                * something different from the four above it. QB/RB/WR/TE totals reflect which
+                * players a manager holds; the kicker total is just how many kicker slots they
+                * have filled, and reading it as a ranking would be reading signal that was
+                * measured not to exist.
+                */}
+              <KickerValuationBand
+                valuation={kickerValuation}
+                teamTotal={team.positionValues.K}
+                formatValue={formatCurrency}
+              />
+
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-white/8 bg-[#0c0c1e] p-3 text-sm text-white/65">
                   {t("powerRankingsPage.position.starterValue")}{" "}
@@ -1335,6 +1360,7 @@ function TeamRow({
   currentJob,
   onCoach,
   onRoadmap,
+  kickerValuation,
 }: {
   team: TeamRanking;
   displayRank: number;
@@ -1344,6 +1370,7 @@ function TeamRow({
   currentJob: ActiveJob | null;
   onCoach: (team: TeamRanking) => void;
   onRoadmap: (team: TeamRanking) => void;
+  kickerValuation: KickerValuationView | null;
 }) {
   const { t, tInterpolate } = useLanguage();
   const avatarUrl = buildAvatarUrl(team.avatar);
@@ -1464,7 +1491,13 @@ function TeamRow({
           detailLoading ? (
             <div className="px-4 py-6 text-sm text-white/45">{t("powerRankingsPage.loadingDetail")}</div>
           ) : (
-            <ExpandedTeamDetail team={team} currentJob={currentJob} onCoach={onCoach} onRoadmap={onRoadmap} />
+            <ExpandedTeamDetail
+              team={team}
+              currentJob={currentJob}
+              onCoach={onCoach}
+              onRoadmap={onRoadmap}
+              kickerValuation={kickerValuation}
+            />
           )
         ) : null}
       </div>
@@ -2111,6 +2144,7 @@ export default function PowerRankingsPage() {
                     currentJob={activeJob}
                     onCoach={requestCoach}
                     onRoadmap={requestRoadmap}
+                    kickerValuation={rankingsMeta?.meta?.kickerValuation ?? null}
                   />
                 ))}
               </div>

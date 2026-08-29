@@ -589,6 +589,10 @@ export const translationsEsParity: Record<string, string> = {
   "powerRankingsPage.phase.midPack": "Mitad de tabla",
   "powerRankingsPage.phase.rebuilding": "Reconstrucción",
   "powerRankingsPage.position.benchDepth": "Profundidad de banquillo:",
+  "powerRankingsPage.position.kickers": "Pateadores",
+  "powerRankingsPage.position.kickerEach": "Cada pateador de esta liga vale {{value}}.",
+  "powerRankingsPage.position.kickerBasis":
+    "Los pateadores se valoran como posición, no se clasifican. La clasificación de pateadores no se mantiene de una temporada a otra, y todo el grupo titulable puntúa dentro de aproximadamente 1,5x entre sí, así que ningún orden de pateadores predeciría nada aquí. El reemplazo está alrededor de K{{rank}}.",
   "powerRankingsPage.position.starterValue": "Valor de titulares:",
   "powerRankingsPage.psychology.decisionStyle": "Estilo de decisión:",
   "powerRankingsPage.psychology.draftStyle": "Estilo de draft:",
