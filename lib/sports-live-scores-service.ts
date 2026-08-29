@@ -1047,13 +1047,117 @@ export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Da
 const LIVE_WINDOW_PAST_MS = 48 * 60 * 60 * 1000
 const LIVE_WINDOW_FUTURE_MS = 21 * 24 * 60 * 60 * 1000
 
+/**
+ * A KICKOFF NOBODY HAS ANNOUNCED IS NOT MIDNIGHT.
+ *
+ * College fixtures are published months before their start time is set, and
+ * ESPN carries the undecided ones at midnight Eastern. Our writer stored that
+ * midnight as though it were a real kickoff — the timestamp version of the 0-0
+ * this module already refuses to write, and it fails the same way: silently,
+ * and as an observation rather than a gap.
+ *
+ * Measured on production 2026-08-29: 72 `espn_live` NCAAF rows sat at exactly
+ * 00:00 ET, 65 of them still in the future, spanning 08-29 to 09-05 — plus 429
+ * `cfbd` rows. Seven were that Saturday's FBS slate (UNC @ TCU, NC State @
+ * Virginia, Hawai'i @ Stanford, Memphis @ UNLV, NMSU @ FSU, Jax State @ NDSU,
+ * Sac State @ EMU). The live page's slate window opens at now-6h; midnight ET
+ * is two hours before that, so a nine-game Saturday rendered as one game.
+ *
+ * ⚠ NCAAF ONLY, AND ONLY WHERE ANOTHER FEED ALREADY KNOWS. Every midnight-ET
+ * row in the table is college football — no NFL, NBA, MLB or NHL row has one —
+ * which is what makes this the college TBD convention rather than a parsing
+ * bug. Nothing here guesses a time: a placeholder is replaced only by a real
+ * kickoff carried on the SAME ESPN event id by a schedule feed. A fixture
+ * nobody has timed keeps its placeholder and stays out of the slate, because
+ * "we do not know when this starts" is the honest answer in that case.
+ */
+const PLACEHOLDER_KICKOFF_SPORTS = new Set<string>(['NCAAF'])
+
+/**
+ * Schedule authorities, consulted for start times and NOTHING else.
+ *
+ * ⚠ DELIBERATELY NOT ADDED TO THE `source` FILTER BELOW. `espn` and `cfbd` hold
+ * 74 NCAAF rows for a single Saturday against `espn_live`'s 8, because they
+ * carry Division II and III — Chowan, Thomas More, Wheeling. They are the right
+ * answer to "when does 401856766 start" and the wrong answer to "what is on
+ * today's slate", so they are read here and never enter the source pool that
+ * `pickFreshestSourceRows` chooses from.
+ *
+ * The join is exact and needs no name matching: all three ESPN-derived feeds
+ * key on the ESPN event id (401856766 is UNC @ TCU in every one of them).
+ * TheSportsDB is absent because it does not — its ids look like 2498571.
+ */
+const KICKOFF_DONOR_SOURCES = ['espn', 'cfbd'] as const
+
+const ET_HOUR_MINUTE = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+/** True when a start time is ESPN's "kickoff not announced" placeholder. */
+export function isPlaceholderKickoff(sport: string, startTime: Date | null): boolean {
+  if (!startTime || Number.isNaN(startTime.getTime())) return false
+  if (!PLACEHOLDER_KICKOFF_SPORTS.has(sport)) return false
+  return ET_HOUR_MINUTE.format(startTime) === '00:00'
+}
+
+type KickoffRepairable = {
+  externalId: string
+  startTime: Date | null
+  fetchedAt: Date | null
+}
+
+/**
+ * Fill placeholder kickoffs from a schedule feed. Never invents, never widens
+ * the row set, and returns the input untouched when there is nothing to fix —
+ * including the common case, so the extra query is not paid on every load.
+ */
+async function repairPlaceholderKickoffs<T extends KickoffRepairable>(
+  sport: string,
+  rows: T[],
+): Promise<T[]> {
+  if (!PLACEHOLDER_KICKOFF_SPORTS.has(sport)) return rows
+  const broken = rows.filter((r) => isPlaceholderKickoff(sport, r.startTime))
+  if (broken.length === 0) return rows
+
+  const donors = await prisma.sportsGame.findMany({
+    select: { externalId: true, startTime: true, fetchedAt: true },
+    where: {
+      sport,
+      externalId: { in: [...new Set(broken.map((r) => r.externalId))] },
+      source: { in: [...KICKOFF_DONOR_SOURCES] },
+      startTime: { not: null },
+    },
+  })
+
+  // Freshest knowledge wins when two schedule feeds disagree. They agreed on
+  // all seven of the measured fixtures, so this is a tie-break, not a merge.
+  const best = new Map<string, { at: Date; fetched: number }>()
+  for (const d of donors) {
+    if (!d.startTime || isPlaceholderKickoff(sport, d.startTime)) continue
+    const fetched = d.fetchedAt?.getTime() ?? 0
+    const current = best.get(d.externalId)
+    if (!current || fetched > current.fetched) best.set(d.externalId, { at: d.startTime, fetched })
+  }
+  if (best.size === 0) return rows
+
+  return rows.map((row) => {
+    if (!isPlaceholderKickoff(sport, row.startTime)) return row
+    const fix = best.get(row.externalId)
+    return fix ? { ...row, startTime: fix.at } : row
+  })
+}
+
 async function readCachedLiveScoreRows(options: {
   sport: LeagueSport
   team?: string | null
 }) {
+  const sport = options.sport
   const team = options.team?.trim() || null
   const now = Date.now()
-  return prisma.sportsGame.findMany({
+  const rows = await prisma.sportsGame.findMany({
     // Exactly what dbRowToLiveScore reads, plus `source` for the picker below.
     // `raw` is deliberately absent: it is a full provider payload per row and
     // nothing on this path reads it.
@@ -1106,6 +1210,8 @@ async function readCachedLiveScoreRows(options: {
     },
     orderBy: { startTime: 'asc' },
   })
+
+  return repairPlaceholderKickoffs(sport, rows)
 }
 
 export async function getCachedLiveScoresForSport(options: {
@@ -1159,6 +1265,50 @@ export async function getCachedLiveScoresForSport(options: {
           ? 'Cached live scores are stale. Admin/cron sync must refresh provider data.'
           : null,
   }
+}
+
+/**
+ * A LIVE FEED'S ANSWER IS NOT THE SLATE.
+ *
+ * The provider loop breaks on the first non-empty response and returns it
+ * verbatim; the database is consulted only when EVERY provider is silent. A
+ * thin answer is not a silent one, so a feed that reports one game out of eight
+ * quietly becomes the whole scoreboard.
+ *
+ * Measured 2026-08-29 08:15 ET: ESPN's college-football scoreboard returned a
+ * single in-window fixture (San José State at USC) while our table held the
+ * other seven FBS games for that Saturday — written by ESPN ITSELF back on
+ * 04-26 and never re-reported since.
+ *
+ * So fixtures the winning feed told us about earlier and has now dropped are
+ * added back. The live row always wins a collision: it owns score and status,
+ * and the restored row only fills a hole in coverage.
+ *
+ * ⚠ SAME SOURCE ONLY — that restriction is what makes this safe. Pulling the
+ * gap from a DIFFERENT feed would mean merging id spaces and naming
+ * conventions, which is the exact duplicate-fixture failure
+ * `pickFreshestSourceRows` exists to prevent, and for NCAAF it would also drag
+ * in `cfbd`'s Division III coverage. Restoring a feed's own back-catalogue
+ * risks neither.
+ *
+ * ⚠ NCAAF ONLY. The gap is measured there and nowhere else. The same mechanism
+ * could bite any sport whose provider reports a partial slate, but widening it
+ * on reasoning alone is how the last four wrong conclusions in this file got
+ * made — measure a second sport before extending this.
+ */
+export async function withOmittedFixtures(
+  sport: LeagueSport,
+  source: string,
+  live: LiveScoreRow[],
+  cached: Array<Parameters<typeof dbRowToLiveScore>[0] & { source: string | null }>,
+): Promise<LiveScoreRow[]> {
+  if (sport !== 'NCAAF') return live
+  const reported = new Set(live.map((s) => s.gameId))
+  const omitted = cached.filter((r) => r.source === source && !reported.has(r.externalId))
+  if (omitted.length === 0) return live
+  // Restored rows come from the database, so they need the crest pass the
+  // provider rows already got upstream.
+  return [...live, ...(await withCollegeTeamLogos(sport, omitted.map(dbRowToLiveScore)))]
 }
 
 /**
@@ -1258,6 +1408,10 @@ export async function getLiveScoresForSport(options: {
       source = candidate
       fetchedAt = new Date().toISOString()
       break
+    }
+
+    if (scores.length > 0) {
+      scores = await withOmittedFixtures(sport, source, scores, cachedGames)
     }
   }
 
