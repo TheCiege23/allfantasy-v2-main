@@ -62,6 +62,12 @@ function buildResolvedPlayer(input: {
       sleeper: true,
       espnInjuryFeed: true,
       internalAdp: true,
+      /*
+       * ⚠ tsconfig EXCLUDES `__tests__`, so a fixture that drifts from
+       * DeterministicSourceFlags is never caught by tsc — it just quietly stops describing
+       * the shape under test. Keep this list in step with the interface by hand.
+       */
+      marketAdp: false,
       internalProjections: true,
       leagueScoringSettings: false,
     },

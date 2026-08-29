@@ -39,7 +39,11 @@ export interface UnifiedPlayerStats {
 
 export interface MultiPlatformADPData {
   consensusADP: number | null
-  platformCount: number
+  /**
+   * How many sources produced `consensusADP`. NULL means the row did not say — which is not
+   * the same as 1, and must never be rendered as a number.
+   */
+  platformCount: number | null
   adpSpread: number | null
   tier: string | null
   redraft: {
@@ -579,7 +583,17 @@ export function buildPlayerContextForAI(players: UnifiedPlayer[]): string {
       if (p.valuation.multiPlatformADP) {
         const mp = p.valuation.multiPlatformADP
         if (mp.consensusADP !== null) {
-          parts.push(`| ConsensusADP: ${mp.consensusADP.toFixed(1)} (${mp.platformCount} platforms, spread: ${mp.adpSpread?.toFixed(1) ?? '?'})`)
+          /*
+           * This string is fed to a model. An unknown source count is stated as unknown, and
+           * a live-ADP figure names its sources, so the model cannot read a lone ffc price as
+           * five platforms agreeing.
+           */
+          const basis =
+            mp.platformCount == null
+              ? 'source count unknown'
+              : `${mp.platformCount} ${mp.platformCount === 1 ? 'platform' : 'platforms'}`
+          const named = mp.origin === 'live-adp' && mp.providers?.length ? `: ${mp.providers.join(', ')}` : ''
+          parts.push(`| ConsensusADP: ${mp.consensusADP.toFixed(1)} (${basis}${named}, spread: ${mp.adpSpread?.toFixed(1) ?? '?'})`)
         }
         if (mp.tier) parts.push(`[${mp.tier}]`)
         if (mp.dynastyADP !== null) parts.push(`DynADP: ${mp.dynastyADP.toFixed(1)}`)

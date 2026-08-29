@@ -510,8 +510,16 @@ export async function enrichChatWithData(
               const live = lookupLiveAdp(liveAdp, p.name)
               if (live) {
                 const who = live.providers.length > 0 ? `: ${live.providers.join(', ')}` : ''
-                const unit = live.providerCount === 1 ? 'source' : 'sources'
-                line += ` | ConsensusADP: ${live.adp.toFixed(1)} (${live.providerCount} ${unit}${who})`
+                /*
+                 * An unknown provider count is stated as unknown. Printing "1 source" for a
+                 * row that never said how many there were would invent provenance, which is
+                 * the exact failure this whole branch exists to avoid.
+                 */
+                const count =
+                  live.providerCount == null
+                    ? 'source count unknown'
+                    : `${live.providerCount} ${live.providerCount === 1 ? 'source' : 'sources'}`
+                line += ` | ConsensusADP: ${live.adp.toFixed(1)} (${count}${who}, ${live.scoring})`
               }
             }
             return line

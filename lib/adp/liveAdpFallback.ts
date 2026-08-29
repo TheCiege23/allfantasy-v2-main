@@ -40,14 +40,28 @@ export interface LiveAdpEntry {
   adp: number
   position: string | null
   team: string | null
-  /** How many distinct sources produced this figure. 1 means uncorroborated. */
-  providerCount: number
+  /**
+   * How many distinct sources produced this figure. 1 means uncorroborated.
+   *
+   * ⚠ NULL MEANS "THE ROW DID NOT SAY", WHICH IS NOT THE SAME AS 1. This used to coalesce a
+   * missing `provider_count` with an empty `provider_breakdown` down to the literal 1, and a
+   * caller then rendered "1 source" — a provenance claim the data never made. Callers must
+   * render an unknown count as unknown.
+   */
+  providerCount: number | null
   /** The sources themselves, so a caller can name them rather than imply a census. */
   providers: string[]
   /** Null when providerCount < 2: there is no spread between a single value and itself. */
   adpSpread: number | null
   season: number
   week: number
+  /**
+   * The board this came from. Carried because the DEFAULTS below are deliberately NOT the
+   * caller's league scoring — a surface that renders the number owes the reader the basis,
+   * or it shows a standard-scoring ADP inside a PPR comparison with nothing saying so.
+   */
+  format: string
+  scoring: string
 }
 
 export interface LiveAdpQuery {
@@ -74,9 +88,24 @@ type CacheEntry = { loadedAt: number; byName: Map<string, LiveAdpEntry> }
 
 const cache = new Map<string, CacheEntry>()
 
+/**
+ * 🛑 A TTL CACHE ALONE DOES NOT STOP A THUNDERING HERD, AND EVERY CALLER HERE FANS OUT.
+ *
+ * The cache is only written AFTER both queries resolve, so on a cold process N concurrent
+ * callers all miss, all query, and all materialise the same ~2,935-row board into N separate
+ * Maps before any of them writes. That is not hypothetical: the comparison lab resolves up to
+ * 6 players through `Promise.all`, and `lib/agents/anthropic-pipeline.ts` fans out over an
+ * unbounded name list. Six players meant twelve queries and six full boards.
+ *
+ * So the in-flight PROMISE is shared, not just the settled result. The second caller awaits
+ * the first one's load instead of starting its own.
+ */
+const inFlight = new Map<string, Promise<Map<string, LiveAdpEntry>>>()
+
 /** Test seam. */
 export function __resetLiveAdpFallbackCache(): void {
   cache.clear()
+  inFlight.clear()
 }
 
 function providersOf(breakdown: unknown): string[] {
@@ -107,6 +136,29 @@ export async function getLiveAdpByName(query: LiveAdpQuery = {}): Promise<Map<st
   const hit = cache.get(cacheKey)
   if (hit && Date.now() - hit.loadedAt < CACHE_TTL_MS) return hit.byName
 
+  // Someone else is already loading this exact board — await theirs rather than adding a scan.
+  const pending = inFlight.get(cacheKey)
+  if (pending) return pending
+
+  const load = loadBoard(sport, format, scoring)
+    .then((byName) => {
+      cache.set(cacheKey, { loadedAt: Date.now(), byName })
+      return byName
+    })
+    .finally(() => {
+      inFlight.delete(cacheKey)
+    })
+
+  inFlight.set(cacheKey, load)
+  return load
+}
+
+/** The uncached read. Never throws — see {@link getLiveAdpByName}. */
+async function loadBoard(
+  sport: string,
+  format: string,
+  scoring: string,
+): Promise<Map<string, LiveAdpEntry>> {
   const byName = new Map<string, LiveAdpEntry>()
 
   try {
@@ -115,10 +167,7 @@ export async function getLiveAdpByName(query: LiveAdpQuery = {}): Promise<Map<st
       orderBy: [{ season: 'desc' }, { week: 'desc' }],
       select: { season: true, week: true },
     })
-    if (!latest) {
-      cache.set(cacheKey, { loadedAt: Date.now(), byName })
-      return byName
-    }
+    if (!latest) return byName
 
     const rows = await prisma.adpDataRecord.findMany({
       where: {
@@ -145,16 +194,24 @@ export async function getLiveAdpByName(query: LiveAdpQuery = {}): Promise<Map<st
       const key = normalizePlayerName(row.playerName)
       if (!key) continue
       const providers = providersOf(row.providerBreakdown)
-      const providerCount = row.providerCount ?? (providers.length || 1)
+      /*
+       * ⚠ DO NOT COALESCE AN UNKNOWN COUNT TO 1. A row that states neither `provider_count`
+       * nor a `provider_breakdown` has told us nothing about corroboration, and defaulting it
+       * to 1 let a caller print "1 source" as though the data had said so. Unknown stays null
+       * and every consumer must handle it.
+       */
+      const providerCount = row.providerCount ?? (providers.length > 0 ? providers.length : null)
       const existing = byName.get(key)
       /*
        * A name can appear more than once across player ids. Prefer the better-corroborated
-       * row, then the earlier ADP — never the last one seen, which is arbitrary.
+       * row, then the earlier ADP — never the last one seen, which is arbitrary. An unknown
+       * count ranks below any known one, so a row that states its provenance wins.
        */
+      const rank = (c: number | null) => (c == null ? -1 : c)
       if (
         existing &&
-        (existing.providerCount > providerCount ||
-          (existing.providerCount === providerCount && existing.adp <= row.adp))
+        (rank(existing.providerCount) > rank(providerCount) ||
+          (rank(existing.providerCount) === rank(providerCount) && existing.adp <= row.adp))
       ) {
         continue
       }
@@ -166,16 +223,18 @@ export async function getLiveAdpByName(query: LiveAdpQuery = {}): Promise<Map<st
         providerCount,
         providers,
         // Zero spread from a single source is absence of disagreement, not agreement.
-        adpSpread: providerCount >= 2 ? row.adpSpread ?? null : null,
+        adpSpread: providerCount != null && providerCount >= 2 ? row.adpSpread ?? null : null,
         season: latest.season,
         week: latest.week,
+        format,
+        scoring,
       })
     }
   } catch {
     // Fall through with whatever was built; an empty map restores the previous behaviour.
   }
 
-  cache.set(cacheKey, { loadedAt: Date.now(), byName })
+  // Caching is the wrapper's job — see getLiveAdpByName, which also shares the in-flight load.
   return byName
 }
 

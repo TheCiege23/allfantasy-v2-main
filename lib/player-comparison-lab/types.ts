@@ -33,6 +33,49 @@ export interface DeterministicSourceFlags {
   internalAdp: boolean;
   internalProjections: boolean;
   leagueScoringSettings: boolean;
+  /** {@link MarketAdpSignal} was resolved from adp_data. Distinct from `sleeper`. */
+  marketAdp: boolean;
+}
+
+/**
+ * Draft cost read from `adp_data`, for the players the static CSV cannot see.
+ *
+ * 🛑 THE NUMBER TRAVELS WITH ITS PROVENANCE, DELIBERATELY. The comparison lab's only other
+ * ADP fields are both unusable: `internalAdp` reads `ai_adp_snapshots`, which holds ZERO rows
+ * in production (its writer `runAiAdpJob` has no scheduled caller), and `sleeperAdp` comes
+ * from a column of `data/nfl-adp-multiplatform.csv` — a hand-placed export dated 2026-03-08,
+ * before the April 2026 draft, covering 4 of ~377 skill-position rookies.
+ *
+ * A 2026 rookie's figure here is priced by `ffc` ALONE at providerCount 1. Rendering it as a
+ * bare number beside a veteran's would assert a corroboration that does not exist, so every
+ * surface that shows `adp` must also show `providerCount`/`providers` and `scoring`.
+ *
+ * ⚠ NOT ROUTED INTO THE `market_value` MATRIX ROW, ON PURPOSE. That row proxies ADP into a
+ * FantasyCalc-scaled value via `Math.max(0, 10000 - adp * 35)`, compares it head-to-head with
+ * real FantasyCalc values, and feeds the winner to the model through `buildSummaryLines` with
+ * no provenance attached. The transform is linear where value is steeply convex, so a rookie
+ * would price at ~89% of the board leader and could win "Market value" outright. It also
+ * saturates to a scored 0 past pick ~286, turning "no data" into "worthless".
+ */
+export interface MarketAdpSignal {
+  adp: number;
+  /** NULL means the row did not state a count — which is NOT the same as 1. */
+  providerCount: number | null;
+  /** Named sources, so a single-source price cannot read as a consensus. */
+  providers: string[];
+  season: number;
+  week: number;
+  /**
+   * The board's own basis, which is NOT the league's scoring. The blended
+   * `redraft`/`standard` board is requested deliberately because it is a superset carrying
+   * the CSV's veterans AND ffc's rookies; `redraft`/`ppr` is pure ffc and would drop
+   * veterans. That tradeoff is only honest if the basis is disclosed.
+   */
+  format: string;
+  scoring: string;
+  /** Identity from the same row, usable as a last-resort position/team fallback. */
+  position: string | null;
+  team: string | null;
 }
 
 export interface InjurySignal {
@@ -57,6 +100,8 @@ export interface ResolvedPlayerStats {
   projection: ProjectionRow | null;
   internalAdp: number | null;
   sleeperAdp: number | null;
+  /** Draft cost from `adp_data`. See {@link MarketAdpSignal} — never collapse into `sleeperAdp`. */
+  marketAdp: MarketAdpSignal | null;
   internalProjectionPoints: number | null;
   injury: InjurySignal;
   scheduleDifficultyScore: number | null;
