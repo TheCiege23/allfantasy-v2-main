@@ -277,8 +277,27 @@ export async function preflight(): Promise<PreflightResult> {
       notes.push(`reported NODE_ENV: ${healthBody.analytics.env}`)
     }
 
-    // Read-only mode skips the write probe entirely and never registers.
-    if (process.env.AGENT_TESTER_READ_ONLY === "1") {
+    /*
+     * Read-only mode skips the write probe entirely and never registers.
+     *
+     * ⚠ TRIMMED ON PURPOSE, AND THE WHITESPACE IS NOT HYPOTHETICAL. The npm
+     * script sets this with Windows cmd:
+     *
+     *   "test:agent:readonly": "set AGENT_TESTER_READ_ONLY=1&& playwright test ..."
+     *
+     * The missing space before `&&` is load-bearing. `set X=1&& cmd` yields
+     * "1", but `set X=1 && cmd` yields "1 " — cmd includes everything up to the
+     * separator in the value. Both were measured, not assumed.
+     *
+     * Against a strict `=== "1"` that one space silently turns read-only OFF:
+     * the run falls through to probeBypass below and registers an account,
+     * with no error and no visible difference in how it was invoked. The
+     * safest documented entry point would quietly become write-capable, which
+     * is the one failure this file exists to prevent.
+     */
+    const readOnly =
+      String(process.env.AGENT_TESTER_READ_ONLY ?? "").trim() === "1"
+    if (readOnly) {
       notes.push("read-only mode: no account creation, no form submission.")
       return { baseURL, bypassActive: false, writesAllowed: false, notes }
     }
