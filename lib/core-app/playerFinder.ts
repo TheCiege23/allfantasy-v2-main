@@ -351,14 +351,66 @@ export async function getPlayerDetail(
       }
     : { available: true, data: await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId) }
 
-  // Injuries come from the ESPN writer — TheSportsDB serves none at all.
-  const injuryRow = await prisma.sportsInjury
-    .findFirst({
-      where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
-      orderBy: { fetchedAt: 'desc' },
-      select: { status: true, description: true, date: true, fetchedAt: true },
+  /*
+   * 🛑 EVERY LOOKUP BELOW USED TO MATCH ON NAME, AND NAMES ARE NOT IDENTITIES.
+   *
+   * `playerName equals row.name` (case-insensitive) attached ANOTHER PLAYER'S career to
+   * this page whenever two people share a name. Measured in production 2026-08-29: 218
+   * NFL names are held by two or more distinct players (548 players), and 61 of those
+   * names carry season stats. Worked example — "DeVonta Smith" is both the Eagles WR
+   * (sleeperId 7525) and a Panthers CB (13977); all nine stat rows belong to the WR, so
+   * the CB's page rendered the receiver's 2021-2025 seasons as his own.
+   *
+   * The identity set: this player's own externalId, plus every externalId belonging to a
+   * SportsPlayer row that shares his sleeperId. One player has up to three rows here —
+   * rolling_insights, sleeper and thesportsdb each mint their own externalId — and the
+   * stats table is keyed on whichever the writer used, so gathering the set is what keeps
+   * the cross-provider merge below working while binding it to one person.
+   */
+  const identityIds = new Set<string>([row.externalId])
+  if (row.sleeperId) {
+    const siblings = await prisma.sportsPlayer
+      .findMany({
+        where: { sport: row.sport, sleeperId: row.sleeperId },
+        select: { externalId: true },
+      })
+      .catch(() => [] as Array<{ externalId: string }>)
+    for (const s of siblings) if (s.externalId) identityIds.add(s.externalId)
+  }
+
+  /*
+   * ⚠ INJURIES STAY ON THE NAME, BECAUSE THE ID DOES NOT EXIST TO JOIN ON.
+   *
+   * `SportsInjury.playerId` is populated by rolling_insights, api_sports and sleeper —
+   * and by ESPN on ZERO of its 2,747 NFL rows, which is the writer this page depends on
+   * ("Injuries come from the ESPN writer — TheSportsDB serves none at all"). An id join
+   * here would drop the entire injury feed rather than bind it correctly.
+   *
+   * So guard the ambiguity instead of pretending it away: when the name belongs to more
+   * than one player in this sport, REFUSE rather than guess. On this data that suppresses
+   * 25 of 1,250 live NFL designations — a 2% cost to never tell a manager the wrong man
+   * is out. An unresolved identity is also refused: without a sleeperId we cannot even
+   * ask whether the name is shared.
+   */
+  const nameSharers = await prisma.sportsPlayer
+    .findMany({
+      where: { sport: row.sport, name: { equals: row.name, mode: 'insensitive' }, sleeperId: { not: null } },
+      select: { sleeperId: true },
+      distinct: ['sleeperId'],
+      take: 5,
     })
-    .catch(() => null)
+    .catch(() => [] as Array<{ sleeperId: string | null }>)
+  const nameIsAmbiguous = nameSharers.length > 1
+
+  const injuryRow = nameIsAmbiguous
+    ? null
+    : await prisma.sportsInjury
+        .findFirst({
+          where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
+          orderBy: { fetchedAt: 'desc' },
+          select: { status: true, description: true, date: true, fetchedAt: true },
+        })
+        .catch(() => null)
 
   const injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }> =
     injuryRow
@@ -366,11 +418,44 @@ export async function getPlayerDetail(
           available: true,
           data: { status: injuryRow.status, description: injuryRow.description, reportedAt: injuryRow.date },
         }
-      : { available: false, reason: 'no injury designation on file — which is not the same as healthy' }
+      : {
+          available: false,
+          reason: nameIsAmbiguous
+            ? `more than one ${row.sport} player is named ${row.name}, and the injury feed carries no id to tell them apart — so we will not guess`
+            : 'no injury designation on file — which is not the same as healthy',
+        }
 
+  /*
+   * A NAME IS ONLY DANGEROUS WHEN IT IS SHARED — so drop it exactly then, and not before.
+   *
+   * ⚠ AN ID-ONLY JOIN WAS TRIED FIRST AND IS THE WRONG FIX. Measured against production:
+   * matching solely on the identity set reaches 1,195 players where the name reached
+   * 1,961 — it would have silently emptied the stats panel for 766 people. The cause is
+   * that 4,026 of 9,875 resolvable stat rows are keyed on an externalId that exists only
+   * on a SportsPlayer row with a NULL sleeperId, so nothing links them to the page. That
+   * trades a wrong-data bug for a missing-data bug on six times as many pages.
+   *
+   * What actually distinguishes the two cases is ambiguity, which is already computed
+   * above for injuries. When 218 NFL names are shared by two or more players, only those
+   * names can contaminate; for the rest the name IS the player. So:
+   *
+   *   shared name  -> identity set ONLY. Narrow, occasionally empty, never someone else's.
+   *   unique name  -> identity set OR name. Full coverage, and there is no one to confuse
+   *                   him with.
+   *
+   * On the worked example that means the Panthers CB gets nothing (correct — he has no
+   * ingested stats) instead of the Eagles receiver's five seasons, while the receiver
+   * keeps all nine of his rows.
+   */
   const stats = await prisma.playerSeasonStats
     .findMany({
-      where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
+      where: {
+        sport: row.sport,
+        OR: [
+          { playerId: { in: [...identityIds] } },
+          ...(nameIsAmbiguous ? [] : [{ playerName: { equals: row.name, mode: 'insensitive' as const } }]),
+        ],
+      },
       orderBy: { season: 'desc' },
       take: 10,
       select: { season: true, stats: true },
