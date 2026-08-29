@@ -167,6 +167,7 @@ export function DefenseHubClient({
           <div className="flex flex-col gap-[22px]">
             <CoverageBanner data={data} />
             <DefenderTable data={data} />
+            <Kickers data={data} />
             <SnapShare data={data} />
             <RoleCards data={data} />
             <Tendencies data={data} />
@@ -174,6 +175,49 @@ export function DefenseHubClient({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Kickers, priced as a position.
+ *
+ * 🛑 ONE VALUE, SHOWN ONCE, ABOVE THE LIST — NOT A COLUMN REPEATED DOWN IT. A per-row value
+ * column would be identical in every row, and a reader scanning a table of identical numbers
+ * concludes the page is broken rather than that the position is flat. Stating it once, with
+ * the reason attached, is the difference between a finding and a rendering bug.
+ *
+ * ⚠ AND NO PROJ / VORP / RANK COLUMNS HERE, DELIBERATELY. Those exist for defenders because
+ * value over replacement genuinely orders them. The same columns beside kickers would invite
+ * a comparison the data cannot support — see lib/kicker-values/leagueKickerValue.ts.
+ */
+function Kickers({ data }: { data: DefenseHubPayload }) {
+  if (!data.kickerValue || data.kickers.length === 0) return null
+
+  return (
+    <section>
+      <Label>Your kickers</Label>
+      <div className="rounded-[13px] border border-white/[0.07] bg-[#0d1020] p-[13px]">
+        <div className="flex items-baseline gap-2.5">
+          <div className="font-mono text-[17px] font-black text-[#eef0fa]">
+            {data.kickerValue.value?.toLocaleString()}
+          </div>
+          <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
+            each · replacement about K{data.kickerValue.replacementRank}
+          </div>
+        </div>
+
+        <p className="mt-2 text-[11px] leading-[1.5] text-[#8f97bd]">{data.kickerValue.basis}</p>
+
+        <div className="mt-3 flex flex-col gap-1.5 border-t border-white/[0.07] pt-3">
+          {data.kickers.map((k) => (
+            <div key={k.sleeperId} className="flex items-center gap-2">
+              <div className="text-[12px] font-bold text-[#eef0fa]">{k.name}</div>
+              <div className="text-[11px] font-medium text-[#5d648a]">{k.team ?? <Dash />}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
 

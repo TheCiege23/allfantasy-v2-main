@@ -7,6 +7,11 @@ import { loadSnapShares, type SnapShareOutcome } from '@/lib/core-app/snapShare'
 import { loadActualWeeklyPoints, type ActualWeekOutcome } from './actualWeeklyPoints'
 import { deriveDefenderRole, type DefenderRoleLine } from './defenderRole'
 import { loadLeagueIdpVorp } from './leagueIdpVorp'
+import {
+  resolveLeagueKickerValue,
+  type LeagueKickerValue,
+} from '@/lib/kicker-values/leagueKickerValue'
+import { isKickerPositionLoose } from '@/lib/league-values/leagueTradeValues'
 import { tendencyForTeam, type TeamDefenseTendency } from './teamTendencies'
 
 /**
@@ -96,12 +101,43 @@ export interface DefenseHubTendencyCard {
   tendency: TeamDefenseTendency
 }
 
+/**
+ * A rostered kicker, and what he is worth here.
+ *
+ * 🛑 EVERY KICKER IN A LEAGUE CARRIES THE SAME `value`, AND THAT IS THE FINDING RATHER THAN A
+ * GAP. Measured over 4,482 kicker game rows (2019-2025): kicker rank does not persist year to
+ * year — the correlation is NEGATIVE in all six season pairs, mean -0.455 — and within a season
+ * it is indistinguishable from zero. The startable population spans 1.55x. There is no honest
+ * way to say one kicker is worth more than another, so this surface does not pretend to.
+ * See `lib/kicker-values/leagueKickerValue.ts`.
+ *
+ * ⚠ DELIBERATELY NO `projection`, `vorp` OR `positionRank` FIELD. Those exist for defenders
+ * because value over replacement genuinely orders them. Adding the same columns here would
+ * invite a manager to compare two kickers on numbers that do not predict anything, which is
+ * the exact impression the flat value exists to prevent.
+ */
+export interface DefenseHubKicker {
+  sleeperId: string
+  name: string
+  team: string | null
+}
+
 export interface DefenseHubPayload {
   state: DefenseHubState
   /** Present only when `state` is 'ok'. */
   projectedFor: { season: number; week: number } | null
   coverage: { defenders: number; projected: number; priced: number }
   defenders: DefenseHubDefender[]
+  /**
+   * The caller's rostered kickers. Empty when the league starts no kicker — then a kicker is
+   * not an asset here at all and the section is not rendered.
+   */
+  kickers: DefenseHubKicker[]
+  /**
+   * What any kicker is worth in this league, with the reasoning. Null when the league starts
+   * none.
+   */
+  kickerValue: LeagueKickerValue | null
   snaps: DefenseHubSnap[]
   roles: DefenseHubRoleCard[]
   tendencies: DefenseHubTendencyCard[]
@@ -117,6 +153,8 @@ const EMPTY = (state: DefenseHubState, notes: string[] = []): DefenseHubPayload 
   projectedFor: null,
   coverage: { defenders: 0, projected: 0, priced: 0 },
   defenders: [],
+  kickers: [],
+  kickerValue: null,
   snaps: [],
   roles: [],
   tendencies: [],
@@ -126,6 +164,12 @@ const EMPTY = (state: DefenseHubState, notes: string[] = []): DefenseHubPayload 
 const NO_CAP_NOTE =
   'No salary, contract or cap-efficiency columns: those tables have zero rows in production, ' +
   'so there is nothing to show for any league yet.'
+
+const KICKER_NOTE =
+  'Every kicker in this league is priced the same, on purpose. Measured over 4,482 kicker ' +
+  'games from 2019-2025, kicker rank does not carry: year to year the correlation is negative ' +
+  'in all six season pairs, and within a season it is effectively zero. Nobody can tell you ' +
+  'which kicker will finish first, so we do not charge you for one.'
 
 const TENDENCY_NOTE =
   'Opponent tendencies are facts about how a defence has been played, not a matchup grade. ' +
@@ -375,14 +419,46 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     if (tendency) tendencies.push({ team: key, tendency })
   }
 
+  /*
+   * Kickers, priced as a POSITION rather than as players.
+   *
+   * ⚠ ONLY THE CALLER'S OWN, AND ONLY WHEN THE LEAGUE STARTS ONE. `resolveLeagueKickerValue`
+   * returns null for a league with no K slot, and rendering a price there would invent a
+   * market for a player nobody in that league can field.
+   *
+   * ⚠ NO LEAGUE-WIDE PASS IS NEEDED, WHICH IS THE OPPOSITE OF THE DEFENDER PATH ABOVE. VORP
+   * has to price every roster in the league to establish replacement level; the kicker value
+   * is derived from the league's SLOTS and team count alone, so the caller's own roster is
+   * the only thing that has to be read.
+   */
+  const kickerValue = resolveLeagueKickerValue({
+    rosterPositions,
+    numTeams,
+    isDynasty: (league.leagueType ?? '').toLowerCase().includes('dynasty'),
+  })
+
+  const kickers: DefenseHubKicker[] =
+    kickerValue.value == null
+      ? []
+      : myIds
+          .map((id) => ({ id, info: best.get(id) }))
+          .filter((x) => isKickerPositionLoose(x.info?.position))
+          .map((x) => ({
+            sleeperId: x.id,
+            name: x.info?.name ?? x.id,
+            team: x.info?.team ?? null,
+          }))
+
   return {
     state: 'ok',
     projectedFor: vorp.projectedFor,
     coverage: vorp.coverage,
     defenders,
+    kickers,
+    kickerValue: kickerValue.value == null ? null : kickerValue,
     snaps,
     roles,
     tendencies,
-    notes: [...notes, TENDENCY_NOTE],
+    notes: [...notes, TENDENCY_NOTE, ...(kickers.length > 0 ? [KICKER_NOTE] : [])],
   }
 }
