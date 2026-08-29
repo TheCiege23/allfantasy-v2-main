@@ -72,6 +72,24 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
+/*
+ * The route now REFUSES to grade a trade whose assets it cannot price, rather than
+ * treating an unknown player as worth zero and grading the difference (that produced a
+ * confident A+/D from no data — see app/api/trade-evaluator/route.ts).
+ *
+ * This suite is about providerEvidence plumbing, not pricing, and its two synthetic
+ * players are on no real board. It used to reach a 200 only because unpriced assets were
+ * silently valued at 0. Give it a board containing them, so it exercises a genuinely
+ * successful evaluation instead of depending on the bug.
+ */
+vi.mock('@/lib/fantasycalc-db', () => ({
+  getFantasyCalcValuesDbFirst: vi.fn().mockResolvedValue([
+    { value: 6000, player: { id: 1, name: 'Player One', position: 'WR', maybeAge: 25, sleeperId: 'sp-1' } },
+    { value: 5200, player: { id: 2, name: 'Player Two', position: 'RB', maybeAge: 26, sleeperId: 'sp-2' } },
+  ]),
+  getFantasyCalcCacheAgeMs: vi.fn().mockReturnValue(0),
+}))
+
 vi.mock('@/lib/sleeper-client', () => ({
   getLeagueInfo: vi.fn().mockResolvedValue(null),
   getLeagueRosters: vi.fn().mockResolvedValue([]),
