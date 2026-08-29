@@ -17,14 +17,21 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runAdpImporter } from "@/lib/workers/adp-importer"
 
 /**
- * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
- * Vercel Cron presents `Authorization: Bearer $CRON_SECRET`, so a BARE call checks
- * LEAGUE_CRON_SECRET first and 401s whenever that variable is set to anything else — which is
- * what happened in production the moment #284 made these routes reachable again (404 -> 401,
- * measured 2026-07-20 00:01 UTC). Naming CRON_SECRET explicitly is what `keeper/session` and
- * `weather/refresh-cron` already do, and those are the crons that were returning 200.
+ * ⚠ THIS NOTE DESCRIBED A BUG THAT IS FIXED, AND SAID THE OPPOSITE OF THE CODE. It read
+ * "`requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`", so a
+ * bare call 401s. That WAS true and did break production on 2026-07-20 (404 -> 401), but
+ * #289/#304 inverted it: `app/api/cron/_auth.ts:22-24` now resolves
+ * `preferredSecretEnv ?? CRON_SECRET ?? LEAGUE_CRON_SECRET`, and its own comment says
+ * LEAGUE_CRON_SECRET "must never win by default".
+ *
+ * Kept as a correction rather than deleted, because the stale version was load-bearing: it is
+ * cited when choosing where to fold new work, and it makes an already-safe route look risky.
+ * Naming 'CRON_SECRET' explicitly below is still right — it is the one contract every
+ * deployment is guaranteed to have — but it is now belt-and-braces, not the thing standing
+ * between this cron and a 401.
  */
 import { ingestPlayerValues } from "@/lib/player-values/ingestPlayerValues"
+import { runAiAdpJob } from "@/lib/ai-adp-engine"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -49,7 +56,8 @@ async function handle(req: NextRequest) {
         ok: true,
         dryRun: true,
         sports: sports ?? "all",
-        message: "Dry run — no DB writes performed (ADP import and player-value capture both skipped).",
+        message:
+          "Dry run — no DB writes performed (ADP import, player-value capture and AI ADP job all skipped).",
         durationMs: Date.now() - startedAt,
       })
     }
@@ -84,10 +92,38 @@ async function handle(req: NextRequest) {
       playerValues = { error: message.slice(0, 200) }
     }
 
+    /*
+     * AI ADP RIDES ALONG TOO, AND THIS IS LIKEWISE THE ONLY THING THAT SCHEDULES IT.
+     *
+     * `runAiAdpJob` documents itself as "Call from cron daily" and had NO caller anywhere in
+     * the repo, so `ai_adp_snapshots` held ZERO rows while eight surfaces read it — the same
+     * shape as the player-value gap above, and as ingestCFBDStats before it. The input is
+     * real: 32 completed sessions, 2,847 picks inside the job's 120-day lookback.
+     *
+     * ⚠ IT RUNS LAST, NOT FIRST, and the tempting argument for first is wrong. `runAdpImporter`
+     * does read `aiAdpSnapshot` — but only in the non-NFL branch, and every consumer is gated
+     * off by `isAiAdpConsumerEnabled()`, so there is no same-run consumer to feed. Meanwhile
+     * this job holds the whole pick set in memory, and a V8 heap OOM is process death, not a
+     * throw: `catch` would never run, and an untested job placed ahead of these two would take
+     * out an ADP import and a player-value capture that both work today. Earn the earlier slot
+     * with one clean run and a measured RSS, not with an ordering argument.
+     *
+     * FAILURE IS ISOLATED, same rule as above — ADP and player values are already written.
+     */
+    let aiAdp: Awaited<ReturnType<typeof runAiAdpJob>> | { error: string } | null = null
+    try {
+      aiAdp = await runAiAdpJob({ runReason: 'cron/adp-refresh' })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error("[cron/adp-refresh] ai adp job failed:", message)
+      aiAdp = { error: message.slice(0, 200) }
+    }
+
     return NextResponse.json({
       ok: true,
       dryRun: false,
       playerValues,
+      aiAdp,
       imported: result.imported,
       sports: result.sports,
       season: result.season,

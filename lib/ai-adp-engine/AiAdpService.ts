@@ -9,6 +9,7 @@ import { computeAdpFromPicks, buildSnapshotDataAndMeta } from './compute-adp'
 import type { AiAdpPlayerEntry } from './types'
 import { LOW_SAMPLE_THRESHOLD_DEFAULT, MIN_SAMPLE_SIZE_DEFAULT } from './types'
 import { resolveAiAdpSegmentContext } from './segment-resolver'
+import { AI_ADP_MIN_DRAFTS_TO_PUBLISH } from './aiAdpConsumerFlag'
 
 export interface RunAiAdpJobResult {
   segmentsUpdated: number
@@ -166,6 +167,21 @@ export async function runAiAdpJob(
     const totalPicks = segData?.picks.length ?? 0
     const totalDrafts = segData?.draftCount ?? 0
     if (entries.length === 0) continue
+    /*
+     * 🛑 A SEGMENT BUILT FROM TOO FEW DRAFTS IS NOT PUBLISHED AT ALL.
+     *
+     * `minSampleSize` (default 2) is a PER-PLAYER filter and is the only enforced gate in
+     * this engine — `lowSample` is stamped onto every entry and then read by no consumer, so
+     * annotating a thin board protects nothing. Without a segment floor, two completed drafts
+     * sharing 16 picks publish a snapshot that downstream code treats exactly like a
+     * well-sampled one, including in the draft recommender where it OUTRANKS the real board.
+     */
+    if (totalDrafts < AI_ADP_MIN_DRAFTS_TO_PUBLISH) {
+      errors.push(
+        `skipped ${segment.sport}/${segment.leagueType}/${segment.formatKey}: ${totalDrafts} draft(s) < ${AI_ADP_MIN_DRAFTS_TO_PUBLISH}`
+      )
+      continue
+    }
     totalPicksProcessed += totalPicks
     const { snapshotData, meta } = buildSnapshotDataAndMeta(
       entries,
@@ -364,6 +380,21 @@ export async function getAiAdpForLeague(
       }
     }
   }
+
+  /*
+   * 🛑 A DYNASTY LEAGUE IS NEVER SERVED A REDRAFT BOARD.
+   *
+   * The two remaining legs cross leagueType, and for dynasty that is not a graceful
+   * degradation — it is a different market. Redraft ADP prices this season; dynasty prices
+   * a career, so rookies and ageing veterans invert between them. Production has 45 NFL
+   * dynasty leagues against 49 redraft, `draftUISettings.aiAdpEnabled` defaults TRUE, and
+   * nothing downstream renders the `segment` field returned below — so before this guard a
+   * dynasty manager was shown a redraft board with no way to tell, and the draft recommender
+   * ranked it above their real ADP.
+   *
+   * Returning null puts them back on standard ADP, which is correct rather than merely safe.
+   */
+  if (baseSegment.leagueType === 'dynasty') return null
 
   result = await getAiAdp(baseSegment.sport, 'redraft', 'default')
   if (result) {
