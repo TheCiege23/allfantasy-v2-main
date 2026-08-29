@@ -5,6 +5,7 @@
  * Supports NFL, NHL, NBA, MLB, NCAAB, NCAAF, SOCCER via sport-scope.
  */
 import { prisma } from '@/lib/prisma'
+import { buildNameIndex } from '@/lib/player-identity/nameIndex'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '@/lib/player-analytics'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TimeframeId } from '@/lib/global-meta-engine/types'
@@ -617,16 +618,21 @@ async function getAnalyticsByPlayerKey(
   )]
   if (names.length === 0) return new Map()
   const batch = await getPlayerAnalyticsBatch(names)
-  const normalizedBatch = new Map<string, PlayerAnalytics>()
-  for (const [name, analytics] of batch.entries()) {
-    normalizedBatch.set(normalizeName(name), analytics)
-  }
+  /*
+   * `batch` is keyed by DISPLAY name and this re-keys by normalized name, so two distinct
+   * display names can collapse onto one key ("A.J. Brown" and "AJ Brown"). Refuse rather
+   * than let the later one win.
+   */
+  const normalizedEntries = buildNameIndex(
+    [...batch.entries()],
+    ([name]) => normalizeName(name),
+  )
   const byPlayerKey = new Map<string, PlayerAnalytics>()
   for (const [playerKey, context] of contextMap.entries()) {
     const displayName = context.displayName?.trim()
     if (!displayName) continue
-    const analytics = normalizedBatch.get(normalizeName(displayName))
-    if (analytics) byPlayerKey.set(playerKey, analytics)
+    const entry = normalizedEntries.get(normalizeName(displayName))
+    if (entry) byPlayerKey.set(playerKey, entry[1])
   }
   return byPlayerKey
 }

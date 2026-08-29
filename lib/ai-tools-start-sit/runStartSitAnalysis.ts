@@ -1,4 +1,5 @@
 import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
+import { buildNameIndex } from '@/lib/player-identity/nameIndex'
 import 'server-only'
 
 import type { LeagueSport, SportsPlayerRecord } from '@prisma/client'
@@ -706,7 +707,12 @@ export async function runStartSitAnalysis(input: {
       ? attachSportsNormalizationToChimmyPayload(chimmyPayloadBase, sportsNormBatch)
       : chimmyPayloadBase
 
-  const playersByNameLower = new Map(players.map((p) => [p.name.toLowerCase(), p]))
+  /*
+   * Refuses on a duplicate name rather than taking the last. Byron Murphy (CB MIN / DL SEA)
+   * and Justin Jefferson (WR MIN / LB CLE) each sit on one production roster together, and
+   * a start-sit answer about the wrong one is materially wrong.
+   */
+  const playersByNameLower = buildNameIndex(players, (p) => p.name.toLowerCase())
   const unresolvedDecisions = buildUnresolvedLineupDecisions({
     lineupSlotAnalysis,
     playersByNameLower,

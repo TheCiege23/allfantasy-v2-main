@@ -6,6 +6,7 @@ import {
   LeagueToolAccessDeniedError,
   leagueToolAccessUserMessage,
 } from '@/lib/ai-tools/league-tool-access-messages'
+import { buildNameIndex } from '@/lib/player-identity/nameIndex'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
@@ -267,7 +268,8 @@ async function enrichPicksWithRollingInsights(
       { prisma },
       { playerNames: names, sport, includeStats: true, skipCache: false },
     )
-    const byLower = new Map(ri.players.map((p) => [p.name.toLowerCase(), p]))
+    // Two Rolling Insights rows sharing a name would otherwise silently overwrite.
+    const byLower = buildNameIndex(ri.players, (p) => p.name.toLowerCase())
     for (const pick of picks) {
       const hit = byLower.get(pick.name.toLowerCase())
       if (!hit) continue

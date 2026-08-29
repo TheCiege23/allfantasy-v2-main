@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { AppPrismaClient } from '@/lib/sports-data-normalization/appPrismaClient'
 import { resolveNormalizedPlayerSportsProfiles } from '@/lib/sports-data-normalization/resolveNormalizedPlayerSportsProfiles'
+import { buildNameIndex } from '@/lib/player-identity/nameIndex'
 import type { NormalizedScoringRules } from '@/lib/league-context-engine/types'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { effectiveFantasyPoints, collectProjectionNotes } from '@/lib/projection-engine'
@@ -90,7 +91,8 @@ export async function enrichInjuryRowsWithLeagueProjections(args: {
       leagueScoring: args.leagueScoring,
       includeClearSportsProjections: group.length <= 20,
     })
-    const profByName = new Map(batch.players.map((x) => [x.player.name.toLowerCase(), x]))
+    // A shared name in the batch must not hand one player another's projection.
+    const profByName = buildNameIndex(batch.players, (x) => x.player.name.toLowerCase())
     for (const p of group) {
       const prof = profByName.get(p.name.toLowerCase())
       const eff = effectiveFantasyPoints(prof)
