@@ -16,6 +16,7 @@ import { prisma } from '../prisma'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
+import { resolveLeagueKickerValue, type LeagueKickerValue } from '@/lib/kicker-values/leagueKickerValue'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { getCompositeWeightConfig, resolveWeightProfile, computeCompositeFromWeights, type CompositeWeightConfig } from './composite-weights'
 import { getActiveCompositeParams, type LearnedCompositeParams } from './composite-param-learning'
@@ -288,6 +289,20 @@ export interface LeagueRankingsV2Output {
       avgStalenessHours: number
       staleSourceCount: number
     }
+    /**
+     * How this league's kickers were priced, and why they are all priced the same.
+     *
+     * `null` in a league that starts no kicker. Carried on the response so the flat number
+     * is self-describing to anything reading these totals — `rankPredictability: 'none'` is
+     * the finding, not a missing feature, and `basis` states it in one line a manager can
+     * argue with. Nothing in the UI renders this today.
+     */
+    kickerValuation: {
+      value: number | null
+      replacementRank: number
+      rankPredictability: 'none'
+      basis: string
+    } | null
   }
 }
 
@@ -2959,6 +2974,7 @@ export async function computeLeagueRankingsV2(
 
   const isIdpLeague = detectIdpLeague(rosterPositions)
   const isKickerLeague = detectKickerLeague(rosterPositions)
+  let leagueKickerValuation: LeagueKickerValue | null = null
   if (isIdpLeague || isKickerLeague) {
     const allRosterPlayerIds: string[] = []
     for (const roster of rosters) {
@@ -2981,16 +2997,40 @@ export async function computeLeagueRankingsV2(
         }).catch(() => null)
       : null
 
-    const idpKickerValues = await buildIdpKickerValueMap(
-      allRosterPlayerIds,
-      isDynasty,
-      idpVorp && idpVorp.vorpBySleeperId.size > 0
-        ? { vorpBySleeperId: idpVorp.vorpBySleeperId }
-        : null,
-    )
+    /*
+     * ⚠ KICKERS ARE PRICED, NOT RANKED, AND THIS IS THE ONLY SURFACE WHERE THAT MATTERS.
+     *
+     * `buildIdpKickerValueMap` used to price them off a hand-drawn ladder indexed by
+     * Sleeper's `search_rank`, which is a popularity poll. Measured on production
+     * 2026-08-29 over 4,482 kicker game rows: kicker rank does not persist year to year
+     * (Spearman NEGATIVE in all six season pairs, mean -0.455) or within a season (~0), and
+     * the whole startable population spans 1.55x against a ladder asserting 12x. So the
+     * ladder was manufacturing up to 1,100 points of difference between two teams' rosters
+     * out of a signal that predicts nothing.
+     *
+     * ⚠ AND NOTHING HERE EVER WANTED THE ORDERING — only the magnitudes. Kicker values are
+     * summed into `computeRosterValues` / `computeAgeAdjustedMarketValue` and the portfolio
+     * totals; no code path sorts kickers against each other, so a flat value cannot make
+     * them sort arbitrarily. It simply stops them differentiating teams, which is exactly
+     * what the measurement says they should not do.
+     */
+    const kickerValuation = isKickerLeague
+      ? resolveLeagueKickerValue({
+          rosterPositions,
+          numTeams: rosters.length,
+          isDynasty,
+        })
+      : null
+
+    const idpKickerValues = await buildIdpKickerValueMap(allRosterPlayerIds, isDynasty, {
+      vorpBySleeperId:
+        idpVorp && idpVorp.vorpBySleeperId.size > 0 ? idpVorp.vorpBySleeperId : undefined,
+      kickerValue: kickerValuation?.value ?? null,
+    })
     for (const [pid, pv] of idpKickerValues) {
       valueMap.set(pid, pv)
     }
+    leagueKickerValuation = kickerValuation
   }
 
   const tradeEfficiency = await fetchTradeMetrics(leagueId, rosterIdToUsername)
@@ -3499,6 +3539,14 @@ export async function computeLeagueRankingsV2(
       segmentKey,
       modelConfidence: computeModelConfidence(teams),
       dataFreshness: computeDataFreshness(teams),
+      kickerValuation: leagueKickerValuation
+        ? {
+            value: leagueKickerValuation.value,
+            replacementRank: leagueKickerValuation.replacementRank,
+            rankPredictability: leagueKickerValuation.rankPredictability,
+            basis: leagueKickerValuation.basis,
+          }
+        : null,
     },
   }
 }

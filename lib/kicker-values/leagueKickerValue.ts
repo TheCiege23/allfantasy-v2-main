@@ -29,11 +29,13 @@
  * K1 is, and it would barely matter if they could: the whole startable population sits inside
  * a 1.55x band. A kicker is therefore priced as a POSITION, not as a player.
  *
- * ⚠ WHAT THIS REPLACES OVERSTATED THE SPREAD BY ROUGHLY EIGHT TIMES. The hand-set ladder in
- * `lib/idp-kicker-values.ts` runs 1200 / 800 / 500 / 300 / 100 — K1 at 12x a K25, ordered by
+ * ⚠ WHAT THIS REPLACED OVERSTATED THE SPREAD BY ROUGHLY EIGHT TIMES. The hand-set ladder in
+ * `lib/idp-kicker-values.ts` ran 1200 / 800 / 500 / 300 / 100 — K1 at 12x a K25, ordered by
  * Sleeper's `search_rank`, which is a popularity poll rather than a projection. The measured
  * points ratio between K1 and K24 is 1.55x, and the ordering it used has no predictive value
- * at all.
+ * at all. That ladder is now DELETED rather than merely bypassed: this module is the only
+ * thing in the codebase that says what a kicker is worth, and `buildIdpKickerValueMap` takes
+ * the number from here through its `kickerValue` context rather than owning a second one.
  *
  * WHAT DOES VARY, AND IS WORTH COMPUTING: the LEAGUE. Replacement level is a property of the
  * rulebook, not of the player — a 12-team league starting one kicker can replace him off

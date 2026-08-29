@@ -362,6 +362,16 @@ export async function getIDPWaiverTargets(
     where: { id: leagueId },
     select: { isDynasty: true },
   })
+  /*
+   * ⚠ DEFENDERS ONLY — NO KICKER REACHES THIS MAP, SO REMOVING THE KICKER LADDER CHANGED
+   * NOTHING HERE. `buildIdpWaiverPool` filters every candidate through `isIdpPosition`,
+   * which is false for `K`, so the pool cannot contain one. The `tierRank` blend below is a
+   * DEFENDER ordering, and defender ordering is the half that was validated (value over
+   * replacement tracks the market at Spearman ~0.9); kicker ordering failed the equivalent
+   * test outright and no longer exists anywhere. A kicker added to this pool would arrive
+   * with no value at all rather than a fabricated one — price it with
+   * `resolveLeagueKickerValue` and do not rank it.
+   */
   const tierValues = await buildIdpKickerValueMap(
     pool.map((p) => p.playerId),
     league?.isDynasty ?? false,

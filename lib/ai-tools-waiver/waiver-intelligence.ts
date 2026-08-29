@@ -825,7 +825,18 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
    * IDP leagues: FantasyCalc carries no individual defenders, so an IDP
    * candidate priced through the NFL bundle scores ~0 and could never be
    * recommended. Value defenders with the real tier-curve valuation instead
-   * (Sleeper search_rank tiers — the same source power rankings use).
+   * (Sleeper search_rank tiers; power rankings now ranks the same curve by the
+   * league's own value over replacement, which this surface does not yet do).
+   *
+   * ⚠ NO KICKER EVER REACHES `buildIdpKickerValueMap` FROM HERE, WHICH IS WHY THE KICKER
+   * LADDER'S REMOVAL CHANGED NOTHING ON THIS SURFACE. The id list below is filtered through
+   * `isIdpPosition`, and `IDP_POSITION_MAP` holds only LB/DL/DB spellings — `K` is not in
+   * it, so `isIdpPosition('K')` is false and a kicker candidate is never passed. Kickers
+   * here fall to the `nflBundle` branch and score on its honest defaults, exactly as before.
+   * Checked rather than assumed: this file's only other mentions of `K` are the `streamers`
+   * position list at the candidate filter and its +6 waiver-score bonus, neither of which
+   * touches a value map. If you ever widen this filter to include kickers, they need a
+   * league-priced value from `resolveLeagueKickerValue` — and still no ordering.
    */
   const idpDynasty = tradeLeague?.isDynasty ?? selectedLeague?.isDynasty ?? true
   let idpTierValues: Awaited<ReturnType<typeof buildIdpKickerValueMap>> | null = null

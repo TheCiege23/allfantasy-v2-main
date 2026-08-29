@@ -33,6 +33,16 @@ players.lb_mid = { full_name: 'Mid Backer', position: 'LB', team: 'CLE', age: 25
 players.lb_scrub = { full_name: 'Scrub Backer', position: 'LB', team: 'CLE', age: 25, search_rank: 1 }
 players.db_one = { full_name: 'One Safety', position: 'S', team: 'CLE', age: 25, search_rank: 300 }
 
+/*
+ * Three kickers whose `search_rank` spans the whole of the deleted ladder: `k_famous` would
+ * have landed on the 1200 rung, `k_mid` on 500 and `k_obscure` on the 100 floor. Their ages
+ * differ too, because age was the other per-player input on the record. If any of that ever
+ * separates them again, the ladder has come back in some form.
+ */
+players.k_famous = { full_name: 'Famous Boot', position: 'K', team: 'CLE', age: 24, search_rank: 1 }
+players.k_mid = { full_name: 'Middling Boot', position: 'K', team: 'BUF', age: 29, search_rank: 12 }
+players.k_obscure = { full_name: 'Obscure Boot', position: 'K', team: 'NYJ', age: 38, search_rank: 900 }
+
 /** VORP that ranks the three named linebackers top / middle / bottom of the pool. */
 const NAMED_VORP = new Map<string, number | null>([
   ['lb_stud', 12.0],
@@ -236,5 +246,91 @@ describe('the value curve is shaped like a market, not like a staircase', () => 
     const { idpTierValueCeiling } = await load()
     expect(idpTierValueCeiling(true)).toBe(5500)
     expect(idpTierValueCeiling(false)).toBe(5300)
+  })
+})
+
+/**
+ * The kicker half, which is built on the OPPOSITE principle to the defender half above.
+ *
+ * Defenders are ranked because ranking them was validated. Kickers are not ranked because
+ * ranking them was measured and failed: year-over-year Spearman is NEGATIVE in all six
+ * measured season pairs (mean -0.455), within-season is ~0, and the whole startable
+ * population spans 1.55x. `lib/kicker-values/leagueKickerValue.ts` carries the numbers.
+ *
+ * These tests exist to stop the ladder being rebuilt by accident — from `search_rank`, from
+ * age, or from a well-meaning default.
+ */
+describe('buildIdpKickerValueMap — kickers are priced, never ranked', () => {
+  it('gives every kicker in the league the same value, whatever their search_rank', async () => {
+    const { buildIdpKickerValueMap } = await load()
+    const ids = ['k_famous', 'k_mid', 'k_obscure']
+    const map = await buildIdpKickerValueMap(ids, true, { kickerValue: 221 })
+
+    for (const id of ids) expect(map.get(id)!.value).toBe(221)
+    /*
+     * The point of the fixture: on the deleted ladder these three were 1200 / 500 / 100.
+     * `search_rank` is a popularity poll and orders nothing that persists.
+     */
+    expect(new Set(ids.map((i) => map.get(i)!.value)).size).toBe(1)
+  })
+
+  it('withholds age, so nothing downstream can rebuild an ordering out of it', async () => {
+    /*
+     * `league-rankings-v2`'s `computeAgeAdjustedMarketValue` multiplies any non-null age into
+     * a 0.88-1.12 band. With the ladder gone, age would be the only field left that differs
+     * between two kickers — and no measurement supports a kicker age curve.
+     */
+    const { buildIdpKickerValueMap } = await load()
+    const map = await buildIdpKickerValueMap(['k_famous', 'k_obscure'], true, { kickerValue: 221 })
+    expect(map.get('k_famous')!.age).toBeNull()
+    expect(map.get('k_obscure')!.age).toBeNull()
+    // The defender half still reports age: it is the trajectory layer there, and priced.
+    const idp = await buildIdpKickerValueMap(['lb_stud'], true, { vorpBySleeperId: NAMED_VORP })
+    expect(idp.get('lb_stud')!.age).toBe(25)
+  })
+
+  it('omits kickers entirely when the caller supplies no kicker value', async () => {
+    /*
+     * There is deliberately nothing to fall back to. A default here would be a new hand-drawn
+     * ladder with the same defect, one import away from any surface — so a caller that does
+     * not price kickers gets no kicker rows rather than invented ones. This is also what the
+     * two IDP-only consumers see: `waiver-intelligence` and `idpChimmy` both filter their id
+     * lists through `isIdpPosition` and never pass a kicker at all.
+     */
+    const { buildIdpKickerValueMap } = await load()
+    const map = await buildIdpKickerValueMap(['k_famous', 'lb_stud'], true)
+    expect(map.has('k_famous')).toBe(false)
+    expect(map.has('lb_stud')).toBe(true)
+  })
+
+  it('keeps kickers out of the two IDP-only consumers by construction', async () => {
+    /*
+     * Both of those consumers gate on this one predicate — `waiver-intelligence` filters its
+     * candidates with it, `idpChimmy`'s `buildIdpWaiverPool` filters its pool with it. It is
+     * the reason removing the kicker ladder changed neither surface, so it is asserted rather
+     * than left as a comment.
+     */
+    const { isIdpPosition, isKickerPosition } = await load()
+    expect(isIdpPosition('K')).toBe(false)
+    expect(isKickerPosition('K')).toBe(true)
+  })
+
+  it('prices the redraft side on the same flat number', async () => {
+    const { buildIdpKickerValueMap } = await load()
+    const map = await buildIdpKickerValueMap(['k_famous', 'k_obscure'], false, { kickerValue: 287 })
+    expect(map.get('k_famous')!.redraftValue).toBe(287)
+    expect(map.get('k_obscure')!.redraftValue).toBe(287)
+    expect(map.get('k_famous')!.value).toBe(0)
+  })
+
+  it('prices kickers with no IDP context at all, for a kicker league that scores no IDP', async () => {
+    /*
+     * `league-rankings-v2` reaches this branch whenever `detectKickerLeague` is true, which is
+     * most leagues. Before this seam the two halves of the context were entangled: a league
+     * with no IDP passed `null` and would now get no kicker price either.
+     */
+    const { buildIdpKickerValueMap } = await load()
+    const map = await buildIdpKickerValueMap(['k_mid'], true, { kickerValue: 221 })
+    expect(map.get('k_mid')!.value).toBe(221)
   })
 })

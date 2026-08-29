@@ -170,44 +170,30 @@ function decayToTiers(
 const DYNASTY_IDP_TIERS = decayToTiers(MARKET_DECAY_DYNASTY, IDP_CEILING_DYNASTY)
 const REDRAFT_IDP_TIERS = decayToTiers(MARKET_DECAY_REDRAFT, IDP_CEILING_REDRAFT)
 
-/**
- * 🛑 THESE KICKER TIERS ARE CONTRADICTED BY MEASUREMENT AND ARE NOT USED FOR TRADES.
+/*
+ * 🛑 THE KICKER TIERS THAT USED TO LIVE HERE ARE GONE, AND NOTHING REPLACES THEM IN THIS FILE.
  *
- * `lib/kicker-values/leagueKickerValue.ts` measured the position on production 2026-08-29
- * across 4,482 kicker game rows (2019-2025) and found two things that make this ladder
- * indefensible:
+ * They ran 1200 / 800 / 500 / 300 / 100 (dynasty) and 900 / 600 / 350 / 200 / 50 (redraft),
+ * indexed by a `rankKickers` helper that sorted on Sleeper's `search_rank`. Both halves of
+ * that construction were measured on production 2026-08-29 across 4,482 kicker game rows
+ * (2019-2025) and both were wrong — see `lib/kicker-values/leagueKickerValue.ts`:
  *
- *   - RANK DOES NOT PERSIST. Year over year the correlation is NEGATIVE in all six season
- *     pairs (mean -0.455); within a season it is ~0. Ranking by Sleeper's `search_rank`, as
- *     `rankKickers` below does, orders by POPULARITY and predicts nothing at all.
- *   - THE POSITION IS FLAT. K24 scores 65% of K1's points per game, a 1.55x spread. This
- *     ladder runs 1200 down to 100 — a 12x spread, overstating reality by roughly eight
- *     times.
+ *   - THE ORDERING PREDICTED NOTHING. `search_rank` is a popularity poll, and no kicker
+ *     ordering survives anyway: year over year the rank correlation is NEGATIVE in all six
+ *     measured season pairs (mean -0.455), and within a season it is ~0 (mean -0.088).
+ *   - THE SPREAD WAS ~8x TOO WIDE. K24 scores 65% of K1's points per game — a 1.55x band
+ *     across the whole startable population, against a ladder asserting 12x.
  *
- * The TRADE path no longer reads this: `loadLeagueTradeValues` gives every kicker in a
- * league one measured value. These tiers still feed `buildIdpKickerValueMap`, whose
- * consumers are waiver intelligence, the IDP Chimmy grounding and league-rankings-v2 —
- * surfaces where a kicker ORDERING is used for suggestion ranking rather than for pricing an
- * asset, and where changing the numbers would move behaviour that was never in scope here.
+ * A kicker is now priced as a POSITION, from the league's own slot demand, by
+ * `resolveLeagueKickerValue`. Every kicker in a league gets the SAME number, which is the
+ * finding rather than a gap. This module does not compute it: that would drag a second
+ * definition of the position's worth into the file the IDP curve lives in. Callers that
+ * price kickers pass it in via `IdpLeagueValuationContext.kickerValue`.
  *
- * Migrating those three is worthwhile and deliberately not done in the same change as the
- * trade wiring. Do not add a NEW consumer of these tiers.
+ * ⚠ AND A CALLER THAT PASSES NO KICKER VALUE NOW GETS NO KICKER ENTRIES, RATHER THAN A
+ * FALLBACK. There is deliberately nothing to fall back TO — a default here would be a new
+ * hand-drawn ladder with the same defect, one import away from any surface.
  */
-const DYNASTY_KICKER_TIERS: { maxRank: number; value: number }[] = [
-  { maxRank: 3, value: 1200 },
-  { maxRank: 8, value: 800 },
-  { maxRank: 15, value: 500 },
-  { maxRank: 25, value: 300 },
-  { maxRank: Infinity, value: 100 },
-]
-
-const REDRAFT_KICKER_TIERS: { maxRank: number; value: number }[] = [
-  { maxRank: 3, value: 900 },
-  { maxRank: 8, value: 600 },
-  { maxRank: 15, value: 350 },
-  { maxRank: 25, value: 200 },
-  { maxRank: Infinity, value: 50 },
-]
 
 function getTierValue(rank: number, tiers: { maxRank: number; value: number }[]): number {
   for (const tier of tiers) {
@@ -340,37 +326,35 @@ function rankIdpPlayers(
   }))
 }
 
-function rankKickers(
-  players: SleeperPlayerInfo[],
-): { playerId: string; rank: number; info: SleeperPlayerInfo }[] {
-  const kickers = players.filter(p => p.position === 'K' && p.team !== null)
-
-  kickers.sort((a, b) => {
-    const aRank = a.search_rank ?? 99999
-    const bRank = b.search_rank ?? 99999
-    if (aRank !== bRank) return aRank - bRank
-    const aExp = a.years_exp ?? 0
-    const bExp = b.years_exp ?? 0
-    return bExp - aExp
-  })
-
-  return kickers.map((p, i) => ({
-    playerId: p.player_id,
-    rank: i + 1,
-    info: p,
-  }))
-}
+/*
+ * ⚠ THERE IS NO `rankKickers` ANY MORE, AND ITS ABSENCE IS THE POINT. It sorted the kicker
+ * board by `search_rank` so the deleted ladder had something to index. Nothing in this
+ * codebase should sort kickers again; `lib/league-values/leagueTradeValues.ts` says the same
+ * thing from the other end ("a caller that improves the kicker half by sorting it is undoing
+ * a measurement"). The IDP board above is ranked because ranking defenders WAS validated
+ * (Spearman ~0.9 against the offensive control); kickers failed the equivalent test.
+ */
 
 /**
- * League context that turns the IDP ranking from a popularity poll into a projection.
+ * League context that turns the IDP ranking from a popularity poll into a projection, and
+ * supplies the one number a kicker is worth in this league.
  *
- * ⚠ OPTIONAL ON PURPOSE. Callers that cannot supply it keep the previous behaviour exactly,
- * so nothing changes underneath a surface that has not opted in. Supplying it is what makes
- * the ranking specific to the reader's league.
+ * ⚠ BOTH FIELDS ARE OPTIONAL, AND THEY ARE INDEPENDENT. An IDP-only caller supplies the
+ * first; a kicker league with no IDP supplies only the second; league-rankings-v2 supplies
+ * both. Omitting `vorpBySleeperId` keeps the previous IDP behaviour exactly, so nothing
+ * changes underneath a surface that has not opted in.
  */
 export interface IdpLeagueValuationContext {
   /** Value over replacement per Sleeper id, from `buildIdpValuations`. */
-  vorpBySleeperId: ReadonlyMap<string, number | null>
+  vorpBySleeperId?: ReadonlyMap<string, number | null>
+  /**
+   * What EVERY kicker in this league is worth, from `resolveLeagueKickerValue`.
+   *
+   * One number, not a curve, because kicker rank does not persist — see the note where the
+   * old tiers used to be. `null` (or absent) means this caller does not price kickers, and
+   * kickers are then left out of the map entirely rather than given a made-up value.
+   */
+  kickerValue?: number | null
 }
 
 /**
@@ -418,12 +402,6 @@ export async function buildIdpKickerValueMap(
     rankedByPosition.set(pos, posRankMap)
   }
 
-  const kickerRanks = rankKickers(allSleeperPlayers)
-  const kickerRankMap = new Map<string, number>()
-  for (const r of kickerRanks) {
-    kickerRankMap.set(r.playerId, r.rank)
-  }
-
   /*
    * Rank within position by this league's value over replacement. Only players the league
    * could actually price appear — a null VORP means replacement level could not be
@@ -431,7 +409,7 @@ export async function buildIdpKickerValueMap(
    * on the board.
    */
   const vorpRankByPlayer = new Map<string, number>()
-  if (leagueContext) {
+  if (leagueContext?.vorpBySleeperId) {
     /*
      * ⚠ ONE COMBINED BOARD, NOT THREE. Ranking within each position group hands the ceiling to
      * the best linebacker, the best lineman AND the best defensive back at once, which asserts
@@ -490,15 +468,29 @@ export async function buildIdpKickerValueMap(
         name: player.full_name,
       })
     } else if (isKickerPosition(player.position)) {
-      const rank = kickerRankMap.get(pid) ?? 50
-      const tiers = isDynasty ? DYNASTY_KICKER_TIERS : REDRAFT_KICKER_TIERS
-      const value = getTierValue(rank, tiers)
+      /*
+       * Every kicker in the league, the same number, supplied by the caller. No rank is read
+       * here and none exists to read — see the note where the tiers used to be.
+       */
+      const value = leagueContext?.kickerValue ?? null
+      if (value == null) continue
       valueMap.set(pid, {
         sleeperId: pid,
         value: isDynasty ? value : 0,
         redraftValue: isDynasty ? 0 : value,
         position: 'K',
-        age: player.age,
+        /*
+         * ⚠ AGE IS WITHHELD FOR KICKERS, AND THAT IS A DECISION RATHER THAN AN OMISSION.
+         * It is the last per-player attribute on this record, and `league-rankings-v2`'s
+         * `computeAgeAdjustedMarketValue` multiplies any non-null age into a 0.88-1.12
+         * band. With the ladder gone, age would become the ENTIRE remaining ordering of one
+         * league's kickers — a spurious ranking rebuilt out of the only field left, in the
+         * one surface this change exists to stop ranking them in. Nothing measures a kicker
+         * age curve, so the field is not supplied rather than supplied and hoped to be
+         * ignored: withholding it here gives every future consumer the same guarantee
+         * instead of each having to remember.
+         */
+        age: null,
         name: player.full_name,
       })
     }
