@@ -1,44 +1,54 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+/**
+ * The free Chimmy floor — `lib/tokens/dailyFreeTokens.ts`.
+ *
+ * ⚠ THIS FILE WAS REWRITTEN ON 2026-08-28 BECAUSE THE MODULE UNDER IT WAS.
+ *
+ * It previously tested a richer API — `DAILY_FREE_TOKENS`, `TRIAL_DAILY_FREE_TOKENS`,
+ * `dailyFloorFor`, `grantDayKey`, `dailyGrantIdempotencyKey`, an Eastern-midnight reset
+ * and a five-answer trial floor. Commit 8dd8e29c5 rewrote the module from scratch,
+ * removing all of it, while its message said the module "was never written": that
+ * session was working from a base 19 hours stale and did not see b1819ed4e/129441a13.
+ * Seventeen tests went red and nothing else noticed, because no production code imports
+ * the deleted symbols and vitest does not run in CI.
+ *
+ * The trial floor is NOT restored here — that is a spend decision (worst case
+ * AI_TRIAL_DAYS x 50 tokens per new account, with signup open) and the trial's user-facing
+ * claims were removed instead. These tests cover the module that actually exists, because
+ * it is on a money path and the previous version's real value was catching exactly that.
+ */
+
 vi.mock('server-only', () => ({}))
 
 const h = vi.hoisted(() => ({
-  appUserFindUnique: vi.fn(),
+  ruleFindUnique: vi.fn(),
   ledgerFindUnique: vi.fn(),
   ledgerCreate: vi.fn(),
   balanceUpsert: vi.fn(),
   balanceUpdate: vi.fn(),
-  balanceFindUnique: vi.fn(),
   transaction: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: h.transaction,
-    userTokenBalance: { findUnique: h.balanceFindUnique },
+    tokenSpendRule: { findUnique: h.ruleFindUnique },
   },
 }))
 
-import {
-  DAILY_FREE_TOKENS,
-  TRIAL_DAILY_FREE_TOKENS,
-  dailyFloorFor,
-  grantDailyFreeTokens,
-  grantDayKey,
-  dailyGrantIdempotencyKey,
-} from '@/lib/tokens/dailyFreeTokens'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY, grantDailyFreeTokens } from '@/lib/tokens/dailyFreeTokens'
 
-/** Runs the callback against a fake tx, the way $transaction would. */
+const COST = 10
+const FLOOR = COST * FREE_CHIMMY_QUESTIONS_PER_DAY
+const NOW = new Date('2026-09-14T18:00:00Z')
+
+/** Runs the callback against a fake tx, the way $transaction does. */
 function withTx() {
-  h.transaction.mockImplementation((fn: any) =>
+  h.transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
     fn({
       tokenLedger: { findUnique: h.ledgerFindUnique, create: h.ledgerCreate },
-      userTokenBalance: {
-        upsert: h.balanceUpsert,
-        update: h.balanceUpdate,
-        findUnique: h.balanceFindUnique,
-      },
-      appUser: { findUnique: h.appUserFindUnique },
+      userTokenBalance: { upsert: h.balanceUpsert, update: h.balanceUpdate },
     }),
   )
 }
@@ -46,188 +56,132 @@ function withTx() {
 beforeEach(() => {
   vi.resetAllMocks()
   withTx()
+  h.ruleFindUnique.mockResolvedValue({ tokenCost: COST })
   h.ledgerFindUnique.mockResolvedValue(null)
-  /* Default: an old account, so the FREE floor applies unless a test says otherwise. */
-  h.appUserFindUnique.mockResolvedValue({ createdAt: new Date('2020-01-01T00:00:00Z') })
   h.ledgerCreate.mockResolvedValue({})
   h.balanceUpdate.mockResolvedValue({})
-})
-
-describe('the day key', () => {
-  /*
-   * ⚠ EASTERN, NOT UTC. A US fantasy audience resetting its free questions at
-   * 7pm local would read as a bug. 03:00 UTC is still the previous Eastern day.
-   */
-  it('rolls at Eastern midnight, not UTC midnight', () => {
-    expect(grantDayKey(new Date('2026-08-28T03:00:00Z'))).toBe('2026-08-27')
-    expect(grantDayKey(new Date('2026-08-28T05:00:00Z'))).toBe('2026-08-28')
-  })
-
-  it('keys the grant per user per day', () => {
-    const k = dailyGrantIdempotencyKey('u1', new Date('2026-08-28T05:00:00Z'))
-    expect(k).toBe('free-daily:u1:2026-08-28')
-    expect(dailyGrantIdempotencyKey('u2', new Date('2026-08-28T05:00:00Z'))).not.toBe(k)
-  })
+  h.balanceUpsert.mockResolvedValue({ id: 'bal-1', balance: 0 })
 })
 
 describe('grantDailyFreeTokens', () => {
   it('lifts an empty account to the floor', async () => {
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
+    const res = await grantDailyFreeTokens('u1', NOW)
 
-    const out = await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
-
-    expect(out.granted).toBe(DAILY_FREE_TOKENS)
-    expect(out.balance).toBe(DAILY_FREE_TOKENS)
+    expect(res).toEqual({ granted: FLOOR, reason: 'granted' })
     expect(h.balanceUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { balance: { increment: DAILY_FREE_TOKENS } } }),
+      expect.objectContaining({ data: { balance: { increment: FLOOR } } }),
     )
   })
 
-  /*
-   * ⚠ A FLOOR, NOT AN ALLOWANCE THAT ACCUMULATES. Adding 20 a day would let
-   * someone bank a fortnight of questions by not asking any — a different
-   * product from "two a day".
-   */
   it('tops UP to the floor rather than adding to it', async () => {
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 12 })
+    // The money bug this guards: adding the floor daily lets anyone bank a fortnight
+    // of questions by not asking any. Two a day means two a day.
+    h.balanceUpsert.mockResolvedValue({ id: 'bal-1', balance: 12 })
 
-    const out = await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
+    const res = await grantDailyFreeTokens('u1', NOW)
 
-    expect(out.granted).toBe(8)
-    expect(out.balance).toBe(DAILY_FREE_TOKENS)
+    expect(res).toEqual({ granted: FLOOR - 12, reason: 'granted' })
   })
 
-  /* Somebody who paid is above the floor and must be left alone. */
-  it('gives nothing to an account already above the floor', async () => {
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 500 })
+  it('gives nothing to an account already at or above the floor', async () => {
+    h.balanceUpsert.mockResolvedValue({ id: 'bal-1', balance: FLOOR + 500 })
 
-    const out = await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
+    const res = await grantDailyFreeTokens('u1', NOW)
 
-    expect(out.granted).toBe(0)
-    expect(out.balance).toBe(500)
+    expect(res).toEqual({ granted: 0, reason: 'at_or_above_floor' })
     expect(h.balanceUpdate).not.toHaveBeenCalled()
-  })
-
-  /*
-   * ⚠ THE LEDGER ROW IS WHAT CONSUMES THE DAY. Skipping it for a user already
-   * at the floor would let them spend to zero and be topped up again the same
-   * day — unlimited questions, one refill at a time.
-   */
-  it('writes the ledger row even when it grants nothing', async () => {
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 500 })
-
-    await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
-
-    expect(h.ledgerCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ tokenDelta: 0, sourceType: 'daily_free_grant' }),
-      }),
-    )
-  })
-
-  /* Free tokens are not revenue; counting them as purchased corrupts reporting. */
-  it('records an adjustment, never a purchase', async () => {
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
-
-    await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
-
-    expect(h.ledgerCreate.mock.calls[0][0].data.entryType).toBe('adjustment')
-  })
-
-  it('does nothing the second time the same day', async () => {
-    h.ledgerFindUnique.mockResolvedValue({ balanceAfter: 20 })
-    h.balanceFindUnique.mockResolvedValue({ balance: 10 })
-
-    const out = await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
-
-    expect(out.alreadyGrantedToday).toBe(true)
-    expect(out.granted).toBe(0)
-    /* Reports the CURRENT balance (already spent down), not the granted total. */
-    expect(out.balance).toBe(10)
     expect(h.ledgerCreate).not.toHaveBeenCalled()
   })
 
-  /*
-   * ⚠ THE LOSER OF A UNIQUE-KEY RACE IS A SUCCESS, not an error: somebody
-   * granted today's tokens. And a grant failure must never turn a chat message
-   * into a 500.
-   */
-  it('never throws, and treats a race loss as already granted', async () => {
-    h.transaction.mockRejectedValue(new Error('unique constraint violation'))
-    h.balanceFindUnique.mockResolvedValue({ balance: 20 })
+  it('does not consume the day when it grants nothing', async () => {
+    /*
+     * Deliberate: a paying user above the floor has taken nothing, so if they spend
+     * down later the same day they still get their one top-up. Writing the key here
+     * would silently cost them it.
+     */
+    h.balanceUpsert.mockResolvedValue({ id: 'bal-1', balance: FLOOR })
 
-    const out = await grantDailyFreeTokens('u1', new Date('2026-08-28T15:00:00Z'))
+    await grantDailyFreeTokens('u1', NOW)
 
-    expect(out.alreadyGrantedToday).toBe(true)
-    expect(out.balance).toBe(20)
+    expect(h.ledgerCreate).not.toHaveBeenCalled()
   })
 
-  it('buys exactly two Chimmy answers at the current price', () => {
-    expect(DAILY_FREE_TOKENS).toBe(20)
-  })
-})
+  it('does nothing the second time the same day', async () => {
+    h.ledgerFindUnique.mockResolvedValue({ id: 'ledger-1' })
 
-/*
- * ⚠ THE TRIAL WAS ADVERTISED AND GRANTED NOTHING. The shell rendered
- * "Trial · Nd left" from AIAccessResolver while the chat route never consulted
- * it, so a trialling user hit the same empty balance as everyone else.
- */
-describe('the trial floor', () => {
-  const inTrial = new Date('2026-08-25T00:00:00Z') // 3 days old; trial is 10
-  const expired = new Date('2020-01-01T00:00:00Z')
-  const now = new Date('2026-08-28T15:00:00Z')
+    const res = await grantDailyFreeTokens('u1', NOW)
 
-  it('is higher than the free floor, and expires with the trial', () => {
-    expect(TRIAL_DAILY_FREE_TOKENS).toBeGreaterThan(DAILY_FREE_TOKENS)
-    expect(dailyFloorFor(inTrial, now)).toBe(TRIAL_DAILY_FREE_TOKENS)
-    expect(dailyFloorFor(expired, now)).toBe(DAILY_FREE_TOKENS)
-  })
-
-  /* An unknown signup date must not silently buy the richer floor. */
-  it('falls back to the free floor when the signup date is unknown', () => {
-    expect(dailyFloorFor(null, now)).toBe(DAILY_FREE_TOKENS)
-  })
-
-  it('tops a trialling account up to the trial floor', async () => {
-    h.appUserFindUnique.mockResolvedValue({ createdAt: inTrial })
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
-
-    const out = await grantDailyFreeTokens('u1', now)
-
-    expect(out.granted).toBe(TRIAL_DAILY_FREE_TOKENS)
-    expect(out.floor).toBe(TRIAL_DAILY_FREE_TOKENS)
-  })
-
-  it('drops back to the free floor once the trial ends', async () => {
-    h.appUserFindUnique.mockResolvedValue({ createdAt: expired })
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
-
-    const out = await grantDailyFreeTokens('u1', now)
-
-    expect(out.granted).toBe(DAILY_FREE_TOKENS)
-  })
-
-  /*
-   * ⚠ A LAPSED TRIAL MUST NOT CLAW ANYTHING BACK. The floor only ever adds, so
-   * someone who ends their trial holding 50 keeps all 50.
-   */
-  it('never removes tokens when the floor drops', async () => {
-    h.appUserFindUnique.mockResolvedValue({ createdAt: expired })
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 50 })
-
-    const out = await grantDailyFreeTokens('u1', now)
-
-    expect(out.granted).toBe(0)
-    expect(out.balance).toBe(50)
+    expect(res).toEqual({ granted: 0, reason: 'already_granted_today' })
     expect(h.balanceUpdate).not.toHaveBeenCalled()
   })
 
-  it('labels the ledger entry as the trial allowance', async () => {
-    h.appUserFindUnique.mockResolvedValue({ createdAt: inTrial })
-    h.balanceUpsert.mockResolvedValue({ id: 'b1', balance: 0 })
+  it('keys the grant per user per UTC day', async () => {
+    await grantDailyFreeTokens('u1', NOW)
+    const firstKey = h.ledgerCreate.mock.calls[0][0].data.idempotencyKey
 
-    await grantDailyFreeTokens('u1', now)
+    vi.clearAllMocks()
+    withTx()
+    h.ruleFindUnique.mockResolvedValue({ tokenCost: COST })
+    h.ledgerFindUnique.mockResolvedValue(null)
+    h.balanceUpsert.mockResolvedValue({ id: 'bal-2', balance: 0 })
+    await grantDailyFreeTokens('u2', NOW)
+    const otherUserKey = h.ledgerCreate.mock.calls[0][0].data.idempotencyKey
 
-    expect(h.ledgerCreate.mock.calls[0][0].data.description).toMatch(/trial/i)
+    expect(firstKey).toContain('u1')
+    expect(firstKey).toContain('2026-09-14')
+    expect(otherUserKey).not.toBe(firstKey)
+  })
+
+  it('records an adjustment, never a purchase', async () => {
+    // A purchase entry would misreport granted tokens as revenue.
+    await grantDailyFreeTokens('u1', NOW)
+
+    const entry = h.ledgerCreate.mock.calls[0][0].data
+    expect(entry.entryType).toBe('adjustment')
+    expect(entry.sourceType).toBe('daily_free_tokens')
+    expect(entry.balanceBefore).toBe(0)
+    expect(entry.balanceAfter).toBe(FLOOR)
+  })
+
+  it('treats a lost race as already granted rather than throwing', async () => {
+    // The unique idempotencyKey IS the lock; P2002 means the other transaction paid out.
+    h.transaction.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }))
+
+    await expect(grantDailyFreeTokens('u1', NOW)).resolves.toEqual({
+      granted: 0,
+      reason: 'already_granted_today',
+    })
+  })
+
+  it('rethrows a real failure instead of disguising it as a quiet success', async () => {
+    /*
+     * The caller wraps this in `.catch(() => null)`, so swallowing everything here
+     * would turn a broken grant into a silent zero balance — the exact failure mode
+     * that left 32 of 34 accounts unable to ask a question.
+     */
+    h.transaction.mockRejectedValue(Object.assign(new Error('db down'), { code: 'P1001' }))
+
+    await expect(grantDailyFreeTokens('u1', NOW)).rejects.toThrow('db down')
+  })
+
+  it('grants NOTHING when the spend rule is missing, rather than inventing a price', async () => {
+    h.ruleFindUnique.mockResolvedValue(null)
+
+    const res = await grantDailyFreeTokens('u1', NOW)
+
+    expect(res).toEqual({ granted: 0, reason: 'no_spend_rule' })
+    expect(h.transaction).not.toHaveBeenCalled()
+  })
+
+  it('tracks the spend rule, so re-pricing a message moves the floor with it', async () => {
+    h.ruleFindUnique.mockResolvedValue({ tokenCost: 25 })
+
+    const res = await grantDailyFreeTokens('u1', NOW)
+
+    expect(res).toEqual({ granted: 25 * FREE_CHIMMY_QUESTIONS_PER_DAY, reason: 'granted' })
+  })
+
+  it('buys exactly two Chimmy answers at the current price', () => {
+    expect(FREE_CHIMMY_QUESTIONS_PER_DAY).toBe(2)
   })
 })

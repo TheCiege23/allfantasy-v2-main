@@ -19,6 +19,7 @@
 
 import { EntitlementResolver, type EntitlementSnapshot } from '@/lib/subscription/EntitlementResolver'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
+import { FREE_CHIMMY_QUESTIONS_PER_DAY } from '@/lib/tokens/dailyFreeTokens'
 
 export const AI_TRIAL_DAYS = 10
 export const AI_TRIAL_MS = AI_TRIAL_DAYS * 24 * 60 * 60 * 1000
@@ -118,8 +119,22 @@ export class AIAccessResolver {
       reason = 'subscription_active'
       message = 'Premium AI active.'
     } else if (trial.inTrial) {
+      /*
+       * ⚠ `reason` STAYS 'in_trial' — it is a true statement about account age, and
+       * telemetry and tests read it. The MESSAGE does not, because it was the only
+       * part making a promise.
+       *
+       * It used to read "N days left in your free AI trial." There is no trial
+       * allowance: TRIAL_DAILY_FREE_TOKENS (5 answers a day) was deleted from
+       * lib/tokens/dailyFreeTokens.ts on 2026-08-28, and the Chimmy route never
+       * consulted this resolver anyway, so a trialling account gets exactly the free
+       * floor. Counting down days against nothing is what 129441a13 fixed once.
+       *
+       * Say what the account actually has. Restore the old copy only alongside the
+       * trial floor — that is a spend decision, not a copy change.
+       */
       reason = 'in_trial'
-      message = `${trial.daysRemaining} day${trial.daysRemaining === 1 ? '' : 's'} left in your free AI trial.`
+      message = `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy questions a day. Upgrade or buy tokens for more.`
     } else if (tokenBalance > 0) {
       reason = 'tokens_available'
       message = `${tokenBalance} AI token${tokenBalance === 1 ? '' : 's'} available.`

@@ -49,10 +49,18 @@ export function renderUserSection(user: UserContextSlice | null): string {
 export function renderAIAccessSection(ai: SubscriptionContextSlice | null): string {
   if (!ai) return ""
   const planLabel = ai.planLabel ?? (ai.hasSubscription ? "Premium" : "Free")
+  /*
+   * ⚠ TRIAL LINES REMOVED — DO NOT TELL THE MODEL ABOUT A TRIAL THAT GRANTS NOTHING.
+   *
+   * These fed "In trial: yes / Trial days remaining: N" into the system prompt, so
+   * Chimmy could volunteer it to the user. The trial has no allowance behind it: its
+   * token floor was deleted from lib/tokens/dailyFreeTokens.ts on 2026-08-28 and the
+   * chat route never consulted AIAccessResolver, so a trialling account gets the same
+   * free floor as anyone else. A model repeating that promise is worse than a badge
+   * doing it — it sounds like a person confirming it.
+   */
   return joinLines("## AI ACCESS", [
     line("Plan", planLabel),
-    line("In trial", ai.inTrial ? "yes" : "no"),
-    line("Trial days remaining", ai.inTrial ? ai.trialDaysRemaining : null),
     line("Token balance", ai.tokenBalance),
   ])
 }

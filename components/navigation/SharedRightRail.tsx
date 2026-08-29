@@ -97,11 +97,14 @@ export default function SharedRightRail() {
             <div>
               Tokens: <span className="mode-text">🪙 {aiAccess.data.tokenBalance}</span>
             </div>
-            {aiAccess.data.reason === 'in_trial' && (
-              <div>
-                Trial: <span className="mode-text">{aiAccess.data.trial.daysRemaining}d left</span>
-              </div>
-            )}
+            {/*
+              * The "Trial: Nd left" row is removed, not hidden behind a flag: the trial
+              * grants nothing. Its token floor was deleted from lib/tokens/dailyFreeTokens.ts
+              * on 2026-08-28 and the Chimmy route never consulted AIAccessResolver, so a
+              * trialling account has the same two free questions as a free one. Counting
+              * down days against an allowance that does not exist is the bug 129441a13
+              * fixed once already. Restore this only after the trial floor is back.
+              */}
             {aiAccess.data.hasSubscription && (
               <div>
                 Plan: <span className="mode-text">Premium</span>

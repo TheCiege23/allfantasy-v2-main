@@ -1048,11 +1048,24 @@ export default async function AfCorePage({
     ? {
         // Plan ids are slugs — 'war_room', 'supreme'. Rendering one raw puts an
         // internal identifier in the chrome of the signed-in home.
+        /*
+         * ⚠ NO TRIAL CHIP, BECAUSE THERE IS NO TRIAL TO CHIP.
+         *
+         * This read `access.trial.inTrial ? \`Trial · ${d}d left\` : 'Free'`. The trial
+         * confers NOTHING: the Chimmy route never consults AIAccessResolver, and the
+         * token floor that used to back it (TRIAL_DAILY_FREE_TOKENS, 5 answers a day)
+         * was deleted from lib/tokens/dailyFreeTokens.ts on 2026-08-28. A trialling
+         * account gets the same two free questions as everyone else.
+         *
+         * So the chip counted down days against an allowance that does not exist —
+         * which is the exact bug "The trial badge now stands for something"
+         * (129441a13) was written to fix, reintroduced when that work was overwritten.
+         * Showing 'Free' is true today. Restoring the chip is a SPEND decision: put the
+         * trial floor back first, then this line.
+         */
         name: access.hasSubscription
           ? titleCase(access.subscription.plans[0] ?? 'premium')
-          : access.trial.inTrial
-            ? `Trial · ${access.trial.daysRemaining}d left`
-            : 'Free',
+          : 'Free',
         tokensLeft: access.tokenBalance,
       }
     : null

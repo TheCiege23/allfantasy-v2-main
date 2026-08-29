@@ -45,8 +45,8 @@ export function summarizeChimmyContextForPrompt(
       [
         "## AI ACCESS",
         line("Plan", bundle.aiAccess.planLabel ?? (bundle.aiAccess.hasSubscription ? "Premium" : "Free")),
-        line("In trial", bundle.aiAccess.inTrial ? "yes" : "no"),
-        line("Trial days remaining", bundle.aiAccess.trialDaysRemaining),
+        // Trial lines removed for the same reason as renderAIAccessSection: the trial
+        // has no allowance behind it, so the model must not repeat it to the user.
         line("Token balance", bundle.aiAccess.tokenBalance),
       ]
         .filter(Boolean)
