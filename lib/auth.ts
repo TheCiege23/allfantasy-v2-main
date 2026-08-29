@@ -692,19 +692,43 @@ export const authOptions: NextAuthOptions = {
         // Handle useSession().update({ username }) from the choose-username flow.
         // This re-stamps the cookie so the middleware gate sees the new username
         // immediately — no sign-out/sign-in cycle required.
+        //
+        // 🛑 THE UPDATE PAYLOAD IS ATTACKER-CONTROLLED AND IS DELIBERATELY IGNORED.
+        //
+        // `updatePayload` is whatever the browser passed to useSession().update(),
+        // posted straight to next-auth's own session endpoint. It is a *request body*,
+        // not a credential. This branch used to trust `payload.username` verbatim, and
+        // because `token.username` flows to `session.user.username` (the session
+        // callback below) and `hasAllFantasyTestAccess` reads exactly that field
+        // (lib/auth/admin.ts), ANY signed-in user could call
+        // `update({ username: "<an all-access handle>" })` and receive full site admin:
+        // /admin (lib/adminAuth.ts), token-spend bypass (lib/tokens/TokenSpendService.ts)
+        // and entitlement bypass (lib/subscription/entitlement-middleware.ts). No row was
+        // ever written, so the unique index on app_users.username never came into it.
+        //
+        // This is the SECOND time this shape has shipped — see the comment in
+        // lib/auth/admin.ts about `user.name`. That fix reasoned that `username` was safe
+        // because it is "the app-owned unique" column. The update trigger is precisely the
+        // path on which it is not app-owned. So: only the DATABASE may name this user.
+        // The username the client wants was already persisted by the route that owns that
+        // write (/api/auth/complete-profile); re-reading it here is what makes the cookie
+        // catch up, and it is the only thing that needs to happen.
         if (trigger === "update") {
-          const payload = updatePayload as Record<string, unknown> | null | undefined
-          if (typeof payload?.username === "string") {
-            token.username = payload.username || null
-          } else if (token.id) {
-            // Fallback: re-read from DB for stale tokens that had no username at login
+          if (token.id) {
+            /*
+             * `undefined` means the READ FAILED and we know nothing — keep whatever the
+             * cookie already carried. `null` (no row) or a row with a null username is an
+             * authoritative answer and does overwrite. Collapsing those two into one value
+             * would let a transient database blip blank a valid username and bounce the
+             * user into /choose-username mid-session.
+             */
             const fresh = await prisma.appUser
               .findUnique({
                 where: { id: token.id as string },
                 select: { username: true },
               })
-              .catch(() => null)
-            if (fresh?.username) token.username = fresh.username
+              .catch(() => undefined)
+            if (fresh !== undefined) token.username = fresh?.username ?? null
           }
           return token
         }

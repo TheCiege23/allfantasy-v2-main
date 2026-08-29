@@ -545,6 +545,61 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       Promise.all(receiverPicksData.map(p => pricePick({ year: p.year, round: p.round, tier: p.tier || null }, labelCtx))),
     ])
 
+    /*
+     * 🛑 REFUSE BEFORE GRADING. An asset nothing could price is not worth zero.
+     *
+     * pricePlayer's terminal branch returns `value: 0` for a name no source matched —
+     * a misspelling, a player not on the board, a devy/college name, an IDP the feed
+     * does not carry. Downstream that zero is arithmetic like any other, so a
+     * something-for-nothing total came out lopsided and the grader turned it into a
+     * confident letter: gradeFromPercentDiff maps 0% to "B" and 100% to "A+", and the
+     * page renders whatever it is handed. The user could not tell "we priced this and
+     * it is a fleecing" apart from "we could not price this at all".
+     *
+     * This repo already has the rule — a "C" grade means no data, and surfaces are
+     * supposed to call hasNoSignal()/sideMath() before showing a letter. This path
+     * never did. Naming the unpriced players is the difference between a dead end and
+     * something the user can fix by correcting a spelling.
+     */
+    const allPlayerPrices = [...senderPlayerPrices, ...receiverPlayerPrices]
+    const unpricedAssets = allPlayerPrices.filter((p) => p.unpriced)
+    if (unpricedAssets.length > 0) {
+      const names = Array.from(new Set(unpricedAssets.map((p) => p.name)))
+      /*
+       * ⚠ "THIS PLAYER IS NOT ON THE BOARD" AND "THE BOARD DID NOT LOAD" ARE DIFFERENT
+       * FAILURES, AND TELLING THE USER TO CHECK THEIR SPELLING FOR THE SECOND IS WORSE
+       * THAN SAYING NOTHING.
+       *
+       * getFantasyCalcPlayers swallows a load error and returns [] (lib/hybrid-valuation.ts),
+       * so downstream an outage is indistinguishable from an empty board — every asset
+       * comes back unpriced either way. If NOTHING could be priced, the board is the
+       * likely culprit, not the names; a real trade of real players does not produce a
+       * clean sweep of misses. Say so, and return 503 so it reads as our problem rather
+       * than the user's typo.
+       */
+      if (allPlayerPrices.length > 0 && unpricedAssets.length === allPlayerPrices.length) {
+        return NextResponse.json(
+          {
+            error: 'VALUATION_UNAVAILABLE',
+            message:
+              'Player values are unavailable right now, so this trade cannot be graded. This is on our side — try again shortly.',
+          },
+          { status: 503 },
+        )
+      }
+      return NextResponse.json(
+        {
+          error: 'UNPRICED_ASSETS',
+          message:
+            names.length === 1
+              ? `No value on file for ${names[0]}, so this trade cannot be graded. Check the spelling, or the player may not be on the dynasty board.`
+              : `No values on file for ${names.join(', ')}, so this trade cannot be graded. Check the spellings, or those players may not be on the dynasty board.`,
+          unpricedPlayers: names,
+        },
+        { status: 422 },
+      )
+    }
+
     const senderGivenAssetsList = [...senderPlayerPrices, ...senderPickPrices]
     const senderReceivedAssetsList = [...receiverPlayerPrices, ...receiverPickPrices]
 

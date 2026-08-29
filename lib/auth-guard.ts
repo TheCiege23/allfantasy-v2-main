@@ -143,15 +143,7 @@ export async function requireAuth(): Promise<
   return { ok: true, userId, session };
 }
 
-/**
- * Shared body of the two user guards below.
- *
- * ⚠ THE ONLY DIFFERENCE IS EMAIL/PHONE VERIFICATION. Auth, profile and AGE are
- * checked identically by both, so they cannot drift — the age gate in
- * particular is a compliance requirement for fantasy sports and must never be
- * the thing that gets dropped by accident when someone relaxes a surface.
- */
-async function resolveGuardedUser(opts: { requireContactVerification: boolean }): Promise<
+export async function requireVerifiedUser(): Promise<
   | { ok: true; userId: string; profile: VerifiedUserProfile }
   | { ok: false; response: NextResponse }
 > {
@@ -193,10 +185,7 @@ async function resolveGuardedUser(opts: { requireContactVerification: boolean })
     };
   }
 
-  if (
-    opts.requireContactVerification &&
-    !isUserVerified(emailVerified, profile.phoneVerifiedAt)
-  ) {
+  if (!isUserVerified(emailVerified, profile.phoneVerifiedAt)) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -214,40 +203,54 @@ async function resolveGuardedUser(opts: { requireContactVerification: boolean })
 }
 
 /**
- * Signed in, profiled, age-confirmed AND contact-verified.
+ * Signed in and age-confirmed, but NOT required to have verified an email or phone.
  *
- * The strict guard. Use it for anything that writes, spends real money on the
- * user's behalf, or exposes another person's data.
- */
-export async function requireVerifiedUser(): Promise<
-  | { ok: true; userId: string; profile: VerifiedUserProfile }
-  | { ok: false; response: NextResponse }
-> {
-  return resolveGuardedUser({ requireContactVerification: true });
-}
-
-/**
- * Signed in, profiled and age-confirmed — but email/phone verification NOT
- * required.
+ * `requireVerifiedUser` above, minus its final check. Chimmy deliberately sits behind the
+ * weaker gate: a brand-new account can ask a question before completing verification,
+ * which is the whole point of "Chimmy no longer requires a verified email" (cb3bcddf6).
+ * Age confirmation still applies, because that one is a legal gate rather than a
+ * deliverability one.
  *
- * ⚠ ADDED BECAUSE EMAIL VERIFICATION WAS LOCKING A THIRD OF SIGNUPS OUT OF
- * CHIMMY ENTIRELY. Measured on production: 17 of 48 accounts are unverified, and
- * every one of them got a 403 carrying a raw VERIFICATION_REQUIRED code instead
- * of an answer. The daily free tokens could not help them either, because this
- * gate sits ~400 lines ahead of the grant.
+ * ⚠ IT WAS IMPORTED BEFORE IT EXISTED. `app/api/chat/chimmy/route.ts` has imported and
+ * CALLED this since 2026-08-27 while nothing exported it, so the route carried an
+ * unresolvable import for ~12 hours. Only `typescript.ignoreBuildErrors: true` in
+ * next.config.js kept that out of the build log.
  *
- * ⚠ AGE IS STILL ENFORCED, DELIBERATELY. It is a compliance requirement for
- * fantasy sports, not a UX nicety, and it is the check most likely to be dropped
- * by accident when somebody relaxes a surface — which is why both guards share
- * one implementation rather than being copy-pasted.
- *
- * Reach for this ONLY on read-only surfaces whose spend is already bounded some
- * other way. Chimmy qualifies: it is answer-only, it never writes to a league,
- * and the daily token floor caps what an unverified account can consume.
+ * Same return shape as its sibling on purpose — callers do `if (!x.ok) return x.response`.
  */
 export async function requireAgeConfirmedUser(): Promise<
   | { ok: true; userId: string; profile: VerifiedUserProfile }
   | { ok: false; response: NextResponse }
 > {
-  return resolveGuardedUser({ requireContactVerification: false });
+  const session = await getAuthenticatedSession();
+  const userId = session?.user?.id ?? null;
+
+  if (!userId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 }),
+    };
+  }
+
+  const profile = await getOrCreateUserProfile(userId);
+
+  if (!profile) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 }),
+    };
+  }
+
+  if (!isAgeConfirmed(profile)) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "AGE_REQUIRED" }, { status: 403 }),
+    };
+  }
+
+  return {
+    ok: true,
+    userId,
+    profile,
+  };
 }

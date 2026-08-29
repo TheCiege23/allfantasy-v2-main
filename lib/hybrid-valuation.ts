@@ -33,6 +33,21 @@ export interface PricedAsset {
   value: number;
   assetValue: AssetValue;
   source: 'excel' | 'fantasycalc' | 'curve' | 'unknown';
+  /**
+   * TRUE MEANS NO VALUE SOURCE MATCHED THIS ASSET AT ALL — it is not "worth zero",
+   * it is unknown, and the two must never be collapsed.
+   *
+   * The terminal branch of pricePlayer returns `value: 0` for a name nothing could
+   * price. Downstream that zero was arithmetic like any other, so a misspelling or
+   * an unlisted player silently became a worthless asset and the trade was graded
+   * anyway — a 0-for-something trade grades as a lopsided A+/D with total
+   * confidence and no data behind it.
+   *
+   * `source: 'unknown'` cannot be used for this test: two OTHER branches return
+   * 'unknown' with a real, usable value (the IDP/kicker baseline and the analytics
+   * lifetime-value fallback). This flag is set on the terminal branch only.
+   */
+  unpriced?: true;
   position?: string;
   age?: number;
   details?: {
@@ -253,6 +268,52 @@ function getIdpKickerFallbackValue(name: string, position: string): number {
   return 0
 }
 
+/**
+ * How old a historical snapshot may be and still stand in for a player the LIVE
+ * board does not carry.
+ *
+ * ⚠ THIS BOUND IS DELIBERATELY GENEROUS, AND A TIGHT ONE IS A BUG. The fix above
+ * stops the stale board OUTRANKING the live one; it does not follow that a stale
+ * price is worthless. This branch is only reached when FantasyCalc has no entry at
+ * all, and measured against the live board 101 players — 30% of the Excel board,
+ * AJ Dillon, Brandin Cooks, Alexander Mattison and other fringe veterans — exist
+ * only in the historical file. A short window there would refuse to grade any trade
+ * containing one of them, which is strictly worse for the user than an old price
+ * carried with lowered confidence (see computeConfidence, which now subtracts for it).
+ *
+ * The bound exists only so that a file left un-regenerated for YEARS eventually
+ * stops pricing silently. A full season plus an offseason is the right scale.
+ */
+const HISTORICAL_FALLBACK_MAX_AGE_DAYS = 400;
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Is the caller asking what something was worth in the PAST?
+ *
+ * Callers default `asOfDate` to today (app/api/trade-evaluator/route.ts does), so
+ * "an asOfDate was supplied" cannot distinguish a backtest from a live grade. Only a
+ * date strictly before today can. ISO dates compare correctly as strings.
+ */
+function isHindsightQuery(asOfDate: string | null | undefined): boolean {
+  if (!asOfDate) return false;
+  const d = String(asOfDate).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  return d < todayIso();
+}
+
+function historicalSnapshotIsRecent(
+  result: { actualDate: string | null },
+  maxAgeDays: number = HISTORICAL_FALLBACK_MAX_AGE_DAYS
+): boolean {
+  if (!result.actualDate) return false;
+  const t = Date.parse(`${result.actualDate.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(t)) return false;
+  return (Date.now() - t) / 86_400_000 <= maxAgeDays;
+}
+
 export async function pricePlayer(
   name: string,
   ctx: ValuationContext
@@ -271,9 +332,26 @@ export async function pricePlayer(
     console.warn(`[hybrid-valuation] Could not fetch analytics for "${name}":`, e);
   }
 
+  /*
+   * 🛑 ORDER MATTERS, AND IT USED TO BE BACKWARDS.
+   *
+   * The historical (Excel) board was consulted FIRST and returned before the live
+   * FantasyCalc board was ever looked at. `getHistoricalPlayerValue` resolves to the
+   * newest snapshot on or before `asOfDate`, and callers pass TODAY — so every
+   * veteran was priced from the newest snapshot in data/historical-values, which is
+   * 2026-02-05. Measured on the day this was fixed that was 205 days stale, and it
+   * was beating a FantasyCalc board written hours earlier. An entire offseason of
+   * free agency, trades, retirements and camp news was invisible to every trade grade.
+   *
+   * The historical board is for HINDSIGHT — replaying what an asset was worth on a
+   * past date. So it is consulted first only when the caller actually asked about the
+   * past, and otherwise serves as a bounded-age fallback for players the live board
+   * does not carry.
+   */
+  const hindsight = isHindsightQuery(ctx.asOfDate);
   const historicalResult = getHistoricalPlayerValue(name, ctx.asOfDate, ctx.isSuperFlex);
-  if (historicalResult.value !== null) {
-    const mv = historicalResult.value;
+  const priceFromHistorical = (): PricedAsset => {
+    const mv = historicalResult.value as number;
     const impact = computeImpactFromMarket(mv, fcPlayer, position);
     const vorp = computeVorp(fcPlayer, position, ctx, fcPlayers);
     const vol = computePlayerVolatility(fcPlayer, position, age, analyticsData);
@@ -286,6 +364,10 @@ export async function pricePlayer(
       position,
       ...(age != null && { age }),
     };
+  };
+
+  if (hindsight && historicalResult.value !== null) {
+    return priceFromHistorical();
   }
 
   if (fcPlayer) {
@@ -302,6 +384,17 @@ export async function pricePlayer(
       position,
       ...(age != null && { age }),
     };
+  }
+
+  /*
+   * The live board does not carry this player — 30% of the historical board's names
+   * are in exactly that position. Use the older price rather than refusing: it is the
+   * only number available, the ordering bug it used to cause is fixed above, and
+   * computeConfidence now subtracts for it instead of adding. Bounded only against a
+   * file left un-regenerated for years.
+   */
+  if (historicalResult.value !== null && historicalSnapshotIsRecent(historicalResult)) {
+    return priceFromHistorical();
   }
 
   const idpKickerFallback = getIdpKickerFallbackValue(name, position);
@@ -342,6 +435,9 @@ export async function pricePlayer(
     value: 0,
     assetValue: { marketValue: 0, impactValue: 0, vorpValue: 0, volatility: 0.50 },
     source: 'unknown',
+    // See PricedAsset.unpriced. The zero below is a placeholder so the shape stays
+    // uniform; it is NOT a price, and any surface that grades must check this first.
+    unpriced: true,
     position,
   };
 }
@@ -478,15 +574,37 @@ function computeConfidence(stats: TradeDelta['valuationStats']): number {
 
   let confidence = 0.5;
 
+  /*
+   * ⚠ THIS USED TO SCORE CONFIDENCE HIGHEST EXACTLY WHERE PRICING WAS STALEST.
+   *
+   * It read `confidence += excelRatio * 0.25` — the larger the share of a trade
+   * priced off the historical spreadsheet, the more certain the product claimed to
+   * be. That was defensible when the Excel board was the curated, hand-checked
+   * source and FantasyCalc was the scraped fallback. It stopped being true when the
+   * board stopped being updated: its newest snapshot is 2026-02-05, so the boost was
+   * rewarding a six-month-old number over one written hours ago.
+   *
+   * Now the live market board is the confident source, and an Excel price — which
+   * after the reordering in pricePlayer only appears as a bounded-age fallback for a
+   * player the live board does not carry — slightly lowers confidence instead.
+   */
   if (totalPlayers > 0) {
+    const liveRatio = stats.playersFromFantasyCalc / totalPlayers;
+    confidence += liveRatio * 0.25;
+
     const excelRatio = stats.playersFromExcel / totalPlayers;
-    confidence += excelRatio * 0.25;
-    
+    confidence -= excelRatio * 0.10;
+
     if (stats.playersUnknown > 0) {
       confidence -= (stats.playersUnknown / totalPlayers) * 0.15;
     }
   }
 
+  /*
+   * Picks keep a modest boost for the historical board: their alternative is a
+   * static curve, not a live market, so a real observed pick price is still the
+   * better of the two available inputs.
+   */
   if (totalPicks > 0) {
     const excelPickRatio = stats.picksFromExcel / totalPicks;
     confidence += excelPickRatio * 0.10;

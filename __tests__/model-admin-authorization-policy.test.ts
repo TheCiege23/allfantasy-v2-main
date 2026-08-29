@@ -22,11 +22,32 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 vi.mock("next/headers", () => ({ cookies: () => ({ get: mocks.cookiesGet }) }))
 vi.mock("@/lib/adminSession", () => ({ verifyAdminSessionCookie: mocks.verifyAdminSessionCookie }))
 
+/*
+ * ⚠ `app/leagues/[leagueId]/admin/model/page.tsx` IS NO LONGER IN THIS LIST, AND THAT
+ * IS NOT A RELAXATION.
+ *
+ * The screen moved onto the core shell (b2ffe5dfc) and that path became a redirect stub
+ * with no gate of its own — deliberately, so there is one admin predicate rather than
+ * two that can drift. The whole-file assertions below (must import adminAuth, must not
+ * mention any league-scoped word) therefore stopped applying to it and it went red on
+ * main, unnoticed, because vitest does not run in CI.
+ *
+ * The coverage moved rather than vanished: the redirect contract is pinned by
+ * model-admin-page-authorization.test.tsx, and the gate at the NEW location is pinned by
+ * the `core shell` describe at the bottom of this file. The whole-file form cannot be
+ * reused there — the core page legitimately contains the word "commissioner" for nav
+ * grouping and for an unrelated /commissioner-hub redirect — so that check is scoped to
+ * the gate expression instead.
+ */
 const PRODUCTION_FILES = [
-  "app/leagues/[leagueId]/admin/model/page.tsx",
   "app/api/leagues/[leagueId]/v3/weights/route.ts",
   "app/api/leagues/[leagueId]/v3/drift/route.ts",
 ]
+
+/** Where the model-admin screen and its gate actually live now. */
+const CORE_SHELL_PAGE = "app/core/[[...screen]]/page.tsx"
+/** The redirect stub left behind at the old address. */
+const LEGACY_REDIRECT_PAGE = "app/leagues/[leagueId]/admin/model/page.tsx"
 
 /** A real league commissioner who is NOT on any site-admin allowlist. */
 const COMMISSIONER_SESSION = {
@@ -147,4 +168,61 @@ describe("model-admin surfaces gate on site-admin only", () => {
       }
     })
   }
+})
+
+describe("model-admin on the core shell keeps the site-admin gate", () => {
+  /*
+   * The screen renders inside a 1,300-line shell serving every /core segment, so a
+   * whole-file scan is useless here — the page mentions "commissioner" for nav grouping
+   * and redirects to /commissioner-hub for an unrelated reason. These assertions target
+   * the gate expression itself, which is the thing that must not weaken.
+   */
+  const coreSource = () => readFileSync(resolve(process.cwd(), CORE_SHELL_PAGE), "utf-8")
+
+  it("gates model-admin on the site-admin allowlist, not league commissionership", () => {
+    const source = coreSource()
+
+    expect(source).toContain("@/lib/adminAuth")
+    // The gate expression, as one string: segment check -> getAdminAccessState -> admin.
+    const gate = source.slice(source.indexOf("const modelAdminAllowed"))
+    expect(gate).toContain("segment === 'model-admin'")
+    expect(gate.slice(0, 400)).toContain("getAdminAccessState()")
+    expect(gate.slice(0, 400)).toContain("status === 'admin'")
+
+    for (const leagueGate of ["getLeagueRole", "isAfCommissioner", "assertLeagueMember", "resolveLeagueAccess"]) {
+      expect(gate.slice(0, 400)).not.toContain(leagueGate)
+    }
+  })
+
+  it("FAILS CLOSED — an errored gate denies rather than admits", () => {
+    // `.catch(() => false)`. If this ever becomes `?? true` or the catch is dropped,
+    // an auth outage would open the panel instead of closing it.
+    const gate = coreSource().slice(0)
+    const start = gate.indexOf("const modelAdminAllowed")
+    expect(start).toBeGreaterThan(-1)
+    expect(gate.slice(start, start + 400)).toContain("catch(() => false)")
+  })
+
+  it("renders the denial branch instead of the panels when the gate says no", () => {
+    const source = coreSource()
+
+    expect(source).toContain("!modelAdminAllowed ?")
+    expect(source).toContain("This account is not on the AllFantasy admin allowlist.")
+    // The panels must sit on the far side of that branch, never before it.
+    expect(source.indexOf("!modelAdminAllowed ?")).toBeLessThan(source.indexOf("<V3WeightsPanel"))
+  })
+
+  it("leaves no second gate on the legacy path — it is a pure redirect", () => {
+    const legacy = readFileSync(resolve(process.cwd(), LEGACY_REDIRECT_PAGE), "utf-8")
+
+    expect(legacy).toContain("/core/model-admin")
+    /*
+     * Match a CALL, not the word. The stub's own comment names `getAdminAccessState`
+     * while explaining why it deliberately does not call it, so a substring check reads
+     * the explanation as the offence — which is exactly the false positive that makes
+     * source-scanning tests untrustworthy.
+     */
+    expect(legacy).not.toMatch(/getAdminAccessState\s*\(/)
+    expect(legacy).not.toMatch(/<V3WeightsPanel/)
+  })
 })

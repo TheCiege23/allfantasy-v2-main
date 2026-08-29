@@ -245,15 +245,54 @@ async function runGrokWithTools(systemPrompt: string, useRealTime: boolean): Pro
 
 export async function POST(req: NextRequest) {
   try {
+    /*
+     * Session first, then the limiter, then the body — the limiter has to run before we
+     * do any work an unauthenticated caller controls the size of, and resolving the
+     * session is what decides which bucket applies.
+     */
+    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
+    const userId = session?.user?.id;
+
+    /*
+     * ⚠ THIS ROUTE IS DELIBERATELY REACHABLE SIGNED-OUT, AND THAT IS NOT AN OVERSIGHT.
+     *
+     * The `leagueId` branch below is gated (401 + assertLeagueMember). The manual-roster
+     * branch is the guest trial: <WaiverAI> (app/components/WaiverAI.tsx) is mounted on
+     * app/legacy/page.tsx, which serves 200 to anonymous visitors. Requiring a session
+     * here would silently kill that funnel — the same mistake already made once on the
+     * legacy trial, where every tab POSTed a verified-user handler and 91 visits produced
+     * zero imports. Do not "standardise" this to a blanket 401.
+     *
+     * What WAS wrong is that a guest and a member drew from the same 10/min bucket, so
+     * the anonymous tier — the one an abuser uses, and the one that costs us Grok tokens
+     * with no account attached — was as generous as the paying one. Split the budget
+     * instead of closing the door:
+     *
+     *   signed in  → 15/min, keyed on the user id (the thing we can actually meter,
+     *                and stable across the office/household NAT that shares one IP)
+     *   anonymous  →  3/min, keyed on IP — enough to try the feature and see it work,
+     *                not enough to farm completions
+     *
+     * Both buckets are still an in-process Map (lib/rate-limit.ts), so a new Vercel
+     * instance grants a fresh allowance. Moving this to the provisioned Redis is the
+     * real fix and is tracked separately; this narrows the blast radius meanwhile.
+     */
     const ip = getClientIp(req) || 'unknown';
-    const rl = rateLimit(`waiver-grok:${ip}`, 10, 60_000);
+    const rl = userId
+      ? rateLimit(`waiver-grok:user:${userId}`, 15, 60_000)
+      : rateLimit(`waiver-grok:anon:${ip}`, 3, 60_000);
     if (!rl.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+      return NextResponse.json(
+        {
+          error: userId
+            ? 'Too many requests. Give it a minute.'
+            : 'Guest limit reached — sign in for more waiver runs.',
+        },
+        { status: 429 },
+      );
     }
 
     const body = await req.json();
-    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
-    const userId = session?.user?.id;
 
     const {
       leagueId,

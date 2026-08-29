@@ -11,20 +11,80 @@ function isUnknownPlayerName(name: string | null | undefined): boolean {
   return !normalized || normalized === 'unknown' || normalized === 'unknown player'
 }
 
-function severityFromStatus(status: string | null | undefined): 'high' | 'medium' | 'low' {
-  return /out|ir|doubtful/i.test(status || '') ? 'high' : 'medium'
+/**
+ * How much a designation should outrank another for a START/SIT decision.
+ *
+ * ⚠ THE PROVIDER FEED IS NOT ALL INJURIES. Measured on the rows this panel could
+ * serve for NFL: Questionable 475 (41.4%), **Active 452 (39.4%)**, IR 156, Out 23,
+ * Suspension 5, Doubtful 1. "Active" rows are practice and transaction notes ESPN
+ * mixes into the same feed ("the Dolphins signed Bennett", "played 18 snaps"), and
+ * because they are published constantly they are always the newest thing in the
+ * table. Ordered by recency alone they filled all 14 slots and buried 475
+ * Questionable and 156 IR players — the panel was newest-first, not most-relevant.
+ *
+ * Rank is by what the manager has to DECIDE, so tier beats recency; recency only
+ * breaks ties inside a tier.
+ */
+function designationRank(status: string | null | undefined): number {
+  const s = String(status ?? '').trim().toLowerCase()
+  if (!s) return 1
+  // Cannot play. Nothing outranks these.
+  if (/\b(out|ir|injured reserve|suspend|suspension|pup|nfi|doubtful)\b/.test(s)) return 4
+  // Genuinely in doubt — the actual start/sit question.
+  if (/\b(questionable|game.?time|day.?to.?day|limited|probable)\b/.test(s)) return 3
+  // "Active"/"Healthy" is the ABSENCE of an injury. It is news, not a designation,
+  // and it ranks below a row with no stated status at all — which is at least a row
+  // the provider bothered to file about someone's availability.
+  if (/\b(active|healthy|cleared|full)\b/.test(s)) return 0
+  return 2
 }
 
-async function readIdentityBackedInjuries(dataSport: string) {
+function severityFromStatus(status: string | null | undefined): 'high' | 'medium' | 'low' {
+  const rank = designationRank(status)
+  if (rank >= 4) return 'high'
+  if (rank === 0) return 'low' // "Active" is not a medium-severity injury; it is not one.
+  return 'medium'
+}
+
+/**
+ * This panel answers "who is hurt for THIS slate", so a report older than three
+ * weeks does not belong in it at any staleness caveat — a genuinely injured player
+ * gets re-reported inside that window, and anything that does not is describing a
+ * different week.
+ *
+ * ⚠ IT MUST BE APPLIED TO EVERY PATH BELOW, NOT JUST THE PORT. The fallbacks read
+ * `injuryReportRecord` via getInjuryReport, which has NO recency filter of its own
+ * (it returns the newest 250 by reportDate whatever their age) and a second fallback
+ * queries sportsInjury directly with none either. Filtering only the primary would
+ * have swapped the three 2020/2022 college rows for nine from April and looked fixed.
+ */
+const SLATE_REPORT_HORIZON_HOURS = 21 * 24
+
+function withinSlateHorizon(when: Date | string | null | undefined, now: Date): boolean {
+  if (!when) return false
+  const t = new Date(when).getTime()
+  if (!Number.isFinite(t)) return false
+  return now.getTime() - t <= SLATE_REPORT_HORIZON_HOURS * 3_600_000
+}
+
+async function readIdentityBackedInjuries(dataSport: string, now: Date) {
   const sourceRows = await prisma.sportsInjury.findMany({
     where: {
       sport: dataSport,
+      // Same slate horizon as every other path here. This query had no recency
+      // filter at all, and it is the one that resurfaced the 2020/2022 college
+      // rows even when the primary read had already excluded them. A null `date`
+      // is kept — it is judged by fetchedAt instead, as in the read port.
+      OR: [
+        { date: null },
+        { date: { gte: new Date(now.getTime() - SLATE_REPORT_HORIZON_HOURS * 3_600_000) } },
+      ],
       NOT: [
         { playerName: { equals: 'Unknown', mode: 'insensitive' } },
         { playerName: { equals: 'Unknown Player', mode: 'insensitive' } },
       ],
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { date: 'desc' },
     take: 250,
     select: {
       playerId: true,
@@ -33,6 +93,7 @@ async function readIdentityBackedInjuries(dataSport: string) {
       position: true,
       status: true,
       description: true,
+      date: true,
       updatedAt: true,
     },
   })
@@ -93,7 +154,16 @@ async function readIdentityBackedInjuries(dataSport: string) {
     }
   }
 
-  return sourceRows.slice(0, 14).map((row) => {
+  return sourceRows
+    // Same ranking as the other two paths — designation first, then report date.
+    .slice()
+    .sort((a, b) => {
+      const byRank = designationRank(b.status) - designationRank(a.status)
+      if (byRank !== 0) return byRank
+      return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime()
+    })
+    .slice(0, 14)
+    .map((row) => {
     const playerId = String(row.playerId ?? '').trim()
     const sportsPlayer = playerId ? sportsPlayerById.get(playerId) : undefined
     const identity = playerId ? identityByAnyExternalId.get(playerId) : undefined
@@ -113,7 +183,9 @@ async function readIdentityBackedInjuries(dataSport: string) {
     return {
       player: playerName,
       source: 'Injury report DB',
-      time: new Date(row.updatedAt).toLocaleDateString(),
+      // Report date, falling back to our row timestamp — never `updatedAt` alone,
+      // which is when WE touched the row and is always ~now.
+      time: new Date(row.date ?? row.updatedAt).toLocaleDateString(),
       severity: severityFromStatus(row.status),
       text: detailParts.join(' — ').slice(0, 220),
     }
@@ -123,6 +195,7 @@ async function readIdentityBackedInjuries(dataSport: string) {
 export async function GET(req: Request) {
   const sport = new URL(req.url).searchParams.get('sport') || 'nfl'
   const dataSport = uiKeyToDataSport(sport)
+  const now = new Date()
 
   try {
     // Slice 18 follow-on — PRIMARY source is the canonical injury read port
@@ -130,9 +203,28 @@ export async function GET(req: Request) {
     // previous primary (`getInjuryReport` → injuryReportRecord) was measured
     // 103.8 days stale in prod on 2026-08-10, so this panel was rendering
     // three-month-old reports as if current.
-    const factList = await listInjuryFacts({ sport: dataSport, limit: 50 }).catch(() => null)
+    /*
+     * ⚠ THE LIMIT HAS TO BE WIDE ENOUGH TO RANK WITHIN.
+     *
+     * listInjuryFacts sorts by report recency and then slices to `limit`, so asking
+     * for 50 and ranking afterwards would only ever reorder the 50 NEWEST rows —
+     * and the newest rows are exactly the "Active" transaction notes that caused
+     * this bug. Ranking has to happen over the whole slate, so the port is asked
+     * for the slate and this route picks the 14 that matter.
+     */
+    const factList = await listInjuryFacts({
+      sport: dataSport,
+      limit: 400,
+      maxReportAgeHours: SLATE_REPORT_HORIZON_HOURS,
+    }).catch(() => null)
     const portInjuries = (factList?.facts ?? [])
       .filter((f) => !isUnknownPlayerName(f.playerName))
+      // Designation first, then most recently reported. See designationRank.
+      .sort((a, b) => {
+        const byRank = designationRank(b.status) - designationRank(a.status)
+        if (byRank !== 0) return byRank
+        return new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
+      })
       .slice(0, 14)
       .map((f) => {
         const detailParts = [f.status, f.description].filter(Boolean) as string[]
@@ -144,7 +236,12 @@ export async function GET(req: Request) {
         return {
           player: f.playerName,
           source: 'Injury report DB',
-          time: new Date(f.fetchedAt).toLocaleDateString(),
+          /*
+           * The REPORT date, not the fetch date. This showed `fetchedAt`, so every
+           * item carried today's date regardless of when it was actually reported —
+           * the college panel displayed "8/28/2026" on reports from 2020 and 2022.
+           */
+          time: new Date(f.reportedAt).toLocaleDateString(),
           severity: severityFromStatus(f.status),
           text: detailParts.join(' — ').slice(0, 220),
         }
@@ -155,18 +252,30 @@ export async function GET(req: Request) {
 
     // Fallback: legacy normalized table, then the identity-backed DB join.
     const rows = await getInjuryReport(dataSport)
-    let injuries = rows.slice(0, 14).map((r) => ({
-      player: r.playerName,
-      source: 'Injury report DB',
-      time: new Date(r.reportDate).toLocaleDateString(),
-      severity: severityFromStatus(r.status),
-      text: [r.status, r.notes].filter(Boolean).join(' — ').slice(0, 220),
-    }))
+    let injuries = rows
+      // getInjuryReport applies no recency filter of its own — see the note on
+      // SLATE_REPORT_HORIZON_HOURS. Without this, NCAAF served nine April rows.
+      .filter((r) => withinSlateHorizon(r.reportDate, now))
+      // Same ranking as the primary path, so a fallback does not silently reorder
+      // the panel into newest-first practice notes.
+      .sort((a, b) => {
+        const byRank = designationRank(b.status) - designationRank(a.status)
+        if (byRank !== 0) return byRank
+        return new Date(b.reportDate).getTime() - new Date(a.reportDate).getTime()
+      })
+      .slice(0, 14)
+      .map((r) => ({
+        player: r.playerName,
+        source: 'Injury report DB',
+        time: new Date(r.reportDate).toLocaleDateString(),
+        severity: severityFromStatus(r.status),
+        text: [r.status, r.notes].filter(Boolean).join(' — ').slice(0, 220),
+      }))
 
     // If the active normalized table is present but identity fields are degraded,
     // backfill from the DB injury table that carries player names.
     if (injuries.length > 0 && injuries.every((row) => isUnknownPlayerName(row.player))) {
-      const identityBacked = await readIdentityBackedInjuries(dataSport)
+      const identityBacked = await readIdentityBackedInjuries(dataSport, now)
       if (identityBacked.some((row) => !isUnknownPlayerName(row.player))) {
         injuries = identityBacked
       }

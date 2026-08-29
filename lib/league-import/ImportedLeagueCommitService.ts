@@ -4,6 +4,7 @@ import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
+import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
   CanonicalImportBundle,
@@ -623,6 +624,17 @@ export async function persistImportedLeagueFromNormalization(
       const r = normalized.rosters.find((row) => row.source_team_id === sourceTeamId)
       return r?.team_name?.trim() || r?.owner_name?.trim() || null
     }
+    /*
+     * The row exists so the History tab has an entry immediately — but "immediately"
+     * must not mean "with a champion invented from an unplayed season". Rank 1 of the
+     * current table is only the champion once the source says the season is over;
+     * see lib/league-import/seasonPlacement.ts.
+     */
+    const placement = resolveSeasonPlacement({
+      leagueStatus: normalized.league.status,
+      championName: nameForTeamId(topStanding?.source_team_id),
+      runnerUpName: nameForTeamId(runnerUpStanding?.source_team_id),
+    })
     await prisma.leagueSeason.upsert({
       where: {
         leagueId_season: { leagueId: league.id, season: seasonYearForRow },
@@ -631,8 +643,7 @@ export async function persistImportedLeagueFromNormalization(
         leagueId: league.id,
         season: seasonYearForRow,
         platformLeagueId: normalized.source.source_league_id,
-        championName: nameForTeamId(topStanding?.source_team_id),
-        runnerUpName: nameForTeamId(runnerUpStanding?.source_team_id),
+        ...placement,
         teamCount: normalized.rosters.length || normalized.league.leagueSize,
         scoringFormat: normalized.scoring?.scoring_format ?? null,
         isDynasty: normalized.league.isDynasty,
@@ -640,8 +651,7 @@ export async function persistImportedLeagueFromNormalization(
       },
       update: {
         platformLeagueId: normalized.source.source_league_id,
-        championName: nameForTeamId(topStanding?.source_team_id),
-        runnerUpName: nameForTeamId(runnerUpStanding?.source_team_id),
+        ...placement,
         teamCount: normalized.rosters.length || normalized.league.leagueSize,
         scoringFormat: normalized.scoring?.scoring_format ?? null,
         isDynasty: normalized.league.isDynasty,
