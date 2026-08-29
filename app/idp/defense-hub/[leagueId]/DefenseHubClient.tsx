@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
+import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 
 /**
  * Defense Hub — rostered defenders, what they are projected for under THIS league's scoring,
@@ -171,6 +172,8 @@ export function DefenseHubClient({
             <SnapShare data={data} />
             <RoleCards data={data} />
             <Tendencies data={data} />
+            {/* Only renders when this league starts defenders or kickers. */}
+            <ValuesPageLink leagueId={leagueId} />
           </div>
         )}
       </div>

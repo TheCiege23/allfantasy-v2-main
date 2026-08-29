@@ -9,6 +9,10 @@ import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/id
 import { prisma } from '@/lib/prisma'
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
 import { loadLeagueKickerValue } from '@/lib/kicker-values/loadLeagueKickerValue'
+import {
+  resolveLeagueValueSurfaces,
+  resolveUserValueSurfaces,
+} from '@/lib/values/valueSurfaceEligibility'
 import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
 import { loadIdpPlayerCard } from '@/lib/idp-projections/idpPlayerCard'
 import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
@@ -44,6 +48,22 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl
   const leagueId = searchParams?.get('leagueId')?.trim() ?? ''
+
+  /*
+   * ⚠ THE ONE VIEW THAT ANSWERS WITHOUT A LEAGUE, AND IT HAS TO SIT ABOVE THE GUARD BELOW.
+   *
+   * `/core` is the manager's home ACROSS his leagues, not one of them, so "should the values
+   * link appear" is a question about him rather than about a league id he has not chosen yet.
+   * Requiring `leagueId` here would make the core surface unable to ask at all.
+   *
+   * It is still fully scoped: the answer is derived only from leagues this user owns or has
+   * claimed a team in, and it returns three booleans — never a roster, a name or a value.
+   */
+  if ((searchParams?.get('view') ?? '').toLowerCase() === 'value-eligibility' && !leagueId) {
+    const payload = await resolveUserValueSurfaces(prisma, userId).catch(() => null)
+    return NextResponse.json(payload ?? { hasIdp: false, hasKicker: false, eligible: false })
+  }
+
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
 
   const allowed = await canAccessLeagueDraft(leagueId, userId)
@@ -76,6 +96,15 @@ export async function GET(req: NextRequest) {
    * resolves the auth and league scoping the answer needs. A league that starts no kicker gets
    * `value: null`, which the client renders as nothing at all.
    */
+  /*
+   * League-scoped twin of the check above. Rides this route for the same reason everything
+   * else here does — the repo is at its route ceiling — and sits before the `isIdpLeague`
+   * guard because a league that scores NO IDP is exactly the case it has to answer for.
+   */
+  if (view === 'value-eligibility') {
+    const payload = await resolveLeagueValueSurfaces(prisma, leagueId).catch(() => null)
+    return NextResponse.json(payload ?? { hasIdp: false, hasKicker: false, eligible: false })
+  }
   if (view === 'kicker-value') {
     const payload = await loadLeagueKickerValue({ prisma, leagueId })
     return NextResponse.json(payload ?? { value: null })

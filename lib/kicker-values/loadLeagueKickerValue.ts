@@ -41,7 +41,13 @@ import { resolveLeagueKickerValue, type LeagueKickerValue } from './leagueKicker
  * starter/bench distinction here would be a second opinion on a question the array spellings
  * never answered either.
  */
-function extractRosterPositions(settings: unknown): string[] | null {
+/**
+ * ⚠ EXPORTED so `lib/values/valueSurfaceEligibility.ts` can ask "does this league start a
+ * kicker" without re-implementing the parsing. There are three spellings to get right
+ * (`roster_positions`, `rosterPositions`, and the AF-native slot map), and a second copy is
+ * how one of them silently gets missed again.
+ */
+export function extractLeagueRosterPositions(settings: unknown): string[] | null {
   const s = (settings ?? {}) as Record<string, unknown>
   const raw = (s.roster_positions ?? s.rosterPositions ?? null) as unknown
   if (Array.isArray(raw)) return raw.map((x) => String(x).toUpperCase())
@@ -155,7 +161,7 @@ export async function loadLeagueKickerValue(
   if (numTeams === null) return null
 
   return resolveLeagueKickerValue({
-    rosterPositions: extractRosterPositions(league.settings),
+    rosterPositions: extractLeagueRosterPositions(league.settings),
     numTeams,
     isDynasty:
       league.isDynasty ?? (league.leagueType ?? '').toLowerCase().includes('dynasty'),
