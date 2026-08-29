@@ -34,8 +34,18 @@ export async function aggregateLiveDraftPicks(
   const whereSession: any = { status: 'completed' }
   if (since) whereSession.updatedAt = { gte: since }
 
+  /*
+   * 🛑 `source: 'auto'` PICKS ARE NOT A MARKET. 18 completed sessions in production are
+   * exactly 50 picks each, 100% autopicked, all created 2026-05-07 — seeded fixtures, not
+   * managers drafting. Averaging them into an ADP publishes a bot's board as though people
+   * had chosen it, and the segment counts it inflates are what make a thin board look
+   * sampled. Real human drafts carry `sleeper-mirror` and other sources.
+   *
+   * Excluded at the QUERY, not in the reducer, so the pick never reaches the sample count
+   * either — a filter applied after aggregation still lets `draftCount` claim the draft.
+   */
   const picks = await prisma.draftPick.findMany({
-    where: { session: whereSession },
+    where: { session: whereSession, source: { not: 'auto' } },
     include: {
       session: {
         include: {

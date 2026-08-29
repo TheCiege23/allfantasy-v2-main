@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
+import { isAiAdpConsumerEnabled } from '@/lib/ai-adp-engine/aiAdpConsumerFlag'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { prisma } from '@/lib/prisma'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
@@ -96,7 +97,20 @@ export async function GET(
     })
   }
 
-  const result = await getAiAdpForLeague(sport, isDynasty, formatKey)
+  /*
+   * 🛑 THIS IS THE ROUTE THAT REACHES THE DRAFT RECOMMENDER, so it is the one that most
+   * needs the gate. Its `entries` become `aiAdpByKey` in the draft room and are POSTed to
+   * /api/draft/recommend, /api/draft/live-brain and /api/ai/draft/recommend — where
+   * RecommendationEngine's `getAdp` returns the AI number IN PREFERENCE to the real ADP and
+   * then reports `hasRealAdp` true. `draftUISettings.aiAdpEnabled` defaults TRUE, so this is
+   * on for everyone by default.
+   *
+   * A second reason specific to this route: `getAiAdpForLeague` falls through a dynasty miss
+   * to `getAiAdp(sport, 'redraft', 'default')`, and production has 45 NFL dynasty leagues.
+   * Nothing downstream renders `segment`, so a dynasty manager would be shown a redraft
+   * board with no way to tell. See lib/ai-adp-engine/aiAdpConsumerFlag.ts.
+   */
+  const result = isAiAdpConsumerEnabled() ? await getAiAdpForLeague(sport, isDynasty, formatKey) : null
   if (!result) {
     return NextResponse.json({
       enabled,
