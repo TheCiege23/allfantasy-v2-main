@@ -85,6 +85,35 @@ const STAT_ALIASES: Record<string, string[]> = {
   safe: ['idp_safe'],
   int_ret_yd: ['idp_int_ret_yd'],
   fum_ret_yd: ['idp_fum_ret_yd'],
+
+  /*
+   * ⚠ THE SAME VOCABULARY GAP AGAIN, AND FOR KICKERS IT HITS THE BIGGEST KEYS THEY HAVE.
+   *
+   * Measured on production 2026-08-29 over 4,482 kicker game rows (2019-2025) and the
+   * scoring settings of all 115 leagues. Leagues configure Sleeper's spelling; the stat
+   * ingest writes a different one for exactly three keys, and the two NEVER co-occur:
+   *
+   *   scoring key   leagues   normalized map carries   rows   both spellings
+   *   xpm             68        pat_made               3296        0
+   *   xpmiss          67        pat_missed              421        0
+   *   fgm_40_49       62        fg_40_49               1353        0
+   *
+   * Unaliased, all three matched nothing and contributed ZERO — so in ~60% of leagues a
+   * kicker's extra points (2-3 per game, his single largest component) and his most common
+   * field-goal bucket were silently absent while the projection reported itself healthy.
+   *
+   * ⚠ ONLY THESE THREE. The vocabulary is MIXED rather than uniformly wrong: `fgm_0_19`
+   * (26 rows), `fgm_20_29`, `fgm_30_39`, `fgm_50p` (842) and `fgmiss` are already written in
+   * Sleeper's spelling and need nothing. Aliasing them anyway would be harmless today and a
+   * trap tomorrow — it would assert a rename that the data does not perform.
+   *
+   * ⚠ `fgm_50_59` IS NOT ALIASED TO `fgm_50p` even though it looks like a finer bucket of it.
+   * An alias picks an ALTERNATIVE SPELLING, not a subset to sum: a row carrying both would
+   * double-count the same kick. `fgm_50p` is already present natively where it applies.
+   */
+  xpm: ['pat_made'],
+  xpmiss: ['pat_missed'],
+  fgm_40_49: ['fg_40_49'],
 }
 
 export type LeagueScoringResult = {

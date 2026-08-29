@@ -19,8 +19,10 @@ export interface ValuationContext {
   /** League format; defaults to dynasty when the caller has no league context. */
   isDynasty?: boolean;
   /**
-   * This league's own IDP board, keyed by lowercased player name — from
-   * `loadIdpTradeValuesByName`.
+   * This league's own non-market values, keyed by lowercased player name — from
+   * `loadLeagueTradeValues`. Covers DEFENDERS (ranked by value over replacement) and
+   * KICKERS (deliberately unranked; every kicker in a league carries the same number,
+   * because kicker rank does not persist — see lib/kicker-values/leagueKickerValue.ts).
    *
    * 🛑 OPTIONAL, AND ITS ABSENCE MUST STAY HARMLESS. Without it every defender is
    * priced off IDP_KICKER_BASELINE_VALUES below, which is a flat per-position
@@ -30,7 +32,10 @@ export interface ValuationContext {
    * described in chat, a snapshot write path — must NOT supply one, because an IDP
    * value computed against the wrong league is worse than a flat one.
    */
-  idpValueByNameLower?: ReadonlyMap<string, { value: number; position: string }>;
+  leagueValueByNameLower?: ReadonlyMap<
+    string,
+    { value: number; position: string; basis: 'idp-vorp' | 'kicker-flat' }
+  >;
 }
 
 export interface AssetValue {
@@ -46,13 +51,15 @@ export interface PricedAsset {
   value: number;
   assetValue: AssetValue;
   /**
-   * Where the number came from. `idp-vorp` means the league's own scoring and
-   * starting slots priced this player — see ValuationContext.idpValueByNameLower.
-   * It is deliberately distinct from 'unknown': the flat IDP baseline also returns
-   * a usable value, and the two must be tellable apart by anything reporting
-   * confidence or explaining a grade to a manager.
+   * Where the number came from. `idp-vorp` and `kicker-flat` both mean the league's
+   * own rulebook priced this player — see ValuationContext.leagueValueByNameLower.
+   * They are kept apart because they are different claims: an IDP value is specific
+   * to that DEFENDER, while a kicker value is specific to the LEAGUE and identical
+   * for every kicker in it. Both are deliberately distinct from 'unknown', since
+   * the flat baseline also returns a usable number and anything reporting confidence
+   * or explaining a grade to a manager has to tell them apart.
    */
-  source: 'excel' | 'fantasycalc' | 'curve' | 'idp-vorp' | 'unknown';
+  source: 'excel' | 'fantasycalc' | 'curve' | 'idp-vorp' | 'kicker-flat' | 'unknown';
   /**
    * TRUE MEANS NO VALUE SOURCE MATCHED THIS ASSET AT ALL — it is not "worth zero",
    * it is unknown, and the two must never be collapsed.
@@ -259,8 +266,10 @@ export interface TradeDelta {
   valuationStats: {
     playersFromExcel: number;
     playersFromFantasyCalc: number;
-    /** Priced off the league's own IDP board. See ValuationContext.idpValueByNameLower. */
+    /** Priced off the league's own IDP board. See ValuationContext.leagueValueByNameLower. */
     playersFromIdpVorp: number;
+    /** Priced at the league's flat kicker value — one number for every kicker, by design. */
+    playersFromKickerFlat: number;
     playersUnknown: number;
     picksFromExcel: number;
     picksFromCurve: number;
@@ -407,10 +416,10 @@ export async function pricePlayer(
    * projection week; answering "what was he worth last March" with it would quietly
    * restate today's price as history.
    */
-  const idpBoardValue = ctx.idpValueByNameLower?.get(name.toLowerCase().trim());
-  if (idpBoardValue && idpBoardValue.value > 0) {
-    const mv = idpBoardValue.value;
-    const vol = computePlayerVolatility(null, idpBoardValue.position, age, analyticsData);
+  const leagueValue = ctx.leagueValueByNameLower?.get(name.toLowerCase().trim());
+  if (leagueValue && leagueValue.value > 0) {
+    const mv = leagueValue.value;
+    const vol = computePlayerVolatility(null, leagueValue.position, age, analyticsData);
     return {
       name,
       type: 'player',
@@ -421,8 +430,8 @@ export async function pricePlayer(
         vorpValue: Math.round(mv * 0.3),
         volatility: vol,
       },
-      source: 'idp-vorp',
-      position: idpBoardValue.position,
+      source: leagueValue.basis,
+      position: leagueValue.position,
       ...(age != null && { age }),
     };
   }
@@ -578,8 +587,10 @@ export async function priceAssets(
   stats: {
     playersFromExcel: number;
     playersFromFantasyCalc: number;
-    /** Priced off the league's own IDP board. See ValuationContext.idpValueByNameLower. */
+    /** Priced off the league's own IDP board. See ValuationContext.leagueValueByNameLower. */
     playersFromIdpVorp: number;
+    /** Priced at the league's flat kicker value — one number for every kicker, by design. */
+    playersFromKickerFlat: number;
     playersUnknown: number;
     picksFromExcel: number;
     picksFromCurve: number;
@@ -607,6 +618,7 @@ export async function priceAssets(
     playersFromExcel: pricedPlayers.filter(p => p.source === 'excel').length,
     playersFromFantasyCalc: pricedPlayers.filter(p => p.source === 'fantasycalc').length,
     playersFromIdpVorp: pricedPlayers.filter(p => p.source === 'idp-vorp').length,
+    playersFromKickerFlat: pricedPlayers.filter(p => p.source === 'kicker-flat').length,
     playersUnknown: pricedPlayers.filter(p => p.source === 'unknown').length,
     picksFromExcel: pricedPicks.filter(p => p.source === 'excel').length,
     picksFromCurve: pricedPicks.filter(p => p.source === 'curve').length
@@ -641,6 +653,7 @@ function computeConfidence(stats: TradeDelta['valuationStats']): number {
     stats.playersFromExcel +
     stats.playersFromFantasyCalc +
     stats.playersFromIdpVorp +
+    stats.playersFromKickerFlat +
     stats.playersUnknown;
   const totalPicks = stats.picksFromExcel + stats.picksFromCurve;
   const totalAssets = totalPlayers + totalPicks;
@@ -735,6 +748,7 @@ export async function computeTradeDeltaFromUserTrades(
     playersFromExcel: received.stats.playersFromExcel + gave.stats.playersFromExcel,
     playersFromFantasyCalc: received.stats.playersFromFantasyCalc + gave.stats.playersFromFantasyCalc,
     playersFromIdpVorp: received.stats.playersFromIdpVorp + gave.stats.playersFromIdpVorp,
+    playersFromKickerFlat: received.stats.playersFromKickerFlat + gave.stats.playersFromKickerFlat,
     playersUnknown: received.stats.playersUnknown + gave.stats.playersUnknown,
     picksFromExcel: received.stats.picksFromExcel + gave.stats.picksFromExcel,
     picksFromCurve: received.stats.picksFromCurve + gave.stats.picksFromCurve

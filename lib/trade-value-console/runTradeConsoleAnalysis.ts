@@ -29,7 +29,7 @@ import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
-import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
+import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import {
@@ -205,7 +205,7 @@ async function resolveAssets(
       const src: TradeConsolePlayerLine['pricedSource'] =
         pa.source === 'fantasycalc' || pa.source === 'excel'
           ? 'fantasycalc'
-          : pa.source === 'idp-vorp'
+          : pa.source === 'idp-vorp' || pa.source === 'kicker-flat'
             ? 'idp_league'
             : 'unknown'
       lines.push(
@@ -448,8 +448,8 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
    * because the console works in INTERNAL League.id space and Sleeper's roster and
    * settings endpoints do not answer to that id.
    */
-  const idpBoard = leagueRow?.platformLeagueId
-    ? await loadIdpTradeValuesByName({
+  const leagueValues = leagueRow?.platformLeagueId
+    ? await loadLeagueTradeValues({
         prisma,
         platformLeagueId: leagueRow.platformLeagueId,
         isDynasty: leagueRow.isDynasty ?? true,
@@ -461,7 +461,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     isSuperFlex,
     fantasyCalcPlayers: fcPlayers,
     numTeams: leagueSize,
-    ...(idpBoard && idpBoard.byNameLower.size > 0 && { idpValueByNameLower: idpBoard.byNameLower }),
+    ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
   }
 
   let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {

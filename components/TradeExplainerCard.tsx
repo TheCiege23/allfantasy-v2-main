@@ -37,7 +37,9 @@ export function createExplainerFromDelta(
   const excelPlayers = delta.valuationStats.playersFromExcel
   const fcPlayers = delta.valuationStats.playersFromFantasyCalc
   const idpPlayers = delta.valuationStats.playersFromIdpVorp
-  const totalPlayers = excelPlayers + fcPlayers + idpPlayers + delta.valuationStats.playersUnknown
+  const kickerPlayers = delta.valuationStats.playersFromKickerFlat
+  const totalPlayers =
+    excelPlayers + fcPlayers + idpPlayers + kickerPlayers + delta.valuationStats.playersUnknown
   
   if (excelPlayers > 0) {
     bullets.push(`${excelPlayers} of ${totalPlayers} players valued from historical data${mode === 'atTime' && tradeDate ? ` (${tradeDate})` : ''}`)
@@ -52,6 +54,13 @@ export function createExplainerFromDelta(
    * difference between a value a manager can argue with and one that looks made up. */
   if (idpPlayers > 0) {
     bullets.push(`${idpPlayers} defender${idpPlayers > 1 ? 's' : ''} valued from your league's IDP scoring and starting slots`)
+  }
+
+  /* Says the quiet part out loud. Every kicker in a league carries the SAME value here
+   * because kicker rank does not persist (year-over-year Spearman -0.455, negative in all
+   * six measured season pairs). A manager reading a flat number deserves the reason. */
+  if (kickerPlayers > 0) {
+    bullets.push(`${kickerPlayers} kicker${kickerPlayers > 1 ? 's' : ''} valued at your league's flat kicker price — kicker rank does not carry year to year, so we don't pretend one is worth more than another`)
   }
   
   if (delta.valuationStats.picksFromExcel > 0 || delta.valuationStats.picksFromCurve > 0) {

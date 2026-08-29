@@ -15,7 +15,7 @@ import { PrismaClient } from '@prisma/client'
 
 import { hasIdpScoring } from '../lib/core-app/scoringNotes'
 import { extractScoringSettings } from '../lib/projections/leagueScoring'
-import { loadIdpTradeValuesByName } from '../lib/idp-projections/idpTradeValues'
+import { loadLeagueTradeValues } from '../lib/league-values/leagueTradeValues'
 import { pricePlayer } from '../lib/hybrid-valuation'
 
 const prisma = new PrismaClient()
@@ -32,7 +32,7 @@ async function main() {
   const asOfDate = new Date().toISOString().slice(0, 10)
 
   for (const l of leagues.slice(0, 3)) {
-    const board = await loadIdpTradeValuesByName({
+    const board = await loadLeagueTradeValues({
       prisma,
       platformLeagueId: l.platformLeagueId,
       isDynasty: l.isDynasty ?? true,
@@ -40,20 +40,23 @@ async function main() {
 
     console.log(
       `\n${l.name ?? l.id} (${l.platformLeagueId})\n` +
-        `  skipped=${board.skipped} coverage=${JSON.stringify(board.coverage)} ` +
-        `ambiguous=${board.ambiguousNames.length}`,
+        `  IDP  skipped=${board.idp.skipped} coverage=${JSON.stringify(board.idp.coverage)} ` +
+        `ambiguous=${board.idp.ambiguousNames.length}\n` +
+        `  K    value=${board.kicker.value} named=${board.kicker.named} ` +
+        `replacement=K${board.kicker.replacementRank} scarcity=${board.kicker.scarcity}`,
     )
     if (board.byNameLower.size === 0) continue
 
     const sorted = [...board.byNameLower.entries()].sort((a, b) => b[1].value - a[1].value)
     const sample = [sorted[0], sorted[Math.floor(sorted.length / 2)], sorted[sorted.length - 1]]
 
-    for (const [nameLower, entry] of sample) {
+    const kickerSample = [...board.byNameLower.entries()].filter(([, e]) => e.basis === 'kicker-flat').slice(0, 2)
+    for (const [nameLower, entry] of [...sample, ...kickerSample]) {
       if (!nameLower) continue
       const withBoard = await pricePlayer(nameLower, {
         asOfDate,
         isSuperFlex: false,
-        idpValueByNameLower: board.byNameLower,
+        leagueValueByNameLower: board.byNameLower,
       })
       const withoutBoard = await pricePlayer(nameLower, { asOfDate, isSuperFlex: false })
       console.log(

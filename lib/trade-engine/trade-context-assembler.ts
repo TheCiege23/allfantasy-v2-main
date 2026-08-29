@@ -9,7 +9,7 @@ import {
 } from './league-intelligence'
 import { type Asset, type LeagueSettings, DEFAULT_THRESHOLDS } from './types'
 import { getPlayerADP, type ADPEntry } from '../adp-data'
-import { loadIdpTradeValuesByName } from '../idp-projections/idpTradeValues'
+import { loadLeagueTradeValues } from '../league-values/leagueTradeValues'
 import {
   TradeDecisionContextV1Schema,
   type TradeDecisionContextV1,
@@ -384,15 +384,15 @@ export async function assembleTradeDecisionContext(
    * offensive-only DEFAULT when the caller supplied none, and handing that to the
    * valuation would state that the league has zero IDP starting slots — which makes
    * replacement level unresolvable and refuses the whole board. Passing the raw input
-   * instead lets `loadIdpTradeValuesByName` fetch the real slots when it is absent.
+   * instead lets `loadLeagueTradeValues` fetch the real slots when it is absent.
    *
    * ⚠ DYNASTY IS ASSUMED because this input carries no format field. It only selects
    * between two decay curves, and every league in production that genuinely scores
    * IDP is dynasty (see lib/idp-kicker-values.ts), so the redraft curve is currently
    * unreachable from anywhere. If a format ever reaches this input, pass it.
    */
-  const idpBoard = leagueInput.leagueId
-    ? await loadIdpTradeValuesByName({
+  const leagueValues = leagueInput.leagueId
+    ? await loadLeagueTradeValues({
         prisma,
         platformLeagueId: leagueInput.leagueId,
         isDynasty: true,
@@ -408,7 +408,7 @@ export async function assembleTradeDecisionContext(
     asOfDate: new Date().toISOString().split('T')[0],
     isSuperFlex: leagueSettings.isSF ?? false,
     numTeams: leagueSettings.numTeams,
-    ...(idpBoard && idpBoard.byNameLower.size > 0 && { idpValueByNameLower: idpBoard.byNameLower }),
+    ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
   }
 
   const playerNames: string[] = []
@@ -433,7 +433,7 @@ export async function assembleTradeDecisionContext(
   const [pricedResult, analyticsMap, injuryMap, adpResults, managerA, managerB, tradeHistory, competitorData] = await Promise.all([
     priceAssets(assetsInput, valuationCtx).catch(e => {
       warnings.push(`Valuation failed: ${e.message}`)
-      return { total: 0, compositeTotal: 0, items: [] as PricedAsset[], stats: { playersFromExcel: 0, playersFromFantasyCalc: 0, playersFromIdpVorp: 0, playersUnknown: 0, picksFromExcel: 0, picksFromCurve: 0 } }
+      return { total: 0, compositeTotal: 0, items: [] as PricedAsset[], stats: { playersFromExcel: 0, playersFromFantasyCalc: 0, playersFromIdpVorp: 0, playersFromKickerFlat: 0, playersUnknown: 0, picksFromExcel: 0, picksFromCurve: 0 } }
     }),
     getPlayerAnalyticsBatch(allPlayerNames).catch(e => {
       warnings.push(`Analytics fetch failed: ${e.message}`)

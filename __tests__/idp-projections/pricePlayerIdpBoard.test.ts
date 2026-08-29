@@ -54,7 +54,7 @@ describe('pricePlayer with a league IDP board', () => {
   it('prices a defender off the board and says where the number came from', async () => {
     const priced = await pricePlayer('Stud Backer', {
       ...baseCtx,
-      idpValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB' }]]),
+      leagueValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB', basis: 'idp-vorp' as const }]]),
     })
 
     expect(priced.value).toBe(5500)
@@ -66,12 +66,12 @@ describe('pricePlayer with a league IDP board', () => {
   /** Two defenders in the same league must not collapse to one number. */
   it('separates defenders the old flat constant priced identically', async () => {
     const board = new Map([
-      ['stud backer', { value: 5500, position: 'LB' }],
-      ['scrub backer', { value: 240, position: 'LB' }],
+      ['stud backer', { value: 5500, position: 'LB', basis: 'idp-vorp' as const }],
+      ['scrub backer', { value: 240, position: 'LB', basis: 'idp-vorp' as const }],
     ])
 
-    const stud = await pricePlayer('Stud Backer', { ...baseCtx, idpValueByNameLower: board })
-    const scrub = await pricePlayer('Scrub Backer', { ...baseCtx, idpValueByNameLower: board })
+    const stud = await pricePlayer('Stud Backer', { ...baseCtx, leagueValueByNameLower: board })
+    const scrub = await pricePlayer('Scrub Backer', { ...baseCtx, leagueValueByNameLower: board })
 
     expect(stud.value).toBeGreaterThan(scrub.value * 10)
   })
@@ -79,7 +79,7 @@ describe('pricePlayer with a league IDP board', () => {
   it('matches on a trimmed, case-insensitive name', async () => {
     const priced = await pricePlayer('  STUD Backer ', {
       ...baseCtx,
-      idpValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB' }]]),
+      leagueValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB', basis: 'idp-vorp' as const }]]),
     })
 
     expect(priced.value).toBe(5500)
@@ -95,7 +95,7 @@ describe('pricePlayer with a league IDP board', () => {
     const priced = await pricePlayer('Stud Backer', {
       ...baseCtx,
       asOfDate: '2024-09-01',
-      idpValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB' }]]),
+      leagueValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB', basis: 'idp-vorp' as const }]]),
     })
 
     expect(priced.source).toBe('excel')
@@ -112,7 +112,7 @@ describe('pricePlayer with a league IDP board', () => {
 
     const priced = await pricePlayer('Wide One', {
       ...baseCtx,
-      idpValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB' }]]),
+      leagueValueByNameLower: new Map([['stud backer', { value: 5500, position: 'LB', basis: 'idp-vorp' as const }]]),
     })
 
     expect(priced.source).toBe('fantasycalc')
@@ -124,5 +124,22 @@ describe('pricePlayer with a league IDP board', () => {
 
     expect(priced.source).not.toBe('idp-vorp')
     expect(priced.unpriced).toBe(true)
+  })
+
+  /**
+   * A kicker arrives through the same seam but carries a different claim, and the source
+   * has to say which. `idp-vorp` is specific to that defender; `kicker-flat` is specific to
+   * the LEAGUE and identical for every kicker in it.
+   */
+  it('prices a kicker and reports the flat basis, not the IDP one', async () => {
+    const priced = await pricePlayer('Boot Leg', {
+      ...baseCtx,
+      leagueValueByNameLower: new Map([['boot leg', { value: 310, position: 'K', basis: 'kicker-flat' as const }]]),
+    })
+
+    expect(priced.value).toBe(310)
+    expect(priced.source).toBe('kicker-flat')
+    expect(priced.position).toBe('K')
+    expect(priced.unpriced).toBeUndefined()
   })
 })

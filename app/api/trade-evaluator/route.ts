@@ -24,7 +24,7 @@ import { computeLineupDelta, computeLineupFairness, computeValueFairness, type L
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
-import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
+import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
 import { buildGptInputContract, buildGptUserPrompt, validateGptNarrativeOutput, shouldSkipGpt, AI_OUTPUT_INVALID_FALLBACK, GPT_NARRATIVE_SYSTEM_PROMPT } from '@/lib/trade-engine/gpt-input-contract'
@@ -555,8 +555,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
      * Reuses the league info and player index already fetched above rather than
      * paying for them twice.
      */
-    const idpBoard = data.league_id
-      ? await loadIdpTradeValuesByName({
+    const leagueValues = data.league_id
+      ? await loadLeagueTradeValues({
           prisma,
           platformLeagueId: data.league_id,
           isDynasty: (data.league?.format ?? 'dynasty') !== 'redraft',
@@ -573,7 +573,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       isSuperFlex: isSF,
       numTeams: 12,
       rosterConfig: rosterConfigForVorp,
-      ...(idpBoard && idpBoard.byNameLower.size > 0 && { idpValueByNameLower: idpBoard.byNameLower }),
+      ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
     }
 
     const [senderPlayerPrices, receiverPlayerPrices, senderPickPrices, receiverPickPrices] = await Promise.all([

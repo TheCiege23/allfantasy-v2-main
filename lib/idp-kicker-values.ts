@@ -170,6 +170,29 @@ function decayToTiers(
 const DYNASTY_IDP_TIERS = decayToTiers(MARKET_DECAY_DYNASTY, IDP_CEILING_DYNASTY)
 const REDRAFT_IDP_TIERS = decayToTiers(MARKET_DECAY_REDRAFT, IDP_CEILING_REDRAFT)
 
+/**
+ * 🛑 THESE KICKER TIERS ARE CONTRADICTED BY MEASUREMENT AND ARE NOT USED FOR TRADES.
+ *
+ * `lib/kicker-values/leagueKickerValue.ts` measured the position on production 2026-08-29
+ * across 4,482 kicker game rows (2019-2025) and found two things that make this ladder
+ * indefensible:
+ *
+ *   - RANK DOES NOT PERSIST. Year over year the correlation is NEGATIVE in all six season
+ *     pairs (mean -0.455); within a season it is ~0. Ranking by Sleeper's `search_rank`, as
+ *     `rankKickers` below does, orders by POPULARITY and predicts nothing at all.
+ *   - THE POSITION IS FLAT. K24 scores 65% of K1's points per game, a 1.55x spread. This
+ *     ladder runs 1200 down to 100 — a 12x spread, overstating reality by roughly eight
+ *     times.
+ *
+ * The TRADE path no longer reads this: `loadLeagueTradeValues` gives every kicker in a
+ * league one measured value. These tiers still feed `buildIdpKickerValueMap`, whose
+ * consumers are waiver intelligence, the IDP Chimmy grounding and league-rankings-v2 —
+ * surfaces where a kicker ORDERING is used for suggestion ranking rather than for pricing an
+ * asset, and where changing the numbers would move behaviour that was never in scope here.
+ *
+ * Migrating those three is worthwhile and deliberately not done in the same change as the
+ * trade wiring. Do not add a NEW consumer of these tiers.
+ */
 const DYNASTY_KICKER_TIERS: { maxRank: number; value: number }[] = [
   { maxRank: 3, value: 1200 },
   { maxRank: 8, value: 800 },
