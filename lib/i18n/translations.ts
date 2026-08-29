@@ -1580,6 +1580,10 @@ export const translations: Record<string, Record<string, string>> = {
     "powerRankingsPage.detail.positionValues": "Position Values",
     "powerRankingsPage.position.starterValue": "Starter Value:",
     "powerRankingsPage.position.benchDepth": "Bench Depth:",
+    "powerRankingsPage.position.kickers": "Kickers",
+    "powerRankingsPage.position.kickerEach": "Every kicker in this league is worth {{value}}.",
+    "powerRankingsPage.position.kickerBasis":
+      "Kickers are priced as a position, not ranked. Kicker rank doesn't carry from one season to the next, and the whole startable group scores within about 1.5x of each other — so no kicker ordering here would predict anything. Replacement is about K{{rank}}.",
     "powerRankingsPage.detail.nextSteps": "Next Steps",
     "powerRankingsPage.impact.high": "HIGH",
     "powerRankingsPage.impact.medium": "MEDIUM",
