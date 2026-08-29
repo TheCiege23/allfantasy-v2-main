@@ -1,0 +1,248 @@
+/* ── "Where you stand" — the cross-league matchup pulse ───────────────────
+ *
+ * ⚠ THE ROW RULE CARRIES `.af-core` ON PURPOSE. af-core.css scopes its
+ * primitives as `.af-core a` — specificity (0,2,0). A bare `.af-mp-row` is
+ * (0,1,0) and LOSES regardless of import order, which has silently dropped a
+ * link's colour in this suite before. Same reason as af-pick-league.css.
+ */
+
+.af-mp {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-mp-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.af-mp-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
+.af-mp-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/*
+  The basis note is not fine print. It states whether the numbers below are
+  points or projections, and a reader who misses it reads the wrong thing.
+*/
+.af-mp-basis {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+.af-mp-gap {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-mp-quiet {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Columns ─────────────────────────────────────────────────────────── */
+
+.af-mp-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.af-mp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-mp-col-head[data-tone='good'] {
+  color: var(--good);
+}
+.af-mp-col-head[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-mp-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Row ─────────────────────────────────────────────────────────────── */
+
+.af-core .af-mp-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.af-core .af-mp-row:hover,
+.af-core .af-mp-row:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+
+/* The opponent's manager avatar — 30px circle, per the handoff. */
+.af-mp-face {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-mp-face--none {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text2);
+}
+
+/* The league crest — 22px squircle. */
+.af-mp-crest {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-mp-crest--none {
+  display: grid;
+  place-items: center;
+  font-size: 8.5px;
+  font-weight: 800;
+  color: var(--text2);
+}
+
+/*
+  Platform tint, per the handoff's crest/avatar colouring. Applied only to the
+  INITIALS fallbacks — a real crest brings its own colour and tinting behind an
+  opaque image would do nothing but confuse the next reader of this file.
+*/
+.af-mp-face--none[data-platform='sleeper'],
+.af-mp-crest--none[data-platform='sleeper'] {
+  background: rgba(147, 90, 255, 0.16);
+  border-color: rgba(147, 90, 255, 0.3);
+  color: #b394ff;
+}
+.af-mp-face--none[data-platform='espn'],
+.af-mp-crest--none[data-platform='espn'] {
+  background: rgba(251, 91, 120, 0.16);
+  border-color: rgba(251, 91, 120, 0.3);
+  color: #fb5b78;
+}
+.af-mp-face--none[data-platform='yahoo'],
+.af-mp-crest--none[data-platform='yahoo'] {
+  background: rgba(148, 88, 255, 0.16);
+  border-color: rgba(148, 88, 255, 0.3);
+  color: #a685ff;
+}
+
+.af-mp-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.af-mp-league {
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-mp-meta {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The projected tag. Quiet, but never absent on a projected row. */
+.af-mp-tag {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font: 700 8px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.af-mp-diff {
+  flex: none;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.af-mp-diff[data-tone='good'] {
+  color: var(--good);
+}
+.af-mp-diff[data-tone='bad'] {
+  color: var(--bad);
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 780px) {
+  /* Stacked, per the mobile frame — not two columns squeezed to nothing. */
+  .af-mp-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-mp {
+    padding: 14px;
+  }
+
+  /* The crest is the first thing to go when 390px has to hold a margin. */
+  .af-mp-crest {
+    display: none;
+  }
+}

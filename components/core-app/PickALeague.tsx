@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import '@/components/core-app/af-pick-league.css'
+import type { ReactNode } from 'react'
 
 /**
  * The no-league state for a league-scoped screen.
@@ -28,13 +29,43 @@ export type PickALeagueProps = {
   /** Why this screen is per-league. Kept from the old empty state — it was correct. */
   blurb: string
   issues: CoreIssue[]
-  leagues: Array<{ id: string; name: string; platform?: string | null }>
+  /**
+   * `imageUrl` and `mark` are the rail's already-resolved crest and letter
+   * fallback.
+   *
+   * ⚠ THEY WERE BEING DISCARDED. The caller passes `rail`, whose rows carry a
+   * resolved `imageUrl` (Sleeper avatar hash already expanded to its CDN URL),
+   * and this prop's type narrowed them away — so every tile in the picker
+   * rendered as text while the same leagues showed real crests one screen over.
+   */
+  leagues: Array<{
+    id: string
+    name: string
+    platform?: string | null
+    imageUrl?: string | null
+    mark?: string
+  }>
+  /**
+   * Rendered between the header and "Needs you first".
+   *
+   * The handoff puts the cross-league pulse ABOVE the queue and the picker and
+   * leaves both otherwise unchanged, so it is composed in rather than forking a
+   * second copy of this screen for one tab.
+   */
+  above?: ReactNode
 }
 
 /** Most severe first, and only rows that name a league — a row we cannot route is noise here. */
 const RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
-export function PickALeague({ tabKey, title, blurb, issues, leagues }: PickALeagueProps) {
+export function PickALeague({
+  tabKey,
+  title,
+  blurb,
+  issues,
+  leagues,
+  above,
+}: PickALeagueProps) {
   const routable = issues
     .filter((i) => i.leagueId != null)
     .sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9))
@@ -49,6 +80,8 @@ export function PickALeague({ tabKey, title, blurb, issues, leagues }: PickALeag
         <h1 className="af-display af-pl-title">{title}</h1>
         <p className="af-pl-blurb">{blurb}</p>
       </header>
+
+      {above}
 
       {routable.length > 0 ? (
         <section className="af-pl-panel" aria-labelledby="af-pl-queue">
@@ -116,6 +149,29 @@ export function PickALeague({ tabKey, title, blurb, issues, leagues }: PickALeag
                 className="af-pl-league"
                 href={`/core/${tabKey}?league=${encodeURIComponent(l.id)}`}
               >
+                {/*
+                  The crest, with the rail's own letter mark as the fallback —
+                  never a broken <img>, and never nothing.
+                */}
+                {l.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    className="af-pl-league-crest"
+                    src={l.imageUrl}
+                    alt=""
+                    width={22}
+                    height={22}
+                    loading="lazy"
+                  />
+                ) : (
+                  <span
+                    className="af-pl-league-crest af-pl-league-crest--none"
+                    data-platform={l.platform ?? undefined}
+                    aria-hidden
+                  >
+                    {l.mark ?? l.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
                 <span className="af-pl-league-name">{l.name}</span>
                 {l.platform ? (
                   <span className="af-platform af-pl-league-plat" data-platform={l.platform}>

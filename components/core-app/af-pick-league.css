@@ -189,11 +189,46 @@
 }
 
 .af-pl-league-name {
+  flex: 1 1 auto;
   font-size: 13px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The league crest on a picker tile, and the letter that stands in for it. */
+.af-pl-league-crest {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-pl-league-crest--none {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-pl-league-crest--none[data-platform='sleeper'] {
+  background: rgba(147, 90, 255, 0.16);
+  border-color: rgba(147, 90, 255, 0.3);
+  color: #b394ff;
+}
+.af-pl-league-crest--none[data-platform='espn'] {
+  background: rgba(251, 91, 120, 0.16);
+  border-color: rgba(251, 91, 120, 0.3);
+  color: #fb5b78;
+}
+.af-pl-league-crest--none[data-platform='yahoo'] {
+  background: rgba(148, 88, 255, 0.16);
+  border-color: rgba(148, 88, 255, 0.3);
+  color: #a685ff;
 }
 
 .af-pl-league-plat {

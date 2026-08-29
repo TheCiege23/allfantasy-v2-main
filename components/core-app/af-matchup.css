@@ -23,6 +23,38 @@
   background: var(--surface2);
 }
 
+/* The league this matchup belongs to — named and crested, not implied. */
+.af-mu-league-crest {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+.af-mu-league-crest--none {
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--text2);
+}
+
+.af-mu-league-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34ch;
+}
+
+.af-mu-week-label {
+  color: var(--faint);
+}
+
 .af-mu-week-state {
   margin-left: auto;
   padding: 3px 9px;
@@ -76,6 +108,12 @@
   font-weight: 900;
   font-size: 16px;
 }
+/* The real manager crest, when the platform published one. */
+.af-mu-crest--img {
+  object-fit: cover;
+  padding: 0;
+}
+
 /* Your own side carries the accent so the eye lands on it first. */
 .af-mu-team[data-you='true'] .af-mu-crest {
   background: var(--accent-soft);
@@ -254,9 +292,232 @@
   color: var(--faint);
 }
 
+/* ── Slot-by-slot board ──────────────────────────────────────────────── */
+
+.af-mu-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.af-mu-board-head,
+.af-mu-board-row,
+.af-mu-board-foot {
+  display: grid;
+  /* The slot label is the spine: both halves are measured against the SAME
+     column, which is what makes the two lineups comparable at a glance. */
+  grid-template-columns: minmax(0, 1fr) 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.af-mu-board-head {
+  padding: 0 4px 2px;
+  color: var(--faint);
+}
+
+.af-mu-board-slot {
+  text-align: center;
+  color: var(--faint);
+}
+
+.af-mu-board-side--right {
+  text-align: right;
+}
+
+.af-mu-board-row {
+  padding: 6px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-mu-slot {
+  text-align: center;
+  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.af-mu-half {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.af-mu-half[data-align='right'] {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+/*
+  A slot the other team simply does not have — one lineup is longer than the
+  other. Left blank rather than filled with a dash, which would read as an
+  empty slot in a roster that has none.
+*/
+.af-mu-half[data-state='none'] {
+  min-height: 34px;
+}
+.af-mu-half[data-state='empty'] .af-mu-half-name {
+  color: var(--bad);
+}
+
+.af-mu-portrait {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+}
+
+.af-mu-face {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+.af-mu-face--none {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text2);
+}
+
+.af-mu-portrait--empty {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px dashed var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-weight: 800;
+}
+
+/* The club crest, overlapped at the corner of the headshot. */
+.af-mu-club {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 0 0 1.5px var(--surface2);
+}
+.af-mu-half[data-align='right'] .af-mu-club {
+  right: auto;
+  left: -3px;
+}
+
+.af-mu-half-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-mu-half-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-mu-half-unresolved {
+  color: var(--warn);
+}
+
+.af-mu-half-sub {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-mu-half-pts {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* An unpriced player is quiet — the dash is an absence, not a score of zero. */
+.af-mu-half-pts[data-unpriced='true'] {
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.af-mu-board-foot {
+  margin-top: 2px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-mu-foot-total {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.af-mu-foot-total--right {
+  text-align: right;
+}
+
+.af-mu-foot-label {
+  text-align: center;
+  color: var(--faint);
+}
+
+/* The basis note leads the board, so it is read before the numbers are. */
+.af-mu-note--lead {
+  margin-top: 0;
+  color: var(--muted);
+}
+
 @media (max-width: 780px) {
   .af-mu-h2h {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /*
+    The board keeps its three columns on a phone — collapsing it to one would
+    stack your starter above theirs and lose the head-to-head, which is the
+    entire point of the section. The portrait and the sub-line go instead.
+  */
+  .af-mu-board-head,
+  .af-mu-board-row,
+  .af-mu-board-foot {
+    grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+    gap: 5px;
+  }
+  .af-mu-portrait,
+  .af-mu-face,
+  .af-mu-portrait--empty {
+    width: 26px;
+    height: 26px;
+  }
+  .af-mu-club {
+    width: 12px;
+    height: 12px;
+  }
+  .af-mu-half-sub {
+    display: none;
+  }
+  .af-mu-half-name {
+    font-size: 11.5px;
+  }
+  .af-mu-half-pts {
+    font-size: 12.5px;
   }
   .af-mu-team[data-align='right'] {
     flex-direction: row;

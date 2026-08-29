@@ -21,6 +21,19 @@ export type SideProjection = {
   /** Starters we could not price — surfaced, never silently treated as zero. */
   unprojected: number
   projectedRemaining: number
+  /**
+   * EVERY starter, in the order the platform stores the lineup, priced or not.
+   *
+   * ⚠ THIS IS NOT `starters` WITH NULLS. `starters` is the priced subset the win
+   * probability model consumes and it must stay that way — a player carried into
+   * the model at zero reads as "certain to score nothing" rather than "unknown".
+   * The slot-by-slot view has the opposite requirement: a starter we cannot
+   * price still occupies a slot, and dropping him would silently shorten one
+   * side's lineup against the other's.
+   *
+   * `null` here means unpriced. It never means zero.
+   */
+  lineup: Array<{ playerId: string; projected: number | null }>
 }
 
 /**
@@ -109,12 +122,14 @@ export async function loadSideProjections(args: {
 
   const build = (ids: string[]): SideProjection => {
     const starters: MatchupPlayer[] = []
+    const lineup: SideProjection['lineup'] = []
     let unprojected = 0
     let projectedRemaining = 0
     for (const id of ids) {
       const proj = isResolvableId(id) ? byPlayer.get(id) : undefined
       if (!proj) {
         unprojected++
+        lineup.push({ playerId: id, projected: null })
         continue
       }
       /*
@@ -130,6 +145,7 @@ export async function loadSideProjections(args: {
         : null
       if (!scored) {
         unprojected++
+        lineup.push({ playerId: id, projected: null })
         continue
       }
       starters.push({
@@ -138,9 +154,15 @@ export async function loadSideProjections(args: {
         actualPoints: 0,
         isFinal: false,
       })
+      lineup.push({ playerId: id, projected: scored.points })
       projectedRemaining += scored.points
     }
-    return { starters, unprojected, projectedRemaining: Math.round(projectedRemaining * 100) / 100 }
+    return {
+      starters,
+      unprojected,
+      projectedRemaining: Math.round(projectedRemaining * 100) / 100,
+      lineup,
+    }
   }
 
   return {
