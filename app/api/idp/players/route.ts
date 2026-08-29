@@ -8,6 +8,7 @@ import { isIdpPosition } from '@/lib/idp-kicker-values'
 import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/idp/idpRouteHelpers'
 import { prisma } from '@/lib/prisma'
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
+import { loadLeagueKickerValue } from '@/lib/kicker-values/loadLeagueKickerValue'
 import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
 import { loadIdpPlayerCard } from '@/lib/idp-projections/idpPlayerCard'
 import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
@@ -63,6 +64,21 @@ export async function GET(req: NextRequest) {
   if (view === 'defense-hub') {
     const payload = await loadDefenseHub({ prisma, leagueId, userId })
     return NextResponse.json(payload)
+  }
+  /*
+   * ⚠ ALSO BEFORE THE `isIdpLeague` GUARD, AND FOR A STRONGER REASON THAN THE HUB ABOVE.
+   *
+   * Kickers have nothing to do with IDP. Measured on production: 19 leagues start a kicker and
+   * only 5 of them score IDP, so gating this behind the guard below would answer for a quarter
+   * of the leagues that actually have the question and 404 the rest.
+   *
+   * It rides this route because the route budget is at its ceiling and this endpoint already
+   * resolves the auth and league scoping the answer needs. A league that starts no kicker gets
+   * `value: null`, which the client renders as nothing at all.
+   */
+  if (view === 'kicker-value') {
+    const payload = await loadLeagueKickerValue({ prisma, leagueId })
+    return NextResponse.json(payload ?? { value: null })
   }
   if (view === 'waiver-board') {
     const lim = Number(searchParams?.get('limit'))
