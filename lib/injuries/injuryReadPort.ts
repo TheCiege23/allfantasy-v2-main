@@ -58,6 +58,63 @@ export const INJURY_STALE_AFTER_HOURS = 36
  */
 export const INJURY_PRIOR_SEASON_AFTER_HOURS = 120 * 24
 
+/**
+ * Sports for which NO feed can currently produce a live injury designation.
+ *
+ * 🛑 "WE HAVE NO SOURCE" AND "NOBODY IS HURT" ARE DIFFERENT ANSWERS, AND AN EMPTY PANEL
+ * TELLS THE READER THE SECOND ONE. On a Saturday in September, a college manager reading
+ * an empty injury list concludes their starters are healthy. That is a false statement
+ * this product cannot support, and it is worse than saying nothing.
+ *
+ * NCAAF, established by exhausting the sources rather than by assuming:
+ *
+ *   Rolling Insights  contracts/rolling-insights/ENDPOINTS.yaml:157 —
+ *                     `injuries: { … NCAAFB: false … }`, and :170 says outright
+ *                     "NCAAFB and NCAABB have NO injuries endpoint. College injury data
+ *                     must come from another source or be omitted with an explicit
+ *                     'not available' flag." This IS that flag.
+ *                     ⚠ GAPS ncaa_injuries_real_404 keeps the question open — the vendor
+ *                     forbids calling it, which is policy rather than a 404 guarantee —
+ *                     and CLAUDE.md forbids probing to settle it. So it stays closed.
+ *   TheSportsDB       no injury endpoint at all (404 on lookupinjuries).
+ *   CollegeFootballData  stats and play-by-play, not injuries.
+ *   ESPN              publishes football/college-football/injuries, and it is fetched
+ *                     every cron tick — but on 2026-08-29, the day the season OPENED, it
+ *                     still returned the same THREE rows it held in preseason, whose
+ *                     reports are dated 2020-11-21, 2022-11-03 and 2022-11-26.
+ *
+ * ⚠ THE ESPN MODULE'S OWN HYPOTHESIS IS NOW DISPROVEN, and it is corrected there: it read
+ * "the college count is small because the season has not started, not because the feed is
+ * thin." The season started and the count did not move. The feed is thin.
+ *
+ * Underneath all of it is a domain fact no integration fixes: the NCAA does not mandate
+ * injury reporting the way the NFL does, so there is no league-wide college equivalent to
+ * publish.
+ *
+ * ⚠ NCAAB IS DELIBERATELY NOT LISTED. Its feed is equally empty today, but basketball is
+ * out of season — the same evidence that convicts NCAAF is unavailable for it, and
+ * claiming otherwise would be the guess this constant exists to prevent. Revisit in
+ * November.
+ *
+ * To remove a sport from here: land a real row and check the REPORT date, not the fetch
+ * date (see claimAsOf above for why those differ).
+ */
+const INJURY_SOURCE_UNAVAILABLE: Record<string, string> = {
+  NCAAF:
+    'No live college injury source. The NCAA does not mandate injury reports, and no feed we carry publishes them — so this is “we cannot know”, not “nobody is hurt”.',
+}
+
+/**
+ * Can any feed answer injury questions for this sport at all?
+ *
+ * Callers should render `reason` instead of an empty list, so a reader can tell a missing
+ * SOURCE from a missing INJURY.
+ */
+export function injuryCoverageFor(sport: string): { covered: boolean; reason: string | null } {
+  const reason = INJURY_SOURCE_UNAVAILABLE[String(sport ?? '').trim().toUpperCase()] ?? null
+  return { covered: reason == null, reason }
+}
+
 /** Source preference when the same player appears from multiple providers. */
 const SOURCE_RANK: Record<string, number> = {
   rolling_insights: 100,

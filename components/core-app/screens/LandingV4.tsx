@@ -42,11 +42,30 @@ import '@/components/core-app/af-landing.css'
  * /core/partners. This page is B2C only.
  */
 
-// Platform names are brands, so they are not translated; only the "soon" chip is.
+/*
+ * Platform names are brands, so they are not translated; only the "soon" chip is.
+ *
+ * ⚠ `state` IS A CLAIM ABOUT PRODUCTION, NOT A ROADMAP. Anything marked `live` here is
+ * being promised to a stranger who has not signed up yet, so it has to be true of the
+ * database, not of the code that exists.
+ *
+ * Yahoo was marked `live` and has NEVER imported a league. Measured 2026-08-29:
+ *
+ *     leagues where platform='yahoo'   0        import_runs provider='yahoo'   0 (ever)
+ *     YahooLeague / YahooConnection    0 / 0    league_auths yahoo row         1, oauthToken NULL
+ *
+ * Sleeper (70 leagues) and ESPN (2 leagues, 2 completed import runs) are genuinely live.
+ * ESPN is thin but real; Yahoo is not real at all.
+ *
+ * ⚠ FLIPPING THIS BACK NEEDS A ROW, NOT A REPAIRED CODE PATH. The check is one query —
+ * `select count(*) from import_runs where provider='yahoo'` — and it must be non-zero
+ * BEFORE this says `live` again. See the note in lib/i18n/landing-copy.ts for the two
+ * rival Yahoo token stores that have to be reconciled first.
+ */
 const PLATFORMS = [
   { name: 'Sleeper', state: 'live' as const },
   { name: 'ESPN', state: 'live' as const },
-  { name: 'Yahoo', state: 'live' as const },
+  { name: 'Yahoo', state: 'soon' as const },
   { name: 'MFL · Fantrax', state: 'soon' as const },
 ]
 
@@ -254,7 +273,9 @@ export function LandingV4({
           {[
             { mark: 'S', platform: 'sleeper', name: 'Dynasty Dragons', meta: 'Sleeper · Dynasty PPR', score: '96.2', against: '–88.4', tag: 'Set flex', tone: 'bad' },
             { mark: 'E', platform: 'espn', name: 'Gridiron Gang', meta: 'ESPN · 0.5 PPR', score: '74.0', against: '–91.6', tag: 'Waivers', tone: 'warn' },
-            { mark: 'Y', platform: 'yahoo', name: 'Waiver Warriors', meta: 'Yahoo · Standard', score: '110.8', against: '–102.1', tag: 'Trade', tone: 'warn' },
+            /* Was a Yahoo league. The card is labelled "example", but an example is still a
+               claim about what you can connect — and Yahoo has never imported one. */
+            { mark: 'S', platform: 'sleeper', name: 'Waiver Warriors', meta: 'Sleeper · Standard', score: '110.8', against: '–102.1', tag: 'Trade', tone: 'warn' },
             { mark: 'E', platform: 'espn', name: 'End Zone Elites', meta: 'ESPN · Keeper', score: '88.4', against: '–71.9', tag: 'All set', tone: 'good' },
           ].map((row) => (
             <div key={row.name} className="af-lp-card-row">

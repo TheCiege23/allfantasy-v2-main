@@ -25,9 +25,32 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
 }[] = [
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
-  // yahoo discovery lists leagues from the user's CONNECTED Yahoo account (OAuth
-  // use_login=1) — no account identifier input; requires Yahoo connected in League Sync.
-  { provider: 'yahoo', label: 'Yahoo', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
+  /*
+   * yahoo: NOT AVAILABLE, flipped 2026-08-29. Discovery lists leagues from the user's
+   * CONNECTED Yahoo account (OAuth use_login=1) — no account identifier input.
+   *
+   * ⚠ IT HAS NEVER IMPORTED A LEAGUE, AND THE FLOW CANNOT SUCCEED AS WIRED. Measured in
+   * production the day this flipped:
+   *
+   *     leagues where platform='yahoo'  0     import_runs provider='yahoo'  0 (ever)
+   *     YahooLeague / YahooConnection   0/0   league_auths yahoo row  1, oauthToken NULL
+   *
+   * The cause is two rival credential stores that cannot see each other. /api/auth/yahoo
+   * — the ONLY connect entry point this screen offers — writes `YahooConnection`, which
+   * has zero rows; the league-import callback writes `league_auths`; and /api/yahoo/leagues
+   * reads only `YahooConnection`. So "Connect Yahoo" returns the user to a screen that
+   * still asks them to connect Yahoo. A loop with no exit is worse than a closed door,
+   * because the person keeps paying for the attempt.
+   *
+   * Left `true` while the landing page stopped advertising Yahoo would have been the worst
+   * of both: no longer promised, still offered.
+   *
+   * ⚠ FLIPPING BACK NEEDS A ROW, NOT A REPAIRED CODE PATH — reconcile the two stores, then
+   * require `select count(*) from import_runs where provider='yahoo'` to be non-zero. The
+   * Yahoo app itself must NOT be deleted or recreated while doing so; its fantasy-read
+   * permission is captured at consent time and cannot be re-granted to a new app.
+   */
+  { provider: 'yahoo', label: 'Yahoo', available: false, supportsDiscovery: true, supportedSports: ['NFL'] },
   /*
    * fantrax: LIVE. Fantrax turned out to have a real read API (`fxea`), so the
    * CSV upload is no longer the only way in — a league id is enough.
