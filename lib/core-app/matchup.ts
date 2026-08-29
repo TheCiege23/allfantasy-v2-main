@@ -637,7 +637,15 @@ export async function getMatchupData(
     ? identityGapNote({
         platform,
         total: lineups.data.filter((s) => s.you && !s.you.empty).length,
-        resolved: lineups.data.filter((s) => s.you && !s.you.empty && s.you.name != null).length,
+        named: lineups.data.filter((s) => s.you && !s.you.empty && s.you.name != null).length,
+        /*
+         * A cell is "priced" when it carries a projection. On this board that is
+         * the number the whole screen exists to compare, so a lineup that is
+         * fully named and wholly unpriced is exactly as unusable as one that is
+         * nameless — and says so, rather than going quiet.
+         */
+        priced: lineups.data.filter((s) => s.you && !s.you.empty && s.you.projected != null)
+          .length,
       })
     : null
 

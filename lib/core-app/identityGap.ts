@@ -33,10 +33,28 @@
  */
 
 export type IdentityCoverage = {
-  /** Ids that resolved to a player row. */
-  resolved: number
-  /** Ids we tried to resolve. Empty slots are NOT counted — a hole is not a miss. */
+  /**
+   * Filled starting slots we attempted.
+   *
+   * ⚠ AN EMPTY SLOT IS NOT COUNTED. A hole in someone's lineup is their
+   * decision, not our failure to identify anyone.
+   */
   total: number
+  /** Of those, how many carry a name — from ANY source. */
+  named: number
+  /**
+   * Of those, how many carry a projection, i.e. are usable by anything
+   * downstream.
+   *
+   * ⚠ NAMED AND PRICED CAME APART THE MOMENT A PROVIDER-NAME FALLBACK EXISTED.
+   * `sports_core_player_provider_identities` names an ESPN athlete but carries
+   * no position and no club (0 of 1,257), so those rows produce a name and
+   * nothing else — no projection, no headshot, no bench-check eligibility.
+   * Keying this note on identity alone would fall silent exactly then, and a
+   * roster of named players with no numbers looks COMPLETE, which is a worse
+   * silence than a roster of blanks.
+   */
+  priced: number
   /** `League.platform`, lowercased. Named in the copy, because it is the cause. */
   platform: string
 }
@@ -54,19 +72,21 @@ const BRIDGED_PLATFORM_NOTE: Record<string, string> = {
  */
 export function identityGapNote(c: IdentityCoverage): string | null {
   if (c.total <= 0) return null
-  if (c.resolved >= c.total) return null
 
   const platform = c.platform.trim().toLowerCase()
   const cause = BRIDGED_PLATFORM_NOTE[platform]
   const platformLabel = platform === 'espn' ? 'ESPN' : platform || 'this platform'
 
   /*
-   * ⚠ TOTAL FAILURE AND PARTIAL FAILURE ARE DIFFERENT FACTS. Zero of twelve is a
-   * statement about the PLATFORM; nine of twelve is a statement about three
-   * players. Rendering them in the same words tells a manager to go looking for
-   * a problem with their roster that does not exist.
+   * ⚠ THREE FAILURES, THREE SENTENCES. "Nobody is named" is a statement about
+   * the PLATFORM; "three are missing" is a statement about three players; and
+   * "everyone is named but nobody can be priced" is a third thing again.
+   * Collapsing any two of them sends a manager looking for a problem with their
+   * roster that does not exist.
    */
-  if (c.resolved === 0) {
+
+  /* 1. Nothing resolved at all — no bridge for this platform. */
+  if (c.named === 0) {
     const because = cause ?? `we hold no id bridge for ${platformLabel}`
     return (
       `None of the ${c.total} players in this lineup could be identified — ${because}. ` +
@@ -76,9 +96,43 @@ export function identityGapNote(c: IdentityCoverage): string | null {
     )
   }
 
-  const missing = c.total - c.resolved
-  return (
-    `${missing} of ${c.total} players in this lineup could not be identified, so their ` +
-    `rows carry no name or projection. The rest are unaffected.`
-  )
+  /*
+   * 2. Everyone named, nobody priceable.
+   *
+   * ⚠ DELIBERATELY NARROW — `named === total` AND `priced === 0`. A roster where
+   * the feed simply misses one or two players is normal and must stay silent, or
+   * the note fires on healthy lineups and gets ignored. This shape is the
+   * systematic one: a provider-name fallback that carries a name and nothing
+   * else.
+   */
+  if (c.named === c.total && c.priced === 0) {
+    /*
+     * ⚠ THE CAUSE IS ONLY NAMED WHERE IT IS KNOWN. The provider-record
+     * explanation is true for ESPN, whose identity rows carry a name and nothing
+     * else. On any other platform the same SHAPE — everyone named, nobody priced
+     * — has a different cause (most often scoring settings we cannot read), and
+     * asserting ESPN's reason there would be a confident wrong answer about why
+     * a manager's screen is empty. So the observable fact is stated either way
+     * and the mechanism only when we hold it.
+     */
+    return cause
+      ? `All ${c.total} players here are named from ${platformLabel}'s own athlete records, ` +
+        `which carry no position or club — so none of them can be projected, given a ` +
+        `headshot, or checked against your bench. The names are real; everything measured ` +
+        `beside them is missing for the same single reason.`
+      : `All ${c.total} players here are named, but none of them could be priced under this ` +
+        `league's scoring — so there are no projections and no bench check. That is one ` +
+        `cause affecting the whole lineup, not ${c.total} separate gaps.`
+  }
+
+  /* 3. A few players, not the platform. */
+  if (c.named < c.total) {
+    const missing = c.total - c.named
+    return (
+      `${missing} of ${c.total} players in this lineup could not be identified, so their ` +
+      `rows carry no name or projection. The rest are unaffected.`
+    )
+  }
+
+  return null
 }

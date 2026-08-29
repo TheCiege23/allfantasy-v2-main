@@ -1156,3 +1156,21 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   gap: 6px;
   max-width: 260px;
 }
+
+/*
+  The identity gap — why rows are nameless AND why the bench check is silent.
+
+  ⚠ WARN-TONED, NOT ERROR-TONED. Nothing failed on the user's side; this is a
+  bridge AllFantasy has not built. Red would send someone to re-sync a league
+  that synced perfectly.
+*/
+.af-mt-identity-gap {
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text2);
+}

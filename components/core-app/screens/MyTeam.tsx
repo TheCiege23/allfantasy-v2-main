@@ -756,7 +756,18 @@ export function MyTeam({ data }: MyTeamProps) {
               />
             ) : null}
 
-            {/* ── Both weekly totals, at the top where they belong ──── */}
+            {/*
+        ⚠ ABOVE THE ROSTER AND ABOVE THE TOTALS, because it explains BOTH — the
+        nameless rows AND the absent bench advice. The bench check skips any
+        player it cannot price, so on a league whose ids do not resolve it runs,
+        finds nothing, and says nothing; that silence would otherwise read as
+        "your lineup is fine".
+      */}
+      {data.identityNote ? (
+        <p className="af-mt-identity-gap">{data.identityNote}</p>
+      ) : null}
+
+      {/* ── Both weekly totals, at the top where they belong ──── */}
             <div className="af-mt-tiles">
               {/*
                 THE TWO TOTALS ARE ONE COMPARISON, NOT TWO FACTS, so they share a
