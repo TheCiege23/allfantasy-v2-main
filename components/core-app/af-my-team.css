@@ -1143,3 +1143,16 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   font-weight: 800;
   color: var(--text);
 }
+
+/*
+  "Fix Lineup in Sleeper ↗" — the one action on a read-only screen.
+
+  Sits in the header beside the team identity rather than at the foot of the
+  roster: the bench check can fire on the first row, and an action a reader has
+  to scroll past sixteen players to find is one they will not take.
+*/
+.af-core .af-mt-source {
+  align-self: flex-start;
+  gap: 6px;
+  max-width: 260px;
+}

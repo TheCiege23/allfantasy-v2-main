@@ -17,6 +17,8 @@ import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
+import { parseDescriptiveId } from './descriptiveId'
+import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -190,7 +192,21 @@ export type LineupSlot = {
 }
 
 export type MyTeamData = {
-  league: { id: string; name: string; platform: string; format: string | null }
+  league: {
+    id: string
+    name: string
+    platform: string
+    format: string | null
+    /**
+     * Where to go to actually CHANGE the lineup.
+     *
+     * ⚠ AllFantasy NEVER WRITES A LINEUP for an imported league — the bench
+     * check tells you what to do and this is where you do it. Resolved
+     * server-side through the one hardened resolver (exact-host HTTPS
+     * allowlist); null for a native league, where there is no source to open.
+     */
+    sourceLink: SourceLink | null
+  }
   team: SectionState<{
     teamName: string
     /** The manager's display name. Imported since day one, never rendered. */
@@ -586,6 +602,51 @@ async function resolvePlayers(
     })
   }
 
+  /*
+   * ── Ids that carry their own answer ────────────────────────────────────
+   *
+   * ⚠ SOME IMPORTERS MINT A DESCRIPTIVE ID WHEN THE PLATFORM GAVE THEM NONE,
+   * and we were throwing the description away. The shape is
+   * `name:Christian McCaffrey:RB:SF` — the name, the position and the club, in
+   * the id itself. It fails the `sleeperId` join like any foreign id, so the
+   * slot rendered "Player we could not identify" over a string that says
+   * exactly who the player is.
+   *
+   * Measured on production 2026-08-29: 12 of 49 starting slots in `manual`
+   * leagues (24%) are this shape.
+   *
+   * ⚠ WHAT THIS DELIBERATELY DOES NOT DO IS INVENT THE REST. There is no
+   * `SportsPlayer` row behind it, so there is no headshot, no projection and no
+   * game context — those stay null rather than being guessed from the name.
+   * Naming him is a fact the id supports; pricing him is not, and a name beside
+   * a fabricated projection would be worse than the em dash it replaced.
+   */
+  for (const id of ids) {
+    if (out.has(id)) continue
+    const described = parseDescriptiveId(id)
+    if (!described) continue
+    out.set(id, {
+      sleeperId: id,
+      name: described.name,
+      position: described.position,
+      team: described.team,
+      sport,
+      imageUrl: null,
+      gameContext: null,
+      kickoff: null,
+      preseason: false,
+      venue: null,
+      injuryStatus: null,
+      ruledOut: false,
+      projectedPoints: null,
+      afProjectedPoints: null,
+      indoors: null,
+      weather: null,
+      market: null,
+      onBye: false,
+    })
+  }
+
   return out
 }
 
@@ -602,6 +663,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
        * an empty result instead of an error.
        */
       platformLeagueId: true,
+      /* Only for the ESPN source link, which takes a seasonId. */
+      season: true,
       // Superflex and dynasty both change which value market applies.
       isDynasty: true,
       starters: true,
@@ -616,6 +679,14 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,
+      sourceLink: resolveSourceLink({
+        platform: league.platform,
+        sourceLeagueId: league.platformLeagueId,
+        leagueName: leagueDisplayName(league.name),
+        season: league.season,
+        /* "Fix Lineup in <league>" — the action this screen is actually about. */
+        action: 'lineup',
+      }),
     },
     /*
      * The default for the early-return paths only — a roster we never found cannot

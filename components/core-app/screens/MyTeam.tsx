@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
+import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
 import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
@@ -740,6 +741,20 @@ export function MyTeam({ data }: MyTeamProps) {
                   : ` · ${data.team.data.teamCount} teams`}
               </div>
             </div>
+
+            {/*
+              ⚠ WHERE THE BENCH CHECK ACTUALLY GETS ACTED ON. This screen can
+              tell you the wrong player is starting; it can never fix it, because
+              AllFantasy does not write lineups for an imported league. Without
+              this the advice has nowhere to go. Resolved server-side through the
+              one hardened resolver, and absent entirely for a native league.
+            */}
+            {data.league.sourceLink ? (
+              <SourceActionLink
+                link={data.league.sourceLink}
+                className="af-btn af-mt-source"
+              />
+            ) : null}
 
             {/* ── Both weekly totals, at the top where they belong ──── */}
             <div className="af-mt-tiles">

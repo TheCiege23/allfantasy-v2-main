@@ -2,6 +2,7 @@
 
 import '@/components/core-app/af-matchup.css'
 import { teamLogoUrl } from '@/lib/media-url'
+import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -284,6 +285,20 @@ export function Matchup({ data }: MatchupProps) {
         ) : (
           <span className="af-mu-unavailable">{data.week.reason}</span>
         )}
+
+        {/*
+          ⚠ THE ONLY PLACE ANYTHING CAN ACTUALLY CHANGE. AllFantasy is read-only
+          for an imported league, so a screen that shows a losing matchup and no
+          way to act on it is a dead end. The href is resolved server-side
+          through one hardened resolver — never built here — and the component
+          renders nothing at all for a native league.
+        */}
+        {data.league.sourceLink ? (
+          <SourceActionLink
+            link={data.league.sourceLink}
+            className="af-btn af-mu-source"
+          />
+        ) : null}
       </header>
 
       {/* ── Head to head ────────────────────────────────────────────── */}

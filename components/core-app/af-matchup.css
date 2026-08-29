@@ -550,3 +550,14 @@
     gap: 2px;
   }
 }
+
+/*
+  "View Matchup in Sleeper ↗" — the read-only escape hatch on the week banner.
+  Sits after the state chip, which already carries the `margin-left:auto` that
+  pushes the pair right. A second auto margin here would split the free space
+  between them and float the two apart mid-banner.
+*/
+.af-core .af-mu-source {
+  gap: 6px;
+  max-width: 260px;
+}

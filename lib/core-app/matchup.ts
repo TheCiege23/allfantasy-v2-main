@@ -7,6 +7,7 @@ import { loadSideProjections, winProbabilityFor } from './matchupProjections'
 import { myRosterCandidates } from './myRoster'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
+import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 
 /**
  * A crest we can actually render, or null.
@@ -162,6 +163,15 @@ export type MatchupData = {
     platform: string
     /** The league crest, when the platform published one. */
     logoUrl: string | null
+    /**
+     * Where to go to actually CHANGE something.
+     *
+     * ⚠ AllFantasy is READ-ONLY for an imported league, so every action ends on
+     * the source platform. Resolved server-side through the one hardened
+     * resolver — an exact-host HTTPS allowlist, never a URL built at the call
+     * site. Null for a native league, where there is no source to open.
+     */
+    sourceLink: SourceLink | null
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
   sides: SectionState<{ you: MatchupSide; opponent: MatchupSide }>
@@ -235,6 +245,13 @@ export async function getMatchupData(
       name: leagueDisplayName(league.name),
       platform,
       logoUrl: asImageUrl(league.logoUrl, platform) ?? asImageUrl(league.avatarUrl, platform),
+      sourceLink: resolveSourceLink({
+        platform: league.platform,
+        sourceLeagueId: league.platformLeagueId,
+        leagueName: leagueDisplayName(league.name),
+        season: league.season,
+        action: 'matchup',
+      }),
     },
     lineups: {
       available: false as const,
