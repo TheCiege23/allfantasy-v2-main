@@ -1,6 +1,10 @@
 'use client';
 
-import type { ResolvedPlayerStats, PlayerComparisonScores } from '@/lib/player-comparison-lab/types';
+import type {
+  ResolvedPlayerStats,
+  PlayerComparisonScores,
+  MarketAdpSignal,
+} from '@/lib/player-comparison-lab/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export interface PlayerStatCardsProps {
@@ -11,6 +15,27 @@ export interface PlayerStatCardsProps {
 function formatVal(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return '—';
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+/**
+ * The provenance suffix beside a Market ADP.
+ *
+ * 🛑 IT NAMES THE SOURCES AT EVERY COUNT, NOT JUST AT ONE. Rendering a bare "(5 sources)"
+ * would assert a current five-platform agreement that does not exist: four of the six sources
+ * behind `adp_data` come from `data/nfl-adp-multiplatform.csv`, frozen on 2026-03-08, and only
+ * `ffc` is a live fetch. Naming them lets the reader see that for themselves.
+ *
+ * The scoring basis is included because it is NOT the league's — the blended standard board is
+ * requested on purpose (it is the only one carrying both veterans and rookies), so a PPR
+ * comparison would otherwise show a standard-scoring ADP with nothing saying so.
+ */
+function formatAdpProvenance(m: MarketAdpSignal): string {
+  const named = m.providers.length > 0 ? m.providers.join(', ') : null;
+  const count =
+    m.providerCount == null
+      ? 'sources unknown'
+      : `${m.providerCount} ${m.providerCount === 1 ? 'source' : 'sources'}`;
+  return `(${named ? `${count}: ${named}` : count} · ${m.format}/${m.scoring})`;
 }
 
 export function PlayerStatCards({ players, scores }: PlayerStatCardsProps) {
@@ -42,6 +67,15 @@ export function PlayerStatCards({ players, scores }: PlayerStatCardsProps) {
                 <span className="text-white/60">Internal ADP</span>
                 <span className="text-white">{formatVal(p.internalAdp)}</span>
               </div>
+              {p.marketAdp && (
+                <div className="flex justify-between">
+                  <span className="text-white/60">Market ADP</span>
+                  <span className="text-white">
+                    {p.marketAdp.adp.toFixed(1)}
+                    <span className="ml-1 text-white/50">{formatAdpProvenance(p.marketAdp)}</span>
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-white/60">Rank</span>
                 <span className="text-white">{p.projection?.rank ?? '—'}</span>

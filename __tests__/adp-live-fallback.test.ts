@@ -128,6 +128,49 @@ describe('getLiveAdpByName', () => {
     expect(findMany).toHaveBeenCalledTimes(1)
   })
 
+  it('shares the in-flight load so concurrent callers do not each scan the board', async () => {
+    /*
+     * The TTL cache is written only AFTER both awaits resolve, so it cannot help callers that
+     * miss simultaneously — and every caller here fans out: the comparison lab resolves up to
+     * 6 players through Promise.all, lib/agents/anthropic-pipeline.ts over an unbounded list.
+     * Without in-flight promise sharing this was N full loads of ~2,935 rows.
+     */
+    const [a, b, c] = await Promise.all([
+      getLiveAdpByName(),
+      getLiveAdpByName(),
+      findLiveAdp('Rookie Receiver'),
+    ])
+    expect(findFirst).toHaveBeenCalledTimes(1)
+    expect(findMany).toHaveBeenCalledTimes(1)
+    expect(a).toBe(b) // literally the same Map, not two equal ones
+    expect(c?.adp).toBe(84.5)
+  })
+
+  it('reports an unstated provider count as null rather than inventing 1', async () => {
+    findMany.mockResolvedValue([row({ providerCount: null, providerBreakdown: null })])
+    const entry = await findLiveAdp('Rookie Receiver')
+    expect(entry?.providerCount).toBeNull()
+    expect(entry?.providers).toEqual([])
+    // An unknown count is not corroboration, so there is still no spread to report.
+    expect(entry?.adpSpread).toBeNull()
+  })
+
+  it('prefers a row that states its provenance over one that does not', async () => {
+    findMany.mockResolvedValue([
+      row({ adp: 10, providerCount: null, providerBreakdown: null }),
+      row({ adp: 55, providerCount: 2, adpSpread: 4, providerBreakdown: { ffc: 53, espn: 57 } }),
+    ])
+    const entry = await findLiveAdp('Rookie Receiver')
+    expect(entry?.providerCount).toBe(2)
+    expect(entry?.adp).toBe(55)
+  })
+
+  it('carries the board basis, which is not the caller league scoring', async () => {
+    const entry = await findLiveAdp('Rookie Receiver')
+    expect(entry?.format).toBe('redraft')
+    expect(entry?.scoring).toBe('standard')
+  })
+
   it('reads the blended redraft board by default, which is a superset of the CSV', async () => {
     await getLiveAdpByName()
     expect(findFirst).toHaveBeenCalledWith(

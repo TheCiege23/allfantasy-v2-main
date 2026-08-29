@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { findLiveAdp } from '@/lib/adp/liveAdpFallback';
 import { findMultiADP } from '@/lib/multi-platform-adp';
 import { normalizePlayerName } from '@/lib/team-abbrev';
 import { type FantasyCalcSettings } from '@/lib/fantasycalc';
@@ -16,6 +17,7 @@ import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db';
 import type {
   ResolvedPlayerStats,
   HistoricalSeasonRow,
+  MarketAdpSignal,
   ProjectionRow,
   ScoringFormat,
   LeagueScoringSettings,
@@ -145,10 +147,11 @@ export async function resolvePlayerStats(
   );
 
   const historicalResolved = await resolveHistorical(name, sport);
-  const [projection, internalAdp, internalProjectionPoints, injury, sleeperSignal, scheduleDifficultyScore] =
+  const [projection, internalAdp, marketAdp, internalProjectionPoints, injury, sleeperSignal, scheduleDifficultyScore] =
     await Promise.all([
       resolveProjection(name, settings, historicalResolved.rows, sport),
       resolveInternalAdp(name, sport, options?.scoringFormat),
+      resolveMarketAdp(name, sport),
       resolveInternalProjectionPoints(name, sport, historicalResolved.rollingInsightsPlayerId),
       resolveInjurySignal(name, sport),
       resolveSleeperSignal(name, sport, historicalResolved.team),
@@ -159,14 +162,26 @@ export async function resolvePlayerStats(
       ),
     ]);
 
+  /*
+   * `marketAdp` sits LAST, after the CSV, on purpose: it is the fallback for the players the
+   * CSV predates, not a replacement for it. Its identity comes from an `adp_data` row keyed to
+   * a player id, so unlike the PlayerIdentityMap route it cannot hand back a name-twin's
+   * position — which matters, because `resolveSleeperSignal` disambiguates with BOTH hints
+   * null for any player with no history (every 2026 rookie), against 178 known NFL homonym
+   * groups.
+   */
   const fallbackPosition =
     historicalResolved.position ??
     projection?.position ??
-    (findMultiADP(name)?.position ?? null);
+    (findMultiADP(name)?.position ?? null) ??
+    marketAdp?.position ??
+    null;
   const fallbackTeam =
     historicalResolved.team ??
     projection?.team ??
-    (findMultiADP(name)?.team ?? null);
+    (findMultiADP(name)?.team ?? null) ??
+    marketAdp?.team ??
+    null;
 
   const adjustedProjection = applyScoringAdjustment(
     projection?.redraftValue ?? internalProjectionPoints,
@@ -202,6 +217,7 @@ export async function resolvePlayerStats(
     projection: mergedProjection,
     internalAdp,
     sleeperAdp: sleeperSignal.sleeperAdp,
+    marketAdp,
     internalProjectionPoints:
       adjustedProjection ?? internalProjectionPoints ?? mergedProjection?.redraftValue ?? null,
     injury,
@@ -211,6 +227,7 @@ export async function resolvePlayerStats(
       sleeper: sleeperSignal.available,
       espnInjuryFeed: injury.source === 'espn',
       internalAdp: internalAdp != null,
+      marketAdp: marketAdp != null,
       internalProjections: internalProjectionPoints != null,
       leagueScoringSettings:
         options?.leagueScoringSettings != null &&
@@ -336,6 +353,36 @@ async function resolveInternalProjectionPoints(
     select: { projectedPointsYear1: true },
   });
   return projection?.projectedPointsYear1 ?? null;
+}
+
+/**
+ * Draft cost from `adp_data`, for the players `findMultiADP`'s CSV predates.
+ *
+ * ⚠ NFL ONLY, and that is not a stub — `lib/adp/liveAdpFallback.ts` defaults to the NFL
+ * consensus board, and asking it for another sport would return an empty map and a null here
+ * anyway. Guarding makes the no-op explicit and skips the query.
+ *
+ * ⚠ THE LEAGUE'S SCORING IS DELIBERATELY NOT PASSED THROUGH. `redraft`/`standard` is the
+ * BLENDED board — it carries the CSV-derived veterans and ffc's rookies together — whereas
+ * `redraft`/`ppr` is pure ffc and would drop most veterans. The superset is the right board;
+ * the price of that choice is that the basis must be disclosed wherever the number renders,
+ * which is why {@link MarketAdpSignal} carries `scoring`.
+ */
+async function resolveMarketAdp(playerName: string, sport: string): Promise<MarketAdpSignal | null> {
+  if (normalizeToSupportedSport(sport) !== 'NFL') return null;
+  const entry = await findLiveAdp(playerName).catch(() => null);
+  if (!entry) return null;
+  return {
+    adp: entry.adp,
+    providerCount: entry.providerCount,
+    providers: entry.providers,
+    season: entry.season,
+    week: entry.week,
+    format: entry.format,
+    scoring: entry.scoring,
+    position: entry.position,
+    team: entry.team,
+  };
 }
 
 async function resolveInternalAdp(

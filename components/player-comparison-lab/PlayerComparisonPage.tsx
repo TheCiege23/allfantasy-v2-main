@@ -478,6 +478,7 @@ export function PlayerComparisonPage() {
               <p>Sleeper: {comparison.sourceCoverage.sleeper ? 'yes' : 'no'}</p>
               <p>ESPN injuries: {comparison.sourceCoverage.espnInjuryFeed ? 'yes' : 'no'}</p>
               <p>Internal ADP: {comparison.sourceCoverage.internalAdp ? 'yes' : 'no'}</p>
+              <p>Market ADP: {comparison.sourceCoverage.marketAdp ? 'yes' : 'no'}</p>
               <p>Internal projections: {comparison.sourceCoverage.internalProjections ? 'yes' : 'no'}</p>
               <p>League scoring settings: {comparison.sourceCoverage.leagueScoringSettings ? 'yes' : 'no'}</p>
             </CardContent>
