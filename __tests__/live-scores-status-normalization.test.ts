@@ -253,3 +253,55 @@ describe('scheduled captions', () => {
     expect(dbRowToLiveScore(live).statusDetail).toBe('Q2 5:43')
   })
 })
+
+/**
+ * The last unguarded fake zero on this path.
+ *
+ * `LiveScoreRow.homeScore` was typed `number` while the column behind it is
+ * nullable, so `dbRowToLiveScore` wrote `?? 0` to satisfy the type — and every
+ * consumer received a 0-0 result for a game whose score we simply do not have.
+ * Measured 2026-08-29: 47 NFL rows carry status `final` with both scores NULL,
+ * 14 of them inside the live window.
+ *
+ * The type was the outlier, not the data. THREE consumers were already written
+ * for the null this type forbade: estimateWinProbability returns null on it,
+ * SportsScheduleContextProvider writes `?? null` for Chimmy, and
+ * playoffSeriesSyncService declares `number | null` and guards on it.
+ */
+describe('a score we do not have', () => {
+  const finished = (home: number | null, away: number | null) => ({
+    externalId: 'evt-9',
+    homeTeam: 'BUF',
+    awayTeam: 'PIT',
+    homeScore: home,
+    awayScore: away,
+    status: 'final',
+    startTime: new Date('2026-08-28T03:00:00.000Z'),
+    venue: null,
+    week: 1,
+    season: 2026,
+    fetchedAt: new Date('2026-08-29T12:15:00.000Z'),
+  })
+
+  it('carries a missing score through as null, not zero', () => {
+    const mapped = dbRowToLiveScore(finished(null, null))
+    expect(mapped.homeScore).toBeNull()
+    expect(mapped.awayScore).toBeNull()
+    // Still a final — we know it ended, we just cannot say how.
+    expect(mapped.completed).toBe(true)
+  })
+
+  it('keeps a real 0-0 as the result it is', () => {
+    // POSITIVE CONTROL. Zero and absent are different facts, and the whole
+    // point of the change is that the type can now tell them apart.
+    const mapped = dbRowToLiveScore(finished(0, 0))
+    expect(mapped.homeScore).toBe(0)
+    expect(mapped.awayScore).toBe(0)
+  })
+
+  it('does not invent the other half of a one-sided score', () => {
+    const mapped = dbRowToLiveScore(finished(52, null))
+    expect(mapped.homeScore).toBe(52)
+    expect(mapped.awayScore).toBeNull()
+  })
+})

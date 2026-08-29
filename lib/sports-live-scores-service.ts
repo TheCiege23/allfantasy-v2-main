@@ -165,13 +165,28 @@ export interface LiveScoreRow {
   homeTeamId?: string | null
   homeTeamFull: string
   homeLogo: string
-  homeScore: number
+  /**
+   * NULL means "we have no score for this game", NEVER zero.
+   *
+   * ⚠ THIS FIELD WAS `number`, AND THAT TYPE FORCED THE LIE. The column it is
+   * built from is nullable, so `dbRowToLiveScore` had to write `?? 0` to
+   * satisfy it — the last unguarded fake zero on this path. Measured
+   * 2026-08-29: 47 NFL rows carry status `final` with both scores NULL, 14 of
+   * them inside the live window, and every one arrived at a consumer as a 0-0
+   * result. `SportsScheduleContextProvider` was already writing
+   * `row.homeScore ?? null` for Chimmy — dead code against the old type, and a
+   * plain statement that the author expected a null this type refused to allow.
+   *
+   * A 0-0 is a RESULT. Null is "not played, or not captured". Every other
+   * consumer of this shape was already null-safe; the type was the outlier.
+   */
+  homeScore: number | null
   homeRecord: string | null
   awayTeam: string
   awayTeamId?: string | null
   awayTeamFull: string
   awayLogo: string
-  awayScore: number
+  awayScore: number | null
   awayRecord: string | null
   status: string
   statusDetail: string
@@ -964,12 +979,14 @@ export function dbRowToLiveScore(g: {
     homeTeam: g.homeTeam,
     homeTeamFull: g.homeTeam,
     homeLogo: '',
-    homeScore: g.homeScore ?? 0,
+    // Carried through, not defaulted. The column is nullable because the score
+    // genuinely can be unknown; `?? 0` turned that into a 0-0 result.
+    homeScore: g.homeScore,
     homeRecord: null,
     awayTeam: g.awayTeam,
     awayTeamFull: g.awayTeam,
     awayLogo: '',
-    awayScore: g.awayScore ?? 0,
+    awayScore: g.awayScore,
     awayRecord: null,
     status: CANONICAL_TO_ESPN_STATUS[state],
     // The cached row carries no clock, so the raw string is the better caption
