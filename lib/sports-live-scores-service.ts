@@ -10,7 +10,7 @@ import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 import { normalizeGameStatus, type CanonicalGameStatus } from '@/lib/scores/gameScoreProviders'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
-import { resolveCollegeTeamLogo } from '@/lib/sport-teams/collegeTeamIdentity'
+import { resolveCollegeTeam } from '@/lib/sport-teams/collegeTeamIdentity'
 
 export const LIVE_SCORES_FRESHNESS_MS = 60 * 1000
 
@@ -873,21 +873,68 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
  * leave the logo exactly as it was — an empty crest is cosmetic, a scoreboard
  * that fails to render is not.
  */
-async function withCollegeTeamLogos(
+/**
+ * Fill crest and school name from the team directory, for rows that lack them.
+ *
+ * ⚠ FILLS GAPS, NEVER OVERWRITES. A live ESPN row already carries both, and its
+ * spelling is the one the rest of the card is built from.
+ *
+ * The name half exists because a database row has no full name to carry:
+ * `dbRowToLiveScore` sets `homeTeamFull` from `homeTeam`, and `espn_live` stores
+ * abbreviations — so the seven fixtures restored by `withOmittedFixtures` read
+ * "MEM", "NMSU", "JVST" beside a live row reading "San José State Spartans".
+ * The directory has already been consulted for the crest at that point, and the
+ * resolved record carries `school`; not using it was leaving the answer on the
+ * floor. `homeTeamFull === homeTeam` is the tell that a row never had a
+ * distinct full name, rather than one that happens to match.
+ */
+async function withCollegeTeamIdentity(
   sport: LeagueSport,
   scores: LiveScoreRow[],
 ): Promise<LiveScoreRow[]> {
   if (sport !== 'NCAAF' || scores.length === 0) return scores
-  if (scores.every((s) => s.homeLogo && s.awayLogo)) return scores
+  const incomplete = scores.some(
+    (s) =>
+      !s.homeLogo ||
+      !s.awayLogo ||
+      s.homeTeamFull === s.homeTeam ||
+      s.awayTeamFull === s.awayTeam,
+  )
+  if (!incomplete) return scores
 
   const index = await loadCollegeTeamIndex()
   if (!index) return scores
 
-  return scores.map((s) => ({
-    ...s,
-    homeLogo: s.homeLogo || resolveCollegeTeamLogo(s.homeTeamFull || s.homeTeam, index) || '',
-    awayLogo: s.awayLogo || resolveCollegeTeamLogo(s.awayTeamFull || s.awayTeam, index) || '',
-  }))
+  return scores.map((s) => {
+    const home = resolveCollegeTeam(s.homeTeamFull || s.homeTeam, index)
+    const away = resolveCollegeTeam(s.awayTeamFull || s.awayTeam, index)
+    return {
+      ...s,
+      homeLogo: s.homeLogo || home?.logo || '',
+      awayLogo: s.awayLogo || away?.logo || '',
+      homeTeamFull:
+        s.homeTeamFull !== s.homeTeam ? s.homeTeamFull : (home?.school ?? s.homeTeamFull),
+      awayTeamFull:
+        s.awayTeamFull !== s.awayTeam ? s.awayTeamFull : (away?.school ?? s.awayTeamFull),
+    }
+  })
+}
+
+/**
+ * The stored status, but only when it is something worth showing a person.
+ *
+ * ⚠ OUR OWN VOCABULARY IS A MACHINE TOKEN TOO. This branch exists to keep a
+ * human-readable vendor string ("Q2 5:43", "8/27 - 7:00 PM EDT") rather than
+ * flatten it to a label — but it only excluded ESPN's `STATUS_*` spelling, so
+ * the canonical lowercase words this module WRITES sailed straight through and
+ * a card read "scheduled". Both spellings are tokens; neither belongs on screen.
+ */
+function rawStatusCaption(status: string | null, state: CanonicalGameStatus): string | null {
+  const raw = status?.trim()
+  if (!raw) return null
+  if (raw === CANONICAL_TO_ESPN_STATUS[state]) return null
+  if (Object.hasOwn(CANONICAL_STATUS_LABEL, raw)) return null
+  return raw
 }
 
 export function dbRowToLiveScore(g: {
@@ -928,10 +975,16 @@ export function dbRowToLiveScore(g: {
     // The cached row carries no clock, so the raw string is the better caption
     // when it is human-readable ("Q2 5:43", "8/27 - 7:00 PM EDT"). Fall back to
     // the canonical label rather than echoing a machine token at the user.
+    //
+    // ⚠ A SCHEDULED ROW IS THE CASE THAT FELL THROUGH. Its stored status is the
+    // literal token `scheduled`, which differs from `STATUS_SCHEDULED`, so the
+    // pass-through branch printed a machine token — the exact thing the comment
+    // above says it avoids. Worse, it hid a kickoff time we hold: seven
+    // restored fixtures read "scheduled" beside a live row reading
+    // "8/29 - 3:00 PM EDT". The time we know is the better caption.
     statusDetail:
-      g.status && g.status !== CANONICAL_TO_ESPN_STATUS[state]
-        ? g.status
-        : CANONICAL_STATUS_LABEL[state],
+      (state === 'scheduled' ? kickoffCaption(g.startTime) : null) ??
+      (rawStatusCaption(g.status, state) ?? CANONICAL_STATUS_LABEL[state]),
     period: 0,
     clock: '0:00',
     completed: state === 'final',
@@ -1096,6 +1149,40 @@ const ET_HOUR_MINUTE = new Intl.DateTimeFormat('en-US', {
   hourCycle: 'h23',
 })
 
+/**
+ * ESPN's own caption format, so a row rebuilt from the database reads like a
+ * row the live feed supplied. Eastern because that is what the live feed's
+ * string already says, and a scoreboard that mixes zones is worse than one that
+ * picks the sport's.
+ *
+ * ⚠ RETURNS NULL FOR AN UNANNOUNCED KICKOFF rather than printing midnight. A
+ * placeholder that reached this point unrepaired — no schedule feed knew the
+ * time — must not be dressed up as "12:00 AM EDT"; the caller falls back to
+ * "Scheduled", which is what we actually know. The check is deliberately
+ * sport-independent: this asks whether the timestamp is worth PRINTING, and a
+ * genuine midnight-Eastern kickoff in any sport is rare enough that showing
+ * "Scheduled" for one costs nothing next to inventing a time for the others.
+ */
+function kickoffCaption(at: Date | null): string | null {
+  if (!at || Number.isNaN(at.getTime())) return null
+  if (ET_HOUR_MINUTE.format(at) === '00:00') return null
+  const part: Record<string, string> = {}
+  for (const p of ET_KICKOFF_CAPTION.formatToParts(at)) part[p.type] = p.value
+  if (!part.month || !part.day || !part.hour || !part.minute) return null
+  const zone = part.timeZoneName ? ` ${part.timeZoneName}` : ''
+  const period = part.dayPeriod ? ` ${part.dayPeriod}` : ''
+  return `${part.month}/${part.day} - ${part.hour}:${part.minute}${period}${zone}`
+}
+
+const ET_KICKOFF_CAPTION = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZoneName: 'short',
+})
+
 /** True when a start time is ESPN's "kickoff not announced" placeholder. */
 export function isPlaceholderKickoff(sport: string, startTime: Date | null): boolean {
   if (!startTime || Number.isNaN(startTime.getTime())) return false
@@ -1235,7 +1322,7 @@ export async function getCachedLiveScoresForSport(options: {
   // That blend is how one fixture rendered once per feed, and how a dead feed's
   // 0-0 rows sat beside a live one's real score.
   const useRows = pickFreshestSourceRows(cachedGames)
-  const scores = await withCollegeTeamLogos(sport, useRows.map(dbRowToLiveScore))
+  const scores = await withCollegeTeamIdentity(sport, useRows.map(dbRowToLiveScore))
   const now = Date.now()
   const latestFetched =
     cachedGames
@@ -1308,7 +1395,7 @@ export async function withOmittedFixtures(
   if (omitted.length === 0) return live
   // Restored rows come from the database, so they need the crest pass the
   // provider rows already got upstream.
-  return [...live, ...(await withCollegeTeamLogos(sport, omitted.map(dbRowToLiveScore)))]
+  return [...live, ...(await withCollegeTeamIdentity(sport, omitted.map(dbRowToLiveScore)))]
 }
 
 /**
@@ -1419,7 +1506,7 @@ export async function getLiveScoresForSport(options: {
     // Same rule as the cached-only reader: one source, the freshest that ranks
     // highest, never a blend across feeds.
     const useRows = pickFreshestSourceRows(cachedGames)
-    scores = await withCollegeTeamLogos(sport, useRows.map(dbRowToLiveScore))
+    scores = await withCollegeTeamIdentity(sport, useRows.map(dbRowToLiveScore))
     source = useRows[0]?.source === 'rolling_insights' ? 'db_cache_ri' : 'db_cache'
     fetchedAt = useRows[0]?.fetchedAt?.toISOString() ?? null
   }
