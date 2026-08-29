@@ -18,7 +18,9 @@ import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
+import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { identityGapNote } from './identityGap'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -220,6 +222,16 @@ export type MyTeamData = {
     teamCount: number
   }>
   starters: SectionState<LineupSlot[]>
+  /**
+   * Why the roster carries unnamed rows, said ONCE.
+   *
+   * ⚠ IT ALSO EXPLAINS A SILENCE. The bench check skips any player it cannot
+   * price, so on an ESPN league — where 0 of 145 starter ids resolve across
+   * production — it runs and finds nothing, and the screen shows no bench
+   * advice at all. Without this note that silence reads as "your lineup is
+   * fine". Null when every id resolved.
+   */
+  identityNote: string | null
   bench: SectionState<LineupPlayer[]>
   /**
    * Injured reserve and taxi squad, kept apart.
@@ -348,7 +360,16 @@ async function resolvePlayers(
    * line. Null when the league never recorded any — in which case there is no
    * league-specific number to compute and the screen shows only the generic one.
    */
-  scoringSettings: Record<string, unknown> | null
+  scoringSettings: Record<string, unknown> | null,
+  /**
+   * `League.platform`, for the last-resort name lookup.
+   *
+   * ⚠ IT IS THE PROVIDER KEY, not decoration. Ids that fail the `sleeperId`
+   * join are looked up against THAT provider's own athlete records, and asking
+   * the wrong provider for an id is how a numeric collision puts a stranger in
+   * someone's lineup — see `providerIdentityNames.ts`.
+   */
+  platform: string,
 ): Promise<Map<string, LineupPlayer>> {
   /*
    * ⚠ IN AN IDP LEAGUE THE GENERIC NUMBER IS NOT A PROJECTION OF ANYTHING for a
@@ -621,6 +642,54 @@ async function resolvePlayers(
    * Naming him is a fact the id supports; pricing him is not, and a name beside
    * a fabricated projection would be worse than the em dash it replaced.
    */
+  /*
+   * ── The provider's own name, for ids we hold no player row for ──────────
+   *
+   * ⚠ RUNS BEFORE THE DESCRIPTIVE PARSE ONLY IN THE SENSE THAT BOTH ARE
+   * FALLBACKS; they cannot collide, because a `name:` id is never a provider
+   * athlete id. Both fill the same gap from different sources, and both stop at
+   * the name.
+   *
+   * This is the ESPN case: 98 of 98 starting-slot ids on production ESPN
+   * rosters have a `display_name` here, and none of them resolved before.
+   */
+  const unresolvedIds = ids.filter((id) => !out.has(id))
+  const providerNames = unresolvedIds.length
+    ? await lookupProviderIdentityNames(platform, sport, unresolvedIds).catch(
+        () => new Map<string, { name: string }>(),
+      )
+    : new Map<string, { name: string }>()
+
+  for (const [id, named] of providerNames) {
+    if (out.has(id)) continue
+    out.set(id, {
+      sleeperId: id,
+      name: named.name,
+      /*
+       * ⚠ NULL, NOT INFERRED. These rows carry no position and no team — 0 of
+       * 1,257 — so everything below the name stays absent. A position guessed
+       * from a name is exactly the kind of confident wrong answer that puts a
+       * running back in a TE slot and silently breaks the bench check.
+       */
+      position: null,
+      team: null,
+      sport,
+      imageUrl: null,
+      gameContext: null,
+      kickoff: null,
+      preseason: false,
+      venue: null,
+      injuryStatus: null,
+      ruledOut: false,
+      projectedPoints: null,
+      afProjectedPoints: null,
+      indoors: null,
+      weather: null,
+      market: null,
+      onBye: false,
+    })
+  }
+
   for (const id of ids) {
     if (out.has(id)) continue
     const described = parseDescriptiveId(id)
@@ -731,6 +800,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     }
     return {
       ...base,
+      /* No claimed team, so no lineup was read and no id was attempted. */
+      identityNote: null,
       team: unknown,
       starters: unknown,
       bench: unknown,
@@ -783,6 +854,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     }
     return {
       ...base,
+      /* No roster rows, so nothing was resolved and nothing failed to resolve. */
+      identityNote: null,
       team,
       starters: noRoster,
       bench: noRoster,
@@ -829,7 +902,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     sport,
     projectionWeek,
     sportsWeek,
-    scoringSettings
+    scoringSettings,
+    String(league.platform ?? '')
   )
 
   // Sleeper encodes an unfilled starting slot as "0" — that is the handoff's
@@ -1218,6 +1292,26 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       starters.length > 0
         ? { available: true, data: starters }
         : { available: false, reason: 'no starting lineup recorded on this roster' },
+    /*
+     * Counted over filled starting slots only. An EMPTY slot is a hole in the
+     * lineup, not an id we failed to resolve, and folding the two together
+     * would report a manager's own unfilled FLEX as our identity failure.
+     */
+    identityNote: identityGapNote({
+      platform: String(league.platform ?? 'manual').toLowerCase(),
+      total: starters.filter((sl) => !sl.empty).length,
+      named: starters.filter((sl) => !sl.empty && sl.player != null).length,
+      /*
+       * ⚠ PRICED, NOT MERELY NAMED — and this distinction is the whole reason
+       * the note survives the provider-name bridge. An id named from
+       * `providerIdentityNames` carries no position and no club, so it yields no
+       * projection and the bench check skips it entirely. Counting those as
+       * resolved would silence this note at the exact moment a manager is
+       * looking at eleven named players, no numbers, and no bench advice, with
+       * nothing on screen saying why.
+       */
+      priced: starters.filter((sl) => !sl.empty && sl.player?.afProjectedPoints != null).length,
+    }),
     bench:
       benchIds.length > 0
         ? { available: true, data: benchIds.map((id) => resolved.get(id)).filter(Boolean) as LineupPlayer[] }

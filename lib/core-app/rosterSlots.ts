@@ -48,9 +48,35 @@ export function startingSlotTemplate(settings: unknown): string[] | null {
     (Array.isArray(s.rosterPositions) && s.rosterPositions) ||
     null
   if (!raw) return null
-  const slots = raw
-    .map((v) => String(v ?? '').trim().toUpperCase())
-    .filter((v) => v.length > 0 && !NON_STARTING_SLOT.has(v))
+  const cleaned = raw.map((v) => String(v ?? '').trim().toUpperCase()).filter((v) => v.length > 0)
+
+  /*
+   * ⚠ ESPN COMPRESSES THIS COLUMN AND THE TWO SHAPES ARE NOT INTERCHANGEABLE.
+   * Sleeper writes one entry per starting slot, in lineup order. ESPN writes
+   * SLOT:COUNT pairs — measured on production:
+   *
+   *     ["QB:1","RB:2","WR:2","TE:1","D/ST:1","K:1","BE:7","IR:1","FLEX:1"]
+   *
+   * Read as a Sleeper template that is nine labels for an eight-man lineup, and
+   * `"BE:7"`/`"IR:1"` do not match the bench filter either — so bench and IR
+   * were being handed out as STARTING slot names, index-for-index against a
+   * lineup they do not describe. On a live ESPN roster that rendered Ja'Marr
+   * Chase in "QB:1" and a kicker in "D/ST:1".
+   *
+   * ⚠ AND EXPANDING THE PAIRS DOES NOT RESCUE IT. Expanded, the template leads
+   * with QB; the actual `starters` array for that same roster leads with a WR.
+   * The two orderings are simply not the same fact, so there is nothing here to
+   * align against and any label produced would be a guess.
+   *
+   * So it refuses, which is what this function's null already means and what
+   * the eligibility table below already does for an unknown slot. The caller
+   * falls back to its own inference — a neutral "SLOT 3" that claims nothing —
+   * rather than asserting a position this league never told us.
+   */
+  if (cleaned.some((v) => /^[A-Z/]+:\d+$/.test(v))) return null
+
+  const slots = cleaned
+    .filter((v) => !NON_STARTING_SLOT.has(v))
     .map((v) => SLOT_ALIAS[v] ?? v)
   return slots.length > 0 ? slots : null
 }
