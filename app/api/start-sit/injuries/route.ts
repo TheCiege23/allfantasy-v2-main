@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getInjuryReport } from '@/lib/data/players'
 import { prisma } from '@/lib/prisma'
-import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { injuryCoverageFor, listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { uiKeyToDataSport } from '@/lib/startSit/shared'
 
 export const dynamic = 'force-dynamic'
@@ -196,6 +196,21 @@ export async function GET(req: Request) {
   const sport = new URL(req.url).searchParams.get('sport') || 'nfl'
   const dataSport = uiKeyToDataSport(sport)
   const now = new Date()
+
+  /*
+   * Answer "we have no source" BEFORE looking, because the two outcomes are visually
+   * identical and only one of them is true here. Falling through would return the same
+   * empty list this panel shows when a slate genuinely has no designations — which reads
+   * as "your starters are fine" to a college manager on a Saturday.
+   *
+   * See injuryCoverageFor in lib/injuries/injuryReadPort.ts for how NCAAF was established:
+   * every feed exhausted, including ESPN still serving three 2020/2022 rows on the day the
+   * season opened.
+   */
+  const coverage = injuryCoverageFor(dataSport)
+  if (!coverage.covered) {
+    return NextResponse.json({ injuries: [], note: coverage.reason, sourceAvailable: false })
+  }
 
   try {
     // Slice 18 follow-on — PRIMARY source is the canonical injury read port
