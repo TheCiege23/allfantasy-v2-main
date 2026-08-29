@@ -7,6 +7,7 @@ import { loadSideProjections, winProbabilityFor } from './matchupProjections'
 import { myRosterCandidates } from './myRoster'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
+import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 
 /**
@@ -185,6 +186,15 @@ export type MatchupData = {
    */
   lineups: SectionState<MatchupSlot[]>
   /**
+   * Why the board carries unnamed rows, said ONCE.
+   *
+   * ⚠ A PLATFORM-LEVEL FAILURE MUST NOT RENDER AS N BROKEN PLAYERS. On an ESPN
+   * league not one starter id resolves (0 of 145 across production), so without
+   * this the board is a column of "Unresolved player" rows that look like a
+   * roster problem. Null when every id resolved.
+   */
+  identityNote: string | null
+  /**
    * Whether per-player LIVE scoring exists for this league and week.
    *
    * ⚠ THIS FIELD USED TO SAY "not ingested for imported leagues" UNCONDITIONALLY
@@ -257,6 +267,7 @@ export async function getMatchupData(
       available: false as const,
       reason: 'no matchup resolved, so there are no lineups to pair',
     },
+    identityNote: null as string | null,
     // Each of these needs per-player weekly scoring, which no writer produces for
     // imported leagues. A win probability invented from a points ratio is the
     // most authoritative-looking wrong number this product could print.
@@ -617,6 +628,19 @@ export async function getMatchupData(
         reason: 'we could not match both sides of this matchup to an imported roster',
       }
 
+  /*
+   * Coverage is counted over YOUR side only. Both lineups come from the same
+   * league and therefore the same id space, so counting both would double a
+   * single platform's failure and make "0 of 12" read as "0 of 24".
+   */
+  const identityNote = lineups.available
+    ? identityGapNote({
+        platform,
+        total: lineups.data.filter((s) => s.you && !s.you.empty).length,
+        resolved: lineups.data.filter((s) => s.you && !s.you.empty && s.you.name != null).length,
+      })
+    : null
+
   const playerScoring: MatchupData['playerScoring'] = scoreRows.length
     ? {
         available: true,
@@ -649,6 +673,7 @@ export async function getMatchupData(
       winProbability,
       lineups,
       playerScoring,
+      identityNote,
       sides: {
         available: false,
         reason: `week ${latest.week} is on file but nothing has been scored — this is an unplayed week, not a 0-0 game`,
@@ -703,6 +728,7 @@ export async function getMatchupData(
     winProbability,
     lineups,
     playerScoring,
+    identityNote,
     sides: {
       available: true,
       data: {

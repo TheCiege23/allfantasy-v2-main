@@ -561,3 +561,21 @@
   gap: 6px;
   max-width: 260px;
 }
+
+/*
+  The identity gap — why every row below is nameless.
+
+  ⚠ WARN-TONED, NOT ERROR-TONED. Nothing is broken on the user's side and
+  nothing failed just now: this is a bridge AllFantasy has not built. Red would
+  send someone to re-sync a league that synced perfectly.
+*/
+.af-mu-identity-gap {
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}

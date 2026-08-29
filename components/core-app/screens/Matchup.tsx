@@ -181,6 +181,16 @@ function LineupBoard({ data }: { data: MatchupData }) {
   return (
     <>
       {/*
+        ⚠ THE IDENTITY GAP LEADS, ABOVE EVEN THE BASIS NOTE. When not one id
+        resolves, every row below is nameless and unpriced — reading the basis
+        note first ("these are projections") makes no sense when the reader
+        cannot see who anyone is. Cause before consequence.
+      */}
+      {data.identityNote ? (
+        <p className="af-mu-identity-gap">{data.identityNote}</p>
+      ) : null}
+
+      {/*
         The basis is stated ABOVE the board, not under it. It changes what every
         number in the table means, and a note nobody reaches is the same as no
         note.
