@@ -451,7 +451,21 @@ async function resolvePlayers(
       select: { playerName: true, status: true },
     })
     .catch(() => [])
-  const injuryByName = new Map(injuries.map((i) => [i.playerName.toLowerCase(), i.status]))
+  /*
+   * ⚠ FIRST WINS, NOT LAST, AND THE `orderBy` ABOVE IS WHY. `new Map(pairs)` resolves a
+   * duplicate key to the LAST pair, so feeding it rows sorted `fetchedAt: desc` kept the
+   * OLDEST status for anyone with more than one row — the exact opposite of what the sort
+   * asks for. Measured on production 2026-08-28: `sportsInjury` holds 6,426 NFL rows and
+   * 989 players have more than one, one of them 133. Every one of those was reading stale.
+   *
+   * Building the map explicitly and skipping a key already present keeps the newest row,
+   * matching `injByPlayer` in `runInjuryImpactDashboard.ts`, which had this right already.
+   */
+  const injuryByName = new Map<string, string | null>()
+  for (const i of injuries) {
+    const k = i.playerName.toLowerCase()
+    if (!injuryByName.has(k)) injuryByName.set(k, i.status)
+  }
 
   /*
    * ⚠ PROJECTIONS ARE JOINED HERE BECAUSE THIS IS WHERE THE IDS ALREADY ARE, and
