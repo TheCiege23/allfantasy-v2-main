@@ -179,8 +179,19 @@ const COVERAGE = [
       '# Drop a fresh multi-platform ADP export at data/nfl-adp-multiplatform.csv',
     ],
     consequence:
-      'every player who entered the league that year is invisible to consensus ADP —\n' +
-      '  unified-player-service, chat enrichment, the mock-draft pool and the comparison lab.',
+      'every player who entered the league that year is missing from the four static sources\n' +
+      '  this file supplies (fantrax, sleeper, espn, mfl). Measured on production at week 35:\n' +
+      '  skill-position rookies reach consensus 29, ffc 24, sleeper 4, espn 1, fantrax 0, mfl 0 —\n' +
+      '  so `ffc` prices that whole class ALONE, at provider_count 1.\n' +
+      '\n' +
+      '  unified-player-service and chat enrichment now fall back to lib/adp/liveAdpFallback.ts,\n' +
+      '  which reads those ffc-backed rows out of adp_data and reports the provider count so one\n' +
+      '  source is not rendered as five agreeing. STILL UNCOVERED: the comparison lab\n' +
+      '  (PlayerStatsResolver) reads the CSV directly, and the mock-draft pool takes its ADP from\n' +
+      '  getLiveADP but still sources injury/health here, so rookies carry no health line.\n' +
+      '\n' +
+      '  The fallback narrows the blast radius; it does not refresh this file. A real export is\n' +
+      '  still the only thing that restores multi-platform corroboration for the 2026 class.',
   },
 ]
 

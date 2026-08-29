@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { fetchAllFFCFormats } from '@/lib/adp-data'
+import { confidenceForConsensus } from '@/lib/adp/consensusConfidence'
 import { loadMultiPlatformADP } from '@/lib/multi-platform-adp'
 import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -56,18 +57,6 @@ function sourceWeight(source: string): number {
   return SOURCE_WEIGHTS[source] ?? 0.8
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
-
-function confidenceForConsensus(providerCount: number, spread: number): number {
-  // More independent providers with tighter spread => higher confidence.
-  const providerScore = clamp(providerCount / 4, 0, 1)
-  const spreadPenalty = clamp(spread / 60, 0, 1)
-  const raw = 0.3 + providerScore * 0.55 - spreadPenalty * 0.25
-  return Number(clamp(raw, 0.2, 0.98).toFixed(3))
-}
-
 function buildConsensusRows(input: {
   sport: string
   season: number
@@ -98,10 +87,16 @@ function buildConsensusRows(input: {
     if (weightSum <= 0) continue
 
     const consensusAdp = weighted.reduce((sum, item) => sum + item.row.adp * item.weight, 0) / weightSum
-    const values = bucket.map((row) => row.adp)
-    const spread = values.length >= 2 ? Math.max(...values) - Math.min(...values) : 0
     const providerBreakdown = Object.fromEntries(bucket.map((row) => [row.source, Number(row.adp.toFixed(2))]))
     const providerCount = Object.keys(providerBreakdown).length
+    /*
+     * Spread is measured ACROSS PROVIDERS, not across rows. Two rows from the same source
+     * are one opinion, and taking their range would manufacture a disagreement that no two
+     * platforms actually had. Null when there is only one opinion to hold.
+     */
+    const providerValues = Object.values(providerBreakdown)
+    const spread =
+      providerValues.length >= 2 ? Math.max(...providerValues) - Math.min(...providerValues) : null
 
     const base = bucket[0]
     const key = `${sport}:${base.format}:${base.scoring}:${base.playerId}:consensus`
@@ -118,7 +113,7 @@ function buildConsensusRows(input: {
       adp: adpValue,
       adpChange: previousMap.has(key) ? Number((adpValue - Number(previousMap.get(key))).toFixed(2)) : null,
       providerCount,
-      adpSpread: Number(spread.toFixed(2)),
+      adpSpread: spread == null ? null : Number(spread.toFixed(2)),
       confidenceScore: confidenceForConsensus(providerCount, spread),
       providerBreakdown,
       week,
