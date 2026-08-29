@@ -431,9 +431,30 @@ export async function fetchAPISportsPlayerBySearch(
   for (const row of byIdRows) {
     if (row.apiSportsId && row.currentTeam) teamById.set(String(row.apiSportsId), row.currentTeam)
   }
-  const teamByName = new Map<string, string>()
+  /*
+   * ⚠ NAME IS NOT A KEY HERE, AND THE COLLISIONS ARE MEASURED. Within a single sport (which is
+   * what the query above filters to), `PlayerIdentityMap` normalizedNames that map to MORE THAN
+   * ONE currentTeam, on production 2026-08-28:
+   *
+   *     NCAAB 2,811   NCAAF 1,227   NFL 117   MLB 63   SOCCER 18   NHL 12   NBA 6
+   *
+   * Real people, not junk rows: `mike hughes` -> ATL | JAX, `spencer brown` -> BUF | ATL,
+   * `jordan phillips` -> BUF | MIA. Last-write-wins handed one man the other's team.
+   *
+   * A name that resolves to exactly one team is still used — this is a fallback after the id
+   * lookup and it earns its place. A name that resolves to two is dropped, because the caller
+   * below already treats a miss as "leave the row alone", and no team beats a wrong team.
+   */
+  const teamsByName = new Map<string, Set<string>>()
   for (const row of byNameRows) {
-    if (row.normalizedName && row.currentTeam) teamByName.set(row.normalizedName, row.currentTeam)
+    if (!row.normalizedName || !row.currentTeam) continue
+    const s = teamsByName.get(row.normalizedName) ?? new Set<string>()
+    s.add(row.currentTeam)
+    teamsByName.set(row.normalizedName, s)
+  }
+  const teamByName = new Map<string, string>()
+  for (const [name, teams] of teamsByName) {
+    if (teams.size === 1) teamByName.set(name, [...teams][0])
   }
 
   return rows.map((p) => {
