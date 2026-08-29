@@ -67,15 +67,27 @@ export function positionGroup(pos: string): string {
 
 /** name + birth date — deterministic, and the key to prefer once `dob` is backfilled. */
 const byNameDob = new Map<string, Row>()
-/** name + college + position group — works today, but the college vocabularies disagree. */
-const byNameCollegePos = new Map<string, Row>()
+/**
+ * name + college + position group.
+ *
+ * ⚠ A SET, NOT A ROW, BECAUSE THE KEY IS NOT UNIQUE. nflverse carries five Chris Johnsons in
+ * the DB group; storing one row per key with last-write-wins hands a man another man's draft
+ * slot. The identical bug in `scripts/backfill-player-dob.ts` wrote a 1971 birth date onto a
+ * 2026 rookie before it was caught, so this refuses instead.
+ */
+const byNameCollegePos = new Map<string, Row[]>()
 /** name alone, kept ONLY to detect ambiguity before a last-resort match. */
 const byName = new Map<string, Row[]>()
 
 for (const r of ROWS) {
   if (r.birthDate) byNameDob.set(`${r.name}|${r.birthDate}`, r)
   const c = (r.college ?? '').toLowerCase().trim()
-  if (c) byNameCollegePos.set(`${r.name}|${c}|${r.position}`, r)
+  if (c) {
+    const k = `${r.name}|${c}|${r.position}`
+    const arr = byNameCollegePos.get(k) ?? []
+    arr.push(r)
+    byNameCollegePos.set(k, arr)
+  }
   const arr = byName.get(r.name) ?? []
   arr.push(r)
   byName.set(r.name, arr)
@@ -116,8 +128,9 @@ export function lookupDraftCapital(input: LookupInput): DraftCapital | null {
   const college = (input.college ?? '').toLowerCase().trim()
   const pos = positionGroup(input.position ?? '')
   if (college && pos) {
-    const hit = byNameCollegePos.get(`${n}|${college}|${pos}`)
-    if (hit) return toCapital(hit)
+    const hits = byNameCollegePos.get(`${n}|${college}|${pos}`)
+    // Exactly one, or nothing: two men sharing all three fields cannot be told apart here.
+    if (hits && hits.length === 1) return toCapital(hits[0])
   }
 
   const cands = byName.get(n)
