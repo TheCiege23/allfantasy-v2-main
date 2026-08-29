@@ -482,11 +482,43 @@ export async function getPlayerDetail(
    * `take` is 10 rather than 5 because the cap now counts provider rows, not
    * seasons; five seasons of a two-provider player needed ten.
    */
+  /*
+   * ⚠ ONE PROVIDER STORES AN ENVELOPE WHERE THE OTHERS STORE A STAT MAP.
+   *
+   * 168 NFL rows — every api_sports row, all season 2025 — hold the raw provider
+   * payload rather than the stats: `{ sport, teams, season, provider, fetchedAt,
+   * flattened }`. Rendered by the page's `Object.entries(stats).slice(0, 6)` that
+   * printed the WRAPPER as though it were statistics, and because `teams` is an array
+   * it came out as "teams [object Object] · provider api_sports · fetchedAt …" on a
+   * public page.
+   *
+   * `flattened` is the real stat map, keyed `defense.sacks`, `rushing.yards`. The group
+   * prefix is deliberately KEPT: rolling_insights writes bare `sacks` / `tackles`, and
+   * stripping the prefix to match would merge `rushing.yards` and `receiving.yards` into
+   * one `yards` and silently pick whichever landed first. A qualified key is uglier than
+   * a bare one and is the only version that is true.
+   */
+  const unwrapStats = (raw: unknown): Record<string, string> => {
+    if (!raw || typeof raw !== 'object') return {}
+    const obj = raw as Record<string, unknown>
+    const inner = obj.flattened
+    if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+      return inner as Record<string, string>
+    }
+    return obj as Record<string, string>
+  }
+
   const bySeason = new Map<string, Record<string, string>>()
   for (const s of stats) {
     const merged = bySeason.get(s.season) ?? {}
-    for (const [k, v] of Object.entries((s.stats ?? {}) as Record<string, string>)) {
-      if (!(k in merged)) merged[k] = v
+    for (const [k, v] of Object.entries(unwrapStats(s.stats))) {
+      /*
+       * Skip nested values outright. Only scalars belong in a stat line, and anything
+       * else reaching the renderer becomes "[object Object]" — which is how this defect
+       * presented in the first place.
+       */
+      if (v !== null && typeof v === 'object') continue
+      if (!(k in merged)) merged[k] = v as string
     }
     bySeason.set(s.season, merged)
   }
