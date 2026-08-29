@@ -2,19 +2,21 @@
 /**
  * Fails when a committed `data/` artifact has aged out of the period it describes.
  *
- * ⚠ A CRON CANNOT REFRESH THESE, WHICH IS WHY A CHECK EXISTS INSTEAD. Both artifacts are
- * STATICALLY IMPORTED (`lib/idp-projections/draftCapital.ts`, `lib/idp-projections/teamTendencies.ts`),
- * so they are bundled at build time. A scheduled job on the deployed app would write to an
- * ephemeral filesystem and change nothing that is running. Only a human regenerating and
- * committing updates them.
+ * Two kinds of check, because there are two kinds of artifact:
+ *   PERIOD   — the file carries the year it covers, so it can date itself.
+ *   COVERAGE — the file carries NO date, so it is dated against one that does.
+ *
+ * ⚠ A CRON CANNOT REFRESH THESE, WHICH IS WHY A CHECK EXISTS INSTEAD. The period artifacts are
+ * STATICALLY IMPORTED (`draftCapital.ts`, `teamTendencies.ts`) and so are bundled at build time;
+ * the ADP export has no generator in this repo at all. A scheduled job would write to an
+ * ephemeral filesystem and change nothing that is running. Only a human updates these.
  *
  * So the job is not to refresh, it is to REFUSE TO BE QUIET. `ingestCFBDStats` sat unscheduled
  * for months while a surface served stale columns and looked correct doing it. An artifact that
- * silently ages out every off-season is the same shape. This turns that silence into a red run
- * with a date on it.
+ * silently ages out every off-season is the same shape.
  *
- * Deliberately needs NO database and NO network — it reads committed files and a clock, so it
- * runs in CI, by hand, and in any workflow without configuration.
+ * Needs NO database and NO network — committed files and a clock — so it runs in CI, by hand,
+ * and in any workflow without configuration.
  *
  *   node scripts/check-static-data-freshness.mjs
  *   node scripts/check-static-data-freshness.mjs --report-only   # never exits non-zero
@@ -45,7 +47,20 @@ function latestCompletedSeason(now) {
   return now.getUTCMonth() >= 2 ? y - 1 : y - 2
 }
 
-const ARTIFACTS = [
+const normName = (s) =>
+  String(s)
+    .toLowerCase()
+    .replace(/[^a-z ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+let failed = 0
+
+/* =========================================================================================
+ * PERIOD CHECKS — the artifact carries the year it covers.
+ * ====================================================================================== */
+
+const PERIOD = [
   {
     label: 'NFL draft capital',
     file: 'data/nfl-draft-capital.json',
@@ -66,8 +81,8 @@ const ARTIFACTS = [
     /*
      * ⚠ THE YEARS ARE NOT OPTIONAL HERE. `derive-team-defense-tendencies.ts` defaults to
      * `FROM = 2024, TO = 2025` as HARDCODED literals, so running it bare regenerates exactly
-     * the seasons that are already committed and looks like it worked. Anyone following this
-     * instruction without the arguments would see a no-op diff and conclude the check was wrong.
+     * the seasons already committed and looks like it worked. Anyone following this instruction
+     * without arguments would see a no-op diff and conclude the check was wrong.
      */
     regenerate: [
       '# the years are REQUIRED — the script defaults to a hardcoded 2024..2025',
@@ -80,19 +95,15 @@ const ARTIFACTS = [
   },
 ]
 
-let failed = 0
-
-for (const a of ARTIFACTS) {
-  const path = join(ROOT, a.file)
+for (const a of PERIOD) {
   let rows
   try {
-    rows = JSON.parse(readFileSync(path, 'utf8'))
+    rows = JSON.parse(readFileSync(join(ROOT, a.file), 'utf8'))
   } catch (err) {
     console.error(`\n[${a.label}] cannot read ${a.file}: ${err.message}`)
     failed++
     continue
   }
-
   if (!Array.isArray(rows) || rows.length === 0) {
     console.error(`\n[${a.label}] artifact is empty or not an array.`)
     failed++
@@ -138,11 +149,108 @@ for (const a of ARTIFACTS) {
   console.error(`  Until then, ${a.consequence}`)
 }
 
+/* =========================================================================================
+ * COVERAGE CHECKS — the artifact carries no date of its own.
+ *
+ * `nfl-adp-multiplatform.csv` is a hand-placed export: no season column, no generator in this
+ * repo, nothing in it saying which year it describes. It can still be dated, because an ADP
+ * board for season Y lists the players who entered the league in Y.
+ *
+ * Measured 2026-08-28, rounds 1-2 defenders present by class:
+ *     2023: 93%   2024: 86%   2025: 90%   2026: 0%
+ *
+ * A clean break, not a name-matching artifact — the file predates the 2026 draft. So the newest
+ * class in `nfl-draft-capital.json` dates it, and the two artifacts check each other.
+ * ====================================================================================== */
+
+const COVERAGE = [
+  {
+    label: 'multi-platform ADP',
+    file: 'data/nfl-adp-multiplatform.csv',
+    reference: 'data/nfl-draft-capital.json',
+    /*
+     * Real classes land at 86-93%; a missing class is 0%. 40% sits far below the observed floor
+     * and far above zero, so ordinary variation — a deep pick with no ADP, a name spelled
+     * differently — cannot trip it.
+     */
+    minPresentPct: 40,
+    regenerate: [
+      '# NO GENERATOR EXISTS IN THIS REPO — this file is a hand-placed export.',
+      '# Drop a fresh multi-platform ADP export at data/nfl-adp-multiplatform.csv',
+    ],
+    consequence:
+      'every player who entered the league that year is invisible to consensus ADP —\n' +
+      '  unified-player-service, chat enrichment, the mock-draft pool and the comparison lab.',
+  },
+]
+
+for (const c of COVERAGE) {
+  console.log(`\n[${c.label}] ${c.file}`)
+
+  let capital
+  try {
+    capital = JSON.parse(readFileSync(join(ROOT, c.reference), 'utf8'))
+  } catch (err) {
+    console.error(`  cannot read reference ${c.reference}: ${err.message}`)
+    failed++
+    continue
+  }
+
+  const newestClass = Math.max(...capital.map((r) => Number(r?.draftYear)).filter(Number.isFinite))
+  const expected = latestCompletedDraft(new Date())
+
+  /*
+   * If the REFERENCE is itself behind, it cannot date anything. Say so and move on rather than
+   * raising a second confusing failure — the reference's own check above already reports it.
+   */
+  if (!Number.isFinite(newestClass) || newestClass < expected) {
+    console.log(`  SKIPPED — the reference is itself stale (${newestClass} < ${expected}).`)
+    console.log('  Fix that first; its own check above reports it.')
+    continue
+  }
+
+  let haystack
+  try {
+    haystack = readFileSync(join(ROOT, c.file), 'utf8').toLowerCase()
+  } catch (err) {
+    console.error(`  cannot read ${c.file}: ${err.message}`)
+    failed++
+    continue
+  }
+
+  const cohort = capital.filter((r) => r.draftYear === newestClass && r.draftRound <= 2)
+  if (cohort.length === 0) {
+    console.log(`  SKIPPED — the reference carries no rounds 1-2 cohort for ${newestClass}.`)
+    continue
+  }
+
+  const present = cohort.filter((r) => haystack.includes(normName(r.name))).length
+  const pct = (present / cohort.length) * 100
+
+  console.log(`  dated against the ${newestClass} class: ${present}/${cohort.length} present (${pct.toFixed(0)}%)`)
+  console.log(`  threshold: ${c.minPresentPct}%`)
+
+  if (pct >= c.minPresentPct) {
+    console.log(`  OK — covers the ${newestClass} class.`)
+    continue
+  }
+
+  failed++
+  console.error(`  STALE: only ${pct.toFixed(0)}% of the ${newestClass} class appears — this file predates that draft.`)
+  console.error('')
+  for (const line of c.regenerate) console.error(`      ${line}`)
+  console.error(`      git add ${c.file} && git commit`)
+  console.error('')
+  console.error(`  Until then, ${c.consequence}`)
+}
+
+const TOTAL = PERIOD.length + COVERAGE.length
+
 if (failed > 0 && !REPORT_ONLY) {
-  console.error(`\n${failed} of ${ARTIFACTS.length} artifacts are stale or unreadable.`)
+  console.error(`\n${failed} of ${TOTAL} artifacts are stale or unreadable.`)
   process.exit(1)
 }
 console.log(
-  `\n${ARTIFACTS.length - failed} of ${ARTIFACTS.length} artifacts current.` +
+  `\n${TOTAL - failed} of ${TOTAL} artifacts current.` +
     (failed > 0 ? ' (--report-only: not failing)' : ''),
 )
