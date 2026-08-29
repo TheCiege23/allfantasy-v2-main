@@ -377,13 +377,37 @@ export async function fetchCfbdGames(season: number, week?: number): Promise<Pro
     const home = str(r.homeTeam)
     const away = str(r.awayTeam)
     if (!externalId || !home || !away) continue
+
+    /*
+     * ⚠ A FINAL NEEDS BOTH HALVES OF THE SCORE.
+     *
+     * Measured on production 2026-08-29: CFBD returned Delta State at
+     * Northeastern State with `completed: true` and `homePoints: 52` against a
+     * NULL `awayPoints` — on a game that kicked off four hours later. It was
+     * the only row in the table claiming a result before kickoff, and the only
+     * one carrying a score for one side and not the other.
+     *
+     * One vendor row was wrong; transcribing it faithfully is what would have
+     * turned it into something the UI repeats. `dbRowToLiveScore` maps a null
+     * score to 0, so this row renders as a finished game won 52-0 by a team
+     * that has not taken the field.
+     *
+     * A completion claim we cannot corroborate with BOTH scores is therefore
+     * not propagated, and neither score is carried without the other. Nothing
+     * here invents the missing half, and nothing asserts a result nobody can
+     * read — the vendor's own claim survives in `raw` for anyone auditing it.
+     */
+    const homePoints = num(r.homePoints)
+    const awayPoints = num(r.awayPoints)
+    const played = r.completed === true && homePoints !== null && awayPoints !== null
+
     games.push({
       externalId,
       homeTeam: home,
       awayTeam: away,
-      homeScore: num(r.homePoints),
-      awayScore: num(r.awayPoints),
-      status: r.completed === true ? 'final' : 'scheduled',
+      homeScore: played ? homePoints : null,
+      awayScore: played ? awayPoints : null,
+      status: played ? 'final' : 'scheduled',
       startTime: toDate(r.startDate),
       week: weekOrNull(r.week),
       // The query string above pins `seasonType=regular`, so every row here IS
