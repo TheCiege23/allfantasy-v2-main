@@ -384,3 +384,43 @@ give real build duration, and the CLI is installed and authenticated.
   run concurrently or serially. Measured, blocking would merge only **3%** of
   pushes into an existing build, because the overlap is cross-session. The money
   therefore depends on you actually batching, not on the guard catching you.
+
+## Exploratory agent testing (`agent-tester/`)
+
+`agent-tester/` is archetype-driven exploratory Playwright testing. It
+complements `e2e/` and does not replace it: `e2e/` asks "does the flow I wrote
+down still work?", the agent tester asks "can a distracted human who has never
+seen this get through it?". It is given a goal, not a script, so it clicks
+whatever it finds and submits forms nobody wrote a spec for. Read
+`agent-tester/README.md` before the first run.
+
+🛑 **PRODUCTION IS DENIED BY DESIGN, IN `agent-tester/preflight.ts`.** Not
+discouraged — refused. `AGENT_TESTER_BASE_URL` has no default (a default is how
+a suite finds production), `allfantasy.ai` and its subdomains are on a hostname
+denylist, and a behavioural probe confirms the `x-allfantasy-e2e` bypass is
+actually live before any write-capable mission starts. Do not weaken the
+denylist, do not add a fallback URL, and do not route around the probe.
+
+The cost of getting this wrong is read out of `app/api/auth/register/route.ts`:
+the e2e bypass needs `NODE_ENV !== "production"` **or** `ALLOW_E2E_SEED=1`, and
+the production deploy sets neither. So every signup the agent invents there
+sends a **real Resend verification email** to a fake address (bounces charged
+against sender reputation), fires **`notifyOwnerOfNewSignup`** into your inbox,
+sends a Meta CAPI **`CompleteRegistration`** conversion that teaches the ad
+optimiser to buy the wrong audience — **that one is not reversible** — and
+counts against `rateLimit(signup:${ip}, 5, 600_000)`, so the run mostly tests
+the limiter.
+
+⚠ **A `.vercel.app` URL is NOT proof you are off the production database.**
+Vercel preview deployments use the production DB — `lib/email/undeliverableDomains.ts`
+records the 114 test rows that fact put into a 146-row `EarlyAccessSignup`
+table. Verify with `npx tsx scripts/check-staging-env.ts` (exit 1 = not safe),
+never by reading the hostname. `/api/health` cannot settle it either: it reports
+whether a DB is connected, not *which* DB.
+
+**`npm run test:agent:readonly` is the default for an unfamiliar target.** It
+sets `AGENT_TESTER_READ_ONLY=1`, which skips the signup probe entirely and never
+registers or submits, and it still catches dead links, 5xx, console errors, slow
+screens and tap-target problems. Reach for the write-capable scripts only once
+you have confirmed the target sets `ALLOW_E2E_SEED=1` and is not on the
+production DB. Reports land in `agent-tester/reports/latest.md`.
