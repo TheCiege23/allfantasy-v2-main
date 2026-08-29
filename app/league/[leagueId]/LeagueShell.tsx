@@ -2,6 +2,7 @@
 
 import { isIdpLeagueVariant } from '@/lib/core-app/idpLeagueVariant'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
+import { KickerValuePanel } from '@/components/league/KickerValuePanel'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
 import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
@@ -2071,6 +2072,15 @@ function LeagueTabRouter({
               in-progress draft picks; renders nothing for other platforms. */}
           <div className="px-4 pt-4 lg:px-6">
             <LiveRosterPanel leagueId={leagueId} />
+          </div>
+          {/*
+            What a kicker is worth here — one number for every kicker, because kicker rank does
+            not persist (see components/league/KickerValuePanel.tsx). Renders nothing at all in
+            a league that starts no kicker, so this line is inert for the leagues it does not
+            apply to rather than showing an empty box.
+          */}
+          <div className="px-4 pt-3 lg:px-6">
+            <KickerValuePanel leagueId={leagueId} />
           </div>
           <TeamTab
             league={selectedLeague}
