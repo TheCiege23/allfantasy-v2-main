@@ -50,6 +50,25 @@ It exits `1` when the environment is not safe (production DB host, live Stripe
 key, and so on). **A non-zero exit ends the run** — surface the ❌ lines verbatim
 and stop. Do not re-run it with an override flag. Report ⚠️ warnings but continue.
 
+🛑 **A PASS HERE DOES NOT CLEAR A LOCAL DEV SERVER.** The script overlays
+`.env.staging` on top of `.env`/`.env.local`; **Next.js never loads
+`.env.staging`**. So the check can report "safe" on a file set the running
+server does not use. Observed: it passed on `ep-winter-salad-…` from
+`.env.staging` while `.env.local` — the file `next dev` actually reads — pointed
+at `ep-curly-block-…`, the production host.
+
+**So when the target is localhost or any dev server, read the effective
+`DATABASE_URL` directly** and refuse if it is the production host:
+
+```bash
+grep -m1 '^DATABASE_URL=' .env.local .env | sed 's#.*@##; s#/.*##'
+```
+
+The staging check answers "is the staging file set safe"; only this answers
+"what will the server I am about to point an agent at actually write to". If it
+is the production host, `readonly` is the ONLY acceptable mode — it returns from
+the preflight before `probeBypass`, so nothing is registered or submitted.
+
 ## Step 3 — run the agent tester
 
 Only after steps 1 and 2 both pass. Pick from `$ARGUMENTS`:

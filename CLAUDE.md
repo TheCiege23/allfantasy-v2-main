@@ -418,6 +418,18 @@ table. Verify with `npx tsx scripts/check-staging-env.ts` (exit 1 = not safe),
 never by reading the hostname. `/api/health` cannot settle it either: it reports
 whether a DB is connected, not *which* DB.
 
+⚠ **And that check does NOT clear a local dev server.** It overlays
+`.env.staging` on `.env`/`.env.local`, but **Next.js never loads `.env.staging`**
+— so a pass describes the staging *file set*, not the server you are about to
+point an agent at. Observed on 2026-08-29: the check reported "safe" on
+`ep-winter-salad-…` from `.env.staging` while `.env.local`, the file `next dev`
+actually reads, pointed at `ep-curly-block-…` — the production host. For a dev
+server, read the effective value directly:
+
+```bash
+grep -m1 '^DATABASE_URL=' .env.local .env | sed 's#.*@##; s#/.*##'
+```
+
 **`npm run test:agent:readonly` is the default for an unfamiliar target.** It
 sets `AGENT_TESTER_READ_ONLY=1`, which skips the signup probe entirely and never
 registers or submits, and it still catches dead links, 5xx, console errors, slow
