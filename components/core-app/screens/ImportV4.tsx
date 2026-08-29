@@ -207,11 +207,12 @@ const PROVIDER_TAGLINE: Partial<Record<ImportProvider, string>> = {
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
   /*
-   * Empty, and kept rather than deleted: every provider on this screen is
-   * selectable today, and the next one added will need somewhere to say why it
-   * is not. The tile falls back to "Not connectable yet." if a provider is ever
-   * marked unavailable without an entry here.
+   * Yahoo, 2026-08-29. Says what is true without naming plumbing the reader cannot act
+   * on: connecting currently returns you here still disconnected, so offering the button
+   * only spends the person's time. See lib/league-import/provider-ui-config.ts for the
+   * two rival credential stores behind it.
    */
+  yahoo: 'Yahoo sign-in is not working yet — connecting returns you here still disconnected, so we have turned it off rather than waste the trip.',
 }
 
 /**
