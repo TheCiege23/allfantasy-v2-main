@@ -13,6 +13,7 @@ import MiniPlayerImg from '@/components/MiniPlayerImg'
  * before this exact import fixed it, and LeagueHome carries the same note.
  */
 import '@/components/core-app/af-core.css'
+import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 import '@/components/core-app/af-dash-3a.css'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
@@ -910,6 +911,12 @@ export function Dashboard3A({
               <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
               <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
               <Link className="af3a-tool" href="/rankings"><i>★</i>Rankings</Link>
+              {/*
+                Only renders for managers who are in at least one league that starts defenders
+                or kickers — the user-scoped question, because /core is not one league. See
+                lib/values/valueSurfaceEligibility.ts.
+              */}
+              <ValuesPageLink compact className="af3a-tool" />
             </div>
           </section>
         </div>
