@@ -24,6 +24,7 @@ import { computeLineupDelta, computeLineupFairness, computeValueFairness, type L
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
+import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
 import { buildGptInputContract, buildGptUserPrompt, validateGptNarrativeOutput, shouldSkipGpt, AI_OUTPUT_INVALID_FALLBACK, GPT_NARRATIVE_SYSTEM_PROMPT } from '@/lib/trade-engine/gpt-input-contract'
@@ -513,9 +514,10 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     }
 
     let rosterConfigForVorp: import('@/lib/vorp-engine').LeagueRosterConfig | undefined
+    let sleeperLeagueForConfig: Awaited<ReturnType<typeof getLeagueInfo>> = null
     if (data.league_id) {
       try {
-        const sleeperLeagueForConfig = await getLeagueInfo(data.league_id)
+        sleeperLeagueForConfig = await getLeagueInfo(data.league_id)
         if (sleeperLeagueForConfig?.roster_positions) {
           const parsed = parseSleeperRosterPositions(sleeperLeagueForConfig.roster_positions)
           rosterConfigForVorp = {
@@ -531,11 +533,47 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       } catch { /* use defaults */ }
     }
 
+    /*
+     * This league's own defenders, priced by its own scoring.
+     *
+     * 🛑 WITHOUT THIS, EVERY DEFENDER IN EVERY TRADE GRADE WAS A FLAT POSITION
+     * CONSTANT — `IDP_KICKER_BASELINE_VALUES` in lib/hybrid-valuation.ts, where the
+     * best linebacker in the league and a rookie backup both price at 800. And it
+     * was worse than that in practice: the constant is keyed on POSITION, which
+     * `pricePlayer` reads off the FantasyCalc row, and FantasyCalc carries no
+     * defenders at all — so the position resolved to 'UNKNOWN', the baseline branch
+     * never fired, and defenders fell through to an analytics lifetime value or came
+     * back `unpriced`. The board below is keyed by NAME for exactly that reason: it
+     * does not depend on a position lookup that cannot succeed for a defender.
+     *
+     * Deliberately NOT gated on `data.league.idp_enabled` — that flag is client-
+     * supplied and optional, so trusting it would silently skip pricing for any
+     * caller that omits it. `loadLeagueIdpVorp` decides from the league's OWN
+     * scoring settings, which is the authority, and returns empty for the ~100 of
+     * 110 leagues that do not genuinely score IDP.
+     *
+     * Reuses the league info and player index already fetched above rather than
+     * paying for them twice.
+     */
+    const idpBoard = data.league_id
+      ? await loadIdpTradeValuesByName({
+          prisma,
+          platformLeagueId: data.league_id,
+          isDynasty: (data.league?.format ?? 'dynasty') !== 'redraft',
+          prefetched: {
+            rosterPositions: sleeperLeagueForConfig?.roster_positions ?? null,
+            numTeams: sleeperLeagueForConfig?.total_rosters ?? null,
+            players: Object.keys(leaguePlayers).length > 0 ? leaguePlayers : null,
+          },
+        }).catch(() => null)
+      : null
+
     const labelCtx: ValuationContext = {
       asOfDate: data.asOfDate || new Date().toISOString().split('T')[0],
       isSuperFlex: isSF,
       numTeams: 12,
       rosterConfig: rosterConfigForVorp,
+      ...(idpBoard && idpBoard.byNameLower.size > 0 && { idpValueByNameLower: idpBoard.byNameLower }),
     }
 
     const [senderPlayerPrices, receiverPlayerPrices, senderPickPrices, receiverPickPrices] = await Promise.all([

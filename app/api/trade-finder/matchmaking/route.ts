@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
+import { prisma } from '@/lib/prisma'
+import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
 import { type FantasyCalcSettings } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { convertSleeperToAssets } from '@/lib/trade-engine'
@@ -201,18 +203,43 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
       fcPlayers = await getFantasyCalcValuesDbFirst(fcSettings)
     } catch { fcPlayers = [] }
 
+    /*
+     * This league's defenders, priced by its own scoring. Sleeper's league info and rosters
+     * were already fetched above, so this costs a DB read rather than another round trip.
+     */
+    const idpBoard = await loadIdpTradeValuesByName({
+      prisma,
+      platformLeagueId: leagueId,
+      isDynasty: !/redraft/i.test(String((league as { settings?: { type?: unknown } })?.settings?.type ?? '')),
+      prefetched: {
+        rosters,
+        rosterPositions: league.roster_positions ?? null,
+        numTeams: league.total_rosters ?? null,
+      },
+    }).catch(() => null)
+    const idpValueByNameLower = idpBoard && idpBoard.byNameLower.size > 0 ? idpBoard.byNameLower : null
+
     const ctx: ValuationContext = {
       asOfDate: new Date().toISOString().slice(0, 10),
       isSuperFlex: isSF,
       fantasyCalcPlayers: fcPlayers,
       numTeams: Number(numTeams),
+      ...(idpValueByNameLower && { idpValueByNameLower }),
     }
 
     const fantasyCalcValueMap: Record<string, { value: number; marketValue?: number; impactValue?: number; vorpValue?: number; volatility?: number }> = {}
     const allPlayerNames = new Set<string>()
     for (const r of allRosters) {
       for (const p of r.players) {
-        if (p.name && !p.isIdp) allPlayerNames.add(p.name)
+        /*
+         * Defenders were skipped outright here because nothing could price them — every
+         * one came back unpriced and would have polluted the value map with zeroes. They
+         * are included now only when this league's board actually priced them; without a
+         * board the old exclusion is still the honest behaviour.
+         */
+        if (!p.name) continue
+        if (p.isIdp && !idpValueByNameLower?.has(p.name.toLowerCase().trim())) continue
+        allPlayerNames.add(p.name)
       }
     }
     const uniqueNames = Array.from(allPlayerNames)

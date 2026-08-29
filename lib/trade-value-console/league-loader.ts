@@ -4,6 +4,8 @@ import { assertLeagueMember } from '@/lib/league/league-access'
 
 export type LoadedTradeLeague = {
   id: string
+  /** The platform's own league id — what the Sleeper endpoints and the IDP board key on. */
+  platformLeagueId: string | null
   name: string | null
   sport: LeagueSport
   leagueSize: number | null
@@ -33,6 +35,7 @@ export async function loadLeagueForTrade(args: {
     where: { id: args.leagueId },
     select: {
       id: true,
+      platformLeagueId: true,
       name: true,
       sport: true,
       leagueSize: true,
@@ -54,6 +57,7 @@ export async function loadLeagueForTrade(args: {
       : null
   return {
     id: row.id,
+    platformLeagueId: row.platformLeagueId,
     name: row.name,
     sport: row.sport,
     leagueSize: row.leagueSize,

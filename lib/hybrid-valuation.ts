@@ -18,6 +18,19 @@ export interface ValuationContext {
   ppr?: 0 | 0.5 | 1;
   /** League format; defaults to dynasty when the caller has no league context. */
   isDynasty?: boolean;
+  /**
+   * This league's own IDP board, keyed by lowercased player name — from
+   * `loadIdpTradeValuesByName`.
+   *
+   * 🛑 OPTIONAL, AND ITS ABSENCE MUST STAY HARMLESS. Without it every defender is
+   * priced off IDP_KICKER_BASELINE_VALUES below, which is a flat per-position
+   * constant: every linebacker in the league worth 800, the best and the worst
+   * alike. Supplying it replaces that with a value derived from the league's own
+   * scoring settings and starting slots. Callers that have no league — a trade
+   * described in chat, a snapshot write path — must NOT supply one, because an IDP
+   * value computed against the wrong league is worse than a flat one.
+   */
+  idpValueByNameLower?: ReadonlyMap<string, { value: number; position: string }>;
 }
 
 export interface AssetValue {
@@ -32,7 +45,14 @@ export interface PricedAsset {
   type: 'player' | 'pick';
   value: number;
   assetValue: AssetValue;
-  source: 'excel' | 'fantasycalc' | 'curve' | 'unknown';
+  /**
+   * Where the number came from. `idp-vorp` means the league's own scoring and
+   * starting slots priced this player — see ValuationContext.idpValueByNameLower.
+   * It is deliberately distinct from 'unknown': the flat IDP baseline also returns
+   * a usable value, and the two must be tellable apart by anything reporting
+   * confidence or explaining a grade to a manager.
+   */
+  source: 'excel' | 'fantasycalc' | 'curve' | 'idp-vorp' | 'unknown';
   /**
    * TRUE MEANS NO VALUE SOURCE MATCHED THIS ASSET AT ALL — it is not "worth zero",
    * it is unknown, and the two must never be collapsed.
@@ -239,6 +259,8 @@ export interface TradeDelta {
   valuationStats: {
     playersFromExcel: number;
     playersFromFantasyCalc: number;
+    /** Priced off the league's own IDP board. See ValuationContext.idpValueByNameLower. */
+    playersFromIdpVorp: number;
     playersUnknown: number;
     picksFromExcel: number;
     picksFromCurve: number;
@@ -368,6 +390,41 @@ export async function pricePlayer(
 
   if (hindsight && historicalResult.value !== null) {
     return priceFromHistorical();
+  }
+
+  /*
+   * This league's own IDP board, when the caller supplied one.
+   *
+   * ⚠ AHEAD OF THE FANTASYCALC BRANCH ON PURPOSE, THOUGH TODAY THEY CANNOT COLLIDE.
+   * FantasyCalc prices no defenders — `PlayerValueSnapshot` carries 7,043 rows and
+   * zero of them — and the map only ever contains players the board resolved as IDP,
+   * so neither branch can currently steal the other's players. The order states which
+   * should win if that changes: inside a league that genuinely scores IDP, a value
+   * derived from that league's own scoring and starting slots beats a generic
+   * cross-league market number, which is the whole reason the board exists.
+   *
+   * ⚠ NOT APPLIED TO A HINDSIGHT QUERY. The board is built from the CURRENT
+   * projection week; answering "what was he worth last March" with it would quietly
+   * restate today's price as history.
+   */
+  const idpBoardValue = ctx.idpValueByNameLower?.get(name.toLowerCase().trim());
+  if (idpBoardValue && idpBoardValue.value > 0) {
+    const mv = idpBoardValue.value;
+    const vol = computePlayerVolatility(null, idpBoardValue.position, age, analyticsData);
+    return {
+      name,
+      type: 'player',
+      value: mv,
+      assetValue: {
+        marketValue: mv,
+        impactValue: Math.round(mv * 0.6),
+        vorpValue: Math.round(mv * 0.3),
+        volatility: vol,
+      },
+      source: 'idp-vorp',
+      position: idpBoardValue.position,
+      ...(age != null && { age }),
+    };
   }
 
   if (fcPlayer) {
@@ -521,6 +578,8 @@ export async function priceAssets(
   stats: {
     playersFromExcel: number;
     playersFromFantasyCalc: number;
+    /** Priced off the league's own IDP board. See ValuationContext.idpValueByNameLower. */
+    playersFromIdpVorp: number;
     playersUnknown: number;
     picksFromExcel: number;
     picksFromCurve: number;
@@ -547,6 +606,7 @@ export async function priceAssets(
   const stats = {
     playersFromExcel: pricedPlayers.filter(p => p.source === 'excel').length,
     playersFromFantasyCalc: pricedPlayers.filter(p => p.source === 'fantasycalc').length,
+    playersFromIdpVorp: pricedPlayers.filter(p => p.source === 'idp-vorp').length,
     playersUnknown: pricedPlayers.filter(p => p.source === 'unknown').length,
     picksFromExcel: pricedPicks.filter(p => p.source === 'excel').length,
     picksFromCurve: pricedPicks.filter(p => p.source === 'curve').length
@@ -566,7 +626,22 @@ function computeGrade(percentDiff: number): { verdict: string; grade: string } {
 }
 
 function computeConfidence(stats: TradeDelta['valuationStats']): number {
-  const totalPlayers = stats.playersFromExcel + stats.playersFromFantasyCalc + stats.playersUnknown;
+  /*
+   * ⚠ IDP-PRICED PLAYERS COUNT, AND THEY COUNT AS NEITHER LIVE NOR UNKNOWN.
+   *
+   * Leaving them out of `totalPlayers` would make an all-defence trade divide by
+   * zero into a flat 0.5; counting them as `playersUnknown` would penalise the one
+   * branch that actually knows something about the player. They get no boost either:
+   * the board's ORDER is derived from the league's own scoring, but the ceiling that
+   * sets defence against offence is an unmeasured product decision, so a defender's
+   * price is not market-corroborated the way a FantasyCalc price is. Neutral is the
+   * honest reading — present in the denominator, absent from both adjustments.
+   */
+  const totalPlayers =
+    stats.playersFromExcel +
+    stats.playersFromFantasyCalc +
+    stats.playersFromIdpVorp +
+    stats.playersUnknown;
   const totalPicks = stats.picksFromExcel + stats.picksFromCurve;
   const totalAssets = totalPlayers + totalPicks;
 
@@ -659,6 +734,7 @@ export async function computeTradeDeltaFromUserTrades(
   const combinedStats = {
     playersFromExcel: received.stats.playersFromExcel + gave.stats.playersFromExcel,
     playersFromFantasyCalc: received.stats.playersFromFantasyCalc + gave.stats.playersFromFantasyCalc,
+    playersFromIdpVorp: received.stats.playersFromIdpVorp + gave.stats.playersFromIdpVorp,
     playersUnknown: received.stats.playersUnknown + gave.stats.playersUnknown,
     picksFromExcel: received.stats.picksFromExcel + gave.stats.picksFromExcel,
     picksFromCurve: received.stats.picksFromCurve + gave.stats.picksFromCurve

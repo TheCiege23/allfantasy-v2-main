@@ -91,29 +91,50 @@ const EMPTY = (
   projectedFor: null,
 })
 
-export async function loadLeagueIdpVorp(
-  args: LoadLeagueIdpVorpArgs,
-): Promise<LeagueIdpVorpResult> {
+/**
+ * Does this league genuinely score IDP?
+ *
+ * Exported so a caller can ask BEFORE assembling the expensive inputs. `loadLeagueIdpVorp`
+ * needs every rostered player id, and gathering those costs a provider round trip — which
+ * would be paid by the ~100 of 110 leagues that answer `false` here. One indexed read
+ * settles it first.
+ *
+ * Returns the scoring settings on success so the caller need not re-resolve them, and the
+ * refusal reason otherwise. This is the single authority for the question; the strict
+ * predicate matters (see `hasIdpScoring`) because the bare `sack`/`int`/`ff` keys are the
+ * team-defence block that EVERY Sleeper league ships.
+ */
+export async function resolveLeagueIdpScoring(
+  prisma: PrismaClient,
+  leagueId: string,
+): Promise<
+  | { ok: true; scoring: NonNullable<ReturnType<typeof extractScoringSettings>> }
+  | { ok: false; reason: 'no_scoring_settings' | 'not_an_idp_league' }
+> {
   const league =
-    (await args.prisma.league
-      .findUnique({ where: { id: args.leagueId }, select: { settings: true } })
+    (await prisma.league
+      .findUnique({ where: { id: leagueId }, select: { settings: true } })
       .catch(() => null)) ??
-    (await args.prisma.league
+    (await prisma.league
       .findFirst({
-        where: { platformLeagueId: args.leagueId },
+        where: { platformLeagueId: leagueId },
         orderBy: { updatedAt: 'desc' },
         select: { settings: true },
       })
       .catch(() => null))
 
   const scoring = extractScoringSettings(league?.settings)
-  if (!scoring) return EMPTY('no_scoring_settings')
-  /*
-   * The strict predicate, not the loose one. Bare `sack`/`int`/`ff` are the team-defence block
-   * every Sleeper league ships; treating them as IDP would run this whole path for ~64 of 110
-   * leagues instead of the 10 that actually roster defenders.
-   */
-  if (!hasIdpScoring(scoring)) return EMPTY('not_an_idp_league')
+  if (!scoring) return { ok: false, reason: 'no_scoring_settings' }
+  if (!hasIdpScoring(scoring)) return { ok: false, reason: 'not_an_idp_league' }
+  return { ok: true, scoring }
+}
+
+export async function loadLeagueIdpVorp(
+  args: LoadLeagueIdpVorpArgs,
+): Promise<LeagueIdpVorpResult> {
+  const resolved = await resolveLeagueIdpScoring(args.prisma, args.leagueId)
+  if (!resolved.ok) return EMPTY(resolved.reason)
+  const scoring = resolved.scoring
 
   const ids = [...new Set(args.rosterPlayerIds.filter((id) => typeof id === 'string' && id))]
   if (ids.length === 0) return EMPTY('no_rostered_defenders')

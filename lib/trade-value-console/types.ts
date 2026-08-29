@@ -87,7 +87,12 @@ export type TradeConsolePlayerLine = {
   dataSource: string
   composite: number
   marketValue: number
-  pricedSource: 'fantasycalc' | 'sports_db' | 'faab' | 'pick' | 'unknown'
+  /**
+   * Where the price came from. `idp_league` means this league's own IDP scoring and
+   * starting slots priced the player — no market prices defenders, so collapsing it
+   * into 'unknown' would report a value we can fully explain as one we cannot.
+   */
+  pricedSource: 'fantasycalc' | 'idp_league' | 'sports_db' | 'faab' | 'pick' | 'unknown'
   /** From `resolveNormalizedPlayerSportsProfiles` + league scoring stack. */
   effectiveProjection?: number | null
   projectionNotes?: string[]

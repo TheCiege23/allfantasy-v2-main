@@ -29,6 +29,7 @@ import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
+import { loadIdpTradeValuesByName } from '@/lib/idp-projections/idpTradeValues'
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import {
@@ -202,7 +203,11 @@ async function resolveAssets(
       priced.push(pa)
       const headshot = row?.headshotUrl ?? row?.headshotUrlLg ?? row?.headshotUrlSm ?? null
       const src: TradeConsolePlayerLine['pricedSource'] =
-        pa.source === 'fantasycalc' || pa.source === 'excel' ? 'fantasycalc' : 'unknown'
+        pa.source === 'fantasycalc' || pa.source === 'excel'
+          ? 'fantasycalc'
+          : pa.source === 'idp-vorp'
+            ? 'idp_league'
+            : 'unknown'
       lines.push(
         lineFromPriced(pa, {
           playerId: row?.id ?? raw.playerId ?? null,
@@ -437,11 +442,26 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     ppr: pprNfl,
   })
 
+  /*
+   * This league's defenders, priced by its own scoring rather than by the flat
+   * per-position constant in lib/hybrid-valuation.ts. Keyed off `platformLeagueId`
+   * because the console works in INTERNAL League.id space and Sleeper's roster and
+   * settings endpoints do not answer to that id.
+   */
+  const idpBoard = leagueRow?.platformLeagueId
+    ? await loadIdpTradeValuesByName({
+        prisma,
+        platformLeagueId: leagueRow.platformLeagueId,
+        isDynasty: leagueRow.isDynasty ?? true,
+      }).catch(() => null)
+    : null
+
   const nflCtx: ValuationContext = {
     asOfDate: asOf,
     isSuperFlex,
     fantasyCalcPlayers: fcPlayers,
     numTeams: leagueSize,
+    ...(idpBoard && idpBoard.byNameLower.size > 0 && { idpValueByNameLower: idpBoard.byNameLower }),
   }
 
   let { priced: givePriced, lines: giveLines, unresolved: giveUnresolved } = await resolveAssets(give, {

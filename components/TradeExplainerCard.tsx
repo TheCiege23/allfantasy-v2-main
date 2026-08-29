@@ -36,7 +36,8 @@ export function createExplainerFromDelta(
   
   const excelPlayers = delta.valuationStats.playersFromExcel
   const fcPlayers = delta.valuationStats.playersFromFantasyCalc
-  const totalPlayers = excelPlayers + fcPlayers + delta.valuationStats.playersUnknown
+  const idpPlayers = delta.valuationStats.playersFromIdpVorp
+  const totalPlayers = excelPlayers + fcPlayers + idpPlayers + delta.valuationStats.playersUnknown
   
   if (excelPlayers > 0) {
     bullets.push(`${excelPlayers} of ${totalPlayers} players valued from historical data${mode === 'atTime' && tradeDate ? ` (${tradeDate})` : ''}`)
@@ -44,6 +45,13 @@ export function createExplainerFromDelta(
   
   if (fcPlayers > 0) {
     bullets.push(`${fcPlayers} player${fcPlayers > 1 ? 's' : ''} valued from live market data`)
+  }
+
+  /* Named separately from the market bullet on purpose: no market prices defenders, so
+   * this number comes from THIS league's scoring and starting slots, and saying so is the
+   * difference between a value a manager can argue with and one that looks made up. */
+  if (idpPlayers > 0) {
+    bullets.push(`${idpPlayers} defender${idpPlayers > 1 ? 's' : ''} valued from your league's IDP scoring and starting slots`)
   }
   
   if (delta.valuationStats.picksFromExcel > 0 || delta.valuationStats.picksFromCurve > 0) {

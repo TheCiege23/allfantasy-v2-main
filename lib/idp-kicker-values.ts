@@ -1,4 +1,12 @@
-import { PlayerValueMap } from './rankings-engine/league-rankings-v2'
+/*
+ * ⚠ `import type`, AND THE KEYWORD IS LOad-BEARING. `league-rankings-v2.ts` is 3,500 lines
+ * and imports this module back (for `buildIdpKickerValueMap`), so a value import here is a
+ * genuine cycle AND drags the whole rankings engine into the runtime graph of anything that
+ * only wants the IDP curve. Measured when the trade evaluator first pulled this chain in:
+ * the route's test transform cost went from 14s to 47s and pushed its contract tests past
+ * their timeout. Only the TYPE was ever used.
+ */
+import type { PlayerValueMap } from './rankings-engine/league-rankings-v2'
 
 const IDP_POSITION_MAP: Record<string, string> = {
   LB: 'LB',
