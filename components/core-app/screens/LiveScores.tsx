@@ -553,22 +553,38 @@ function Side({
 }) {
   return (
     <div className="af-live-side-team" data-align={align}>
-      <span className="af-live-team-mark af-num" aria-hidden>
-        {side.abbrev}
-      </span>
+      {/*
+        The crest when we resolved one, the abbreviation when we did not. The
+        logo already travelled on the card and this component simply never read
+        it, so college slates rendered as text marks while the URL sat unused.
+        Falling back to the abbreviation keeps the row readable rather than
+        leaving a hole where an image failed.
+      */}
+      {side.logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="af-live-team-crest" src={side.logo} alt="" width={38} height={38} loading="lazy" />
+      ) : (
+        <span className="af-live-team-mark af-num" aria-hidden>
+          {side.abbrev}
+        </span>
+      )}
       <span className="af-live-team-text">
         <span className="af-live-team-name">{side.name}</span>
         {/* Records are not published for every league/sport; withheld, not "0—0". */}
         <span className="af-live-team-record af-num">{side.record ?? '—'}</span>
       </span>
+      {/* Withheld before kickoff, exactly like the record above — a scheduled
+          game showed "0 @ 0", which is a result nobody played. */}
       <span className="af-live-team-score af-num" data-leading={leading}>
-        {side.score}
+        {side.score ?? '—'}
       </span>
     </div>
   )
 }
 
-function leads(a: number, b: number): boolean {
+function leads(a: number | null, b: number | null): boolean {
+  // Nobody leads a game that has not started.
+  if (a === null || b === null) return false
   return a > b
 }
 

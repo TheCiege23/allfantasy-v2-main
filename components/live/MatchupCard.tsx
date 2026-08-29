@@ -15,7 +15,13 @@ import type { LiveGameCard } from '@/lib/live/liveScoresPage'
  */
 export function MatchupCard({ game }: { game: LiveGameCard }) {
   const leading =
-    game.home.score === game.away.score ? null : game.home.score > game.away.score ? 'home' : 'away'
+    game.home.score === null || game.away.score === null
+      ? null // no leader before kickoff
+      : game.home.score === game.away.score
+        ? null
+        : game.home.score > game.away.score
+          ? 'home'
+          : 'away'
   const wp = game.winProbability
 
   return (
@@ -147,7 +153,7 @@ function TeamRow({ side, dimmed }: { side: LiveGameCard['home']; dimmed: boolean
         className="live-mono flex-none text-[28px] font-extrabold leading-none"
         style={{ color: dimmed ? 'var(--muted)' : 'var(--text)' }}
       >
-        {side.score}
+        {side.score ?? '—'}
       </span>
     </div>
   )

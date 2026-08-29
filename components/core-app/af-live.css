@@ -290,6 +290,16 @@
   font-size: 11.5px;
   font-weight: 800;
 }
+/* Same 38px slot as the abbreviation mark, so swapping a crest in does not
+   shift the row. `contain` because college logos are not a uniform aspect. */
+.af-live-team-crest {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: contain;
+  background: var(--chip);
+}
 .af-live-team-text {
   display: flex;
   flex-direction: column;

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import {
   getCachedLiveScoresForSport,
   getLiveScoresForSport,
+  hasStarted,
   type LiveScoreRow,
 } from '@/lib/sports-live-scores-service'
 import { getPlayFeed, type PlayFeedItem } from '@/lib/live/playFeedPresentation'
@@ -59,7 +60,16 @@ export type LiveTeamSide = {
   abbrev: string
   name: string
   logo: string
-  score: number
+  /**
+   * Points scored, or NULL before kickoff.
+   *
+   * ⚠ NULL, NOT 0. ESPN sends `"0"` for both sides of a game that has not
+   * started, so reading it unconditionally puts a real-looking 0-0 on every
+   * scheduled fixture — measured on `/core/live` 2026-08-29: "SJSU 0 @ 0 USC"
+   * for a game kicking off the next afternoon. The record beside it already
+   * gets this right ("withheld, not 0—0"); the score now matches.
+   */
+  score: number | null
   record: string | null
 }
 
@@ -508,6 +518,8 @@ export async function getLivePageData(opts: {
       return (b.points ?? 0) - (a.points ?? 0)
     })
 
+    // ESPN sends 0-0 before kickoff; a score is only real once play began.
+    const played = hasStarted(row.status) || row.completed
     return {
       gameId: row.gameId,
       sport,
@@ -522,14 +534,14 @@ export async function getLivePageData(opts: {
         abbrev: home,
         name: row.homeTeamFull,
         logo: row.homeLogo,
-        score: row.homeScore,
+        score: played ? row.homeScore : null,
         record: row.homeRecord,
       },
       away: {
         abbrev: away,
         name: row.awayTeamFull,
         logo: row.awayLogo,
-        score: row.awayScore,
+        score: played ? row.awayScore : null,
         record: row.awayRecord,
       },
       winProbability: estimateWinProbability({

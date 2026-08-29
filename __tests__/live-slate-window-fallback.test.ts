@@ -22,6 +22,9 @@ const getCachedLiveScoresForSport = vi.fn()
 vi.mock('@/lib/sports-live-scores-service', () => ({
   getLiveScoresForSport: (...a: unknown[]) => getLiveScoresForSport(...a),
   getCachedLiveScoresForSport: (...a: unknown[]) => getCachedLiveScoresForSport(...a),
+  // Real enough for these rows: every fixture here is STATUS_SCHEDULED, so the
+  // card's score is withheld — which is the behaviour the assertions rely on.
+  hasStarted: (status: unknown) => /in_progress|final|halftime/i.test(String(status)),
   LIVE_SCORES_FRESHNESS_MS: 60_000,
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
