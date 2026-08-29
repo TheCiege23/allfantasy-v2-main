@@ -1,5 +1,27 @@
-import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+/**
+ * `/leagues/[leagueId]/admin/model` — REDIRECT CONTRACT.
+ *
+ * ⚠ THIS FILE USED TO ASSERT THE GATE LIVED HERE, AND IT NO LONGER DOES.
+ *
+ * The screen moved onto the core shell (`b2ffe5dfc`) and this path became a redirect
+ * stub to `/core/model-admin?league=<id>`. The four render tests that used to live here
+ * — unauthenticated redirect, access-denied for non-admins, commissioner denial, panels
+ * for admins — were asserting behaviour that deliberately moved, so they failed on every
+ * run after the move and sat red on main because vitest does not run in CI.
+ *
+ * They are NOT deleted, they are RELOCATED: the gate itself is now covered by
+ * `model-admin-authorization-policy.test.ts`, which exercises the real `lib/adminAuth`
+ * predicate and pins the core page's gate expression. What belongs HERE is the one thing
+ * this file still owns — that the old path forwards correctly and leaks nothing on the
+ * way.
+ *
+ * Verified against production on 2026-08-28 before rewriting, so this encodes observed
+ * behaviour rather than intent:
+ *   /leagues/abc/admin/model      -> 307 /core/model-admin?league=abc
+ *   /core/model-admin?league=abc  -> 307 /login?callbackUrl=%2Fcore%2Fmodel-admin
+ */
 
 const mocks = vi.hoisted(() => ({
   getAdminAccessState: vi.fn(),
@@ -8,83 +30,69 @@ const mocks = vi.hoisted(() => ({
   }),
 }))
 
-vi.mock("next/navigation", () => ({
-  redirect: mocks.redirect,
-}))
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("@/lib/adminAuth", () => ({ getAdminAccessState: mocks.getAdminAccessState }))
 
-vi.mock("@/lib/adminAuth", () => ({
-  getAdminAccessState: mocks.getAdminAccessState,
-}))
+async function loadPage() {
+  const mod = await import("@/app/leagues/[leagueId]/admin/model/page")
+  return mod.default
+}
 
-vi.mock("@/components/admin/V3WeightsPanel", () => ({
-  V3WeightsPanel: () => <div data-testid="v3-weights-panel-stub" />,
-}))
-
-vi.mock("@/components/admin/UsageAnalyticsPanel", () => ({
-  UsageAnalyticsPanel: () => <div data-testid="usage-analytics-panel-stub" />,
-}))
-
-describe("league model-admin page authorization", () => {
+describe("league model-admin path forwards to the core shell", () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
   })
 
-  it("redirects unauthenticated users to admin login with a league-scoped return path", async () => {
-    mocks.getAdminAccessState.mockResolvedValueOnce({ status: "unauthenticated", source: "none" })
-    const { default: ModelAdminPage } = await import("@/app/leagues/[leagueId]/admin/model/page")
+  it("redirects to the core model-admin screen, carrying the league", async () => {
+    const ModelAdminPage = await loadPage()
+
+    await expect(ModelAdminPage({ params: { leagueId: "league-1" } })).rejects.toThrow(
+      "redirect:/core/model-admin?league=league-1",
+    )
+  })
+
+  it("awaits a promised params object (Next 15 passes it async)", async () => {
+    const ModelAdminPage = await loadPage()
 
     await expect(
-      ModelAdminPage({ params: { leagueId: "league-1" } }),
-    ).rejects.toThrow("redirect:/admin-login?next=%2Fleagues%2Fleague-1%2Fadmin%2Fmodel")
+      ModelAdminPage({ params: Promise.resolve({ leagueId: "league-2" }) }),
+    ).rejects.toThrow("redirect:/core/model-admin?league=league-2")
   })
 
-  it("renders access denied for authenticated non-admin users and never mounts protected panels", async () => {
-    mocks.getAdminAccessState.mockResolvedValueOnce({
-      status: "forbidden",
-      source: "app_session",
-      user: { id: "user-1", email: "member@example.com" },
-    })
-    const { default: ModelAdminPage } = await import("@/app/leagues/[leagueId]/admin/model/page")
+  it("encodes the league id rather than splicing it into the query raw", async () => {
+    // A league id is caller-controlled. Unencoded, `a&admin=1` would forge a second
+    // query parameter on the destination.
+    const ModelAdminPage = await loadPage()
 
-    render(await ModelAdminPage({ params: { leagueId: "league-1" } }))
-
-    expect(screen.getByText(/access denied/i)).toBeInTheDocument()
-    expect(screen.queryByTestId("v3-weights-panel-stub")).not.toBeInTheDocument()
-    expect(screen.queryByTestId("usage-analytics-panel-stub")).not.toBeInTheDocument()
+    await expect(
+      ModelAdminPage({ params: { leagueId: "a&admin=1 b/c" } }),
+    ).rejects.toThrow("redirect:/core/model-admin?league=a%26admin%3D1%20b%2Fc")
   })
 
-  it("denies a league commissioner who is not a site admin", async () => {
-    // Commissioner status confers no admin access - the canonical gate reports
-    // forbidden. See model-admin-authorization-policy.test.ts, which proves this
-    // against the real lib/adminAuth rather than this mock.
-    mocks.getAdminAccessState.mockResolvedValueOnce({
-      status: "forbidden",
-      source: "app_session",
-      user: { id: "commish-1", email: "commissioner@example.com", username: "leaguecommish" },
-    })
-    const { default: ModelAdminPage } = await import("@/app/leagues/[leagueId]/admin/model/page")
+  it("does NOT evaluate the admin gate here — the destination owns it", async () => {
+    /*
+     * Deliberate, and the reason this assertion exists rather than a second gate:
+     * duplicating `getAdminAccessState` on the stub would create a second predicate to
+     * drift out of step with the real one. If someone adds a gate here, they must also
+     * decide what happens when the two disagree — so make that a conscious change.
+     */
+    const ModelAdminPage = await loadPage()
 
-    render(await ModelAdminPage({ params: { leagueId: "league-1" } }))
-
-    expect(screen.getByText(/access denied/i)).toBeInTheDocument()
-    expect(screen.queryByTestId("v3-weights-panel-stub")).not.toBeInTheDocument()
-    expect(screen.queryByTestId("usage-analytics-panel-stub")).not.toBeInTheDocument()
+    await expect(ModelAdminPage({ params: { leagueId: "league-3" } })).rejects.toThrow(
+      /^redirect:/,
+    )
+    expect(mocks.getAdminAccessState).not.toHaveBeenCalled()
   })
 
-  it("renders both model admin panels for admins", async () => {
-    mocks.getAdminAccessState.mockResolvedValueOnce({
-      status: "admin",
-      source: "app_session",
-      user: { id: "admin-1", email: "founder@example.com", role: "admin" },
-    })
-    const { default: ModelAdminPage } = await import("@/app/leagues/[leagueId]/admin/model/page")
+  it("redirects before doing anything else, for every caller", async () => {
+    const ModelAdminPage = await loadPage()
 
-    render(await ModelAdminPage({ params: { leagueId: "league-1" } }))
-
-    expect(screen.getByText("Model Admin")).toBeInTheDocument()
-    expect(screen.getByText(/League league-1/)).toBeInTheDocument()
-    expect(screen.getByTestId("v3-weights-panel-stub")).toBeInTheDocument()
-    expect(screen.getByTestId("usage-analytics-panel-stub")).toBeInTheDocument()
+    for (const leagueId of ["league-a", "league-b"]) {
+      await expect(ModelAdminPage({ params: { leagueId } })).rejects.toThrow(
+        `redirect:/core/model-admin?league=${leagueId}`,
+      )
+    }
+    expect(mocks.redirect).toHaveBeenCalledTimes(2)
   })
 })
