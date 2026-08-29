@@ -25,6 +25,7 @@ import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converte
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
+import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
 import { buildGptInputContract, buildGptUserPrompt, validateGptNarrativeOutput, shouldSkipGpt, AI_OUTPUT_INVALID_FALLBACK, GPT_NARRATIVE_SYSTEM_PROMPT } from '@/lib/trade-engine/gpt-input-contract'
@@ -615,6 +616,46 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
        * clean sweep of misses. Say so, and return 503 so it reads as our problem rather
        * than the user's typo.
        */
+      /*
+       * 🛑 A COLLEGE PLAYER IS NOT A TYPO, AND SAYING SO WAS ACTIVELY MISLEADING.
+       *
+       * Both branches below assume an unpriced name is either a misspelling or a board
+       * outage. A devy asset is neither: he is correctly spelled, correctly identified, and
+       * genuinely unpriced because NO MARKET PRICES COLLEGE PLAYERS — see
+       * lib/trade-intel/devyOutlook.ts. Sent through the branches below, a devy-for-devy
+       * trade returned 503 "this is on our side, try again shortly" (it is not, and retrying
+       * will never help) and a mixed deal told the manager to check his spelling.
+       *
+       * `identifyDevyAssets` is the SAME implementation `/api/trade-value/analyze` uses, so
+       * the two surfaces cannot drift into different answers about the same trade.
+       */
+      const devy = await identifyDevyAssets({
+        give: senderPlayerPrices.map((p) => ({ name: p.name, marketValue: p.unpriced ? null : p.value })),
+        get: receiverPlayerPrices.map((p) => ({ name: p.name, marketValue: p.unpriced ? null : p.value })),
+        season: new Date(data.asOfDate || Date.now()).getUTCFullYear(),
+      }).catch(() => null)
+
+      if (devy && devy.matched.length > 0) {
+        const devyNames = new Set(devy.matched.map((m) => m.name.toLowerCase()))
+        const stillUnexplained = names.filter((n) => !devyNames.has(n.toLowerCase()))
+        return NextResponse.json(
+          {
+            error: 'DEVY_SCALE',
+            message:
+              devy.refusal ??
+              devy.verdict ??
+              'This trade is between college assets, which are ranked against each other rather than priced in market units.',
+            /* The devy half of the answer, so the refusal is not a dead end. */
+            devyAssets: devy.matched.map((m) => m.name),
+            devyStandings: devy.standings,
+            devyVerdict: devy.verdict,
+            /* Names that are neither priced nor known college players really are suspect. */
+            ...(stillUnexplained.length > 0 && { unpricedPlayers: stillUnexplained }),
+          },
+          { status: 422 },
+        )
+      }
+
       if (allPlayerPrices.length > 0 && unpricedAssets.length === allPlayerPrices.length) {
         return NextResponse.json(
           {

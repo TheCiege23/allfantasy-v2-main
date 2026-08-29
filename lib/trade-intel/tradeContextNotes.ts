@@ -58,12 +58,7 @@ import {
   assessUnpriced,
 } from './rosterShape'
 import { assessContention, postureNote } from './contention'
-import {
-  projectDevyOutlook,
-  refuseMixedScaleGrade,
-  type TradeAsset as DevyTradeAsset,
-} from './devyOutlook'
-import { devyAssetValue, gradeDevyTrade, type DevyTradeSide } from './devyTradeValue'
+import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
 import {
@@ -1077,126 +1072,6 @@ async function buildFormatNotes(args: {
  * Returns null when the deal contains no college assets at all, so the ordinary
  * path is untouched.
  */
-async function identifyDevyAssets(args: {
-  give: Array<{ name: string; marketValue: number | null }>
-  get: Array<{ name: string; marketValue: number | null }>
-  season: number
-}): Promise<{
-  matched: Array<{ name: string }>
-  refusal: string | null
-  standings: string[]
-  verdict: string | null
-} | null> {
-  const all = [...args.give, ...args.get]
-  const unpricedNames = all.filter((x) => x.marketValue == null).map((x) => x.name)
-  if (unpricedNames.length === 0) return null
-
-  const select = {
-    name: true,
-    position: true,
-    school: true,
-    draftEligibleYear: true,
-    recruitingComposite: true,
-    breakoutAge: true,
-    projectedDraftRound: true,
-    devyAdp: true,
-    draftProjectionScore: true,
-  } as const
-
-  const candidates = await prisma.devyPlayer.findMany({
-    where: {
-      graduatedToNFL: false,
-      OR: unpricedNames.map((n) => ({ name: { equals: n, mode: 'insensitive' as const } })),
-    },
-    select,
-  })
-  if (candidates.length === 0) return null
-
-  const assets: DevyTradeAsset[] = [
-    ...candidates.map((c) => ({ label: c.name, kind: 'devy_player' as const })),
-    ...all
-      .filter((x) => x.marketValue != null)
-      .map((x) => ({ label: x.name, kind: 'nfl_player' as const })),
-  ]
-  const refusal = refuseMixedScaleGrade(assets)?.reason ?? null
-
-  const outlookFor = (c: (typeof candidates)[number]) =>
-    projectDevyOutlook({
-      player: c,
-      draftEligibleYear: c.draftEligibleYear,
-      currentSeason: args.season,
-      name: c.name,
-    })
-
-  const standings = candidates.map(
-    (c) => `${c.name} (${c.position}, ${c.school}) — ${outlookFor(c).basis}`,
-  )
-
-  /*
-   * ⚠ RANK MUST BE AGAINST THE WHOLE BOARD, NOT THE PLAYERS IN THE DEAL. Ranking
-   * the two prospects in a trade against each other makes them #1 and #2 and
-   * therefore near-elite by construction, which is how a swap of two nobodies
-   * would grade as a blockbuster.
-   *
-   * The whole non-null score column is ~800 floats, so it is cheaper to pull and
-   * rank in memory than to issue a positional COUNT per player.
-   */
-  const board = await prisma.devyPlayer.findMany({
-    where: { graduatedToNFL: false, draftProjectionScore: { not: null } },
-    select: { draftProjectionScore: true },
-  })
-  const descending = board
-    .map((b) => b.draftProjectionScore as number)
-    .sort((a, b) => b - a)
-
-  const rankOf = (score: number | null): number | null => {
-    if (score == null) return null
-    /* One-based rank: how many players score strictly higher, plus one. */
-    let lo = 0
-    let hi = descending.length
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1
-      if (descending[mid] > score) lo = mid + 1
-      else hi = mid
-    }
-    return lo + 1
-  }
-
-  /*
-   * A verdict only when the deal is devy on BOTH sides. A mixed deal is refused
-   * above, and devy points cannot settle a trade whose other half is priced in
-   * market units.
-   */
-  let verdict: string | null = null
-  if (!refusal) {
-    const byName = new Map(candidates.map((c) => [c.name.toLowerCase(), c]))
-    const toSide = (lines: Array<{ name: string }>): DevyTradeSide[] =>
-      lines
-        .map((l) => byName.get(l.name.toLowerCase()))
-        .filter((c): c is (typeof candidates)[number] => c != null)
-        .map((c) => ({
-          label: c.name,
-          value: devyAssetValue({
-            devyRank: rankOf(c.draftProjectionScore),
-            outlook: outlookFor(c),
-            name: c.name,
-          }),
-        }))
-
-    const give = toSide(args.give)
-    const get = toSide(args.get)
-    if (give.length > 0 && get.length > 0) {
-      verdict = gradeDevyTrade({ give, get }).basis
-    }
-  }
-
-  return {
-    matched: candidates.map((c) => ({ name: c.name })),
-    refusal,
-    standings,
-    verdict,
-  }
-}
 
 async function buildScaleNotes(args: {
   abundantPositions: Array<{ pos: string; freeAgents: number }>

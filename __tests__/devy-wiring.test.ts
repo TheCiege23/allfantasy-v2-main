@@ -13,17 +13,36 @@ import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
  * by devy-outlook.test.ts; what is covered here is that a college asset in a
  * real trade actually reaches it.
  */
-const SRC = readFileSync(resolve(process.cwd(), 'lib/trade-intel/tradeContextNotes.ts'), 'utf8')
+const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8')
+const SRC = read('lib/trade-intel/tradeContextNotes.ts')
+/* The identifier itself now lives in one shared module; both trade surfaces call it. */
+const VERDICT = read('lib/devy/devyTradeVerdict.ts')
+const EVALUATOR = read('app/api/trade-evaluator/route.ts')
 
 describe('devy valuation is reachable from the trade console', () => {
   it('imports the devy module rather than reimplementing it', () => {
-    expect(SRC).toContain("from './devyOutlook'")
-    expect(SRC).toContain('refuseMixedScaleGrade')
-    expect(SRC).toContain('projectDevyOutlook')
+    expect(VERDICT).toContain("from '@/lib/trade-intel/devyOutlook'")
+    expect(VERDICT).toContain('refuseMixedScaleGrade')
+    expect(VERDICT).toContain('projectDevyOutlook')
   })
 
   it('actually calls the identifier from the scale notes', () => {
     expect(SRC).toContain('await identifyDevyAssets(')
+  })
+
+  /**
+   * ⚠ THE SURFACE THAT WAS MISSING IT ENTIRELY. `/api/trade-evaluator` is the primary
+   * trade path and never reached any of this: a college player was simply "unpriced", and
+   * the manager was told to check the spelling of a correctly-spelled name. If this
+   * assertion fails, that regression is back.
+   */
+  it('is reached from the primary trade evaluator, not just the console', () => {
+    expect(EVALUATOR).toContain('identifyDevyAssets')
+  })
+
+  it('keeps ONE implementation — the console must not reimplement the identifier', () => {
+    expect(SRC).not.toContain('async function identifyDevyAssets')
+    expect(EVALUATOR).not.toContain('async function identifyDevyAssets')
   })
 
   it('leads with the refusal, because a cross-scale verdict is a correctness problem', () => {
@@ -44,7 +63,7 @@ describe('devy valuation is reachable from the trade console', () => {
 
   it('only reinterprets names that carry no market price', () => {
     // A name that priced is an NFL player whatever else shares his name.
-    expect(SRC).toContain('x.marketValue == null')
+    expect(VERDICT).toContain('x.marketValue == null')
   })
 })
 

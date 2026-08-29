@@ -2,12 +2,25 @@
  * What a devy asset is worth, in devy terms — and why that number must never be
  * added to a FantasyCalc value.
  *
- * ⚠ A DEVY PLAYER IS NOT PRICED BY ANY MARKET WE HOLD. Verified against
- * production on 2026-08-25: the `DevyAdp` table has ZERO rows, and
- * `DevyPlayer.devyAdp` is null for all 1,718 college players on file. There is
- * no FantasyCalc entry, no DynastyProcess entry, and no NCAAF trade-value source
- * anywhere in the schema. The only college signal that exists is a DERIVED
- * SCOUTING COMPOSITE — recruiting stars, production, projected draft round.
+ * ⚠ A DEVY PLAYER IS NOT PRICED BY ANY MARKET WE HOLD. There is no FantasyCalc
+ * entry, no DynastyProcess entry, and no NCAAF trade-VALUE source anywhere in
+ * the schema. That remains true and is the reason this module exists.
+ *
+ * ⚠ BUT THE "NO SIGNAL AT ALL" HALF OF THIS NOTE IS NOW OUT OF DATE, AND WAS
+ * LEFT STANDING TOO LONG. It said `DevyAdp` had ZERO rows and `devyAdp` was null
+ * for all 1,718 players. Re-verified 2026-08-29: `DevyAdp` holds 337 rows and
+ * 337 players carry a non-null `devyAdp`, ingested from Fantrax NCAAF ADP on
+ * 2026-08-26. A second, independently-derived signal now exists.
+ *
+ * ⚠ IT IS STILL NOT A PRICE, AND IT DOES NOT RESCUE THE RANK BRIDGE. ADP is
+ * DRAFT POSITION — it orders a board, it does not say what a player trades for.
+ * And the two orderings we hold disagree: measured across the 327 players
+ * carrying both, Spearman is 0.380 (WR 0.348, RB 0.333, TE 0.328, QB 0.580),
+ * median rank gap 71 of 327. `devyValueBoard.ts` therefore REPORTS the
+ * disagreement rather than averaging it, and the reasoning is in that file.
+ *
+ * The only other college signal is a DERIVED SCOUTING COMPOSITE — recruiting
+ * stars, production, projected draft round.
  *
  * ⚠ SO THE RANK BRIDGE IN afValue.ts IS NOT AVAILABLE HERE, AND COPYING IT WOULD
  * BE A LIE. What makes that bridge honest is that it reconciles two
