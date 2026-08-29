@@ -30,8 +30,12 @@ import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
+import MyTeamBoard from '@/components/core-app/MyTeamBoard'
+import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
 import Matchup from '@/components/core-app/screens/Matchup'
 import { getMatchupData } from '@/lib/core-app/matchup'
+import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
+import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 import Trades from '@/components/core-app/screens/Trades'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
@@ -199,7 +203,15 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
 const TAB_META: Record<string, { title: string; description: string }> = {
   '': { title: 'Your leagues', description: 'Every league you play, ordered by what needs you first.' },
   players: { title: 'Player Finder', description: 'Search any player and see what they are worth in your leagues.' },
-  'my-team': { title: 'My team', description: 'Your lineup, slots and lock times for one league.' },
+  /*
+   * Covers both states this segment renders: the cross-league lineup check when
+   * no league is selected, and one league's roster when one is. A description
+   * naming only the second was wrong for the screen most visits land on.
+   */
+  'my-team': {
+    title: 'My team',
+    description: 'Which of your lineups still need setting, and every slot, projection and lock time inside one league.',
+  },
   matchup: { title: 'Matchup', description: 'This week head to head, scored against your league rules.' },
   trades: { title: 'Trades', description: 'Trade offers and grades, priced against one league.' },
   waivers: { title: 'Waivers', description: 'Targets, bids and claim order for this league.' },
@@ -326,6 +338,31 @@ export default async function AfCorePage({
   if (segment === 'signup-preview') {
     return <AuthV4 mode="signup" />
   }
+  /*
+   * ⚠ /core/import RESOLVED TO THE DASHBOARD, SILENTLY. `import` is not in
+   * SCREEN_KEYS, and an unknown segment falls back to `activeKey = 'home'` — so
+   * anyone who typed, bookmarked or linked /core/import landed on the home screen
+   * with no indication they had asked for something else. LeaguePanel.tsx even
+   * carries a comment warning contributors to link /import instead, which is a
+   * workaround for this rather than a fix.
+   *
+   * It redirects rather than rendering ImportV4 here on purpose: /import is not
+   * only a screen, it is the auth boundary and the param contract (`provider`,
+   * `username`, `leagueId`/`sourceId`, `returnTo`, the Yahoo callback fields) for
+   * every inbound import link in the product. Re-rendering the screen on this
+   * route would mean maintaining that contract in two places; forwarding keeps
+   * one. The query string is carried over so a deep link still arrives intact.
+   */
+  if (segment === 'import') {
+    const qs = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (typeof value === 'string') qs.set(key, value)
+      else if (Array.isArray(value) && typeof value[0] === 'string') qs.set(key, value[0])
+    }
+    const query = qs.toString()
+    redirect(query ? `/import?${query}` : '/import')
+  }
+
   if (segment === 'import-preview') {
     // ?state= previews the connecting and result layouts. They are reachable
     // only deliberately, and the result panel says it carries no league data.
@@ -530,9 +567,36 @@ export default async function AfCorePage({
       ? await getMyTeamData(selectedLeagueId, userId).catch(() => null)
       : null
 
+  /*
+   * The cross-league lineup check, for `/core/my-team` with no league in
+   * context.
+   *
+   * ⚠ ONLY ON THE NO-LEAGUE PATH, for the same reason as `matchupPulse` below.
+   * It reads every claimed team's starting lineup across the whole portfolio;
+   * running it while a single league is selected would put that whole board on
+   * the critical path of a screen that never renders it.
+   */
+  const myTeamPulse =
+    activeKey === 'my-team' && !selectedLeagueId
+      ? await getMyTeamPulse(userId).catch(() => null)
+      : null
+
   const matchup =
     activeKey === 'matchup' && selectedLeagueId
       ? await getMatchupData(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  /*
+   * The cross-league pulse, for `/core/matchup` with no league in context.
+   *
+   * ⚠ ONLY ON THE NO-LEAGUE PATH. It reads every claimed team's current week
+   * across the whole portfolio; running it while a single league is selected
+   * would put that whole board on the critical path of a screen that never
+   * renders it.
+   */
+  const matchupPulse =
+    activeKey === 'matchup' && !selectedLeagueId
+      ? await getMatchupPulse(userId).catch(() => null)
       : null
 
   const trades =
@@ -1386,9 +1450,16 @@ export default async function AfCorePage({
           <PickALeague
             tabKey="my-team"
             title="My team"
-            blurb="Your roster, slots and lock time only mean something inside a single league's rules."
+            blurb="Which lineups still need setting, and how long you have left. Pick one below for the full roster."
             issues={issues}
             leagues={rail}
+            /*
+              Composed above the queue and picker rather than replacing them —
+              the same shape as the matchup pulse below. A failed read renders
+              nothing here instead of an empty board, so this screen still does
+              everything it did before.
+            */
+            above={myTeamPulse ? <MyTeamBoard pulse={myTeamPulse} /> : null}
           />
         )
       ) : activeKey === 'matchup' ? (
@@ -1398,9 +1469,16 @@ export default async function AfCorePage({
           <PickALeague
             tabKey="matchup"
             title="Matchup"
-            blurb="A head-to-head only means something inside one league's schedule and scoring."
+            blurb="Every league with a head-to-head this week, ranked by margin. Pick one below for the full box score."
             issues={issues}
             leagues={rail}
+            /*
+              The pulse is composed above the queue and picker rather than
+              replacing them — the handoff leaves both unchanged. A failed read
+              renders nothing here instead of an empty board, so this screen
+              still does everything it did before.
+            */
+            above={matchupPulse ? <MatchupPulseBoard pulse={matchupPulse} /> : null}
           />
         )
       ) : activeKey === 'trades' ? (

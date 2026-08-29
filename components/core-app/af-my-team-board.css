@@ -1,0 +1,346 @@
+/* ── "Lineups that need you" — the cross-league my-team board ─────────────
+ *
+ * ⚠ THE ROW RULE CARRIES `.af-core` ON PURPOSE. af-core.css scopes its
+ * primitives as `.af-core a` — specificity (0,2,0). A bare `.af-mtb-row` is
+ * (0,1,0) and LOSES regardless of import order, which has silently dropped a
+ * link's colour in this suite before. Same reason as af-matchup-pulse.css and
+ * af-pick-league.css.
+ *
+ * Tokens are the handoff's: --surface / --line / --good / --bad / --warn and
+ * the platform tints. Nothing here invents a colour.
+ */
+
+.af-mtb {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-mtb-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.af-mtb-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
+.af-mtb-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/*
+  Not fine print. It states that the bye column did not run, and a reader who
+  misses it believes a check happened that did not.
+*/
+.af-mtb-basis {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+.af-mtb-gap,
+.af-mtb-more {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-mtb-more {
+  padding-left: 2px;
+}
+
+.af-mtb-quiet {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Columns ─────────────────────────────────────────────────────────── */
+
+.af-mtb-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.af-mtb-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-mtb-col-head[data-tone='good'] {
+  color: var(--good);
+}
+.af-mtb-col-head[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-mtb-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Row ─────────────────────────────────────────────────────────────── */
+
+.af-core .af-mtb-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.af-core .af-mtb-row:hover,
+.af-core .af-mtb-row:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+
+/*
+  A locked row is history, not a task. It is dimmed rather than removed —
+  "you lost a slot here" is still a fact worth reading — and it recovers full
+  contrast on hover so it never becomes unreadable.
+*/
+.af-core .af-mtb-row[data-locked='true'] {
+  opacity: 0.62;
+}
+.af-core .af-mtb-row[data-locked='true']:hover,
+.af-core .af-mtb-row[data-locked='true']:focus-visible {
+  opacity: 1;
+}
+
+/* The league crest — 30px, the row's anchor. */
+.af-mtb-crest {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-mtb-crest--none {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text2);
+}
+
+/*
+  Platform tint, per the handoff. Applied only to the INITIALS fallback — a real
+  crest brings its own colour and tinting behind an opaque image would do
+  nothing but confuse the next reader of this file.
+*/
+.af-mtb-crest--none[data-platform='sleeper'] {
+  background: rgba(147, 90, 255, 0.16);
+  border-color: rgba(147, 90, 255, 0.3);
+  color: #b394ff;
+}
+.af-mtb-crest--none[data-platform='espn'] {
+  background: rgba(251, 91, 120, 0.16);
+  border-color: rgba(251, 91, 120, 0.3);
+  color: #fb5b78;
+}
+.af-mtb-crest--none[data-platform='yahoo'] {
+  background: rgba(148, 88, 255, 0.16);
+  border-color: rgba(148, 88, 255, 0.3);
+  color: #a685ff;
+}
+.af-mtb-crest--none[data-platform='fantrax'] {
+  background: rgba(34, 211, 238, 0.16);
+  border-color: rgba(34, 211, 238, 0.3);
+  color: #22d3ee;
+}
+.af-mtb-crest--none[data-platform='mfl'] {
+  background: rgba(52, 211, 153, 0.16);
+  border-color: rgba(52, 211, 153, 0.3);
+  color: #34d399;
+}
+
+.af-mtb-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.af-mtb-league {
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-mtb-meta {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Problem chips ───────────────────────────────────────────────────── */
+
+.af-mtb-chips {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.af-mtb-chip {
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/*
+  ⚠ THE TONES ARE NOT DECORATION. `bad` is a point already lost, `warn` is a
+  risk that may not land, and `quiet` is OUR gap rather than the user's. Giving
+  the third one a colour would tell a manager to go and fix a lineup that is
+  fine.
+*/
+/*
+  ⚠ THE BORDER IS MIXED FROM THE TOKEN, NOT HARDCODED. af-core.css redefines
+  --good/--warn/--bad per theme — light mode uses much darker values — so a
+  literal rgba() border would be a dark-theme colour sitting on a white ground
+  in `data-mode="light"`. Mixing keeps one rule correct in all three modes.
+*/
+.af-mtb-chip[data-tone='bad'] {
+  background: var(--bad-soft);
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+  color: var(--bad);
+}
+.af-mtb-chip[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+  color: var(--warn);
+}
+.af-mtb-chip[data-tone='good'] {
+  background: var(--good-soft);
+  border-color: color-mix(in srgb, var(--good) 30%, transparent);
+  color: var(--good);
+}
+
+/* ── The lock ────────────────────────────────────────────────────────── */
+
+.af-mtb-lock {
+  flex: none;
+  min-width: 58px;
+  text-align: right;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text2);
+  cursor: help;
+}
+.af-mtb-lock[data-state='urgent'] {
+  color: var(--bad);
+}
+.af-mtb-lock[data-state='locked'] {
+  color: var(--faint);
+  font-weight: 600;
+}
+.af-mtb-lock[data-state='unknown'] {
+  color: var(--faint);
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 780px) {
+  /* Stacked, per the handoff's mobile frame — not two columns squeezed to
+     nothing. */
+  .af-mtb-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-mtb {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  /*
+    The chips wrap under the name rather than fighting the lock for the same
+    strip. At 390px a row cannot hold a crest, two lines of text, three chips
+    and a countdown side by side — and the chips are the part that has to stay,
+    because they are the reason the row is in this column.
+  */
+  .af-core .af-mtb-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 11px 12px;
+  }
+  .af-mtb-text {
+    flex: 1 1 auto;
+  }
+  .af-mtb-chips {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+  .af-mtb-lock {
+    order: 2;
+  }
+}
+
+/*
+  ⚠ THE CREST IS NOT DROPPED ON A PHONE, and af-matchup-pulse.css hides its own
+  at this width for a reason that does not apply here. That row keeps everything
+  on ONE line, so at 390px the crest genuinely is the thing that has to go. This
+  row wraps its chips onto a second line instead, which leaves the top line
+  holding only a crest, a name and a countdown — measured at 360px, still no
+  horizontal overflow. Hiding it would cost the platform tint, which on a
+  60-league Sleeper portfolio is how the one Fantrax league stays findable.
+*/
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+/*
+  The countdown itself is information and keeps ticking; only the hover
+  transitions are dropped. Removing the clock would take away the one number
+  this board exists to show.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-mtb-row {
+    transition: none;
+  }
+}

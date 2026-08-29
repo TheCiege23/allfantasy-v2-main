@@ -395,8 +395,24 @@
     flex-wrap: wrap;
     row-gap: 8px;
   }
+  /*
+   * ⚠ `width: 100%` ON A FLEX **ROW** ITEM OVERFLOWS BY THE WIDTH OF ITS
+   * SIBLINGS, AND THIS ONE DID. `.af-mt-empty-text` is a flex row holding the
+   * "Empty" text block and this button; the button is `flex: 0 0 auto`, so it
+   * never shrinks, and 100% resolves against the whole container rather than
+   * the space left over. Measured in a harness carrying this file and the app's
+   * own border-box reset: 19px of horizontal page scroll at 390px and 4px at
+   * 360px — on the one row the screen most wants a manager to act on.
+   *
+   * Stacking the cell is what makes the full-width button mean what it says.
+   */
+  .af-mt-empty-text {
+    flex-direction: column;
+    align-items: stretch;
+  }
   .af-mt-fix {
     width: 100%;
+    text-align: center;
   }
   .af-mt-lock-fix {
     margin-left: 0;
