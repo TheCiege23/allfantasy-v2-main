@@ -336,7 +336,9 @@ export async function getPlayerDetail(
     select: {
       externalId: true, sleeperId: true, name: true, position: true, team: true,
       imageUrl: true, number: true, height: true, weight: true, age: true,
-      college: true, sport: true, fetchedAt: true,
+      // `source` is required, not decorative: an externalId means nothing without
+      // the provider that minted it. See the identity-pair note below.
+      college: true, sport: true, fetchedAt: true, source: true,
     },
   })
   if (!row) return null
@@ -367,15 +369,34 @@ export async function getPlayerDetail(
    * stats table is keyed on whichever the writer used, so gathering the set is what keeps
    * the cross-provider merge below working while binding it to one person.
    */
-  const identityIds = new Set<string>([row.externalId])
+  /*
+   * 🛑 THE PAIR IS (SOURCE, EXTERNALID). MATCHING ON THE ID ALONE IS A BUG I SHIPPED.
+   *
+   * Provider ids are bare integers with no namespace, so the SAME STRING NAMES
+   * DIFFERENT PEOPLE in different feeds. Measured in production: `3167` is Kendrick
+   * Bourne (WR) to rolling_insights and Adam Butler (DL) to api_sports. An id-only set
+   * put Butler's 2025 defensive line — `defense.sacks 1` — on Bourne's page, which is
+   * the same wrong-player defect this join was written to fix, arriving through a
+   * different key.
+   *
+   * So the identity of a stat row is (source, playerId), and it only matches a
+   * SportsPlayer row of the SAME source. api_sports has 168 stat rows and NO player
+   * rows at all, so nothing there can be attributed this way — correctly, since the
+   * only thing that ever "matched" it was a collision.
+   */
+  const identityPairs: Array<{ source: string; playerId: string }> = [
+    { source: row.source, playerId: row.externalId },
+  ]
   if (row.sleeperId) {
     const siblings = await prisma.sportsPlayer
       .findMany({
         where: { sport: row.sport, sleeperId: row.sleeperId },
-        select: { externalId: true },
+        select: { externalId: true, source: true },
       })
-      .catch(() => [] as Array<{ externalId: string }>)
-    for (const s of siblings) if (s.externalId) identityIds.add(s.externalId)
+      .catch(() => [] as Array<{ externalId: string; source: string }>)
+    for (const s of siblings) {
+      if (s.externalId && s.source) identityPairs.push({ source: s.source, playerId: s.externalId })
+    }
   }
 
   /*
@@ -452,7 +473,7 @@ export async function getPlayerDetail(
       where: {
         sport: row.sport,
         OR: [
-          { playerId: { in: [...identityIds] } },
+          ...identityPairs,
           ...(nameIsAmbiguous ? [] : [{ playerName: { equals: row.name, mode: 'insensitive' as const } }]),
         ],
       },
