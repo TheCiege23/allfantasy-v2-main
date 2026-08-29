@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ImportV4 } from "@/components/core-app/screens/ImportV4";
 import { normalizeIncomingImportProvider } from "@/lib/import/importSearchParams";
+import { IMPORT_PROVIDER_UI_OPTIONS } from "@/lib/league-import/provider-ui-config";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -51,8 +52,27 @@ export default async function ImportPage({
    */
   const returnTo = returnToRaw?.startsWith("/") ? returnToRaw : "/create-league";
 
+  /*
+   * ⚠ PARSING A PROVIDER IS NOT THE SAME AS OFFERING IT, AND THE DEEP LINK IS THE WAY IN.
+   *
+   * `normalizeIncomingImportProvider` only decides whether the string names a provider we
+   * know; it says nothing about whether that provider is usable. Disabling a tile in
+   * ImportV4 therefore does NOT close the door, because /import is reached with
+   * `?provider=` from source-platform deep links — and, until 2026-08-29, from Yahoo's own
+   * connect flow, whose returnTo was literally `/import?provider=yahoo`. Someone pressed
+   * "Connect Yahoo", came back here, and was handed the same button again.
+   *
+   * So an unavailable provider falls back to the default rather than being selected. The
+   * tile still shows with its "soon" chip and its BLOCKED_REASON, which is the honest
+   * outcome: the provider is visible and named as not ready, instead of opening a panel
+   * that cannot finish.
+   */
   const providerRaw = pickQuery(sp, "provider");
-  const defaultProvider = normalizeIncomingImportProvider(providerRaw) ?? "sleeper";
+  const requestedProvider = normalizeIncomingImportProvider(providerRaw);
+  const requestedIsAvailable =
+    requestedProvider != null &&
+    IMPORT_PROVIDER_UI_OPTIONS.some((p) => p.provider === requestedProvider && p.available);
+  const defaultProvider = requestedIsAvailable ? requestedProvider : "sleeper";
   const initialSleeperUsername = pickQuery(sp, "username");
   const initialLeagueSourceId =
     pickQuery(sp, "leagueId") || pickQuery(sp, "sourceId");
