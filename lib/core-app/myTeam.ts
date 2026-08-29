@@ -17,6 +17,11 @@ import { getGameWeather, type GameWeather } from './gameWeather'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
+import {
+  BENCH_SWAP_POINTS,
+  isEligibleForSlot,
+  startingSlotTemplate,
+} from './rosterSlots'
 
 /**
  * My team · roster — "read-only view of your real lineup, with the fix and where
@@ -142,8 +147,31 @@ export type LineupPlayer = {
   projectedPoints: number | null
 }
 
+/**
+ * A benched player who is eligible for this slot and projects higher.
+ *
+ * ⚠ THE CHECK ALWAYS RUNS; ONLY THE VERDICT VARIES. `swap` means the gap clears
+ * BENCH_SWAP_POINTS and the number can carry the recommendation. `close` means a
+ * bench player is nominally ahead but inside the model's own error, so the
+ * honest reading is that the starter is fine — saying "start him instead" on a
+ * 0.4-point edge is a coin flip wearing a decision's clothes.
+ *
+ * Null when nothing eligible outprojects the starter, or when either side is
+ * unpriced. An unpriced player is not a zero and must never lose a comparison
+ * he was never entered into.
+ */
+export type BenchCheck = {
+  verdict: 'swap' | 'close'
+  benchName: string
+  benchProjected: number
+  starterName: string
+  starterProjected: number
+}
+
 export type LineupSlot = {
   slotLabel: string
+  /** The stronger same-slot bench option, or null. See BenchCheck. */
+  benchCheck: BenchCheck | null
   player: LineupPlayer | null
   /**
    * The slot genuinely holds nobody — the platform recorded an unfilled starter.
@@ -736,11 +764,22 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
   // Sleeper encodes an unfilled starting slot as "0" — that is the handoff's
   // "FLEX is empty" state, and it must survive as an empty slot rather than
   // being filtered out into a shorter lineup that looks complete.
-  const starters: LineupSlot[] = starterIds.map((id, i) => {
+  /*
+   * ⚠ THE SLOT NAME COMES FROM THE LEAGUE, NOT FROM WHOEVER IS STANDING IN IT.
+   * `inferSlotLabel` reads the player's position, so a FLEX holding a tight end
+   * rendered as "TE" — and the bench check below would then have refused every
+   * running back who is in fact eligible for that slot. The label and the
+   * eligibility rule have to come from one place. `roster_positions` is present
+   * on 70 of 70 Sleeper leagues in production; inference stays as the fallback
+   * for a league that carries no template.
+   */
+  const slotTemplate = startingSlotTemplate(league.settings)
+
+  const starterSlots = starterIds.map((id, i) => {
     const isEmptySlot = id === '0'
     const player = isEmptySlot ? null : resolved.get(id) ?? null
     return {
-      slotLabel: inferSlotLabel(player?.position ?? null, i),
+      slotLabel: slotTemplate?.[i] ?? inferSlotLabel(player?.position ?? null, i),
       player,
       empty: isEmptySlot,
       // Present id, no player row — a lookup failure, NOT an empty slot.
@@ -761,6 +800,109 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
   const benchIds = allIds.filter(
     (id) => !starterSet.has(id) && !reserveSet.has(id) && !taxiSet.has(id),
   )
+
+  /* ── The bench check ─────────────────────────────────────────────────────
+   *
+   * For each starting slot, the strongest BENCH player who is actually eligible
+   * to fill it and projects higher under this league's own scoring.
+   *
+   * ⚠ EVERY GUARD BELOW IS THE DIFFERENCE BETWEEN ADVICE AND NOISE:
+   *
+   *   · Eligibility, from the league's own slot template. Without it the screen
+   *     cheerfully reports that your kicker outprojects your quarterback.
+   *   · `afProjectedPoints`, never the generic PPR figure. A recommendation
+   *     scored for a league nobody is in is worse than none.
+   *   · An UNPRICED player on either side ends the comparison. Null is not zero,
+   *     and a player must never lose a contest he was never entered into.
+   *   · A bench player on bye or ruled OUT is skipped — he is a guaranteed zero,
+   *     and pointing at one is the exact mistake this feature exists to catch.
+   *
+   * A starter who is himself on bye or OUT is scored at 0 rather than skipped:
+   * that is the single case where zero is the honest number, and it is precisely
+   * when a manager most needs to be told there is a body on the bench.
+   */
+  const benchPlayers = benchIds
+    .map((id) => resolved.get(id))
+    .filter((p): p is LineupPlayer => p != null)
+
+  /*
+   * ⚠ ONE BENCH PLAYER IS OFFERED AT ONE SLOT, NOT AT EVERY SLOT HE BEATS.
+   * Scoring each slot independently put Garrett Wilson on a real roster's WR
+   * row AND both FLEX rows — three amber strips describing ONE substitution.
+   * That reads as three problems and overstates what is actually on the bench.
+   *
+   * So candidate pairs are ranked by gap and assigned greedily, each bench
+   * player and each slot used at most once: the biggest single improvement is
+   * claimed first, and a slot whose best option has already gone elsewhere then
+   * surfaces its NEXT-best eligible player rather than falling silent.
+   */
+  type BenchCandidate = {
+    slotIndex: number
+    bench: LineupPlayer
+    benchProj: number
+    starter: LineupPlayer
+    starterProj: number
+    gap: number
+  }
+
+  const benchCandidates: BenchCandidate[] = []
+  starterSlots.forEach((slot, slotIndex) => {
+    const starter = slot.player
+    if (!starter || slot.empty) return
+
+    /*
+     * A starter on bye or ruled OUT is scored at 0 rather than skipped. That is
+     * the single case where zero is the honest number, and it is exactly when a
+     * manager most needs to be told there is a body on the bench.
+     */
+    const starterProj = starter.onBye || starter.ruledOut ? 0 : starter.afProjectedPoints
+    if (starterProj == null) return
+
+    for (const bench of benchPlayers) {
+      const benchProj = bench.afProjectedPoints
+      /*
+       * ⚠ EVERY GUARD HERE IS THE DIFFERENCE BETWEEN ADVICE AND NOISE:
+       *   · unpriced on either side ends it — null is not zero, and a player
+       *     must never lose a contest he was never entered into;
+       *   · a bench player on bye or OUT is a guaranteed zero, and pointing at
+       *     one is the exact mistake this feature exists to catch;
+       *   · eligibility comes from the league's own slot template, without which
+       *     the screen reports that your kicker outprojects your quarterback.
+       */
+      if (benchProj == null || bench.onBye || bench.ruledOut) continue
+      if (!isEligibleForSlot(slot.slotLabel, bench.position)) continue
+      if (benchProj <= starterProj) continue
+      benchCandidates.push({
+        slotIndex,
+        bench,
+        benchProj,
+        starter,
+        starterProj,
+        gap: benchProj - starterProj,
+      })
+    }
+  })
+
+  benchCandidates.sort((a, b) => b.gap - a.gap)
+
+  const checkBySlot = new Map<number, BenchCheck>()
+  const claimedBench = new Set<string>()
+  for (const c of benchCandidates) {
+    if (checkBySlot.has(c.slotIndex) || claimedBench.has(c.bench.sleeperId)) continue
+    claimedBench.add(c.bench.sleeperId)
+    checkBySlot.set(c.slotIndex, {
+      verdict: c.gap >= BENCH_SWAP_POINTS ? 'swap' : 'close',
+      benchName: c.bench.name,
+      benchProjected: c.benchProj,
+      starterName: c.starter.name,
+      starterProjected: c.starterProj,
+    })
+  }
+
+  const starters: LineupSlot[] = starterSlots.map((slot, i) => ({
+    ...slot,
+    benchCheck: checkBySlot.get(i) ?? null,
+  }))
 
   const kickoffs = starters
     .map((s) => s.player?.kickoff)

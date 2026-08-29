@@ -1093,3 +1093,53 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   font-weight: 600;
   color: var(--muted);
 }
+
+/* ── Bench check ─────────────────────────────────────────────────────────
+ *
+ * The same-slot "someone on your bench projects higher" strip, attached under
+ * the starter it is about.
+ *
+ * ⚠ SPANS FROM COLUMN 2 BECAUSE `.af-mt-row` IS A TABLE ROW, not one of the
+ * separately-bordered cards the handoff draws. Starting it under the player —
+ * not under the slot gutter — is what makes it read as belonging to this row.
+ */
+.af-mt-bench-check {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+}
+
+/*
+  The "close call" verdict is deliberately quieter than the swap. Both are the
+  same check; only one of them is asking for an action, and rendering them
+  identically would train people to ignore the loud one.
+*/
+.af-mt-bench-check[data-verdict='close'] {
+  background: var(--chip);
+  border-color: var(--chip-line);
+}
+
+.af-mt-bench-check-tag {
+  flex: none;
+  color: var(--warn);
+}
+.af-mt-bench-check[data-verdict='close'] .af-mt-bench-check-tag {
+  color: var(--muted);
+}
+
+.af-mt-bench-check-text {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-mt-bench-check-text strong {
+  font-weight: 800;
+  color: var(--text);
+}

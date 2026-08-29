@@ -6,6 +6,7 @@ import { leagueDisplayName, type SectionState, type UnavailableSection } from '.
 import { loadSideProjections, winProbabilityFor } from './matchupProjections'
 import { myRosterCandidates } from './myRoster'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { startingSlotTemplate } from './rosterSlots'
 
 /**
  * A crest we can actually render, or null.
@@ -89,47 +90,6 @@ function inferSlotLabel(position: string | null, index: number): string {
   const p = (position ?? '').toUpperCase()
   if (['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DST'].includes(p)) return p === 'DST' ? 'DEF' : p
   return p || `SLOT ${index + 1}`
-}
-
-/** Roster template entries that are not starting slots. */
-const NON_STARTING_SLOT = new Set(['BN', 'BENCH', 'IR', 'TAXI'])
-
-/** Long template names that will not fit the slot column. */
-const SLOT_ALIAS: Record<string, string> = {
-  SUPER_FLEX: 'SFLEX',
-  REC_FLEX: 'W/T',
-  IDP_FLEX: 'IDP',
-  WRRB_FLEX: 'FLEX',
-  DST: 'DEF',
-}
-
-/**
- * The league's OWN starting-slot template, in lineup order.
- *
- * ⚠ THIS IS THE ONLY HONEST SOURCE FOR THE SPINE OF A HEAD-TO-HEAD. Inferring a
- * slot from the player standing in it names a FLEX after whoever happens to be
- * in it — so a FLEX holding your TE and their RB rendered as "TE", labelling the
- * opponent's running back a tight end. `roster_positions` is present on 70 of 70
- * Sleeper leagues in production and says `["QB","RB","RB","WR","WR","TE","FLEX",
- * "FLEX","SUPER_FLEX","DEF","BN",…]` — bench entries are dropped, and what is
- * left aligns index-for-index with `Roster.playerData.starters`.
- *
- * Null when a league carries no template, which is when `inferSlotLabel` is the
- * fallback rather than the default.
- */
-function startingSlotTemplate(settings: unknown): string[] | null {
-  if (!settings || typeof settings !== 'object') return null
-  const s = settings as Record<string, unknown>
-  const raw =
-    (Array.isArray(s.roster_positions) && s.roster_positions) ||
-    (Array.isArray(s.rosterPositions) && s.rosterPositions) ||
-    null
-  if (!raw) return null
-  const slots = raw
-    .map((v) => String(v ?? '').trim().toUpperCase())
-    .filter((v) => v.length > 0 && !NON_STARTING_SLOT.has(v))
-    .map((v) => SLOT_ALIAS[v] ?? v)
-  return slots.length > 0 ? slots : null
 }
 
 /**

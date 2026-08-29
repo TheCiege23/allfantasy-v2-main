@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
-import type { LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
+import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
+import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
 import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'
@@ -493,6 +494,49 @@ function ProjHeader() {
   )
 }
 
+/**
+ * The bench check, joined under the starter it is about.
+ *
+ * ⚠ IT RENDERS FOR BOTH VERDICTS ON PURPOSE. A strip that only ever appears
+ * when you are wrong teaches people to read its ABSENCE as "nothing to see" —
+ * when absence actually means "nobody eligible outprojects him", which is a
+ * different and much weaker statement than "we checked and he is the play".
+ * Saying so out loud is the whole value of running the check every week.
+ */
+function BenchCheckStrip({ check }: { check: BenchCheck }) {
+  const gap = check.benchProjected - check.starterProjected
+  return (
+    <div className="af-mt-bench-check" data-verdict={check.verdict}>
+      <span className="af-label af-mt-bench-check-tag">Bench check</span>
+      <span className="af-mt-bench-check-text">
+        {check.verdict === 'swap' ? (
+          <>
+            <strong>{check.benchName}</strong> (bench) projects{' '}
+            <span className="af-num">{check.benchProjected.toFixed(1)}</span> against{' '}
+            {check.starterName}&rsquo;s{' '}
+            <span className="af-num">{check.starterProjected.toFixed(1)}</span> — the stronger
+            play this week.
+          </>
+        ) : (
+          <>
+            {/*
+              ⚠ NAMES THE GAP AND THE THRESHOLD. "Too close to call" with no
+              numbers reads as a hedge; with them it is a statement the reader
+              can check, and can disagree with.
+            */}
+            <strong>{check.benchName}</strong> (bench) projects{' '}
+            <span className="af-num">{check.benchProjected.toFixed(1)}</span> against{' '}
+            {check.starterName}&rsquo;s{' '}
+            <span className="af-num">{check.starterProjected.toFixed(1)}</span> — inside the{' '}
+            {BENCH_SWAP_POINTS}-point margin these projections can actually tell apart, so your
+            starter is fine as-is.
+          </>
+        )}
+      </span>
+    </div>
+  )
+}
+
 function SlotRow({
   slot,
   platform,
@@ -540,6 +584,15 @@ function SlotRow({
           </Link>
         </>
       )}
+
+      {/*
+        ⚠ SPANS FROM COLUMN 2, NOT COLUMN 1. This list is a TABLE, not the stack
+        of separately-bordered cards the handoff draws, so the design's
+        "joined box" treatment does not translate literally. Starting under the
+        player rather than under the slot gutter is what makes it read as
+        attached to THIS row in a table layout.
+      */}
+      {slot.benchCheck ? <BenchCheckStrip check={slot.benchCheck} /> : null}
     </li>
   )
 }
