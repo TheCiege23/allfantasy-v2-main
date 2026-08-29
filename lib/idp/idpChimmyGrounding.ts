@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import { resolveUserRosterInLeague } from '@/lib/league/resolveUserRoster'
+import { lookupDraftCapital, formatDraftCapital } from '@/lib/idp-projections/draftCapital'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 
 /**
@@ -102,7 +103,15 @@ export async function buildIdpContext(leagueId: string, userId: string): Promise
     const needNames = Array.from(new Set([...top, ...ownedPriced].map(([id]) => id)))
     const players = await prisma.sportsPlayer.findMany({
       where: { sport: 'NFL', source: 'sleeper', sleeperId: { in: needNames } },
-      select: { sleeperId: true, name: true, position: true, team: true },
+      select: {
+        sleeperId: true,
+        name: true,
+        position: true,
+        team: true,
+        // For the draft-capital lookup only — never shown directly.
+        college: true,
+        dob: true,
+      },
     })
     const byId = new Map(players.map((p) => [p.sleeperId as string, p]))
 
@@ -127,7 +136,24 @@ export async function buildIdpContext(leagueId: string, userId: string): Promise
        * inference it does not need to make.
        */
       const floorPart = value === ranked[ranked.length - 1][1] ? ' [FLOOR PRICE, not a measured value]' : ''
-      return `${name} (${pos}${team}${rankPart}): ${value}${projPart}${floorPart}`
+      /*
+       * Draft capital, when we know it. This is the ONLY thing in this block that speaks to why
+       * the market pays picks for a floor-priced defender — the value above is production rank,
+       * and a 2024 first-rounder with one season on file ranks below a veteran who out-produced
+       * him. It is a FACT, never a multiplier; see lib/idp-projections/draftCapital.ts.
+       */
+      const draft = p
+        ? formatDraftCapital(
+            lookupDraftCapital({
+              name: p.name,
+              dob: p.dob,
+              college: p.college,
+              position: p.position,
+            }),
+          )
+        : null
+      const draftPart = draft ? ` (${draft})` : ''
+      return `${name} (${pos}${team}${rankPart}): ${value}${projPart}${floorPart}${draftPart}`
     }
 
     const lines: string[] = []
@@ -171,6 +197,19 @@ export async function buildIdpContext(leagueId: string, userId: string): Promise
           'assets, and do not grade a trade on the difference between them.',
       )
     }
+    /*
+     * Explain the parenthetical before it appears, and fence it. Measured against real trades:
+     * floor-priced defenders fetch 1sts and 2nds, and draft capital is the only fact here that
+     * speaks to why. But it is NOT in the price and must not be treated as if it were — Nolan
+     * Smith (2023 rd1 pk30) sits at the floor while Jack Campbell (2023 rd1 pk18) prices 3104,
+     * so the slot alone does not predict the value either.
+     */
+    lines.push(
+      '- A trailing "(2024 rd1 pk21)" is where that player was taken in the NFL draft. It is ' +
+        'context, NOT part of the price: the value above measures production only, which is why ' +
+        'a recent high pick can sit at the floor while the market still pays picks for him. ' +
+        'Weigh it in words; never multiply a value by it. Absent means undrafted or pre-2015.',
+    )
     lines.push('')
     lines.push(`Top ${top.length} defenders by value in this league:`)
 
