@@ -83,3 +83,31 @@ jobs:
               body,
               labels: ['data-quality', 'draft-pool', 'automated'],
             });
+
+  # ---------------------------------------------------------------------------------------
+  # A SECOND, INDEPENDENT JOB — deliberately not a step in the sweep above.
+  #
+  # It needs no database, no npm install and no secrets (it reads a committed JSON file and a
+  # clock), so it must not be gated behind a 15-minute DB sweep, and a stale artifact must not
+  # stop that sweep from running either. Separate jobs, separate verdicts.
+  #
+  # WHY A CHECK RATHER THAN A REFRESH. Both artifacts it covers -- nfl-draft-capital.json and
+  # team-defense-tendencies.json -- are STATICALLY IMPORTED, so they are bundled at build time.
+  # A scheduled job on the deployed app would write to an ephemeral filesystem and change
+  # nothing that is running. Only a human regenerating and committing updates them. This exists
+  # so the day that stops happening is a red run rather than silence -- the `ingestCFBDStats`
+  # failure, where a writer nobody scheduled fed a surface that kept serving stale data and
+  # looked correct doing it.
+  static-data-freshness:
+    name: Committed data/ artifacts are current
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Check committed data/ artifacts include the latest completed period
+        run: node scripts/check-static-data-freshness.mjs

@@ -157,6 +157,65 @@ export function loadMultiPlatformADP(): MultiPlatformADP[] {
     })
   }
 
+  /*
+   * 🛑 A COLUMN WITH ONE DISTINCT VALUE IS NOT A RANKING, AND AVERAGING IT RUINS THE BOARD.
+   *
+   * The CSV's `ESPN` column is the literal string "170.00" on all 2,544 rows that carry a
+   * value — Ja'Marr Chase, the consensus 1.01, is "170.00" like everyone else. It is a
+   * broken export, not a slow one.
+   *
+   * Because `consensus` is the MEAN of the five redraft columns, one constant at 170 drags
+   * every good player toward it. Measured against production before this guard:
+   *
+   *     Ja'Marr Chase     true 1.68  ->  35.34        Bijan Robinson  3.08 -> 36.47
+   *     Justin Jefferson  true 6.14  ->  38.91        every top player +32 to +34
+   *
+   *     11 of the true top 12 rendered outside round 1
+   *     37 players truly inside pick 48 rendered outside it
+   *
+   * and `adpSpread` became a constant ~168.9, so the confidence signal died with it. The
+   * stored rows carry the fingerprint: consensus 34.89-35.28 at providerCount 5.
+   *
+   * ⚠ THE READ-TIME SENTINEL FILTER CANNOT FIX THIS, which is why the guard belongs here.
+   * `sentinelValues` in lib/adp/resolveAdp.ts drops rows whose value IS the sentinel (170)
+   * and is right to exist — but a contaminated MEAN is 35.11, not 170, so it sails through
+   * every filter looking like an ordinary draft position.
+   *
+   * Detected rather than hardcoded, for the same reason SENTINEL_SHARE is derived: name the
+   * PROPERTY that makes a column useless, not the column that happens to have it today. If
+   * the export is repaired the source returns on its own; if a different column breaks the
+   * same way, it is caught without a code change.
+   */
+  const REDRAFT_SOURCES = ['fantrax', 'sleeper', 'espn', 'mfl', 'nffc'] as const
+  const degenerate = new Set<string>()
+  for (const src of REDRAFT_SOURCES) {
+    const seen = new Set<number>()
+    for (const p of players) {
+      const v = p.redraft[src]
+      if (v !== null) seen.add(v)
+      if (seen.size > 1) break
+    }
+    // One distinct value across the whole board (or none at all) carries no ordering.
+    if (seen.size <= 1) degenerate.add(src)
+  }
+
+  if (degenerate.size > 0) {
+    console.warn(
+      `[MULTI-ADP] Ignoring degenerate redraft column(s) — a single distinct value across ` +
+        `${players.length} players is a placeholder, not an ADP: ${[...degenerate].join(', ')}`,
+    )
+    for (const p of players) {
+      for (const src of degenerate) {
+        ;(p.redraft as Record<string, number | null>)[src] = null
+      }
+      // Recompute from the surviving columns so consensus and spread never saw the constant.
+      const vals = REDRAFT_SOURCES.map((s) => p.redraft[s]).filter((v): v is number => v !== null)
+      p.platformCount = vals.length
+      p.consensus = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+      p.adpSpread = vals.length >= 2 ? Math.max(...vals) - Math.min(...vals) : null
+    }
+  }
+
   cache = players
   console.log(`[MULTI-ADP] Loaded ${players.length} players from multi-platform CSV`)
   return players

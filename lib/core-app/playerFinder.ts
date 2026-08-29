@@ -330,9 +330,22 @@ export async function getPlayerDetail(
    * and the ordering makes the remaining case (same sport, duplicated row) stable
    * rather than a coin flip.
    */
+  /*
+   * 🛑 `nulls: 'last'` IS LOAD-BEARING. Postgres sorts NULLS FIRST on a DESC order, so
+   * `{ sleeperId: 'desc' }` alone returns the row WITHOUT a platform id in preference to
+   * the one with it — the exact opposite of what the ordering is here to do.
+   *
+   * Measured on DeVonta Smith (WR, PHI): externalId `6503` exists twice, as a
+   * rolling_insights row carrying sleeperId 7525 and as a `backfill` row carrying none.
+   * The bare DESC picked the backfill row, so `identityResolved` was false, no sibling
+   * externalIds were gathered, and the season-stats join collapsed to
+   * `source: 'backfill'` — which owns no stat rows. His page reported "no season
+   * statistics ingested for this player" while nine rows across five seasons sat in the
+   * table. The name join used to paper over this by matching regardless of which row won.
+   */
   const row = await prisma.sportsPlayer.findFirst({
     where: refSport ? { externalId, sport: refSport } : { externalId },
-    orderBy: [{ sleeperId: 'desc' }, { fetchedAt: 'desc' }],
+    orderBy: [{ sleeperId: { sort: 'desc', nulls: 'last' } }, { fetchedAt: 'desc' }],
     select: {
       externalId: true, sleeperId: true, name: true, position: true, team: true,
       imageUrl: true, number: true, height: true, weight: true, age: true,

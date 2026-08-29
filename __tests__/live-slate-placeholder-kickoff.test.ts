@@ -196,6 +196,10 @@ describe('fixtures the live feed stopped reporting', () => {
     // game that is on television — the exact failure this file keeps hitting.
     expect(usc?.status).toBe('STATUS_IN_PROGRESS')
     expect(usc?.homeScore).toBe(14)
+    // And the live feed's own naming survives: the identity pass fills gaps on
+    // restored rows and must never rewrite what the feed supplied.
+    expect(usc?.awayTeamFull).toBe('San José State Spartans')
+    expect(usc?.awayLogo).toBe('https://espn/sjsu.png')
   })
 
   it('never merges across sources', async () => {
@@ -212,5 +216,81 @@ describe('fixtures the live feed stopped reporting', () => {
     const { withOmittedFixtures } = await import('@/lib/sports-live-scores-service')
     const merged = await withOmittedFixtures('NFL', 'espn_live', [liveRow], ESPN_LIVE_TODAY)
     expect(merged).toHaveLength(1)
+  })
+})
+
+/**
+ * The restored fixtures read "MEM", "NMSU", "JVST" beside a live row reading
+ * "San José State Spartans", because `espn_live` stores abbreviations and
+ * `dbRowToLiveScore` has no full name to carry. The team directory was already
+ * being consulted for the crest on the very same pass — the school name was
+ * sitting in the resolved record, unused.
+ */
+const DIRECTORY = [
+  {
+    id: 153,
+    school: 'North Carolina',
+    mascot: 'Tar Heels',
+    abbreviation: 'UNC',
+    alternateNames: ['UNC', 'North Carolina'],
+    classification: 'fbs',
+    logo: 'https://cdn.collegefootballdata.com/logos/500/153.png',
+  },
+  {
+    id: 2628,
+    school: 'TCU',
+    mascot: 'Horned Frogs',
+    abbreviation: 'TCU',
+    alternateNames: ['TCU'],
+    classification: 'fbs',
+    logo: 'https://cdn.collegefootballdata.com/logos/500/2628.png',
+  },
+]
+
+describe('college team identity on restored rows', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(NOW))
+    findMany.mockReset()
+    findUnique.mockReset()
+  })
+
+  it('fills the school name and crest an abbreviation stood in for', async () => {
+    findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
+      const sources = args?.where?.source?.in ?? []
+      if (sources.includes('espn') || sources.includes('cfbd')) {
+        return Promise.resolve(SCHEDULE_DONORS)
+      }
+      return Promise.resolve(ESPN_LIVE_TODAY.filter((r) => r.externalId === '401856766'))
+    })
+    findUnique.mockResolvedValue({ data: DIRECTORY, expiresAt: new Date(NOW + 1000) })
+
+    const { getCachedLiveScoresForSport } = await import('@/lib/sports-live-scores-service')
+    const { scores } = await getCachedLiveScoresForSport({ sport: 'NCAAF' })
+
+    expect(scores[0]!.awayTeamFull).toBe('North Carolina')
+    expect(scores[0]!.homeTeamFull).toBe('TCU')
+    expect(scores[0]!.awayLogo).toContain('153.png')
+    // The abbreviation itself is untouched — the card still needs it.
+    expect(scores[0]!.awayTeam).toBe('UNC')
+  })
+
+  it('leaves the row alone when the directory has never been ingested', async () => {
+    findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
+      const sources = args?.where?.source?.in ?? []
+      if (sources.includes('espn') || sources.includes('cfbd')) {
+        return Promise.resolve(SCHEDULE_DONORS)
+      }
+      return Promise.resolve(ESPN_LIVE_TODAY.filter((r) => r.externalId === '401856766'))
+    })
+    findUnique.mockResolvedValue(null)
+
+    const { getCachedLiveScoresForSport } = await import('@/lib/sports-live-scores-service')
+    const { scores } = await getCachedLiveScoresForSport({ sport: 'NCAAF' })
+
+    // Lossless: no directory means no name and no crest, never a wrong one.
+    expect(scores[0]!.awayTeamFull).toBe('UNC')
+    expect(scores[0]!.awayLogo).toBe('')
   })
 })

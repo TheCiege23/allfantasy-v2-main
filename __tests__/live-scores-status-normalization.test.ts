@@ -143,8 +143,15 @@ describe('dbRowToLiveScore — cached rows must speak the UI vocabulary', () => 
   })
 
   it('does not echo a machine token back as the caption', () => {
+    // Assertion updated 2026-08-29: this used to pin the fallback label
+    // 'Scheduled'. A scheduled row now captions itself with the kickoff it
+    // already holds, which serves this test's stated intent — no machine token
+    // on screen — better than the label did. The intent is what is asserted
+    // here; the token check is the part that must never regress.
     const mapped = dbRowToLiveScore(row('STATUS_SCHEDULED', { home: null, away: null }))
-    expect(mapped.statusDetail).toBe('Scheduled')
+    expect(mapped.statusDetail).not.toBe('STATUS_SCHEDULED')
+    expect(mapped.statusDetail).not.toBe('scheduled')
+    expect(mapped.statusDetail).toBe('8/27 - 11:00 PM EDT')
   })
 
   it('defaults an unknown status to scheduled rather than claiming a result', () => {
@@ -191,5 +198,110 @@ describe('pickFreshestSourceRows — a stale favourite must not beat a live feed
     const ancient = { ...rollingInsights, fetchedAt: new Date('2026-04-26T00:00:00Z') }
     const picked = pickFreshestSourceRows([ancient, espnLive], NOW)
     expect(picked.map((r) => r.source)).toEqual(['espn_live'])
+  })
+})
+
+/**
+ * A cached row's caption used to read `scheduled` — the literal stored token,
+ * printed at the user. It differs from `STATUS_SCHEDULED`, so it took the
+ * pass-through branch meant for human-readable strings like "Q2 5:43".
+ *
+ * On 2026-08-29 that put seven restored NCAAF fixtures on the live page reading
+ * "scheduled" beside a live row reading "8/29 - 3:00 PM EDT", while the kickoff
+ * time sat unused in the same object.
+ */
+describe('scheduled captions', () => {
+  const at = (iso: string) => ({
+    externalId: 'evt-1',
+    homeTeam: 'TCU',
+    awayTeam: 'UNC',
+    homeScore: null,
+    awayScore: null,
+    status: 'scheduled',
+    startTime: new Date(iso),
+    venue: null,
+    week: 1,
+    season: 2026,
+    fetchedAt: new Date('2026-08-29T12:15:00.000Z'),
+  })
+
+  it('prints the kickoff instead of the stored token', () => {
+    // 16:00Z is noon Eastern.
+    expect(dbRowToLiveScore(at('2026-08-29T16:00:00.000Z')).statusDetail).toBe(
+      '8/29 - 12:00 PM EDT',
+    )
+  })
+
+  it('says Scheduled rather than midnight when the kickoff is unannounced', () => {
+    // The placeholder repair fills these upstream, but a fixture no schedule
+    // feed knows still reaches here. "12:00 AM EDT" would be an invented time.
+    const row = dbRowToLiveScore(at('2026-08-29T04:00:00.000Z'))
+    expect(row.statusDetail).not.toContain('12:00 AM')
+    expect(row.statusDetail).toBe('Scheduled')
+  })
+
+  it('says Scheduled when there is no start time at all', () => {
+    expect(dbRowToLiveScore({ ...at('2026-08-29T16:00:00.000Z'), startTime: null }).statusDetail).toBe(
+      'Scheduled',
+    )
+  })
+
+  it('leaves an in-play caption alone', () => {
+    // POSITIVE CONTROL: a guard that captioned every row by start time would
+    // replace a live clock with a kickoff time.
+    const live = { ...at('2026-08-29T16:00:00.000Z'), status: 'Q2 5:43' }
+    expect(dbRowToLiveScore(live).statusDetail).toBe('Q2 5:43')
+  })
+})
+
+/**
+ * The last unguarded fake zero on this path.
+ *
+ * `LiveScoreRow.homeScore` was typed `number` while the column behind it is
+ * nullable, so `dbRowToLiveScore` wrote `?? 0` to satisfy the type — and every
+ * consumer received a 0-0 result for a game whose score we simply do not have.
+ * Measured 2026-08-29: 47 NFL rows carry status `final` with both scores NULL,
+ * 14 of them inside the live window.
+ *
+ * The type was the outlier, not the data. THREE consumers were already written
+ * for the null this type forbade: estimateWinProbability returns null on it,
+ * SportsScheduleContextProvider writes `?? null` for Chimmy, and
+ * playoffSeriesSyncService declares `number | null` and guards on it.
+ */
+describe('a score we do not have', () => {
+  const finished = (home: number | null, away: number | null) => ({
+    externalId: 'evt-9',
+    homeTeam: 'BUF',
+    awayTeam: 'PIT',
+    homeScore: home,
+    awayScore: away,
+    status: 'final',
+    startTime: new Date('2026-08-28T03:00:00.000Z'),
+    venue: null,
+    week: 1,
+    season: 2026,
+    fetchedAt: new Date('2026-08-29T12:15:00.000Z'),
+  })
+
+  it('carries a missing score through as null, not zero', () => {
+    const mapped = dbRowToLiveScore(finished(null, null))
+    expect(mapped.homeScore).toBeNull()
+    expect(mapped.awayScore).toBeNull()
+    // Still a final — we know it ended, we just cannot say how.
+    expect(mapped.completed).toBe(true)
+  })
+
+  it('keeps a real 0-0 as the result it is', () => {
+    // POSITIVE CONTROL. Zero and absent are different facts, and the whole
+    // point of the change is that the type can now tell them apart.
+    const mapped = dbRowToLiveScore(finished(0, 0))
+    expect(mapped.homeScore).toBe(0)
+    expect(mapped.awayScore).toBe(0)
+  })
+
+  it('does not invent the other half of a one-sided score', () => {
+    const mapped = dbRowToLiveScore(finished(52, null))
+    expect(mapped.homeScore).toBe(52)
+    expect(mapped.awayScore).toBeNull()
   })
 })

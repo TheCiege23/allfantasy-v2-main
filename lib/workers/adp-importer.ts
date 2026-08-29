@@ -182,6 +182,25 @@ export async function runAdpImporter(options?: {
     const rows: AdpRow[] = []
 
     if (sport === 'NFL') {
+      /*
+       * 🛑 `fantrax` / `sleeper` / `espn` / `mfl` / `nffc` BELOW ARE NOT PROVIDER CALLS. They are
+       * COLUMNS of one committed CSV — `data/nfl-adp-multiplatform.csv`, read here through
+       * `loadMultiPlatformADP()` (fs.readFileSync, cached in-process). A row landing in
+       * `AdpDataRecord` with `source: 'espn'` did not come from ESPN; it came from the ESPN
+       * column of that file, whenever that file was last hand-updated.
+       *
+       * ⚠ THIS CRON THEREFORE REPUBLISHES A STATIC FILE DAILY AND LOOKS HEALTHY DOING IT.
+       * Measured 2026-08-28: the CSV was last changed 2026-03-08, before the April draft, so
+       * every 2026 draft entrant is absent — yet `AdpDataRecord` held 93,622 rows for season
+       * 2026 with `createdAt` of that morning. Freshness monitors key on `createdAt` and see
+       * green. Rookies present by source made the split unmistakable:
+       *
+       *     ffc 28 (a LIVE fetch)   espn 1   sleeper 4   fantrax 0   mfl 0
+       *
+       * `scripts/check-static-data-freshness.mjs` dates the CSV against the newest class in
+       * `data/nfl-draft-capital.json` for exactly this reason. It is not guarding a legacy
+       * fallback — this file is the primary source for most of the NFL ADP stack.
+       */
       const multi = loadMultiPlatformADP()
       for (const player of multi) {
         const shared = {
