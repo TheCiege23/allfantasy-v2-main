@@ -156,6 +156,33 @@ const MARKET_DECAY_REDRAFT: ReadonlyArray<{ rank: number; share: number }> = [
 const IDP_CEILING_DYNASTY = 5500
 const IDP_CEILING_REDRAFT = 5300
 
+/**
+ * How far the ceiling could defensibly sit either side of the shipped number.
+ *
+ * 🛑 THIS EXISTS BECAUSE THE CEILING TURNED OUT TO CARRY REAL VERDICTS, NOT AS A HEDGE.
+ * Measured 2026-08-30 by `scripts/probe-idp-ceiling-sensitivity.ts`, replaying every real
+ * trade in production that contains a priced defender through the actual grading path at
+ * six ceilings between 1,000 and 11,000:
+ *
+ *   Nolan Smith            <-> Jack Campbell           D  D  D  D  D  D     unmoved
+ *   DJ Moore + McDuffie    <-> Van Ginkel              A+ A+ A+ A  A- B     4 grades
+ *   Lloyd + Turner         <-> 3 offensive players     D  D  C  B- B  A-    5 grades
+ *   Gary + Pollard + Nabers<-> Jones + London + Hall   B- B- B- B- C  C     1 grade
+ *
+ * The first row is the general case, not a fluke: `percentDiff` is (r-g)/(r+g), so when BOTH
+ * sides are defenders the ceiling cancels exactly and the verdict cannot move. What the
+ * ceiling actually prices is the EXCHANGE RATE, so a trade is exposed in proportion to how
+ * unequal the two sides' defensive shares are — worst when defenders sit on one side only.
+ *
+ * ⚠ THE BAND IS NOT A CONFIDENCE INTERVAL AND MUST NOT BE PRESENTED AS ONE. Nothing was
+ * estimated here; three routes to measuring the ceiling are closed (see above). 0.5x-1.5x is
+ * chosen to span the two principled derivations the comment above already records — share of
+ * the #1 offensive asset gives ~5,300, matching the percentile gives ~8,000 — with room
+ * either side, because a quantity with no measurement cannot be bracketed tighter than the
+ * disagreement between the only two ways anyone has tried to derive it.
+ */
+export const IDP_CEILING_UNCERTAINTY_BAND = { low: 0.5, high: 1.5 } as const
+
 function decayToTiers(
   decay: ReadonlyArray<{ rank: number; share: number }>,
   ceiling: number,
