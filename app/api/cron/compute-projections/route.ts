@@ -89,8 +89,15 @@ function assess(r: WriteSnapshotsResult) {
  *
  * Extracted from `handle` so the route can iterate every sport without duplicating the assessment
  * and telemetry logic — the two things that must never disagree about whether a run was healthy.
+ *
+ * @param sportExplicit true when the caller named this sport via `?sport=`. Gates `?week=`, which
+ *   is meaningless across a rotation — see the note on the week parsing below.
  */
-async function runOneSport(url: URL, sport: string): Promise<{ body: Record<string, unknown>; failed: boolean }> {
+async function runOneSport(
+  url: URL,
+  sport: string,
+  sportExplicit: boolean,
+): Promise<{ body: Record<string, unknown>; failed: boolean }> {
   const formatParam = (url.searchParams.get('format') ?? 'ppr').toLowerCase()
   const scoringFormat = (VALID_FORMATS as string[]).includes(formatParam)
     ? (formatParam as ScoringFormat)
@@ -107,7 +114,35 @@ async function runOneSport(url: URL, sport: string): Promise<{ body: Record<stri
   // manual backfill path; scheduled runs let the writer resolve the week from Sleeper state.
   const weekRaw = url.searchParams.get('week')
   const parsedWeek = weekRaw && /^\d{1,2}$/.test(weekRaw) ? Number(weekRaw) : undefined
-  const targetWeek = parsedWeek != null && parsedWeek >= 1 && parsedWeek <= 18 ? parsedWeek : undefined
+  const requestedWeek = parsedWeek != null && parsedWeek >= 1 && parsedWeek <= 18 ? parsedWeek : undefined
+
+  /*
+   * ⚠ A BARE `?week=` FANS OUT ACROSS EVERY SPORT, AND A WEEK NUMBER IS NOT SPORT-NEUTRAL.
+   *
+   * Omitting `?sport=` runs the whole rotation, and `handle()` passes each sport the SAME `url`
+   * object — so `?week=3` alone stamped week 3 onto NCAAF, NCAAB, NBA, NHL and MLB rows using a
+   * number that only ever meant the NFL's week. College weeks do not line up with NFL weeks, and
+   * the other codes have no football week at all. Not hypothetical: the header on `handle()`
+   * records that NCAAF's existing AFProjectionSnapshot rows came from "a manual backfill", which
+   * is this path.
+   *
+   * A DELIBERATE, SCOPED BACKFILL IS STILL ALLOWED — `?sport=NCAAF&week=3` names both halves and
+   * is an operator saying what they mean. What is refused is the UNSCOPED form, where the week
+   * reaches sports the caller never mentioned.
+   *
+   * ⚠ THE AUTOMATIC PATH WAS NEVER EXPOSED, and this is worth recording because it was reported
+   * as the bug. `writeAfProjectionSnapshots` gates its Sleeper season-state lookup on
+   * `sport === 'NFL'` (line ~120), so `inRegularSeason` stays null for every other sport and
+   * `writeWeekly` stays false regardless of what the NFL calendar does. Only this hand-run
+   * override could ever cross sports, which is why the guard belongs here and not there.
+   */
+  const weekApplies = requestedWeek != null && sportExplicit
+  const targetWeek = weekApplies ? requestedWeek : undefined
+  const weekIgnoredReason =
+    requestedWeek != null && !weekApplies
+      ? `week=${requestedWeek} ignored: a week number is sport-specific, and no ?sport= was given. ` +
+        `Re-run as ?sport=${sport}&week=${requestedWeek} if that is what you meant.`
+      : null
 
   const startedAt = Date.now()
   try {
@@ -171,6 +206,12 @@ async function runOneSport(url: URL, sport: string): Promise<{ body: Record<stri
         ok: !failed && !noSourceSeasonYet,
         sport,
         dryRun,
+        /**
+         * Present only when a `?week=` was supplied but dropped because the run was unscoped.
+         * Reported rather than swallowed: an operator who asked for a weekly backfill and
+         * silently got a season baseline would reasonably believe the backfill happened.
+         */
+        ...(weekIgnoredReason ? { weekIgnored: weekIgnoredReason } : {}),
         sourceSeason: r.sourceSeason,
         targetSeason: r.targetSeason,
         scoringFormat: r.scoringFormat,
@@ -262,7 +303,7 @@ async function handle(req: NextRequest) {
   const explicit = url.searchParams.get('sport')
 
   if (explicit) {
-    const one = await runOneSport(url, explicit.toUpperCase())
+    const one = await runOneSport(url, explicit.toUpperCase(), true)
     return NextResponse.json(one.body, { status: one.failed ? 500 : 200 })
   }
 
@@ -280,7 +321,7 @@ async function handle(req: NextRequest) {
       deferred.push(sport)
       continue
     }
-    results.push(await runOneSport(url, sport))
+    results.push(await runOneSport(url, sport, false))
   }
 
   const anyFailed = results.some((r) => r.failed)
