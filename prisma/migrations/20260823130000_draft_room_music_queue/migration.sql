@@ -1,9 +1,28 @@
 -- 31a — the draft room's collaborative music queue.
 --
--- ⚠ NOT APPLIED. Authored and committed, deliberately not run. The only database
--- this repo's .env.local points at is production; apply this against a
--- non-production database first (.env.test / ep-muddy-leaf), verify, and only
--- then schedule the prod apply. Do not reach for `prisma migrate deploy` here.
+-- ⚠ THE FOREIGN KEY NAMED THE MODEL, NOT THE TABLE, SO THIS COULD NEVER APPLY.
+-- It said REFERENCES "League"("id"), but the League model carries
+-- @@map("leagues") — there is no relation called "League" on any database.
+-- Corrected 2026-08-30 after a production `migrate deploy` failed with 42P01
+-- `relation "League" does not exist`. Nothing had been applied at the point of
+-- failure, so this is a rename rather than a repair.
+--
+-- Same defect as 20260823120000_discord_bridge_surfaces, authored the same day:
+-- both wrote the Prisma MODEL name into raw SQL. A repo-wide scan of all 147
+-- migrations against every @@map in schema.prisma found exactly these two, so
+-- the pattern is contained rather than systemic.
+--
+-- `"DraftRoomQueueItem"` is left as-is deliberately: that model is not in
+-- schema.prisma at all, so no @@map applies and the table name is what it says.
+--
+-- The original header said this was deliberately not run and that
+-- `migrate deploy` should not be reached for, because .env pointed at
+-- production. That warning was well-founded and is kept as history — it is
+-- exactly what happened. It is applied now as a deliberate, authorised step.
+--
+-- ⚠ THE MODEL IS STILL ABSENT FROM schema.prisma. Prisma ignores tables it does
+-- not know about, so this is harmless at runtime, but `prisma migrate dev` will
+-- read it as drift and propose dropping it. Land the model before running that.
 --
 -- ⚠ THE QUEUE IS SHARED. THE AUDIO IS NOT. This table holds what the room has
 -- lined up, and nothing else — there is no room-wide playback state because
@@ -45,4 +64,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS "DraftRoomQueueItem_leagueId_trackId_unplayed_
 
 ALTER TABLE "DraftRoomQueueItem"
   ADD CONSTRAINT "DraftRoomQueueItem_leagueId_fkey"
-  FOREIGN KEY ("leagueId") REFERENCES "League"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("leagueId") REFERENCES "leagues"("id") ON DELETE CASCADE ON UPDATE CASCADE;
