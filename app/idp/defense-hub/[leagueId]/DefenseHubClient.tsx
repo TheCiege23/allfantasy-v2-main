@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { TradeBoardSection } from './TradeBoardSection'
+
 import type { DefenseHubPayload, DefenseHubState } from '@/lib/idp-projections/defenseHub'
 import { ValuesPageLink } from '@/components/values/ValuesPageLink'
 
@@ -168,6 +170,14 @@ export function DefenseHubClient({
           <div className="flex flex-col gap-[22px]">
             <CoverageBanner data={data} />
             <DefenderTable data={data} />
+            {/*
+              The league-wide board. Rendered directly under "your rostered defenders" because
+              it answers the question that one raises: you can now see what yours are worth, so
+              what is HIS worth? It fetches separately — the board queries every roster in the
+              league rather than one, and pairing the two would make the fast half of this page
+              wait for the slow half.
+            */}
+            <TradeBoardSection leagueId={leagueId} />
             <Kickers data={data} />
             <SnapShare data={data} />
             <RoleCards data={data} />
