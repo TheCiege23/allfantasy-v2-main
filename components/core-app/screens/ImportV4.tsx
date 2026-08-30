@@ -28,6 +28,11 @@ import {
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
 import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
+import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
+import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
+import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
+import { readBackfillOutcome } from '@/lib/league-import/backfillOutcome'
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import {
   discoverProviderLeagues,
   fetchImportPreview,
@@ -125,7 +130,24 @@ type Phase =
   | { k: 'attest'; sourceId: string; message: string }
   | { k: 'preview'; sourceId: string; leagueName: string; attested: boolean }
   | { k: 'committing'; sourceId: string }
-  | { k: 'done'; leagueId: string; leagueName: string; backfilled: boolean; sourceId: string; existed: boolean; skipped: boolean; attested: boolean }
+  | {
+      k: 'done'
+      leagueId: string
+      leagueName: string
+      backfilled: boolean
+      /*
+       * 6d's "seasons of history" card. NULLABLE on purpose: readBackfillOutcome
+       * exists precisely because a resolved backfill promise does not mean seasons
+       * were written, and it returns null when the provider's answer is unreadable.
+       * Null means "we do not know", which 6d renders by omitting the card rather
+       * than by printing a 0 that would read as "no history found".
+       */
+      seasonsImported: number | null
+      sourceId: string
+      existed: boolean
+      skipped: boolean
+      attested: boolean
+    }
 
 const FIELD_BY_PROVIDER: Partial<
   Record<ImportProvider, { label: string; placeholder: string; help: string }>
@@ -146,7 +168,13 @@ const FIELD_BY_PROVIDER: Partial<
      * people to type an ID that could not work, and the failure then pointed at
      * League Sync rather than at the settings page that actually fixes it.
      */
-    help: 'Connect ESPN once under Settings → Connected Accounts, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
+    /*
+     * ⚠ THIS SENT PEOPLE TO SETTINGS, AND SETTINGS IS NO LONGER WHERE IT HAPPENS.
+     * The connect panel is on this screen now (6b), so naming another page would
+     * send someone away from the control that is already in front of them — the
+     * same errand the /settings error link used to be.
+     */
+    help: 'Connect ESPN above, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
   },
   /*
    * ⚠ THIS IS A LEAGUE ID, NOT A SNAPSHOT ID — the provider changed shape under
@@ -312,6 +340,140 @@ function describeYahooError(code: string, description?: string): string {
 }
 
 /**
+ * The lock beside the account line. An inline glyph rather than the 🔒 emoji it
+ * replaced: an emoji renders at whatever size and colour the platform font
+ * decides, so it sat a pixel high, ignored `currentColor`, and was announced by
+ * screen readers as "locked". This inherits both and is `aria-hidden`, because
+ * the sentence next to it already says what it means.
+ */
+function LockGlyph() {
+  return (
+    <svg
+      className="af-im-lock"
+      width="13"
+      height="14"
+      viewBox="0 0 13 14"
+      fill="none"
+      aria-hidden
+      focusable="false"
+    >
+      <rect x="1" y="5.75" width="11" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.75 5.75V4a2.75 2.75 0 0 1 5.5 0v1.75" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  )
+}
+
+/**
+ * The `?` affordance the handoff puts beside the READ-ONLY chip, the field label
+ * and "What we read".
+ *
+ * ⚠ A `title` ATTRIBUTE IS NOT AN AFFORDANCE. The READ-ONLY chip already carried
+ * its explanation that way and nobody could tell: a native tooltip has no visible
+ * trigger, never appears on touch, and takes about a second to show on hover. The
+ * three places this screen has something to explain are exactly the three where a
+ * visitor is deciding whether to hand over an account, so the explanation has to
+ * be visibly available.
+ *
+ * A <button> rather than a hover-only span, so it opens on tap and on Enter and is
+ * reachable by keyboard. The bubble is rendered, not `title`-driven, so it is
+ * styled and legible in every theme.
+ */
+function Hint({ label, children }: { label: string; children: React.ReactNode }) {
+  /*
+   * ⚠ TWO FLAGS, NOT ONE — A SINGLE `open` MAKES THE CLICK CLOSE IT. With hover
+   * setting the same boolean the click toggles, a mouse user hovers (open), then
+   * clicks the `?` and it VANISHES: the pointer is already inside, so the toggle
+   * can only run downwards. Caught by driving it: the bubble was hidden the
+   * instant it was pressed.
+   *
+   * Hover and press are different intents and are stored separately. The bubble
+   * shows when either is true, so a click while hovering pins it open and a
+   * click on a touch screen — where nothing ever hovers — is still the way in.
+   */
+  const [hovered, setHovered] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const open = hovered || pinned
+  return (
+    <span className="af-im-hint" data-open={open ? 'true' : undefined}>
+      <button
+        type="button"
+        className="af-im-hint-btn"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setPinned((v) => !v)}
+        onFocus={() => setPinned(true)}
+        onBlur={() => setPinned(false)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onKeyDown={(e) => {
+          /* Escape closes it, which is the one keyboard behaviour a tooltip owes
+             its user beyond opening. */
+          if (e.key === 'Escape') setPinned(false)
+        }}
+      >
+        ?
+      </button>
+      <span className="af-im-hint-bubble" role="tooltip" hidden={!open}>
+        {children}
+      </span>
+    </span>
+  )
+}
+
+/**
+ * The short tag that rides on the pill itself — the slot the handoff draws as
+ * "· Coming soon".
+ *
+ * ⚠ IT SAYS WHAT THE PROVIDER NEEDS, NOT WHETHER IT IS COMING. The handoff was
+ * drawn when MFL, Fantrax and Fleaflicker were unbuilt; all six are live in this
+ * repo (provider-ui-config.ts is the authority and every one of them is
+ * `available: true`), so rendering "Coming soon" against them would be a
+ * regression dressed as a design match. The slot is kept and given the fact that
+ * is actually true at pick time: what you will be asked for.
+ *
+ * The pill row is a scanning surface — the full sentence still lands in the
+ * context line under it and in the field help, so nothing is lost by keeping this
+ * to three words.
+ */
+/**
+ * The letter(s) in the brand circle.
+ *
+ * ⚠ `label.charAt(0)` GIVES FANTRAX AND FLEAFLICKER THE SAME MARK. Both are "F",
+ * and they sit next to each other in the row — so the one visual cue meant to let
+ * you find your platform at a glance pointed at two of them. The handoff draws
+ * "FL" for Fleaflicker for exactly this reason. Only the ambiguous ones are
+ * listed; everything else keeps its initial.
+ */
+/**
+ * The name on the pill.
+ *
+ * ⚠ "MyFantasyLeague (MFL)" DOES NOT FIT A PILL, and on a 390px screen it did
+ * not fit the CARD — the tag beside it ("· league ID + key") was pushed past the
+ * right edge and clipped. Every other pill is one short word.
+ *
+ * Derived from the config label rather than hardcoded, so provider-ui-config
+ * stays the single authority on naming: when a label carries a parenthetical
+ * abbreviation, the pill shows the abbreviation and the full name still appears
+ * wherever there is room for it (`providerLabel` in the field help, the account
+ * note and the blocked strip all keep using it).
+ */
+function providerPillLabel(label: string): string {
+  const abbreviation = /\(([^)]+)\)\s*$/.exec(label)
+  return abbreviation?.[1]?.trim() || label
+}
+
+const PROVIDER_INITIAL: Partial<Record<ImportProvider, string>> = {
+  fleaflicker: 'FL',
+}
+
+const PROVIDER_PILL_TAG: Partial<Record<ImportProvider, string>> = {
+  espn: 'league ID',
+  mfl: 'league ID + key',
+  fantrax: 'league ID',
+  fleaflicker: 'league ID',
+}
+
+/**
  * 6a build rule 2: the read / never-do split IS the trust contract for the whole import flow, and
  * it has to appear on this first screen rather than being discovered later. It replaces the older
  * one-line promise, which said the same thing but only in the abstract — "we only read your league
@@ -324,7 +486,13 @@ function ReadOnlyPromise() {
   return (
     <div className="af-im-trust">
       <div className="af-im-trust-col">
-        <span className="af-label af-im-trust-read">What we read</span>
+        <span className="af-label af-im-trust-read">
+          What we read
+          <Hint label="What we read from your league">
+            Everything AllFantasy shows you is built from these. We re-read them on a schedule so
+            your numbers stay current — and we read nothing else.
+          </Hint>
+        </span>
         <p className="af-im-trust-body">
           Teams · rosters · matchups · scoring settings · past seasons
         </p>
@@ -398,6 +566,14 @@ export function ImportV4({
      provider uses, never held in component state after it is saved. */
   const [fxSecret, setFxSecret] = useState('')
   const [fxSaving, setFxSaving] = useState(false)
+  /*
+   * 6b: whether ESPN is connected for this user, reported by the connect panel
+   * below rather than fetched again here. `null` is "not yet known" and is
+   * deliberately distinct from `false` — the panel is still asking, and claiming
+   * "not connected" during that window is how a connected account gets told to
+   * connect.
+   */
+  const [espnConnected, setEspnConnected] = useState<boolean | null>(null)
 
   const selectable = isImportProviderAvailable(provider)
   // Provider display name comes from the shared config, never a local literal — the same
@@ -415,6 +591,18 @@ export function ImportV4({
   const rowsAreTeams = provider === 'fantrax'
   // Yahoo has no identifier at all; Sleeper falls back to the linked account.
   const usesConnectedAccount = provider === 'yahoo'
+
+  /*
+   * ⚠ MUST BE STABLE, AND THIS IS NOT A STYLE PREFERENCE. The panel's status
+   * fetch is a `useCallback` that closes over this prop and is driven by a
+   * `useEffect` keyed on it. An inline arrow gets a new identity every render, so
+   * the effect would re-fire, set state, re-render, and re-fire — an unbounded
+   * loop of GETs against /api/league/auth. `useCallback` with no deps is the
+   * whole fix.
+   */
+  const handleEspnConnectedChange = useCallback((connected: boolean) => {
+    setEspnConnected(connected)
+  }, [])
 
   const reset = useCallback(() => {
     setLeagues([])
@@ -563,6 +751,26 @@ export function ImportV4({
     outcomeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [phase.k])
 
+  /*
+   * ⚠ AN ERROR THE USER CANNOT SEE IS NOT AN ERROR MESSAGE. The failure panel lives
+   * in the picker card at the TOP of the page, while the row you pressed can be far
+   * below it — the discovered list is as long as the account is deep.
+   *
+   * Found running a real Sleeper account against staging: `theciege24` returns 55
+   * leagues, the page is ~10,800px tall, and a preview failure on a row near the
+   * bottom rendered its explanation roughly nine thousand pixels above the click.
+   * The button appeared to do nothing. The stubbed fixtures never showed this
+   * because three fake leagues fit on one screen.
+   *
+   * Centred rather than 'start' for the same reason the outcome panels are: it keeps
+   * the surrounding context visible so the screen still reads as one flow.
+   */
+  const errorRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!error) return
+    errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [error])
+
   const deepLinked = useRef(false)
 
   const runPreview = useCallback(
@@ -664,6 +872,7 @@ export function ImportV4({
         leagueId,
         leagueName: data?.name || data?.league?.name || 'Your league',
         backfilled: Boolean(data?.historicalBackfill),
+        seasonsImported: readBackfillOutcome(data?.historicalBackfill).seasonsImported,
         sourceId,
         attested,
         existed: Boolean(data?.existed ?? data?.league_existed),
@@ -861,6 +1070,290 @@ export function ImportV4({
       ? `${(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.label ?? provider).toUpperCase()} CONNECTED`
       : null
 
+  /*
+   * ⚠ 6c IS A TAKEOVER, AND APPENDING IT WAS NOT ENOUGH. Rendered below the picker
+   * and the discovered list, the progress ring landed roughly 1,400px down a page
+   * the user was not scrolled to — so pressing Import appeared to do nothing, which
+   * is the exact failure the screen exists to prevent. The handoff draws it as the
+   * only thing on the frame.
+   *
+   * ⚠ BUT NOT DURING DISCOVERY. A lookup is not an import: it is fast, it is often
+   * wrong (a typo'd username), and hiding the field someone needs to correct while
+   * they wait is worse than a spinner. Discovery keeps the existing inline
+   * `Working` line and leaves the form on screen; the takeover starts once a
+   * specific league is being read or written.
+   */
+  const importTakeover =
+    phase.k === 'previewing' ||
+    phase.k === 'committing' ||
+    /* 6d is the last screen of the flow. Leaving the picker above it means the
+       success message lands below a form the user has already finished with. */
+    phase.k === 'done' ||
+    forcedState === 'connecting'
+
+  /*
+   * ── 6c: the checklist, derived from the phase machine ───────────────────────
+   *
+   * ⚠ THREE STEPS BECAUSE THERE ARE THREE CALLS. See the note at the top of
+   * ImportProgress: the handoff draws four, but "matchups and scoring" and "past
+   * seasons" both happen inside the single synchronous commit, so sequencing them
+   * on screen would invent an order the backend never reports. Every state below
+   * is read off `phase`, so the checklist cannot claim a step the screen is not on.
+   */
+  const progressSteps: ImportStep[] = (() => {
+    const discovering = phase.k === 'discovering'
+    const previewing = phase.k === 'previewing'
+    const committing = phase.k === 'committing'
+    const found = leagues.length
+
+    const discoveryDone = !discovering && (found > 0 || previewing || committing)
+    /* Real names, capped — the detail line is one row, not a league list. */
+    const names = leagues.slice(0, 3).map((l) => l.name).join(', ')
+    const extra = found > 3 ? `, +${found - 3} more` : ''
+
+    return [
+      {
+        key: 'discovery',
+        title: found > 0 ? `Discovery · found ${found} ${found === 1 ? 'league' : 'leagues'}` : 'Discovery',
+        detail: discovering
+          ? `Asking ${providerLabel} what you play in`
+          : found > 0
+            ? `${names}${extra}`
+            : canDiscover
+              ? 'Looking up your account'
+              : 'Reading the league ID you entered',
+        state: discovering ? 'working' : discoveryDone ? 'done' : 'queued',
+      },
+      {
+        key: 'preview',
+        title: 'Teams and rosters',
+        detail: previewing
+          ? 'Reading the league and its teams'
+          : committing || phase.k === 'done'
+            ? 'Teams, managers and rosters read'
+            : 'Reads the league before anything is written',
+        state: previewing ? 'working' : committing || phase.k === 'done' ? 'done' : 'queued',
+      },
+      {
+        key: 'commit',
+        title: 'Matchups and scoring settings',
+        detail: committing
+          ? 'Writing your read-only copy'
+          : phase.k === 'done'
+            ? 'Scoring rules and the matchup schedule are in'
+            : 'Scoring rules and the matchup schedule',
+        state: committing ? 'working' : phase.k === 'done' ? 'done' : 'queued',
+      },
+      {
+        /*
+         * ⚠ THE FOURTH ROW IS REAL, BUT IT DOES NOT GET ITS OWN MOMENT. The handoff
+         * draws matchups/scoring and past seasons finishing separately; both happen
+         * inside the SAME synchronous commit call, which reports once. So this row
+         * cannot go WORKING while the one above is still WORKING without inventing a
+         * sequence — the two resolve together, which is why the ring steps 50 → 100
+         * rather than passing through 75.
+         *
+         * What IS separately real is the OUTCOME: readBackfillOutcome gives a genuine
+         * `seasonsImported`, and it is nullable by design because a resolved backfill
+         * promise does not mean seasons were written. All three answers are
+         * distinguishable here — a count, an honest "none found", and "we could not
+         * tell" — which is more than the design asked for and less than it implied.
+         */
+        key: 'seasons',
+        title: 'Past seasons',
+        detail: committing
+          ? 'Reading prior seasons'
+          : phase.k === 'done'
+            ? typeof phase.seasonsImported === 'number' && phase.seasonsImported > 0
+              ? `${phase.seasonsImported} ${phase.seasonsImported === 1 ? 'season' : 'seasons'} imported · powers your career and legacy record`
+              : phase.seasonsImported === 0
+                ? 'No prior seasons found on this league'
+                : 'Imported — the provider did not report how many seasons'
+            : 'Powers your career and legacy record',
+        state: committing ? 'working' : phase.k === 'done' ? 'done' : 'queued',
+      },
+    ]
+  })()
+
+  /*
+   * ── 6d: the stat cards ──────────────────────────────────────────────────────
+   *
+   * ⚠ A CARD IS OMITTED RATHER THAN GUESSED. Handoff rule 4 wants exact counts from
+   * this import; the corollary is that a number this screen cannot source must not
+   * appear at all. `seasonsImported` is null whenever the provider's backfill answer
+   * was unreadable, and a null is dropped here rather than rendered as 0 — a "0
+   * seasons of history" card reports a finding we did not make.
+   */
+  const doneStats: ImportDoneStat[] = (() => {
+    if (phase.k !== 'done') return []
+    const out: ImportDoneStat[] = []
+
+    /* Leagues written in THIS run: the bulk tally when a bulk run happened, else 1. */
+    const importedCount = bulkDone ? bulkCounts.done : phase.skipped ? 0 : 1
+    out.push({
+      key: 'leagues',
+      value: importedCount,
+      label: importedCount === 1 ? 'league imported' : 'leagues imported',
+    })
+
+    /*
+     * Teams, not "players on your rosters". The commit returns no player count, and
+     * the preview's per-manager `players[]` covers every manager in the league — the
+     * handoff's figure would need the viewer's own roster, which is not in either
+     * payload. This is the adjacent fact we can actually stand behind.
+     */
+    const teams = leagues.find((l) => l.sourceId === phase.sourceId)?.totalTeams
+    if (typeof teams === 'number' && teams > 0) {
+      out.push({ key: 'teams', value: teams, label: teams === 1 ? 'team in your league' : 'teams in your league' })
+    }
+
+    if (typeof phase.seasonsImported === 'number' && phase.seasonsImported > 0) {
+      out.push({
+        key: 'seasons',
+        value: phase.seasonsImported,
+        label: phase.seasonsImported === 1 ? 'season of history' : 'seasons of history',
+      })
+    }
+
+    /*
+     * ⚠ THE "NEEDS YOU" CARD IS ONLY --bad ABOVE ZERO (handoff rule 1), and at zero
+     * it becomes a --good "all set" rather than a red 0. What counts as needing you
+     * is this run's own unfinished business: leagues the commissioner gate asked you
+     * to confirm, plus outright failures. Both are real outcomes of this import and
+     * both have an action on this screen.
+     */
+    const needsYou = bulkDone ? bulkCounts.needsAttestation + bulkCounts.failed : 0
+    out.push(
+      needsYou > 0
+        ? { key: 'needs', value: needsYou, label: needsYou === 1 ? 'thing needs you' : 'things need you', tone: 'bad' }
+        : { key: 'needs', value: 0, label: 'left for you to do', tone: 'good' },
+    )
+    return out
+  })()
+
+  /*
+   * ── 6d: "Open in {Platform}" ────────────────────────────────────────────────
+   *
+   * ⚠ RESOLVED, NEVER CONSTRUCTED. `resolveSourceLink` is the one gate for provider
+   * URLs in this repo — every href it returns has passed that provider's EXACT-host
+   * HTTPS allowlist, and it falls back to the provider homepage rather than guessing
+   * a deep link it cannot verify. Building `https://sleeper.com/leagues/${id}` here
+   * by hand would sidestep all of that for one button.
+   *
+   * Null is a real answer: an unknown platform or an unresolvable id yields no link
+   * and the button simply does not render.
+   */
+  const doneSourceLink = (() => {
+    if (phase.k !== 'done') return null
+    const link = resolveSourceLink({
+      platform: provider,
+      sourceLeagueId: phase.sourceId,
+      leagueName: phase.leagueName,
+      action: 'league',
+    })
+    return link ? { href: link.href, label: `Open in ${link.providerLabel}` } : null
+  })()
+
+  /*
+   * ── 6d: the Chimmy aside ────────────────────────────────────────────────────
+   *
+   * ⚠ DERIVED FROM THIS RUN, NOT WRITTEN IN ADVANCE. The handoff's line is an
+   * analytical claim about players across rosters; nothing here can compute that.
+   * What this screen genuinely knows the moment it renders is what the backfill
+   * reported, so that is what Chimmy says — and when the backfill reported nothing
+   * knowable, it falls back to the one thing that is always true on this screen.
+   */
+  const doneChimmyNote = (() => {
+    if (phase.k !== 'done') return null
+    const seasons = phase.seasonsImported
+    if (typeof seasons === 'number' && seasons > 0) {
+      return (
+        <>
+          I pulled {seasons} {seasons === 1 ? 'past season' : 'past seasons'} in alongside this
+          one &mdash; that history is what your career and legacy records are built from.
+        </>
+      )
+    }
+    return (
+      <>
+        Nothing on {providerLabel} changed. From here I only ever read this league &mdash; every
+        number you see is built from that read-only copy.
+      </>
+    )
+  })()
+
+  /*
+   * 6d's outstanding-issue row. Bound to the same bulk outcomes as the card above,
+   * so the two can never disagree, and rendered only when there is genuinely
+   * something to act on. Its action returns to the discovered list, which is where
+   * the per-league confirm panels live.
+   */
+  const doneIssue =
+    phase.k === 'done' && bulkDone && bulkCounts.needsAttestation + bulkCounts.failed > 0
+      ? {
+          title:
+            bulkCounts.needsAttestation > 0
+              ? `${bulkCounts.needsAttestation} ${bulkCounts.needsAttestation === 1 ? 'league needs' : 'leagues need'} your confirmation`
+              : `${bulkCounts.failed} ${bulkCounts.failed === 1 ? 'league' : 'leagues'} did not import`,
+          meta:
+            bulkCounts.needsAttestation > 0
+              ? `${providerLabel} · confirm you are authorised to import them`
+              : `${providerLabel} · open each one to see why`,
+          actionLabel: 'Review them',
+          onAction: backToList,
+        }
+      : null
+
+  /*
+   * The connect action, hoisted so it can sit ON the field's row for every
+   * provider that has a field, and stand alone for Yahoo, which does not. Same
+   * button, same handler, same disabled rule — declared once so the two
+   * placements cannot drift apart.
+   */
+  const submitButton = (
+    <button
+      type="button"
+      className="af-btn af-im-submit"
+      data-testid="import-discovery-find"
+      disabled={phase.k === 'discovering' || phase.k === 'previewing'}
+      onClick={() => {
+        const typed = account.trim()
+        /*
+          ⚠ A TYPED YAHOO LEAGUE ID MUST BYPASS DISCOVERY, NOT FEED IT.
+          Yahoo supports discovery, so `canDiscover` is true and this used
+          to run the account-wide lookup unconditionally — which would
+          ignore what was typed and fail in exactly the way the person was
+          typing to get around.
+        */
+        if (usesConnectedAccount && typed) {
+          void runPreview(toYahooLeagueKey(typed))
+          return
+        }
+        if (canDiscover) void runDiscover(typed)
+        else if (typed) void runPreview(typed)
+        else setError('Enter a league ID to continue.')
+      }}
+    >
+      {/*
+        "Find my leagues" only makes sense when there is something to
+        search from. Yahoo supports discovery but normally takes no
+        identifier, so the same label there would promise a search of
+        something never entered — unless a league ID has been typed, in
+        which case that is precisely what the button will do.
+      */}
+      {usesConnectedAccount
+        ? account.trim()
+          ? 'Import this league'
+          : 'Connect Yahoo'
+        : canDiscover
+          ? 'Find my leagues'
+          : 'Connect'}
+      <span className="af-im-submit-arrow" aria-hidden>
+        &rarr;
+      </span>
+    </button>
+  )
+
   return (
     <div className="af-core af-im">
       {/*
@@ -880,13 +1373,19 @@ export function ImportV4({
           {connectedLabel ? (
             <span className="af-im-connected af-num">{connectedLabel}</span>
           ) : (
-            <span
-              className="af-im-readonly af-num"
-              title="We only ever read from your platform. Nothing here changes your lineup, roster or league."
-            >
-              Read-only
-            </span>
+            <span className="af-im-readonly af-num">Read-only</span>
           )}
+          {/*
+            6a build rule 4: the chip AND its `?` ride every step of this flow,
+            the same way they do on every signed-in screen. It sits outside the
+            connected/read-only swap because the explanation is the same either
+            way — what changed is which account is connected, not what we do
+            with it.
+          */}
+          <Hint label="What read-only means">
+            AllFantasy never changes anything on Sleeper, ESPN or Yahoo. We read your leagues and
+            point you to the exact league and screen where you make the change.
+          </Hint>
           <Link href="/core" className="af-im-skip">
             Skip for now
           </Link>
@@ -952,15 +1451,36 @@ export function ImportV4({
       ) : null}
 
       {/* ── Step 1: provider picker ─────────────────────────────────── */}
+      {importTakeover ? null : (
       <section className="af-im-card">
         {/*
           The section heading used to repeat the h1 verbatim ("Where do you already play?"),
           so the page asked the same question twice in a row. 6a asks it once, in the h1.
         */}
-        <div className="af-im-providers">
+        {/*
+          ── 6a: A PILL ROW, NOT A GRID OF CARDS ───────────────────────────────
+          This was six stacked tiles, each carrying a mark, a name, a tagline and
+          a sports line — 24 lines of text to read before picking the platform
+          you already knew you were on. The handoff draws one scannable row, and
+          it is right: choosing your platform is recognition, not comparison.
+
+          ⚠ NOTHING WAS DELETED TO GET THERE. The tagline and the supported
+          sports both still render — in the context line directly below, for the
+          provider actually chosen. That is where they matter (they describe what
+          the field beneath is about to ask for), and it is the only place they
+          are not competing with five other providers' copy for attention.
+
+          ⚠ AND AVAILABILITY IS STILL provider-ui-config's ANSWER. The handoff
+          tags MFL, Fantrax and Fleaflicker "Coming soon"; that was true when it
+          was drawn and is not true now. Reading `opt.available` rather than the
+          picture keeps the row honest in both directions — it will say "soon"
+          again the day a provider is switched off, without an edit here.
+        */}
+        <div className="af-im-providers" role="group" aria-label="Fantasy platform">
           {IMPORT_PROVIDER_UI_OPTIONS.map((opt) => {
             const available = opt.available
             const active = provider === opt.provider
+            const tag = available ? PROVIDER_PILL_TAG[opt.provider] : 'Coming soon'
             return (
               <button
                 key={opt.provider}
@@ -968,8 +1488,10 @@ export function ImportV4({
                 className="af-im-provider"
                 data-active={active}
                 data-available={available}
+                data-testid={`import-tab-${opt.provider}`}
                 disabled={!available}
                 aria-disabled={!available}
+                aria-pressed={active}
                 onClick={() => {
                   if (!available) return
                   setProvider(opt.provider)
@@ -977,28 +1499,50 @@ export function ImportV4({
                   reset()
                 }}
               >
-                <span className="af-im-provider-top">
-                  <span className="af-platform af-im-mark" data-platform={opt.provider}>
-                    {opt.label.charAt(0)}
-                  </span>
-                  <span className="af-im-provider-label">{opt.label}</span>
-                  {!available ? <span className="af-im-soon af-num">soon</span> : null}
+                <span className="af-platform af-im-mark" data-platform={opt.provider} aria-hidden>
+                  {PROVIDER_INITIAL[opt.provider] ?? opt.label.charAt(0)}
                 </span>
-                <span className="af-im-provider-meta">
-                  {available
-                    ? PROVIDER_TAGLINE[opt.provider] ??
-                      (supportsImportProviderDiscovery(opt.provider)
-                        ? 'Finds your leagues automatically'
-                        : 'League ID · read-only')
-                    : BLOCKED_REASON[opt.provider] ?? 'Not connectable yet.'}
-                </span>
-                <span className="af-im-provider-sports af-num">
-                  {opt.supportedSports.join(' · ')}
-                </span>
+                <span className="af-im-provider-label">{providerPillLabel(opt.label)}</span>
+                {tag ? <span className="af-im-soon af-num">&middot; {tag}</span> : null}
               </button>
             )
           })}
         </div>
+
+        {/*
+          What the chosen pill costs you, in one line: what it asks for, and which
+          sports it can carry. Both used to sit on every tile at once; here they
+          describe the field immediately below them.
+        */}
+        <p className="af-im-context">
+          <span className="af-im-context-meta">
+            {selectable
+              ? PROVIDER_TAGLINE[provider] ??
+                (canDiscover ? 'Finds your leagues automatically' : 'League ID · read-only')
+              : BLOCKED_REASON[provider] ?? 'Not connectable yet.'}
+          </span>
+          <span className="af-im-context-sports af-num">
+            {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
+              .join(' · ')}
+          </span>
+        </p>
+
+        {/*
+          ── 6a: the coming-soon fallback strip ────────────────────────────────
+          ⚠ DORMANT TODAY AND BUILT ANYWAY. Every provider in the config is
+          available, so this renders for nobody — but a disabled pill with no
+          explanation beside it is exactly the dead end the tiles' `BLOCKED_REASON`
+          line used to cover, and deleting the strip because nothing currently
+          triggers it is how that regression gets reintroduced the next time a
+          provider is switched off. It reads from the same `selectable` flag the
+          field block does, so the two can never disagree.
+        */}
+        {!selectable ? (
+          <p className="af-im-blocked" role="status">
+            <span className="af-label">{providerLabel} selected?</span>
+            <span>{BLOCKED_REASON[provider] ?? `${providerLabel} isn't available yet — coming soon.`}</span>
+          </p>
+        ) : null}
 
         {/*
           ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
@@ -1019,6 +1563,42 @@ export function ImportV4({
         {/* ── Step 2: the provider's own field ──────────────────────── */}
         {selectable && phase.k !== 'done' ? (
           <div className="af-im-field-block">
+            {/*
+              ── 6b: ESPN connects HERE, not on another page ─────────────────
+              ⚠ THE OLD ANSWER WAS A LINK OUT, AND A LINK OUT ENDS THE IMPORT.
+              ESPN is the one provider on this screen that cannot be read without a
+              connection — commissionerGate resolves your team from the SWID cookie,
+              so a PUBLIC ESPN league needs one too. The screen knew that and handled
+              it by pointing at /settings, which means: leave with no league id in
+              hand, connect, find your way back, start over. 6a build rule 6 calls
+              ESPN's case one click; this is where that click has to be.
+
+              ⚠ AND IT IS SHOWN BEFORE THE FIELD, NOT AFTER A FAILURE. Rendering it
+              only once an import had already failed would still be teaching the
+              prerequisite by punishment. It leads for as long as ESPN is
+              unconnected, and collapses to a one-line confirmation once it is.
+            */}
+            {provider === 'espn' ? (
+              <div className="af-im-espn" data-connected={espnConnected === true ? 'true' : 'false'}>
+                {espnConnected === true ? null : (
+                  <p className="af-im-espn-lead">
+                    <span className="af-label">Connect ESPN first</span>
+                    {/*
+                      ⚠ SAYS "PRIVATE OR PUBLIC" ON PURPOSE. The previous copy on this
+                      screen implied public ESPN leagues imported directly. They do not,
+                      and that sentence cost a real user a long detour — it sent them to
+                      type an id that could never work.
+                    */}
+                    <span>
+                      ESPN has no sign-in for us to use, so we read your leagues as you.
+                      This is needed for every ESPN league, public ones included.
+                    </span>
+                  </p>
+                )}
+                <EspnConnectPanel onConnectedChange={handleEspnConnectedChange} />
+              </div>
+            ) : null}
+
             {/*
               ── Fantrax: connect once, then there is nothing to type.
               A league id is public and says nothing about who is asking, which is why
@@ -1087,20 +1667,56 @@ export function ImportV4({
 
             {field ? (
               <label className="af-im-field">
-                <span className="af-label">{field.label}</span>
-                <input
-                  type="text"
-                  placeholder={field.placeholder}
-                  value={account}
-                  onChange={(e) => setAccount(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return
-                    e.preventDefault()
-                    if (canDiscover) void runDiscover(account.trim())
-                    else if (account.trim()) void runPreview(account.trim())
-                  }}
-                />
-                <span className="af-im-field-help">{field.help}</span>
+                <span className="af-label">
+                  {field.label}
+                  {/*
+                    6a build rule 1: this label and placeholder change with the
+                    platform, and the `?` is where that rule is explained rather
+                    than merely obeyed. Someone who picked ESPN after typing a
+                    Sleeper username needs to know the box now wants something
+                    else — the swap alone does not say so.
+                  */}
+                  <Hint label="Why this field changes">
+                    Sleeper connects by username. ESPN, Yahoo, MFL, Fantrax and Fleaflicker connect
+                    by league ID — the field swaps when you pick a platform.
+                  </Hint>
+                </span>
+                {/*
+                  ⚠ THE ACTION SITS ON THE FIELD'S ROW, NOT UNDER IT. The submit
+                  used to be a separate block below the help text, so the thing you
+                  press after typing was two paragraphs away from the thing you
+                  typed into — and on the one screen whose entire job is "type this,
+                  press that". 6a puts them on one row; the button drops beneath the
+                  input on narrow screens, where a row would squeeze both.
+                */}
+                <span className="af-im-field-row">
+                  <input
+                    type="text"
+                    placeholder={field.placeholder}
+                    value={account}
+                    data-testid="import-discovery-account"
+                    onChange={(e) => setAccount(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return
+                      e.preventDefault()
+                      if (canDiscover) void runDiscover(account.trim())
+                      else if (account.trim()) void runPreview(account.trim())
+                    }}
+                  />
+                  {submitButton}
+                </span>
+                <span className="af-im-field-help">
+                  {/*
+                    ⚠ "CONNECT ESPN ABOVE" IS WRONG ONCE ESPN IS CONNECTED — it tells
+                    someone to do a thing the green badge two rows up says they have
+                    already done, which reads as the badge being wrong. The static
+                    map cannot know, so the one provider whose help depends on live
+                    state gets it swapped here.
+                  */}
+                  {provider === 'espn' && espnConnected === true
+                    ? 'ESPN is connected, so paste a league ID and we will read it as you. We never ask for your ESPN password.'
+                    : field.help}
+                </span>
               </label>
             ) : (
               <div className="af-im-field">
@@ -1143,43 +1759,12 @@ export function ImportV4({
               </div>
             )}
 
-            <button
-              type="button"
-              className="af-btn af-im-submit"
-              disabled={phase.k === 'discovering' || phase.k === 'previewing'}
-              onClick={() => {
-                const typed = account.trim()
-                /*
-                  ⚠ A TYPED YAHOO LEAGUE ID MUST BYPASS DISCOVERY, NOT FEED IT.
-                  Yahoo supports discovery, so `canDiscover` is true and this used
-                  to run the account-wide lookup unconditionally — which would
-                  ignore what was typed and fail in exactly the way the person was
-                  typing to get around.
-                */
-                if (usesConnectedAccount && typed) {
-                  void runPreview(toYahooLeagueKey(typed))
-                  return
-                }
-                if (canDiscover) void runDiscover(typed)
-                else if (typed) void runPreview(typed)
-                else setError('Enter a league ID to continue.')
-              }}
-            >
-              {/*
-                "Find my leagues" only makes sense when there is something to
-                search from. Yahoo supports discovery but normally takes no
-                identifier, so the same label there would promise a search of
-                something never entered — unless a league ID has been typed, in
-                which case that is precisely what the button will do.
-              */}
-              {usesConnectedAccount
-                ? account.trim()
-                  ? 'Import this league'
-                  : 'Connect Yahoo'
-                : canDiscover
-                  ? 'Find my leagues'
-                  : 'Connect'}
-            </button>
+            {/*
+              Yahoo's block renders its own input above and has no `field`, so the
+              action stays a standalone row there — it is the only branch where
+              pressing the button with nothing typed is the NORMAL path.
+            */}
+            {field ? null : submitButton}
 
             {/*
               6a: the account line that sits directly under the connect action. The promise it
@@ -1187,14 +1772,14 @@ export function ImportV4({
               out, and it belongs here because this is the moment someone decides to type.
             */}
             <p className="af-im-account-note">
-              <span aria-hidden>🔒</span> Create a free account to connect your{' '}
-              {providerLabel} league — read-only, no password, ever.
+              <LockGlyph /> Create a free account to connect your {providerLabel} league &mdash;
+              read-only, no password, ever.
             </p>
 
             {phase.k === 'discovering' ? <Working label="Looking up your leagues…" /> : null}
 
             {error ? (
-              <div className="af-im-error" role="alert">
+              <div className="af-im-error" role="alert" ref={errorRef}>
                 <p className="af-im-error-text">{error}</p>
                 {needsConnectionSetup(error) ? (
                   provider === 'yahoo' ? (
@@ -1213,20 +1798,24 @@ export function ImportV4({
                     >
                       Connect Yahoo →
                     </a>
-                  ) : (
+                  ) : provider === 'espn' ? (
                     /*
-                      ESPN is fixed in Settings → Connected Accounts, where the
-                      cookie form lives -- not in League Sync. Sending an ESPN user
-                      to /leagues gave them a page with no ESPN control on it, which
-                      is how a solvable setup step read as "import is broken".
+                      ⚠ NO LINK, DELIBERATELY. This used to read "Connect ESPN in
+                      Settings →" and navigate away mid-import; the connect panel is
+                      now a few rows up this same card, so a link would send someone
+                      to a second copy of a control already on screen. The sentence
+                      points at it instead.
+
+                      (It pointed at /leagues before that, which was worse again —
+                      League Sync has no ESPN control on it at all, so a solvable
+                      setup step read as "import is broken".)
                     */
-                    <Link
-                      href={provider === 'espn' ? '/settings' : '/leagues'}
-                      className="af-im-error-link"
-                    >
-                      {provider === 'espn'
-                        ? 'Connect ESPN in Settings →'
-                        : 'Connect your accounts in League Sync →'}
+                    <span className="af-im-error-link af-im-error-here">
+                      Use &ldquo;Connect ESPN&rdquo; above to fix this.
+                    </span>
+                  ) : (
+                    <Link href="/leagues" className="af-im-error-link">
+                      Connect your accounts in League Sync →
                     </Link>
                   )
                 ) : null}
@@ -1237,6 +1826,7 @@ export function ImportV4({
 
         <ReadOnlyPromise />
       </section>
+      )}
 
       {/*
         The CSV upload stays, as the second way in rather than the only one.
@@ -1253,7 +1843,7 @@ export function ImportV4({
         carries past seasons the live API does not expose, and a league whose id will not
         read has nowhere else to go. So it stays one click away instead of in the way.
       */}
-      {provider === 'fantrax' || defaultProvider === 'fantrax' ? (
+      {(provider === 'fantrax' || defaultProvider === 'fantrax') && !importTakeover ? (
         <details className="af-im-fx-disclosure">
           <summary className="af-im-fx-link">Have a Fantrax CSV export? (optional — for past seasons)</summary>
           <FantraxUpload />
@@ -1261,7 +1851,7 @@ export function ImportV4({
       ) : null}
 
       {/* ── Discovered leagues ──────────────────────────────────────── */}
-      {leagues.length > 0 && phase.k !== 'done' ? (
+      {leagues.length > 0 && phase.k !== 'done' && !importTakeover ? (
         <section className="af-im-card">
           <header className="af-im-result-head">
             <h2 className="af-label">
@@ -1504,109 +2094,90 @@ export function ImportV4({
         </section>
       ) : null}
 
-      {/* ── Working ─────────────────────────────────────────────────── */}
-      {phase.k === 'committing' || forcedState === 'connecting' ? (
+      {/* ── 6c: Importing ───────────────────────────────────────────── */}
+      {importTakeover && phase.k !== 'done' ? (
         <section className="af-im-card">
-          <h2 className="af-label">Importing</h2>
-          <Working label="Building your read-only copy — rosters, matchups and scoring. This can take a minute." />
+          <ImportProgress
+            providerLabel={providerLabel}
+            accountLabel={accountLabel || (account.trim() || null)}
+            steps={progressSteps}
+            note={
+              <>
+                Nothing on {providerLabel} changes while this runs. I&rsquo;m building a
+                read-only copy &mdash; your lineups, rosters and trades stay exactly as they
+                are over there.
+              </>
+            }
+          />
           <ReadOnlyPromise />
         </section>
       ) : null}
 
-      {/* ── Done ────────────────────────────────────────────────────── */}
+      {/* ── 6d: Done ────────────────────────────────────────────────── */}
       {phase.k === 'done' ? (
         <section className="af-im-card" ref={outcomeRef}>
-          <header className="af-im-result-head">
-            <h2 className="af-label">Imported</h2>
-          </header>
-          <p className="af-im-preview-name">{phase.leagueName}</p>
-          <p className="af-im-field-help">
-            {phase.backfilled
-              ? 'Rosters, matchups, scoring and past seasons are in. '
-              : 'Rosters, matchups and scoring are in. '}
-            Nothing was changed on {provider}.
-          </p>
-          {/*
-            ⚠ "IMPORTED" DID NOT ALWAYS MEAN ANYTHING WAS WRITTEN. A league already
-            imported for this account short-circuits on its idempotency key and comes
-            back untouched — correct, and indistinguishable on screen from a fresh
-            import, which is how a run that changed nothing got reported as success.
-            Say which happened, and offer the only action that changes the answer.
-          */}
-          {phase.skipped ? (
-            <p className="af-im-field-help">
-              This league was already imported, so nothing was re-read and nothing was
-              overwritten. Re-import if it is missing data or has not appeared on your
-              portfolio.
-            </p>
-          ) : null}
-          <div className="af-im-actions">
-            {phase.leagueId ? (
-              /*
-                ⚠ THE LAST STEP OF AN IMPORT MUST NOT LAND ON THE OLD SURFACE.
-                This sent a manager who had just finished importing to the legacy
-                league page, so the first thing they saw of their new league was
-                the screen /core replaces — and it read as the import having gone
-                somewhere wrong.
-              */
-              <Link href={`/core?league=${phase.leagueId}`} className="af-btn af-im-submit">
-                Open your league
-              </Link>
-            ) : null}
+          <ImportDone
+            providerLabel={providerLabel}
+            /*
+              ⚠ THE LAST STEP OF AN IMPORT MUST NOT LAND ON THE OLD SURFACE.
+              This once sent a manager who had just finished importing to the
+              legacy league page, so the first thing they saw of their new league
+              was the screen /core replaces — and it read as the import having gone
+              somewhere wrong. The rule outlived the refactor that moved the button
+              into ImportDone, so it is restated where the href actually is.
+            */
+            leagueHref={phase.leagueId ? `/core?league=${phase.leagueId}` : null}
+            stats={doneStats}
+            issue={doneIssue}
+            noteText={
+              phase.skipped
+                ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
+                : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
+            }
+            sourceLink={doneSourceLink}
+            note={doneChimmyNote}
+            onImportAnother={() => {
+              setAccount('')
+              reset()
+            }}
+            extraActions={
+              <>
             {phase.skipped ? (
               <button
                 type="button"
-                className="af-btn af-btn--ghost"
+                className="af-btn af-btn--ghost af-done-alt"
                 onClick={() => void runCommit(phase.sourceId, phase.attested, true)}
               >
                 Re-import and refresh
               </button>
             ) : null}
             {/*
-              ⚠ THE ONLY WAY BACK TO THE FORM. Both other actions navigate AWAY, so
-              anyone with a second league to add had to leave and re-enter /import,
-              and anyone whose ESPN league ID needed correcting could not retype it
-              at all -- the field is not rendered in this phase. Reported as "it
-              doesn't even let me input the league ID again".
-            */}
-            {/*
-              When a discovered list is still in hand, "back" means back to IT — the
-              rows, their outcomes, and the ones still waiting on a confirmation. Only
-              when there is no list does this fall back to clearing the form, which is
-              what it always did.
+              ⚠ THE ONLY WAY BACK TO A DISCOVERED LIST. Both primary actions
+              navigate away, so anyone with a second league to add from the same
+              lookup had to leave and re-enter /import and wait out discovery again.
             */}
             {leagues.length > 0 ? (
-              <button type="button" className="af-btn af-btn--ghost" onClick={backToList}>
+              <button
+                type="button"
+                className="af-btn af-btn--ghost af-done-alt"
+                onClick={backToList}
+              >
                 Back to your leagues
               </button>
-            ) : (
-              <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
-                Import another league
-              </button>
-            )}
+            ) : null}
             {/*
-              ⚠ THE RETURN PATH IS OFFERED, NOT FORCED. Someone who arrived from
-              create-league came here to finish THAT flow and would otherwise be
-              stranded on a success screen with no way back to it. It sits beside
-              "Open your league" rather than replacing it, because the import
-              having succeeded does not tell us which of the two they now want.
+              ⚠ OFFERED, NOT FORCED. Someone who arrived from another flow came here
+              to finish THAT one and would otherwise be stranded on a success screen
+              with no way back to it.
             */}
             {returnTo ? (
-              <Link href={returnTo} className="af-btn af-btn--ghost">
+              <Link href={returnTo} className="af-btn af-btn--ghost af-done-alt">
                 Back to where you were
               </Link>
             ) : null}
-            <button
-              type="button"
-              className="af-btn af-btn--ghost"
-              onClick={() => {
-                setAccount('')
-                reset()
-              }}
-            >
-              Import another
-            </button>
-          </div>
+              </>
+            }
+          />
           <ReadOnlyPromise />
         </section>
       ) : null}

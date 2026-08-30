@@ -1,0 +1,427 @@
+/*
+ * AF Connect ESPN — handoff 6b, on the core token layer.
+ *
+ * Scoped under `.af-core` for the same reason every other af-*.css is: the tokens
+ * (--surface2, --line, --accent, --good, --bad …) are declared there and nowhere
+ * else. The Settings mount wraps this panel in a `.af-core` div for exactly that
+ * reason — Settings itself is on the older `--panel`/`--border` set.
+ *
+ * ⚠ WHAT THIS REPLACED. The panel was authored in Tailwind utilities plus inline
+ * `style={{ borderColor: 'var(--border)' }}` against the settings token set, so
+ * dropping it into the import screen painted a panel with no border, no surface and
+ * a transparent button — every var() resolved to nothing, because `--border`,
+ * `--panel`, `--panel2`, `--muted2` and `--accent-cyan` do not exist under
+ * `.af-core`. Restyling was not decoration; it was the cost of having one component
+ * instead of two.
+ */
+
+.af-core .af-espn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.af-core .af-espn--loading {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.af-core .af-espn-spinner {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line2);
+  border-top-color: var(--accent);
+  animation: af-espn-spin 0.7s linear infinite;
+}
+
+@keyframes af-espn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The spin is decoration; the label is the status and is announced regardless. */
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-espn-spinner {
+    animation: none;
+    border-top-color: var(--line2);
+  }
+}
+
+/* ── Connected ───────────────────────────────────────────────────────── */
+
+.af-core .af-espn-connected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-espn-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.af-core .af-espn-since {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-espn-connected-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+/*
+ * Disconnect is destructive and reads as such — but it is NOT a primary action, so
+ * it stays a ghost button with a red edge rather than a red fill. A solid red button
+ * beside "Update cookies" would be the loudest thing in the panel.
+ */
+.af-core .af-espn-disconnect {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* ── 6b: the primary card ────────────────────────────────────────────
+ * Accent border when the one-click path is genuinely available, neutral when it
+ * is not — the handoff's "primary path" colour is a claim about what will work,
+ * so it must follow the live extension check rather than being painted on.
+ */
+
+.af-core .af-espn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+.af-core .af-espn-card[data-ready='true'] {
+  border: 2px solid var(--accent);
+  padding: 15px;
+  background: var(--accent-soft);
+}
+
+.af-core .af-espn-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+/* --good only when the extension actually answered; --faint otherwise, so the
+   dot never reports a healthy state the check has not established. */
+.af-core .af-espn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--faint);
+}
+.af-core .af-espn-card[data-ready='true'] .af-espn-dot {
+  background: var(--good);
+}
+
+.af-core .af-espn-h {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-core .af-espn-go {
+  align-self: stretch;
+  min-height: 48px;
+  padding: 0 20px;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+/* ── 6b: the `?` on the extension status ─────────────────────────────── */
+
+.af-core .af-espn-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.af-core .af-espn-hint-btn {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+.af-core .af-espn-hint-btn:hover,
+.af-core .af-espn-hint-btn:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.af-core .af-espn-hint-bubble {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: min(320px, 74vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.af-core .af-espn-hint-bubble[hidden] {
+  display: none;
+}
+
+/* ── 6b: the blocking strip ──────────────────────────────────────────── */
+
+.af-core .af-espn-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.af-core .af-espn-warn strong {
+  color: var(--warn);
+  font-weight: 800;
+}
+.af-core .af-espn-warn-mark {
+  flex: 0 0 auto;
+  color: var(--warn);
+  font-weight: 900;
+}
+
+/* ── 6b: the manual fallback card ────────────────────────────────────── */
+
+.af-core .af-espn-fallback {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  overflow: hidden;
+}
+
+/*
+ * The whole header is the toggle — a 4px "Paste cookies manually" link would be a
+ * needlessly small target for the fallback path that, today, is the only one that
+ * works.
+ */
+.af-core .af-espn-fallback-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.af-core .af-espn-fallback-toggle:hover .af-espn-fallback-cue {
+  color: var(--accent);
+}
+
+.af-core .af-espn-fallback-lead {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-core .af-espn-fallback-lead strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.af-core .af-espn-fallback-cue {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-core .af-espn-fallback-body {
+  padding: 0 16px 16px;
+}
+/* Open: the inner form drops its own frame so the card is not a box in a box. */
+.af-core .af-espn-fallback-body .af-espn-manual {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* ── Manual cookie paste ─────────────────────────────────────────────── */
+
+.af-core .af-espn-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-core .af-espn-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-core .af-espn-body strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core .af-espn-body kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+}
+
+/*
+ * Two fields side by side where there is room. They are entered together, from the
+ * same dev-tools panel, and stacking them made a short task look like a long form.
+ */
+.af-core .af-espn-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.af-core .af-espn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.af-core .af-espn-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+/* Same visible focus ring as the import field — `outline: none` above removes the
+   browser's, so this is the only focus indicator these inputs have. */
+.af-core .af-espn-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.af-core .af-espn-field input::placeholder {
+  color: var(--faint);
+}
+.af-core .af-espn-field input:disabled {
+  opacity: 0.6;
+}
+
+.af-core .af-espn-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-espn-save {
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+.af-core .af-espn-save:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── Messages ────────────────────────────────────────────────────────── */
+
+.af-core .af-espn-msg {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.af-core .af-espn-msg--error {
+  color: var(--bad);
+}
+.af-core .af-espn-msg--good {
+  color: var(--good);
+}
+
+.af-core .af-espn-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-core .af-espn-note--mobile {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.af-core .af-espn-lock {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--faint);
+}
+
+@media (max-width: 560px) {
+  .af-core .af-espn-connected-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .af-core .af-espn-go,
+  .af-core .af-espn-save {
+    width: 100%;
+  }
+}

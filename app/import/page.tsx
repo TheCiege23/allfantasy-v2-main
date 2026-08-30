@@ -47,10 +47,23 @@ export default async function ImportPage({
   const returnToRaw = pickQuery(sp, "returnTo");
   /*
    * Relative paths only. An absolute URL here would turn every import link into
-   * an open redirect, and the default is a real destination rather than "/" so
-   * the create-league flow is not lost.
+   * an open redirect.
+   *
+   * ⚠ AND THERE IS NO DEFAULT ANY MORE. This fell back to "/create-league" for
+   * anyone who arrived without the parameter — which is every entry point on
+   * /core: the rail's "add a league" tile, the shell's Import button, the user
+   * menu, Dashboard3A, MyTeam, YourWeek, RivalryRadar, SeasonOutlook and
+   * PickALeague all link to a bare /import. All of them finished the import on a
+   * success screen offering "Back to where you were →/create-league", a flow the
+   * manager had never been in and which does not link here at all (grep: nothing
+   * under app/create-league/ references /import).
+   *
+   * Empty is the honest answer: the button is conditional on `returnTo`, so it
+   * simply does not render, and "Open your league" → /core is what is left. The
+   * two callers that genuinely have somewhere to go back to — Career and
+   * Portfolio — pass ?returnTo= explicitly and are unaffected.
    */
-  const returnTo = returnToRaw?.startsWith("/") ? returnToRaw : "/create-league";
+  const returnTo = returnToRaw.startsWith("/") ? returnToRaw : "";
 
   /*
    * ⚠ PARSING A PROVIDER IS NOT THE SAME AS OFFERING IT, AND THE DEEP LINK IS THE WAY IN.
@@ -115,7 +128,7 @@ export default async function ImportPage({
 
   if (!session?.user?.id) {
     const qs = new URLSearchParams();
-    qs.set("returnTo", returnTo);
+    if (returnTo) qs.set("returnTo", returnTo);
     if (providerRaw) qs.set("provider", providerRaw);
     if (initialSleeperUsername) qs.set("username", initialSleeperUsername);
     if (initialLeagueSourceId) qs.set("leagueId", initialLeagueSourceId);
@@ -149,7 +162,7 @@ export default async function ImportPage({
       defaultProvider={defaultProvider}
       initialAccount={initialSleeperUsername}
       initialLeagueSourceId={initialLeagueSourceId}
-      returnTo={returnTo}
+      returnTo={returnTo || undefined}
       yahooError={yahooError}
       yahooErrorDesc={yahooErrorDesc}
       yahooConnected={yahooConnected}

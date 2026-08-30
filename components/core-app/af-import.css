@@ -21,13 +21,16 @@
 .af-im-head {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
 .af-im-title {
   margin: 0;
-  font-size: 32px;
-  line-height: 1.1;
+  /* 6a sets this considerably larger than the 32px it was — it is the only
+     heading on the screen and the thing that has to land before the pills do. */
+  font-size: clamp(30px, 4.6vw, 40px);
+  line-height: 1.08;
   font-weight: 900;
   letter-spacing: -0.035em;
   color: var(--text);
@@ -36,8 +39,8 @@
 .af-im-sub {
   margin: 0;
   max-width: 620px;
-  font-size: 14.5px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--muted);
 }
 
@@ -54,59 +57,83 @@
   box-shadow: var(--shadow);
 }
 
-/* ── Provider picker ─────────────────────────────────────────────────── */
+/* ── Provider picker — 6a's pill row ──────────────────────────────────
+ * Was a `repeat(auto-fit, minmax(230px, 1fr))` grid of stacked cards. The row
+ * wraps naturally instead: each pill is only as wide as its own name, so the
+ * six of them settle into two lines at 660px and one on a wide screen, with no
+ * column maths and no ragged empty cell at the end.
+ */
 
 .af-im-providers {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .af-im-provider {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  /* 44px minimum touch row, comfortably exceeded by the stacked content. */
-  min-height: 44px;
-  padding: 14px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  /* 44px minimum touch target — the row is the primary control on this screen. */
+  min-height: 48px;
+  padding: 6px 18px 6px 6px;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface2);
   color: var(--text);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  /* ⚠ A PILL THAT CANNOT SHRINK OVERFLOWS THE CARD. With the label and the tag
+     both `nowrap`, the widest pill set its own width and pushed its tag past the
+     card's right edge at 390px — clipped, and unreadable. Capped here, and the
+     nowrap is lifted on narrow screens below. */
+  max-width: 100%;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
 }
 
+.af-im-provider:hover:not([data-available='false']) {
+  border-color: var(--line2);
+  background: var(--chip);
+}
+
+/*
+ * The selected pill: 2px accent border and the soft accent fill, per 6a. The
+ * border WIDTH changes, so the padding compensates — otherwise selecting a
+ * provider nudges every pill after it one pixel left.
+ */
 .af-im-provider[data-active='true'] {
-  border-color: var(--accent-line);
+  border: 2px solid var(--accent);
+  padding: 5px 17px 5px 5px;
   background: var(--accent-soft);
 }
 
 /*
- * An unavailable provider is visibly out of service AND carries its reason in
- * the meta line. Greying alone would read as "not selected"; the point is that
- * it cannot be selected at all.
+ * An unavailable provider is visibly out of service AND carries its reason —
+ * on the pill's own tag, and again in the strip below the row. Greying alone
+ * would read as "not selected"; the point is that it cannot be selected at all.
  */
 .af-im-provider[data-available='false'] {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.af-im-provider-top {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
+/*
+ * ⚠ FIXED PER-BRAND, NOT THEME-REACTIVE IN MEANING. The circle identifies an
+ * EXTERNAL brand, so it keeps its own colour while the pill around it follows
+ * the AllFantasy theme. The values still come from `--p-*` tokens rather than
+ * hardcoded hex, because this repo tunes each one per theme for contrast — a
+ * literal #143a2e is unreadable on the light surface behind it.
+ */
 .af-im-mark {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   font-weight: 900;
   font-size: 12px;
+  letter-spacing: 0.01em;
   flex: 0 0 auto;
   background: var(--chip);
   color: var(--text2);
@@ -114,30 +141,79 @@
 
 .af-im-provider-label {
   font-weight: 800;
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--text);
+  white-space: nowrap;
 }
 
+/*
+ * The mono tag riding on the pill — "· league ID", or "· Coming soon" for a
+ * provider that is genuinely switched off. `--faint` on purpose: it is a
+ * qualifier on the name beside it, not a warning, and the old `--warn` amber
+ * made every league-ID provider look like a problem.
+ */
 .af-im-soon {
-  margin-left: auto;
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.af-im-provider[data-available='false'] .af-im-soon {
   color: var(--warn);
 }
+.af-im-provider[data-active='true'] .af-im-soon {
+  color: var(--text2);
+}
 
-.af-im-provider-meta {
-  font-size: 11.5px;
+@media (max-width: 560px) {
+  .af-im-provider-label,
+  .af-im-soon {
+    white-space: normal;
+  }
+}
+
+/* ── What the chosen platform asks for ──────────────────────────────── */
+
+.af-im-context {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  /* Pulled up against the pill row: it describes the pill you just pressed, and
+     at the card's own 14px gap it read as a stray line belonging to nothing. */
+  margin: -4px 0 0;
+  font-size: 12.5px;
   line-height: 1.45;
   color: var(--muted);
 }
 
-.af-im-provider-sports {
-  font-size: 9px;
+.af-im-context-meta {
+  color: var(--text2);
+}
+
+.af-im-context-sports {
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.12em;
   color: var(--faint);
+}
+
+/* ── The coming-soon fallback strip (6a) ─────────────────────────────── */
+
+.af-im-blocked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
 }
 
 /* ── Field ───────────────────────────────────────────────────────────── */
@@ -156,19 +232,43 @@
   gap: 6px;
 }
 
+/*
+ * ── 6a: the field and its action share a row ─────────────────────────
+ * Below 560px they stack, because a 44px-tall button and a readable input
+ * cannot both fit on a phone row without one of them losing.
+ */
+.af-im-field-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-im-field-row > input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
 .af-im-field input {
   width: 100%;
-  padding: 14px;
-  border-radius: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface2);
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   font-family: inherit;
   outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
+/*
+ * ⚠ THE FOCUS RING IS THE ONLY THING MARKING THE ACTIVE FIELD, and a
+ * border-colour change alone was not enough to see it. 6a specifies a 3px
+ * accent-soft halo; it doubles as the visible focus indicator this input
+ * otherwise lacks entirely, since `outline: none` above removes the browser's.
+ */
 .af-im-field input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .af-im-field input::placeholder {
   color: var(--faint);
@@ -185,8 +285,103 @@
    min-height 36px and beats a bare single-class rule. */
 .af-core .af-im-submit {
   align-self: flex-start;
-  min-height: 44px;
-  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 0 22px;
+  border-radius: 12px;
+  font-size: 15px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+/* On the field row the button matches the input's height rather than its own
+   minimum, so the two read as one control. */
+.af-core .af-im-field-row .af-im-submit {
+  align-self: auto;
+}
+.af-im-submit-arrow {
+  font-size: 15px;
+  line-height: 1;
+}
+
+@media (max-width: 560px) {
+  .af-core .af-im-field-row .af-im-submit {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ── The `?` explainers (6a) ─────────────────────────────────────────── */
+
+.af-im-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  /* The label around it is uppercase/tracked; the bubble must not inherit that. */
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: middle;
+}
+
+.af-im-hint-btn {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+.af-im-hint-btn:hover,
+.af-im-hint-btn:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-im-hint-bubble {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: min(300px, 74vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.af-im-hint-bubble[hidden] {
+  display: none;
+}
+
+/*
+ * The topbar's hint is at the right edge, so a left-anchored bubble would run
+ * off the viewport on a phone. Anchor that one to its right instead.
+ */
+.af-im-topbar-right .af-im-hint-bubble {
+  left: auto;
+  right: 0;
+}
+
+.af-im-lock {
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 
 /* ── The promise, repeated on every step ─────────────────────────────── */
@@ -500,6 +695,9 @@
   gap: 12px;
   flex-wrap: wrap;
   row-gap: 8px;
+  /* 6a's 66px header, as a floor rather than a fixed height so the row can still
+     grow when it wraps on a narrow screen. */
+  min-height: 66px;
   padding-bottom: 14px;
   margin-bottom: 18px;
   border-bottom: 1px solid var(--line);
@@ -661,11 +859,60 @@
   }
 }
 
+/* ── 6b: the ESPN connect block, inside the field block ──────────────────────
+   The panel itself is styled by af-espn.css; these are only the rules that place
+   it on THIS screen and separate it from the league-ID field beneath it. */
+
+.af-core .af-im-espn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+/*
+ * Once ESPN is connected the block is a one-line confirmation, so the divider and
+ * the padding under it become a gap around nothing.
+ */
+.af-core .af-im-espn[data-connected='true'] {
+  gap: 0;
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+
+.af-core .af-im-espn-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+/*
+ * The one "escape hatch" on this screen that is NOT a link — it names a control a
+ * few rows up rather than a destination. Underlining it would promise navigation
+ * that never happens, so it reads as emphasis instead.
+ */
+.af-core .af-im-error-here {
+  text-decoration: none;
+  min-height: 0;
+}
+
 /* ── Fantrax CSV upload (the pre-import step Fantrax alone needs) ─────────── */
 
-.af-im-fx-link { margin: 14px 0 0; font-size: 12.5px; }
-.af-im-fx-link a { color: var(--accent); font-weight: 700; text-decoration: none; }
-.af-im-fx-link a:hover { text-decoration: underline; }
+/*
+ * ⚠ THE SECOND WAY IN WAS OUTSHINING THE FIRST. In accent at 700 weight this was
+ * the brightest thing on the card above the field — brighter than the input, and
+ * competing with "Find my leagues" for the eye — while being the fallback path
+ * for one provider. Demoted to a secondary link: still obvious to anyone looking
+ * for it, no longer the thing you see first.
+ */
+.af-im-fx-link { margin: 12px 0 0; font-size: 12.5px; }
+.af-im-fx-link a { color: var(--text2); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.af-im-fx-link a:hover { color: var(--accent); }
 
 .af-im-fx {
   margin-top: 16px;
