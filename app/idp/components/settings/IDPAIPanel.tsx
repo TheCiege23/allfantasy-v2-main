@@ -22,9 +22,22 @@ export function IDPAIPanel({
   isCommissioner = false,
 }: {
   leagueId: string
-  hasAfSub: boolean
+  /**
+   * ⚠ THREE-VALUED ON PURPOSE: true, false, or UNDEFINED meaning "not known here".
+   *
+   * Callers that hold league context pass the real value. LeagueSettingsTab does not have one
+   * in scope and threading it would change LeagueTabProps and every caller of that tab, so it
+   * passes nothing. Undefined must NOT collapse to false: that would print a subscription lock
+   * and disable every control for paying subscribers on that surface — a claim about the
+   * viewer's entitlement that this component has not measured. When it is unknown the controls
+   * stay live and the SERVER decides, via the 402/403 handling in useAfSubGate, which is exactly
+   * what the panel this replaced always did.
+   */
+  hasAfSub?: boolean
   isCommissioner?: boolean
 }) {
+  /** Known-false only. Undefined is "unknown", never "no". */
+  const afSubDenied = hasAfSub === false
   const [week, setWeek] = useState(1)
   const [prefs, setPrefs] = useState<Prefs>({
     startSitRecommendations: true,
@@ -57,7 +70,7 @@ export function IDPAIPanel({
       } catch {
         /* ignore */
       }
-      if (!hasAfSub || !isCommissioner) return
+      if (afSubDenied || !isCommissioner) return
       const res = await fetch('/api/idp/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,7 +90,7 @@ export function IDPAIPanel({
       })
       if (!(await handleApiResponse(res))) return
     },
-    [hasAfSub, isCommissioner, leagueId, handleApiResponse],
+    [afSubDenied, isCommissioner, leagueId, handleApiResponse],
   )
 
   const run = async (action: string) => {
@@ -100,7 +113,7 @@ export function IDPAIPanel({
 
   return (
     <div className="pb-8">
-      {!hasAfSub ? (
+      {afSubDenied ? (
         <div className="mx-4 mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100">
           <Lock className="h-4 w-4 shrink-0" />
           <span>AF Commissioner Subscription gates IDP AI execution — preview below requires AfSub.</span>
@@ -120,7 +133,7 @@ export function IDPAIPanel({
             type="checkbox"
             checked={prefs.startSitRecommendations}
             onChange={(e) => void persistPrefs({ ...prefs, startSitRecommendations: e.target.checked })}
-            disabled={!hasAfSub}
+            disabled={afSubDenied}
             data-testid="idp-ai-toggle-start-sit"
           />
         </SettingsRow>
@@ -129,7 +142,7 @@ export function IDPAIPanel({
             type="checkbox"
             checked={prefs.waiverBreakoutAlerts}
             onChange={(e) => void persistPrefs({ ...prefs, waiverBreakoutAlerts: e.target.checked })}
-            disabled={!hasAfSub}
+            disabled={afSubDenied}
             data-testid="idp-ai-toggle-waiver"
           />
         </SettingsRow>
@@ -138,7 +151,7 @@ export function IDPAIPanel({
             type="checkbox"
             checked={prefs.matchupAnalysis}
             onChange={(e) => void persistPrefs({ ...prefs, matchupAnalysis: e.target.checked })}
-            disabled={!hasAfSub}
+            disabled={afSubDenied}
             data-testid="idp-ai-toggle-matchup"
           />
         </SettingsRow>
@@ -147,7 +160,7 @@ export function IDPAIPanel({
             type="checkbox"
             checked={prefs.weeklyRankings}
             onChange={(e) => void persistPrefs({ ...prefs, weeklyRankings: e.target.checked })}
-            disabled={!hasAfSub}
+            disabled={afSubDenied}
             data-testid="idp-ai-toggle-rankings"
           />
         </SettingsRow>
@@ -156,7 +169,7 @@ export function IDPAIPanel({
             type="checkbox"
             checked={prefs.tradeBalanceAnalysis}
             onChange={(e) => void persistPrefs({ ...prefs, tradeBalanceAnalysis: e.target.checked })}
-            disabled={!hasAfSub}
+            disabled={afSubDenied}
             data-testid="idp-ai-toggle-trade"
           />
         </SettingsRow>
@@ -180,7 +193,7 @@ export function IDPAIPanel({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={!!busy || !hasAfSub}
+            disabled={!!busy || afSubDenied}
             onClick={() => void run('rankings')}
             className="rounded-lg border border-cyan-500/35 bg-cyan-950/30 px-3 py-2 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
             data-testid="idp-ai-run-rankings"
@@ -189,7 +202,7 @@ export function IDPAIPanel({
           </button>
           <button
             type="button"
-            disabled={!!busy || !hasAfSub}
+            disabled={!!busy || afSubDenied}
             onClick={() => void run('waiver_targets')}
             className="rounded-lg border border-cyan-500/35 bg-cyan-950/30 px-3 py-2 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
             data-testid="idp-ai-run-waivers"
@@ -198,7 +211,7 @@ export function IDPAIPanel({
           </button>
           <button
             type="button"
-            disabled={!!busy || !hasAfSub}
+            disabled={!!busy || afSubDenied}
             onClick={() => void run('sleepers')}
             className="rounded-lg border border-cyan-500/35 bg-cyan-950/30 px-3 py-2 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
             data-testid="idp-ai-run-sleepers"
@@ -207,7 +220,7 @@ export function IDPAIPanel({
           </button>
           <button
             type="button"
-            disabled={!!busy || !hasAfSub}
+            disabled={!!busy || afSubDenied}
             onClick={() => void run('scarcity')}
             className="rounded-lg border border-cyan-500/35 bg-cyan-950/30 px-3 py-2 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
             data-testid="idp-ai-run-scarcity"
@@ -217,7 +230,7 @@ export function IDPAIPanel({
           {isCommissioner ? (
             <button
               type="button"
-              disabled={!!busy || !hasAfSub}
+              disabled={!!busy || afSubDenied}
               onClick={() => void run('power_rankings')}
               className="rounded-lg border border-amber-500/35 bg-amber-950/25 px-3 py-2 text-[11px] font-semibold text-amber-100 disabled:opacity-40"
               data-testid="idp-ai-run-power-rankings"
