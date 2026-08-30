@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { blendOne, normalizeBlendWeights } from '@/lib/adp/blendPolicy'
 
 export type ADPSource = 'api' | 'global_app' | 'ai' | 'blended' | 'custom'
 
@@ -23,6 +24,16 @@ export type ADPRanking = {
   source: ADPSource
   sources?: Partial<Record<ADPSource, number>>
   sampleSize?: number
+  /*
+   * Drafts behind OUR OWN contribution to this number, and whether that is thin. Carried so a
+   * surface can say "blended, 4 of our drafts" instead of presenting a two-sample figure with
+   * the same authority as a two-thousand-sample one. Null means we contributed no drafts at all,
+   * which is not the same as contributing zero.
+   */
+  ownSampleSize?: number | null
+  lowOwnSample?: boolean
+  /** Weight each source actually contributed after confidence scaling, summing to 1. */
+  contributions?: Partial<Record<ADPSource, number>>
   locked?: boolean
 }
 
@@ -93,25 +104,13 @@ async function resolveDraftSegment(leagueId: string): Promise<DraftSegment> {
   }
 }
 
+/*
+ * Delegates to lib/adp/blendPolicy.ts. The old local copy returned UNNORMALISED values
+ * (40/35/25) on the zero-total path while returning fractions on every other path, so a league
+ * that had explicitly zeroed its weights got numbers on a different scale from every other league.
+ */
 function normalizeWeights(weights?: ADPWeights): Required<ADPWeights> {
-  const base = {
-    api: Number(weights?.api ?? 40),
-    app: Number(weights?.app ?? 35),
-    ai: Number(weights?.ai ?? 25),
-    custom: Number(weights?.custom ?? 0),
-  }
-
-  const total = base.api + base.app + base.ai + base.custom
-  if (total <= 0) {
-    return { api: 40, app: 35, ai: 25, custom: 0 }
-  }
-
-  return {
-    api: base.api / total,
-    app: base.app / total,
-    ai: base.ai / total,
-    custom: base.custom / total,
-  }
+  return normalizeBlendWeights(weights) as Required<ADPWeights>
 }
 
 async function loadApiAdp(segment: DraftSegment): Promise<ADPRanking[]> {
@@ -162,9 +161,18 @@ async function loadApiAdp(segment: DraftSegment): Promise<ADPRanking[]> {
 }
 
 async function loadGlobalAppAdp(segment: DraftSegment): Promise<ADPRanking[]> {
+  /*
+   * 🛑 SPORT COMES FROM THE LEAGUE, NOT `DraftSession.sportType`.
+   * This is the same defect the daily recompute carried: `sportType` is nullable and
+   * `lib/draft/sleeperSync.ts` never writes it, so `sportType: 'NFL'` matched no
+   * Sleeper-mirrored session at all - and mirrored sessions are where live external drafts
+   * live. Prisma equality never matches NULL. The `global_app` component of the blend, a
+   * default 35% of the number, was therefore built from whichever sessions happened to have
+   * the column set. `League.sport` is a non-nullable enum on a required relation.
+   */
   const sessions = await prisma.draftSession.findMany({
     where: {
-      sportType: segment.sport,
+      league: { sport: segment.sport },
       status: { in: ['in_progress', 'completed'] },
     },
     select: {
@@ -352,38 +360,31 @@ export async function blendAdpRankings(
     const base = customEntry ?? apiEntry ?? appEntry ?? aiEntry
     if (!base) continue
 
-    if (customEntry?.locked) {
-      blended.push({
-        ...customEntry,
-        source: 'blended',
-        sources: {
-          api: apiEntry?.adp,
-          global_app: appEntry?.adp,
-          ai: aiEntry?.adp,
-          custom: customEntry.adp,
-        },
-      })
-      continue
-    }
-
-    const weighted =
-      (apiEntry?.adp ?? 0) * normalizedWeights.api +
-      (appEntry?.adp ?? 0) * normalizedWeights.app +
-      (aiEntry?.adp ?? 0) * normalizedWeights.ai +
-      (customEntry?.adp ?? 0) * normalizedWeights.custom
-
-    const presenceWeight =
-      (apiEntry ? normalizedWeights.api : 0) +
-      (appEntry ? normalizedWeights.app : 0) +
-      (aiEntry ? normalizedWeights.ai : 0) +
-      (customEntry ? normalizedWeights.custom : 0)
+    /*
+     * The weighting lives in lib/adp/blendPolicy.ts, not here. Our own sources are scaled by how
+     * many drafts stand behind them, so a two-draft sample cannot move the board the way a
+     * two-thousand-draft one does; the market side is not scaled, because its "sample size" is a
+     * count of providers and is a different scale entirely.
+     */
+    const result = blendOne(
+      {
+        api: apiEntry ? { adp: apiEntry.adp, sampleSize: apiEntry.sampleSize } : null,
+        app: appEntry ? { adp: appEntry.adp, sampleSize: appEntry.sampleSize } : null,
+        ai: aiEntry ? { adp: aiEntry.adp, sampleSize: aiEntry.sampleSize } : null,
+        custom: customEntry
+          ? { adp: customEntry.adp, locked: Boolean(customEntry.locked) }
+          : null,
+      },
+      normalizedWeights,
+    )
+    if (!result) continue
 
     blended.push({
       playerId: base.playerId,
       playerName: base.playerName,
       position: base.position,
       team: base.team,
-      adp: Number(((presenceWeight > 0 ? weighted / presenceWeight : base.adp) || base.adp).toFixed(2)),
+      adp: result.adp,
       source: 'blended',
       sources: {
         api: apiEntry?.adp,
@@ -391,6 +392,14 @@ export async function blendAdpRankings(
         ai: aiEntry?.adp,
         custom: customEntry?.adp,
       },
+      contributions: {
+        api: result.contributions.api,
+        global_app: result.contributions.app,
+        ai: result.contributions.ai,
+        custom: result.contributions.custom,
+      },
+      ownSampleSize: result.ownSampleSize,
+      lowOwnSample: result.lowOwnSample,
       locked: Boolean(customEntry?.locked),
     })
   }
