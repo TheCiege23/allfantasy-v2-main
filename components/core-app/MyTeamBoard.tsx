@@ -103,6 +103,27 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   const label = formatLockLabel(atMs, now)
   const kickoff = `${new Date(atMs).toUTCString().slice(0, 22)} UTC`
 
+  /*
+   * ⚠ A DATE, NOT A COUNTDOWN, AND NOT A LIVE ONE. Past DISTANT_LOCK_DAYS the
+   * next kickoff we hold is almost certainly not this week's — the per-league
+   * screen says so in as many words — so counting down to it states a deadline
+   * that does not exist. Every league on a 55-league portfolio read "10d 8h"
+   * before this, which is a board that has told you nothing.
+   *
+   * The ticking clock is dropped with the countdown: it re-renders every thirty
+   * seconds to redraw a date that changes once a day.
+   */
+  if (label.distant) {
+    const why =
+      `The next kickoff we hold for these starters is ${kickoff}, further out than a lineup ` +
+      'lock should be — this week’s schedule has probably not been ingested yet.'
+    return (
+      <span className="af-mtb-lock af-num" data-state="distant" title={why} aria-label={why}>
+        {label.text}
+      </span>
+    )
+  }
+
   return (
     <span
       className="af-mtb-lock af-num"
@@ -199,7 +220,21 @@ export function MyTeamBoard({ pulse, now = Date.now() }: MyTeamBoardProps) {
       {bye ? <p className="af-mtb-basis">{bye}</p> : null}
 
       {pulse.checked > 0 ? (
-        <div className="af-mtb-cols">
+        /*
+          ⚠ ONE SIDE IS ROUTINELY EMPTY, AND TWO EQUAL COLUMNS THEN LEAVE A HOLE.
+          "Nothing needs a change" is the state this board exists to reach, and
+          in it the left column is a single sentence sitting beside five rows —
+          measured at 1440px as roughly 180px of blank column, which reads as a
+          panel that failed to load rather than as good news.
+
+          Collapsing to one column and running the surviving list two-up keeps
+          the rows at the width the handoff draws them (~460px) instead of
+          stretching one row across the whole board.
+        */
+        <div
+          className="af-mtb-cols"
+          data-one={pulse.needs.length === 0 || pulse.set.length === 0 || undefined}
+        >
           <div className="af-mtb-col">
             <h3 className="af-label af-mtb-col-head" data-tone="bad">
               Needs a change · soonest lock

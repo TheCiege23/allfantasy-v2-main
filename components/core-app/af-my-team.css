@@ -567,9 +567,18 @@
 }
 
 /* ── Taxi squad ──────────────────────────────────────────────────────── */
+/*
+ * ⚠ IT IS A FIFTH ITEM IN A FOUR-COLUMN GRID, so auto-placement was dropping it
+ * onto row 2 column 1 — tucked under the slot badge, in a 46px track, as far
+ * from the player it describes as the row allows. Placed under the NAME
+ * instead, which is where "2 years left" is read.
+ */
 .af-mt-taxi-years {
+  grid-row: 2;
+  grid-column: 2;
+  justify-self: start;
   flex: 0 0 auto;
-  margin-left: 10px;
+  margin-left: 0;
   padding: 3px 8px;
   border-radius: 6px;
   background: var(--chip);
@@ -665,8 +674,21 @@
   .af-mt-projhead > *:nth-child(4) {
     display: none;
   }
+  /*
+   * ⚠ FLIPPING THE AXIS TURNS A FLEX-BASIS FROM A WIDTH INTO A HEIGHT, AND THIS
+   * ONE WAS 340px. `.af-mt-basis-text` carries `flex: 1 1 340px`, written for
+   * the row layout where 340px is a sensible minimum column. In column
+   * direction the same declaration reserved 340px of HEIGHT for a block whose
+   * content measures about 110px, so the card rendered its scoring notes, then
+   * roughly 230px of nothing, then the Chimmy button — measured at 375px: text
+   * ending at y150, button at y166 inside a 422px card.
+   */
   .af-mt-basis {
     flex-direction: column;
+  }
+  .af-mt-basis-text {
+    flex: 0 0 auto;
+    align-self: stretch;
   }
 }
 
@@ -957,9 +979,93 @@
 .af-mt-tile-why { font-size: 10.5px; line-height: 1.45; }
 
 @media (max-width: 860px) {
-  /* Status folds under the name before the numbers give up any room. */
+  /*
+   * Three columns, and every cell placed rather than left to auto-placement.
+   *
+   * ⚠ THE NUMBERS USED TO FOLLOW THE STATUS CHIP DOWN, WHICH IS THE OPPOSITE OF
+   * WHAT THIS RULE WAS WRITTEN TO DO. It read "status folds under the name
+   * before the numbers give up any room", and `.af-mt-status` claimed only a
+   * COLUMN — so auto-placement put it on the implicit second row and then put
+   * the projection cell, next in source order, after it at row 2 column 3.
+   * Every figure on the screen sat one line below the player it belonged to,
+   * which is exactly the "sixteen rows at sixteen different levels" problem the
+   * grid was introduced to fix. Measured at 375px and at 754px before this:
+   * name on row 1, 34.6 on row 2.
+   *
+   * ⚠ AND THE DESIGNATION HAD A WHOLE LINE TO ITSELF WITH ONE LETTER ON IT.
+   * Under the name, "H" occupied a 20px band across the full width of the row —
+   * 87px per row at 800px, 97px at 375px, over a sixteen-slot lineup. It stacks
+   * under the slot badge instead, in a column already reserved and already the
+   * right width, where the two facts also belong together: what he plays, and
+   * whether he is playing. Measured after: 66px per row at 375px.
+   *
+   * The `:not()` guards are load-bearing — an empty or unresolved slot carries
+   * `.af-mt-player` too and must keep its `grid-column: 2 / -1` span.
+   */
   .af-mt-row { grid-template-columns: 40px minmax(0, 1fr) auto; }
-  .af-mt-status { grid-column: 2; justify-self: start; margin-top: 2px; }
+  .af-mt-status {
+    grid-row: 2;
+    grid-column: 1;
+    justify-self: center;
+    margin-top: 0;
+  }
+  .af-mt-row > .af-mt-player:not(.af-mt-empty-text):not(.af-mt-unresolved) {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+  }
+  .af-mt-row > .af-mt-slot { align-self: end; }
+  .af-mt-row > .af-mt-projpair {
+    grid-row: 1 / span 2;
+    grid-column: 3;
+    align-self: center;
+  }
+
+  /* Column 2 row 2 is free again now the chip has moved, so taxi years sit
+     under the name where they are read. */
+  .af-mt-row > .af-mt-taxi-years { grid-row: 2; grid-column: 2; }
+
+  /* ⚠ THE BADGE WAS WIDER THAN ITS OWN TRACK. `.af-mt-slot` carries an explicit
+     46px while the narrow grid declares 40px, so it was spilling six pixels into
+     the gutter and pushing the name column that much narrower still. */
+  .af-mt-slot { width: 40px; }
+}
+
+@media (max-width: 560px) {
+  /*
+   * ⚠ THE PLAYER'S NAME IS THE ROW, AND IT WAS THE ONE THING BEING CUT.
+   *
+   * Measured at 375px before this: the text stack resolves to 96px against a
+   * 107px name, so "Javonte Williams" rendered as "Javonte Willian" and
+   * "Oronde Gadsden" as "Oronde Gadsde" — while the kickoff line beneath was
+   * free to wrap onto two lines. Truncating the only content a manager scans
+   * for, to protect a game time, is backwards.
+   *
+   * Two lines, clamped, so one long name cannot run a row away; and the slot
+   * badge and gutters give back the width they do not need at this size.
+   */
+  .af-mt-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    column-gap: 8px;
+  }
+  .af-mt-slot {
+    width: 34px;
+    letter-spacing: 0.02em;
+  }
+  .af-mt-player { gap: 8px; }
+
+  /* The chip is already stacked under the badge by the rule above; here it only
+     has to fit a 34px track, so the horizontal padding comes off. */
+  .af-mt-status { padding: 3px 4px; }
+
+  .af-mt-player-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.22;
+  }
 }
 
 /* ── Position colours in light mode ──────────────────────────────────── */

@@ -58,6 +58,14 @@ export async function getNextMatchup(args: {
   platformLeagueId: string | null
   /** The claimed team's `externalId`, which is the platform's roster id. */
   myExternalId: string | null
+  /**
+   * The signed-in user's `User.id`.
+   *
+   * ⚠ IT IS ONE OF THE THREE KEYS `Roster.platformUserId` CAN HOLD, and without
+   * it this function priced the opponent and left YOUR side as an em dash — see
+   * the note on the roster join below.
+   */
+  userId: string | null
   seasonYear: number
   week: number
   scoringSettings: Record<string, unknown> | null
@@ -108,13 +116,42 @@ export async function getNextMatchup(args: {
 
   const teamBy = new Map(teams.map((t) => [t.externalId, t]))
 
+  /*
+   * ⚠ THE HOP FROM A TEAM TO ITS ROSTER HAS NO SINGLE KEY, AND THIS FUNCTION
+   * ONLY TRIED ONE OF THEM.
+   *
+   * `Roster.platformUserId` is always set but does not always hold the
+   * PLATFORM's id — sometimes it holds `LeagueTeam.externalId`, and sometimes
+   * our own `User` uuid. `lib/core-app/myRoster.ts` exists because of that and
+   * spells out the measurement: with `platformUserId` alone, two thirds of
+   * claimed teams failed to join a roster that was sitting right there.
+   *
+   * This file joined on `platformUserId` alone, so on any league where the
+   * user's own roster is keyed the other way it read an EMPTY starting lineup
+   * and returned `projected: null` — while the opponent, keyed normally,
+   * priced fine. The visible symptom was a projected matchup reading
+   * "— v 161.7" directly under a header tile saying 224.5, on the same screen,
+   * built from the same starters. Observed on 33 1/3% Active.
+   *
+   * Candidate order matches `myRosterCandidates`: the platform id first, so a
+   * normally-keyed roster still wins, and the user uuid is offered ONLY for the
+   * caller's own team — an opponent's roster is never ours to find that way.
+   */
+  const candidatesFor = (rosterId: number): string[] => {
+    const team = teamBy.get(String(rosterId))
+    const keys = [
+      team?.platformUserId,
+      team?.externalId,
+      rosterId === myRosterId ? args.userId : null,
+    ]
+    return [...new Set(keys.filter((v): v is string => typeof v === 'string' && v.length > 0))]
+  }
+
   const rosters = await prisma.roster
     .findMany({
       where: {
         leagueId,
-        platformUserId: {
-          in: teams.map((t) => t.platformUserId).filter(Boolean) as string[],
-        },
+        platformUserId: { in: [...new Set(rosterIds.flatMap(candidatesFor))] },
       },
       select: { platformUserId: true, playerData: true },
     })
@@ -125,8 +162,9 @@ export async function getNextMatchup(args: {
   // One projection lookup for both lineups.
   const allStarters = new Map<number, string[]>()
   for (const id of rosterIds) {
-    const team = teamBy.get(String(id))
-    const roster = team?.platformUserId ? rosterBy.get(team.platformUserId) : null
+    const roster = candidatesFor(id)
+      .map((key) => rosterBy.get(key))
+      .find(Boolean)
     const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     allStarters.set(
       id,

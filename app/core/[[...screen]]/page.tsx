@@ -242,17 +242,65 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
 }
 
+/**
+ * The league in the URL, named — but only if it is the reader's.
+ *
+ * ⚠ THE MEMBERSHIP CLAUSE IS THE WHOLE POINT AND MUST NOT BE DROPPED FOR SPEED.
+ * A title is rendered from a query parameter the caller supplies, so an
+ * unscoped `findUnique` would hand anybody who guesses a uuid the name of a
+ * private league in the `<title>` tag — a leak the page body itself does not
+ * have, because every screen resolves through a claimed team.
+ *
+ * Both arms are single-key lookups: `League.userId` is the importer's own row,
+ * and the second covers a league someone else imported where this user has
+ * claimed a team. Returns null on anything unexpected so a failed lookup costs
+ * a plainer tab title and never a 500 on the page it titles.
+ */
+async function leagueNameForTitle(leagueId: string, userId: string): Promise<string | null> {
+  return prisma.league
+    .findFirst({
+      where: {
+        id: leagueId,
+        OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+      },
+      select: { name: true },
+    })
+    .then((l) => l?.name?.trim() || null)
+    .catch(() => null)
+}
+
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ screen?: string[] }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { screen } = await params
+  const sp = await searchParams
   const segment = (screen?.[0] ?? '').toLowerCase()
   const meta = TAB_META[segment]
 
+  /*
+   * ⚠ NINETEEN SCREENS SHARED ONE TITLE PER SEGMENT AND SIXTY-FIVE LEAGUES
+   * SHARED THAT. TAB_META exists because "AllFantasy" nineteen times over is
+   * unusable once more than two tabs are open — and the league-scoped screens
+   * have exactly the same problem one level down: three tabs open on three
+   * different rosters all read "My team · AllFantasy". The league is the thing
+   * that tells them apart, and it is already in the URL.
+   */
+  const leagueId = typeof sp.league === 'string' ? sp.league : null
+  let leagueName: string | null = null
+  if (leagueId) {
+    const session = await getServerSession(authOptions).catch(() => null)
+    const userId = (session?.user as { id?: string } | undefined)?.id
+    if (userId) leagueName = await leagueNameForTitle(leagueId, userId)
+  }
+
+  const base = meta ? `${meta.title} · AllFantasy` : 'AllFantasy'
+
   return {
-    title: meta ? `${meta.title} · AllFantasy` : 'AllFantasy',
+    title: leagueName && meta ? `${meta.title} · ${leagueName} · AllFantasy` : base,
     description: meta?.description,
     /*
      * Signed-in surface. `noindex` is the honest instruction and `nofollow`

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
+import { DISTANT_LOCK_DAYS } from '@/lib/core-app/lockLabel'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
@@ -73,6 +74,15 @@ function LockCountdown({
 
   return (
     <div className="af-mt-lock" data-urgent={urgent} data-locked={locked}>
+      {/*
+        ⚠ STAYS A SPAN WHILE THE SECTIONS BELOW BECAME HEADINGS. The lock strip
+        renders ABOVE the team name, so promoting it puts an h2 in front of the
+        page's h1 and the outline starts one level too deep. It is a status
+        banner rather than a section, and it carries its own text ("Week 1
+        locks", the time, the reason) which a screen reader reads in document
+        order regardless. The matchup, byes and roster lists below ARE sections
+        and are headings.
+      */}
       <span className="af-label af-mt-lock-label">
         {week != null ? `Week ${week} locks` : 'Lineup locks'}
       </span>
@@ -682,7 +692,7 @@ export function MyTeam({ data }: MyTeamProps) {
     <div className="af-mt">
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {data.lock.available ? (
-        data.lock.data.daysAway > 8 ? (
+        data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
             ⚠ A LOCK MORE THAN A WEEK OUT IS A COVERAGE GAP, NOT A DEADLINE, and
             counting down to it is how this banner spent weeks pointing at a
@@ -806,9 +816,23 @@ export function MyTeam({ data }: MyTeamProps) {
                   ) : null}
                 </div>
               </div>
-              <div className="af-mt-tile">
-                <div className="af-mt-tile-value af-num">{data.team.data.record}</div>
+              {/*
+                ⚠ THE ABSENT RECORD IS PROSE AND MUST NOT SIT IN THE VALUE SLOT.
+                `af-mt-tile-value` is a 24px tabular figure; the preseason string
+                went in there and rendered as the largest thing on the screen,
+                wrapping across three lines of a numeric slab and shoving the
+                roster-value tile onto its own row. Same treatment as the
+                unavailable roster grade below: an em dash, and the reason under
+                it in the caption.
+              */}
+              <div className="af-mt-tile" data-missing={!data.team.data.recordKnown || undefined}>
+                <div className="af-mt-tile-value af-num">
+                  {data.team.data.recordKnown ? data.team.data.record : '—'}
+                </div>
                 <div className="af-label">Record</div>
+                {data.team.data.recordKnown ? null : (
+                  <div className="af-mt-tile-why">{data.team.data.record}</div>
+                )}
               </div>
               {data.rosterGrade.available ? (
                 <div className="af-mt-tile af-mt-tile--grade">
@@ -846,9 +870,9 @@ export function MyTeam({ data }: MyTeamProps) {
       {data.nextMatchup.available ? (
         <section className="af-frame af-mt-matchup">
           <div className="af-mt-mu-head">
-            <span className="af-label">
+            <h2 className="af-label">
               Week {data.nextMatchup.data.week} · projected matchup
-            </span>
+            </h2>
             {data.nextMatchup.data.bye ? (
               <span className="af-mt-mu-bye">no opponent recorded — bye</span>
             ) : null}
@@ -885,7 +909,7 @@ export function MyTeam({ data }: MyTeamProps) {
       */}
       {data.upcomingByes.length > 0 ? (
         <section className="af-frame af-mt-byes">
-          <span className="af-label">Byes coming up</span>
+          <h2 className="af-label">Byes coming up</h2>
           <ul className="af-mt-byes-list">
             {data.upcomingByes.map((b) => (
               <li key={b.week} data-stack={b.names.length >= 3}>

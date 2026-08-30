@@ -13,8 +13,20 @@
  * visibly changes on hydration.
  */
 
-/** Past this, a countdown is not a deadline any more. */
-const DISTANT_DAYS = 14
+/**
+ * Past this, a countdown is not a deadline any more.
+ *
+ * ⚠ EIGHT, BECAUSE THE PER-LEAGUE SCREEN ALREADY SAYS SO AND THE TWO DISAGREED.
+ * `MyTeam.tsx` refuses to count down past eight days, on the stated grounds that
+ * a lineup lock that far out means THIS WEEK'S SCHEDULE HAS NOT BEEN INGESTED
+ * rather than that the lineup is safe. This file's threshold was fourteen, so
+ * the cross-league board rendered "10d 8h" — a confident countdown to a game we
+ * do not hold — for the same league whose own screen was explaining that the
+ * number is not a deadline. Observed on 55 leagues at once, all reading "10d 8h".
+ *
+ * One constant, used by both, so the two screens cannot drift apart again.
+ */
+export const DISTANT_LOCK_DAYS = 8
 
 export type LockLabel = {
   /** "3d 4h", "02:14:39", "Locked", or a plain date when it is far out. */
@@ -22,11 +34,17 @@ export type LockLabel = {
   locked: boolean
   /** Under an hour, or already gone. The row tints on this. */
   urgent: boolean
+  /**
+   * Further out than a lineup lock should be — see DISTANT_LOCK_DAYS. `text` is
+   * a date rather than a countdown, and a caller must not present it as a
+   * deadline.
+   */
+  distant: boolean
 }
 
 export function formatLockLabel(atMs: number, nowMs: number): LockLabel {
   const ms = atMs - nowMs
-  if (ms <= 0) return { text: 'Locked', locked: true, urgent: true }
+  if (ms <= 0) return { text: 'Locked', locked: true, urgent: true, distant: false }
 
   const total = Math.floor(ms / 1000)
   const d = Math.floor(total / 86_400)
@@ -34,7 +52,7 @@ export function formatLockLabel(atMs: number, nowMs: number): LockLabel {
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
 
-  if (d >= DISTANT_DAYS) {
+  if (d >= DISTANT_LOCK_DAYS) {
     /*
      * ⚠ FORMATTED IN UTC, NOT IN THE SERVER'S ZONE. This string is rendered on
      * the server for the first paint and re-rendered in the browser by the
@@ -43,7 +61,7 @@ export function formatLockLabel(atMs: number, nowMs: number): LockLabel {
      */
     const at = new Date(atMs)
     const day = at.toUTCString().slice(5, 11).trim()
-    return { text: day, locked: false, urgent: false }
+    return { text: day, locked: false, urgent: false, distant: true }
   }
 
   const text =
@@ -51,5 +69,5 @@ export function formatLockLabel(atMs: number, nowMs: number): LockLabel {
       ? `${d}d ${h}h`
       : `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 
-  return { text, locked: false, urgent: ms <= 3_600_000 }
+  return { text, locked: false, urgent: ms <= 3_600_000, distant: false }
 }

@@ -79,6 +79,24 @@
   gap: 14px;
 }
 
+/*
+  One list is empty — see the note in MyTeamBoard.tsx. The columns collapse and
+  the surviving rows run two-up, so nothing stretches and nothing is left blank.
+  Scoped above the phone breakpoint on purpose: below it everything is already
+  one column and a two-up row grid would be two 160px rows.
+*/
+@media (min-width: 781px) {
+  .af-mtb-cols[data-one] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .af-mtb-cols[data-one] .af-mtb-rows {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+}
+
 .af-mtb-col {
   display: flex;
   flex-direction: column;
@@ -283,6 +301,15 @@
 }
 .af-mtb-lock[data-state='unknown'] {
   color: var(--faint);
+}
+/*
+  A date, not a deadline. Set back so it never competes with a real countdown in
+  the same column — see the note on `Lock` in MyTeamBoard.tsx.
+*/
+.af-mtb-lock[data-state='distant'] {
+  color: var(--faint);
+  font-weight: 600;
+  cursor: help;
 }
 
 /* ── Phone ───────────────────────────────────────────────────────────── */
