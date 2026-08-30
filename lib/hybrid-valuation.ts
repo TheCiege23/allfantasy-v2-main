@@ -3,7 +3,7 @@ import { findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
 import { pickValue } from './pick-valuation';
 import { computePlayerVorp as computePlayerVorpEngine, computePickVorp as computePickVorpEngine, LeagueRosterConfig } from './vorp-engine';
-import { isIdpPosition, isKickerPosition } from './idp-kicker-values';
+import { IDP_CEILING_UNCERTAINTY_BAND, isIdpPosition, isKickerPosition } from './idp-kicker-values';
 import { isUserParty } from './user-matching';
 import { getPlayerAnalytics, type PlayerAnalytics } from './player-analytics';
 
@@ -274,6 +274,11 @@ export interface TradeDelta {
     picksFromExcel: number;
     picksFromCurve: number;
   };
+  /**
+   * What this grade would read at the edges of the IDP ceiling's uncertainty — null when the
+   * trade holds no IDP-priced asset, and so does not depend on it. See idpCeilingGradeBand.
+   */
+  idpCeilingBand?: { low: string; high: string; sensitive: boolean } | null;
 }
 
 const IDP_KICKER_BASELINE_VALUES: Record<string, number> = {
@@ -637,6 +642,93 @@ function computeGrade(percentDiff: number): { verdict: string; grade: string } {
   return { verdict: 'Major overpay', grade: 'D' };
 }
 
+/**
+ * Would this verdict survive the one number in the IDP stack nobody can measure?
+ *
+ * 🛑 THE GRADE ON A DEFENCE-FOR-OFFENCE TRADE IS PARTLY A RESTATEMENT OF A PRODUCT DECISION.
+ * `IDP_CEILING_DYNASTY` sets what the best defender in a league is worth against the offensive
+ * board, and it is explicitly unmeasured — see the comment on it. Replaying real production
+ * trades across a range of ceilings moved one of them five grades, D to A-. That is not a
+ * rounding difference; it is the difference between "major overpay" and "clear win" on the
+ * same two rosters, decided by a constant with no market behind it.
+ *
+ * Returning null is the common and correct case: a trade with no IDP-priced asset does not
+ * depend on the ceiling at all, and neither does one whose two sides are both defenders —
+ * `percentDiff` is (r-g)/(r+g), so a factor common to both sides cancels exactly. Only the
+ * asymmetric case is exposed, which is why this reports per-trade rather than as a banner.
+ *
+ * ⚠ SCALES THE ALREADY-PRICED ASSETS RATHER THAN RE-PRICING. `pricePlayer` derives an IDP
+ * asset's impact and vorp as fixed multiples of its board value, and `compositeScore` is
+ * linear in those, so scaling them is exactly equivalent to moving the ceiling — and it costs
+ * no further provider or database work at grade time.
+ */
+export interface IdpCeilingBandTotals {
+  /** Side totals with the ceiling at the bottom of its band. */
+  low: { received: number; gave: number };
+  /** Side totals with the ceiling at the top of its band. */
+  high: { received: number; gave: number };
+}
+
+/**
+ * ⚠ RETURNS TOTALS, NOT A VERDICT, BECAUSE THE TWO TRADE SURFACES SPEAK DIFFERENT LANGUAGES.
+ * `computeTradeDeltaFromUserTrades` reports a letter grade; `/api/trade-evaluator` reports a
+ * 0-100 fairness score off `computeValueFairness`. Returning a grade here would have quietly
+ * given the evaluator a second, disagreeing currency on the same screen.
+ *
+ * `extra` is for value that is part of a side but not a priced asset — FAAB, which the
+ * evaluator adds to each composite. It is constant in the ceiling, so leaving it out would
+ * overstate how much of a side the ceiling actually moves.
+ */
+export function idpCeilingCompositeBand(
+  received: PricedAsset[],
+  gave: PricedAsset[],
+  extra?: { received?: number; gave?: number }
+): IdpCeilingBandTotals | null {
+  const isIdp = (a: PricedAsset) => a.source === 'idp-vorp';
+  if (!received.some(isIdp) && !gave.some(isIdp)) return null;
+
+  const totalAt = (assets: PricedAsset[], k: number, offset: number) =>
+    assets.reduce(
+      (sum, a) =>
+        sum +
+        compositeScore(
+          isIdp(a)
+            ? {
+                ...a.assetValue,
+                impactValue: a.assetValue.impactValue * k,
+                vorpValue: a.assetValue.vorpValue * k,
+              }
+            : a.assetValue
+        ),
+      0
+    ) + offset;
+
+  const at = (k: number) => ({
+    received: totalAt(received, k, extra?.received ?? 0),
+    gave: totalAt(gave, k, extra?.gave ?? 0),
+  });
+
+  return { low: at(IDP_CEILING_UNCERTAINTY_BAND.low), high: at(IDP_CEILING_UNCERTAINTY_BAND.high) };
+}
+
+/** The band expressed as letter grades, for the surfaces that report one. */
+export function idpCeilingGradeBand(
+  received: PricedAsset[],
+  gave: PricedAsset[]
+): { low: string; high: string; sensitive: boolean } | null {
+  const band = idpCeilingCompositeBand(received, gave);
+  if (!band) return null;
+
+  const gradeOf = (side: { received: number; gave: number }) => {
+    const total = side.received + side.gave;
+    return computeGrade(total > 0 ? ((side.received - side.gave) / total) * 100 : 0).grade;
+  };
+
+  const low = gradeOf(band.low);
+  const high = gradeOf(band.high);
+  return { low, high, sensitive: low !== high };
+}
+
 function computeConfidence(stats: TradeDelta['valuationStats']): number {
   /*
    * ⚠ IDP-PRICED PLAYERS COUNT, AND THEY COUNT AS NEITHER LIVE NOR UNKNOWN.
@@ -764,7 +856,8 @@ export async function computeTradeDeltaFromUserTrades(
     confidence: computeConfidence(combinedStats),
     receivedAssets: received.items,
     gaveAssets: gave.items,
-    valuationStats: combinedStats
+    valuationStats: combinedStats,
+    idpCeilingBand: idpCeilingGradeBand(received.items, gave.items)
   };
 }
 

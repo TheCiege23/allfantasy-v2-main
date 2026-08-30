@@ -19,7 +19,7 @@ import { deepseekQuantAnalysis } from '@/lib/deepseek-client'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
-import { pricePlayer, pricePick, compositeScore, compositeTotal, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
+import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import { computeLineupDelta, computeLineupFairness, computeValueFairness, type LineupPlayer, type RosterSlots, type LineupDelta } from '@/lib/lineup-optimizer'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
@@ -974,6 +974,54 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       } catch (_) { /* non-critical */ }
     }
 
+    /*
+     * 🛑 SAY SO WHEN THIS VERDICT IS RESTING ON THE ONE NUMBER NOBODY CAN MEASURE.
+     *
+     * Defenders are priced off the league's own board, but what the BEST defender is worth
+     * against the offensive board — `IDP_CEILING_DYNASTY` — is a product decision with no
+     * market behind it, and three routes to measuring it are closed. Replaying real
+     * production trades across a plausible range of it moved one of them five grades, from
+     * "major overpay" to "clear win", on the same two rosters.
+     *
+     * ⚠ THE CONDITION IS A FLIPPED WINNER, NOT A WIDE RANGE. Every IDP trade's number moves
+     * a little; that is noise a manager cannot act on. What is worth interrupting them for
+     * is the band spanning 50 — the point where the answer to "who wins this" changes
+     * depending on a constant we picked. A trade with defenders on BOTH sides usually will
+     * not trip it, and correctly so: the ceiling is a factor common to both sides there, so
+     * it cancels out of the ratio almost entirely.
+     */
+    const idpCeilingBand = idpCeilingCompositeBand(
+      senderReceivedAssetsList,
+      senderGivenAssetsList,
+      { received: data.receiver.gives_faab ?? 0, gave: data.sender.gives_faab ?? 0 },
+    )
+    let idpCeilingCaveat: {
+      lowFairness: number
+      highFairness: number
+      flipsWinner: boolean
+      note: string
+    } | null = null
+    if (idpCeilingBand) {
+      const lowFairness = computeValueFairness(idpCeilingBand.low.received, idpCeilingBand.low.gave)
+      const highFairness = computeValueFairness(idpCeilingBand.high.received, idpCeilingBand.high.gave)
+      const lo = Math.min(lowFairness, highFairness)
+      const hi = Math.max(lowFairness, highFairness)
+      const flipsWinner = lo < 50 && hi > 50
+      if (flipsWinner) {
+        idpCeilingCaveat = {
+          lowFairness,
+          highFairness,
+          flipsWinner,
+          note:
+            'This trade sends defenders one way and offence the other, so the verdict rests on how ' +
+            'much a defender is worth against an offensive player — a rate no market publishes and ' +
+            'that we set ourselves. Move that rate within a defensible range and this trade scores ' +
+            `anywhere from ${lo} to ${hi}, which changes who it favours. Treat it as close, and ` +
+            'weigh what your lineup actually needs.',
+        }
+      }
+    }
+
     const tradeLabels = detectTradeLabels({
       givenAssets: senderGivenAssets,
       receivedAssets: receiverGivenAssets,
@@ -1734,6 +1782,7 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
       vetoReason: vetoResult.vetoReason,
       expertWarning: vetoResult.warning ? vetoResult.warningText : null,
       ...(idpLineupWarning && { idpLineupWarning }),
+      ...(idpCeilingCaveat && { idpCeilingCaveat }),
     }
 
     const acceptProbData = tradeDriverData ? {
