@@ -135,6 +135,79 @@ export function isIdpPosition(position: string | null | undefined): boolean {
 }
 
 /**
+ * The IDP GROUP a position belongs to — the unit ranks are computed in.
+ *
+ * 🛑 THE DISPLAY BUG THIS FIXES WAS VISIBLE AND WRONG. The Defense Hub rendered its rank as
+ * `${player.position}${rank}`, and `SportsPlayer.position` carries whatever spelling that row
+ * happens to hold — so one league's board showed `CB78`, `DB81` and `Cornerback80` side by
+ * side, three labels for one ranking. `Cornerback80` is the worst of them: it implies a
+ * cornerback-specific ranking, and no such board exists. Ranks are computed per GROUP.
+ *
+ * ⚠ `normalizePositionForSport` in lib/team-abbrev.ts already folds CB/S -> DB, and is NOT
+ * enough on its own: its table is abbreviations only, so every long-form spelling falls through
+ * `|| upper` unchanged. That is exactly how `Cornerback` survived to the screen. The long-form
+ * set lives here, so the fold that understands it lives here too.
+ */
+export function idpPositionGroup(position: string | null | undefined): 'DL' | 'LB' | 'DB' | null {
+  const raw = (position ?? '').trim().toUpperCase()
+  if (!raw) return null
+  if (LB_SPELLINGS.has(raw)) return 'LB'
+  if (DL_SPELLINGS.has(raw)) return 'DL'
+  if (DB_SPELLINGS.has(raw)) return 'DB'
+  return null
+}
+
+const LB_SPELLINGS = new Set([
+  'LB', 'ILB', 'OLB', 'MLB',
+  'LINEBACKER', 'OUTSIDE LINEBACKER', 'INSIDE LINEBACKER', 'MIDDLE LINEBACKER',
+])
+
+/*
+ * ⚠ EDGE SITS WITH THE LINE, NOT ITS OWN GROUP. `IDP_POSITIONS` has no EDGE and the long-form
+ * set has `EDGE RUSHER`; the VORP board ranks DL/LB/DB only, so an edge rusher must land in one
+ * of the three or he would carry a rank computed in a group his label does not name.
+ */
+const DL_SPELLINGS = new Set([
+  'DL', 'DE', 'DT', 'NT',
+  'DEFENSIVE END', 'DEFENSIVE TACKLE', 'DEFENSIVE LINEMAN', 'NOSE TACKLE', 'EDGE', 'EDGE RUSHER',
+])
+
+const DB_SPELLINGS = new Set([
+  'DB', 'CB', 'S', 'SS', 'FS',
+  'CORNERBACK', 'SAFETY', 'FREE SAFETY', 'STRONG SAFETY', 'DEFENSIVE BACK',
+])
+
+/**
+ * The short label for a specific position, for the POS column beside the group rank.
+ *
+ * Keeps CB and S distinct — losing that would throw away real information — while spelling them
+ * the same way every other row does. Unknown spellings pass through uppercased rather than
+ * being forced into a guess.
+ */
+const IDP_SHORT_FORM: Record<string, string> = {
+  LINEBACKER: 'LB',
+  'OUTSIDE LINEBACKER': 'OLB',
+  'INSIDE LINEBACKER': 'ILB',
+  'MIDDLE LINEBACKER': 'MLB',
+  CORNERBACK: 'CB',
+  SAFETY: 'S',
+  'FREE SAFETY': 'FS',
+  'STRONG SAFETY': 'SS',
+  'DEFENSIVE BACK': 'DB',
+  'DEFENSIVE END': 'DE',
+  'DEFENSIVE TACKLE': 'DT',
+  'DEFENSIVE LINEMAN': 'DL',
+  'NOSE TACKLE': 'NT',
+  'EDGE RUSHER': 'EDGE',
+}
+
+export function shortIdpPosition(position: string | null | undefined): string | null {
+  const raw = (position ?? '').trim().toUpperCase()
+  if (!raw) return null
+  return IDP_SHORT_FORM[raw] ?? raw
+}
+
+/**
  * Does this league score individual defensive players?
  *
  * ⚠ IF IT DOES, THE VENDOR'S GENERIC NUMBER IS NOT A WORSE ESTIMATE FOR A
