@@ -73,6 +73,24 @@ const ALWAYS_ON = new Set<string>([
   "importedHistory",
 ])
 
+/*
+ * ⚠ EVERY `ChimmyIntent` NEEDS AN ENTRY. A MISSING KEY IS SILENT AND SEVERE.
+ *
+ * `injury`, `weather`, `commissioner` and `bracket` were absent here while being fully classified
+ * by IntentClassifier — and they sit at positions 2-5 of its `PRIORITY` list, so they WIN TIES
+ * over start_sit, trade, waiver and matchup. The `?? new Set()` fallback below meant every one of
+ * those turns rendered only the five ALWAYS_ON sections: no roster, no matchup, no rankings, no
+ * standings, no league intelligence.
+ *
+ * The worked example, measured: "Should I start Puka Nacua? He is questionable with an ankle
+ * injury" classifies as `injury` at 0.67 confidence and beats `start_sit` — so the single most
+ * common in-season question was answered with the user's roster withheld from the model. Nothing
+ * errored, nothing logged, and the reply still read fluently, which is why it survived.
+ *
+ * The `Record<ChimmyIntent, …>` annotation was already here and did NOT catch it, because the
+ * repo carries a standing tsc error baseline and this was one more line in it. Do not rely on the
+ * type alone — see the exhaustiveness assertion below, which fails the build instead.
+ */
 const INTENT_SECTION_ALLOW: Record<ChimmyIntent, Set<string>> = {
   general: new Set(),
   sports_schedule: new Set(["sportsSchedule"]),
@@ -83,7 +101,34 @@ const INTENT_SECTION_ALLOW: Record<ChimmyIntent, Set<string>> = {
   dynasty: new Set(["intelligence", "rankings", "leagueDifficulty", "standings"]),
   rankings: new Set(["rankings", "leagueDifficulty"]),
   draft: new Set(["rankings"]),
+
+  /*
+   * An injury question is nearly always a lineup question wearing a different hat ("he's
+   * questionable — do I start him?"), so this mirrors start_sit and adds the schedule: whether the
+   * game is soon is half the answer to whether a questionable tag matters.
+   */
+  injury: new Set(["matchup", "intelligence", "roster", "rankings", "sportsSchedule"]),
+
+  /* Weather only ever matters relative to a specific game and the players in it. */
+  weather: new Set(["matchup", "roster", "sportsSchedule"]),
+
+  /* League operation: who is in the league, how it is configured, where it stands. */
+  commissioner: new Set(["intelligence", "standings", "roster", "leagueDifficulty"]),
+
+  /* Brackets have no dedicated section yet; the schedule and rankings are what exist today. */
+  bracket: new Set(["sportsSchedule", "rankings", "standings"]),
 }
+
+/*
+ * Compile-time exhaustiveness. Adding a member to `ChimmyIntent` without adding it above is now a
+ * type error at THIS line, with the missing key named — rather than a silently empty context block
+ * discovered in production. `satisfies` reports the gap even where the surrounding baseline is red.
+ */
+const _INTENT_ALLOW_IS_EXHAUSTIVE = INTENT_SECTION_ALLOW satisfies Record<
+  ChimmyIntent,
+  Set<string>
+>
+void _INTENT_ALLOW_IS_EXHAUSTIVE
 
 export type ComposePromptOptions = {
   intent: ChimmyIntent

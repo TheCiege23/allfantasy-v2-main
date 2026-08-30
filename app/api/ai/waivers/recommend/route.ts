@@ -61,8 +61,24 @@ export async function POST(request: Request) {
       week,
     })
 
+    /*
+     * ⚠ AN EMPTY LIST MUST SAY WHY. The recommender no longer invents a placeholder pick when it
+     * has nothing to work from (see buildRecommendations), so "no recommendations" now reaches the
+     * client as a genuinely empty array. Without this flag the UI cannot tell "your waiver wire is
+     * picked over" — a real answer — from "we could not read your roster" — a fault. `dataGaps`
+     * carries the specific reason.
+     */
+    const blocking = (output.meta?.dataGaps ?? []).filter(
+      (g) =>
+        g === "roster_not_found" ||
+        g === "roster_players_unresolved" ||
+        g === "free_agent_pool_empty" ||
+        g === "cannot_analyze_roster_needs_no_roster"
+    )
+
     return NextResponse.json({
       ok: true,
+      insufficientData: output.recommendations.length === 0 && blocking.length > 0,
       ...output,
     })
   } catch (error) {

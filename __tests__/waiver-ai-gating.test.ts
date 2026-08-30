@@ -31,14 +31,35 @@ vi.mock("@/lib/commissioner/permissions", () => ({
   isCommissioner: vi.fn().mockResolvedValue(false),
 }))
 
+/*
+ * ⚠ THIS MOCK USED TO DESCRIBE A SCHEMA THAT DOES NOT EXIST, AND THAT IS WHY THESE TESTS PASSED
+ * WHILE THE FEATURE WAS TOTALLY BROKEN.
+ *
+ * It mocked `roster.findFirst` returning `{ faabBalance, players }` and `leaguePlayer.findMany` —
+ * but `Roster` has `faabRemaining` and a `playerData` JSON column (no `players` relation), and
+ * `prisma.leaguePlayer` has never existed at all. Against the real client those two calls threw
+ * `PrismaClientValidationError` and `TypeError` on EVERY invocation; against this mock they
+ * resolved cleanly. So the suite was green on a code path that could not run in production, and
+ * the assertions below had been written around the fabricated placeholder the service emitted
+ * when both reads failed.
+ *
+ * The mock now matches the real reads: `roster.findMany` (all rosters in the league),
+ * `league.findUnique` (sport), and `sportsPlayer.findMany` (roster positions).
+ */
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    roster: { findFirst: vi.fn().mockResolvedValue(null) },
-    leaguePlayer: { findMany: vi.fn().mockResolvedValue([]) },
+    roster: { findMany: vi.fn().mockResolvedValue([]) },
+    league: { findUnique: vi.fn().mockResolvedValue({ id: "league-1", sport: "NFL" }) },
+    sportsPlayer: { findMany: vi.fn().mockResolvedValue([]) },
     waiverClaim: { findMany: vi.fn().mockResolvedValue([]) },
     notificationOutbox: { create: vi.fn().mockResolvedValue({ id: "test-notif" }) },
     waiverClaim_groupBy: vi.fn(),
   },
+}))
+
+/** The real free-agent pool resolver. Tests opt in to a pool; the default is genuinely empty. */
+vi.mock("@/lib/sport-teams/SportPlayerPoolResolver", () => ({
+  getPlayerPoolForSport: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock("@/lib/waiver-wire/settings-service", () => ({
@@ -165,16 +186,61 @@ describe("generateWaiverRecommendations — stable shape", () => {
     })
   })
 
-  it("each recommendation has required fields", async () => {
+  /*
+   * ⚠ THE POINT OF THIS TEST IS THE EMPTY ARRAY.
+   *
+   * It used to loop over `output.recommendations` asserting each had the required fields — which
+   * passes vacuously on an empty list and, worse, passed on the ONE fabricated entry the service
+   * emitted with no roster and no player pool: `addPlayerId: "unknown"`, name "Best available WR",
+   * a FAAB bid computed from the user's real budget, and prose about target share that no data
+   * supported. A "stable shape" assertion cannot tell an answer from an invention.
+   *
+   * With no roster and no pool the honest output is NO recommendations plus a stated reason.
+   */
+  it("returns no recommendations — not a placeholder — when there is no roster and no pool", async () => {
     const output = await generateWaiverRecommendations({
       userId: "user-1",
       leagueId: "league-1",
       mode: "quick",
     })
 
+    expect(output.recommendations).toEqual([])
+    expect(output.meta?.dataGaps).toContain("roster_not_found")
+    expect(output.meta?.dataGaps).toContain("free_agent_pool_empty")
+    // And specifically: none of the old invented values may come back.
+    expect(JSON.stringify(output)).not.toContain("Best available WR")
+    expect(JSON.stringify(output)).not.toContain("unknown")
+  })
+
+  it("does not invent roster needs when the roster cannot be read", async () => {
+    // The old implementation returned a hardcoded ["WR_depth", "RB_depth"] here, for every user
+    // in every league in every sport — and `buildReasoning` cited it back as "fills a roster need".
+    const output = await generateWaiverRecommendations({
+      userId: "user-1",
+      leagueId: "league-1",
+      mode: "quick",
+    })
+
+    expect(output.rosterNeeds).toEqual([])
+    expect(output.meta?.dataGaps).toContain("cannot_analyze_roster_needs_no_roster")
+  })
+
+  it("each recommendation has required fields when a pool exists", async () => {
+    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
+    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
+      { player_id: "p1", full_name: "Real Player", position: "WR", external_source_id: null },
+    ] as never)
+
+    const output = await generateWaiverRecommendations({
+      userId: "user-1",
+      leagueId: "league-1",
+      mode: "quick",
+    })
+
+    expect(output.recommendations.length).toBeGreaterThan(0)
     for (const rec of output.recommendations) {
-      expect(rec).toHaveProperty("addPlayerId")
-      expect(rec).toHaveProperty("addPlayerName")
+      expect(rec.addPlayerId).toBe("p1")
+      expect(rec.addPlayerName).toBe("Real Player")
       expect(rec).toHaveProperty("priority")
       expect(rec).toHaveProperty("confidence")
       expect(rec).toHaveProperty("risk")
@@ -200,11 +266,17 @@ describe("generateWaiverRecommendations — FAAB leagues", () => {
 
   it("includes suggestedFaabBid when includeFaab=true for FAAB league", async () => {
     const { prisma } = await import("@/lib/prisma")
-    vi.mocked(prisma.roster.findFirst as any).mockResolvedValue({
-      id: "roster-1",
-      faabBalance: 500,
-      players: [],
-    })
+    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
+
+    /* Real column (`faabRemaining`) and real shape (`playerData` JSON), not the invented
+     * `faabBalance` / `players` relation the previous mock described. */
+    vi.mocked(prisma.roster.findMany as any).mockResolvedValue([
+      { id: "roster-1", platformUserId: "user-1", faabRemaining: 500, playerData: { players: ["rp1"] } },
+    ])
+    vi.mocked(prisma.sportsPlayer.findMany as any).mockResolvedValue([{ position: "WR" }])
+    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
+      { player_id: "fa1", full_name: "Available Back", position: "RB", external_source_id: null },
+    ] as never)
 
     const output = await generateWaiverRecommendations({
       userId: "user-1",
@@ -213,13 +285,38 @@ describe("generateWaiverRecommendations — FAAB leagues", () => {
       includeFaab: true,
     })
 
-    // With faabBalance available, stub rec should have a FAAB bid
     expect(output.leagueContext.waiverType).toBe("faab")
-    // Recs may be fallback (no free agents), but shape should be valid
+    expect(output.leagueContext.faabRemaining).toBe(500)
     expect(output.recommendations.length).toBeGreaterThan(0)
-    // The fallback rec includes suggestedFaabBid when faabRemaining is set
     const rec = output.recommendations[0]
+    // A real free agent, and a bid sized off the real remaining budget.
+    expect(rec.addPlayerName).toBe("Available Back")
     expect(rec.suggestedFaabBid).toBeTypeOf("number")
+  })
+
+  it("excludes players already rostered anywhere in the league", async () => {
+    const { prisma } = await import("@/lib/prisma")
+    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
+
+    vi.mocked(prisma.roster.findMany as any).mockResolvedValue([
+      { id: "r1", platformUserId: "user-1", faabRemaining: 100, playerData: { players: ["mine"] } },
+      { id: "r2", platformUserId: "rival", faabRemaining: 100, playerData: { players: ["theirs"] } },
+    ])
+    vi.mocked(prisma.sportsPlayer.findMany as any).mockResolvedValue([{ position: "WR" }])
+    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
+      { player_id: "mine", full_name: "On My Roster", position: "WR", external_source_id: null },
+      { player_id: "theirs", full_name: "On Their Roster", position: "RB", external_source_id: null },
+      { player_id: "free", full_name: "Genuinely Free", position: "TE", external_source_id: null },
+    ] as never)
+
+    const output = await generateWaiverRecommendations({
+      userId: "user-1",
+      leagueId: "faab-league",
+      mode: "quick",
+    })
+
+    const names = output.recommendations.map((r) => r.addPlayerName)
+    expect(names).toEqual(["Genuinely Free"])
   })
 })
 
@@ -274,12 +371,19 @@ describe("processLeagueWaiversJob — idempotency key", () => {
 // ─── 11. Deeper analysis path routes to Chimmy and requires AF Pro ───────────
 describe("deeperAnalysisPath", () => {
   it("points to Chimmy chat with waiver-analysis topic", async () => {
+    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
+    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
+      { player_id: "p1", full_name: "Real Player", position: "WR", external_source_id: null },
+    ] as never)
+
     const output = await generateWaiverRecommendations({
       userId: "user-1",
       leagueId: "league-xyz",
       mode: "quick",
     })
 
+    /* Previously this looped over an empty array and passed without checking anything. */
+    expect(output.recommendations.length).toBeGreaterThan(0)
     for (const rec of output.recommendations) {
       expect(rec.deeperAnalysisPath).toContain("/chimmy/chat")
       expect(rec.deeperAnalysisPath).toContain("waiver-analysis")
