@@ -10,6 +10,8 @@ import {
 import { getPlayFeed, type PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import { estimateWinProbability, type WinProbability } from '@/lib/live/winProbability'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
+import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
 import { isSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 
@@ -124,8 +126,20 @@ export type LivePageData = {
   counts: Array<{ sport: string; label: string; slateCount: number }>
   games: LiveGameCard[]
   impact: LiveImpact
-  /** When the underlying feed was last refreshed — drives "updated Ns ago". */
-  fetchedAt: string
+  /**
+   * When the underlying feed was last refreshed — drives "updated Ns ago".
+   *
+   * ⚠ NULL WHEN WE DO NOT KNOW, AND THAT IS THE WHOLE POINT. This was
+   * `active?.fetchedAt ?? new Date().toISOString()`, so a sport whose fetch
+   * FAILED, or whose provider returned no timestamp, reported the current
+   * instant — the freshest claim it is possible to make, over data of unknown
+   * age. The view already refuses to date an unparseable timestamp, but a
+   * fabricated `new Date()` parses perfectly, so that guard could never fire.
+   *
+   * "Updated 0s ago" above a stale scoreboard is worse than no age at all: it is
+   * the one number on this page a user would act on during a game.
+   */
+  fetchedAt: string | null
   /** False when signed out or no claimed team, so the UI explains empty tie-ins. */
   hasRosterData: boolean
   /**
@@ -243,9 +257,31 @@ async function loadRosteredPlayers(
 
   const identities = await prisma.sportsPlayer.findMany({
     where: { sleeperId: { in: [...new Set(current.map((r) => r.playerId))] } },
-    select: { sleeperId: true, name: true, position: true, team: true },
+    // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
+    // club fold, and omitting it would silently leave every club unfolded.
+    select: { sleeperId: true, name: true, position: true, team: true, sport: true },
   })
-  const identityById = new Map(identities.map((p) => [p.sleeperId ?? '', p]))
+  /*
+   * ⚠ `new Map(pairs)` RESOLVED A DUPLICATE KEY TO THE LAST PAIR, AND `sleeperId`
+   * IS NOT UNIQUE IN `SportsPlayer`. The duplicates are one athlete as four
+   * vendors describe him, and `findMany` carries no `orderBy` — so which vendor
+   * won was decided by whatever Postgres returned last. Same defect, same fix,
+   * as `/core/matchup`, `/core/my-team` and the home dashboard.
+   *
+   * Smaller here than on those three, and worth stating rather than implying.
+   * Measured on production 2026-08-30 over 11,960 NFL sleeperIds, comparing
+   * values AFTER normalisation so a spelling difference does not count as a
+   * conflict:
+   *
+   *   126  disagree on the FOLDED position — rendered on the tie-in row below
+   *    20  disagree on the NORMALISED club — and the club is what places a
+   *        player into a game, so the losing side of that coin toss puts him in
+   *        the wrong fixture or in none. Myles Garrett resolves LAR or CLE.
+   *
+   * Both are small. Neither is decided by anything but row order, which is the
+   * part worth removing.
+   */
+  const identityById = composePlayerIdentities(identities)
 
   for (const r of current) {
     const identity = identityById.get(r.playerId)
@@ -268,7 +304,13 @@ async function loadRosteredPlayers(
         playerId: r.playerId,
         name: identity.name,
         position: identity.position ?? null,
-        team: identity.team ? normalizeTeamAbbrev(identity.team) || identity.team : null,
+        /*
+         * Already folded by the composer, which applies `normalizeTeamAbbrev`
+         * on NFL rows only. `byTeam` below is keyed on this value and looked up
+         * with the same normaliser applied to the fixture's clubs, so both
+         * sides of that join speak one vocabulary.
+         */
+        team: identity.team,
         leagues: [entry],
       })
     }
@@ -577,7 +619,8 @@ export async function getLivePageData(opts: {
     counts,
     games: visible,
     impact: await buildImpact(visible, players, sport),
-    fetchedAt: active?.fetchedAt ?? new Date().toISOString(),
+    // Never invented — see the field's note. Null means "we cannot date this".
+    fetchedAt: active?.fetchedAt ?? null,
     hasRosterData,
     loadFailed: active?.failed ?? false,
     rosterFailed,
@@ -628,8 +671,16 @@ async function buildImpact(
    * data the user did not ask about.
    */
   const roster = [...players.values()]
+  /*
+   * ⚠ MATCHED ON A NORMALISED NAME, NOT WITH `===`. The roster side and the
+   * play side come from different vendors and disagree about case, punctuation
+   * and generational suffixes on 748 of 9,412 NFL names — see
+   * `rosterPlayMatch.ts`, which holds the measurement and the reason a fuzzy
+   * fallback is deliberately absent.
+   */
+  const rosterNames = rosterNameKeys(roster.map((r) => r.name))
   const mine = plays.find(
-    (p) => liveGameIds.has(p.gameId) && roster.some((r) => r.name === p.playerName),
+    (p) => liveGameIds.has(p.gameId) && isRosteredPlayer(rosterNames, p.playerName),
   )
   const biggestMover = mine
     ? {
