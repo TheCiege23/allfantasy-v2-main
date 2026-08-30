@@ -52,6 +52,9 @@ vi.mock('@/lib/devy-classification', () => ({
   ingestCFBDTeamContext: record('teamContext'),
   ingestCFBDRecruitingData: record('recruiting'),
   ingestCFBDPassingProfile: record('passingProfile'),
+  // Same phase as passingProfile, second half. Not its own entry in `ran` —
+  // these tests count PHASE turns, and locations share the passing turn.
+  ingestCFBDPassLocations: async () => ({ updated: 0, errors: [] as string[] }),
 }))
 
 /** A full-runway budget — these tests are about ORDER, not about time. */

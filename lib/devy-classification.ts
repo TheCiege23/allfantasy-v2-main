@@ -1,16 +1,19 @@
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import {
   getCFBPlayerStats, getCFBTeamRoster,
   getCFBDraftPicksResult, getCFBTeamRosterResult, CfbdUnavailableError,
   getCFBRecruits, getCFBTransferPortal, getCFBReturningProduction,
   getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings,
   getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing,
-  getCFBPassingPlayerSeason, getCFBPassingTeamSeason,
+  getCFBPassingPlayerSeason, getCFBPassingTeamSeason, getCFBPassingPlays,
   type CFBPlayer, type CFBPlayerStats, type CFBDraftPick,
   type CFBRecruit, type CFBTransferPortalEntry, type CFBReturningProduction,
   type CFBPlayerUsage, type CFBPlayerPPA, type CFBTeamSPRating, type CFBPlayerWEPA,
   type CFBPassingProfile, type CFBTeamPassingSummary,
+  type CFBPassingPlay, type CFBPassLocationGrid, type CFBPassLocationSplit,
 } from '@/lib/cfb-player-data'
+import { rotateForFairness } from '@/lib/cron/runBudget'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
 
@@ -1040,8 +1043,13 @@ export async function ingestCFBDPassingProfile(season?: number): Promise<{ updat
           if (p.yardsAfterCatch != null) updateData.yardsAfterCatch = p.yardsAfterCatch
           if (p.yacCompletions != null) updateData.yacCompletions = p.yacCompletions
 
-          const hasLocations = Object.keys(p.locations).length > 0
-          if (hasLocations) updateData.passLocations = p.locations
+          // ⚠ NO LOCATION BRANCH HERE ANY MORE, AND THAT IS THE FIX. This
+          // read `p.locations` off the SEASON endpoint, which carries no
+          // location key at all — see the return type of
+          // `getCFBPassingPlayerSeason`. The condition was false on every row
+          // ever written. `passLocations` is filled by
+          // `ingestCFBDPassLocations` from `/passing/plays`, the only grain
+          // that has the data.
 
           // Only stamp the season once something from this season actually
           // landed. Stamping it on an empty response would date a profile that
@@ -1063,6 +1071,287 @@ export async function ingestCFBDPassingProfile(season?: number): Promise<{ updat
     // skip; swallowing it here into an error string would report a clean zero.
     if (err instanceof CfbdUnavailableError) throw err
     errors.push(`Passing profile bulk fetch failed: ${err.message?.slice(0, 100)}`)
+  }
+
+  return { updated, errors }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// CFBD pass locations — the one part of the passing feed that is play grain
+// ──────────────────────────────────────────────────────────────────
+//
+// 🛑 THE COLUMN EXISTED AND NOTHING COULD EVER FILL IT. `DevyPlayer.passLocations`
+// shipped 2026-08-30 with a read layer, a schema comment, and a phase whose own
+// docstring claims it covers "pass location" — but the only writer read
+// `p.locations` off `/passing/players/season`, and that endpoint carries no
+// location key at all. `getCFBPassingPlayerSeason` says so in its own return
+// type: "ALWAYS `{}` FOR THE SEASON AND TEAM ENDPOINTS". So `hasLocations` was
+// provably false on every row, forever. Not a gap in coverage — a branch that
+// could not be taken.
+//
+// Short/deep × left/middle/right is per-attempt and lives ONLY on
+// `/passing/plays`, which the adapter deliberately does not ingest because play
+// grain is six figures of rows a season and there is no table at that grain.
+// Both of those things stay true. What changes here is that the plays are FOLDED
+// into the season-grain grid the column was designed to hold, so the cost is one
+// request per school rather than a row per throw, and nothing is stored at a
+// grain the devy board cannot read.
+//
+// ⚠ EVERY CELL CARRIES ITS OWN DENOMINATOR, and that is not ceremony. This is the
+// same feature that shipped an ADOT with a NULL `airYardsAttempts` — an average
+// over an unrecorded number of throws, which reads as data and is not. A location
+// grid fails identically: "5 deep lefts" means nothing without knowing whether it
+// is out of 40 measured attempts or 400, and CFBD says location is present only
+// "when provided in the play data". So the grid records how many attempts were
+// SEEN and how many could actually be PLACED, and each measured quantity is
+// stored beside the count of plays that carried it. A cell whose `yardsMeasured`
+// is 0 reports `yards: null`, never 0.
+
+/** One cell of the grid. Counts, each beside the plays that supplied it. */
+export interface DevyPassLocationCell {
+  /** Plays that landed in this cell. Always known — the play exists. */
+  attempts: number
+  completions: number | null
+  /** Denominator for `completions` — plays whose completion flag was present. */
+  completionsMeasured: number
+  yards: number | null
+  /** Denominator for `yards` — plays that carried a numeric yardage. */
+  yardsMeasured: number
+  touchdowns: number | null
+  touchdownsMeasured: number
+  interceptions: number | null
+  interceptionsMeasured: number
+}
+
+export type DevyPassLocationGrid = Partial<
+  Record<'short' | 'deep', Partial<Record<'left' | 'middle' | 'right', DevyPassLocationCell>>>
+>
+
+/** The JSON written to `DevyPlayer.passLocations`. */
+export interface DevyPassLocations {
+  season: number
+  /** Attempts seen for this passer on `/passing/plays`. The grid's denominator. */
+  attempts: number
+  /** Attempts carrying BOTH a depth and a direction, so placeable in the grid. */
+  located: number
+  grid: DevyPassLocationGrid
+}
+
+type CellAccumulator = {
+  attempts: number
+  completions: number
+  completionsMeasured: number
+  yards: number
+  yardsMeasured: number
+  touchdowns: number
+  touchdownsMeasured: number
+  interceptions: number
+  interceptionsMeasured: number
+}
+
+function newCell(): CellAccumulator {
+  return {
+    attempts: 0,
+    completions: 0,
+    completionsMeasured: 0,
+    yards: 0,
+    yardsMeasured: 0,
+    touchdowns: 0,
+    touchdownsMeasured: 0,
+    interceptions: 0,
+    interceptionsMeasured: 0,
+  }
+}
+
+function sealCell(c: CellAccumulator): DevyPassLocationCell {
+  return {
+    attempts: c.attempts,
+    // Null, never 0, when nothing measured it — the distinction the whole
+    // passing migration exists for.
+    completions: c.completionsMeasured > 0 ? c.completions : null,
+    completionsMeasured: c.completionsMeasured,
+    yards: c.yardsMeasured > 0 ? c.yards : null,
+    yardsMeasured: c.yardsMeasured,
+    touchdowns: c.touchdownsMeasured > 0 ? c.touchdowns : null,
+    touchdownsMeasured: c.touchdownsMeasured,
+    interceptions: c.interceptionsMeasured > 0 ? c.interceptions : null,
+    interceptionsMeasured: c.interceptionsMeasured,
+  }
+}
+
+/**
+ * Fold one school's attempts into a per-passer location grid.
+ *
+ * Keyed by normalized passer name so it joins to `DevyPlayer.normalizedName` the
+ * same way every other CFBD ingest in this file does.
+ *
+ * ⚠ A PLAY WITH NO LOCATION STILL COUNTS. It raises `attempts` and not `located`,
+ * which is precisely how a reader tells a genuinely short-and-left passer from
+ * one whose plays simply were not tagged. Dropping unlocated plays here would
+ * make every passer's grid look complete.
+ */
+export function aggregatePassLocations(
+  plays: CFBPassingPlay[],
+  team: string,
+  fallbackSeason: number,
+): Map<string, DevyPassLocations> {
+  const byPasser = new Map<
+    string,
+    { season: number; attempts: number; located: number; grid: Map<string, CellAccumulator> }
+  >()
+
+  for (const play of plays) {
+    // The team filter is a query parameter, not a guarantee: `/passing/plays`
+    // describes both sides of a game, so an unguarded fold would credit the
+    // OPPOSING quarterback's throws to this school.
+    if (play.offense !== team) continue
+    if (!play.passer) continue
+
+    const key = normalizeName(play.passer)
+    if (!key) continue
+
+    let entry = byPasser.get(key)
+    if (!entry) {
+      entry = { season: play.season || fallbackSeason, attempts: 0, located: 0, grid: new Map() }
+      byPasser.set(key, entry)
+    }
+
+    entry.attempts++
+    if (!play.depth || !play.direction) continue
+    entry.located++
+
+    const cellKey = `${play.depth}|${play.direction}`
+    let cell = entry.grid.get(cellKey)
+    if (!cell) {
+      cell = newCell()
+      entry.grid.set(cellKey, cell)
+    }
+
+    cell.attempts++
+    if (typeof play.completion === 'boolean') {
+      cell.completionsMeasured++
+      if (play.completion) cell.completions++
+    }
+    // `Number.isFinite` and not truthiness: a 0-yard completion is a real
+    // measurement, and a throw behind the line is negative.
+    if (typeof play.yards === 'number' && Number.isFinite(play.yards)) {
+      cell.yardsMeasured++
+      cell.yards += play.yards
+    }
+    if (typeof play.touchdown === 'boolean') {
+      cell.touchdownsMeasured++
+      if (play.touchdown) cell.touchdowns++
+    }
+    if (typeof play.interception === 'boolean') {
+      cell.interceptionsMeasured++
+      if (play.interception) cell.interceptions++
+    }
+  }
+
+  const out = new Map<string, DevyPassLocations>()
+  for (const [name, entry] of byPasser) {
+    const grid: DevyPassLocationGrid = {}
+    for (const [cellKey, cell] of entry.grid) {
+      const [depth, dir] = cellKey.split('|') as ['short' | 'deep', 'left' | 'middle' | 'right']
+      grid[depth] = { ...(grid[depth] ?? {}), [dir]: sealCell(cell) }
+    }
+    out.set(name, { season: entry.season, attempts: entry.attempts, located: entry.located, grid })
+  }
+  return out
+}
+
+/*
+ * ⚠ BOUNDED AND ROTATED, BECAUSE THIS IS THE ONLY PER-TEAM FETCH IN THE INTEL
+ * SWEEP. Every other feed in `devyIntelRefresh` pulls the season in one or two
+ * calls and then loops the 50 schools only to WRITE, which is why that file's
+ * header says "there is nothing to slice". This one genuinely does cost a
+ * request per school, so a full pass is 50 against a 75,000/month allowance —
+ * affordable monthly, but not inside a 240s tick shared with the importer.
+ *
+ * So the schools are split into fixed chunks and one chunk runs per day. Five
+ * chunks at a 24h period is a full sweep every five days, against aggregates
+ * that cannot move more than once a week.
+ *
+ * ⚠ CHUNKED RATHER THAN SLICING A ROTATED LIST, and the difference is not
+ * cosmetic. `rotateForFairness` advances the offset by ONE unit per period, so
+ * taking `.slice(0, 12)` of the rotated 50-school list would re-fetch eleven of
+ * the same twelve schools every day and take fifty days to come around — the
+ * exact starvation that function exists to prevent, reintroduced by the slice.
+ * Rotating the CHUNKS moves all twelve.
+ */
+const PASS_LOCATION_TEAMS_PER_RUN = 12
+const PASS_LOCATION_PERIOD_MS = 24 * 60 * 60 * 1000
+
+function passLocationChunks(): string[][] {
+  const chunks: string[][] = []
+  for (let i = 0; i < TOP_CFB_TEAMS.length; i += PASS_LOCATION_TEAMS_PER_RUN) {
+    chunks.push(TOP_CFB_TEAMS.slice(i, i + PASS_LOCATION_TEAMS_PER_RUN))
+  }
+  return chunks
+}
+
+/** The schools this tick is responsible for. Exported so a run can be explained. */
+export function passLocationTeamsForRun(now: () => number = Date.now): string[] {
+  const chunks = passLocationChunks()
+  return rotateForFairness(chunks, PASS_LOCATION_PERIOD_MS, now)[0] ?? []
+}
+
+/**
+ * Write `DevyPlayer.passLocations` for one rotating chunk of schools.
+ *
+ * ⚠ NULLS AND ABSENCES ARE PRESERVED, the same contract as the rest of the
+ * passing ingest. A passer whose plays carried no location at all gets a grid of
+ * `{}` beside a real `attempts` count — a measured "we looked and the feed had
+ * none", not a gap — but a school the feed returned nothing for is skipped
+ * entirely rather than written as empty, because a thin response must not blank
+ * a grid an earlier, better-covered run had filled.
+ */
+export async function ingestCFBDPassLocations(
+  season?: number,
+  options?: { teams?: string[] },
+): Promise<{ updated: number; errors: string[] }> {
+  const year = season || new Date().getFullYear()
+  const teams = options?.teams ?? passLocationTeamsForRun()
+  let updated = 0
+  const errors: string[] = []
+
+  for (const team of teams) {
+    let plays: CFBPassingPlay[]
+    try {
+      plays = await getCFBPassingPlays(year, { team })
+    } catch (err: any) {
+      // A quota wall must reach the scheduler intact rather than be counted as
+      // "this school threw no measured balls".
+      if (err instanceof CfbdUnavailableError) throw err
+      errors.push(`Pass locations fetch failed for ${team}: ${err.message?.slice(0, 80)}`)
+      continue
+    }
+
+    if (plays.length === 0) continue
+
+    for (const [name, locations] of aggregatePassLocations(plays, team, year)) {
+      try {
+        const existing = await prisma.devyPlayer.findFirst({
+          where: { normalizedName: name, school: team },
+        })
+        if (!existing) continue
+
+        await prisma.devyPlayer.update({
+          where: { id: existing.id },
+          data: {
+            passLocations: toPrismaJsonInput(locations),
+            // Stamped for the same reason the season aggregates stamp it: the
+            // DB-first read filters on a non-null season, so a grid written
+            // without one would be invisible to every surface that reads it.
+            passingProfileSeason: locations.season,
+            lastSyncedAt: new Date(),
+          },
+        })
+        updated++
+      } catch (dbErr: any) {
+        errors.push(`Pass location update failed for ${name}: ${dbErr.message?.slice(0, 80)}`)
+      }
+    }
   }
 
   return { updated, errors }

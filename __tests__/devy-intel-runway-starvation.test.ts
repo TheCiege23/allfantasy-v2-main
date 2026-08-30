@@ -37,6 +37,7 @@ vi.mock('@/lib/cfbd-env', () => ({ hasCfbdApiKey: () => true, CFBD_ENV_VARS: ['C
 vi.mock('@/lib/cfb-player-data', () => ({ CfbdUnavailableError: class extends Error {} }))
 
 const ingest = vi.fn(async () => ({ updated: 7, errors: [] as string[] }))
+const ingestLocations = vi.fn(async () => ({ updated: 3, errors: [] as string[] }))
 vi.mock('@/lib/devy-classification', () => ({
   ingestCFBDTransferPortal: (...a: unknown[]) => ingest(...a),
   ingestCFBDUsageAndPPA: (...a: unknown[]) => ingest(...a),
@@ -46,6 +47,16 @@ vi.mock('@/lib/devy-classification', () => ({
   // functions by name stops covering the module the moment a phase is added —
   // the real prisma-backed ingest would then run inside a unit test.
   ingestCFBDPassingProfile: (...a: unknown[]) => ingest(...a),
+  // And again, exactly as the comment above warned: the pass-location half of
+  // the passing phase was added later and this mock had to grow with it.
+  //
+  // ⚠ ITS OWN SPY, NOT THE SHARED `ingest` COUNTER, AND THAT IS NOT THE TEST
+  // BEING LOOSENED. `ingest` is this file's proxy for "a PHASE ran", and pass
+  // locations are the second half of the passing phase rather than a sixth
+  // phase — they fetch a different grain of the same season onto the same row.
+  // Counting them as a phase would make the one-per-tick assertion below fail
+  // for a sweep that ran exactly one phase.
+  ingestCFBDPassLocations: (...a: unknown[]) => ingestLocations(...a),
 }))
 vi.mock('@/lib/devy/devyStatsRefresh', () => ({ defaultStatSeason: () => 2026 }))
 
@@ -64,6 +75,7 @@ describe('devy intel sweep — runway starvation', () => {
     findUnique.mockReset().mockResolvedValue(null) // no marker: every phase is due
     upsert.mockReset().mockResolvedValue({})
     ingest.mockClear()
+    ingestLocations.mockClear()
   })
 
   it('runs a phase when it has a full tick to itself', async () => {
@@ -90,6 +102,24 @@ describe('devy intel sweep — runway starvation', () => {
     const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
     await refreshDevyIntelSources(budgetWith(240_000) as never)
     expect(ingest).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs BOTH halves of the passing phase on the turn it leads', async () => {
+    /*
+     * The coverage the split spy above would otherwise drop. Pass locations are
+     * the only per-school fetch in the sweep, so "the phase ran" and "the
+     * locations ran" are worth asserting separately — the season aggregates
+     * landing while the location half silently never fires is precisely the
+     * shape of every CFBD bug this file was written about.
+     */
+    const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
+    const summary = await refreshDevyIntelSources(budgetWith(240_000) as never)
+
+    const passing = summary.phases.find((p) => p.phase === 'passingProfile')
+    if (!passing?.skipped) {
+      expect(ingestLocations, 'the passing phase ran without its location half').toHaveBeenCalledTimes(1)
+      expect(passing?.updated, 'the two halves were not summed into the phase total').toBe(10)
+    }
   })
 
   it('records a marker after a phase runs, so the next tick moves on', async () => {

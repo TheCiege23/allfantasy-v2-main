@@ -5,6 +5,9 @@ import {
   searchDevyPlayersFromDb,
   getDevyTeamRosterFromDb,
   getDevyValuesForNamesFromDb,
+  getDevyPassingProfileFromDb,
+  getDevyPassingProfilesByNameFromDb,
+  type DevyPassingProfile,
 } from '@/lib/devy/devyPlayerReads'
 import { prisma } from '@/lib/prisma'
 
@@ -50,6 +53,45 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/cfb-players", tool: "Le
         values: resolved.filter((v): v is DevyPlayerValue => v !== null),
         unresolved: playerNames.map(n => n.trim()).filter((_, i) => resolved[i] === null),
       })
+    }
+
+    /*
+     * Action: passing — air yards, ADOT, YAC and the short/deep × left/middle/
+     * right grid CFBD published 2026-08-30.
+     *
+     * ⚠ THE DENOMINATORS ARE PART OF THE PAYLOAD, NOT DEBUG DETAIL. CFBD's
+     * air-yard and location coverage is partial — its own note says 2025 is thin
+     * and even 2026 games can have gaps — so `adot` is an average over
+     * `airYardsAttempts`, NOT over `attempts`, and the location grid describes
+     * `locations.located` of `locations.attempts` throws. A client that renders
+     * ADOT or a tendency chart without those counts is showing a 40-attempt
+     * sample and a 400-attempt one as though they were the same measurement.
+     * They are returned alongside every figure so that cannot happen silently.
+     *
+     * A player the phase has never written is returned in `unresolved` rather
+     * than as a row of zeroes — absence is not a quarterback who threw
+     * everything at the line of scrimmage.
+     */
+    if (action === 'passing') {
+      const names = searchParams?.get('players')?.split(',').map((n) => n.trim()).filter(Boolean) ?? []
+
+      if (names.length > 0) {
+        const resolved = await Promise.all(names.map((n) => getDevyPassingProfileFromDb(n)))
+        return NextResponse.json({
+          passing: resolved.filter((p): p is DevyPassingProfile => p !== null),
+          unresolved: names.filter((_, i) => resolved[i] === null),
+        })
+      }
+
+      if (team) {
+        const byName = await getDevyPassingProfilesByNameFromDb([team])
+        return NextResponse.json({ passing: [...byName.values()] })
+      }
+
+      return NextResponse.json(
+        { error: 'action=passing needs either players= or team=' },
+        { status: 400 },
+      )
     }
 
     // Action: fantrax-roster - Get Fantrax league roster with devy values

@@ -38,6 +38,7 @@ import {
   ingestCFBDUsageAndPPA,
   ingestCFBDTeamContext,
   ingestCFBDPassingProfile,
+  ingestCFBDPassLocations,
 } from '@/lib/devy-classification'
 import { defaultStatSeason } from '@/lib/devy/devyStatsRefresh'
 import { rotateForFairness, type RunBudget } from '@/lib/cron/runBudget'
@@ -128,11 +129,38 @@ const PHASES: Array<{
      * Same cadence as usageAndPpa and for the same reason: both are derived
      * from games, and a season aggregate cannot move more than once a week.
      * Season is passed explicitly — see the note on ingestCFBDPassingProfile.
+     *
+     * ⚠ TWO INGESTS, ONE PHASE, BECAUSE LOCATION IS A DIFFERENT GRAIN. The
+     * comment above has always claimed this phase covers pass location. Until
+     * now it did not and could not: the season endpoint carries no location key,
+     * so the writer's `hasLocations` branch was false on every row ever written.
+     * Air yards, ADOT and YAC are season aggregates and arrive in two calls;
+     * short/deep × left/middle/right exists only per-attempt on
+     * `/passing/plays`, so it costs one call per school and is chunked to twelve
+     * schools a day inside `ingestCFBDPassLocations`.
+     *
+     * Kept in THIS phase rather than added as a sixth on purpose. The rotation
+     * arithmetic below is already oversubscribed — 5.14 slots of demand against
+     * 4 of supply — and a sixth entry would push `recruiting` and `teamContext`
+     * back toward the zero they were just rescued from. Both halves describe the
+     * same season on the same row, so they belong to the same turn.
+     *
+     * ⚠ THE LOCATION HALF RUNS SECOND, AND THAT ORDER MATTERS. It is the only
+     * per-school fetch in this sweep and so the only half that can run long; if
+     * the tick dies partway, the cheap season aggregates have already landed.
      */
     key: 'passingProfile',
     everyMs: 24 * HOUR_MS,
     why: 'season air-yard aggregates move only when games are played',
-    run: (season) => ingestCFBDPassingProfile(season ?? defaultStatSeason()),
+    run: async (season) => {
+      const year = season ?? defaultStatSeason()
+      const profile = await ingestCFBDPassingProfile(year)
+      const locations = await ingestCFBDPassLocations(year)
+      return {
+        updated: profile.updated + locations.updated,
+        errors: [...profile.errors, ...locations.errors],
+      }
+    },
   },
   {
     key: 'teamContext',

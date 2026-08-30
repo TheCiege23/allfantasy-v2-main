@@ -29,6 +29,7 @@ import { prisma } from '@/lib/prisma'
 import { buildDevyValueBoard } from '@/lib/devy/devyValueBoard'
 import { getEligibleDevyPlayers } from '@/lib/devy-classification'
 import type { CFBPlayer, CFBPlayerStats, DevyPlayerValue } from '@/lib/cfb-player-data'
+import type { DevyPassLocations } from '@/lib/devy-classification'
 
 /** Mirrors normalizeName in lib/devy-classification.ts — the key rows are stored under. */
 export function normalizeDevyName(name: string): string {
@@ -385,8 +386,18 @@ export interface DevyPassingProfile {
   airYardsAttempts: number | null
   yardsAfterCatch: number | null
   yacCompletions: number | null
-  /** Sparse short/deep × left/middle/right grid; `{}` when no play carried one. */
-  locations: Record<string, unknown>
+  /**
+   * Short/deep × left/middle/right, folded from `/passing/plays`.
+   *
+   * ⚠ READ `located` BEFORE THE GRID, exactly as you must read
+   * `airYardsAttempts` before `adot`. CFBD tags location only "when provided in
+   * the play data", so `attempts` is the throws seen and `located` is the throws
+   * that could be placed. A grid summing to 30 out of 400 attempts describes 7%
+   * of a passer's season and will look like a complete tendency chart if the
+   * caller does not check. Null when the phase has never written one — absence,
+   * not a passer who threw nowhere.
+   */
+  locations: DevyPassLocations | null
   /** School offensive context, for reading a passer's own ADOT against scheme. */
   teamPassAdot: number | null
   teamPassYacPerComp: number | null
@@ -428,6 +439,28 @@ type PassingRow = {
   teamPassYacPerComp: number | null
 }
 
+/**
+ * Narrow the stored JSON, refusing anything that is not the shape
+ * `ingestCFBDPassLocations` writes.
+ *
+ * ⚠ `attempts` IS THE GATE, and a bare grid is rejected on purpose. A grid
+ * without its denominator is the ADOT-without-`airYardsAttempts` bug in another
+ * column, so a legacy or hand-written value that carries only cells reads as
+ * null rather than as a complete tendency chart.
+ */
+function readStoredLocations(raw: unknown): DevyPassLocations | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const v = raw as Record<string, unknown>
+  if (typeof v.attempts !== 'number' || typeof v.located !== 'number') return null
+  if (!v.grid || typeof v.grid !== 'object' || Array.isArray(v.grid)) return null
+  return {
+    season: typeof v.season === 'number' ? v.season : 0,
+    attempts: v.attempts,
+    located: v.located,
+    grid: v.grid as DevyPassLocations['grid'],
+  }
+}
+
 function toPassingProfile(row: PassingRow): DevyPassingProfile {
   return {
     name: row.name,
@@ -441,10 +474,7 @@ function toPassingProfile(row: PassingRow): DevyPassingProfile {
     airYardsAttempts: row.airYardsAttempts,
     yardsAfterCatch: row.yardsAfterCatch,
     yacCompletions: row.yacCompletions,
-    locations:
-      row.passLocations && typeof row.passLocations === 'object' && !Array.isArray(row.passLocations)
-        ? (row.passLocations as Record<string, unknown>)
-        : {},
+    locations: readStoredLocations(row.passLocations),
     teamPassAdot: row.teamPassAdot,
     teamPassYacPerComp: row.teamPassYacPerComp,
   }
