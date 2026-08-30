@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { loadSideProjections, winProbabilityFor } from './matchupProjections'
@@ -505,11 +506,42 @@ export async function getMatchupData(
       ].filter((id) => id !== EMPTY_SLOT && !id.startsWith('name:'))
     : []
 
+  /*
+   * ── Foreign roster ids, translated before the join ──────────────────────
+   *
+   * ⚠ THE `sleeperId` JOIN BELOW HAS NEVER MATCHED AN ESPN ROSTER, because an
+   * ESPN roster carries ESPN athlete ids. Every cell on this board rendered as
+   * an unresolved row for those leagues. `PlayerIdentityMap` now holds the
+   * bridge — see `rosterIdCrosswalk.ts` — so the ids are translated here and the
+   * ORDINARY path resolves them: name, position, club and headshot, and a
+   * projection, because the projection feed is keyed on Sleeper ids too.
+   *
+   * Measured 2026-08-30: 127 of 176 distinct ESPN roster ids translate, and all
+   * 127 exist in `SportsPlayer`. The rest stay unresolved and are still counted
+   * by the identity note, which is the honest outcome for an id we hold no
+   * bridge for.
+   *
+   * ⚠ THE MAP IS KEYED ON THE ORIGINAL ROSTER ID, NOT THE TRANSLATED ONE.
+   * Everything downstream — slot order, cell lookup, the weekly score join —
+   * addresses players by the id the roster actually holds, and `leaguePlayerWeeklyScore`
+   * is written with the platform's own ids too. Translating anything but this
+   * one lookup would silently break the score join.
+   */
+  const sleeperIdByRosterId = lineupIds.length
+    ? await crosswalkToSleeperIds(league.platform, sport, [...new Set(lineupIds)]).catch(
+        () => new Map<string, string>(),
+      )
+    : new Map<string, string>()
+
+  const lookupIds = [
+    ...new Set(lineupIds.map((id) => sleeperIdByRosterId.get(id) ?? id)),
+  ]
+
   const [identityRows, scoreRows] = await Promise.all([
     lineupIds.length
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: [...new Set(lineupIds)] } },
+            where: { sleeperId: { in: lookupIds } },
             select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
           })
           .catch(() => [])
@@ -534,10 +566,20 @@ export async function getMatchupData(
    * resolved to 1,231 rows elsewhere in this codebase. First row wins, same as
    * dash34.ts, so one athlete cannot occupy a slot twice.
    */
-  const identityBy = new Map<string, (typeof identityRows)[number]>()
+  const bySleeperId = new Map<string, (typeof identityRows)[number]>()
   for (const r of identityRows) {
-    if (!r.sleeperId || identityBy.has(r.sleeperId)) continue
-    identityBy.set(r.sleeperId, r)
+    if (!r.sleeperId || bySleeperId.has(r.sleeperId)) continue
+    bySleeperId.set(r.sleeperId, r)
+  }
+
+  /*
+   * Re-keyed onto the roster's own ids, so every reader below is unchanged. A
+   * Sleeper league maps id-to-itself and this is a no-op for it.
+   */
+  const identityBy = new Map<string, (typeof identityRows)[number]>()
+  for (const rosterId of new Set(lineupIds)) {
+    const row = bySleeperId.get(sleeperIdByRosterId.get(rosterId) ?? rosterId)
+    if (row) identityBy.set(rosterId, row)
   }
   const actualBy = new Map(scoreRows.map((r) => [r.playerId, r.points]))
 

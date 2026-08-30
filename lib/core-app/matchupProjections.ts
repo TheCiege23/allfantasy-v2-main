@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 
@@ -99,7 +100,7 @@ export async function loadSideProjections(args: {
   // league's rules or one player's price.
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { settings: true },
+    select: { settings: true, platform: true, sport: true },
   })
   const scoring = extractScoringSettings(league?.settings)
 
@@ -108,7 +109,28 @@ export async function loadSideProjections(args: {
   const oppIds = byUser.get(args.opponentPlatformUserId) ?? []
   if (yourIds.length === 0 || oppIds.length === 0) return null
 
-  const lookupIds = [...yourIds, ...oppIds].filter(isResolvableId)
+  const rosterIds = [...yourIds, ...oppIds].filter(isResolvableId)
+
+  /*
+   * ⚠ `fantasyProjection.playerId` IS A SLEEPER ID, so an ESPN roster priced
+   * nothing at all — every starter came back unprojected and the board showed a
+   * column of em dashes beside names it could now read. Same cause as the
+   * identity join in `matchup.ts`, and the same fix: translate through the
+   * id-composed crosswalk before the lookup.
+   *
+   * ⚠ THE LINEUP KEEPS THE ROSTER'S OWN IDS. `matchup.ts` pairs slots and joins
+   * live scores on the id the roster holds, and `league_player_weekly_scores` is
+   * written with the platform's ids too — so only the projection lookup is
+   * translated, and `lineup[].playerId` below stays exactly what came off the
+   * roster.
+   */
+  const sleeperIdByRosterId = await crosswalkToSleeperIds(
+    String(league?.platform ?? ''),
+    String(league?.sport ?? 'NFL'),
+    rosterIds,
+  ).catch(() => new Map<string, string>())
+
+  const lookupIds = [...new Set(rosterIds.map((id) => sleeperIdByRosterId.get(id) ?? id))]
   const projections = await prisma.fantasyProjection.findMany({
     // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.
     where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' } },
@@ -126,7 +148,9 @@ export async function loadSideProjections(args: {
     let unprojected = 0
     let projectedRemaining = 0
     for (const id of ids) {
-      const proj = isResolvableId(id) ? byPlayer.get(id) : undefined
+      const proj = isResolvableId(id)
+        ? byPlayer.get(sleeperIdByRosterId.get(id) ?? id)
+        : undefined
       if (!proj) {
         unprojected++
         lineup.push({ playerId: id, projected: null })
