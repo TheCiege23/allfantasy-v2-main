@@ -3350,6 +3350,34 @@ model DevyPlayer {
   statsPayload         Json?
   /// Sport-aware NCAA source tag (e.g. cfbd, ncaab_stats) for multi-sport devy.
   ncaaSourceTag        String?   @db.VarChar(24)
+  /// Season the passing-detail columns below describe. Separate from statSeason:
+  /// the passing feed only goes back to 2025 and is partial there, so a player
+  /// can hold a 2026 stat line and a 2025 passing profile, or a stat line and no
+  /// passing profile at all.
+  passingProfileSeason Int?
+  /// Attempts the passer threw, per the passing feed.
+  passAttempts         Int?
+  passCompletions      Int?
+  /// Summed air yards over attempts that CARRIED an air-yard value.
+  airYards             Float?
+  /// Average depth of target = airYards / airYardsAttempts.
+  adot                 Float?
+  /// ⚠ ADOT's denominator, and NOT passAttempts. CFBD's air-yard coverage is
+  /// partial (2025 especially), so this is how many throws were actually
+  /// measured. A reader that treats adot as complete without checking this is
+  /// comparing a 40-attempt sample against a 400-attempt one.
+  airYardsAttempts     Int?
+  yardsAfterCatch      Float?
+  /// YAC's denominator — completions that carried a YAC value.
+  yacCompletions       Int?
+  /// Sparse short/deep × left/middle/right grid. Absent cells mean the plays
+  /// carried no location, which CFBD says is common.
+  passLocations        Json?
+  /// School passing context, offense side, from /passing/teams/season. Carried
+  /// on the player row the same way teamSpRating and returningProdPct are: it is
+  /// what makes a passer's own ADOT readable as scheme or as arm.
+  teamPassAdot         Float?
+  teamPassYacPerComp   Float?
   devyAdpHistory       DevyAdp[]
 
   @@unique([normalizedName, position, school], name: "uniq_devy_player")

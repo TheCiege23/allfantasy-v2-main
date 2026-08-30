@@ -422,8 +422,14 @@ LAST command's**, so the thing being tested never decides the result. Use
   `(Get-Item <path> -Force).LinkType` is null when there is no link.
 - `npx tsc --noEmit` OOMs at the default heap on this repo, prints a V8 crash
   dump instead of diagnostics, and `grep -c "error TS"` then returns 0 — which
-  reads exactly like a clean typecheck. Needs
-  `NODE_OPTIONS=--max-old-space-size=10240`; a real run exits 2, never 0.
+  reads exactly like a clean typecheck. Use the repo's own setting rather than a
+  remembered number: `npm run typecheck` is
+  `node --max-old-space-size=8192 …/tsc.js --noEmit`, so
+  `NODE_OPTIONS=--max-old-space-size=8192 npx tsc --noEmit` is the equivalent
+  when a script path will not resolve (a worktree with no local `node_modules`).
+  ⚠ This repo carries a standing error baseline, so a **non-zero exit is
+  normal** — the tell for the OOM is a crash dump and no `error TS` lines at
+  all, not the exit code.
 
 🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
 POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for

@@ -37,8 +37,10 @@ import {
   ingestCFBDTransferPortal,
   ingestCFBDUsageAndPPA,
   ingestCFBDTeamContext,
+  ingestCFBDPassingProfile,
 } from '@/lib/devy-classification'
-import type { RunBudget } from '@/lib/cron/runBudget'
+import { defaultStatSeason } from '@/lib/devy/devyStatsRefresh'
+import { rotateForFairness, type RunBudget } from '@/lib/cron/runBudget'
 
 const HOUR_MS = 60 * 60 * 1000
 /*
@@ -75,6 +77,11 @@ const MAX_PHASES_PER_RUN = 1
  * inside its 12h cadence.
  */
 const MIN_RUNWAY_MS = 150 * 1000
+/**
+ * How long one phase holds the lead position. Matches the `?intel=1` tick in
+ * `cron-schedule.json` (`10 STAR/6 * * *`), so a different phase leads each fire.
+ */
+const INTEL_TICK_MS = 6 * HOUR_MS
 const CACHE_PREFIX = 'devy_intel_refresh:'
 /** Marker rows outlive their cadence so a lapsed phase is still visible. */
 const MARKER_TTL_MS = 90 * 24 * HOUR_MS
@@ -104,6 +111,28 @@ const PHASES: Array<{
     everyMs: 24 * HOUR_MS,
     why: 'derived from games, so it moves at most once a week',
     run: (season) => ingestCFBDUsageAndPPA(season),
+  },
+  {
+    /*
+     * Air yards, ADOT, pass location and YAC — the five passing endpoints CFBD
+     * published 2026-08-30.
+     *
+     * ⚠ THIS PHASE IS THE WHOLE POINT OF THE FEATURE, NOT A FOLLOW-UP. Three
+     * separate times this repo has shipped correct CFBD ingest code with no
+     * scheduled caller — `ingestCFBDStats`, and the four feeds in this very
+     * list — and each time the columns sat empty in production while every
+     * surface reading them looked healthy. A passing profile nothing refreshes
+     * is worse than no passing profile: `draftProjectionScore` would start
+     * ordering the board on a snapshot that silently ages out.
+     *
+     * Same cadence as usageAndPpa and for the same reason: both are derived
+     * from games, and a season aggregate cannot move more than once a week.
+     * Season is passed explicitly — see the note on ingestCFBDPassingProfile.
+     */
+    key: 'passingProfile',
+    everyMs: 24 * HOUR_MS,
+    why: 'season air-yard aggregates move only when games are played',
+    run: (season) => ingestCFBDPassingProfile(season ?? defaultStatSeason()),
   },
   {
     key: 'teamContext',
@@ -196,8 +225,42 @@ export async function refreshDevyIntelSources(budget: RunBudget): Promise<DevyIn
     }
   }
 
+  /*
+   * 🛑 ROTATE, OR THE TAIL NEVER RUNS.
+   *
+   * This loop runs the FIRST DUE phase in order and stops. `runBudget.ts` names
+   * that exact shape as a starvation bug and ships `rotateForFairness` for it;
+   * the sweep was iterating a fixed array anyway, and the arithmetic had already
+   * gone bad before this feature touched it.
+   *
+   * Four ticks a day (`10 STAR/6`), one phase each, against cadences of
+   * 12h/24h/24h/24h/168h — 5.14 slots of demand against 4 of supply. Simulated
+   * over 28 days on the FIXED order:
+   *
+   *   transferPortal 2.00/day · usageAndPpa 1.00 · passingProfile 1.00
+   *   teamContext 0.00 · recruiting 0.00
+   *
+   * transferPortal leads and is due twice a day, so it takes half of every
+   * day's supply forever and the back of the list is never reached. `recruiting`
+   * was ALREADY at zero before the passing phase existed — it has never run on
+   * this schedule — and adding a fifth phase pushed `teamContext` to zero too.
+   *
+   * Rotated by tick, the same simulation serves all five:
+   *
+   *   transferPortal 1.43/day · usageAndPpa 0.82 · passingProfile 0.82
+   *   teamContext 0.79 · recruiting 0.14   (= exactly its 1-per-7-days cadence)
+   *
+   * Each phase now leads one tick in five, and a phase that is not leading still
+   * runs when nothing ahead of it is due. The cost is that transferPortal drifts
+   * from 2.00 to 1.43 runs a day — its 12h cadence becomes closer to 17h. That
+   * is the right trade: a portal entry landing a few hours later is news slightly
+   * stale, whereas teamContext and recruiting at zero are columns that are simply
+   * never written, which is the failure this file's own header was written about.
+   */
+  const order = rotateForFairness(PHASES, INTEL_TICK_MS)
+
   let ranThisTick = 0
-  for (const phase of PHASES) {
+  for (const phase of order) {
     if (ranThisTick >= MAX_PHASES_PER_RUN) {
       phases.push({ phase: phase.key, skipped: 'deferred: one feed per tick' })
       continue
@@ -233,7 +296,11 @@ export async function refreshDevyIntelSources(budget: RunBudget): Promise<DevyIn
         // burning the remaining phases against a wall, and say so.
         console.error(`[devy-intel] provider unavailable during ${phase.key}: ${e.message}`)
         phases.push({ phase: phase.key, skipped: e.message })
-        for (const rest of PHASES.slice(PHASES.indexOf(phase) + 1)) {
+        // Sliced from the ROTATED order, not from PHASES: after rotation the two
+        // disagree about what "the rest" is, and indexing the wrong one would
+        // report a phase as unattempted while marking an already-reported one
+        // for a second time.
+        for (const rest of order.slice(order.indexOf(phase) + 1)) {
           phases.push({ phase: rest.key, skipped: 'not attempted: provider unavailable' })
         }
         break
