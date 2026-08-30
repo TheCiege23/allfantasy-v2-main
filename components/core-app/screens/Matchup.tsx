@@ -322,7 +322,16 @@ export function Matchup({ data }: MatchupProps) {
             {initialsOf(data.league.name)}
           </span>
         )}
-        <span className="af-mu-league-name">{data.league.name}</span>
+        {/*
+          ⚠ THE PAGE HAD NO h1 AT ALL. Its outline began at "HEAD TO HEAD, SLOT
+          BY SLOT", so a screen reader jumping by heading landed halfway down and
+          nothing named the document — while the two sibling screens both have
+          one (`/core/matchup` renders "Matchup", `/core/my-team?league=` renders
+          the team name). The league is what this page is about and it is already
+          the first thing in the banner, so it is the heading rather than a new
+          one being invented above it.
+        */}
+        <h1 className="af-mu-league-name">{data.league.name}</h1>
 
         {data.week.available ? (
           <>
