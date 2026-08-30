@@ -98,6 +98,25 @@
   color: var(--muted);
 }
 
+/* The honest banner for a switched-off platform. --warn, not --bad: it is a
+   temporary state of the integration, not an error the reader caused. */
+.af-core .af-lp-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-core .af-lp-unavailable .af-label {
+  color: var(--warn);
+}
+
 .af-core .af-lp-needs {
   display: flex;
   flex-direction: column;
