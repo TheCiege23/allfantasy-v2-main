@@ -61,7 +61,19 @@ export async function buildDraftIntelligenceSnapshot(input: {
 
   const best = det.recommendation?.player ?? null
   const platformAdp = input.platformAdp ?? best?.adp ?? null
-  const valueVsMarket = clamp(det.recommendation?.adpEdge ?? 0, -40, 40)
+  /*
+   * 🛑 `adpEdge` IS ONLY A MARKET COMPARISON WHEN THE ADP IS REAL.
+   *
+   * `computeDraftRecommendation` is called above WITHOUT `aiAdpByKey`, so any player the
+   * market has not priced gets the synthetic `overall + 20` prior — against which `adpEdge`
+   * evaluates to exactly -20 at EVERY pick (clamped). A field named `valueVsMarket` was
+   * therefore reporting a fixed -20 "market" verdict for unpriced players, and the reach line
+   * below fired on 100% of picks for a wholly unpriced pool (devy / NCAAF / rookies).
+   *
+   * Zero is the honest value: no measured difference from a market that did not price them.
+   */
+  const adpIsReal = det.recommendation?.adpIsReal ?? false
+  const valueVsMarket = adpIsReal ? clamp(det.recommendation?.adpEdge ?? 0, -40, 40) : 0
 
   let leagueVsPlatformAdpDelta: number | null = null
   if (input.leagueEarlyWrRate != null) {
@@ -74,8 +86,12 @@ export async function buildDraftIntelligenceSnapshot(input: {
     marketNotes = sig.notes
   }
 
+  // Gated for the same reason as `valueVsMarket`: without a real ADP this is the -20 prior,
+  // not a reach, and it would exceed the threshold below on every pick.
   const reachVsPlatform =
-    det.recommendation != null && det.recommendation.adpEdge < -8 ? Math.abs(det.recommendation.adpEdge) : null
+    adpIsReal && det.recommendation != null && det.recommendation.adpEdge < -8
+      ? Math.abs(det.recommendation.adpEdge)
+      : null
 
   const personalizedFitScore = clamp(60 + valueVsMarket * 1.2 + (det.recommendation?.needScore ?? 50) * 0.25, 0, 100)
   const formatFitScore = clamp(55 + (input.isSuperflex ? 8 : 0) + (input.isDynasty ? 5 : 0), 0, 100)

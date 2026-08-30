@@ -111,6 +111,16 @@ export interface RecommendationResult {
     confidence: number
     needScore: number
     adpEdge: number
+    /**
+     * Whether `adpEdge` was measured against a REAL market ADP.
+     *
+     * Exposed because callers outside this module were asserting market behaviour from
+     * `adpEdge` with no way to know. `getAdp` falls back to the AI board and then to a
+     * synthetic `overall + 20`, and against that prior `adpEdge` pins to exactly -20 at every
+     * pick — so an unpriced player reads as a 20-pick reach forever. Any consumer phrasing
+     * `adpEdge` as what the market does must check this first.
+     */
+    adpIsReal: boolean
   } | null
   alternatives: Array<{ player: RecommendationPlayer; reason: string; confidence: number }>
   reachWarning: string | null
@@ -161,15 +171,27 @@ function getAdp(p: RecommendationPlayer, overall: number, aiAdpByKey?: Record<st
  * "typically drafted later (ADP ~87), this is a reach at pick 67" off a number
  * it invented. This reports whether a row's ADP is real.
  */
-function hasRealAdp(p: RecommendationPlayer, aiAdpByKey?: Record<string, number>, key?: string): boolean {
-  /*
-   * Mirrors {@link getAdp}'s order so this answers a question about the number that was
-   * ACTUALLY returned. Both branches are observed values rather than the synthetic
-   * `overall + 20` prior, which is the only thing this guard exists to keep out of the
-   * engine's spoken output.
-   */
-  if (p.adp != null && Number.isFinite(Number(p.adp))) return true
-  return Boolean(key && aiAdpByKey && aiAdpByKey[key] != null)
+/**
+ * 🛑 ONLY A REAL MARKET ADP MAY BE SPOKEN. The AI board is for ORDERING, never for claims.
+ *
+ * This used to return true when `aiAdpByKey` supplied the value, on the reasoning that an
+ * AI-derived number is OBSERVED rather than invented and so is not the thing the honesty pass
+ * was written to catch. That reasoning was rejected: what these strings assert is what THE
+ * MARKET does — "typically drafted later", "usually goes before pick N", "Market edge: +6
+ * picks vs ADP" — and an AllFantasy board built from nine in-house drafts is not the market,
+ * however genuinely it was observed. Saying so put a private measurement in the market's mouth.
+ *
+ * So the AI board joins the synthetic `overall + 20` prior on the unspeakable side of the line.
+ * {@link getAdp} still returns it and the scores still use it; it simply stops being narrated.
+ * The consequence is deliberate: a player the market has not priced now gets NO reach warning,
+ * NO value warning and NO market-edge figure, which is the honest output for a player the
+ * market has not priced.
+ *
+ * ⚠ The `aiAdpByKey`/`key` parameters are gone rather than ignored, so a future caller cannot
+ * pass them and quietly assume they still count.
+ */
+function hasRealAdp(p: RecommendationPlayer): boolean {
+  return p.adp != null && Number.isFinite(Number(p.adp))
 }
 
 function defaultTargetsForSport(sport: string): Record<string, { starter: number; ideal: number }> {
@@ -673,7 +695,7 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
     }
     const key = playerKey(p)
     const adp = getAdp(p, overall, aiAdpByKey, key)
-    const adpIsReal = hasRealAdp(p, aiAdpByKey, key)
+    const adpIsReal = hasRealAdp(p)
     const adpEdge = clamp((overall - adp) * 1.4, -20, 25)
     let formatBoost = 0
     if (normalizedSport === 'NFL' && isSF && pos === 'QB') formatBoost += 14
@@ -888,7 +910,9 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     // Honesty pass: never present a synthetic ADP as a "market edge".
     best.adpIsReal
       ? `Market edge: ${adpDelta >= 0 ? '+' : ''}${adpDelta} picks vs ADP.`
-      : `Market edge: unavailable — no ADP data for ${best.player.name}.`,
+      // "no MARKET ADP", not "no ADP data": an AI-priced player has a number, and the engine
+      // is ordering by it. What it lacks is a market price, which is the claim being withheld.
+      : `Market edge: unavailable — no market ADP for ${best.player.name}.`,
     `Position supply in pool: ${samePosCount} ${pos} candidates.`,
   ]
   if (best.vorp != null) {
@@ -896,7 +920,15 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     evidence.push(
       `Replacement value: ${v >= 0 ? '+' : ''}${v} projected pts vs the best ${pos} likely available at your next pick.`,
     )
-  } else if (best.tierDropoff != null && best.tierDropoff > 4) {
+  } else if (best.tierDropoff != null && best.tierDropoff > 4 && best.adpIsReal) {
+    /*
+     * `&& best.adpIsReal` added: this was the ONE ADP evidence line without the guard its
+     * sibling at "Market edge" already had. `tierDropoff` measures from the anchor `getAdp`
+     * returned — which may be the AI board or the synthetic prior — to a list of REAL ADPs, so
+     * the "picks later by ADP" figure was a gap between two different things. It also sits in
+     * the `else` branch taken when no projection exists, i.e. precisely the thin-data case
+     * where the anchor is least likely to be real.
+     */
     evidence.push(
       `Tier cliff: next available ${pos} goes ~${Math.round(best.tierDropoff)} picks later by ADP.`,
     )
@@ -917,6 +949,7 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
       confidence: best.confidence,
       needScore: best.needScore,
       adpEdge: best.adpEdge,
+      adpIsReal: best.adpIsReal,
     },
     alternatives,
     reachWarning,
