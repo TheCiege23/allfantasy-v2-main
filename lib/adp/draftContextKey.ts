@@ -3,27 +3,34 @@ import type { DraftContext } from '@/lib/adp/computeAllFantasyAdp'
 /**
  * ONE derivation of the AllFantasy ADP context tuple, shared by the writer and every reader.
  *
- * 🛑 THIS EXISTS BECAUSE THE WRITER AND THE READER DISAGREED, AND THE DISAGREEMENT WAS SILENT.
+ * ð THIS EXISTS BECAUSE THE WRITER AND THE READER DISAGREED, AND THE DISAGREEMENT WAS SILENT.
  * `contextHash` is a sha256 over all seven fields, so a single differing field means a reader
  * finds ZERO rows for a player the recompute wrote moments earlier. There is no partial match and
- * no error — just an empty result.
+ * no error â just an empty result.
  *
  * And an empty result is indistinguishable from the legitimate one. `readSnapshotForLeague` never
- * falls back to market ADP by design, so the UI renders em-dashes — which is exactly what it is
+ * falls back to market ADP by design, so the UI renders em-dashes â which is exactly what it is
  * supposed to render when we genuinely have no samples. A hash mismatch therefore looks like the
  * feature working correctly on a cold table.
  *
- * The three fields that actually differed, before this module:
+ * The TWO fields that actually differed, before this module:
  *
  *   draftType   writer read `DraftSession.draftType`; the reader read `settings.draft.type`
- *               and defaulted to 'snake'. Nothing keeps those two in step.
+ *               and defaulted to 'snake'. Nothing keeps those two in step, and they are
+ *               different VALUES ('linear' vs 'snake'), not different spellings.
  *   teamCount   writer read `DraftSession.teamCount`; the reader read `League.leagueSize`,
  *               which is nullable and defaulted to 12. A 10-team league with a null leagueSize
  *               was written as 10 and read as 12.
- *   leagueType  writer lowercased `leagueVariant`; the reader passed it through raw, so a stored
- *               "Dynasty" was written as `dynasty` and read as `Dynasty`.
  *
- * ⚠ THE DRAFT SESSION WINS WHERE IT EXISTS, AND THAT IS NOT ARBITRARY. The snapshot is an
+ * ⚠ AN EARLIER VERSION OF THIS COMMENT CLAIMED A THIRD: that the writer lowercased
+ * `leagueVariant` while the reader passed it through raw, so "Dynasty" and "dynasty" produced
+ * different hashes. THAT WAS WRONG. `buildContextHash` lowercases `leagueType` itself (along with
+ * draftType, scoringFormat and rosterFormat, and it uppercases sport), so casing on any of those
+ * cannot change a hash. Both sides also read the same column. The lowercasing below is kept
+ * because a canonical context object is worth having on its own terms - it is just not what was
+ * broken. Recorded rather than quietly deleted: the claim reached a commit message.
+ *
+ * â  THE DRAFT SESSION WINS WHERE IT EXISTS, AND THAT IS NOT ARBITRARY. The snapshot is an
  * aggregate of picks, and those picks came from a session. The session's own `draftType` and
  * `teamCount` describe the draft that produced them; `League.leagueSize` describes the league
  * today, which is a different question and can differ after an expansion. Anything reading a board

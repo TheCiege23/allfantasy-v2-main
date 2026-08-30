@@ -1,5 +1,5 @@
 /**
- * D.5-scheduler Ã¢ÂÂ reusable recompute service for AllFantasy AI ADP.
+ * D.5-scheduler ÃÂ¢ÃÂÃÂ reusable recompute service for AllFantasy AI ADP.
  *
  * Lifts the aggregation + upsert flow out of `scripts/recompute-allfantasy-adp.ts`
  * so a Vercel cron route (or any future caller) can run the recompute without
@@ -8,7 +8,7 @@
  * Default behavior (matches D.5 spec):
  *   - Real-mode picks only.
  *   - `source` NOT IN ('test_seed', 'undone', 'corrected', 'deleted').
- *   - `assetType` IN (null, 'player') Ã¢ÂÂ devy / dispersal picks excluded.
+ *   - `assetType` IN (null, 'player') ÃÂ¢ÃÂÃÂ devy / dispersal picks excluded.
  *   - Sport NFL by default, but `options.sport` is overridable.
  *   - Mock and test draftModes can be opted in via flags (used by the CLI).
  *
@@ -32,7 +32,7 @@ import {
 } from '@/lib/adp/computeAllFantasyAdp'
 
 /**
- * Upsert computed **`AllFantasyAdpSnapshot`** rows Ã¢ÂÂ shared by cron/CLI and tests.
+ * Upsert computed **`AllFantasyAdpSnapshot`** rows ÃÂ¢ÃÂÃÂ shared by cron/CLI and tests.
  * Does not run aggregation; pass **`AdpSnapshot`** from **`aggregateAdp`** / **`applyTrends`**.
  */
 export async function persistAllFantasyAdpSnapshots(
@@ -90,7 +90,7 @@ export interface RecomputeAllFantasyAdpOptions {
   sport?: string | null
   /** Default null = all seasons. */
   season?: string | null
-  /** Default 'real'. Pass 'all' or another mode to widen Ã¢ÂÂ cron should leave default. */
+  /** Default 'real'. Pass 'all' or another mode to widen ÃÂ¢ÃÂÃÂ cron should leave default. */
   draftMode?: DraftMode | 'all'
   /** When false (default), test_seed picks AND draftMode='test' rows are excluded. */
   includeTest?: boolean
@@ -174,7 +174,7 @@ function deriveDraftMode(row: DraftPickWithSession): DraftMode {
 }
 
 /*
- * 🛑 BOTH OF THESE DELEGATE TO `buildDraftContext`. DO NOT REINLINE THEM.
+ * ð BOTH OF THESE DELEGATE TO `buildDraftContext`. DO NOT REINLINE THEM.
  * The reader (`lib/adp/readSnapshotForLeague.ts`) had its own copy of this derivation and the two
  * disagreed on three of seven fields, so a reader found ZERO rows for players the recompute had
  * just written - and an empty AI ADP board is what the product is SUPPOSED to render when there
@@ -205,7 +205,7 @@ function deriveContext(row: DraftPickWithSession) {
 /**
  * Runs the recompute end-to-end and returns a structured report. Safe to call
  * from a Next route handler. Errors during individual upserts are captured in
- * `report.errors` rather than thrown Ã¢ÂÂ the caller decides on the HTTP status.
+ * `report.errors` rather than thrown ÃÂ¢ÃÂÃÂ the caller decides on the HTTP status.
  */
 export async function recomputeAllFantasyAdp(
   options: RecomputeAllFantasyAdpOptions = {},
@@ -255,7 +255,7 @@ export async function recomputeAllFantasyAdp(
     const picksRaw = (await prisma.draftPick.findMany({
       where: {
         /*
-         * ð SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
+         * Ã°ÂÂÂ SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
          *
          * `sportType` is nullable on BOTH DraftPick and DraftSession, and the writers that
          * matter most leave it null. `lib/draft/sleeperSync.ts` - the mirror for externally
@@ -395,13 +395,34 @@ export async function recomputeAllFantasyAdp(
     const sevenMap = new Map<string, number>()
     const thirtyMap = new Map<string, number>()
     if (snapshots.length) {
-      const orFilter = snapshots.map(({ playerKey, contextHash, draftMode: dm }) => ({
-        playerKey,
-        contextHash,
-        draftMode: dm,
-      }))
+      /*
+       * 🛑 THIS USED TO BUILD ONE `OR` CLAUSE PER SNAPSHOT, AND POSTGRES REFUSES THAT AT SCALE.
+       * Three bind variables each (playerKey, contextHash, draftMode), so 27,061 snapshots asked
+       * for 81,185 against a hard ceiling of 32,767:
+       *
+       *   Assertion violation on the database: too many bind variables in prepared statement,
+       *   expected maximum of 32767, received 81185
+       *
+       * ⚠ IT WAS LATENT UNTIL THE CORPUS GREW. The query is unchanged in intent; what changed is
+       * that folding in imported drafts took this run from a few hundred snapshots to 27,061, and
+       * the ceiling sits in between. A dry run against production is what surfaced it - no test
+       * fixture is big enough to cross a 32,767-variable limit, and the failure lands in
+       * `report.errors` rather than throwing, so the job would have kept exiting 200 with trends
+       * silently missing.
+       *
+       * Filtering by contextHash instead costs one bind variable per CONTEXT (163 here, not 27,061)
+       * and returns a superset: every prior row in those contexts rather than only the exact
+       * triples. That is harmless - `applyTrends` looks up only the keys it holds - and it is one
+       * query rather than a chunked loop.
+       */
+      const contextHashes = Array.from(new Set(snapshots.map((s) => s.contextHash)))
+      const draftModes = Array.from(new Set(snapshots.map((s) => s.draftMode)))
       const priorRows = await prisma.allFantasyAdpSnapshot.findMany({
-        where: { OR: orFilter, lastUpdatedAt: { lt: sevenDaysAgo } },
+        where: {
+          contextHash: { in: contextHashes },
+          draftMode: { in: draftModes },
+          lastUpdatedAt: { lt: sevenDaysAgo },
+        },
         select: {
           playerKey: true,
           contextHash: true,
