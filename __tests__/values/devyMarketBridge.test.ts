@@ -20,6 +20,7 @@ const {
   devyPointsToMarketUnits,
   topDevyAssetAtRate,
   DEVY_BRIDGE_SETTING_KEY,
+  DEVY_BRIDGE_CONFIG_KEY,
   DEVY_BRIDGE_MIN,
   DEVY_BRIDGE_MAX,
   DEVY_BRIDGE_CAVEAT,
@@ -27,10 +28,22 @@ const {
 
 const { identifyDevyAssets } = await import('@/lib/devy/devyTradeVerdict')
 
-const rate = (v: unknown) => ({ [DEVY_BRIDGE_SETTING_KEY]: v })
+/*
+ * ⚠ NESTED, MATCHING WHERE THE COMMISSIONER UI ACTUALLY WRITES. `DevyLeagueSettingsHub` PATCHes
+ * `devyLeagueConfig`, which the settings route stores under `devy_league_config`. A test that
+ * put the rate at the top level of `settings` would pass against a module nothing in the
+ * product could ever configure.
+ */
+const rate = (v: unknown) => ({ [DEVY_BRIDGE_CONFIG_KEY]: { version: 1, [DEVY_BRIDGE_SETTING_KEY]: v } })
 
 describe('resolveDevyBridge', () => {
-  it('is UNSET by default, which is not an error', () => {
+  it('is UNSET when the league has a devy config but no rate in it', () => {
+    const r = resolveDevyBridge({ [DEVY_BRIDGE_CONFIG_KEY]: { version: 1 } })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toBe('unset')
+  })
+
+  it('is UNSET when there is no devy config at all', () => {
     const r = resolveDevyBridge({})
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.reason).toBe('unset')

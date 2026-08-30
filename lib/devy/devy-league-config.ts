@@ -67,6 +67,14 @@ export interface DevyLeagueConfigV1 {
     ir: number
   }
   futurePickTradingEnabled: boolean
+  /**
+   * Market units per one devy point, for grading a trade that spans college and NFL assets.
+   *
+   * 🛑 OPTIONAL, AND ABSENT MEANS REFUSE. Nothing prices college players, so a mixed-scale
+   * trade is reported ungradeable unless the commissioner states a conversion himself. See
+   * lib/devy/devyMarketBridge.ts — the number is a house rule, never a measurement.
+   */
+  devyMarketUnitsPerDevyPoint?: number | null
   promotionModel: DevyPromotionModelId
   rookieDevyDraftStructure: DevyRookieDevyDraftStructureId
   /** Order style for combined or separate annual rookie/devy drafts (not startup). */
