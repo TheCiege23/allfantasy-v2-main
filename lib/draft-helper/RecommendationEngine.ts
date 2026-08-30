@@ -126,9 +126,32 @@ export interface RecommendationResult {
   uncertainty: string | null
 }
 
+/**
+ * 🛑 REAL ADP ALWAYS WINS. `aiAdpByKey` IS A FALLBACK, NOT AN OVERRIDE.
+ *
+ * This used to return `aiAdpByKey[key]` in PREFERENCE to the player's real `adp`, so an
+ * AllFantasy-computed board silently replaced the market board for every player it covered —
+ * and `hasRealAdp` below then reported the substitute as real, letting the engine speak it as
+ * market knowledge. That board is computed from AllFantasy's own completed drafts: at the time
+ * this was written the largest publishable segment was NINE drafts. Nine in-house drafts do
+ * not outrank the market, whatever their internal sample gates say.
+ *
+ * Order is now: the real ADP, then the AI/blended value for players the market has not priced,
+ * then the synthetic prior. That keeps the AI board doing the one job it is good at — covering
+ * players with no market ADP at all, which is exactly the rookie gap it exists for.
+ *
+ * ⚠ CONSEQUENCE FOR THE BLEND, RECORDED DELIBERATELY. `lib/live-draft-brain/orchestrator.ts`
+ * merges `blendedAdpByKey` into this same parameter, and that blend is
+ * `external 0.55 + site 0.35 + context 0.10` (lib/live-draft-brain/combined-ai-adp.ts). Since
+ * the live-brain path already sets `p.adp` to the EXTERNAL adp, the blend now applies only
+ * where the market has no price. That is the rule working as intended, not a side effect: a
+ * composite that is 35% in-house ADP is not "real ADP", so it must not displace one either.
+ */
 function getAdp(p: RecommendationPlayer, overall: number, aiAdpByKey?: Record<string, number>, key?: string): number {
+  const real = p.adp != null && Number.isFinite(Number(p.adp)) ? Number(p.adp) : null
+  if (real != null) return real
   if (key && aiAdpByKey && aiAdpByKey[key] != null) return aiAdpByKey[key]
-  return p.adp != null ? Number(p.adp) : overall + 20
+  return overall + 20
 }
 
 /**
@@ -139,8 +162,14 @@ function getAdp(p: RecommendationPlayer, overall: number, aiAdpByKey?: Record<st
  * it invented. This reports whether a row's ADP is real.
  */
 function hasRealAdp(p: RecommendationPlayer, aiAdpByKey?: Record<string, number>, key?: string): boolean {
-  if (key && aiAdpByKey && aiAdpByKey[key] != null) return true
-  return p.adp != null && Number.isFinite(Number(p.adp))
+  /*
+   * Mirrors {@link getAdp}'s order so this answers a question about the number that was
+   * ACTUALLY returned. Both branches are observed values rather than the synthetic
+   * `overall + 20` prior, which is the only thing this guard exists to keep out of the
+   * engine's spoken output.
+   */
+  if (p.adp != null && Number.isFinite(Number(p.adp))) return true
+  return Boolean(key && aiAdpByKey && aiAdpByKey[key] != null)
 }
 
 function defaultTargetsForSport(sport: string): Record<string, { starter: number; ideal: number }> {
