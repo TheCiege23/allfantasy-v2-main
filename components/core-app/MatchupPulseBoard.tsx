@@ -150,7 +150,19 @@ export function MatchupPulseBoard({ pulse }: MatchupPulseBoardProps) {
       {note ? <p className="af-mp-basis">{note}</p> : null}
 
       {pulse.ranked > 0 ? (
-        <div className="af-mp-cols">
+        /*
+          ⚠ ONE SIDE IS ROUTINELY EMPTY AND TWO EQUAL COLUMNS THEN LEAVE A HOLE.
+          "You are not behind in any league right now" is a single sentence
+          sitting beside up to five rows, and on a wide screen that reads as a
+          panel that failed to load rather than as good news. The same shape,
+          and the same fix, as the my-team board in MyTeamBoard.tsx — collapse to
+          one column and run the surviving list two-up, so the rows keep the
+          width the handoff draws them at instead of stretching across the board.
+        */
+        <div
+          className="af-mp-cols"
+          data-one={pulse.leading.length === 0 || pulse.trailing.length === 0 || undefined}
+        >
           <div className="af-mp-col">
             <h3 className="af-label af-mp-col-head" data-tone="good">
               Leading · top 5

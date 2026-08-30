@@ -70,6 +70,23 @@
   gap: 14px;
 }
 
+/*
+  One list is empty — see the note in MatchupPulseBoard.tsx. Scoped above the
+  phone breakpoint on purpose: below it the board is already one column, and a
+  two-up row grid there would be two 160px rows.
+*/
+@media (min-width: 781px) {
+  .af-mp-cols[data-one] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .af-mp-cols[data-one] .af-mp-rows {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+}
+
 .af-mp-col {
   display: flex;
   flex-direction: column;

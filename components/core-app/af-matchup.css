@@ -610,6 +610,76 @@
   }
 }
 
+@media (max-width: 560px) {
+  /*
+   * ⚠ NINETEEN OF TWENTY NAMES ON THIS BOARD WERE TRUNCATED, BOTH SIDES.
+   *
+   * Measured at 375px before this: each half resolves to 125px and spends it on
+   * a 26px portrait, a 9px gap and a ~34px points cell, leaving the name 54px
+   * against a 106px "David Montgomery". Every row read "David ...", "Javonte...",
+   * "Luther ..." — on a screen whose only job is telling you which of your
+   * starters is beating which of theirs. The 780px pass shrank the fonts and
+   * dropped the sub-line, which bought a few pixels and never checked whether
+   * the names then fit.
+   *
+   * The half becomes a two-row grid instead: portrait beside a stack of name
+   * over points. Nothing is dropped — not the portrait, not the club crest on
+   * its corner, not a digit of the score — and the name gets 91px with two
+   * lines to use, which clears the longest single word on file ("Montgomery",
+   * 72px).
+   *
+   * ⚠ THE POINTS STAY VERTICALLY ALIGNED ACROSS THE SPINE, which is the whole
+   * reason this is a grid rather than a wrap. Both halves put points on row 2,
+   * so yours and theirs still read straight across the slot label. Letting them
+   * wrap naturally would have put one side's score beside a one-line name and
+   * the other's below a two-line one, and the comparison this section exists
+   * for would be gone.
+   */
+  .af-mu-board-row .af-mu-half {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 1px;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-portrait {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-half-text {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-half-pts {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  /* The opponent's half mirrors: portrait outboard, text and score against the
+     spine. `flex-direction: row-reverse` above is inert once this is a grid. */
+  .af-mu-board-row .af-mu-half[data-align='right'] {
+    grid-template-columns: minmax(0, 1fr) 26px;
+    justify-items: end;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-portrait {
+    grid-column: 2;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-half-text,
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-half-pts {
+    grid-column: 1;
+  }
+
+  /* Two lines, clamped, so one long name cannot run the row away. */
+  .af-mu-board-row .af-mu-half-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+}
+
 /*
   "View Matchup in Sleeper ↗" — the read-only escape hatch on the week banner.
   Sits after the state chip, which already carries the `margin-left:auto` that
