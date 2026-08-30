@@ -18,7 +18,7 @@
  * duplication is what let the two drift 3-6x in size without anything failing.
  */
 import { describe, expect, it } from 'vitest'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const ROOT = process.cwd()
@@ -69,6 +69,34 @@ describe('IDP components are not forked across the two trees', () => {
       const stillBoth = has(`app/idp/components/${n}`) && has(`components/idp/${n}`)
       expect(stillBoth, `${n} is no longer forked — remove it from KNOWN_STILL_FORKED`).toBe(true)
     }
+  })
+
+  /**
+   * 🛑 THE FORM THE DELETIONS ACTUALLY MISSED. `components/idp/index.ts` re-exported three of
+   * the components that were deleted, and the lines outlived them by two commits — three
+   * TS2307s with no symptom, because nothing imports the barrel.
+   *
+   * A `export { X } from './Y'` is a CONSUMER of './Y' that an importer census cannot see: it
+   * is not an import, not a relative import of this module, not a dynamic import, not a mock.
+   * It is the "re-export facade" case CLAUDE.md names, reached from the direction the rule does
+   * not phrase — this module pointing at one that is gone, rather than one pointing here.
+   */
+  it('has no barrel re-export pointing at a deleted module', () => {
+    const barrel = 'components/idp/index.ts'
+    const src = readFileSync(resolve(ROOT, barrel), 'utf8')
+    /*
+     * Anchored to a real export STATEMENT, not to the text "from '...'" anywhere in the file.
+     * The first cut matched prose: the barrel's own comment explains the rule using `from './Y'`
+     * as an example, and the guard dutifully reported './Y' as a deleted module. A check that
+     * reads source as text rather than as code will find its own documentation.
+     */
+    const targets = [...src.matchAll(/^export\b[^\r\n]*\sfrom\s+'(\.[^']+)'/gm)].map((m) => m[1])
+    expect(targets.length).toBeGreaterThan(0)
+    const dangling = targets.filter((t) => {
+      const base = `components/idp/${t.replace(/^\.\//, '')}`
+      return !has(`${base}.tsx`) && !has(`${base}.ts`)
+    })
+    expect(dangling).toEqual([])
   })
 
   /** All four resolutions, pinned so a revert is loud rather than silent. */
