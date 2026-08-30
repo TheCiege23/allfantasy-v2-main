@@ -1,0 +1,322 @@
+/*
+ * Public per-platform import landing pages.
+ *
+ * Scoped under `.af-core` like every other af-*.css — the tokens are declared
+ * there and nowhere else. Responsive by construction: one column, fluid type, and
+ * the only multi-column block collapses at 640px. There is no separate mobile
+ * implementation to drift.
+ */
+
+.af-core.af-lp {
+  min-height: 100vh;
+  background: var(--bg);
+  background-image: var(--hero);
+  background-repeat: no-repeat;
+  color: var(--text);
+}
+
+.af-core .af-lp-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-core .af-lp-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+
+.af-core .af-lp-wordmark {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-core .af-lp-brand:hover .af-lp-wordmark {
+  color: var(--accent);
+}
+
+.af-core .af-lp-readonly {
+  margin-left: auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-core .af-lp-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 20px 72px;
+}
+
+.af-core .af-lp-crumbs {
+  font-size: 12px;
+  color: var(--faint);
+  margin-bottom: 18px;
+}
+.af-core .af-lp-crumbs a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.af-core .af-lp-crumbs a:hover {
+  color: var(--accent);
+}
+
+.af-core .af-lp-eyebrow {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--accent);
+}
+
+.af-core .af-lp-h1 {
+  margin: 0 0 14px;
+  /* Fluid rather than a breakpoint swap — one rule covers 320px to desktop. */
+  font-size: clamp(30px, 6vw, 46px);
+  line-height: 1.06;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-core .af-lp-intro {
+  margin: 0 0 20px;
+  font-size: clamp(15px, 2.2vw, 17px);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-core .af-lp-needs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 22px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+.af-core .af-lp-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.af-core .af-lp-cta {
+  min-height: 52px;
+  padding: 0 26px;
+  font-size: 15.5px;
+  text-decoration: none;
+}
+
+.af-core .af-lp-cta-note {
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
+.af-core .af-lp-soon {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.af-core .af-lp-section {
+  margin-bottom: 40px;
+}
+
+.af-core .af-lp-h2 {
+  margin: 0 0 16px;
+  font-size: clamp(20px, 3.2vw, 25px);
+  line-height: 1.2;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+/* ── Steps ───────────────────────────────────────────────────────────── */
+
+.af-core .af-lp-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  counter-reset: none;
+}
+
+.af-core .af-lp-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+.af-core .af-lp-step-n {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+/* ── Trust ───────────────────────────────────────────────────────────── */
+
+.af-core .af-lp-trust {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+.af-core .af-lp-trust-col {
+  padding: 18px 20px;
+}
+.af-core .af-lp-trust-col + .af-lp-trust-col {
+  border-left: 1px solid var(--line);
+}
+.af-core .af-lp-trust-col p {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-core .af-lp-read {
+  color: var(--good);
+}
+.af-core .af-lp-never {
+  color: var(--bad);
+}
+
+/* ── FAQ ─────────────────────────────────────────────────────────────── */
+
+.af-core .af-lp-faq {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-core .af-lp-faq-item {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-core .af-lp-faq-q {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-lp-faq-a {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text2);
+}
+
+/* ── Sibling platforms ───────────────────────────────────────────────── */
+
+.af-core .af-lp-others {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.af-core .af-lp-other {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-lp-other:hover {
+  border-color: var(--accent-line, var(--accent));
+  color: var(--text);
+}
+
+.af-core .af-lp-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.af-core .af-lp-foot {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.af-core .af-lp-foot-link {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .af-core .af-lp-trust {
+    grid-template-columns: 1fr;
+  }
+  .af-core .af-lp-trust-col + .af-lp-trust-col {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .af-core .af-lp-cta {
+    width: 100%;
+    justify-content: center;
+  }
+}
