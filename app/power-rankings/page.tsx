@@ -14,6 +14,7 @@ import {
 } from "@/lib/sport-scope";
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
 import { KickerValuationBand, type KickerValuationView } from "./KickerValuationBand";
+import { selectLatestSeasonLeagues } from "./latestSeasonLeagues";
 
 type LeagueFormat = "redraft" | "dynasty" | "keeper";
 type RankingView = "power" | "dynasty" | "composite";
@@ -702,6 +703,16 @@ function LeagueGate({
   onSelect: (league: UserLeague) => void;
 }) {
   const { t, tInterpolate } = useLanguage();
+
+  /*
+   * One season only — the newest the reader actually has. See `selectLatestSeasonLeagues` for
+   * why it is resolved from the list rather than from the calendar.
+   */
+  const { visibleLeagues, latestSeason, hiddenCount } = useMemo(
+    () => selectLatestSeasonLeagues(leagues),
+    [leagues],
+  );
+
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
       <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
@@ -713,6 +724,15 @@ function LeagueGate({
           </div>
           <h1 className="mt-2 text-3xl font-black">{t("powerRankingsPage.selectLeagueTitle")}</h1>
           <p className="mt-2 text-sm text-white/45">{t("powerRankingsPage.selectLeagueBody")}</p>
+          {/* Hidden leagues are stated, never silently dropped — otherwise this reads as data loss. */}
+          {latestSeason && hiddenCount > 0 ? (
+            <p className="mt-1 text-xs text-white/35">
+              {tInterpolate("powerRankingsPage.seasonFilterNote", {
+                season: latestSeason,
+                n: hiddenCount,
+              })}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -745,9 +765,9 @@ function LeagueGate({
           </div>
         ) : null}
 
-        {!loading && leagues.length > 0 ? (
+        {!loading && visibleLeagues.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {leagues.map((league) => {
+            {visibleLeagues.map((league) => {
               const platform = PLATFORM_LABELS[league.platform] ?? PLATFORM_LABELS.sleeper;
               return (
                 <button
