@@ -32,7 +32,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const payload = await getDashboardLeagueListForUser(userId)
+    let collapseSeries = false
+    try {
+      collapseSeries = new URL(request.url).searchParams.get('collapseSeries') === '1'
+    } catch {
+      /* Malformed URL is not a reason to fail; serve the default shape. */
+    }
+
+    const payload = await getDashboardLeagueListForUser(userId, { collapseSeries })
 
     let summary = false
     try {
