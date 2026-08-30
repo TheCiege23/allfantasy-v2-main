@@ -290,11 +290,21 @@
 
 /* ── Visible focus ────────────────────────────────────────────────────────
  *
- * ⚠ af-core DEFINES NO focus-visible RULE AT ALL — grep it, the count is zero.
- * So every button on this sheet fell through to the user agent's default
- * outline, which on `--surface2` in the dark theme is a thin dark ring on a dark
- * ground. The `?` explainer had its own ring; the five controls that DO
- * something did not.
+ * ⚠ WHEN THIS WAS WRITTEN af-core DEFINED NO focus-visible RULE AT ALL, so every
+ * button on this sheet fell through to the user agent's default outline — on
+ * `--surface2` in the dark theme, a thin dark ring on a dark ground. The `?`
+ * explainer had its own ring; the five controls that DO something did not.
+ *
+ * ⚠ THAT IS NO LONGER TRUE, AND THE ORIGINAL WORDING TOLD YOU TO CHECK IT THE
+ * WRONG WAY. It read "grep it, the count is zero" — an instruction that stopped
+ * being correct in the very same batch this shipped in, once af-core gained a
+ * `:where()`-scoped focus FLOOR. A reader following it would grep, get a
+ * non-zero count, and have no way to tell which file was lying.
+ *
+ * The floor does not replace these rules and they are not redundant: it weighs
+ * (0,1,0) and every rule below is (0,3,0), so these still win. The floor is what
+ * covers controls nobody has written a rule for; this block is what gives the
+ * destructive one its own tone.
  *
  * ⚠ AND THIS SHEET IS WHERE IT MATTERS MOST, because one of those controls is
  * Disconnect. A keyboard user tabbing a stack of per-platform rows has to be
