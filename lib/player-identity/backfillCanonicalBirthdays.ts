@@ -43,31 +43,19 @@ export type BirthdayBackfillSummary = {
   skippedAlreadySet: number
 }
 
-/**
- * A `YYYY-MM-DD` string as a UTC-midnight Date, or null.
+/*
+ * ⚠ MOVED TO `birthdayRules.ts`, RE-EXPORTED HERE SO NOTHING BREAKS. Both rules
+ * are now shared with `lib/espn/sleeperDobMap.ts`, which feeds the same
+ * birthdays to the same matcher at link time and must apply the same Jan-1
+ * exclusion — a second copy that drifted would mean two callers disagreeing
+ * about which birthdays are real. That module cannot import from this one,
+ * because this file pulls prisma at module scope.
  *
- * Anything else is refused rather than coerced. `new Date('9/6/02')` succeeds and
- * means something different in two time zones, and a birthday that shifts by a day
- * is a birthday that stops matching.
+ * The rules themselves, and the measurements behind them, are unchanged.
  */
-export function parseBirthday(value: string | null | undefined): Date | null {
-  const raw = String(value ?? '').trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
-  const year = Number(raw.slice(0, 4))
-  if (year < 1940 || year > 2015) return null
-  const parsed = new Date(`${raw}T00:00:00.000Z`)
-  if (Number.isNaN(parsed.getTime())) return null
-  /* Reject a date that rolled over — '2001-02-30' parses to March 2nd. */
-  if (parsed.toISOString().slice(0, 10) !== raw) return null
-  return parsed
-}
+import { parseBirthday, isPlaceholderBirthday } from './birthdayRules'
 
-/** True for the filler dates measured above. See the header. */
-export function isPlaceholderBirthday(value: string | null | undefined): boolean {
-  return String(value ?? '')
-    .trim()
-    .slice(5) === '01-01'
-}
+export { parseBirthday, isPlaceholderBirthday }
 
 /**
  * Copy birthdays from a provider's `SportsPlayer` rows onto the canonical players

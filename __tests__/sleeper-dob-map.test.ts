@@ -102,6 +102,37 @@ describe('buildSleeperDobMap', () => {
     expect(map.get('p1')).toBe('1999-03-11')
   })
 
+  /*
+   * ⚠ THE OTHER LOAD-BEARING ONE, AND THE FIRST CUT OF THIS MODULE MISSED IT.
+   * `backfillCanonicalBirthdays` travels the same id chain and excludes Jan 1 on
+   * measured grounds: across 2,023 well-formed birthdays those dates carry 3.17
+   * players each against 1.34 for every other day, and 2001-01-01 alone has 8.
+   * An agreeing birthday is treated as near decisive, so eight players sharing a
+   * filler one would produce eight 0.95-confidence links between different
+   * people — strictly worse than having no birthday at all.
+   */
+  it('refuses a placeholder January 1 birthday', () => {
+    const map = buildSleeperDobMap(
+      [
+        { playerId: 'p1', providerPlayerId: '4034' },
+        { playerId: 'p2', providerPlayerId: '6794' },
+      ],
+      [
+        { sleeperId: '4034', dob: '2001-01-01' },
+        { sleeperId: '6794', dob: '1999-01-01' },
+      ],
+    )
+    expect(map.size).toBe(0)
+  })
+
+  it('keeps a real birthday that merely falls in January', () => {
+    const map = buildSleeperDobMap(
+      [{ playerId: 'p1', providerPlayerId: '4034' }],
+      [{ sleeperId: '4034', dob: '1999-01-02' }],
+    )
+    expect(map.get('p1')).toBe('1999-01-02')
+  })
+
   it('trims a padded birthday rather than passing whitespace to the matcher', () => {
     const map = buildSleeperDobMap(
       [{ playerId: 'p1', providerPlayerId: '4034' }],

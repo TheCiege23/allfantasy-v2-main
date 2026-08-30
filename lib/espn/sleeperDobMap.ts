@@ -17,7 +17,24 @@
  *
  * ⚠ A PURE MODULE, because the file that uses it imports prisma at module scope
  * and a unit test could not load it. Same reason as `descriptiveId.ts`.
+ *
+ * 🛑 IT MUST APPLY THE SAME PLACEHOLDER RULE AS `backfillCanonicalBirthdays`, AND
+ * THE FIRST CUT OF THIS FILE DID NOT. That module travels the same id chain to
+ * write `Player.birthDate`, and it excludes January 1 on measured grounds:
+ * across 2,023 well-formed thesportsdb NFL birthdays, Jan-1 dates average 3.17
+ * players per date against 1.34 for every other day, and `2001-01-01` alone
+ * carries 8. It is a filler value.
+ *
+ * Feeding a filler birthday to the matcher is worse than feeding it none,
+ * because an agreeing birthday is treated as near decisive — eight players
+ * "agreeing" on 2001-01-01 would produce eight 0.95-confidence links between
+ * DIFFERENT PEOPLE. The whole value of this enrichment rests on a birthday
+ * being strong evidence, which is exactly why a fake one cannot be allowed
+ * through. The rule is imported rather than copied so the two paths cannot
+ * drift apart.
  */
+
+import { isPlaceholderBirthday } from '@/lib/player-identity/birthdayRules'
 
 export type IdentityRow = {
   /** `Player.id`. Rows with none are ignored by the caller. */
@@ -65,6 +82,8 @@ export function buildSleeperDobMap(
     /* First wins: the caller reads these in one query with no ordering
        guarantee, so a duplicate must not silently flip the value between runs. */
     if (!r.sleeperId || !dob || dobBySleeperId.has(r.sleeperId)) continue
+    /* A filler birthday is worse than none — see the header. */
+    if (isPlaceholderBirthday(dob)) continue
     dobBySleeperId.set(r.sleeperId, dob)
   }
 
