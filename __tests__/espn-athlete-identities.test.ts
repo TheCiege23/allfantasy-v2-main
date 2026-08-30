@@ -235,3 +235,40 @@ describe('⚠ the list endpoint lies about pagination', () => {
     expect(ADAPTER).toContain('if (response.status === 404) return null')
   })
 })
+
+/*
+ * 🛑 THE LINKER SPENT EVERY RUN ON THE SAME 400 UNLINKABLE ROWS.
+ *
+ * Only a SUCCESSFUL link clears `playerId`, so a refused row never leaves the
+ * pending set. With `take: 400` and no ordering, Postgres returned the same
+ * physical head every tick, and that head is retired players this module
+ * already documents as correctly unmatchable.
+ *
+ * Measured by running the real cron against production 2026-08-29:
+ * considered 400, attempted 353, linked 0 — with 826 rows behind it, where the
+ * players on live ESPN rosters actually are, never once examined. Across the
+ * whole pending set the same matcher links 222.
+ */
+describe('⚠ the pending set has no head to get stuck on', () => {
+  const LINK = readFileSync(
+    resolve(process.cwd(), 'lib/espn/linkEspnIdentities.ts'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+
+  it('records the measurement, because the cap looks harmless', () => {
+    expect(LINK).toContain('THAT WAS THIS FUNCTION&apos;S CLAIM AND IT WAS FALSE'.replace('&apos;', "'"))
+    expect(LINK).toContain('considered 400   attempted 353   linked 0')
+  })
+
+  it('defaults to covering the whole pending set, not a ration of it', () => {
+    /* 1,226 rows pending on production; anything in the hundreds re-creates the
+       head. `isExhausted` is what bounds the tick. */
+    const m = LINK.match(/options\?\.maxRows \?\? (\d+)/)
+    expect(m).not.toBeNull()
+    expect(Number(m![1])).toBeGreaterThanOrEqual(2000)
+  })
+
+  it('keeps the runway check as the real bound', () => {
+    expect(LINK).toContain('isExhausted')
+  })
+})

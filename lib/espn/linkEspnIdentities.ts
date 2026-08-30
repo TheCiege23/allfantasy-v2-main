@@ -138,15 +138,53 @@ async function loadSleeperDobs(sportKey: string): Promise<Map<string, string>> {
 /**
  * Link the ESPN identity rows that carry enough evidence to be linked safely.
  *
- * Bounded and resumable in the same shape as the ingest that calls it: a run that
- * stops early is still progress, because the next one starts from a shorter list.
+ * 🛑 "A RUN THAT STOPS EARLY IS STILL PROGRESS, BECAUSE THE NEXT ONE STARTS FROM
+ * A SHORTER LIST" — THAT WAS THIS FUNCTION'S CLAIM AND IT WAS FALSE. Only a
+ * SUCCESSFUL link clears `playerId`, so a refused row never leaves the pending
+ * set. With `take: 400` and no `orderBy`, Postgres returned the same physical
+ * head every run, and that head is barren: the low ESPN ids are retired players
+ * this module already documents as correctly unmatchable (10140 Zac Alcorn,
+ * 1027 Donnie Abraham, 10147 Miles Austin).
+ *
+ * Measured by running the real cron against production 2026-08-29:
+ *
+ *     considered 400   attempted 353   linked 0   refused 204   unmatched 149
+ *
+ * Zero, and zero on every previous tick — 31 rows linked in total since
+ * 2026-08-28, while the 826 rows BEHIND that head, which is where the players
+ * on real ESPN rosters live, were never once examined. Simulated across the
+ * whole pending set the same matcher links 222.
+ *
+ * ⚠ THE FIX IS TO STOP HAVING A HEAD, NOT TO ORDER IT DIFFERENTLY. Any fixed
+ * ordering just relocates the problem: link the first N and a fresh stable head
+ * of refused rows forms behind them. So the cap now covers the entire pending
+ * set. That is affordable because the expensive part of a run — loading two
+ * candidate pools of ~13k and ~3.3k — happens ONCE regardless, and the per-row
+ * work after it is a Map lookup and a scored bucket. The full 1,226-row pass
+ * completes in seconds.
+ *
+ * `isExhausted` remains the real bound, and it is now the ONLY one.
+ *
+ * ⚠ RESIDUAL, STATED RATHER THAN PAPERED OVER: if a run is cut short by
+ * `isExhausted` the tail is still lost, and the next run re-reads the same
+ * order. That is acceptable while the pending set is ~1.2k and a pass is
+ * seconds. It stops being acceptable if this set ever grows into the tens of
+ * thousands, and the fix then is an attempt marker on the row — the table's
+ * `lastSeenAt`/`sourceUpdatedAt` carry provider meaning and must not be
+ * repurposed for it.
  */
 export async function linkEspnIdentitiesToCanonical(options?: {
   maxRows?: number
   sportKey?: string
   isExhausted?: () => boolean
 }): Promise<EspnLinkSummary> {
-  const maxRows = options?.maxRows ?? 400
+  /*
+   * Sized to clear the whole pending set, not to ration it. Production holds
+   * 1,226 unlinked ESPN rows; the headroom is for growth, and `isExhausted` is
+   * what actually protects the tick. A caller that genuinely wants a small
+   * sample still passes `maxRows`.
+   */
+  const maxRows = options?.maxRows ?? 5000
   const sportKey = options?.sportKey ?? 'NFL'
   const summary: EspnLinkSummary = { ...EMPTY }
 
