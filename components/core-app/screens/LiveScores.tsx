@@ -123,6 +123,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   }
 
   const ageSeconds = useMemo(() => {
+    /*
+     * ⚠ NULL IS CHECKED BEFORE `new Date`, NOT AFTER. `new Date(null)` is the
+     * epoch, not an invalid date, so it parses cleanly and would render an age
+     * measured in decades. The loader now returns null when it cannot date the
+     * feed — see `LivePageData.fetchedAt` — and this is what turns that into no
+     * claim rather than an absurd one.
+     */
+    if (data.fetchedAt == null) return null
     const at = new Date(data.fetchedAt).getTime()
     // No age before mount, and none for an unparseable timestamp. Both render
     // without a freshness claim rather than with a wrong one.

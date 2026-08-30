@@ -93,14 +93,6 @@ describe('composePlayerIdentities', () => {
   })
 
   /*
-   * ⚠ A PASSTHROUGH IS NOT A FOLD, AND THE DIFFERENCE IS INVISIBLE AT THE CALL
-   * SITE. `normalizeTeamAbbrev` returns the input upper-cased when it knows no
-   * such club, so the value still looks resolved. Kept rather than dropped —
-   * "WEST HAM UNITED" under a name is worse than nothing only if it is fed to a
-   * crest CDN, and this module's contract is that anything over four characters
-   * did not fold.
-   */
-  /*
    * ⚠ THE FOLD IS NFL-ONLY AND MUST LEAVE OTHER SPORTS ALONE.
    * `normalizeTeamAbbrev` is an NFL table that passes anything else through
    * UPPER-CASED, so running it over an NBA or soccer roster produces a shouty
