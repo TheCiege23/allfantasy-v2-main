@@ -1,0 +1,503 @@
+/*
+ * AF Devy — the Core devy hub and the per-league devy tab.
+ *
+ * Built from `design-refs/devy-handoff/` (AF Devy Core.dc.html, AF Devy League Tab.dc.html).
+ *
+ * ⚠ THE HANDOFF'S RAW HEX IS DELIBERATELY NOT USED. Its tokens.css and `af-core.css`
+ * share variable NAMES and disagree on VALUES — `--faint` is #5d648a in the handoff and
+ * #7d84a8 here, because af-core.css measured the handoff value against 4.5:1 and it fails
+ * everywhere except plain `--surface`. Pasting the mock's hex would reintroduce a contrast
+ * failure that this codebase already found and fixed once, and would freeze these two
+ * screens in dark mode while every sibling screen follows `data-mode`.
+ *
+ * So every colour below is `var(--token)` from af-core.css. Light and `af` themes come
+ * free; nothing here needs to know they exist.
+ *
+ * ⚠ FONTS COME FROM app/layout.tsx, NOT FROM AN @import HERE. af-core.css explains why at
+ * length: Next concatenates this folder into one route bundle, af-geo.css lands first, and
+ * an `@import` after any rule is dropped silently by the parser. Ask for the variables.
+ */
+
+/*
+ * Screen-reader-only text.
+ *
+ * ⚠ DEFINED HERE BECAUSE IT DID NOT EXIST. The trend indicators are glyphs — ↑ ↓ — which
+ * a screen reader announces as "up arrow" or skips entirely, so each carries a written
+ * label beside it. A first pass referenced `.af-sr-only` assuming a utility class the way
+ * Tailwind provides one; `grep` across af-*.css and globals.css found none, which would
+ * have rendered "Trending up" as visible text next to every arrow rather than hiding it.
+ *
+ * The clip-rect pattern rather than `display:none` or `visibility:hidden`, both of which
+ * remove the text from the accessibility tree as well as from the page.
+ */
+.af-devy .af-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.af-devy {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ── shared shell ─────────────────────────────────────────────── */
+
+.af-devy-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.af-devy-eyebrow {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.af-devy-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-devy-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 560px;
+}
+
+.af-devy-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.af-devy-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+/* ── state panels ─────────────────────────────────────────────── */
+
+.af-devy-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 70px 30px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  text-align: center;
+}
+
+.af-devy-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--chip-line);
+  border-top-color: var(--accent);
+  animation: af-devy-spin 0.9s linear infinite;
+}
+
+@keyframes af-devy-spin {
+  to { transform: rotate(360deg); }
+}
+
+/*
+ * ⚠ THE MOCK HAS NO REDUCED-MOTION PATH AND THE HANDOFF SAYS SO. Its README asks the
+ * implementation to add one. A 0.9s infinite rotation is exactly the kind of thing that
+ * makes a vestibular-sensitive reader look away from the screen they came to read.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .af-devy-spinner {
+    animation: none;
+    border-top-color: var(--accent);
+    opacity: 0.7;
+  }
+}
+
+.af-devy-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.af-devy-skel span {
+  height: 14px;
+  border-radius: 7px;
+  background: var(--chip);
+  display: block;
+}
+
+/* ── prospect hero rows ───────────────────────────────────────── */
+
+.af-devy-prospect {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.af-devy-prospect:first-of-type { border-top: 0; }
+
+.af-devy-rank {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--faint);
+  min-width: 22px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-devy-avatar-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+}
+
+.af-devy-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  display: block;
+}
+
+/* Fallback when no headshot URL exists — initials, never a broken image icon. */
+.af-devy-avatar-fb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--faint);
+}
+
+.af-devy-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 8px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.af-devy-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-devy-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.af-devy-blurb {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text2);
+  margin-top: 5px;
+  max-width: 460px;
+}
+
+.af-devy-statrow {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.af-devy-stat-v {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-devy-stat-l {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+/* Grade thresholds are the handoff's: >=93 good, >=88 accent, else neutral. */
+.af-devy-grade {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 18px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-devy-grade--good { color: var(--good); }
+.af-devy-grade--accent { color: var(--accent); }
+.af-devy-grade--neutral { color: var(--text2); }
+
+.af-devy-trend { font-size: 11px; font-weight: 700; }
+.af-devy-trend--up { color: var(--good); }
+.af-devy-trend--down { color: var(--bad); }
+.af-devy-trend--flat { color: var(--faint); }
+
+/* ── tables ───────────────────────────────────────────────────── */
+
+.af-devy-tablewrap { overflow-x: auto; }
+
+.af-devy-table {
+  width: 100%;
+  min-width: 460px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.af-devy-table th {
+  text-align: left;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+  text-transform: uppercase;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-devy-table td {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text2);
+}
+
+.af-devy-table td:first-child { color: var(--text); font-weight: 600; }
+.af-devy-table tr:last-child td { border-bottom: 0; }
+
+.af-devy-num {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.af-devy-num--accent { color: var(--accent); }
+
+/* ── chips ────────────────────────────────────────────────────── */
+
+.af-devy-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.af-devy-chip {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.af-devy-chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.af-devy-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── grids ────────────────────────────────────────────────────── */
+
+.af-devy-grid2,
+.af-devy-grid3,
+.af-devy-grid4 {
+  display: grid;
+  gap: 10px;
+}
+
+.af-devy-grid2 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.af-devy-grid3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.af-devy-grid4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+.af-devy-tile {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.af-devy-tile--dashed {
+  border-style: dashed;
+  border-color: var(--line2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* ── pills / tags ─────────────────────────────────────────────── */
+
+.af-devy-pill {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.af-devy-tag {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 4px 7px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.af-devy-tag--breakout { background: var(--good-soft); color: var(--good); }
+.af-devy-tag--injury { background: var(--bad-soft); color: var(--bad); }
+.af-devy-tag--combine { background: var(--warn-soft); color: var(--warn); }
+.af-devy-tag--transfer { background: var(--accent-soft); color: var(--accent); }
+.af-devy-tag--neutral { background: var(--chip); color: var(--muted); }
+
+/* ── buttons ──────────────────────────────────────────────────── */
+
+.af-devy-btn {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.af-devy-btn:hover { filter: brightness(1.08); }
+.af-devy-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-devy-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.af-devy-btn--ghost {
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+}
+
+/* ── news rows ────────────────────────────────────────────────── */
+
+.af-devy-news {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.af-devy-news:first-of-type { border-top: 0; }
+
+.af-devy-time {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  color: var(--faint);
+  margin-left: auto;
+  white-space: nowrap;
+  padding-left: 8px;
+}
+
+.af-devy-note {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--faint);
+  margin-top: 10px;
+}
+
+/* ── league-tab specifics ─────────────────────────────────────── */
+
+.af-devy-slot-name { font-size: 13px; font-weight: 700; color: var(--text); }
+
+.af-devy-pick-lab {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+
+.af-devy-pick--live {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-devy-pick--live .af-devy-pick-status { color: var(--accent); font-weight: 800; }
+
+.af-devy-pick-status { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .af-devy-prospect { flex-wrap: wrap; }
+  .af-devy-statrow { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .af-devy-blurb { max-width: none; }
+}
