@@ -35,6 +35,7 @@ import {
   type CanonicalCandidate,
 } from '@/lib/player-identity/matchProviderAthlete'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { buildSleeperDobMap } from '@/lib/espn/sleeperDobMap'
 
 export type EspnLinkSummary = {
   considered: number
@@ -95,6 +96,46 @@ function bucketByName(rows: CanonicalCandidate[]): Map<string, CanonicalCandidat
 }
 
 /**
+ * `Player.id` → a birthday reached through that player's Sleeper identity.
+ *
+ * Two bounded reads for the whole batch, matching how the candidate pools above
+ * are loaded: a per-candidate lookup would be thousands of round trips inside a
+ * cron budget.
+ *
+ * ⚠ A PLAYER WITH TWO SLEEPER IDENTITIES IS SKIPPED, NOT GUESSED. Production
+ * currently shows exactly one per player, but if that ever stops being true the
+ * two rows point at different athletes and picking whichever returned first
+ * would feed the matcher a birthday belonging to somebody else — which is worse
+ * than no birthday, because it can produce a confident wrong link rather than a
+ * refusal.
+ */
+async function loadSleeperDobs(sportKey: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+
+  const identities = await prisma.playerProviderIdentity
+    .findMany({
+      where: { provider: 'sleeper', sportKey, playerId: { not: null } },
+      select: { playerId: true, providerPlayerId: true },
+    })
+    .catch(() => [])
+  if (identities.length === 0) return out
+
+  const sleeperIds = [...new Set(identities.map((i) => i.providerPlayerId).filter(Boolean))]
+  if (sleeperIds.length === 0) return out
+
+  const dobRows = await prisma.sportsPlayer
+    .findMany({
+      where: { sport: sportKey, sleeperId: { in: sleeperIds }, dob: { not: null } },
+      select: { sleeperId: true, dob: true },
+    })
+    .catch(() => [])
+
+  /* The composing rules, and the two-identities guard, live in a pure module so
+     they can be tested without loading prisma. */
+  return buildSleeperDobMap(identities, dobRows)
+}
+
+/**
  * Link the ESPN identity rows that carry enough evidence to be linked safely.
  *
  * Bounded and resumable in the same shape as the ingest that calls it: a run that
@@ -136,6 +177,34 @@ export async function linkEspnIdentitiesToCanonical(options?: {
     })
     .catch(() => [])
 
+  /*
+   * ── The birthdays the candidate pool was missing ───────────────────────
+   *
+   * ⚠ `Player.birthDate` IS NOT WHERE THIS APP KEEPS BIRTHDAYS, and matching
+   * against it alone is why so little linked. Measured on production
+   * 2026-08-29: `Player(NFL)` carries a birthDate on 1,546 of 13,010 rows
+   * (12%), while `SportsPlayer(NFL)` holds 15,777 of them —
+   * `matchProviderAthlete`'s own header already says the only birthday in the
+   * database is `SportsPlayer.dob`, and its `dob?: string | Date` signature
+   * exists to accept exactly that string.
+   *
+   * ESPN evidence is a name and a birthday and nothing else (its athlete
+   * document has no position field), so a candidate with no birthday can never
+   * be corroborated — the matcher correctly refuses on name alone. That was
+   * the outcome for 471 of 1,163 attempted rows: "only the name agreed".
+   *
+   * The chain is all ids, no matching: Player -> its SLEEPER provider identity
+   * -> that identity's providerPlayerId IS the Sleeper id -> SportsPlayer.dob.
+   * It reaches 4,071 players that have no `birthDate` of their own, taking
+   * corroborable coverage from 12% to roughly 43%.
+   *
+   * ⚠ IT NEVER OVERRIDES A BIRTHDATE WE ALREADY HOLD. `birthDate` wins where it
+   * is set; this only fills a null. A provider disagreeing with our own
+   * canonical record is a conflict to investigate, not one to silently resolve
+   * in the provider's favour inside a matcher.
+   */
+  const sleeperDobByPlayerId = await loadSleeperDobs(sportKey)
+
   const playerPool = bucketByName(
     players.map((c) => ({
       id: c.id,
@@ -143,7 +212,7 @@ export async function linkEspnIdentitiesToCanonical(options?: {
       sport: c.sport,
       position: c.position,
       team: c.team,
-      dob: c.birthDate,
+      dob: c.birthDate ?? sleeperDobByPlayerId.get(c.id) ?? null,
     })),
   )
 
