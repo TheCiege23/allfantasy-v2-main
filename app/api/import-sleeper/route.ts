@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import pLimit from "p-limit";
+import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
 import { LeagueSport, Prisma } from "@prisma/client";
 
@@ -42,6 +43,12 @@ export const dynamic = "force-dynamic";
 const CURRENT_IMPORT_SEASON = new Date().getFullYear();
 
 const leagueImportLimit = pLimit(8);
+/*
+ * The history walk is 4 Sleeper calls plus a 500ms pause PER SEASON, up to 10 seasons deep.
+ * Eight of those at once is a burst against one provider for no benefit — the work is
+ * background, so it is paced rather than raced.
+ */
+const historySyncLimit = pLimit(2);
 
 const bodySchema = z
   .object({
@@ -234,9 +241,23 @@ export async function POST(req: Request) {
     const failed = results.length - imported;
     const commentaryTelemetry = sumCommentaryTelemetry(successfulImports);
 
-    // Fire-and-forget: rank computation, rankings context refresh, and history sync
-    // These are non-critical for the import response and can run in the background.
-    void (async () => {
+    /*
+     * Background work: rank computation, rankings context refresh, and league history sync.
+     * Non-critical for the import RESPONSE, but it must still be allowed to finish.
+     *
+     * 🛑 THIS WAS `void (async () => ...)()` AND THE HISTORY SYNC NEVER SURVIVED IT. A floating
+     * promise in a serverless function is killed the moment the response is returned, so
+     * `syncLeagueHistory` only ever completed its FIRST loop iteration — the current season —
+     * before the invocation was torn down. Measured on production: `LeagueSeason` holds 73 rows
+     * across 73 distinct leagues, every one of them a single 2026 row. Not one chain was ever
+     * walked past its first step, in any league, ever.
+     *
+     * That is why nothing in this codebase knows which Sleeper leagues are the same league in
+     * different years: the walker follows `previous_league_id` correctly, it was just never
+     * given time to. `waitUntil` is the platform's answer and is already used this way in
+     * `app/api/leagues/import` and `app/api/trade-finder/matchmaking`.
+     */
+    waitUntil((async () => {
       try {
         const legacyUser = await prisma.legacyUser.findUnique({
           where: { sleeperUserId },
@@ -266,17 +287,29 @@ export async function POST(req: Request) {
       }
 
       if (!isLegacy) {
+        /*
+         * ⚠ AWAITED, NOT `void`ed. Wrapping the outer block in `waitUntil` is not enough on its
+         * own: these were floating promises inside it, so the block would return the instant it
+         * had STARTED them and `waitUntil` would consider the work done. One league's chain
+         * failing must not sink the others, hence allSettled.
+         */
+        const historyJobs: Promise<unknown>[] = [];
         for (let i = 0; i < leaguesData.length; i++) {
           const row = results[i];
           if (!row) continue;
           const platformLeagueId = leaguesData[i]?.league_id?.toString();
           if (!platformLeagueId) continue;
-          void syncLeagueHistory(row.leagueId, platformLeagueId, afUserId).catch((err) =>
-            console.error(`[import-sleeper] History sync failed for ${platformLeagueId}:`, err)
+          historyJobs.push(
+            historySyncLimit(() =>
+              syncLeagueHistory(row.leagueId, platformLeagueId, afUserId).catch((err) =>
+                console.error(`[import-sleeper] History sync failed for ${platformLeagueId}:`, err)
+              )
+            )
           );
         }
+        await Promise.allSettled(historyJobs);
       }
-    })();
+    })());
 
     // userId = AllFantasy account (primary). sleeperUserId = Sleeper provider id (imports only).
     return NextResponse.json({
