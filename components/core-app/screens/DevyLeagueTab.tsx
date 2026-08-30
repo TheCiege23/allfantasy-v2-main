@@ -174,10 +174,34 @@ export default function DevyLeagueTab({
               ? 'Add devy or taxi slots in league settings and this tab fills with the college pool.'
               : 'Your commissioner can add devy or taxi slots in league settings.'}
           </div>
+          {/*
+            ⚠ `href={settingsHref ?? '#'}` SHIPPED A BUTTON THAT GOES NOWHERE.
+            With no settingsHref the CTA still rendered, fully live-looking, and
+            pointed at '#' — a commissioner reads "Enable in league settings",
+            clicks, and the page does not move. That is worse than the disabled
+            Add buttons below, which at least LOOK unavailable; this one gives no
+            signal at all, and the natural read is that the feature is broken.
+
+            The codebase already settled this case: EspnConnectPanel's install
+            CTA is gated on a real URL existing, with the note "Absent -> the
+            install CTA is replaced by an honest sentence rather than a button
+            that goes nowhere." Same rule here.
+
+            The sentence still tells a commissioner what to do — the destination
+            is a page they can reach on their own — so nothing is lost except a
+            control that could not work.
+          */}
           {isCommissioner ? (
-            <a className="af-devy-btn" href={settingsHref ?? '#'}>
-              Enable in league settings
-            </a>
+            settingsHref ? (
+              <a className="af-devy-btn" href={settingsHref}>
+                Enable in league settings
+              </a>
+            ) : (
+              <p className="af-devy-note">
+                Devy slots are turned on under this league&rsquo;s settings, in the
+                roster section.
+              </p>
+            )
           ) : null}
         </div>
       ) : null}
@@ -242,14 +266,43 @@ export default function DevyLeagueTab({
                     onClick={() => onAddFreeAgent?.(fa.id)}
                     disabled={!onAddFreeAgent}
                     /* Disabled rather than inert-and-silent when no handler is wired: a button
-                       that looks live and does nothing is the worse of the two. */
-                    title={onAddFreeAgent ? undefined : 'Roster moves are not wired on this surface yet'}
+                       that looks live and does nothing is the worse of the two.
+                       ⚠ THE REASON IS NOT ON A `title` ANY MORE — see the note below the
+                       list. A tooltip on a DISABLED button is the least reliable place a
+                       reason can live: browsers suppress pointer events on disabled form
+                       controls, so the native tooltip often never fires at all, and it
+                       never appears on touch. */
+                    aria-describedby={onAddFreeAgent ? undefined : 'af-devy-fa-unwired'}
                   >
                     Add
                   </button>
                 </div>
               ))
             )}
+            {/*
+              ⚠ SAID ONCE, AND SAID VISIBLY. Every Add button on this list is
+              disabled until a handler is wired, and the reason used to live on
+              each button's `title`. That is the least reliable place to put it:
+              browsers suppress pointer events on disabled form controls, so the
+              native tooltip frequently never fires, and it never appears on
+              touch at all. What a person actually saw was a column of greyed
+              buttons with no explanation — the same dead-control shape as
+              Yahoo's tile on the import screen, where the reason sat in a branch
+              that could not render.
+
+              One line for the list rather than one per row: the fact is about
+              the surface, not about any particular prospect, and repeating it
+              down fifteen rows would bury the names people came to read.
+
+              `aria-describedby` ties the buttons to it, so the explanation
+              reaches a screen reader on focus without being restated per row.
+            */}
+            {!onAddFreeAgent && freeAgents.length > 0 ? (
+              <p className="af-devy-note" id="af-devy-fa-unwired">
+                Adds are read-only here for now — this view can show you the pool,
+                but roster moves still happen on your league&rsquo;s own platform.
+              </p>
+            ) : null}
           </section>
 
           <section className="af-devy-card" aria-labelledby="af-devy-board">
