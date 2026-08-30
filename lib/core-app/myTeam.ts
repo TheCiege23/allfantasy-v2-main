@@ -18,6 +18,8 @@ import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
+import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
@@ -323,11 +325,6 @@ export type MyTeamData = {
 }
 
 /** Slot labels in the order fantasy lineups conventionally read. */
-function inferSlotLabel(position: string | null, index: number): string {
-  const p = (position ?? '').toUpperCase()
-  if (['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DST'].includes(p)) return p === 'DST' ? 'DEF' : p
-  return p || `SLOT ${index + 1}`
-}
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -383,8 +380,33 @@ async function resolvePlayers(
   const out = new Map<string, LineupPlayer>()
   if (ids.length === 0) return out
 
+  /*
+   * ── Foreign roster ids, translated before every lookup ──────────────────
+   *
+   * ⚠ THE JOINS BELOW ARE ALL KEYED ON SLEEPER IDS — `SportsPlayer.sleeperId`
+   * and the projection feed both — so an ESPN roster resolved nothing through
+   * them. `providerIdentityNames` further down rescued the NAME, but only the
+   * name: the provider's athlete record carries no position and no team, so
+   * those lineups came out named and wholly unpriceable.
+   *
+   * `PlayerIdentityMap.espnId` is now filled, and it sits on rows that already
+   * hold a `sleeperId`, so the id composes across with no matching anywhere.
+   * Translating here means an ESPN starter resolves through the ORDINARY path
+   * instead — position, club, headshot, game context, bye, weather and a
+   * projection priced under the league's own rules.
+   *
+   * Measured 2026-08-30: 127 of 176 distinct ESPN roster ids translate, and all
+   * 127 exist in `SportsPlayer`. Whatever does not still falls through to the
+   * name-only bridge, then to the descriptive-id parse, then to an honest
+   * "could not identify" — none of which this removes.
+   */
+  const sleeperIdByRosterId = await crosswalkToSleeperIds(platform, sport, ids).catch(
+    () => new Map<string, string>(),
+  )
+  const lookupIds = [...new Set(ids.map((id) => sleeperIdByRosterId.get(id) ?? id))]
+
   const rows = await prisma.sportsPlayer.findMany({
-    where: { sleeperId: { in: ids } },
+    where: { sleeperId: { in: lookupIds } },
     select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
   })
 
@@ -551,7 +573,7 @@ async function resolvePlayers(
    * second `SportsGame` query with its own chances of picking the wrong fixture.
    */
   const byId = rows.filter((r) => r.sleeperId)
-  const projections = await lookupProjections(ids, projectionWeek, {
+  const projections = await lookupProjections(lookupIds, projectionWeek, {
     scoringSettings,
     positionBySleeperId: new Map(byId.map((r) => [r.sleeperId as string, r.position])),
     opponentBySleeperId: new Map(
@@ -592,7 +614,7 @@ async function resolvePlayers(
     out.set(r.sleeperId, {
       sleeperId: r.sleeperId,
       name: r.name,
-      position: r.position,
+      position: displayPosition(r.position),
       team: r.team,
       sport,
       imageUrl: r.imageUrl,
@@ -653,6 +675,26 @@ async function resolvePlayers(
    * This is the ESPN case: 98 of 98 starting-slot ids on production ESPN
    * rosters have a `display_name` here, and none of them resolved before.
    */
+  /*
+   * ── Re-key onto the roster's own ids ────────────────────────────────────
+   *
+   * ⚠ WITHOUT THIS THE TRANSLATION IS INVISIBLE. Everything above resolved
+   * against SLEEPER ids, so `out` is keyed by them — but every caller indexes
+   * this map by the id the ROSTER holds (`starterIds[i]`, the bench and taxi
+   * lists), so an ESPN lineup would look exactly as unresolved as before while
+   * the resolved players sat in the map under keys nobody asks for.
+   *
+   * The entry itself is left alone: its `sleeperId` stays the CANONICAL id,
+   * because that is what a player link should carry — the roster's own id
+   * resolves to nothing outside its platform.
+   *
+   * A Sleeper league has an empty crosswalk, so this loop does nothing there.
+   */
+  for (const [rosterId, sleeperId] of sleeperIdByRosterId) {
+    const resolved = out.get(sleeperId)
+    if (resolved && !out.has(rosterId)) out.set(rosterId, resolved)
+  }
+
   const unresolvedIds = ids.filter((id) => !out.has(id))
   const providerNames = unresolvedIds.length
     ? await lookupProviderIdentityNames(platform, sport, unresolvedIds).catch(

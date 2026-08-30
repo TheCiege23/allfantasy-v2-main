@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { loadSideProjections, winProbabilityFor } from './matchupProjections'
@@ -55,33 +56,7 @@ function asHeadshotUrl(raw: string | null | undefined): string | null {
  * production: 415 Wide Receiver, 216 Running Back, 135 Quarterback and so on,
  * so this is the common spelling rather than an edge case.
  */
-const LONG_POSITION: Record<string, string> = {
-  QUARTERBACK: 'QB',
-  'RUNNING BACK': 'RB',
-  FULLBACK: 'RB',
-  'WIDE RECEIVER': 'WR',
-  'TIGHT END': 'TE',
-  KICKER: 'K',
-  'PLACE KICKER': 'K',
-  PUNTER: 'P',
-  LINEBACKER: 'LB',
-  CORNERBACK: 'DB',
-  SAFETY: 'DB',
-  'DEFENSIVE END': 'DL',
-  'DEFENSIVE TACKLE': 'DL',
-  'OFFENSIVE TACKLE': 'OL',
-  GUARD: 'OL',
-  CENTER: 'OL',
-  'DEFENSIVE BACK': 'DB',
-  'DEFENSIVE LINEMAN': 'DL',
-}
 
-function displayPosition(raw: string | null | undefined, sport: string | null): string | null {
-  const v = raw?.trim()
-  if (!v) return null
-  const long = LONG_POSITION[v.toUpperCase()]
-  return long ?? normalizePositionForSport(sport ?? 'NFL', v) ?? v.toUpperCase()
-}
 
 /**
  * Slot labels in the order fantasy lineups conventionally read.
@@ -89,11 +64,6 @@ function displayPosition(raw: string | null | undefined, sport: string | null): 
  * Mirrors `inferSlotLabel` in myTeam.ts deliberately: the two screens render the
  * same lineup and must not disagree about what a slot is called.
  */
-function inferSlotLabel(position: string | null, index: number): string {
-  const p = (position ?? '').toUpperCase()
-  if (['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DST'].includes(p)) return p === 'DST' ? 'DEF' : p
-  return p || `SLOT ${index + 1}`
-}
 
 /**
  * Matchup — "live head-to-head, what's left to play, and what decides it".
@@ -611,7 +581,7 @@ export async function getMatchupData(
       return {
         playerId: entry.playerId,
         name: rawName || null,
-        position: displayPosition(rawPos, sport),
+        position: displayPosition(rawPos),
         team: rawTeam ? normalizeTeamAbbrev(rawTeam) : null,
         sport,
         imageUrl: null,
@@ -624,7 +594,7 @@ export async function getMatchupData(
     return {
       playerId: entry.playerId,
       name: identity?.name ?? null,
-      position: displayPosition(identity?.position, sport),
+      position: displayPosition(identity?.position),
       /*
        * ⚠ NORMALISED, BECAUSE THE CREST LOOKUP UPPERCASES WHAT IT IS GIVEN AND
        * DOES NOT NORMALISE. `SportsPlayer.team` holds "Kansas City Chiefs" on 32
