@@ -285,7 +285,46 @@ export async function getLegacyLeagueBoardItems(legacyUserId: string): Promise<u
  * untouched: they have nothing to group on and must never be grouped with each
  * other.
  */
-export function collapseLeagueSeasons<T extends Record<string, unknown>>(rows: T[]): T[] {
+/**
+ * Sleeper league id -> the AF league whose `previous_league_id` chain contains it.
+ *
+ * 🛑 WITHOUT THIS THE COLLAPSE ABOVE IS A NO-OP, WHICH IS WHAT IT WAS FOR ITS WHOLE LIFE.
+ * Its doc promises one row per league rather than one per season, and it keys on
+ * `platform:platformLeagueId` — but Sleeper mints a NEW league id every season, so the six
+ * seasons of "AFC Dreaming!" carry six different ids and never grouped. Measured on the live
+ * payload before this existed: 557 entries in, 557 out.
+ *
+ * `LeagueSeason` is the chain, one row per season with that season's own Sleeper id, written
+ * by `syncLeagueHistory`. It was empty of chains until 2026-08-29 (every league held a single
+ * current-season row, because the walk was a floating promise that died with the response);
+ * once that was fixed and backfilled it went from 78 rows to 294 and became usable as a key.
+ */
+export async function loadLeagueSeriesMap(
+  leagueIds: readonly string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (leagueIds.length === 0) return out
+  const rows = await (prisma as any).leagueSeason
+    .findMany({
+      where: { leagueId: { in: [...leagueIds] } },
+      select: { leagueId: true, platformLeagueId: true },
+    })
+    .catch(() => [] as Array<{ leagueId: string; platformLeagueId: string }>)
+  for (const r of rows as Array<{ leagueId: string; platformLeagueId: string }>) {
+    if (r.platformLeagueId) out.set(r.platformLeagueId, r.leagueId)
+  }
+  return out
+}
+
+/**
+ * @param seriesByPlatformLeagueId optional chain map from `loadLeagueSeriesMap`. Omit it and
+ * this behaves exactly as before — every existing caller is unaffected, which matters because
+ * a dozen surfaces read this list and none of them asked for their rows to start disappearing.
+ */
+export function collapseLeagueSeasons<T extends Record<string, unknown>>(
+  rows: T[],
+  seriesByPlatformLeagueId?: ReadonlyMap<string, string>,
+): T[] {
   const byLeague = new Map<string, T>()
   const passthrough: T[] = []
 
@@ -296,7 +335,13 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(rows: T
       passthrough.push(lg)
       continue
     }
-    const key = `${platform}:${platformId}`
+    /*
+     * The series wins when the chain knows this id; otherwise fall back to the per-season key,
+     * which groups nothing but is exactly the previous behaviour. A league whose chain has not
+     * been walked is left alone rather than guessed at.
+     */
+    const seriesId = seriesByPlatformLeagueId?.get(platformId)
+    const key = seriesId ? `series:${seriesId}` : `${platform}:${platformId}`
     const seen = byLeague.get(key)
     if (!seen) {
       byLeague.set(key, lg)
@@ -309,7 +354,10 @@ export function collapseLeagueSeasons<T extends Record<string, unknown>>(rows: T
   return [...passthrough, ...byLeague.values()]
 }
 
-export async function getDashboardLeagueListForUser(userId: string): Promise<DashboardLeagueListPayload> {
+export async function getDashboardLeagueListForUser(
+  userId: string,
+  opts?: { collapseSeries?: boolean },
+): Promise<DashboardLeagueListPayload> {
   const [profile, appUser] = await Promise.all([
     prisma.userProfile
       .findUnique({
@@ -675,7 +723,17 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
     ...legacyBoardItems,
   ]
 
-  const deduped = collapseLeagueSeasons(filtered as any[])
+  /*
+   * Opt-in, like `?summary=1`. Collapsing by series is what this list was always meant to do,
+   * but turning it on for every caller at once would silently shrink a dozen surfaces that
+   * never asked for it — so the surface that wants it asks.
+   */
+  const seriesMap = opts?.collapseSeries
+    ? await loadLeagueSeriesMap(
+        (filtered as any[]).map((l) => String(l?.id ?? '')).filter(Boolean),
+      )
+    : undefined
+  const deduped = collapseLeagueSeasons(filtered as any[], seriesMap)
 
   const leaguesSorted = deduped.sort((a: any, b: any) => {
     const aDate = a.lastSyncedAt ? new Date(a.lastSyncedAt).getTime() : 0
