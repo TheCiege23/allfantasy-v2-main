@@ -1,7 +1,8 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { isIdpPosition } from '@/lib/core-app/scoringNotes'
+import { idpPositionGroup, isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShares, type SnapShareOutcome } from '@/lib/core-app/snapShare'
 
 import { loadActualWeeklyPoints, type ActualWeekOutcome } from './actualWeeklyPoints'
@@ -40,6 +41,15 @@ export interface DefenseHubDefender {
   name: string
   team: string | null
   position: string | null
+  /**
+   * The IDP group his rank was computed in (DL / LB / DB).
+   *
+   * ⚠ RENDER THE RANK AGAINST THIS, NOT AGAINST `position`. `position` is the raw spelling the
+   * player row carries, and pairing it with a group rank produced `Cornerback80` on a board
+   * that also showed `CB78` and `DB81` — three labels for one ranking, one of which names a
+   * board that does not exist.
+   */
+  positionGroup: 'DL' | 'LB' | 'DB' | null
   /** League-scored projected points. Null when the scoring could not price him — never zero. */
   projection: number | null
   vorp: number | null
@@ -362,8 +372,13 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
     return {
       sleeperId: d.sleeperId,
       name: d.name,
-      team: d.team,
-      position: d.position,
+      /*
+       * Normalised so one table does not print `CLE` beside `Cleveland Browns`. Falls back to
+       * the raw value rather than blanking a team we simply do not have an alias for.
+       */
+      team: normalizeTeamAbbrev(d.team) ?? d.team,
+      position: shortIdpPosition(d.position) ?? d.position,
+      positionGroup: idpPositionGroup(d.position),
       projection,
       vorp: v,
       positionRank: vorp.positionRankBySleeperId.get(d.sleeperId) ?? null,

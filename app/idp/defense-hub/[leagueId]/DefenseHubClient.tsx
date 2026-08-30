@@ -322,8 +322,13 @@ function DefenderTable({ data }: { data: DefenseHubPayload }) {
                       )}
                     </td>
                     <td className="px-2 py-3 text-right font-mono text-[12px] text-[#c3c9e6]">
-                      {d.positionRank != null && d.position ? (
-                        `${d.position}${d.positionRank}`
+                      {/*
+                        Against the GROUP, never `d.position` — the rank is computed per
+                        DL/LB/DB, and pairing it with a raw spelling printed `Cornerback80`
+                        beside `CB78` and `DB81` for one ranking. See idpPositionGroup.
+                      */}
+                      {d.positionRank != null && (d.positionGroup ?? d.position) ? (
+                        `${d.positionGroup ?? d.position}${d.positionRank}`
                       ) : (
                         <Dash />
                       )}
