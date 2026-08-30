@@ -139,14 +139,27 @@
   margin-left: auto;
 }
 
+/*
+ * ── 44px, not 40 ──────────────────────────────────────────────────────
+ * ⚠ THE ONE CONTROL ON THIS SHEET THAT ALREADY MET THE FLOOR MADE THE OTHERS
+ * LOOK DELIBERATE. `.af-ca-add` is 44px; fix, manage and disconnect were all
+ * 40. Four pixels reads as a design choice rather than an omission, which is
+ * why it survived — but the floor is a reachability minimum, not a size
+ * preference, and the rest of this flow holds it (6a's provider tiles, Skip for
+ * now, the error links, the ESPN panel's controls are all 44).
+ *
+ * These are the per-platform row actions, so on a phone they sit in a stack of
+ * near-identical targets — the case where a 4px shortfall actually costs a
+ * mis-tap, and where mis-tapping means pressing Disconnect.
+ */
 .af-core .af-ca-fix {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 16px;
 }
 
 .af-core .af-ca-manage,
 .af-core .af-ca-disconnect {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   font-size: 12.5px;
   text-decoration: none;
@@ -273,4 +286,40 @@
   .af-core .af-ca-tag {
     order: -1;
   }
+}
+
+/* ── Visible focus ────────────────────────────────────────────────────────
+ *
+ * ⚠ af-core DEFINES NO focus-visible RULE AT ALL — grep it, the count is zero.
+ * So every button on this sheet fell through to the user agent's default
+ * outline, which on `--surface2` in the dark theme is a thin dark ring on a dark
+ * ground. The `?` explainer had its own ring; the five controls that DO
+ * something did not.
+ *
+ * ⚠ AND THIS SHEET IS WHERE IT MATTERS MOST, because one of those controls is
+ * Disconnect. A keyboard user tabbing a stack of per-platform rows has to be
+ * able to see which row they are on before pressing — the cost of guessing here
+ * is severing a live league connection, not a wasted click.
+ *
+ * Same accent-soft halo the import field, the provider tiles and the ESPN panel
+ * already use, so focus reads as one thing across the whole connect flow rather
+ * than four. `outline: none` is paired with the replacement in the same rule —
+ * never removed on its own.
+ */
+.af-core .af-ca-add:focus-visible,
+.af-core .af-ca-fix:focus-visible,
+.af-core .af-ca-manage:focus-visible,
+.af-core .af-ca-disconnect:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/*
+ * The destructive one gets its OWN tone rather than the shared accent. Focus is
+ * the last moment before a press, and a ring that says "this is the same kind of
+ * thing as Manage" is the wrong signal on the control that disconnects a league.
+ */
+.af-core .af-ca-disconnect:focus-visible {
+  box-shadow: 0 0 0 3px var(--bad-soft);
+  border-color: var(--bad);
 }
