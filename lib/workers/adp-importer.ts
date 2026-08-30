@@ -2,6 +2,11 @@ import 'server-only'
 
 import { fetchAllFFCFormats } from '@/lib/adp-data'
 import { confidenceForConsensus } from '@/lib/adp/consensusConfidence'
+import {
+  measureStaticAdpCoverage,
+  staticSourceWeightFactor,
+  type StaticAdpCoverage,
+} from '@/lib/adp/staticAdpCoverage'
 import { isAiAdpConsumerEnabled } from '@/lib/ai-adp-engine/aiAdpConsumerFlag'
 import { loadMultiPlatformADP } from '@/lib/multi-platform-adp'
 import { prisma } from '@/lib/prisma'
@@ -43,19 +48,39 @@ type AdpRow = {
   source: string
 }
 
+/*
+ * 🛑 FOUR OF THESE NAMES ARE NOT PROVIDERS. `fantrax`, `sleeper`, `espn` and `mfl` are COLUMNS
+ * of one committed file, `data/nfl-adp-multiplatform.csv` - see the block comment at the CSV read
+ * below. `ffc` is the only NFL source here that performs a live fetch.
+ *
+ * The weights used to say the opposite: `fantrax` 1.0 and `sleeper` 0.95 outranked `ffc` at 0.9,
+ * so a hand-placed export last refreshed in March outvoted the one source fetched that morning on
+ * every player it listed. `ffc` now leads on the ground that it is live, and the static columns
+ * are additionally decayed by `staticSourceWeightFactor` whenever the file has aged out of the
+ * draft class it should cover.
+ *
+ * `nffc`, `rolling_insights` and `ai_adp` are left where they were: the first is a CSV column the
+ * NFL branch does not currently emit, and the other two are not produced by this importer's NFL
+ * path at all, so moving them would be tuning on no evidence.
+ */
 const SOURCE_WEIGHTS: Record<string, number> = {
-  fantrax: 1.0,
-  sleeper: 0.95,
+  ffc: 1.0,
+  fantrax: 0.95,
+  sleeper: 0.92,
+  rolling_insights: 0.92,
+  nffc: 0.9,
   espn: 0.9,
   mfl: 0.88,
-  nffc: 0.9,
-  ffc: 0.9,
-  rolling_insights: 0.92,
   ai_adp: 0.85,
 }
 
-function sourceWeight(source: string): number {
-  return SOURCE_WEIGHTS[source] ?? 0.8
+/** Sources whose values come from `data/nfl-adp-multiplatform.csv` rather than a live call. */
+export const STATIC_CSV_SOURCES = new Set(['fantrax', 'sleeper', 'espn', 'mfl', 'nffc'])
+
+/** Exported for the weight-ordering test - the ordering is the bug, so it needs an assertion. */
+export function sourceWeight(source: string, staticFactor = 1): number {
+  const base = SOURCE_WEIGHTS[source] ?? 0.8
+  return STATIC_CSV_SOURCES.has(source) ? base * staticFactor : base
 }
 
 function buildConsensusRows(input: {
@@ -64,8 +89,11 @@ function buildConsensusRows(input: {
   week: number
   rows: AdpRow[]
   previousMap: Map<string, number>
+  /** 1 when the static export is current; < 1 when it has aged out. */
+  staticFactor?: number
 }): AdpRow[] {
   const { sport, season, week, rows, previousMap } = input
+  const staticFactor = input.staticFactor ?? 1
   const grouped = new Map<string, AdpRow[]>()
 
   for (const row of rows) {
@@ -82,7 +110,7 @@ function buildConsensusRows(input: {
     if (!bucket.length) continue
     const weighted = bucket.map((row) => ({
       row,
-      weight: sourceWeight(row.source),
+      weight: sourceWeight(row.source, staticFactor),
     }))
     const weightSum = weighted.reduce((sum, item) => sum + item.weight, 0)
     if (weightSum <= 0) continue
@@ -157,6 +185,7 @@ export async function runAdpImporter(options?: {
   providerRowsWrittenBySport: Record<string, number>
   consensusRowsAttemptedBySport: Record<string, number>
   consensusRowsBySport: Record<string, number>
+  staticAdpCoverage: StaticAdpCoverage | null
 }> {
   const season = currentSeason()
   const week = currentWeekOfYear()
@@ -173,21 +202,23 @@ export async function runAdpImporter(options?: {
   const providerRowsWrittenBySport: Record<string, number> = {}
   const consensusRowsAttemptedBySport: Record<string, number> = {}
   const consensusRowsBySport: Record<string, number> = {}
+  let staticAdpCoverage: StaticAdpCoverage | null = null
+
   for (const sport of sports) {
     const previousMap = await loadPreviousMap(sport)
     const rows: AdpRow[] = []
 
     if (sport === 'NFL') {
       /*
-       * 🛑 `fantrax` / `sleeper` / `espn` / `mfl` / `nffc` BELOW ARE NOT PROVIDER CALLS. They are
-       * COLUMNS of one committed CSV — `data/nfl-adp-multiplatform.csv`, read here through
+       * ð `fantrax` / `sleeper` / `espn` / `mfl` / `nffc` BELOW ARE NOT PROVIDER CALLS. They are
+       * COLUMNS of one committed CSV â `data/nfl-adp-multiplatform.csv`, read here through
        * `loadMultiPlatformADP()` (fs.readFileSync, cached in-process). A row landing in
        * `AdpDataRecord` with `source: 'espn'` did not come from ESPN; it came from the ESPN
        * column of that file, whenever that file was last hand-updated.
        *
-       * ⚠ THIS CRON THEREFORE REPUBLISHES A STATIC FILE DAILY AND LOOKS HEALTHY DOING IT.
+       * â  THIS CRON THEREFORE REPUBLISHES A STATIC FILE DAILY AND LOOKS HEALTHY DOING IT.
        * Measured 2026-08-28: the CSV was last changed 2026-03-08, before the April draft, so
-       * every 2026 draft entrant is absent — yet `AdpDataRecord` held 93,622 rows for season
+       * every 2026 draft entrant is absent â yet `AdpDataRecord` held 93,622 rows for season
        * 2026 with `createdAt` of that morning. Freshness monitors key on `createdAt` and see
        * green. Rookies present by source made the split unmistakable:
        *
@@ -195,9 +226,14 @@ export async function runAdpImporter(options?: {
        *
        * `scripts/check-static-data-freshness.mjs` dates the CSV against the newest class in
        * `data/nfl-draft-capital.json` for exactly this reason. It is not guarding a legacy
-       * fallback — this file is the primary source for most of the NFL ADP stack.
+       * fallback â this file is the primary source for most of the NFL ADP stack.
        */
       const multi = loadMultiPlatformADP()
+      /*
+       * Measured from the file's CONTENT, never its mtime - a checkout restamps every file, so
+       * mtime would call a years-old export minutes old. See lib/adp/staticAdpCoverage.ts.
+       */
+      staticAdpCoverage = measureStaticAdpCoverage(multi.map((p) => p.name))
       for (const player of multi) {
         const shared = {
           sport,
@@ -265,13 +301,13 @@ export async function runAdpImporter(options?: {
       }
     } else {
       /*
-       * Gated like every other AI ADP read — see lib/ai-adp-engine/aiAdpConsumerFlag.ts.
+       * Gated like every other AI ADP read â see lib/ai-adp-engine/aiAdpConsumerFlag.ts.
        * This one needs its own check because it queries the table DIRECTLY rather than
        * through `getAiAdp`, so the service-level gate does not cover it. It emits rows with
        * `source: 'ai_adp'` at SOURCE_WEIGHTS 0.85, i.e. it feeds the blended consensus.
        *
        * (Reached only in the non-NFL branch, and `adp_data` is 100% NFL today, so this is
-       * currently unreachable in practice — gated anyway, because "unreachable today" is not
+       * currently unreachable in practice â gated anyway, because "unreachable today" is not
        * a property worth relying on.)
        */
       const snapshots = isAiAdpConsumerEnabled()
@@ -316,6 +352,11 @@ export async function runAdpImporter(options?: {
       week,
       rows,
       previousMap,
+      /*
+       * Only the NFL branch reads the CSV, so every other sport keeps a factor of 1 rather than
+       * inheriting a penalty measured against a file it never touched.
+       */
+      staticFactor: staticAdpCoverage ? staticSourceWeightFactor(staticAdpCoverage) : 1,
     })
     consensusRowsAttempted += consensusRows.length
     consensusRowsAttemptedBySport[sport] = (consensusRowsAttemptedBySport[sport] ?? 0) + consensusRows.length
@@ -350,5 +391,10 @@ export async function runAdpImporter(options?: {
     consensusRowsBySport,
     skippedRows:
       providerRowsRead + consensusRowsAttempted - providerRowsWritten - consensusRowsWritten,
+    /*
+     * Reported so a run that silently republished a stale export is legible in the response
+     * rather than only in a row count that looks identical either way. Null when no NFL branch ran.
+     */
+    staticAdpCoverage,
   }
 }

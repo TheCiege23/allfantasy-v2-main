@@ -27,6 +27,13 @@ async function handle(req: NextRequest) {
   const dryRun = url.searchParams.get('dryRun') === 'true'
   const sportParam = url.searchParams.get('sport')
   const seasonParam = url.searchParams.get('season')
+  /*
+   * Ops kill switch for the imported-draft pass (lib/adp/draftFactSamples.ts). Default ON - those
+   * facts are the largest body of real picks we hold and reached nothing before. `?includeImported=false`
+   * turns them off WITHOUT A DEPLOY if the pass ever misbehaves in production; the CLI has the same
+   * control, but the CLI is not what runs at 09:00.
+   */
+  const includeImported = url.searchParams.get('includeImported') !== 'false'
 
   const sport = sportParam ? sportParam.toUpperCase() : 'NFL'
   const season = seasonParam?.trim() ? seasonParam.trim() : null
@@ -38,6 +45,7 @@ async function handle(req: NextRequest) {
       draftMode: 'real',
       includeTest,
       apply: !dryRun,
+      includeImportedDrafts: includeImported,
     })
 
     const hasErrors = report.errors.length > 0

@@ -140,6 +140,8 @@ describe('D.5-scheduler — recompute invocation defaults', () => {
       draftMode: 'real',
       includeTest: false,
       apply: true,
+      // Imported (DraftFact) drafts are ON by default; ?includeImported=false is the ops opt-out.
+      includeImportedDrafts: true,
     })
   })
 
@@ -257,5 +259,38 @@ describe('D.5-scheduler — vercel.json cron entry', () => {
     // Daily — first cron field is a single hour, last three are wildcards.
     // (We don't pin a specific hour here; matches `0 H * * *` for any H.)
     expect(entry!.schedule).toMatch(/^\d+\s+\d+\s+\*\s+\*\s+\*$/)
+  })
+})
+
+describe('D.5-scheduler — imported-draft opt-out', () => {
+  beforeEach(() => {
+    mockRecompute.mockReset()
+    mockRecompute.mockResolvedValue({ ...SAMPLE_REPORT })
+    process.env.CRON_SECRET = 'unit-test-secret'
+  })
+  afterEach(() => {
+    delete process.env.CRON_SECRET
+  })
+
+  it('?includeImported=false turns the DraftFact pass off without a deploy', async () => {
+    await GET(
+      makeReq('http://localhost/api/cron/recompute-allfantasy-adp?includeImported=false', {
+        headers: { Authorization: 'Bearer unit-test-secret' },
+      }),
+    )
+    expect(mockRecompute).toHaveBeenCalledWith(
+      expect.objectContaining({ includeImportedDrafts: false }),
+    )
+  })
+
+  it('only the exact string "false" opts out — a typo must not silently disable ingest', async () => {
+    await GET(
+      makeReq('http://localhost/api/cron/recompute-allfantasy-adp?includeImported=no', {
+        headers: { Authorization: 'Bearer unit-test-secret' },
+      }),
+    )
+    expect(mockRecompute).toHaveBeenCalledWith(
+      expect.objectContaining({ includeImportedDrafts: true }),
+    )
   })
 })
