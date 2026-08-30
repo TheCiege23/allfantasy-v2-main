@@ -66,15 +66,26 @@ function getImportApiErrorMessage(
 ): string {
   if (data?.error === 'VERIFICATION_REQUIRED') return 'Verify your email or phone before importing a league.';
   /*
-   * No AGE_REQUIRED mapping. That code is emitted only by the brackets product
-   * (app/api/bracket/**), where an 18+ check gates paid contest entry and is a
-   * real control worth keeping. No import endpoint returns it, so mapping it here
-   * only ever promised the user an age problem they did not have -- and told them
-   * to fix it on a screen that has never checked their age.
+   * ⚠ AGE_REQUIRED IS MAPPED AGAIN, AND THE COMMENT THAT REMOVED IT WAS WRONG.
+   * It read: "That code is emitted only by the brackets product (app/api/bracket/**)
+   * … No import endpoint returns it." Observed otherwise on 2026-08-29, running a
+   * real Sleeper import against staging: POST /api/leagues/import/discover answered
+   * 403 {"error":"AGE_REQUIRED"} three times, and the screen rendered the raw enum
+   * as the user's error message.
    *
-   * If an import gate ever genuinely needs an age check, add it server-side first
-   * and map it back here; do not reintroduce the message on its own.
+   * The source is `lib/auth-guard.ts` — `isAgeConfirmed(profile)` is false whenever
+   * `profile.ageConfirmedAt` is null, and the shared guard the import routes use
+   * returns AGE_REQUIRED at 403 (auth-guard.ts:182 and :247). That is a server-side
+   * gate on the import path, which is exactly the condition the old comment set for
+   * restoring this ("add it server-side first and map it back here") — it simply had
+   * not noticed the gate was already there.
+   *
+   * /verify is the right destination: `lib/require-verified.ts` redirects to
+   * `/verify?error=AGE_REQUIRED` for the same condition, so the two paths now agree.
    */
+  if (data?.error === 'AGE_REQUIRED') {
+    return 'Confirm your date of birth before importing a league — you can do it on the verification screen.';
+  }
   if (data?.error === 'UNAUTHENTICATED' || data?.error === 'Unauthorized') return 'Sign in to import a league.';
   if (data?.error?.includes('Connect Yahoo')) return 'Connect Yahoo in League Sync before importing from Yahoo.';
   if (data?.error?.includes('Connect ESPN')) return 'Connect ESPN in League Sync before importing private ESPN leagues.';
