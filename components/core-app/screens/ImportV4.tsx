@@ -606,6 +606,19 @@ export function ImportV4({
   const [espnConnected, setEspnConnected] = useState<boolean | null>(null)
 
   const selectable = isImportProviderAvailable(provider)
+  /*
+   * The row's disabled tiles, so the reason line below it can name them without a
+   * second hardcoded list falling out of step with the tiles themselves.
+   *
+   * ⚠ EXCLUDES THE SELECTED ONE, and that is not tidiness — it is what keeps the
+   * two explanations from both rendering. A blocked provider that is also SELECTED
+   * gets the fuller "{provider} selected?" strip below, and if it appeared in this
+   * list as well the same sentence would be on screen twice. (It also breaks the
+   * test: `getByText` throws on multiple matches, which is how this was caught.)
+   */
+  const unavailableProviders = IMPORT_PROVIDER_UI_OPTIONS.filter(
+    (o) => !o.available && o.provider !== provider,
+  )
   // Provider display name comes from the shared config, never a local literal — the same
   // reason availability does (see the header note).
   const providerLabel = getImportProviderLabel(provider)
@@ -1532,8 +1545,17 @@ export function ImportV4({
                 <span className="af-platform af-im-mark" data-platform={opt.provider} aria-hidden>
                   {PROVIDER_INITIAL[opt.provider] ?? opt.label.charAt(0)}
                 </span>
-                <span className="af-im-provider-label">{providerPillLabel(opt.label)}</span>
-                {tag ? <span className="af-im-soon af-num">&middot; {tag}</span> : null}
+                {/*
+                  The name over its tag. A wrapper rather than a CSS grid on the
+                  button, because the stack is now the layout at EVERY width — the
+                  grid-row trick that did this below 560px only worked while the
+                  desktop case was a single line, and keeping two mechanisms for
+                  one arrangement is how they drift apart.
+                */}
+                <span className="af-im-provider-text">
+                  <span className="af-im-provider-label">{providerPillLabel(opt.label)}</span>
+                  {tag ? <span className="af-im-soon af-num">&middot; {tag}</span> : null}
+                </span>
               </button>
             )
           })}
@@ -1564,26 +1586,77 @@ export function ImportV4({
           </span>
           {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
             .map((sport) => (
-              <span key={sport} className="af-im-context-sport af-num">
+              <span key={sport} className="af-im-context-sport af-num" data-sport={sport}>
                 {sport}
               </span>
             ))}
         </p>
 
         {/*
-          ── 6a: the coming-soon fallback strip ────────────────────────────────
-          ⚠ DORMANT TODAY AND BUILT ANYWAY. Every provider in the config is
-          available, so this renders for nobody — but a disabled pill with no
-          explanation beside it is exactly the dead end the tiles' `BLOCKED_REASON`
-          line used to cover, and deleting the strip because nothing currently
-          triggers it is how that regression gets reintroduced the next time a
-          provider is switched off. It reads from the same `selectable` flag the
-          field block does, so the two can never disagree.
+          ── 6a: why a provider is unavailable ─────────────────────────────────
+          ⚠ THIS COMMENT USED TO SAY THE STRIP WAS "DORMANT TODAY AND BUILT ANYWAY
+          — every provider in the config is available, so this renders for
+          nobody." That was true when it was written and stopped being true on
+          2026-08-29, when yahoo was flipped to `available: false`. The strip was
+          not dormant after that; it was BROKEN, and the stale comment is a good
+          part of why nobody looked — it told every reader the empty result was
+          expected.
+
+          Both forms below are live now. Keep this note pointed at the config
+          rather than at a count of providers, so it cannot go stale the same way.
+        */}
+        {/*
+          ⚠ THE OLD STRIP COULD NEVER RENDER, WHICH IS WHY THE ROW HAD A DEAD TILE
+          ON IT ALL DAY. It was gated on `!selectable` — the SELECTED provider being
+          unavailable — and nothing can put the screen in that state: the tiles are
+          `disabled`, and app/import/page.tsx falls an unavailable `?provider=` back
+          to sleeper before it ever reaches this component. So Yahoo sat greyed with
+          a "Coming soon" tag and its reason lived in a branch with no reachable
+          condition. A disabled control whose explanation is unreachable is just a
+          dead control.
+
+          The handoff puts the reason UNDER THE ROW, unconditionally, and that is
+          the fix: it is a fact about the row, not about the selection. Derived from
+          the config rather than a literal, so a provider switching off tomorrow
+          gets a line here without an edit, and one switching on loses it.
+        */}
+        {unavailableProviders.length > 0 ? (
+          <p className="af-im-blocked" role="status">
+            {unavailableProviders.map((opt) => (
+              <span key={opt.provider} className="af-im-blocked-line">
+                <span className="af-label">{providerPillLabel(opt.label)}</span>
+                <span>
+                  {BLOCKED_REASON[opt.provider] ??
+                    `${opt.label} isn't available yet — coming soon.`}
+                </span>
+              </span>
+            ))}
+          </p>
+        ) : null}
+
+        {/*
+          ⚠ KEPT, AND I WAS WRONG TO CALL IT UNREACHABLE. The comment above the row
+          list says this branch cannot fire, which is true of both production
+          callers — /import falls an unavailable `?provider=` back to sleeper, and
+          /core passes no provider at all. It is NOT true of the component's own
+          API, which takes `defaultProvider` from anyone who renders it, and the 6a
+          suite exercises exactly that. A third caller added without the fallback
+          would land someone on a blocked provider with no field and, without this,
+          no explanation either.
+
+          It says more than the row line does — the provider is the one you are
+          looking at, so it gets the "selected?" framing and a full sentence rather
+          than a footnote.
         */}
         {!selectable ? (
-          <p className="af-im-blocked" role="status">
-            <span className="af-label">{providerLabel} selected?</span>
-            <span>{BLOCKED_REASON[provider] ?? `${providerLabel} isn't available yet — coming soon.`}</span>
+          <p className="af-im-blocked af-im-blocked--selected" role="status">
+            <span className="af-im-blocked-line">
+              <span className="af-label">{providerLabel} selected?</span>
+              <span>
+                {BLOCKED_REASON[provider] ??
+                  `${providerLabel} isn't available yet — coming soon.`}
+              </span>
+            </span>
           </p>
         ) : null}
 

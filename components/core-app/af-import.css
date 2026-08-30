@@ -104,39 +104,67 @@
   box-shadow: var(--shadow);
 }
 
-/* ── Provider picker — 6a's pill row ──────────────────────────────────
- * Was a `repeat(auto-fit, minmax(230px, 1fr))` grid of stacked cards. The row
- * wraps naturally instead: each pill is only as wide as its own name, so the
- * six of them settle into two lines at 660px and one on a wide screen, with no
- * column maths and no ragged empty cell at the end.
+/* ── Provider picker — 6a's 3-column grid ─────────────────────────────
+ * ⚠ A WRAPPING FLEX ROW AND A FIXED GRID ARE NOT INTERCHANGEABLE HERE, and the
+ * handoff picks the grid for a reason the flex row made obvious: six pills sized
+ * to their own labels wrap to a RAGGED two lines — "Sleeper · username" is half
+ * the width of "MFL · league ID + key", so the right edge of each row lands
+ * somewhere different and the row reads as a paragraph of buttons rather than a
+ * set of six equal choices. Choosing your platform is recognition among peers;
+ * unequal widths imply a ranking that does not exist.
+ *
+ * `repeat(3, 1fr)` — fixed, not `auto-fit`. auto-fit would re-columnise on width
+ * and put the six into 1/2/3/4/6 columns depending on the viewport, and a 6-item
+ * set has exactly two tidy shapes: 3x2 and 2x3. Those are the two the breakpoint
+ * below names explicitly.
  */
 
 .af-im-providers {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
 
+/*
+ * ⚠ A ROUNDED RECT, NOT A 999px PILL. With the tag stacked under the name the
+ * control is two lines tall, and a full pill radius on a two-line box bows the
+ * short sides outward — the mark stops looking centred and the tag crowds the
+ * curve. 12px is the handoff's value and it is the card radius one step down,
+ * which is what this now is: a small card, not a tag.
+ */
 .af-im-provider {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   /* 44px minimum touch target — the row is the primary control on this screen. */
   min-height: 48px;
-  padding: 6px 18px 6px 6px;
-  border-radius: 999px;
+  padding: 10px 13px 10px 10px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface2);
   color: var(--text);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  /* ⚠ A PILL THAT CANNOT SHRINK OVERFLOWS THE CARD. With the label and the tag
-     both `nowrap`, the widest pill set its own width and pushed its tag past the
-     card's right edge at 390px — clipped, and unreadable. Capped here, and the
-     nowrap is lifted on narrow screens below. */
-  max-width: 100%;
+  /* Grid cells are equal and fixed now, so a long label must shrink inside its
+     cell rather than widen it — `min-width: 0` is what lets the text column
+     actually wrap instead of forcing the track. */
+  min-width: 0;
   transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
+}
+
+/*
+ * The name over its tag, at every width. This used to happen only below 560px;
+ * the handoff stacks them throughout, and it is better everywhere for the same
+ * reason it was better on a phone — the platform NAME is what the eye is hunting
+ * for, and putting the qualifier on the same line makes every pill start with a
+ * variable-length distraction.
+ */
+.af-im-provider-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .af-im-provider:hover:not([data-available='false']) {
@@ -177,18 +205,28 @@
  */
 .af-im-provider[data-active='true'] {
   border: 2px solid var(--accent);
-  padding: 5px 17px 5px 5px;
+  padding: 9px 12px 9px 9px;
   background: var(--accent-soft);
 }
 
 /*
  * An unavailable provider is visibly out of service AND carries its reason —
- * on the pill's own tag, and again in the strip below the row. Greying alone
+ * on the pill's own tag, and again in the line below the row. Greying alone
  * would read as "not selected"; the point is that it cannot be selected at all.
+ *
+ * ⚠ THE BORDER GOES DASHED, per the handoff, and that is the part doing the work.
+ * Opacity alone is ambiguous — a dimmed control reads as "not currently chosen"
+ * to anyone who has just seen five other dimmed controls that ARE choosable. A
+ * dashed edge is the one border treatment nothing else on this screen uses, so it
+ * reads as a different KIND of thing rather than a different state of the same
+ * thing. It also survives the case opacity cannot cover: a viewer who has turned
+ * contrast up.
  */
 .af-im-provider[data-available='false'] {
   cursor: not-allowed;
   opacity: 0.55;
+  border-style: dashed;
+  border-color: var(--line2);
 }
 
 /*
@@ -201,8 +239,8 @@
 .af-im-mark {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   font-weight: 900;
   font-size: 12px;
@@ -214,9 +252,9 @@
 
 .af-im-provider-label {
   font-weight: 800;
-  font-size: 14.5px;
+  font-size: 13px;
+  line-height: 1.15;
   color: var(--text);
-  white-space: nowrap;
 }
 
 /*
@@ -241,53 +279,15 @@
 
 @media (max-width: 560px) {
   /*
-   * ⚠ THE ROW BECAME FIVE LINES ON A PHONE. Six pills of six different widths wrap
-   * greedily, so at 390px it settled as 2-1-1-1-1 — nearly 300px of vertical space
-   * to choose one platform, and four of the six lines with a hole beside them that
-   * looked like a missing option. Two equal columns instead: same six pills, three
-   * tidy rows.
+   * ⚠ ONLY THE COLUMN COUNT CHANGES NOW. This block used to rebuild the whole
+   * tile — a grid with the mark spanning two rows — because the desktop layout
+   * was a single-line flex pill and the phone needed a stack. The desktop tile IS
+   * the stack now, so all of that was a second implementation of an arrangement
+   * that already existed, and the two would have drifted the first time either
+   * was touched. Six tiles have exactly two tidy shapes: 3x2 and 2x3.
    */
   .af-im-providers {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  /*
-   * ⚠ AND THE TAG GETS ITS OWN LINE, because `white-space: normal` (which is what
-   * used to be here) breaks it in the middle: "· league / ID", "· Coming / soon",
-   * "· league ID + / key". A qualifier split across two lines mid-phrase is harder
-   * to read than no qualifier at all. Stacking under the name keeps each one whole
-   * and keeps the name — the thing being scanned for — first on its own line.
-   *
-   * A grid rather than a nested flex box, so this needs no extra element in the
-   * JSX: the mark spans both rows, the label takes the first and the tag the second.
-   */
-  .af-im-provider {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    column-gap: 8px;
-    row-gap: 1px;
-    min-width: 0;
-    padding: 5px 12px 5px 5px;
-  }
-  .af-im-provider[data-active='true'] {
-    padding: 4px 11px 4px 4px;
-  }
-  .af-im-mark {
-    grid-row: 1 / span 2;
-    width: 28px;
-    height: 28px;
-    font-size: 11px;
-  }
-  .af-im-provider-label {
-    grid-column: 2;
-    grid-row: 1;
-    font-size: 13.5px;
-  }
-  .af-im-soon {
-    grid-column: 2;
-    grid-row: 2;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -343,31 +343,61 @@
  */
 .af-im-context-sport {
   flex: 0 0 auto;
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: 999px;
-  border: 1px solid var(--chip-line);
-  background: var(--surface2);
+  border: 1px solid var(--line);
+  background: var(--surface);
   font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.12em;
-  color: var(--text2);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/*
+ * ⚠ NCAAF IS THE ONE CHIP THAT CARRIES NEWS. NFL is on all six providers, so it
+ * says nothing you did not already assume; NCAAF appears on Fantrax alone and is
+ * the ONLY place in this product that tells you a college league can be imported
+ * at all. Rendered identically to NFL it was a second grey token nobody read.
+ * The handoff gives it the accent, which is this screen's "this is the thing"
+ * colour, and that is exactly what it is here.
+ */
+.af-im-context-sport[data-sport='NCAAF'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 /* ── The coming-soon fallback strip (6a) ─────────────────────────────── */
 
+/*
+ * ⚠ NOT A CARD ANY MORE. As a bordered chip-filled box this competed with the
+ * context strip directly above it — two boxed rows stacked under the grid, and
+ * the eye read the disabled-provider footnote as being as important as the
+ * caption for the provider you actually chose. It is a footnote; the handoff
+ * draws it as one plain faint line under the row.
+ */
 .af-im-blocked {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--chip);
-  font-size: 12.5px;
+  flex-direction: column;
+  gap: 4px;
+  margin: -2px 0 0;
+  font-size: 11px;
   line-height: 1.5;
-  color: var(--text2);
+  color: var(--faint);
+}
+
+.af-im-blocked-line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+/* The provider's name keeps the mono label treatment so the line scans as
+   "<platform> — <why>" rather than as a sentence that happens to start with a
+   proper noun. */
+.af-core .af-im-blocked-line > .af-label {
+  color: var(--muted);
 }
 
 /* ── Field ───────────────────────────────────────────────────────────── */
@@ -1247,4 +1277,22 @@
 .af-im-brand,
 .af-core .af-im-brand {
   min-height: 44px;
+}
+
+/*
+ * The selected-provider variant of the blocked line. Louder than the row
+ * footnote on purpose: this one is about the tile you are looking at and the
+ * reason the field below has vanished, so it gets the boxed treatment the
+ * footnote gave up.
+ */
+.af-im-blocked--selected {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.af-core .af-im-blocked--selected .af-label {
+  color: var(--warn);
 }
