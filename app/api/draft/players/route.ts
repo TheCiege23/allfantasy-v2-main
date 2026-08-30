@@ -68,8 +68,21 @@ function toResponseRow(r: PlayerRow, sport: string, adp: number | null) {
     imageUrl: r.imageUrl,
     status: r.status,
     adp,
-    projPts: 0,
-    proj: 0,
+    /*
+     * 🛑 NULL, NOT 0. `0` is a claim — "we project this player to score nothing" — and it was
+     * being made about every player in the pool.
+     *
+     * There IS a projection table, and it is deliberately not used here:
+     * `fantasy_projections` holds 1,001 NFL rows for 2026 at week 1 only. A WEEKLY number is
+     * not a draft-board projection, and substituting one would repeat the category error this
+     * route already made with ADP — a real number from the wrong question.
+     *
+     * Nothing reads either field today (censused across app/, components/, lib/, hooks/), so
+     * null costs nothing now and forces the first real consumer to handle "unknown" instead of
+     * silently rendering 0.0 as a projection.
+     */
+    projPts: null,
+    proj: null,
     byeWeek: null,
     bye: null,
     stats: {},

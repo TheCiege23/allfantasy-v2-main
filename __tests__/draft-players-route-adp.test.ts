@@ -126,6 +126,22 @@ describe('GET /api/draft/players', () => {
     expect(body.players[0].adp).toBeNull()
   })
 
+  it('reports projections as null, never a fabricated 0', async () => {
+    /*
+     * `projPts: 0` / `proj: 0` asserted that every player in the pool projects to score
+     * nothing. `fantasy_projections` does exist (1,001 NFL rows, 2026) but only at week 1 — a
+     * weekly number is not a draft-board projection, so null is the honest value rather than
+     * substituting a real number that answers a different question.
+     */
+    getLiveAdpByNameMock.mockResolvedValue(boardOf([['Real Player', 4]]))
+    findManyMock.mockResolvedValue([player('Real Player', 'r1')])
+
+    const body = await callRoute()
+    expect(body.players[0].proj).toBeNull()
+    expect(body.players[0].projPts).toBeNull()
+    expect(body.players[0].proj).not.toBe(0)
+  })
+
   it('honours the limit', async () => {
     getLiveAdpByNameMock.mockResolvedValue(
       boardOf(Array.from({ length: 10 }, (_, i) => [`Player ${i}`, i + 1] as [string, number])),
