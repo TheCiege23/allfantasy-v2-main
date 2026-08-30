@@ -1103,3 +1103,427 @@ export async function getCFBTeamDirectory(): Promise<CFBTeamDirectoryEntry[]> {
   if (!directory) throw new Error('CFBD team directory unavailable')
   return directory
 }
+
+// ──────────────────────────────────────────────────────────────────
+// CFBD v2: Passing detail — air yards, ADOT, pass location, YAC
+//
+// Added 2026-08-30, the day CFBD published five passing endpoints that split
+// passing production into WHERE the ball was thrown and WHAT HAPPENED AFTER IT
+// ARRIVED. For devy that is the difference between a QB whose yardage is his
+// own and one whose yardage is his slot receiver's: two passers with identical
+// `passingYards` can sit five air yards apart in ADOT, and only one of them is
+// making the throws that translate.
+//
+// ⚠ COVERAGE IS PARTIAL AND THE PROVIDER SAYS SO. CFBD's own note: 2025 is
+// partial "with richer detail concentrated later in the season", 2026 onward
+// "mostly complete as games are played, though individual games and fields can
+// still have gaps". So every aggregate here carries its own denominator —
+// `airYardsAttempts` is the number of attempts that actually HAD an air-yard
+// value, not the passer's attempt total. A caller that divides by `attempts`
+// instead is computing an ADOT diluted by every throw the feed never measured,
+// and it will be wrong in the direction that looks plausible: too low, smoothly,
+// for exactly the players with the least data. Never substitute one for the
+// other.
+//
+// ⚠ THE FIELD NAMES BELOW ARE MAPPED DEFENSIVELY, NOT FROM A CAPTURED FIXTURE.
+// The announcement names the METRICS; it does not publish the JSON keys, this
+// repo has no `contracts/collegefootballdata/` to read a shape out of, and the
+// CFBD key has been over its monthly quota since 2026-08-25 — so there was no
+// honest way to observe one. Each field therefore accepts the plausible
+// spellings (`airYards` / `air_yards` / `totalAirYards`) and falls through to
+// null rather than 0. A key we guessed wrong yields null, which every consumer
+// below treats as "not measured"; guessing wrong toward 0 would publish a
+// fabricated ADOT of zero for the whole board. When a real payload is first
+// seen, tighten these to the observed keys and delete the aliases.
+// ──────────────────────────────────────────────────────────────────
+
+/** First present, finite number among `keys`; null when none is usable. */
+function pickNumber(row: any, ...keys: string[]): number | null {
+  for (const k of keys) {
+    const v = row?.[k]
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    // CFBD occasionally serialises aggregates as strings; "" and "NA" must not
+    // become 0.
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v)
+      if (Number.isFinite(n)) return n
+    }
+  }
+  return null
+}
+
+function pickInt(row: any, ...keys: string[]): number | null {
+  const n = pickNumber(row, ...keys)
+  return n == null ? null : Math.round(n)
+}
+
+/**
+ * The short/deep × left/middle/right grid, as far as the feed provides it.
+ *
+ * Kept as a nested record rather than eighteen flat columns: CFBD says location
+ * is present "when provided in the play data", so most cells are absent for
+ * most passers, and a sparse grid is honest about that in a way a wall of null
+ * columns is not.
+ */
+export interface CFBPassLocationSplit {
+  attempts: number | null
+  completions: number | null
+  yards: number | null
+  touchdowns: number | null
+  interceptions: number | null
+}
+
+export type CFBPassDepth = 'short' | 'deep'
+export type CFBPassDirection = 'left' | 'middle' | 'right'
+
+export type CFBPassLocationGrid = Partial<
+  Record<CFBPassDepth, Partial<Record<CFBPassDirection, CFBPassLocationSplit>>>
+>
+
+const PASS_DEPTHS: CFBPassDepth[] = ['short', 'deep']
+const PASS_DIRECTIONS: CFBPassDirection[] = ['left', 'middle', 'right']
+
+/**
+ * Read a location grid out of whichever shape the payload uses.
+ *
+ * Two are plausible from the announcement's wording ("short or deep, and left,
+ * middle, or right"): nested (`locations.short.left`) or flat-keyed
+ * (`locations["short_left"]`). Both are accepted; anything else yields an empty
+ * grid, which reads as "no location detail" — the correct answer for a passer
+ * whose plays carried none.
+ */
+function readPassLocations(raw: any): CFBPassLocationGrid {
+  const src = raw?.locations ?? raw?.passLocations ?? raw?.pass_locations ?? raw
+  if (!src || typeof src !== 'object') return {}
+
+  const grid: CFBPassLocationGrid = {}
+  for (const depth of PASS_DEPTHS) {
+    for (const dir of PASS_DIRECTIONS) {
+      const cell =
+        src?.[depth]?.[dir] ??
+        src?.[`${depth}_${dir}`] ??
+        src?.[`${depth}${dir[0].toUpperCase()}${dir.slice(1)}`]
+      if (!cell || typeof cell !== 'object') continue
+
+      const split: CFBPassLocationSplit = {
+        attempts: pickInt(cell, 'attempts', 'att', 'plays'),
+        completions: pickInt(cell, 'completions', 'comp', 'completed'),
+        yards: pickNumber(cell, 'yards', 'yds', 'passingYards'),
+        touchdowns: pickInt(cell, 'touchdowns', 'td', 'tds'),
+        interceptions: pickInt(cell, 'interceptions', 'int', 'ints'),
+      }
+      // A cell of nothing but nulls is noise — the grid is meant to be sparse.
+      if (Object.values(split).every((v) => v == null)) continue
+
+      grid[depth] = { ...(grid[depth] ?? {}), [dir]: split }
+    }
+  }
+  return grid
+}
+
+/** Season or game passing profile for one passer. */
+export interface CFBPassingProfile {
+  season: number
+  /** Present only on the per-game endpoint. */
+  week: number | null
+  gameId: number | null
+  playerId: number | null
+  playerName: string
+  team: string
+  conference: string | null
+  /** Total attempts the passer threw, per the feed. */
+  attempts: number | null
+  completions: number | null
+  /** Summed air yards across attempts that HAD an air-yard value. */
+  airYards: number | null
+  /**
+   * Average depth of target.
+   *
+   * Taken from the feed when it supplies one and derived only from
+   * `airYards / airYardsAttempts` otherwise — never from `attempts`. See the
+   * coverage warning at the top of this section.
+   */
+  adot: number | null
+  /** ⚠ ADOT's denominator. NOT `attempts`. Null when the feed omits it. */
+  airYardsAttempts: number | null
+  /** Yards gained after the catch, summed over completions that carried it. */
+  yardsAfterCatch: number | null
+  /** YAC's denominator — completions with a YAC value. NOT `completions`. */
+  yacCompletions: number | null
+  locations: CFBPassLocationGrid
+}
+
+function toPassingProfile(p: any, fallbackSeason: number): CFBPassingProfile {
+  const airYards = pickNumber(p, 'airYards', 'air_yards', 'totalAirYards', 'total_air_yards')
+  const airYardsAttempts = pickInt(
+    p,
+    'airYardsAttempts',
+    'air_yards_attempts',
+    'attemptsWithAirYards',
+    'airYardsCount',
+    'countableAttempts',
+  )
+  const feedAdot = pickNumber(p, 'adot', 'averageDepthOfTarget', 'average_depth_of_target', 'avgAirYards')
+
+  return {
+    season: pickInt(p, 'season', 'year') ?? fallbackSeason,
+    week: pickInt(p, 'week'),
+    gameId: pickInt(p, 'gameId', 'game_id'),
+    playerId: pickInt(p, 'playerId', 'player_id', 'athleteId', 'id'),
+    playerName: String(p?.player ?? p?.playerName ?? p?.name ?? '').trim(),
+    team: String(p?.team ?? p?.school ?? '').trim(),
+    conference: p?.conference ?? null,
+    attempts: pickInt(p, 'attempts', 'att', 'passAttempts'),
+    completions: pickInt(p, 'completions', 'comp', 'completedPasses'),
+    airYards,
+    // Derive ONLY over the measured denominator. `airYards / attempts` would be
+    // an ADOT silently deflated by every unmeasured throw.
+    adot:
+      feedAdot ??
+      (airYards != null && airYardsAttempts != null && airYardsAttempts > 0
+        ? airYards / airYardsAttempts
+        : null),
+    airYardsAttempts,
+    yardsAfterCatch: pickNumber(p, 'yardsAfterCatch', 'yards_after_catch', 'yac', 'totalYac'),
+    yacCompletions: pickInt(p, 'yacCompletions', 'yac_completions', 'completionsWithYac', 'yacCount'),
+    locations: readPassLocations(p),
+  }
+}
+
+/**
+ * Passer season summaries — `/passing/players/season`.
+ *
+ * The endpoint this whole section exists for: one row per passer per season,
+ * which is the grain `DevyPlayer` stores at.
+ */
+export async function getCFBPassingPlayerSeason(year: number, team?: string): Promise<CFBPassingProfile[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const cacheKey = `cfbd-passing-players-season-${year}-${team || 'all'}`
+
+  const result = await getCachedOrFetch<CFBPassingProfile[]>(cacheKey, ONE_DAY, async () => {
+    let url = `${CFBD_BASE}/passing/players/season?year=${year}`
+    if (team) url += `&team=${encodeURIComponent(team)}`
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) return []
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return []
+    return data.map((p: any) => toPassingProfile(p, year))
+  })
+
+  return result || []
+}
+
+/** Passer game summaries — `/passing/players/games`. */
+export async function getCFBPassingPlayerGames(
+  year: number,
+  options?: { team?: string; week?: number },
+): Promise<CFBPassingProfile[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const cacheKey = `cfbd-passing-players-games-${year}-${options?.team || 'all'}-${options?.week ?? 'all'}`
+
+  const result = await getCachedOrFetch<CFBPassingProfile[]>(cacheKey, ONE_DAY, async () => {
+    let url = `${CFBD_BASE}/passing/players/games?year=${year}`
+    if (options?.team) url += `&team=${encodeURIComponent(options.team)}`
+    if (options?.week != null) url += `&week=${options.week}`
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) return []
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return []
+    return data.map((p: any) => toPassingProfile(p, year))
+  })
+
+  return result || []
+}
+
+/**
+ * Team passing summary, one side of the ball.
+ *
+ * ⚠ OFFENSE AND DEFENSE ARRIVE IN THE SAME RESPONSE and mean opposite things.
+ * A team's defensive ADOT is how deep opponents threw AGAINST it; storing it
+ * beside the offensive figure without the label would make a good pass defence
+ * read as a vertical passing attack.
+ */
+export interface CFBTeamPassingSummary extends CFBPassingProfile {
+  unit: 'offense' | 'defense'
+}
+
+function splitTeamUnits(data: any[], fallbackSeason: number): CFBTeamPassingSummary[] {
+  const out: CFBTeamPassingSummary[] = []
+  for (const row of data) {
+    // Two shapes are plausible: a `unit`/`side` discriminator on a flat row, or
+    // nested `offense`/`defense` objects on one row per team.
+    const declared = String(row?.unit ?? row?.side ?? '').toLowerCase()
+    if (declared === 'offense' || declared === 'defense') {
+      out.push({ ...toPassingProfile(row, fallbackSeason), unit: declared })
+      continue
+    }
+    for (const unit of ['offense', 'defense'] as const) {
+      const nested = row?.[unit]
+      if (!nested || typeof nested !== 'object') continue
+      out.push({ ...toPassingProfile({ ...row, ...nested }, fallbackSeason), unit })
+    }
+  }
+  return out
+}
+
+/** Team season passing summaries — `/passing/teams/season`. Offense and defense. */
+export async function getCFBPassingTeamSeason(year: number, team?: string): Promise<CFBTeamPassingSummary[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const cacheKey = `cfbd-passing-teams-season-${year}-${team || 'all'}`
+
+  const result = await getCachedOrFetch<CFBTeamPassingSummary[]>(cacheKey, ONE_DAY, async () => {
+    let url = `${CFBD_BASE}/passing/teams/season?year=${year}`
+    if (team) url += `&team=${encodeURIComponent(team)}`
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) return []
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return []
+    return splitTeamUnits(data, year)
+  })
+
+  return result || []
+}
+
+/** Team game passing summaries — `/passing/teams/games`. Offense and defense. */
+export async function getCFBPassingTeamGames(
+  year: number,
+  options?: { team?: string; week?: number },
+): Promise<CFBTeamPassingSummary[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const cacheKey = `cfbd-passing-teams-games-${year}-${options?.team || 'all'}-${options?.week ?? 'all'}`
+
+  const result = await getCachedOrFetch<CFBTeamPassingSummary[]>(cacheKey, ONE_DAY, async () => {
+    let url = `${CFBD_BASE}/passing/teams/games?year=${year}`
+    if (options?.team) url += `&team=${encodeURIComponent(options.team)}`
+    if (options?.week != null) url += `&week=${options.week}`
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) return []
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return []
+    return splitTeamUnits(data, year)
+  })
+
+  return result || []
+}
+
+/** One passing attempt — `/passing/plays`. */
+export interface CFBPassingPlay {
+  id: number | null
+  season: number
+  week: number | null
+  gameId: number | null
+  offense: string
+  defense: string
+  passerId: number | null
+  passer: string
+  receiverId: number | null
+  receiver: string | null
+  /** Negative for a throw behind the line of scrimmage. */
+  airYards: number | null
+  yardsAfterCatch: number | null
+  yards: number | null
+  completion: boolean | null
+  touchdown: boolean | null
+  interception: boolean | null
+  depth: CFBPassDepth | null
+  direction: CFBPassDirection | null
+  down: number | null
+  distance: number | null
+}
+
+/**
+ * Individual attempts.
+ *
+ * ⚠ NOT INGESTED, AND DELIBERATELY SO. This is play grain: a single team-season
+ * is several hundred attempts and a season-wide pull is six figures of rows.
+ * There is no table at that grain in this schema, the devy board reasons at
+ * season grain, and pulling it on the shared cron budget would spend the CFBD
+ * monthly allowance on rows nothing reads. It is exposed because the season and
+ * game aggregates cannot answer a question about ONE throw — a scouting or
+ * research surface that needs that should call this narrowly, per team and
+ * week, and say why.
+ */
+export async function getCFBPassingPlays(
+  year: number,
+  options?: { team?: string; week?: number },
+): Promise<CFBPassingPlay[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const cacheKey = `cfbd-passing-plays-${year}-${options?.team || 'all'}-${options?.week ?? 'all'}`
+
+  const result = await getCachedOrFetch<CFBPassingPlay[]>(cacheKey, ONE_DAY, async () => {
+    let url = `${CFBD_BASE}/passing/plays?year=${year}`
+    if (options?.team) url += `&team=${encodeURIComponent(options.team)}`
+    if (options?.week != null) url += `&week=${options.week}`
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) return []
+
+    const data = await response.json()
+    if (!Array.isArray(data)) return []
+
+    return data.map((p: any) => {
+      const depth = String(p?.depth ?? p?.passDepth ?? '').toLowerCase()
+      const direction = String(p?.direction ?? p?.passDirection ?? '').toLowerCase()
+      return {
+        id: pickInt(p, 'id', 'playId'),
+        season: pickInt(p, 'season', 'year') ?? year,
+        week: pickInt(p, 'week'),
+        gameId: pickInt(p, 'gameId', 'game_id'),
+        offense: String(p?.offense ?? p?.team ?? '').trim(),
+        defense: String(p?.defense ?? p?.opponent ?? '').trim(),
+        passerId: pickInt(p, 'passerId', 'passer_id'),
+        passer: String(p?.passer ?? p?.passerName ?? '').trim(),
+        receiverId: pickInt(p, 'receiverId', 'receiver_id'),
+        receiver: p?.receiver ? String(p.receiver).trim() : null,
+        // `pickNumber` on purpose: a throw behind the line has NEGATIVE air
+        // yards, which is a real measurement and must survive.
+        airYards: pickNumber(p, 'airYards', 'air_yards'),
+        yardsAfterCatch: pickNumber(p, 'yardsAfterCatch', 'yards_after_catch', 'yac'),
+        yards: pickNumber(p, 'yards', 'yardsGained', 'yards_gained'),
+        completion: typeof p?.completion === 'boolean' ? p.completion : null,
+        touchdown: typeof p?.touchdown === 'boolean' ? p.touchdown : null,
+        interception: typeof p?.interception === 'boolean' ? p.interception : null,
+        depth: depth === 'short' || depth === 'deep' ? depth : null,
+        direction:
+          direction === 'left' || direction === 'middle' || direction === 'right' ? direction : null,
+        down: pickInt(p, 'down'),
+        distance: pickInt(p, 'distance', 'yardsToGoal'),
+      }
+    })
+  })
+
+  return result || []
+}
