@@ -16,7 +16,8 @@
  * Filters (defaults match D.5 spec):
  *   - source NOT IN ('test_seed', 'undone', 'corrected', 'deleted')
  *   - assetType IN (null, 'player')   (rookie / devy / dispersal picks excluded)
- *   - session.status = 'completed' OR pick.pickedAt is set
+ *   - the row is not a commissioner-cleared EMPTY slot
+ *   - sport is matched through `league.sport`, NOT the nullable `DraftPick.sportType`
  */
 
 /** server-only stub is loaded by scripts/_audit-preload.cjs (node --require). */
@@ -89,6 +90,11 @@ function printPretty(args: Args, report: RecomputeAllFantasyAdpReport): void {
   console.log(`   filtered (source): ${report.filteredOutBySource}`)
   console.log(`   filtered (asset):  ${report.filteredOutByAsset}`)
   console.log(`   filtered (mode):   ${report.filteredOutByMode}`)
+  console.log(`   filtered (empty):  ${report.filteredOutByEmptyRow}`)
+  console.log('')
+  console.log(` Imported drafts:     ${report.importedDraftsCovered} drafts, ${report.importedPicksKept} picks`)
+  console.log(`   facts scanned:     ${report.importedFactsScanned}`)
+  console.log(`   unresolved player: ${report.importedSkippedUnresolvedPlayer}`)
   console.log('')
   console.log(` Unique players:      ${report.uniquePlayers}`)
   console.log(` Unique contexts:     ${report.uniqueContexts}`)

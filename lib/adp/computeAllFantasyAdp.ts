@@ -1,5 +1,5 @@
 /**
- * D.5-test — pure aggregation logic for AllFantasy AI ADP.
+ * D.5-test â pure aggregation logic for AllFantasy AI ADP.
  *
  * Given a list of valid `DraftPick` rows, group by (player + context + draftMode)
  * and compute the snapshot fields the resolver / table will read:
@@ -7,21 +7,24 @@
  *   - minOverallPick, maxOverallPick
  *   - sevenDayTrend / thirtyDayTrend (deltas vs. earlier snapshots, computed elsewhere)
  *
- * Pure, framework-free — no Prisma, no React. The recompute script wires this
+ * Pure, framework-free â no Prisma, no React. The recompute script wires this
  * to Neon; the test suite verifies the math directly without a database.
  *
  * Definition of valid pick (filtered upstream by the recompute script):
- *   - session is `completed` OR pick was actually submitted in an in-progress draft
- *   - pick.source NOT IN ('test_seed', 'undone', 'corrected')   ← see DraftPick.source
+ *   - the row is not a commissioner-cleared EMPTY slot (see `isPickValidForAdp` - this
+ *     replaced a `pickedAt`/`status=completed` test that excluded every live draft)
+ *   - pick.source NOT IN ('test_seed', 'undone', 'corrected')   â see DraftPick.source
  *   - playerName is non-empty
- *   - overall ≥ 1
+ *   - overall â¥ 1
  *   - assetType IN (null, 'player')   (rookie/devy/dispersal picks excluded from ADP)
  *
- * Context tuple — drives `contextHash` (the natural key alongside playerKey + draftMode):
+ * Context tuple â drives `contextHash` (the natural key alongside playerKey + draftMode):
  *   sport | leagueType | draftType | scoringFormat | rosterFormat | teamCount | season
  */
 
 import { createHash } from 'node:crypto'
+
+import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 
 export interface DraftContext {
   sport: string
@@ -74,7 +77,7 @@ export function buildPlayerKey(name: string, position: string | null | undefined
   return `${n}|${p}`
 }
 
-/** Deterministic context hash — used as the natural key alongside playerKey + draftMode. */
+/** Deterministic context hash â used as the natural key alongside playerKey + draftMode. */
 export function buildContextHash(ctx: DraftContext): string {
   const parts = [
     String(ctx.sport ?? '').trim().toUpperCase(),
@@ -108,7 +111,7 @@ function stdDevOf(nums: readonly number[]): number | null {
 function clampRoundPick(pick: AggregatablePick): number {
   if (pick.roundPick != null && Number.isFinite(pick.roundPick) && pick.roundPick > 0) return pick.roundPick
   // Snake derivation: pick-in-round = ((overall - 1) % teamCount) + 1
-  // (Sleeper-equivalent — for snake, the raw pick-in-round is a useful approximation
+  // (Sleeper-equivalent â for snake, the raw pick-in-round is a useful approximation
   //  even though slot direction reverses each round; readers care about the average
   //  position more than the slot direction.)
   const tc = Math.max(1, pick.context.teamCount || 1)
@@ -170,10 +173,10 @@ function round2(n: number): number {
  * (playerKey, contextHash, draftMode).
  *
  * sevenDayTrend = (7-day prior snapshot averageOverallPick) - (current averageOverallPick)
- *   → positive number means the player has moved UP the board (drafted earlier now).
- *   → null when no prior snapshot exists for that window.
+ *   â positive number means the player has moved UP the board (drafted earlier now).
+ *   â null when no prior snapshot exists for that window.
  *
- * Same shape for 30-day. Pure function — recompute script handles the DB read.
+ * Same shape for 30-day. Pure function â recompute script handles the DB read.
  */
 export function applyTrends(
   current: AdpSnapshot[],
@@ -212,11 +215,30 @@ export function snapshotKey(s: { playerKey: string; contextHash: string; draftMo
  * - draftMode === 'test' is excluded by default; pass `{ includeTest: true }` to keep them.
  * - source values 'undone' / 'corrected' are excluded unconditionally.
  * - assetType must be null OR 'player' (rookie / devy / dispersal picks excluded from ADP).
+ * - commissioner-cleared EMPTY slot rows are excluded.
+ *
+ * ⚠ THE EMPTY-ROW CHECK REPLACED A `pickedAt IS NOT NULL` FILTER THAT MATCHED ALMOST NOTHING.
+ * The recompute selected `pickedAt != null OR session.status = 'completed'` to mean "a pick that
+ * was actually made". But `pickedAt` is written by exactly ONE caller in the repo -
+ * `commissionerPickEditService`. `PickSubmissionService` and `AuctionEngine` both omit the column
+ * on create, and `sleeperSync` sets it to NULL deliberately (Sleeper's pick payload carries no
+ * timestamp, and stamping sync-time made every pick read as "just now"). So for any draft not yet
+ * `completed`, that clause dropped every pick - which is exactly the live and in-progress draft
+ * data this system exists to collect.
+ *
+ * A DraftPick row is only created when a pick is actually made. The single exception is a
+ * commissioner-cleared slot, which leaves a placeholder row behind. Emptiness, not `pickedAt`, is
+ * the faithful expression of the original intent, and it is one predicate shared with the draft
+ * board rather than a second definition that can drift.
  */
 export interface PickValidityInput {
   source?: string | null
   assetType?: string | null
   draftMode: DraftMode
+  /** Commissioner-cleared slots leave a placeholder row behind; these three identify one. */
+  playerName?: string | null
+  position?: string | null
+  pickMetadata?: unknown | null
 }
 
 export function isPickValidForAdp(
@@ -228,5 +250,6 @@ export function isPickValidForAdp(
   if (pick.draftMode === 'test' && !options.includeTest) return false
   const asset = (pick.assetType ?? 'player').trim().toLowerCase()
   if (asset !== 'player' && asset !== '') return false
+  if (isDraftPickRowEmpty(pick)) return false
   return true
 }

@@ -1,5 +1,5 @@
 /**
- * D.5-scheduler — reusable recompute service for AllFantasy AI ADP.
+ * D.5-scheduler â reusable recompute service for AllFantasy AI ADP.
  *
  * Lifts the aggregation + upsert flow out of `scripts/recompute-allfantasy-adp.ts`
  * so a Vercel cron route (or any future caller) can run the recompute without
@@ -8,7 +8,7 @@
  * Default behavior (matches D.5 spec):
  *   - Real-mode picks only.
  *   - `source` NOT IN ('test_seed', 'undone', 'corrected', 'deleted').
- *   - `assetType` IN (null, 'player') — devy / dispersal picks excluded.
+ *   - `assetType` IN (null, 'player') â devy / dispersal picks excluded.
  *   - Sport NFL by default, but `options.sport` is overridable.
  *   - Mock and test draftModes can be opted in via flags (used by the CLI).
  *
@@ -16,6 +16,9 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { collectDraftFactSamples } from '@/lib/adp/draftFactSamples'
+import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { Prisma } from '@prisma/client'
 import {
   aggregateAdp,
@@ -28,7 +31,7 @@ import {
 } from '@/lib/adp/computeAllFantasyAdp'
 
 /**
- * Upsert computed **`AllFantasyAdpSnapshot`** rows — shared by cron/CLI and tests.
+ * Upsert computed **`AllFantasyAdpSnapshot`** rows â shared by cron/CLI and tests.
  * Does not run aggregation; pass **`AdpSnapshot`** from **`aggregateAdp`** / **`applyTrends`**.
  */
 export async function persistAllFantasyAdpSnapshots(
@@ -86,7 +89,7 @@ export interface RecomputeAllFantasyAdpOptions {
   sport?: string | null
   /** Default null = all seasons. */
   season?: string | null
-  /** Default 'real'. Pass 'all' or another mode to widen — cron should leave default. */
+  /** Default 'real'. Pass 'all' or another mode to widen â cron should leave default. */
   draftMode?: DraftMode | 'all'
   /** When false (default), test_seed picks AND draftMode='test' rows are excluded. */
   includeTest?: boolean
@@ -98,6 +101,15 @@ export interface RecomputeAllFantasyAdpOptions {
   teamCount?: number | null
   /** Override the wall-clock used for trend windows; tests pass a fixed Date. */
   now?: Date
+  /*
+   * Fold in drafts imported from other platforms (`DraftFact`). Default ON: an imported league's
+   * draft history is the single largest body of real picks we hold, and it reached NOTHING before
+   * - the historical sync writes `DraftFact` while this reads `DraftPick`.
+   *
+   * They land on their own `draftType: 'imported'` board and so cannot alter a live one. See
+   * lib/adp/draftFactSamples.ts for why the draft type is not assumed.
+   */
+  includeImportedDrafts?: boolean
 }
 
 export interface RecomputeAllFantasyAdpReport {
@@ -114,6 +126,13 @@ export interface RecomputeAllFantasyAdpReport {
   filteredOutBySource: number
   filteredOutByAsset: number
   filteredOutByMode: number
+  /** Commissioner-cleared placeholder slots. Was silently folded into `filteredOutByAsset`. */
+  filteredOutByEmptyRow: number
+  /** Picks contributed by imported (`DraftFact`) drafts, and what could not be used. */
+  importedFactsScanned: number
+  importedPicksKept: number
+  importedDraftsCovered: number
+  importedSkippedUnresolvedPlayer: number
   uniquePlayers: number
   uniqueContexts: number
   snapshotsWritten: number
@@ -130,6 +149,7 @@ interface DraftPickWithSession {
   pickedAt: Date | null
   source: string | null
   assetType: string | null
+  pickMetadata: unknown | null
   session: {
     sessionKind: string
     status: string
@@ -174,7 +194,7 @@ function deriveContext(row: DraftPickWithSession) {
 /**
  * Runs the recompute end-to-end and returns a structured report. Safe to call
  * from a Next route handler. Errors during individual upserts are captured in
- * `report.errors` rather than thrown — the caller decides on the HTTP status.
+ * `report.errors` rather than thrown â the caller decides on the HTTP status.
  */
 export async function recomputeAllFantasyAdp(
   options: RecomputeAllFantasyAdpOptions = {},
@@ -201,6 +221,11 @@ export async function recomputeAllFantasyAdp(
     filteredOutBySource: 0,
     filteredOutByAsset: 0,
     filteredOutByMode: 0,
+    filteredOutByEmptyRow: 0,
+    importedFactsScanned: 0,
+    importedPicksKept: 0,
+    importedDraftsCovered: 0,
+    importedSkippedUnresolvedPlayer: 0,
     uniquePlayers: 0,
     uniqueContexts: 0,
     snapshotsWritten: 0,
@@ -208,11 +233,36 @@ export async function recomputeAllFantasyAdp(
     errors: [],
   }
 
+  /*
+   * `normalizeToSupportedSport` maps vendor spellings onto the Prisma enum - notably
+   * NCAAFB / CFB -> NCAAF, which is how a college recompute reaches college leagues at all.
+   * `sport: null` (CLI "every sport") stays null and skips the filter entirely.
+   */
+  const sportFilter = sport ? normalizeToSupportedSport(sport) : null
+
   try {
     const picksRaw = (await prisma.draftPick.findMany({
       where: {
-        OR: [{ pickedAt: { not: null } }, { session: { status: 'completed' } }],
-        ...(sport ? { sportType: sport } : {}),
+        /*
+         * 🛑 SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
+         *
+         * `sportType` is nullable on BOTH DraftPick and DraftSession, and the writers that
+         * matter most leave it null. `lib/draft/sleeperSync.ts` - the mirror for externally
+         * hosted (live) Sleeper drafts - never sets the column on either table, and
+         * `PickSubmissionService` / `AuctionEngine` copy `session.sportType`, which that same
+         * mirror never populated. Prisma equality never matches NULL, so `sportType: 'NFL'`
+         * excluded every one of those rows.
+         *
+         * `deriveContext` below reads `league.sport` FIRST and would have classified the very
+         * same rows as NFL. The query and the classifier disagreed about what "NFL" means, and
+         * the query won by returning nothing - a recompute that writes zero snapshots and
+         * still exits 200.
+         *
+         * `League.sport` is a non-nullable enum (`@default(NFL)`) and `DraftSession.league` is a
+         * required relation, so `deriveContext` ALWAYS resolves to `league.sport`. Filtering on
+         * it is exactly faithful to the value each snapshot is written under.
+         */
+        ...(sportFilter ? { session: { league: { sport: sportFilter } } } : {}),
       },
       select: {
         playerName: true,
@@ -223,6 +273,7 @@ export async function recomputeAllFantasyAdp(
         pickedAt: true,
         source: true,
         assetType: true,
+        pickMetadata: true,
         session: {
           select: {
             sessionKind: true,
@@ -257,7 +308,14 @@ export async function recomputeAllFantasyAdp(
       if (draftMode !== 'all' && mode !== draftMode) continue
 
       const ok = isPickValidForAdp(
-        { source: row.source, assetType: row.assetType, draftMode: mode },
+        {
+          source: row.source,
+          assetType: row.assetType,
+          draftMode: mode,
+          playerName: row.playerName,
+          position: row.position,
+          pickMetadata: row.pickMetadata,
+        },
         { includeTest },
       )
       if (!ok) {
@@ -266,6 +324,8 @@ export async function recomputeAllFantasyAdp(
           report.filteredOutBySource++
         } else if (mode === 'test') {
           report.filteredOutByMode++
+        } else if (isDraftPickRowEmpty(row)) {
+          report.filteredOutByEmptyRow++
         } else {
           report.filteredOutByAsset++
         }
@@ -283,6 +343,35 @@ export async function recomputeAllFantasyAdp(
       })
     }
     report.picksKept = valid.length
+
+    /*
+     * Imported drafts, folded in AFTER the DraftPick pass so a failure here cannot cost us the
+     * live samples. `sport: null` (CLI all-sports) skips them: `collectDraftFactSamples` scans one
+     * sport at a time by design, and quietly picking one would misreport the run.
+     */
+    if (options.includeImportedDrafts !== false && sportFilter && draftMode !== 'mock') {
+      try {
+        const imported = await collectDraftFactSamples({ sport: sportFilter, season })
+        report.importedFactsScanned = imported.factsScanned
+        report.importedDraftsCovered = imported.draftsCovered
+        report.importedSkippedUnresolvedPlayer = imported.skippedUnresolvedPlayer
+
+        const usable = imported.picks.filter((p) => {
+          if (options.leagueType && p.context.leagueType !== options.leagueType.toLowerCase()) return false
+          if (options.draftType && p.context.draftType !== options.draftType.toLowerCase()) return false
+          if (options.teamCount != null && p.context.teamCount !== options.teamCount) return false
+          if (draftMode !== 'all' && p.draftMode !== draftMode) return false
+          return true
+        })
+        report.importedPicksKept = usable.length
+        valid.push(...usable)
+        report.picksKept = valid.length
+      } catch (err) {
+        report.errors.push(
+          `imported drafts: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
+    }
 
     const snapshots = aggregateAdp(valid)
     report.uniquePlayers = new Set(snapshots.map((s) => s.playerKey)).size
