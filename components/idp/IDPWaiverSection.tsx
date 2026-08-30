@@ -10,13 +10,8 @@ import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { IDPWaiverTarget } from '@/lib/idp/ai/idpChimmy'
 
-const STATIC_PLACEHOLDER = [
-  { name: 'Use AI Targets', desc: 'Loads personalized waiver ideas from Chimmy.' },
-  { name: 'DL / LB / DB', desc: 'Prioritize high-snap roles and favorable schedules.' },
-]
-
 export function IDPWaiverSection({ leagueId, week }: { leagueId: string; week: number }) {
-  const [mode, setMode] = useState<'static' | 'ai'>('static')
+  const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [targets, setTargets] = useState<IDPWaiverTarget[] | null>(null)
   const { handleApiResponse } = useAfSubGate('commissioner_idp_analysis')
@@ -34,7 +29,7 @@ export function IDPWaiverSection({ leagueId, week }: { leagueId: string; week: n
       const data = (await res.json().catch(() => [])) as IDPWaiverTarget[]
       if (Array.isArray(data)) {
         setTargets(data)
-        setMode('ai')
+        setLoaded(true)
       }
     } finally {
       setLoading(false)
@@ -58,23 +53,25 @@ export function IDPWaiverSection({ leagueId, week }: { leagueId: string; week: n
           {loading ? 'Loading…' : 'AI Targets'}
         </Button>
       </div>
-      <ul className="mt-3 space-y-2 text-sm">
-        {mode === 'ai' && targets?.length
-          ? targets.map((t) => (
-              <li key={`${t.rank}-${t.name}`} className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <span className="font-medium text-white">
-                  {t.rank}. {t.name} ({t.position}
-                  {t.team ? `, ${t.team}` : ''})
-                </span>
-                <p className="mt-1 text-xs text-white/70">{t.reasoning}</p>
-              </li>
-            ))
-          : STATIC_PLACEHOLDER.map((row) => (
-              <li key={row.name} className="text-white/75">
-                <span className="font-medium text-white/90">{row.name}</span> — {row.desc}
-              </li>
-            ))}
-      </ul>
+      {targets?.length ? (
+        <ul className="mt-3 space-y-2 text-sm" data-testid="idp-waiver-targets">
+          {targets.map((t) => (
+            <li key={`${t.rank}-${t.name}`} className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
+              <span className="font-medium text-white">
+                {t.rank}. {t.name} ({t.position}
+                {t.team ? `, ${t.team}` : ''})
+              </span>
+              <p className="mt-1 text-xs text-white/70">{t.reasoning}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 text-sm text-white/60" data-testid="idp-waiver-empty">
+          {loaded
+            ? 'No IDP waiver targets stood out this week.'
+            : 'Tap AI Targets for personalized IDP waiver ideas from Chimmy.'}
+        </p>
+      )}
     </div>
   )
 }
