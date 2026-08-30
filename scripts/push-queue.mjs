@@ -57,6 +57,18 @@ import { join, resolve } from 'node:path'
 
 const HEARTBEAT_TTL_MS = Number(process.env.AF_PUSH_QUEUE_TTL_MS) || 15 * 60_000
 const PUSH_GRACE_MS = Number(process.env.AF_PUSH_QUEUE_GRACE_MS) || 10 * 60_000
+
+/**
+ * How long a pusher lock survives without a heartbeat.
+ *
+ * Deliberately much longer than a ticket's 15 min: a ticket covers one push,
+ * while the ROLE is held across batches and a pusher legitimately goes quiet for
+ * long stretches — verifying a tip, waiting on a ratchet, talking to authors. A
+ * short TTL would evaporate the lock during exactly the careful work it exists
+ * to protect. 45 min is long enough to cover a slow batch and short enough that
+ * a vanished pusher does not block the room for a working day.
+ */
+const PUSHER_TTL_MS = Number(process.env.AF_PUSH_PUSHER_TTL_MS) || 45 * 60_000
 const POLL_MS = Number(process.env.AF_PUSH_QUEUE_POLL_MS) || 15_000
 const WAIT_TIMEOUT_MS = 90 * 60_000 // `wait` gives up rather than hanging forever
 const ZEROS = /^0+$/
@@ -185,6 +197,61 @@ function readPusher(dir) {
   } catch {
     return null
   }
+}
+
+/**
+ * 🛑 THE TOKEN IS THE IDENTITY. THE NAME IS A HINT FOR HUMANS.
+ *
+ * Session names in this room are REASSIGNED. On 2026-08-30 the holder's name
+ * went from `allfantasy-v2-main-61` to `-9e` mid-session, so a peer found the
+ * recorded name unreachable — `ListAgents` did not list it and `SendMessage` was
+ * refused — concluded the session had ended, and released a lock that was being
+ * actively held mid-batch. Two independent signals, both correct about the NAME,
+ * both wrong about the SESSION.
+ *
+ * A name cannot be made reliable here, so liveness is measured instead of
+ * inferred: the holder refreshes `heartbeatAt`, and a lock nobody has refreshed
+ * for PUSHER_TTL_MS is stale and clears itself. That removes the judgement call
+ * about someone else's existence, which is the thing that went wrong.
+ */
+const pusherAge = (p) => now() - (Number(p?.heartbeatAt) || Number(p?.since) || 0)
+const pusherIsStale = (p) => pusherAge(p) > PUSHER_TTL_MS
+const holdsPusherToken = (p) => Boolean(p) && process.env.AF_PUSH_TOKEN === p.token
+
+/** Refresh the lock's heartbeat. Only ever called for the token holder. */
+function touchPusher(dir, p) {
+  try {
+    writeFileSync(join(dir, 'pusher.json'), `${JSON.stringify({ ...p, heartbeatAt: now() }, null, 2)}\n`)
+  } catch {}
+}
+
+/**
+ * Drop a stale lock and say so. Returns the live lock, or null if there is none
+ * (or it expired). A cleared lock means no gate — the same fail-open shape the
+ * rest of this file uses, reached by measurement rather than by someone deciding
+ * a peer is gone.
+ */
+function livePusher(dir) {
+  const p = readPusher(dir)
+  if (!p) return null
+  if (pusherIsStale(p)) {
+    try {
+      rmSync(join(dir, 'pusher.json'), { force: true })
+    } catch {
+      return p // could not remove it; keep honouring it rather than half-clearing
+    }
+    journal(dir, {
+      event: 'pusher-expired',
+      name: p.name,
+      ref: p.ref,
+      staleFor: `${Math.round(pusherAge(p) / 60000)}m`,
+    })
+    process.stderr.write(
+      `  ⚠ push-queue: the pusher lock held by ${p.name} went ${Math.round(pusherAge(p) / 60000)} min without a heartbeat — expired and cleared.\n`,
+    )
+    return null
+  }
+  return p
 }
 
 /** One `ls-remote` per process, at most. Null means "could not tell". */
@@ -505,11 +572,13 @@ function cmdCheck() {
 
   // The pusher gate runs BEFORE a ticket is taken: a session that is not
   // pushing today should not be occupying a place in the line either.
-  const pusher = readPusher(dir)
-  if (pusher && process.env.AF_PUSH_TOKEN !== pusher.token) {
+  const pusher = livePusher(dir)
+  if (pusher && holdsPusherToken(pusher)) touchPusher(dir, pusher)
+  if (pusher && !holdsPusherToken(pusher)) {
     process.stderr.write(
       `\n  ✋ push blocked: ${pusher.name} is the designated pusher right now.\n\n` +
         `     holding since  ${new Date(pusher.since).toLocaleString()}\n` +
+        `     last heartbeat ${Math.round(pusherAge(pusher) / 60000)} min ago (expires at ${PUSHER_TTL_MS / 60000})\n` +
         `     reach them at  ${pusher.ref || pusher.name}  (SendMessage)\n\n` +
         `  One session batches and pushes, so several sessions' work rides one\n` +
         `  build instead of one build each. Ordering pushes does not save the\n` +
@@ -676,14 +745,62 @@ function cmdPusher(argv) {
   }
   const file = join(dir, 'pusher.json')
 
+  if (argv.includes('--heartbeat')) {
+    const held = readPusher(dir)
+    if (!held) return process.stdout.write('push-queue: no pusher lock to refresh.\n')
+    if (!holdsPusherToken(held)) {
+      return process.stdout.write(
+        `push-queue: not your lock — ${held.name} holds it. Only the token holder can refresh it.\n`,
+      )
+    }
+    touchPusher(dir, held)
+    return process.stdout.write(`push-queue: heartbeat refreshed for ${held.name}.\n`)
+  }
+
   if (argv.includes('--release')) {
     const held = readPusher(dir)
+    if (!held) {
+      process.stdout.write('push-queue: no pusher lock to release.\n')
+      return
+    }
+
+    // 🛑 A FRESH LOCK IS NOT YOURS TO RELEASE. This is the whole point of the
+    // heartbeat: on 2026-08-30 a peer released a lock held by a session that was
+    // mid-batch, because the holder's NAME had stopped resolving. Names are
+    // reassigned here; liveness is not a thing to infer about someone else.
+    // Three ways past this, in descending order of how much you should like them:
+    // you hold the token (it is your own lock), the lock is stale (measured, not
+    // judged), or you pass --force and own the consequences.
+    const mine = holdsPusherToken(held)
+    const stale = pusherIsStale(held)
+    const forced = argv.includes('--force')
+
+    if (!mine && !stale && !forced) {
+      process.stderr.write(
+        `\n  ✋ push-queue: ${held.name} holds the pusher role and the lock is LIVE.\n\n` +
+          `     last heartbeat  ${Math.round(pusherAge(held) / 60000)} min ago\n` +
+          `     expires after   ${PUSHER_TTL_MS / 60000} min without one\n` +
+          `     reach them at   ${held.ref || held.name}  (SendMessage)\n\n` +
+          `  A quiet pusher is not an absent one — they may be verifying a tip or\n` +
+          `  waiting on a ratchet, which is exactly when the lock matters most. A\n` +
+          `  name that no longer resolves is NOT evidence the session ended: names\n` +
+          `  are reassigned in this room, and that is how a live lock was released\n` +
+          `  out from under a batch on 2026-08-30.\n\n` +
+          `  Ask the room before overriding. If it really is abandoned, it clears\n` +
+          `  itself once the heartbeat goes stale — no action needed.\n\n` +
+          `  Genuinely stuck?  npm run push:pusher -- --release --force\n\n`,
+      )
+      process.exitCode = 1
+      return
+    }
+
     try {
       rmSync(file, { force: true })
     } catch {}
-    journal(dir, { event: 'pusher-released', name: held?.name })
+    const why = mine ? 'released by its holder' : stale ? `stale for ${Math.round(pusherAge(held) / 60000)}m` : 'FORCED by another session'
+    journal(dir, { event: 'pusher-released', name: held.name, ref: held.ref, reason: why })
     process.stdout.write(
-      `push-queue: pusher role released${held ? ` (was ${held.name})` : ''}. Anyone may push again — tell the other sessions.\n`,
+      `push-queue: pusher role released (was ${held.name}) — ${why}. Anyone may push again; tell the other sessions.\n`,
     )
     return
   }
@@ -692,7 +809,20 @@ function cmdPusher(argv) {
   if (claim) {
     const token = randomUUID()
     const ref = argFor(argv, '--ref') || ''
-    writeFileSync(file, `${JSON.stringify({ name: claim, ref, token, since: Date.now() }, null, 2)}\n`)
+    const existing = livePusher(dir)
+    if (existing && !holdsPusherToken(existing)) {
+      process.stderr.write(
+        `\n  ✋ push-queue: ${existing.name} already holds the pusher role, heartbeat ${Math.round(pusherAge(existing) / 60000)} min ago.\n` +
+          `     Claiming would take it from a live holder. Ask them, or wait for it to\n` +
+          `     expire on its own after ${PUSHER_TTL_MS / 60000} min without a heartbeat.\n\n`,
+      )
+      process.exitCode = 1
+      return
+    }
+    writeFileSync(
+      file,
+      `${JSON.stringify({ name: claim, ref, token, since: Date.now(), heartbeatAt: Date.now() }, null, 2)}\n`,
+    )
     journal(dir, { event: 'pusher-claimed', name: claim, ref })
     process.stdout.write(
       `push-queue: ${claim} now holds the pusher role.\n\n` +
@@ -705,14 +835,21 @@ function cmdPusher(argv) {
     return
   }
 
-  const held = readPusher(dir)
+  const held = livePusher(dir)
   if (!held) {
     process.stdout.write('push-queue: no designated pusher. Any session may push, in queue order.\n')
     return
   }
+  const age = Math.round(pusherAge(held) / 60000)
+  const expiresIn = Math.max(0, Math.round((PUSHER_TTL_MS - pusherAge(held)) / 60000))
   process.stdout.write(
     `push-queue: ${held.name} holds the pusher role since ${new Date(held.since).toLocaleString()}.\n` +
-      `  reach them at ${held.ref || held.name} (SendMessage) — hand over your SHA and attestation.\n`,
+      `  last heartbeat  ${age} min ago — expires in ${expiresIn} min without one\n` +
+      `  reach them at   ${held.ref || held.name} (SendMessage) — hand over your SHA and attestation\n` +
+      `${holdsPusherToken(held) ? '  (this session holds the token)\n' : ''}` +
+      `\n  ⚠ A quiet holder is not an absent one, and a name that no longer resolves\n` +
+      `    is not evidence a session ended — names are reassigned here. The lock\n` +
+      `    clears itself on a stale heartbeat; you do not need to judge that.\n`,
   )
 }
 
