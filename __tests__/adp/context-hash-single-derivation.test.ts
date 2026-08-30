@@ -63,6 +63,23 @@ function readIfPresent(abs: string): string | null {
   }
 }
 
+/*
+ * The tell of a hand-built tuple: the rosterFormat literal sitting next to a buildContextHash
+ * call. buildDraftContext is the only place it belongs.
+ *
+ * Deliberately a substring test rather than a regex. The first version of this was
+ * /rosterFormat:\s*'standard'/, the escape was lost in transit, and it shipped as
+ * /rosterFormat:s*'standard'/ -- zero-or-more literal 's', which never matches the way
+ * prettier actually formats this. A detector that cannot fire is worse than no detector,
+ * so `detectorFiresOnKnownPositive` below proves this one does.
+ */
+function hasRosterFormatLiteral(src: string): boolean {
+  return (
+    src.includes("rosterFormat: 'standard'") ||
+    src.includes("rosterFormat:'standard'")
+  )
+}
+
 function sourceFiles(): string[] {
   const patterns = ['lib/**/*.ts', 'lib/**/*.tsx', 'app/**/*.ts', 'app/**/*.tsx', 'components/**/*.tsx', 'scripts/**/*.ts']
   const out = new Set<string>()
@@ -116,6 +133,17 @@ describe('one derivation of the ADP context tuple', () => {
     expect(offenders).toEqual([])
   })
 
+  it('the rosterFormat detector actually matches something', () => {
+    /*
+     * lib/adp/draftContextKey.ts is the ONE file that legitimately contains this literal - it
+     * is where the tuple is built. If the detector cannot find it there, the "no offenders"
+     * result below is meaningless. This is the positive control for that check.
+     */
+    const src = readIfPresent(resolve(root, 'lib/adp/draftContextKey.ts'))
+    expect(src).not.toBeNull()
+    expect(hasRosterFormatLiteral(src!)).toBe(true)
+  })
+
   it('no production caller hand-builds the tuple with a rosterFormat literal', () => {
     /*
      * The tell of an inline copy: `rosterFormat: 'standard'` next to a buildContextHash call.
@@ -126,7 +154,7 @@ describe('one derivation of the ADP context tuple', () => {
       if (rel === 'lib/adp/computeAllFantasyAdp.ts') continue
       if (rel === 'scripts/seed-test-adp-drafts.ts') continue
       const src = readIfPresent(resolve(root, rel))
-      if (src != null && /rosterFormat:s*'standard'/.test(src)) offenders.push(rel)
+      if (src != null && hasRosterFormatLiteral(src)) offenders.push(rel)
     }
     expect(offenders).toEqual([])
   })
