@@ -629,6 +629,39 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
        * `identifyDevyAssets` is the SAME implementation `/api/trade-value/analyze` uses, so
        * the two surfaces cannot drift into different answers about the same trade.
        */
+      /*
+       * 🛑 AN AMBIGUOUS NAME IS NOT A MISSING PLAYER, AND SAYING "CHECK THE SPELLING" IS THE
+       * SAME WRONG ANSWER THIS ROUTE ALREADY GAVE COLLEGE PLAYERS.
+       *
+       * `loadLeagueTradeValues` refuses to price a defender whose name is shared with another
+       * player rostered in the same league — pricing him would hand one player the other's
+       * value. The name is spelled correctly and the player IS on the board; we simply will not
+       * guess which one is meant. Telling the manager to check his spelling sends him looking
+       * for a typo that does not exist.
+       *
+       * ⚠ IT IS ONE PLAYER, MEASURED, AND THAT IS WHY THIS IS A MESSAGE RATHER THAN A
+       * RESOLUTION. Across all 10 IDP leagues: 2,564 priced defenders, 12 unreachable by name,
+       * every one of them Byron Murphy (a corner and a lineman share the name) — 0.47%.
+       * Threading player ids through the name-keyed pricing path to disambiguate one duplicate
+       * would be a great deal of machinery aimed at a single collision. Naming the real cause
+       * costs nothing and is what the manager actually needs.
+       */
+      const ambiguous = new Set(leagueValues?.idp.ambiguousNames ?? [])
+      const ambiguousInTrade = names.filter((n) => ambiguous.has(n.toLowerCase().trim()))
+      if (ambiguousInTrade.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'AMBIGUOUS_PLAYER',
+            message:
+              ambiguousInTrade.length === 1
+                ? `Two players in this league are named ${ambiguousInTrade[0]}, so this trade cannot be graded — pricing one of them would risk using the other's value. This is a limitation on our side, not a mistake in what you entered.`
+                : `More than one player in this league shares each of these names — ${ambiguousInTrade.join(', ')} — so this trade cannot be graded without risking the wrong player's value.`,
+            ambiguousPlayers: ambiguousInTrade,
+          },
+          { status: 422 },
+        )
+      }
+
       const devy = await identifyDevyAssets({
         give: senderPlayerPrices.map((p) => ({ name: p.name, marketValue: p.unpriced ? null : p.value })),
         get: receiverPlayerPrices.map((p) => ({ name: p.name, marketValue: p.unpriced ? null : p.value })),
