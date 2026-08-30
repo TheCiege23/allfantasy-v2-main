@@ -505,6 +505,98 @@ conflict rules already name, reached from the opposite side: not a habit of
 taking one side, but a habit of **reusing a resolution that worked before**.
 Twice correct is not evidence about the third time.
 
+#### The third shape: a check that PASSES, on something you did not ship
+
+The two above are a check that cannot fail and a check that fails while handing
+back a plausible value. This one is neither: it runs, it is honest, it goes
+green — **against a different artifact from the one you committed.**
+
+🛑 **A PATH-SCOPED COMMIT OUT OF A DIRTY SHARED TREE CREATES A TREE NOBODY HAS
+BUILT.** `git commit -- <paths>` takes a SUBSET of the working tree. The result
+is a new artifact that has never existed on disk, so every check you ran before
+committing describes the tree you still have, not the one you just wrote. On
+2026-08-30 that shipped an attestation of "147 errors, zero in my files" for a
+commit that does not compile.
+
+The mechanics, because the file was shared in the ordinary way this repo now
+works: two sessions had uncommitted work in `lib/core-app/myTeam.ts`. We agreed
+one of us would take the whole file — correctly, per the sweep rule above. But
+the peer's change spanned TWO files, and only one of them was mine to commit. So
+the commit took their call site (`userId,` passed into `getNextMatchup`) and left
+their signature behind in the uncommitted `nextMatchup.ts`. Measured afterwards
+by typechecking each committed tree:
+
+```
+67c237ff4   156 error TS lines, incl. lib/core-app/myTeam.ts(1329,9) TS2353
+            'userId' does not exist in type '{ leagueId: string; ... }'
+75591e6bb   155 — the standing baseline — and zero in core-app
+```
+
+⚠ **THIS IS THE SWEEP RULE'S THIRD FACE, AND THE ONLY ONE THAT IS SILENT ON BOTH
+SIDES.** Committing a path can sweep a peer's hunks IN; reading a diff in full
+catches that. Resolving a conflict can drop a peer's work OUT; `patch-id` catches
+that. Splitting a peer's change across the commit boundary produces **no conflict,
+no marker, and a green local check** — and the author is the last person who can
+see it, because their own tree is the one that still works.
+
+**The check, and it is cheap — about four minutes:**
+
+```
+git worktree add --detach <tmp> <sha>
+# node_modules must be a junction, or every import fails and the run is noise.
+# Verify it IS one: PowerShell (Get-Item <tmp>/node_modules -Force).LinkType
+cd <tmp>
+# Read the UNPIPED exit status; `| grep <my files>` is the filtered-check trap above.
+NODE_OPTIONS=--max-old-space-size=8192 node ./node_modules/typescript/lib/tsc.js --noEmit
+```
+
+🛑 **REMOVE THE JUNCTION WITH `cmd /c rmdir <link>` BEFORE `git worktree
+remove`.** `rmdir` unlinks the junction and never recurses into its target;
+`Remove-Item -Recurse` can delete THROUGH it and take the real `node_modules`
+with it. Count the target's entries before and after and confirm the number is
+unchanged — the same "prove the negative" rule the junction detection above
+already carries.
+
+⚠ **AND THE MILD VERSION IS THE COMMON ONE — IT MOVES THE BASELINE.** The
+follow-up commit that repaired the break above carried "148 errors" in its own
+message; its committed tree measures **155**. Both readings were honest. The
+author's tree happened to hold two other sessions' uncommitted work — one
+breakage, one fix — so the number describes a tree nobody will build. Nothing
+was hidden and nothing broke, which is precisely why this version survives:
+**a wrong baseline is what every later "no new errors" claim is measured
+against.** On a repo whose baseline drifts anyway, a figure taken from a shared
+dirty tree is not a baseline at all.
+
+🛑 **AND THE INDEX IS SHARED TOO, WHICH IS THE FASTEST WAY TO HIT ALL OF THIS AT
+ONCE.** The commit that added this section swept three of a peer's waiver files
+and contained none of its own: between `git add -- CLAUDE.md` and the commit, a
+peer restaged, and a BARE `git commit` takes whatever is in the index. The
+existing rule — *verify the staged set before committing* — was followed to the
+letter and could not help, because the verification was chained to the commit
+with `&&`:
+
+```
+git add -- <paths> && git status --porcelain | grep '^[MARD]' && git commit -m …
+```
+
+That prints the staged set and then commits regardless. **It is a check that
+cannot fail, in the exact form this section is about**, and it is easy to write
+because it looks careful. Two fixes, and use both: read the staged set in a
+SEPARATE call before deciding, and commit with `git commit -- <paths>`, which
+takes the working-tree version of those paths and leaves every other index entry
+alone. A path-scoped commit could not have taken the peer's files at all.
+
+Recovery, if it happens anyway: `git reset --soft HEAD~1` restores the index
+exactly, then prove it — `git diff --cached | git patch-id --stable` against the
+same id from the bad commit, and the two patches byte-compared. Nothing is lost
+and the proof takes one command.
+
+**When it is required, stated narrowly so it does not become ceremony:** only
+when the commit's file set differs from the working tree's — a path-scoped commit
+out of a dirty tree, or a cherry-pick onto a base you have not built. A clean
+tree committed whole needs none of this; the tree you checked IS the tree you
+wrote.
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 User's decision, 2026-08-29, and the larger half of the build bill. The
@@ -539,6 +631,12 @@ covered:
 **Authors attest.** When handing work to the pusher, state what you ran and what
 it said — suite names and counts, not "tests pass". An author who cannot say
 which checks they ran is asking the pusher to guess.
+
+⚠ **AND ATTEST TO THE COMMIT, NOT TO YOUR WORKING TREE.** If the commit's file
+set differs from the tree you checked — the path-scoped case above — the numbers
+you hand over describe something nobody will build. Check the SHA out detached
+and re-run. This has already put a non-compiling commit into a batch with a
+clean attestation on it.
 
 **The pusher runs a fast smoke over the batch**, not a full re-verification: a
 scoped typecheck and the test files touched across the union of the batch. That
