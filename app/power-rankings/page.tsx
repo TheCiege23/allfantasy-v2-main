@@ -1596,7 +1596,12 @@ export default function PowerRankingsPage() {
       setLeagueError(null);
 
       try {
-        const response = await fetch("/api/league/list", { cache: "no-store" });
+        /*
+         * `summary=1` drops `settings` and `rosters`, which this picker never reads —
+         * `normalizeLeagueFromList` below touches only top-level scalars. Measured: 5.28 MB
+         * across 557 leagues, of which those two fields are 94%.
+         */
+        const response = await fetch("/api/league/list?summary=1", { cache: "no-store" });
         if (response.ok) {
           const payload = (await response.json().catch(() => ({}))) as {
             leagues?: unknown[];
