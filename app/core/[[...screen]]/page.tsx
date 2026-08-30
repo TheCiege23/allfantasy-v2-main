@@ -15,6 +15,8 @@ import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
+import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
+import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
 import { DashScheduleBand } from '@/components/core-app/screens/DashScheduleBand'
@@ -134,6 +136,7 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   waivers: 'waivers',
   'war-room': 'war-room',
   'draft-hq': 'draft-hq',
+  'defense-hub': 'defense-hub',
   portfolio: 'portfolio',
   career: 'career',
   rankings: 'rankings',
@@ -217,6 +220,10 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   waivers: { title: 'Waivers', description: 'Targets, bids and claim order for this league.' },
   'war-room': { title: 'War Room', description: 'The live draft board, clock and queue.' },
   'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
+  'defense-hub': {
+    title: 'Defense Hub',
+    description: 'Your defenders and kickers, priced by this league’s own scoring and starting slots.',
+  },
   portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
   career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
   // (league-scoped career shares this key; the title is accurate either way)
@@ -618,6 +625,18 @@ export default async function AfCorePage({
     activeKey === 'war-room' && selectedLeagueId
       ? await getWarRoomData(selectedLeagueId, userId).catch(() => null)
       : null
+
+  /*
+   * Does this league score IDP? Gates the Defense Hub rail entry.
+   *
+   * ⚠ RUN ON EVERY LEAGUE-SCOPED RENDER, NOT ONLY ON ITS OWN SCREEN, WHICH IS THE OPPOSITE OF
+   * the per-screen loaders above — a nav item has to be decidable before you are on the screen
+   * it links to. It is one indexed read of the league's own settings, no provider call, and it
+   * degrades to false so an error hides the entry rather than surfacing a dead one.
+   */
+  const hasIdpDefense = selectedLeagueId
+    ? (await resolveLeagueValueSurfaces(prisma, selectedLeagueId).catch(() => null))?.hasIdp ?? false
+    : false
 
   /*
    * 38a·2 — the live slate.
@@ -1275,6 +1294,7 @@ export default async function AfCorePage({
       leagues={rail}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       selectedLeagueId={selectedLeagueId}
+      hasIdpDefense={hasIdpDefense}
       weekLabel={dash34?.weekLabel ?? null}
       plan={plan}
       commissionerCount={commissionerCount}
@@ -1525,6 +1545,24 @@ export default async function AfCorePage({
             tabKey="waivers"
             title="Waivers"
             blurb="FAAB, waiver order and bid pricing are all per-league — the same player is worth a different amount in a different league."
+            issues={issues}
+            leagues={rail}
+          />
+        )
+      ) : activeKey === 'defense-hub' ? (
+        selectedLeagueId ? (
+          /*
+           * The same client the standalone /idp/defense-hub page renders, embedded. It owns its
+           * own fetch and its own blocked states — including "this league doesn't roster
+           * individual defenders" — so a manager who reaches this by URL in a non-IDP league
+           * gets that explanation rather than an empty screen.
+           */
+          <DefenseHubClient leagueId={selectedLeagueId} embedded />
+        ) : (
+          <PickALeague
+            tabKey="defense-hub"
+            title="Defense Hub"
+            blurb="Defenders and kickers are priced by one league's scoring and starting slots, so pick a league."
             issues={issues}
             leagues={rail}
           />

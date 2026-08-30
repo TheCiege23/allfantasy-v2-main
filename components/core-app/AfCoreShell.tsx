@@ -92,6 +92,16 @@ export type CoreNavKey =
      league belong to /import. This answers "is THIS league current" and does not
      re-sync — see the rail note for what that cost. */
   | 'sync'
+  /*
+   * 38a·11 — the Defense Hub, inside the shell.
+   *
+   * ⚠ CONDITIONAL, UNLIKE EVERY OTHER LEAGUE KEY. `navItems` omits it entirely unless the
+   * league actually scores IDP, and `navSections` drops any key it cannot find — so a redraft
+   * PPR league never sees it. Showing it unconditionally would put a nav entry in front of
+   * ~100 of 115 leagues that lands on "this league doesn't roster individual defenders",
+   * which is the "not built yet" panel problem this rail already learned once.
+   */
+  | 'defense-hub'
 
 type NavItem = {
   key: CoreNavKey
@@ -130,6 +140,14 @@ export type AfCoreShellProps = {
   warRoomLive?: boolean
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /**
+   * Does the selected league score IDP? Gates the Defense Hub nav entry.
+   *
+   * Resolved on the SERVER (`resolveLeagueValueSurfaces`) and passed down, rather than fetched
+   * here: the page already knows the league, and a client round trip would make the rail
+   * flicker an item in after paint on every navigation.
+   */
+  hasIdpDefense?: boolean
   /**
    * Feeds the communications drawer (23a/23b) and the support modal (25b), both
    * mounted once here so every screen inherits them. Omitted on surfaces that
@@ -230,6 +248,17 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/my-team',
     },
+    /* Only for leagues that actually roster defenders — see the CoreNavKey note. */
+    ...(props.hasIdpDefense && props.selectedLeagueId
+      ? [
+          {
+            key: 'defense-hub' as const,
+            label: 'Defense Hub',
+            glyph: '🛡',
+            href: `/core/defense-hub?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
     {
       key: 'matchup',
       label: 'Matchup',
@@ -469,7 +498,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   {
     id: 'league',
     heading: 'This league',
-    keys: ['my-team', 'matchup', 'waivers', 'trades', 'players', 'draft-hq', 'war-room'],
+    keys: ['my-team', 'defense-hub', 'matchup', 'waivers', 'trades', 'players', 'draft-hq', 'war-room'],
   },
   { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
   { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
