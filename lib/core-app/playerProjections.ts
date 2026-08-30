@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/loadIdpProjections'
 import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
+import { lookupNcaafProjections } from './ncaafProjections'
 
 /**
  * Weekly player projections, shared by My Team and Player Finder.
@@ -44,6 +45,17 @@ export type PlayerProjection = {
    * without them is showing a projection whose provenance it is choosing not to state.
    */
   idpProjection?: IdpProjectionSuccess
+  /**
+   * Set when this number describes a SEASON, not the coming week.
+   *
+   * ⚠ ONLY COLLEGE SETS IT TODAY, AND A SURFACE THAT IGNORES IT IS OFF BY A SEASON.
+   * NCAAF has no weekly projection feed at all, so `/core` serves the computed
+   * season-long figure instead — which is a real number, and roughly twelve times a
+   * weekly one. Rendering it unlabelled next to an NFL weekly projection invites
+   * exactly the comparison it cannot survive.
+   * `lib/projections/projectionCoverage.ts` carries the copy that explains it.
+   */
+  seasonLong?: true
 }
 
 type ProjectionStats = {
@@ -83,6 +95,15 @@ function toProjection(row: {
  * is that it asked for the wrong week.
  */
 export async function latestProjectionWeek(): Promise<{ season: string; week: number } | null> {
+  /*
+   * ⚠ NO SPORT PARAMETER, AND THAT IS THE CORRECTED DESIGN. A first cut gave this a
+   * `sport` and returned a college week for NCAAF. There is no college week to
+   * return: every `AFProjectionSnapshot` row is season-long (`week = null`), because
+   * the writer gates week-scoped rows on Sleeper's season state, which is the NFL's.
+   * A sport-aware version here could only have invented a number or returned null and
+   * switched college projections off entirely. `lookupProjections` resolves the
+   * college season itself and ignores the week — see lib/core-app/ncaafProjections.ts.
+   */
   const row = await prisma.fantasyProjection.findFirst({
     // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
     // provider feed — they must not decide, or serve as, "the week the feed holds".
@@ -115,10 +136,24 @@ export interface IdpEnrichment {
 export async function lookupProjections(
   playerIds: readonly string[],
   at?: { season: string; week: number } | null,
-  idp?: IdpEnrichment | null
+  idp?: IdpEnrichment | null,
+  sport?: string | null
 ): Promise<Map<string, PlayerProjection>> {
   const ids = playerIds.filter((id) => typeof id === 'string' && id.length > 0 && !id.startsWith('name:'))
   if (ids.length === 0) return new Map()
+
+  /*
+   * College comes from AFProjectionSnapshot, not from this table. The projections
+   * exist and always did — `fantasy_projections` simply never receives them,
+   * because the AF mirror keys on a Sleeper id no college player has. Delegated
+   * rather than merged so the NFL path below is untouched: `sport` is optional and
+   * every existing caller keeps its exact behaviour.
+   *
+   * IDP enrichment is deliberately NOT applied. It loads NFL defensive projections
+   * keyed on Sleeper ids, so for a college roster it can only ever return nothing —
+   * and running it would spend a query per screen to prove that.
+   */
+  if (String(sport ?? '').trim().toUpperCase() === 'NCAAF') return lookupNcaafProjections(ids, at ? { season: at.season } : null)
 
   const when = at ?? (await latestProjectionWeek())
   if (!when) return new Map()
