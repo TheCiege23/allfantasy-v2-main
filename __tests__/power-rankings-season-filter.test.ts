@@ -92,3 +92,54 @@ describe('selectLatestSeasonLeagues', () => {
     expect(res.latestSeason).toBe('2026')
   })
 })
+
+describe('selectLatestSeasonLeagues — the recency window', () => {
+  it('defaults to one season, so every existing caller is unchanged', () => {
+    const res = selectLatestSeasonLeagues([L('a', '2026'), L('b', '2025')])
+    expect(res.visibleLeagues.map((l) => l.id)).toEqual(['a'])
+    expect(res.hiddenCount).toBe(1)
+  })
+
+  it('keeps the newest TWO seasons at a window of 2, which is what the picker passes', () => {
+    const res = selectLatestSeasonLeagues(
+      [L('a', '2026'), L('b', '2025'), L('c', '2024'), L('d', '2021')],
+      2,
+    )
+    expect(res.visibleLeagues.map((l) => l.id)).toEqual(['a', 'b'])
+    expect(res.hiddenCount).toBe(2)
+    expect(res.latestSeason).toBe('2026')
+  })
+
+  it('reproduces the measured production split at window 2', () => {
+    /*
+     * After series collapse: 374 cards — 68 current, 9 previous, 297 older. The window keeps
+     * 77 and states that 297 are not listed.
+     */
+    const rows = [
+      ...Array.from({ length: 68 }, (_, i) => L(`cur${i}`, '2026')),
+      ...Array.from({ length: 9 }, (_, i) => L(`prev${i}`, '2025')),
+      ...Array.from({ length: 297 }, (_, i) => L(`old${i}`, String(2020 + (i % 5)))),
+    ]
+    const res = selectLatestSeasonLeagues(rows, 2)
+    expect(res.visibleLeagues).toHaveLength(77)
+    expect(res.hiddenCount).toBe(297)
+  })
+
+  it('clamps a nonsense window rather than blanking the picker', () => {
+    for (const w of [0, -3]) {
+      const res = selectLatestSeasonLeagues([L('a', '2026'), L('b', '2025')], w)
+      expect(res.visibleLeagues.map((l) => l.id), `window ${w}`).toEqual(['a'])
+    }
+  })
+
+  it('a window wider than the history keeps everything and hides nothing', () => {
+    const res = selectLatestSeasonLeagues([L('a', '2026'), L('b', '2025')], 10)
+    expect(res.visibleLeagues).toHaveLength(2)
+    expect(res.hiddenCount).toBe(0)
+  })
+
+  it('still excludes rows with an unreadable season from the window', () => {
+    const res = selectLatestSeasonLeagues([L('a', '2026'), L('b', '2025'), L('c', '')], 2)
+    expect(res.visibleLeagues.map((l) => l.id)).toEqual(['a', 'b'])
+  })
+})
