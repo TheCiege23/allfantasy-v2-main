@@ -113,6 +113,27 @@ export function DraftHq({ data }: DraftHqProps) {
             {data.madePicks.data.map((p) => (
               <li key={p.overall} className="af-dh-made-row">
                 <span className="af-dh-pick-label af-num">{p.label}</span>
+                {/*
+                  A face on your own picks. `imageUrl` is vetted server-side, so
+                  a value here is always something a `src` can take — the
+                  fallback is an initial for a pick we could not resolve, or for
+                  a non-Sleeper league where only a name is on file.
+                */}
+                {p.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    className="af-dh-made-face"
+                    src={p.imageUrl}
+                    alt=""
+                    width={28}
+                    height={28}
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="af-dh-made-face af-dh-made-face--none" aria-hidden>
+                    {p.playerName.charAt(0).toUpperCase()}
+                  </span>
+                )}
                 <span className="af-dh-made-name">{p.playerName}</span>
                 <span className="af-dh-made-meta">
                   {[p.position, p.team].filter(Boolean).join(' · ')}
