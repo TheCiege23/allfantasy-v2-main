@@ -144,6 +144,23 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
   const [editing, setEditing] = useState(false)
   const [swid, setSwid] = useState('')
   const [espnS2, setEspnS2] = useState('')
+  /*
+   * ⚠ MASKED BY DEFAULT, BUT REVEALABLE — AND THE REVEAL IS THE POINT.
+   * Both fields are `type="password"` because these cookies ARE credentials, and
+   * that is right. But they are the only credentials on this screen the user
+   * TYPES BY COPYING: the instructions above literally say open devtools,
+   * find the cookie, paste it here. `espn_s2` is a ~400-character opaque string.
+   *
+   * With no way to see what landed, a paste that grabbed a trailing space, a
+   * truncated selection, or the wrong cookie entirely is indistinguishable from
+   * a correct one until the connect fails — and the failure says "ESPN rejected
+   * these", which reads as "my cookies expired" rather than "I mis-copied".
+   * That sends someone back to devtools to repeat the same mistake.
+   *
+   * One toggle for the pair rather than one each: they are copied together in
+   * one trip, so they are checked together.
+   */
+  const [revealed, setRevealed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
@@ -327,8 +344,13 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           <span className="af-label">SWID</span>
           <input
             id="espn-swid-input"
-            type="password"
+            type={revealed ? 'text' : 'password'}
             autoComplete="off"
+            /* Pasted from devtools, never typed — so no autocorrect, no
+               capitalisation, and no spellcheck underline under a cookie. */
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"
             value={swid}
             onChange={(e) => setSwid(e.target.value)}
@@ -339,8 +361,11 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           <span className="af-label">espn_s2</span>
           <input
             id="espn-s2-input"
-            type="password"
+            type={revealed ? 'text' : 'password'}
             autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             placeholder="Long cookie value"
             value={espnS2}
             onChange={(e) => setEspnS2(e.target.value)}
@@ -348,6 +373,31 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
           />
         </label>
       </div>
+
+      {/*
+        ⚠ A REAL BUTTON, NOT A SPAN WITH AN onClick. It is keyboard reachable, it
+        carries `aria-pressed` so the state is announced rather than only drawn,
+        and it takes the same 44px floor every other control on this screen has.
+        `type="button"` because it sits inside the form and would otherwise
+        submit it — which here means firing the connect with half-checked values,
+        the exact thing the control exists to prevent.
+
+        Only rendered when there is something to reveal: an empty pair has
+        nothing to check, and a toggle over two blank boxes is a control that
+        does nothing on a screen already dense with instructions.
+      */}
+      {swid || espnS2 ? (
+        <div className="af-espn-reveal-row">
+          <button
+            type="button"
+            className="af-espn-reveal"
+            aria-pressed={revealed}
+            onClick={() => setRevealed((v) => !v)}
+          >
+            {revealed ? 'Hide values' : 'Show what I pasted'}
+          </button>
+        </div>
+      ) : null}
       <div className="af-espn-actions">
         <button
           type="button"
