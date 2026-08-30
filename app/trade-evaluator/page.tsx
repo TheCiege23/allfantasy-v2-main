@@ -7,6 +7,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { TradeSimulationStrip } from "@/components/ai/sim/TradeSimulationStrip"
+import { IdpTradeLineupWarning } from "@/components/idp/IdpTradeLineupWarning"
 import { InContextMonetizationCard } from "@/components/monetization/InContextMonetizationCard"
 import { usePlayerComparisonUIOptional } from "@/components/player-comparison-ui"
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from "@/lib/sport-scope"
@@ -22,6 +23,18 @@ type ScoringFormat =
   | "Superflex"
   | "Points"
   | "Categories"
+
+/**
+ * The band the verdict moves across when the unmeasured IDP defence-vs-offence ceiling is
+ * varied over a defensible range. The route emits it ONLY when that band spans 50 — i.e.
+ * when the constant WE picked, not the trade, is what decides who wins.
+ */
+interface IdpCeilingCaveat {
+  lowFairness: number
+  highFairness: number
+  flipsWinner: boolean
+  note: string
+}
 
 type PhaseKey = "plan" | "pricing" | "engine" | "ai" | "check"
 type VerdictKey =
@@ -89,6 +102,8 @@ interface TradeResult {
   drivers: TradeDriver[]
   labels: TradeLabelChip[]
   warnings: string[]
+  idpLineupWarning: string | null
+  idpCeilingCaveat: IdpCeilingCaveat | null
   counterOffer?: string
   negotiationSteps: string[]
   betterAlternatives: Array<{ teamId: string; whyBetter: string; tradeFramework: string; fitScore: number }>
@@ -151,6 +166,7 @@ interface ApiTradeResponse {
     vetoReason?: string | null
     expertWarning?: string | null
     idpLineupWarning?: string | null
+    idpCeilingCaveat?: IdpCeilingCaveat | null
   }
   valuationReport?: {
     teamA?: {
@@ -444,7 +460,6 @@ function buildWarnings(payload: ApiTradeResponse) {
   return [
     payload.tradeInsights?.vetoReason ?? null,
     payload.tradeInsights?.expertWarning ?? null,
-    payload.tradeInsights?.idpLineupWarning ?? null,
     ...(payload.evaluation?.riskFlags ?? []),
   ].filter((value): value is string => Boolean(value && value.trim()))
 }
@@ -503,6 +518,8 @@ function mapApiResponse(payload: ApiTradeResponse, headers: Headers, asOfDate: s
     drivers,
     labels,
     warnings: buildWarnings(payload),
+    idpLineupWarning: payload.tradeInsights?.idpLineupWarning ?? null,
+    idpCeilingCaveat: payload.tradeInsights?.idpCeilingCaveat ?? null,
     counterOffer: buildCounterOffer(payload),
     negotiationSteps: buildNegotiationSteps(payload),
     betterAlternatives: payload.evaluation?.betterAlternatives ?? [],
@@ -1229,6 +1246,34 @@ function TradeHubInner() {
             <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
               <div className="space-y-4">
                 <ResultBadge verdict={result.verdict} />
+
+                {/*
+                  Both IDP qualifiers sit with the verdict, because the verdict is what they
+                  qualify. They are deliberately NOT in `result.warnings`: that list is veto
+                  reasons, expert flags and risk flags — things wrong with the TRADE — and the
+                  ceiling caveat is a statement about the limits of OUR OWN pricing.
+                */}
+                <IdpTradeLineupWarning idpLineupWarning={result.idpLineupWarning} />
+
+                {result.idpCeilingCaveat ? (
+                  <div
+                    data-testid="idp-ceiling-caveat"
+                    className="rounded-2xl border border-sky-400/25 bg-sky-500/[0.07] p-4 text-sm text-sky-100/90"
+                  >
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-300/70">
+                      Close call — rests on our IDP rate
+                    </div>
+                    <p className="mt-2 leading-relaxed text-sky-100/80">{result.idpCeilingCaveat.note}</p>
+                    <div className="mt-3 flex items-center gap-2 text-[11px] text-sky-200/70">
+                      <span className="rounded-md border border-sky-400/25 bg-sky-500/10 px-2 py-1 font-semibold tabular-nums">
+                        {Math.min(result.idpCeilingCaveat.lowFairness, result.idpCeilingCaveat.highFairness)}
+                        {" – "}
+                        {Math.max(result.idpCeilingCaveat.lowFairness, result.idpCeilingCaveat.highFairness)}
+                      </span>
+                      <span>fairness range across a defensible ceiling</span>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="rounded-2xl border border-white/8 bg-[#0c0c1e] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">Score Cards</div>
