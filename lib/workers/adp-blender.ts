@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getAiAdpForLeague } from '@/lib/ai-adp-engine'
 import { resolveAiAdpFormatKeyFromSettings } from '@/lib/ai-adp-engine/segment-resolver'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { LeagueSport } from '@prisma/client'
 import { blendOne, normalizeBlendWeights } from '@/lib/adp/blendPolicy'
 
 export type ADPSource = 'api' | 'global_app' | 'ai' | 'blended' | 'custom'
@@ -39,7 +40,12 @@ export type ADPRanking = {
 
 type DraftSegment = {
   leagueId: string
-  sport: string
+  /*
+   * `LeagueSport`, not `string`. `resolveDraftSegment` already narrows through
+   * `normalizeToSupportedSport`, whose return type IS the enum; declaring it as `string` here
+   * threw that away and made a Prisma enum filter (`league: { sport }`) a type error.
+   */
+  sport: LeagueSport
   format: string
   scoring: string
   settings: Record<string, unknown>
