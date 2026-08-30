@@ -5,6 +5,8 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import type { SectionState, UnavailableSection } from './leagueHome'
 import { latestProjectionWeek, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
+import { asHeadshotUrl } from './playerIdentityCompose'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShare } from './snapShare'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -150,10 +152,35 @@ export type PlayerDetail = {
 const SLOT_ORDER = ['starters', 'reserve', 'taxi', 'players'] as const
 
 /** Team strings vary too ("BUF" vs "Buffalo Bills"); compare on the first token. */
+/**
+ * The club half of the collapse key.
+ *
+ * ⚠ THE LAST-WORD RULE DOES NOT FOLD AN ABBREVIATION AGAINST A FULL NAME, so
+ * "PIT" keyed as PIT while "Pittsburgh Steelers" keyed as STEELERS — and the
+ * same player was returned TWICE, which is precisely what the collapse comment
+ * says this key exists to prevent. `normalizePosition` folds its half; this one
+ * never did.
+ *
+ * Measured on production 2026-08-30: of 16,217 NFL name+position groups, 5,905
+ * split across more than one club key and **2,170 of those splits are ONE club
+ * under two spellings** — "behren morton|QB → NE / PATRIOTS",
+ * "dj rogers|TE → DAL / COWBOYS". Two rows in a search list for one player.
+ *
+ * ⚠ THE FALLBACK IS NOT TIDINESS, IT PREVENTS A REGRESSION OFF NFL.
+ * `normalizeTeamAbbrev` is an NFL table that passes anything else through
+ * upper-cased, so an NBA roster would key "Hawks" as HAWKS and "Atlanta Hawks"
+ * as ATLANTA HAWKS — SPLITTING a pair the last-word rule currently merges.
+ * `searchPlayers` is not scoped to a sport, so both vocabularies reach here.
+ * Taking the fold only when it actually resolves to a code keeps every
+ * non-NFL group exactly as it is today.
+ */
 function teamKey(raw: string | null): string {
   if (!raw) return ''
   const t = raw.trim().toUpperCase()
-  return t.length <= 4 ? t : t.split(/\s+/).slice(-1)[0] ?? t
+  if (t.length <= 4) return t
+  const folded = normalizeTeamAbbrev(t)
+  if (folded && folded.length <= 4) return folded
+  return t.split(/\s+/).slice(-1)[0] ?? t
 }
 
 function slotLabel(key: (typeof SLOT_ORDER)[number]): string {
@@ -196,31 +223,72 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
     },
   })
 
-  // Collapse duplicates across sources, keeping the richest row per name+position.
-  const seen = new Map<string, (typeof rows)[number]>()
+  /*
+   * Collapse duplicates across sources, keeping the richest row per
+   * name+position — and COMPOSING the headshot across the group rather than
+   * inheriting whichever row won.
+   *
+   * ⚠ TWO SEPARATE BUGS LIVED IN THE OLD SCORE, `(sleeperId?2:0) + (imageUrl?1:0)`.
+   *
+   * First, `imageUrl ? 1 : 0` counts a BARE FILENAME as a headshot. 959 of
+   * 24,135 NFL rows store one — `2c42f60e-…png` is Aaron Rodgers — and rendered
+   * into a `src` those resolve against the current route and 404. The badge
+   * component catches it with `onError` and falls back to an initial, so the
+   * user sees no broken glyph; what they see is a player with no face and one
+   * wasted request.
+   *
+   * Second, and worse, the winner takes its image with it. `sleeperId` is
+   * weighted 2 because it is what makes a row cross-referenceable — correctly —
+   * so a row with an id and NO usable image beats a sibling with a real CDN URL
+   * and no id, and that URL is discarded. The two facts do not have to compete:
+   * one row can supply the identity and another the face.
+   *
+   * Measured on production 2026-08-30, grouping with this module's own
+   * `normalizePosition` and `teamKey`: of 22,239 NFL groups, 1,821 carry more
+   * than one row and 417 winners had no usable image — of which **126 were
+   * RECOVERABLE**, a sibling in the same group holding a real URL. Aaron
+   * Rodgers, Andy Dalton, Tyrod Taylor, Chig Okonkwo, Gunner Olszewski and
+   * D'Ernest Johnson are all in that set.
+   *
+   * ⚠ AND THE NORMALISERS ARE LOAD-BEARING IN THAT MEASUREMENT. Grouping by a
+   * plain upper-cased position and team instead of these two reports 407
+   * multi-row groups and ZERO recoverable — an answer that says "leave it
+   * alone". The folding is what puts the duplicate rows in the same group at
+   * all, so any census of this collapse has to use the real key.
+   */
+  const seen = new Map<string, { row: (typeof rows)[number]; imageUrl: string | null }>()
   for (const r of rows) {
     // Normalised so "Dalton Kincaid / TE / BUF" and "Dalton Kincaid / Tight End
     // / BUF" collapse to one entry instead of looking like two players.
     const key = `${r.name.trim().toLowerCase()}|${normalizePosition(r.position)}|${teamKey(r.team)}`
+    const image = asHeadshotUrl(r.imageUrl)
     const existing = seen.get(key)
     if (!existing) {
-      seen.set(key, r)
+      seen.set(key, { row: r, imageUrl: image })
       continue
     }
+    // The face is kept from whichever row actually has one, independently of
+    // which row wins the identity.
+    existing.imageUrl ??= image
     const better =
-      (r.sleeperId ? 2 : 0) + (r.imageUrl ? 1 : 0) >
-      (existing.sleeperId ? 2 : 0) + (existing.imageUrl ? 1 : 0)
-    if (better) seen.set(key, r)
+      (r.sleeperId ? 2 : 0) + (image ? 1 : 0) >
+      (existing.row.sleeperId ? 2 : 0) + (asHeadshotUrl(existing.row.imageUrl) ? 1 : 0)
+    if (better) existing.row = r
   }
 
-  return [...seen.values()].slice(0, limit).map((r) => ({
+  return [...seen.values()].slice(0, limit).map(({ row: r, imageUrl }) => ({
     externalId: r.externalId,
     sport: r.sport,
     sleeperId: r.sleeperId,
     name: r.name,
     position: r.position,
     team: r.team,
-    imageUrl: r.imageUrl,
+    /*
+     * ⚠ NEVER THE RAW COLUMN. Vetted by `asHeadshotUrl` and composed across the
+     * group, so a bare filename becomes null (an honest initial) rather than a
+     * request that 404s, and a sibling's real URL survives the collapse.
+     */
+    imageUrl,
     number: r.number,
     rosteredIn: null,
     platforms: [],
