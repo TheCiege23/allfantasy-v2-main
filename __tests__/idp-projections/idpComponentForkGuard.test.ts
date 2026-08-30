@@ -40,15 +40,14 @@ const FORK_CANDIDATES = [
 ]
 
 /**
- * ⚠ KNOWN, DELIBERATELY STILL FORKED. IDPAIPanel is not a rename away from resolved: the two
- * copies take different props (`components/idp` takes { leagueId, isCommissioner }; `app/idp`
- * additionally requires `hasAfSub` and a settings object) and its `components/idp` caller,
- * LeagueSettingsTab, has no `hasAfSub` in scope. Collapsing it means plumbing a new prop through
- * that tab, which is a real change rather than a repoint. Listed here so the guard stays green
- * on a known state instead of being deleted, and so removing this entry is the definition of
- * done for that one.
+ * EMPTY, AND THAT IS THE POINT. IDPAIPanel was the last entry: its two copies took different
+ * props and its `components/idp` caller, LeagueSettingsTab, had no `hasAfSub` in scope, so it
+ * was exempted rather than forced. It is now resolved — `hasAfSub` became optional-meaning-
+ * unknown so the tab can render the richer panel without asserting an entitlement it cannot
+ * measure. The set stays here so the next fork has somewhere to be declared VISIBLY rather than
+ * living as an undocumented second copy.
  */
-const KNOWN_STILL_FORKED = new Set(['settings/IDPAIPanel.tsx'])
+const KNOWN_STILL_FORKED = new Set<string>([])
 
 describe('IDP components are not forked across the two trees', () => {
   /** 🛑 THE ASSERTION. A name may exist in app/idp OR components/idp, never both. */
@@ -60,8 +59,10 @@ describe('IDP components are not forked across the two trees', () => {
   })
 
   /**
-   * The exemption must stay HONEST. If IDPAIPanel is ever collapsed, this fails and forces the
-   * entry out of the allowlist — an exemption nobody revisits is how the original fork survived.
+   * The exemption list must stay HONEST. Any entry that is no longer forked fails here and has
+   * to be removed — an exemption nobody revisits is how the original fork survived. This is what
+   * forced IDPAIPanel out of the list the moment it was collapsed, rather than leaving a stale
+   * allowlist entry implying work still outstanding.
    */
   it('does not carry a stale exemption', () => {
     for (const n of KNOWN_STILL_FORKED) {
@@ -70,7 +71,7 @@ describe('IDP components are not forked across the two trees', () => {
     }
   })
 
-  /** The three resolved in this pass, pinned so a revert is loud rather than silent. */
+  /** All four resolutions, pinned so a revert is loud rather than silent. */
   it('keeps the copy that won each resolution', () => {
     // Richer, no fabricated data.
     expect(has('app/idp/components/IDPMatchupView.tsx')).toBe(true)
@@ -80,5 +81,8 @@ describe('IDP components are not forked across the two trees', () => {
     // The honest one: the app/idp copy invented a trending board and had inert controls.
     expect(has('components/idp/IDPWaiverSection.tsx')).toBe(true)
     expect(has('app/idp/components/IDPWaiverSection.tsx')).toBe(false)
+    // Richer: preference toggles persisted per-device and per-league, plus a real gate badge.
+    expect(has('app/idp/components/settings/IDPAIPanel.tsx')).toBe(true)
+    expect(has('components/idp/settings/IDPAIPanel.tsx')).toBe(false)
   })
 })
