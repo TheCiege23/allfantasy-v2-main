@@ -384,12 +384,51 @@ genuinely divergent rewrites, and the branch did **not** contain main's
 paths. Resolving on the pattern rather than the evidence would have deleted a
 deployed fix with no conflict marker and no failing test.
 
-When patch-ids differ, read `git diff <main>:<path> HEAD:<path>` in full, check
-`git merge-base --is-ancestor <theirCommit> HEAD`, and if both sides are real
-work, **stop and ask the author** — that is not a merge strategy question.
+**The rule, in order:**
+
+1. `git patch-id --stable` both sides. Equal → resolve to either side.
+2. Not equal → the two sides are independent changes and **neither is a
+   superset**. Read `git diff <main>:<path> HEAD:<path>` in full and check
+   `git merge-base --is-ancestor <theirCommit> HEAD`.
+3. Both sides real work → **stop and find the author.** Not a merge-strategy
+   question.
+4. **Never auto-resolve a whole conflict set to one side.** That is how step 3
+   gets skipped.
+
+⚠ **`git commit -- <paths>` SCOPES TO PATHS, NOT TO YOUR HUNKS INSIDE THEM.** A
+peer's uncommitted edits in a file you commit ride along with no conflict and no
+marker — the mirror image of the trap above. So `git diff` read in full is the
+check in BOTH directions: what you might drop on a merge, and what you might
+sweep on a commit. It also only accepts already-TRACKED paths, and staging and
+committing in separate turns is how work gets swept into a peer's commit — do
+both in one command.
 
 ⚠ Verify a push by SHA (`git ls-remote origin refs/heads/main`), never by
-grepping push output: a rejected push prints `-> main` too.
+grepping push output: a rejected push prints `-> main` too, and a pipe (`| tail`)
+reports the PIPE's exit code, so `$?` reads 0 over a failed push.
+
+### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
+
+User's decision, 2026-08-29, and the larger half of the build bill. The
+cherry-pick rule above settles HOW work lands; this settles WHEN.
+
+The pre-push hook states the cost from real data: **165 of 326 production builds
+in one 4.7-day window were superseded before they finished. Both billed, one
+served.** Six sessions each pushing as they finish reproduces that indefinitely —
+three builds went out inside a few minutes the day this was written.
+
+So: **commit freely, push rarely, and let ONE session do it.** Everyone else
+lands work on `shared/f-working-tree` and tells the pusher. The pusher batches
+and cherry-picks the batch onto `main`.
+
+⚠ **THE PUSHER IS A ROLE, NOT A SESSION — SESSIONS END.** Whoever holds it must
+announce it to the others (`ListAgents` + `SendMessage`), and hand it over
+explicitly when finishing. A designated pusher who vanishes silently blocks
+everyone, which is worse than the duplicate builds this replaces.
+
+⚠ **AND WAITING IS THE INTENDED RESPONSE TO THE HOOK.** If it refuses because a
+build is running, wait and retry. `AF_ALLOW_CONCURRENT_PUSH=1` exists for a
+genuine emergency and using it routinely turns the guard back into decoration.
 
 ## Deploys cost money, and pushes are the meter
 
