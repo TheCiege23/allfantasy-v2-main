@@ -171,6 +171,30 @@ async function main() {
     }
   }
 
+  /*
+   * Live-shaped vs imported boards.
+   *
+   * Imported drafts (lib/adp/draftFactSamples.ts) are written with draftType 'imported' because
+   * DraftFact records no draft type, and an auction is indistinguishable from a snake board there.
+   * draftType is part of the context hash, so NO real league can ever resolve to one: a league's
+   * own draftType is snake, linear or auction, never imported.
+   *
+   * That quarantine is intended - it is why imported data cannot corrupt a live board - but it
+   * also means those rows serve zero users until something reads them deliberately. Printing the
+   * split stops "we ingested 264 drafts" from being mistaken for "managers can see them".
+   */
+  const byDraftType = await prisma.allFantasyAdpSnapshot.groupBy({
+    by: ['draftType'],
+    where: { draftMode: 'real' },
+    _count: { _all: true },
+  })
+  console.log('\n=== Boards by draftType (real) ===')
+  for (const row of byDraftType.sort((a, b) => b._count._all - a._count._all)) {
+    const note =
+      row.draftType === 'imported' ? '   <- quarantined: no league resolves to this' : ''
+    console.log(`  ${row.draftType.padEnd(12)} ${String(row._count._all).padStart(7)} rows${note}`)
+  }
+
   console.log('\n=== Verdict ===')
   if (leagues.length === 0) {
     console.log('  INCONCLUSIVE — no leagues sampled.')
