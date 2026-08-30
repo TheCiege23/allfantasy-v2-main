@@ -56,6 +56,84 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('the OBSERVED payload shape maps completely', () => {
+  /*
+   * 🛑 THE REGRESSION THIS PINS. The adapter shipped with guessed field names and
+   * three were wrong: the availability counts are `...AttemptsAvailable`, not
+   * `...Attempts`, and YAC is `totalYardsAfterCatch`, not `totalYac`. Production
+   * wrote 116 profiles with adot set and airYardsAttempts NULL on every single
+   * one — an ADOT with no denominator, which is the one state this feature
+   * exists to make impossible.
+   *
+   * This row is copied verbatim from the real response (Gunner Stockton,
+   * Georgia 2025, fetched 2026-08-30), so it fails if anyone "tidies" the alias
+   * lists back to the guesses.
+   */
+  const OBSERVED_ROW = {
+    season: 2025,
+    playerId: '4685578',
+    player: 'Gunner Stockton',
+    team: 'Georgia',
+    conference: 'SEC',
+    attempts: 385,
+    completions: 270,
+    incompletions: 110,
+    interceptions: 5,
+    completionRate: 0.701,
+    airYardsAttemptsAvailable: 153,
+    totalAirYards: 1108,
+    averageDepthOfTarget: 7.2,
+    totalYardsAttemptsAvailable: 385,
+    totalYards: 2947,
+    yardsAfterCatchAttemptsAvailable: 108,
+    totalYardsAfterCatch: 685,
+    averageYardsAfterCatch: 6.3,
+  }
+
+  it('reads every metric field out of the real response', async () => {
+    vi.stubGlobal('fetch', mockJson([OBSERVED_ROW]))
+
+    const { getCFBPassingPlayerSeason } = await import('@/lib/cfb-player-data')
+    const [p] = await getCFBPassingPlayerSeason(2025)
+
+    expect(p.playerName).toBe('Gunner Stockton')
+    // playerId arrives as a STRING in the real payload.
+    expect(p.playerId).toBe(4685578)
+    expect(p.attempts).toBe(385)
+    expect(p.completions).toBe(270)
+    expect(p.airYards).toBe(1108)
+    expect(p.adot).toBeCloseTo(7.2, 5)
+    expect(p.airYardsAttempts, 'the denominator that shipped NULL in production').toBe(153)
+    expect(p.yardsAfterCatch).toBe(685)
+    expect(p.yacCompletions).toBe(108)
+    expect(p.avgYardsAfterCatch).toBeCloseTo(6.3, 5)
+  })
+
+  it('shows why the denominator matters on this exact row', async () => {
+    vi.stubGlobal('fetch', mockJson([OBSERVED_ROW]))
+
+    const { getCFBPassingPlayerSeason } = await import('@/lib/cfb-player-data')
+    const [p] = await getCFBPassingPlayerSeason(2025)
+
+    // 1108/153 = 7.24 (what CFBD reports) vs 1108/385 = 2.88 (dividing by every
+    // throw). Only 40% of his attempts carry air-yard data, and the wrong
+    // denominator understates his depth by 2.5x while still looking plausible.
+    expect(p.adot).toBeCloseTo(7.2, 1)
+    expect(p.airYards! / p.attempts!).toBeCloseTo(2.88, 1)
+    expect(p.adot).not.toBeCloseTo(p.airYards! / p.attempts!, 1)
+  })
+
+  it('returns an empty location grid — season rows carry no location at all', async () => {
+    // Confirmed against the live endpoint: neither the season nor the team
+    // response has a locations key. Location is per-attempt, on /passing/plays.
+    vi.stubGlobal('fetch', mockJson([OBSERVED_ROW]))
+
+    const { getCFBPassingPlayerSeason } = await import('@/lib/cfb-player-data')
+    const [p] = await getCFBPassingPlayerSeason(2025)
+    expect(Object.keys(p.locations)).toHaveLength(0)
+  })
+})
+
 describe('ADOT is derived over the MEASURED denominator', () => {
   it('divides air yards by airYardsAttempts, not by attempts', async () => {
     /*
@@ -177,14 +255,16 @@ describe('team summaries keep offense and defense apart', () => {
    * would poison a whole roster's context.
    */
   it('splits a nested offense/defense row into two labelled units', async () => {
+    // The nested shape is the OBSERVED one (2026-08-30): the team response is
+    // one row per team with `offense` and `defense` objects side by side.
     vi.stubGlobal(
       'fetch',
       mockJson([
         {
           season: 2026,
           team: 'Georgia',
-          offense: { attempts: 400, airYards: 3600, airYardsAttempts: 400 },
-          defense: { attempts: 380, airYards: 2280, airYardsAttempts: 380 },
+          offense: { attempts: 400, totalAirYards: 3600, airYardsAttemptsAvailable: 400 },
+          defense: { attempts: 380, totalAirYards: 2280, airYardsAttemptsAvailable: 380 },
         },
       ]),
     )

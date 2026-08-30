@@ -1125,16 +1125,34 @@ export async function getCFBTeamDirectory(): Promise<CFBTeamDirectoryEntry[]> {
 // for exactly the players with the least data. Never substitute one for the
 // other.
 //
-// ⚠ THE FIELD NAMES BELOW ARE MAPPED DEFENSIVELY, NOT FROM A CAPTURED FIXTURE.
-// The announcement names the METRICS; it does not publish the JSON keys, this
-// repo has no `contracts/collegefootballdata/` to read a shape out of, and the
-// CFBD key has been over its monthly quota since 2026-08-25 — so there was no
-// honest way to observe one. Each field therefore accepts the plausible
-// spellings (`airYards` / `air_yards` / `totalAirYards`) and falls through to
-// null rather than 0. A key we guessed wrong yields null, which every consumer
-// below treats as "not measured"; guessing wrong toward 0 would publish a
-// fabricated ADOT of zero for the whole board. When a real payload is first
-// seen, tighten these to the observed keys and delete the aliases.
+// ✅ FIELD NAMES OBSERVED 2026-08-30 against /passing/players/season and
+// /passing/teams/season. The first spelling in each `pick*` list below is the
+// REAL one; the rest are the original defensive guesses, kept only because the
+// game-grain endpoints have not been observed and may differ.
+//
+//     season playerId player team conference attempts completions incompletions
+//     interceptions completionRate airYardsAttemptsAvailable totalAirYards
+//     averageDepthOfTarget totalYardsAttemptsAvailable totalYards
+//     yardsAfterCatchAttemptsAvailable totalYardsAfterCatch averageYardsAfterCatch
+//
+// 🛑 THREE OF THE ORIGINAL GUESSES WERE WRONG AND SHIPPED THAT WAY. The
+// availability counts are `...AttemptsAvailable`, not `...Attempts`, and YAC is
+// `totalYardsAfterCatch`, not `totalYac`. Production wrote 116 profiles with
+// adot populated and airYardsAttempts NULL on every one — an ADOT with no
+// denominator, which is the exact state the rest of this file is written to
+// prevent. Nulls made it a visible gap rather than a wrong number, which is why
+// the null-not-zero rule below is not pedantry.
+//
+// ⚠ COVERAGE IS PARTIAL AND THE REAL NUMBERS ARE STARKER THAN THE ANNOUNCEMENT
+// SUGGESTS. Gunner Stockton, Georgia 2025: 385 attempts, `airYardsAttemptsAvailable`
+// 153. ADOT 7.2 is computed over 40% of his throws. `totalAirYards / attempts`
+// would give 2.88 — a 2.5x deflation that still looks like a plausible ADOT.
+// That is why the denominator is stored, not derived away.
+//
+// ⚠ THERE IS NO LOCATION DATA AT SEASON OR TEAM GRAIN. Neither aggregate carries
+// a `locations` key; short/deep and left/middle/right live on `/passing/plays`,
+// per-attempt. `readPassLocations` therefore returns `{}` for these two
+// endpoints, which is correct rather than a mapping failure.
 // ──────────────────────────────────────────────────────────────────
 
 /** First present, finite number among `keys`; null when none is usable. */
@@ -1250,20 +1268,32 @@ export interface CFBPassingProfile {
   yardsAfterCatch: number | null
   /** YAC's denominator — completions with a YAC value. NOT `completions`. */
   yacCompletions: number | null
+  /** The vendor's own YAC average, over its own availability count. */
+  avgYardsAfterCatch: number | null
+  /**
+   * Short/deep × left/middle/right.
+   *
+   * ⚠ ALWAYS `{}` FOR THE SEASON AND TEAM ENDPOINTS — observed 2026-08-30, they
+   * carry no location key at all. Location is per-attempt and lives on
+   * `/passing/plays`. An empty grid here is the correct answer, not a gap.
+   */
   locations: CFBPassLocationGrid
 }
 
 function toPassingProfile(p: any, fallbackSeason: number): CFBPassingProfile {
-  const airYards = pickNumber(p, 'airYards', 'air_yards', 'totalAirYards', 'total_air_yards')
+  // First spelling in each list is the OBSERVED one (2026-08-30). The rest are
+  // the original guesses, kept only for the unobserved game-grain endpoints.
+  const airYards = pickNumber(p, 'totalAirYards', 'airYards', 'air_yards', 'total_air_yards')
   const airYardsAttempts = pickInt(
     p,
+    'airYardsAttemptsAvailable',
     'airYardsAttempts',
     'air_yards_attempts',
     'attemptsWithAirYards',
     'airYardsCount',
     'countableAttempts',
   )
-  const feedAdot = pickNumber(p, 'adot', 'averageDepthOfTarget', 'average_depth_of_target', 'avgAirYards')
+  const feedAdot = pickNumber(p, 'averageDepthOfTarget', 'adot', 'average_depth_of_target', 'avgAirYards')
 
   return {
     season: pickInt(p, 'season', 'year') ?? fallbackSeason,
@@ -1284,8 +1314,23 @@ function toPassingProfile(p: any, fallbackSeason: number): CFBPassingProfile {
         ? airYards / airYardsAttempts
         : null),
     airYardsAttempts,
-    yardsAfterCatch: pickNumber(p, 'yardsAfterCatch', 'yards_after_catch', 'yac', 'totalYac'),
-    yacCompletions: pickInt(p, 'yacCompletions', 'yac_completions', 'completionsWithYac', 'yacCount'),
+    yardsAfterCatch: pickNumber(p, 'totalYardsAfterCatch', 'yardsAfterCatch', 'yards_after_catch', 'yac', 'totalYac'),
+    yacCompletions: pickInt(
+      p,
+      'yardsAfterCatchAttemptsAvailable',
+      'yacCompletions',
+      'yac_completions',
+      'completionsWithYac',
+      'yacCount',
+    ),
+    /*
+     * The feed's own YAC average, which is preferred over dividing because it is
+     * computed over the same availability count the vendor used. Null when
+     * absent; a consumer that needs a rate and finds null should divide
+     * `yardsAfterCatch / yacCompletions` itself rather than fall back to
+     * `completions`, for the same reason ADOT does not divide by `attempts`.
+     */
+    avgYardsAfterCatch: pickNumber(p, 'averageYardsAfterCatch', 'avgYardsAfterCatch', 'yacPerCompletion'),
     locations: readPassLocations(p),
   }
 }
