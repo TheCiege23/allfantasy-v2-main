@@ -407,6 +407,39 @@ both in one command.
 grepping push output: a rejected push prints `-> main` too, and a pipe (`| tail`)
 reports the PIPE's exit code, so `$?` reads 0 over a failed push.
 
+### ⚠ A CHECK THAT CANNOT FAIL READS AS A PASS
+
+Three sessions hit this in one day, each in a different tool, each believing
+they had verified something. The common cause: **a pipeline's exit status is the
+LAST command's**, so the thing being tested never decides the result. Use
+`${PIPESTATUS[0]}`, or do not pipe the command whose status you are reading.
+
+- `git push … | tail` printed a success line over a rejection. **Verify a push
+  by comparing SHAs, never by reading its output or its exit status through a
+  pipe** — a rejected push prints `-> main` too, so grepping the text for
+  success fails the same way `$?` does. `git ls-remote origin refs/heads/main`
+  against the SHA you pushed is the only check that holds.
+- `ls <dir> | head && echo "HAS"` always takes the HAS branch, because `head`
+  exits 0 whether or not `ls` found anything. That reported a `node_modules`
+  junction in a worktree which had none, and nearly triggered a destructive
+  cleanup. For a junction, ask the filesystem: PowerShell
+  `(Get-Item <path> -Force).LinkType` is null when there is no link.
+- `npx tsc --noEmit` OOMs at the default heap on this repo, prints a V8 crash
+  dump instead of diagnostics, and `grep -c "error TS"` then returns 0 — which
+  reads exactly like a clean typecheck. Use the repo's own setting rather than a
+  remembered number: `npm run typecheck` is
+  `node --max-old-space-size=8192 …/tsc.js --noEmit`, so
+  `NODE_OPTIONS=--max-old-space-size=8192 npx tsc --noEmit` is the equivalent
+  when a script path will not resolve (a worktree with no local `node_modules`).
+  ⚠ This repo carries a standing error baseline, so a **non-zero exit is
+  normal** — the tell for the OOM is a crash dump and no `error TS` lines at
+  all, not the exit code.
+
+🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
+POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
+and confirm the check reports it. A green check that has never once gone red is
+not evidence, and on a long session it is the most expensive kind of comfort.
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 User's decision, 2026-08-29, and the larger half of the build bill. The
@@ -429,6 +462,33 @@ everyone, which is worse than the duplicate builds this replaces.
 ⚠ **AND WAITING IS THE INTENDED RESPONSE TO THE HOOK.** If it refuses because a
 build is running, wait and retry. `AF_ALLOW_CONCURRENT_PUSH=1` exists for a
 genuine emergency and using it routinely turns the guard back into decoration.
+
+#### What the pusher checks, and what authors owe
+
+⚠ **BATCHING CHANGED WHAT A RED BUILD MEANS.** One SHA per session meant a
+failure named its author. A batch of six commits from four sessions that fails
+names nobody, and the person bisecting is the pusher — who wrote none of it and
+cannot tell an expected failure from a new one. User's decision on how that is
+covered:
+
+**Authors attest.** When handing work to the pusher, state what you ran and what
+it said — suite names and counts, not "tests pass". An author who cannot say
+which checks they ran is asking the pusher to guess.
+
+**The pusher runs a fast smoke over the batch**, not a full re-verification: a
+scoped typecheck and the test files touched across the union of the batch. That
+catches the thing attestation structurally cannot — one session's change
+breaking another's, which neither author would ever have run.
+
+**Neither is a full CI run.** If it goes red on main anyway, that is the
+accepted cost of fewer builds, and the pusher bisects with the authors rather
+than alone.
+
+⚠ **A MIGRATION IS NOT PUSHABLE WORK.** Code that ships ahead of its migration
+does NOT no-op — a generated client that knows about columns production lacks
+raises P2022, and a missing table raises P2021. Landing the code is a deploy;
+applying the schema change is a separate decision that belongs to the user. The
+pusher does neither on the author's say-so.
 
 ## Deploys cost money, and pushes are the meter
 
