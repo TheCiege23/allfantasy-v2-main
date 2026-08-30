@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800;900&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+:root{
+  --bg:#06070f; --surface:#0d1020; --surface2:#0a0c1a;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
+  --text:#eef0fa; --text2:#c3c9e6; --muted:#8f97bd; --faint:#5d648a;
+  --accent:#22d3ee; --accent-ink:#04050c; --accent-soft:rgba(34,211,238,.09); --accent-line:rgba(34,211,238,.3);
+  --good:#34d399; --warn:#fbbf24; --bad:#fb5b78;
+  --good-soft:rgba(52,211,153,.1); --warn-soft:rgba(251,191,36,.1); --bad-soft:rgba(251,91,120,.1);
+  --chip:rgba(255,255,255,.05); --chip-line:rgba(255,255,255,.1);
+}
+html{background:var(--bg)} body{margin:0;background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,sans-serif}
+h1,h2,h3{margin:0;font-weight:900;letter-spacing:-.03em}
+a{color:var(--accent)} a:hover{color:#67e4f7}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg);padding:40px 0 100px">
+  <div style="max-width:1200px;margin:0 auto;padding:0 40px;display:flex;flex-direction:column;gap:22px">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">CORE · DEVY</div>
+        <h1 style="font-size:24px;color:var(--text)">Devy</h1>
+        <div style="font:400 12px/1.5 'Archivo',sans-serif;color:var(--muted);max-width:560px">College prospects tracked across every league you're in — rankings, exposure, and news, pulled from public college data feeds.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PREVIEW STATE</div>
+        <div style="display:flex;padding:4px;gap:3px;background:var(--chip);border:1px solid var(--chip-line);border-radius:10px">
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.main }};color:{{ v.tabColor.main }}" onClick="{{ setView_main }}">Populated</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.empty }};color:{{ v.tabColor.empty }}" onClick="{{ setView_empty }}">Empty</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.loading }};color:{{ v.tabColor.loading }}" onClick="{{ setView_loading }}">Loading</div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ v.isLoading }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:70px 30px;background:var(--surface);border:1px solid var(--line);border-radius:18px;text-align:center">
+        <div style="width:36px;height:36px;border-radius:50%;border:3px solid var(--chip-line);border-top-color:var(--accent);animation:spin 0.9s linear infinite"></div>
+        <div style="font:700 14px/1.4 'Archivo',sans-serif;color:var(--text2)">Loading devy data…</div>
+        <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:520px">
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:70%"></div>
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:90%"></div>
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:55%"></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:60px 30px;background:var(--surface);border:1px solid var(--line);border-radius:18px;text-align:center">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--chip);display:flex;align-items:center;justify-content:center;font:900 18px/1 'Archivo',sans-serif;color:var(--faint)">—</div>
+        <div style="font:800 17px/1.3 'Archivo',sans-serif">No devy data yet</div>
+        <div style="font:400 13px/1.5 'Archivo',sans-serif;color:var(--muted);max-width:460px">Connect a college-eligible dynasty league to start pulling prospect rankings, exposure and news into this hub.</div>
+        <div style="cursor:pointer;font:700 12px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent);padding:11px 18px;border-radius:9px">Connect a league</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.isMain }}" hint-placeholder-val="{{ true }}">
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">TOP DEVY PROSPECTS</div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">Updated after each Saturday's slate</div>
+        </div>
+        <sc-for list="{{ v.prospects }}" as="p" hint-placeholder-count="5">
+          <div style="display:flex;gap:16px;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px">
+            <div style="font:900 20px/1 'JetBrains Mono',monospace;color:var(--faint);width:30px;flex:none;text-align:center;padding-top:6px">{{ p.rank }}</div>
+            <div style="position:relative;flex:none;width:64px;height:64px">
+              <image-slot id="{{ p.photoId }}" shape="circle" placeholder="headshot" style="width:64px;height:64px"></image-slot>
+              <div style="position:absolute;bottom:-2px;right:-2px;width:24px;height:24px;border-radius:50%;background:{{ p.teamColor }};border:2px solid var(--surface);font:800 8px/20px 'Archivo',sans-serif;text-align:center;color:{{ p.teamColor2 }}">{{ p.teamAbbr }}</div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="font:800 15px/1.2 'Archivo',sans-serif">{{ p.name }}</div>
+                <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--muted)">{{ p.pos }} · {{ p.school }} · {{ p.classYear }}</div>
+                <div style="font:700 9px/1 'JetBrains Mono',monospace;color:{{ p.trendColor }}">{{ p.trend }}</div>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap">
+                <sc-for list="{{ p.stats }}" as="s" hint-placeholder-count="3">
+                  <div><div style="font:900 14px/1 'JetBrains Mono',monospace">{{ s.val }}</div><div style="font:700 8px/1.3 'JetBrains Mono',monospace;color:var(--faint);margin-top:2px">{{ s.label }}</div></div>
+                </sc-for>
+                <div><div style="font:900 14px/1 'JetBrains Mono',monospace;color:{{ p.gradeColor }}">{{ p.grade }}</div><div style="font:700 8px/1.3 'JetBrains Mono',monospace;color:var(--faint);margin-top:2px">GRADE</div></div>
+              </div>
+              <div style="font:400 11px/1.5 'Archivo',sans-serif;color:var(--muted)">{{ p.blurb }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">CROSS-LEAGUE EXPOSURE</div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 110px 1fr 90px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)">
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PLAYER</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);text-align:right">LEAGUES</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PLATFORMS</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--accent);text-align:right">EXPOSURE</div>
+          </div>
+          <sc-for list="{{ v.exposure }}" as="e" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1fr 110px 1fr 90px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)">
+              <div style="font:800 13px/1.2 'Archivo',sans-serif">{{ e.name }}</div>
+              <div style="font:700 12px/1 'JetBrains Mono',monospace;color:var(--text2);text-align:right">{{ e.leagues }}</div>
+              <div style="font:600 11px/1.4 'Archivo',sans-serif;color:var(--faint)">{{ e.platforms }}</div>
+              <div style="font:900 13px/1 'JetBrains Mono',monospace;text-align:right;color:var(--accent)">{{ e.pct }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">RANKINGS BY POSITION</div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ v.posTabs }}" as="pt" hint-placeholder-count="4">
+            <div style="cursor:pointer;font:700 11px/1 'JetBrains Mono',monospace;padding:9px 14px;border-radius:8px;background:{{ pt.bg }};color:{{ pt.color }};border:1px solid {{ pt.border }}" onClick="{{ pt.onClick }}">{{ pt.label }}</div>
+          </sc-for>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ v.posList }}" as="q" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+              <div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--faint);width:20px">{{ q.rank }}</div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:2px"><div style="font:800 13px/1.2 'Archivo',sans-serif">{{ q.name }}</div><div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ q.school }} · {{ q.classYear }}</div></div>
+              <div style="font:900 13px/1 'JetBrains Mono',monospace;color:{{ q.gradeColor }}">{{ q.grade }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">YOUR WATCHLIST</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+          <sc-for list="{{ v.watchlist }}" as="w" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px">
+              <image-slot id="{{ w.photoId }}" shape="circle" placeholder="headshot" style="width:38px;height:38px;flex:none"></image-slot>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <div style="font:800 12px/1.2 'Archivo',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.name }}</div>
+                <div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ w.pos }} · {{ w.school }}</div>
+              </div>
+              <div style="font:700 9px/1 'JetBrains Mono',monospace;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);padding:6px 9px;border-radius:7px;flex:none">Following</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">BROWSE BY COLLEGE</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <sc-for list="{{ v.colleges }}" as="c" hint-placeholder-count="8">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:13px;background:{{ c.bg }};border:1px solid {{ c.border }}">
+              <div style="width:30px;height:30px;border-radius:8px;background:{{ c.color }};font:800 11px/30px 'Archivo',sans-serif;text-align:center;color:{{ c.color2 }}">{{ c.abbr }}</div>
+              <div style="font:800 13px/1.2 'Archivo',sans-serif">{{ c.name }}</div>
+              <div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ c.conf }}</div>
+              <div style="font:700 10px/1 'JetBrains Mono',monospace;color:var(--muted)">{{ c.count }} tracked</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">DEVY NEWS</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ v.news }}" as="n" hint-placeholder-count="4">
+            <div style="display:flex;gap:12px;padding:13px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px">
+              <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ n.tagColor }};background:{{ n.tagSoft }};border:1px solid {{ n.tagLine }};padding:5px 8px;border-radius:6px;flex:none;height:fit-content">{{ n.tag }}</div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="font:800 12px/1.2 'Archivo',sans-serif">{{ n.name }}</div>
+                <div style="font:400 11px/1.5 'Archivo',sans-serif;color:var(--text2)">{{ n.blurb }}</div>
+              </div>
+              <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint);flex:none">{{ n.time }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font:400 10px/1.5 'Archivo',sans-serif;color:var(--faint)">Devy grades, stats and news are pulled from public college data feeds — nothing here is guessed, and unverified reports are labeled as such.</div>
+      </div>
+
+    </sc-if>
+
+  </div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const TEAM = {
+  osu:{abbr:'OSU', color:'#BB0000', color2:'#fff'},
+  tex:{abbr:'TEX', color:'#BF5700', color2:'#fff'},
+  uga:{abbr:'UGA', color:'#BA0C2F', color2:'#fff'},
+  ore:{abbr:'ORE', color:'#154733', color2:'#FEE123'},
+  col:{abbr:'COL', color:'#CFB87C', color2:'#000'},
+  lsu:{abbr:'LSU', color:'#461D7C', color2:'#FDD023'},
+  bama:{abbr:'BAM', color:'#9E1B32', color2:'#fff'},
+  mich:{abbr:'MICH', color:'#00274C', color2:'#FFCB05'},
+};
+function gradeColor(g){ return g>=93 ? 'var(--good)' : g>=88 ? 'var(--accent)' : 'var(--text2)'; }
+function trendColor(t){ return t[0]==='↑' ? 'var(--good)' : t[0]==='↓' ? 'var(--bad)' : 'var(--faint)'; }
+
+const PROSPECTS = [
+  { rank:'#1', name:'Malik Osei', pos:'QB', school:'Ohio State', classYear:'Jr', team:'osu', photoId:'devy-p1',
+    stats:[{val:'3,412',label:'PASS YDS'},{val:'34',label:'PASS TD'},{val:'9',label:'INT'}], grade:'96', trend:'↑ +2',
+    blurb:'Elite arm talent with improving pocket discipline; the CFP appearance boosted his stock further.' },
+  { rank:'#2', name:'Trey Whitfield', pos:'RB', school:'Texas', classYear:'So', team:'tex', photoId:'devy-p2',
+    stats:[{val:'1,540',label:'RUSH YDS'},{val:'5.8',label:'YPC'},{val:'16',label:'TD'}], grade:'94', trend:'↑ +1',
+    blurb:"Vision and contact balance translate immediately; graded well on both early-down and passing-down work." },
+  { rank:'#3', name:'Deshawn Carrow', pos:'WR', school:'Georgia', classYear:'Jr', team:'uga', photoId:'devy-p3',
+    stats:[{val:'78',label:'REC'},{val:'1,210',label:'REC YDS'},{val:'11',label:'TD'}], grade:'93', trend:'— even',
+    blurb:'Route-running polish beyond his class; separates against man coverage consistently.' },
+  { rank:'#4', name:'Bo Lindqvist', pos:'TE', school:'Oregon', classYear:'Sr', team:'ore', photoId:'devy-p4',
+    stats:[{val:'61',label:'REC'},{val:'812',label:'REC YDS'},{val:'8',label:'TD'}], grade:'90', trend:'↑ +3',
+    blurb:"Reliable in-line blocker who's added a real vertical route tree this season." },
+  { rank:'#5', name:'Cam Detry', pos:'WR', school:'LSU', classYear:'So', team:'lsu', photoId:'devy-p5',
+    stats:[{val:'65',label:'REC'},{val:'980',label:'REC YDS'},{val:'9',label:'TD'}], grade:'89', trend:'↓ -1',
+    blurb:'Big-play speed with some drop concerns; still a QB1-friendly ceiling long-term.' },
+].map(p => ({ ...p, teamAbbr:TEAM[p.team].abbr, teamColor:TEAM[p.team].color, teamColor2:TEAM[p.team].color2, gradeColor:gradeColor(+p.grade), trendColor:trendColor(p.trend) }));
+
+const EXPOSURE = [
+  { name:'Malik Osei', leagues:'4 of 6', platforms:'Sleeper, ESPN', pct:'22%' },
+  { name:'Trey Whitfield', leagues:'3 of 6', platforms:'Yahoo, Fantrax', pct:'17%' },
+  { name:'Deshawn Carrow', leagues:'2 of 6', platforms:'ESPN', pct:'11%' },
+  { name:'Bo Lindqvist', leagues:'1 of 6', platforms:'MFL', pct:'6%' },
+];
+
+const POSITIONS = {
+  QB:[ {rank:1,name:'Malik Osei',school:'Ohio State',classYear:'Jr',grade:'96'}, {rank:2,name:'Jax Merrow',school:'Alabama',classYear:'So',grade:'91'}, {rank:3,name:'Theo Banning',school:'Michigan',classYear:'Jr',grade:'87'} ],
+  RB:[ {rank:1,name:'Trey Whitfield',school:'Texas',classYear:'So',grade:'94'}, {rank:2,name:'Isiah Doko',school:'Colorado',classYear:'Fr',grade:'90'}, {rank:3,name:'Marquis Feld',school:'Ohio State',classYear:'Jr',grade:'86'} ],
+  WR:[ {rank:1,name:'Deshawn Carrow',school:'Georgia',classYear:'Jr',grade:'93'}, {rank:2,name:'Cam Detry',school:'LSU',classYear:'So',grade:'89'}, {rank:3,name:'Rashad Pilling',school:'Texas',classYear:'Jr',grade:'85'} ],
+  TE:[ {rank:1,name:'Bo Lindqvist',school:'Oregon',classYear:'Sr',grade:'90'}, {rank:2,name:'Owen Streat',school:'Georgia',classYear:'So',grade:'84'}, {rank:3,name:'Nate Wardlow',school:'Alabama',classYear:'Jr',grade:'80'} ],
+};
+
+const WATCHLIST = [
+  { name:'Jax Merrow', pos:'QB', school:'Alabama', photoId:'devy-w1' },
+  { name:'Isiah Doko', pos:'RB', school:'Colorado', photoId:'devy-w2' },
+  { name:'Owen Streat', pos:'TE', school:'Georgia', photoId:'devy-w3' },
+  { name:'Rashad Pilling', pos:'WR', school:'Texas', photoId:'devy-w4' },
+];
+
+const COLLEGES = [
+  { name:'Ohio State', conf:'Big Ten', team:'osu', count:6 },
+  { name:'Texas', conf:'SEC', team:'tex', count:5 },
+  { name:'Georgia', conf:'SEC', team:'uga', count:7 },
+  { name:'Oregon', conf:'Big Ten', team:'ore', count:4 },
+  { name:'Colorado', conf:'Big 12', team:'col', count:3 },
+  { name:'LSU', conf:'SEC', team:'lsu', count:5 },
+  { name:'Alabama', conf:'SEC', team:'bama', count:6 },
+  { name:'Michigan', conf:'Big Ten', team:'mich', count:4 },
+].map(c => ({ ...c, abbr:TEAM[c.team].abbr, color:TEAM[c.team].color, color2:TEAM[c.team].color2, bg:'var(--surface)', border:'var(--line)' }));
+
+const NEWS = [
+  { tag:'BREAKOUT', name:'Trey Whitfield', blurb:'180 total yards and 2 TDs in a ranked win; RB1 in his class on usage share alone.', time:'2h ago', tagColor:'var(--good)', tagSoft:'var(--good-soft)', tagLine:'rgba(52,211,153,.3)' },
+  { tag:'INJURY', name:'Cam Detry', blurb:"Left Saturday's game with a shoulder issue, questionable for next week — unconfirmed by team medical staff.", time:'5h ago', tagColor:'var(--bad)', tagSoft:'var(--bad-soft)', tagLine:'rgba(251,91,120,.3)' },
+  { tag:'COMBINE', name:'Deshawn Carrow', blurb:'Ran an unofficial 4.42 at a regional camp; unverified hand-time, treat as directional only.', time:'1d ago', tagColor:'var(--warn)', tagSoft:'var(--warn-soft)', tagLine:'rgba(251,191,36,.3)' },
+  { tag:'TRANSFER', name:'Nate Wardlow', blurb:'Entered the transfer portal; destination and depth-chart impact unknown until he lands.', time:'1d ago', tagColor:'var(--accent)', tagSoft:'var(--accent-soft)', tagLine:'var(--accent-line)' },
+];
+
+class Component extends DCLogic {
+  state = { view: 'main', activePos: 'RB' };
+  setPos(pos) { this.setState({ activePos: pos }); }
+  renderVals() {
+    const view = this.state.view;
+    const tabBg = { main:{}, empty:{}, loading:{} }, tabColor = { main:{}, empty:{}, loading:{} };
+    ['main','empty','loading'].forEach(k => {
+      tabBg[k] = k === view ? 'var(--accent)' : 'transparent';
+      tabColor[k] = k === view ? 'var(--accent-ink)' : 'var(--muted)';
+    });
+    const posList = POSITIONS[this.state.activePos].map(q => ({ ...q, gradeColor: gradeColor(+q.grade) }));
+    const posTabs = Object.keys(POSITIONS).map(p => ({
+      label: p, onClick: () => this.setPos(p),
+      bg: p === this.state.activePos ? 'var(--accent-soft)' : 'var(--chip)',
+      color: p === this.state.activePos ? 'var(--accent)' : 'var(--muted)',
+      border: p === this.state.activePos ? 'var(--accent-line)' : 'var(--chip-line)',
+    }));
+    return {
+      v: {
+        isMain: view === 'main', isEmpty: view === 'empty', isLoading: view === 'loading',
+        tabBg, tabColor,
+        prospects: PROSPECTS, exposure: EXPOSURE, posTabs, posList,
+        watchlist: WATCHLIST, colleges: COLLEGES, news: NEWS,
+      },
+      setView_main: () => this.setState({ view: 'main' }),
+      setView_empty: () => this.setState({ view: 'empty' }),
+      setView_loading: () => this.setState({ view: 'loading' }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
