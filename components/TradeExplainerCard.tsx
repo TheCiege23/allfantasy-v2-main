@@ -38,8 +38,14 @@ export function createExplainerFromDelta(
   const fcPlayers = delta.valuationStats.playersFromFantasyCalc
   const idpPlayers = delta.valuationStats.playersFromIdpVorp
   const kickerPlayers = delta.valuationStats.playersFromKickerFlat
+  const fallbackPlayers = delta.valuationStats.playersFromFallback
   const totalPlayers =
-    excelPlayers + fcPlayers + idpPlayers + kickerPlayers + delta.valuationStats.playersUnknown
+    excelPlayers +
+    fcPlayers +
+    idpPlayers +
+    kickerPlayers +
+    fallbackPlayers +
+    delta.valuationStats.playersUnknown
   
   if (excelPlayers > 0) {
     bullets.push(`${excelPlayers} of ${totalPlayers} players valued from historical data${mode === 'atTime' && tradeDate ? ` (${tradeDate})` : ''}`)
@@ -63,6 +69,18 @@ export function createExplainerFromDelta(
     bullets.push(`${kickerPlayers} kicker${kickerPlayers > 1 ? 's' : ''} valued at your league's flat kicker price — kicker rank does not carry year to year, so we don't pretend one is worth more than another`)
   }
   
+  /* 🛑 THE ONE BULLET THAT ADMITS A WEAK PRICE, AND THE REASON THE SOURCE SPLIT HAPPENED.
+   * These players were priced by a stand-in: a flat per-position IDP constant that is the
+   * same for every linebacker in the league, or a draft lifetime value because no board
+   * carried them. Both used to be indistinguishable from "we could not price him", so this
+   * card could not have said it. A manager about to send a trade should know which side of
+   * it rests on a number nothing measured. */
+  if (fallbackPlayers > 0) {
+    bullets.push(
+      `${fallbackPlayers} player${fallbackPlayers > 1 ? 's' : ''} priced from a fallback, not a market or your league's own board — treat ${fallbackPlayers > 1 ? 'those values' : 'that value'} as a rough placeholder`,
+    )
+  }
+
   if (delta.valuationStats.picksFromExcel > 0 || delta.valuationStats.picksFromCurve > 0) {
     const pickTotal = delta.valuationStats.picksFromExcel + delta.valuationStats.picksFromCurve
     bullets.push(`${pickTotal} draft pick${pickTotal > 1 ? 's' : ''} included in valuation`)

@@ -433,7 +433,7 @@ export async function assembleTradeDecisionContext(
   const [pricedResult, analyticsMap, injuryMap, adpResults, managerA, managerB, tradeHistory, competitorData] = await Promise.all([
     priceAssets(assetsInput, valuationCtx).catch(e => {
       warnings.push(`Valuation failed: ${e.message}`)
-      return { total: 0, compositeTotal: 0, items: [] as PricedAsset[], stats: { playersFromExcel: 0, playersFromFantasyCalc: 0, playersFromIdpVorp: 0, playersFromKickerFlat: 0, playersUnknown: 0, picksFromExcel: 0, picksFromCurve: 0 } }
+      return { total: 0, compositeTotal: 0, items: [] as PricedAsset[], stats: { playersFromExcel: 0, playersFromFantasyCalc: 0, playersFromIdpVorp: 0, playersFromKickerFlat: 0, playersFromFallback: 0, playersUnknown: 0, picksFromExcel: 0, picksFromCurve: 0 } }
     }),
     getPlayerAnalyticsBatch(allPlayerNames).catch(e => {
       warnings.push(`Analytics fetch failed: ${e.message}`)

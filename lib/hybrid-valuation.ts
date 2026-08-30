@@ -51,15 +51,38 @@ export interface PricedAsset {
   value: number;
   assetValue: AssetValue;
   /**
-   * Where the number came from. `idp-vorp` and `kicker-flat` both mean the league's
-   * own rulebook priced this player — see ValuationContext.leagueValueByNameLower.
-   * They are kept apart because they are different claims: an IDP value is specific
-   * to that DEFENDER, while a kicker value is specific to the LEAGUE and identical
-   * for every kicker in it. Both are deliberately distinct from 'unknown', since
-   * the flat baseline also returns a usable number and anything reporting confidence
-   * or explaining a grade to a manager has to tell them apart.
+   * Where the number came from — and, just as importantly, how much of a claim it is.
+   *
+   * `idp-vorp` and `kicker-flat` both mean the league's own rulebook priced this player
+   * — see ValuationContext.leagueValueByNameLower. They are kept apart because they are
+   * different claims: an IDP value is specific to that DEFENDER, while a kicker value is
+   * specific to the LEAGUE and identical for every kicker in it.
+   *
+   * 🛑 `idp-flat-baseline` AND `analytics-lifetime` USED TO BE `unknown`, AND THAT MADE
+   * THIS FIELD UNABLE TO ANSWER THE ONE QUESTION IT IS ASKED. Three branches returned
+   * 'unknown': the IDP/kicker positional constant, the analytics lifetime-value fallback,
+   * and the terminal branch where nothing matched at all. The first two return a real,
+   * usable number; the third returns 0. Collapsing them meant nothing downstream could
+   * distinguish "we priced this defender off a flat per-position constant where every
+   * linebacker is worth 800" from "we could not price this name" — so no surface could
+   * warn about the first, and no test could assert it had stopped happening.
+   *
+   * With the split, `unknown` means exactly one thing: nothing priced this asset.
+   *
+   * ⚠ THE SPLIT DOES NOT MEAN THE TWO NEW SOURCES ARE GOOD PRICES. `idp-flat-baseline` is
+   * a POSITIONAL constant carrying no information about the individual, and a surface that
+   * treats it as equivalent to a market price is making the error this field now exists to
+   * prevent. Ask `isEvidencedPrice` rather than testing against 'unknown' by hand.
    */
-  source: 'excel' | 'fantasycalc' | 'curve' | 'idp-vorp' | 'kicker-flat' | 'unknown';
+  source:
+    | 'excel'
+    | 'fantasycalc'
+    | 'curve'
+    | 'idp-vorp'
+    | 'kicker-flat'
+    | 'idp-flat-baseline'
+    | 'analytics-lifetime'
+    | 'unknown';
   /**
    * TRUE MEANS NO VALUE SOURCE MATCHED THIS ASSET AT ALL — it is not "worth zero",
    * it is unknown, and the two must never be collapsed.
@@ -70,9 +93,9 @@ export interface PricedAsset {
    * anyway — a 0-for-something trade grades as a lopsided A+/D with total
    * confidence and no data behind it.
    *
-   * `source: 'unknown'` cannot be used for this test: two OTHER branches return
-   * 'unknown' with a real, usable value (the IDP/kicker baseline and the analytics
-   * lifetime-value fallback). This flag is set on the terminal branch only.
+   * ⚠ `source === 'unknown'` NOW IMPLIES THIS FLAG, but the flag is still the thing to
+   * test. It is set on the terminal branch only and says what it means directly, where
+   * the source string is one widening away from meaning something else again.
    */
   unpriced?: true;
   position?: string;
@@ -83,6 +106,64 @@ export interface PricedAsset {
     tier?: string;
     wasAveraged?: boolean;
   };
+}
+
+/**
+ * Sources that price an asset by STANDING IN for evidence rather than carrying any.
+ *
+ * `idp-flat-baseline` is a hand-set per-position ladder — every linebacker 800, every
+ * defensive back 650 — with nothing behind it and no measurement it can point to. It fires
+ * only when the league's own board was unavailable.
+ *
+ * `analytics-lifetime` reuses a player's draft lifetime value because no board carried him.
+ * It is about the right player, which is why it beats refusing, but it is not a trade price.
+ *
+ * `unknown` is the terminal branch: nothing matched, and the accompanying value is 0.
+ */
+const FALLBACK_SOURCES: ReadonlySet<PricedAsset['source']> = new Set([
+  'idp-flat-baseline',
+  'analytics-lifetime',
+  'unknown',
+]);
+
+/**
+ * Does this price rest on evidence about this specific asset?
+ *
+ * 🛑 ASK THIS INSTEAD OF TESTING `source !== 'unknown'` BY HAND. That test used to answer this
+ * question correctly — by accident, because the two fallback branches also reported 'unknown'.
+ * Splitting them apart broke the accident, and every call site that kept the old test would
+ * have silently started counting a flat positional constant as a real price. In the trade
+ * evaluator that fed `calculateTradeConfidence`, so an IDP trade priced entirely off the
+ * baseline would have gained up to 0.25 confidence on the strength of the constant 800.
+ *
+ * ⚠ `kicker-flat` COUNTS AS EVIDENCED AND `idp-flat-baseline` DOES NOT, THOUGH BOTH ARE ONE
+ * NUMBER SHARED BY MANY PLAYERS. The distinction is not how the number varies, it is whether
+ * anything measured it. A kicker's value is constant because seven seasons of data say rank
+ * does not persist and the startable position spans 1.55x — the flatness IS the finding (see
+ * lib/kicker-values/leagueKickerValue.ts). The IDP baseline is constant because nobody had
+ * got round to it.
+ */
+export function isEvidencedPrice(asset: Pick<PricedAsset, 'source'>): boolean {
+  return !FALLBACK_SOURCES.has(asset.source);
+}
+
+/**
+ * How many players in a trade were priced by nothing that measured them.
+ *
+ * 🛑 EXTRACTED SO IT CAN BE TESTED, AND IT WAS EXTRACTED BECAUSE A MUTATION GOT THROUGH.
+ * `computeConfidence` inlined `stats.playersFromFallback + stats.playersUnknown`. Deleting
+ * the first term — the exact regression the source split created the opportunity for, since
+ * `playersUnknown` alone reads like the obvious quantity — passed the entire suite: the tests
+ * checked that the STATS were counted apart, never that confidence still added them back.
+ *
+ * The sum is the invariant. Before the split it was the single `playersUnknown` count, and
+ * confidence must keep penalising exactly that population, or making the pricing more legible
+ * would silently make the product more confident about its worst-priced trades.
+ */
+export function unevidencedPlayerCount(
+  stats: Pick<TradeDelta['valuationStats'], 'playersFromFallback' | 'playersUnknown'>,
+): number {
+  return stats.playersFromFallback + stats.playersUnknown;
 }
 
 
@@ -270,6 +351,15 @@ export interface TradeDelta {
     playersFromIdpVorp: number;
     /** Priced at the league's flat kicker value — one number for every kicker, by design. */
     playersFromKickerFlat: number;
+    /**
+     * Priced by a FALLBACK that carries no evidence about this player — the flat IDP
+     * positional constant, or his draft lifetime value. A real, usable number, but not a
+     * price anything measured, and a surface that shows one without saying so overstates
+     * what it knows. Counted apart from `playersUnknown` since the split; the two were one
+     * number while all three fallback branches reported `source: 'unknown'`.
+     */
+    playersFromFallback: number;
+    /** Nothing priced this player at all. The value is 0 and means unknown, not worthless. */
     playersUnknown: number;
     picksFromExcel: number;
     picksFromCurve: number;
@@ -481,7 +571,7 @@ export async function pricePlayer(
         vorpValue: Math.round(idpKickerFallback * 0.3),
         volatility: vol,
       },
-      source: 'unknown',
+      source: 'idp-flat-baseline',
       position,
     };
   }
@@ -494,7 +584,7 @@ export async function pricePlayer(
       type: 'player',
       value: mv,
       assetValue: { marketValue: mv, impactValue: Math.round(mv * 0.5), vorpValue: Math.round(mv * 0.25), volatility: vol },
-      source: 'unknown',
+      source: 'analytics-lifetime',
       position: analyticsData.position || position,
     };
   }
@@ -596,6 +686,15 @@ export async function priceAssets(
     playersFromIdpVorp: number;
     /** Priced at the league's flat kicker value — one number for every kicker, by design. */
     playersFromKickerFlat: number;
+    /**
+     * Priced by a FALLBACK that carries no evidence about this player — the flat IDP
+     * positional constant, or his draft lifetime value. A real, usable number, but not a
+     * price anything measured, and a surface that shows one without saying so overstates
+     * what it knows. Counted apart from `playersUnknown` since the split; the two were one
+     * number while all three fallback branches reported `source: 'unknown'`.
+     */
+    playersFromFallback: number;
+    /** Nothing priced this player at all. The value is 0 and means unknown, not worthless. */
     playersUnknown: number;
     picksFromExcel: number;
     picksFromCurve: number;
@@ -624,6 +723,7 @@ export async function priceAssets(
     playersFromFantasyCalc: pricedPlayers.filter(p => p.source === 'fantasycalc').length,
     playersFromIdpVorp: pricedPlayers.filter(p => p.source === 'idp-vorp').length,
     playersFromKickerFlat: pricedPlayers.filter(p => p.source === 'kicker-flat').length,
+    playersFromFallback: pricedPlayers.filter(p => p.source === 'idp-flat-baseline' || p.source === 'analytics-lifetime').length,
     playersUnknown: pricedPlayers.filter(p => p.source === 'unknown').length,
     picksFromExcel: pricedPicks.filter(p => p.source === 'excel').length,
     picksFromCurve: pricedPicks.filter(p => p.source === 'curve').length
@@ -746,7 +846,7 @@ function computeConfidence(stats: TradeDelta['valuationStats']): number {
     stats.playersFromFantasyCalc +
     stats.playersFromIdpVorp +
     stats.playersFromKickerFlat +
-    stats.playersUnknown;
+    unevidencedPlayerCount(stats);
   const totalPicks = stats.picksFromExcel + stats.picksFromCurve;
   const totalAssets = totalPlayers + totalPicks;
 
@@ -775,8 +875,18 @@ function computeConfidence(stats: TradeDelta['valuationStats']): number {
     const excelRatio = stats.playersFromExcel / totalPlayers;
     confidence -= excelRatio * 0.10;
 
-    if (stats.playersUnknown > 0) {
-      confidence -= (stats.playersUnknown / totalPlayers) * 0.15;
+    /*
+     * ⚠ FALLBACK-PRICED PLAYERS ARE PENALISED EXACTLY AS UNPRICED ONES ARE, AND THE SPLIT
+     * DELIBERATELY DID NOT CHANGE THAT NUMBER. Before it, the flat IDP constant and the
+     * analytics lifetime value both reported `source: 'unknown'` and so landed in this
+     * penalty by accident. Reading only `playersUnknown` here afterwards would have QUIETLY
+     * RAISED confidence on exactly the trades priced worst — an all-defence trade in a
+     * league with no board would have gone from a 0.15 penalty to none, because the pricing
+     * got more legible rather than more certain.
+     */
+    const unevidenced = unevidencedPlayerCount(stats);
+    if (unevidenced > 0) {
+      confidence -= (unevidenced / totalPlayers) * 0.15;
     }
   }
 
@@ -841,6 +951,7 @@ export async function computeTradeDeltaFromUserTrades(
     playersFromFantasyCalc: received.stats.playersFromFantasyCalc + gave.stats.playersFromFantasyCalc,
     playersFromIdpVorp: received.stats.playersFromIdpVorp + gave.stats.playersFromIdpVorp,
     playersFromKickerFlat: received.stats.playersFromKickerFlat + gave.stats.playersFromKickerFlat,
+    playersFromFallback: received.stats.playersFromFallback + gave.stats.playersFromFallback,
     playersUnknown: received.stats.playersUnknown + gave.stats.playersUnknown,
     picksFromExcel: received.stats.picksFromExcel + gave.stats.picksFromExcel,
     picksFromCurve: received.stats.picksFromCurve + gave.stats.picksFromCurve

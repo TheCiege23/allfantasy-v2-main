@@ -1,6 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
-import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
+import { isEvidencedPrice, pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { findPlayerInCSV, getPlayerValue as getCSVPlayerValue, getPlayerECR, CSVPlayerValue } from '@/lib/player-values-csv'
@@ -51,7 +51,14 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-stock", tool: "
     
     const player = dynastyPlayer || redraftPlayer
     
-    if (pricedPlayer.source === 'unknown' && !csvPlayer) {
+    /*
+     * ⚠ `isEvidencedPrice` RATHER THAN `source === 'unknown'`, TO HOLD THIS BEHAVIOUR STILL.
+     * The IDP flat baseline and the analytics lifetime value used to report 'unknown' too, so
+     * a defender with no league board 404'd here. After the source split the bare test would
+     * have let him through and rendered the constant 800 as his dynasty value beside a rank
+     * of 999 — a confident-looking stock page built on a positional placeholder.
+     */
+    if (!isEvidencedPrice(pricedPlayer) && !csvPlayer) {
       return NextResponse.json({ 
         success: false, 
         error: 'Player not found in database' 

@@ -19,7 +19,7 @@ import { deepseekQuantAnalysis } from '@/lib/deepseek-client'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { checkAiRateLimit, getCachedResponse, setCachedResponse, buildCacheKey, getAiActionConfig } from '@/lib/ai-protection'
 import { buildHistoricalTradeContext, getDataInfo, calculateTradeConfidence, computeDualModeGrades } from '@/lib/historical-values'
-import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
+import { pricePlayer, pricePick, compositeScore, compositeTotal, idpCeilingCompositeBand, isEvidencedPrice, ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import { computeLineupDelta, computeLineupFairness, computeValueFairness, type LineupPlayer, type RosterSlots, type LineupDelta } from '@/lib/lineup-optimizer'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
@@ -1057,9 +1057,19 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         isSF
       )
 
+      /*
+       * ⚠ `found` FEEDS CONFIDENCE, SO IT MUST MEAN "PRICED BY EVIDENCE", NOT "NOT UNKNOWN".
+       * This read `priced.source !== 'unknown'` and was right by accident: the IDP flat
+       * baseline and the analytics lifetime-value fallback both reported 'unknown' too, so
+       * both correctly failed the test. Once those became their own sources, the old
+       * expression would have started counting a flat per-position constant as a found
+       * player — `calculateTradeConfidence` adds up to 0.25 for the found ratio, so an IDP
+       * trade priced entirely off the constant 800 would have reported HIGHER confidence
+       * than before precisely because the pricing got more honest.
+       */
       const playerResults = [
-        ...senderPlayerPrices.map((priced, i) => ({ name: senderPlayerNames[i], found: priced.source !== 'unknown' })),
-        ...receiverPlayerPrices.map((priced, i) => ({ name: receiverPlayerNames[i], found: priced.source !== 'unknown' })),
+        ...senderPlayerPrices.map((priced, i) => ({ name: senderPlayerNames[i], found: isEvidencedPrice(priced) })),
+        ...receiverPlayerPrices.map((priced, i) => ({ name: receiverPlayerNames[i], found: isEvidencedPrice(priced) })),
       ]
       const pickResults = [
         ...senderPickPrices.map(priced => ({ wasAveraged: priced.source === 'curve' })),
