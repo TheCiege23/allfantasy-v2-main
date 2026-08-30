@@ -30,7 +30,20 @@
 
 import { DEVY_FIRST_PICK_VALUE } from '@/lib/trade-intel/devyTradeValue'
 
-/** Where the rate lives on `League.settings`. JSON, so no migration is involved. */
+/**
+ * Where the rate lives: `League.settings.devy_league_config.devyMarketUnitsPerDevyPoint`.
+ *
+ * ⚠ NESTED INSIDE THE DEVY CONFIG, NOT AT THE TOP OF `settings`, BECAUSE THAT IS WHERE THE
+ * COMMISSIONER UI WRITES. `DevyLeagueSettingsHub` PATCHes `devyLeagueConfig`, which
+ * `execute-league-settings-patch` stores verbatim under `devy_league_config`. A rate read from
+ * the top level would be an orphan key that nothing in the product can set — reachable only by
+ * editing the database by hand, which is the same "surface pointed at a table nothing writes"
+ * failure this stack keeps finding.
+ *
+ * ONE LOCATION ONLY. A fallback to the top level would mean two places to look and two ways for
+ * a league to disagree with itself about its own house rule.
+ */
+export const DEVY_BRIDGE_CONFIG_KEY = 'devy_league_config' as const
 export const DEVY_BRIDGE_SETTING_KEY = 'devyMarketUnitsPerDevyPoint' as const
 
 /**
@@ -98,7 +111,11 @@ const UNSET: DevyBridgeRefusal = {
  */
 export function resolveDevyBridge(settings: unknown): DevyBridgeOutcome {
   const bag = (settings ?? {}) as Record<string, unknown>
-  const raw = bag[DEVY_BRIDGE_SETTING_KEY]
+  const cfg = bag[DEVY_BRIDGE_CONFIG_KEY]
+  const raw =
+    cfg && typeof cfg === 'object' && !Array.isArray(cfg)
+      ? (cfg as Record<string, unknown>)[DEVY_BRIDGE_SETTING_KEY]
+      : undefined
 
   if (raw == null || raw === '') return UNSET
 

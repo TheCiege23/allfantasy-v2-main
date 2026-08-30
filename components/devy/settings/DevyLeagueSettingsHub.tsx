@@ -18,6 +18,12 @@ import {
 } from 'lucide-react'
 import type { SubPanelContext } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
 import {
+  DEVY_BRIDGE_CAVEAT,
+  DEVY_BRIDGE_MAX,
+  DEVY_BRIDGE_MIN,
+} from '@/lib/devy/devyMarketBridge'
+import { DEVY_FIRST_PICK_VALUE } from '@/lib/trade-intel/devyTradeValue'
+import {
   defaultDevyLeagueSetup,
   parseDevyLeagueConfig,
   type DevyLeagueSetupState,
@@ -204,13 +210,20 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
       ) : null}
 
       {tab === 'trading' ? (
-        <GlassCard>
-          <h4 className="text-sm font-bold text-white">Trading rules</h4>
-          <p className="mt-1 text-[12px] text-white/55">
-            Supports players, devy assets, rookie picks, future picks, taxi players, and multi-team deals. Trade review,
-            veto thresholds, deadlines, and pick labeling (year/round/original owner) surface in trade UIs.
-          </p>
-        </GlassCard>
+        <div className="space-y-4">
+          <GlassCard>
+            <h4 className="text-sm font-bold text-white">Trading rules</h4>
+            <p className="mt-1 text-[12px] text-white/55">
+              Supports players, devy assets, rookie picks, future picks, taxi players, and multi-team deals. Trade review,
+              veto thresholds, deadlines, and pick labeling (year/round/original owner) surface in trade UIs.
+            </p>
+          </GlassCard>
+          <DevyExchangeRateCard
+            value={config.devyMarketUnitsPerDevyPoint ?? null}
+            disabled={!ctx.isCommissioner}
+            onChange={(v) => setConfig((c) => ({ ...c, devyMarketUnitsPerDevyPoint: v }))}
+          />
+        </div>
       ) : null}
 
       {tab === 'scoring' ? (
@@ -271,5 +284,123 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
         </GlassCard>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The devy/NFL exchange rate — the one setting in this hub that changes whether a trade can be
+ * graded at all.
+ *
+ * 🛑 THE DEFAULT IS "NOT SET", AND THE CARD SAYS WHAT THAT MEANS. Nothing prices college
+ * players, so a trade spanning devy and NFL assets is reported ungradeable. That is the honest
+ * state and most leagues should stay in it; this control exists for a commissioner who would
+ * rather his league used a stated house rule than got no answer.
+ *
+ * ⚠ IT SHOWS THE CONSEQUENCE, NOT JUST THE NUMBER. A rate is an abstraction — "3.5" tells a
+ * commissioner nothing. "Your best prospect becomes 3,500" is the thing he can actually judge
+ * against the NFL players he knows the price of, so the preview updates as he types.
+ *
+ * ⚠ AND IT NEVER CALLS THE NUMBER CORRECT. The copy says house rule, not valuation, in the same
+ * words the grade itself will carry (DEVY_BRIDGE_CAVEAT). A settings screen that presented this
+ * as a calibration would undo the refusal it is lifting.
+ */
+function DevyExchangeRateCard({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number | null
+  disabled: boolean
+  onChange: (v: number | null) => void
+}) {
+  const [text, setText] = useState(value == null ? '' : String(value))
+
+  useEffect(() => {
+    setText(value == null ? '' : String(value))
+  }, [value])
+
+  const parsed = text.trim() === '' ? null : Number(text.trim())
+  const isNumber = parsed != null && Number.isFinite(parsed)
+  const inRange = isNumber && parsed >= DEVY_BRIDGE_MIN && parsed <= DEVY_BRIDGE_MAX
+  const preview = inRange ? Math.round(DEVY_FIRST_PICK_VALUE * (parsed as number)) : null
+
+  return (
+    <GlassCard>
+      <h4 className="text-sm font-bold text-white">Devy ↔ NFL exchange rate</h4>
+      <p className="mt-1 text-[12px] leading-relaxed text-white/55">
+        Leave this empty and a trade mixing college prospects with NFL players is reported as
+        ungradeable — which is the honest answer, because nothing prices college players and no
+        such exchange rate has ever been measured. Set it and those trades get graded at your
+        number, labelled as a house rule.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <label className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
+          Market units per devy point
+        </label>
+        <input
+          value={text}
+          onChange={(e) => {
+            const next = e.target.value
+            setText(next)
+            const n = next.trim() === '' ? null : Number(next.trim())
+            if (next.trim() === '') onChange(null)
+            else if (Number.isFinite(n) && (n as number) >= DEVY_BRIDGE_MIN && (n as number) <= DEVY_BRIDGE_MAX)
+              onChange(n as number)
+          }}
+          disabled={disabled}
+          inputMode="decimal"
+          placeholder="not set"
+          aria-label="Market units per devy point"
+          className="w-28 rounded-lg border border-white/[0.12] bg-black/30 px-3 py-1.5 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-cyan-400/50 disabled:opacity-40"
+        />
+        {text.trim() !== '' ? (
+          <button
+            type="button"
+            onClick={() => {
+              setText('')
+              onChange(null)
+            }}
+            disabled={disabled}
+            className="rounded-lg border border-white/[0.12] px-2.5 py-1.5 text-[11px] font-semibold text-white/60 hover:text-white/90 disabled:opacity-40"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      {/* The consequence, which is the part a commissioner can actually judge. */}
+      {preview != null ? (
+        <p className="mt-2 text-[12px] text-cyan-100/80">
+          At this rate the top prospect on your devy board is worth about{' '}
+          <span className="font-bold">{preview.toLocaleString()}</span> — compare that with an NFL
+          player you already know the price of.
+        </p>
+      ) : null}
+
+      {text.trim() !== '' && !isNumber ? (
+        <p className="mt-2 text-[12px] text-amber-200/85">
+          That is not a number, so it will be ignored and mixed trades stay ungradeable.
+        </p>
+      ) : null}
+
+      {isNumber && !inRange ? (
+        <p className="mt-2 text-[12px] text-amber-200/85">
+          Outside the accepted range of {DEVY_BRIDGE_MIN}–{DEVY_BRIDGE_MAX}, so it will be ignored.
+          At {DEVY_BRIDGE_MAX} your top prospect would price level with the most valuable NFL asset
+          in existence; at {DEVY_BRIDGE_MIN} the whole devy board rounds to nothing.
+        </p>
+      ) : null}
+
+      {value == null ? (
+        <p className="mt-2 text-[11px] text-white/40">
+          Not set — mixed devy/NFL trades are reported as ungradeable.
+        </p>
+      ) : null}
+
+      <p className="mt-3 border-t border-white/[0.06] pt-2 text-[11px] leading-relaxed text-white/45">
+        {DEVY_BRIDGE_CAVEAT}
+      </p>
+    </GlassCard>
   )
 }
