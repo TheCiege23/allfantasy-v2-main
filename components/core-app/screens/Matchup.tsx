@@ -6,8 +6,8 @@ import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type {
   MatchupData,
   MatchupPlayerCell,
-  MatchupSide,
   MatchupSlot,
+  MatchupTeam,
 } from '@/lib/core-app/matchup'
 
 /**
@@ -45,25 +45,53 @@ function initialsOf(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-function TeamCard({ side, align }: { side: MatchupSide; align: 'left' | 'right' }) {
+/**
+ * One manager's half of the banner.
+ *
+ * ⚠ THE NUMBER AND THE TEAM COME FROM DIFFERENT SECTIONS ON PURPOSE. The crest,
+ * name and record are known days before kickoff; the score is not. `points` is
+ * the scored total when there is one, and `projected` stands in when there is
+ * not — labelled, never silently. A projection rendered as a score is the one
+ * mistake this banner cannot make, and a blank banner over an unplayed week was
+ * the overcorrection it used to make instead.
+ */
+function TeamCard({
+  team,
+  points,
+  projected,
+  align,
+}: {
+  team: MatchupTeam
+  points: number | null
+  projected: number | null
+  align: 'left' | 'right'
+}) {
+  const showing = points ?? projected
   return (
-    <div className="af-mu-team" data-align={align} data-you={side.isYou}>
-      {side.avatarUrl ? (
+    <div className="af-mu-team" data-align={align} data-you={team.isYou}>
+      {team.avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img className="af-mu-crest af-mu-crest--img" src={side.avatarUrl} alt="" width={48} height={48} />
+        <img className="af-mu-crest af-mu-crest--img" src={team.avatarUrl} alt="" width={48} height={48} />
       ) : (
         <div className="af-mu-crest" aria-hidden>
-          {initialsOf(side.teamName)}
+          {initialsOf(team.teamName)}
         </div>
       )}
       <div className="af-mu-team-text">
-        <div className="af-mu-team-name">{side.teamName}</div>
+        <div className="af-mu-team-name">{team.teamName}</div>
         <div className="af-mu-team-meta">
-          {[side.isYou ? 'You' : side.ownerName || null, side.record].filter(Boolean).join(' · ') ||
+          {[team.isYou ? 'You' : team.ownerName || null, team.record].filter(Boolean).join(' · ') ||
             'no record on file'}
         </div>
       </div>
-      <div className="af-mu-score af-num">{side.points.toFixed(1)}</div>
+      <div className="af-mu-score-stack" data-align={align}>
+        <div className="af-mu-score af-num" data-basis={points != null ? 'scored' : 'projected'}>
+          {showing == null ? '—' : showing.toFixed(1)}
+        </div>
+        {points == null && showing != null ? (
+          <span className="af-mu-score-tag af-label">proj</span>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -250,9 +278,22 @@ function LineupBoard({ data }: { data: MatchupData }) {
 }
 
 export function Matchup({ data }: MatchupProps) {
+  /*
+   * The two numbers the banner compares: the scored totals when the week has
+   * been scored, and the projected finals when it has not. Kept as one pair so
+   * the margin chip below cannot end up comparing a score against a projection.
+   */
+  const scored = data.sides.available
+    ? { you: data.sides.data.you.points, opponent: data.sides.data.opponent.points }
+    : null
+  const projected = data.projectedFinal.available
+    ? { you: data.projectedFinal.data.you, opponent: data.projectedFinal.data.opponent }
+    : null
+  const compared = scored ?? projected
+
   const leader =
-    data.sides.available && data.sides.data.you.points !== data.sides.data.opponent.points
-      ? data.sides.data.you.points > data.sides.data.opponent.points
+    compared && compared.you !== compared.opponent
+      ? compared.you > compared.opponent
         ? 'you'
         : 'opponent'
       : null
@@ -313,9 +354,14 @@ export function Matchup({ data }: MatchupProps) {
 
       {/* ── Head to head ────────────────────────────────────────────── */}
       <section className="af-frame af-mu-h2h">
-        {data.sides.available ? (
+        {data.teams.available ? (
           <>
-            <TeamCard side={data.sides.data.you} align="left" />
+            <TeamCard
+              team={data.teams.data.you}
+              points={scored?.you ?? null}
+              projected={projected?.you ?? null}
+              align="left"
+            />
 
             <div className="af-mu-centre">
               <div className="af-label af-mu-centre-label">Win probability</div>
@@ -349,24 +395,53 @@ export function Matchup({ data }: MatchupProps) {
                 </>
               )}
 
-              {leader ? (
+              {/*
+                ⚠ THE CHIP SAYS WHICH OF THE TWO IT IS MEASURING. "Ahead by 62.9"
+                over an unplayed week is a projection, and a manager who reads it
+                as a live lead has been told something false by a screen that
+                knew better.
+              */}
+              {compared == null ? (
+                <div className="af-mu-margin af-num" data-leader="unknown">
+                  No margin yet
+                </div>
+              ) : leader ? (
                 <div className="af-mu-margin af-num" data-leader={leader}>
-                  {leader === 'you' ? 'You lead by ' : 'Behind by '}
-                  {Math.abs(
-                    data.sides.data.you.points - data.sides.data.opponent.points
-                  ).toFixed(1)}
+                  {scored
+                    ? leader === 'you'
+                      ? 'You lead by '
+                      : 'Behind by '
+                    : leader === 'you'
+                      ? 'Projected ahead by '
+                      : 'Projected behind by '}
+                  {Math.abs(compared.you - compared.opponent).toFixed(1)}
                 </div>
               ) : (
                 <div className="af-mu-margin af-num" data-leader="tied">
-                  Level
+                  {scored ? 'Level' : 'Projected level'}
                 </div>
               )}
             </div>
 
-            <TeamCard side={data.sides.data.opponent} align="right" />
+            <TeamCard
+              team={data.teams.data.opponent}
+              points={scored?.opponent ?? null}
+              projected={projected?.opponent ?? null}
+              align="right"
+            />
+
+            {/*
+              ⚠ THE UNSCORED-WEEK SENTENCE SURVIVES, IT JUST NO LONGER REPLACES
+              THE BANNER. It is the reason the two numbers above it are
+              projections, so it belongs UNDER them, inside the same frame —
+              not in place of both crests.
+            */}
+            {data.sides.available ? null : (
+              <p className="af-mu-basis">{data.sides.reason}</p>
+            )}
           </>
         ) : (
-          <p className="af-mu-unavailable af-mu-unavailable--block">{data.sides.reason}</p>
+          <p className="af-mu-unavailable af-mu-unavailable--block">{data.teams.reason}</p>
         )}
       </section>
 

@@ -141,6 +141,22 @@
   color: var(--muted);
 }
 
+/*
+  The score column. A stack rather than a bare number, because before kickoff
+  the figure shown is a PROJECTION and has to say so within the banner itself —
+  the note under the banner explains why, but the eye lands on the number first.
+*/
+.af-mu-score-stack {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.af-mu-score-stack[data-align='left'] {
+  align-items: flex-start;
+}
+
 .af-mu-score {
   flex: 0 0 auto;
   font-size: 30px;
@@ -148,6 +164,35 @@
   letter-spacing: -0.03em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+/*
+  A projected total is dimmer than a scored one. Same size — it is still the
+  headline figure of the screen — but it must not read as a result.
+*/
+.af-mu-score[data-basis='projected'] {
+  color: var(--text2);
+}
+
+.af-mu-score-tag {
+  color: var(--faint);
+  letter-spacing: 0.12em;
+}
+
+/*
+  The unscored-week sentence, now a caption INSIDE the banner it used to
+  replace. Full width under all three columns, so it reads as a note about the
+  two numbers above it rather than as a floating sentence between two cards.
+*/
+.af-mu-basis {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-align: center;
 }
 
 /* ── Centre column ───────────────────────────────────────────────────── */
@@ -203,6 +248,11 @@
 .af-mu-margin[data-leader='tied'] {
   background: var(--chip);
   color: var(--muted);
+}
+/* Neither scored nor priceable — an absence, not a level game. */
+.af-mu-margin[data-leader='unknown'] {
+  background: var(--chip);
+  color: var(--faint);
 }
 
 /* ── Sections ────────────────────────────────────────────────────────── */
@@ -544,6 +594,15 @@
   }
   .af-mu-centre {
     order: 3;
+  }
+  /*
+    ⚠ AND THE CAPTION AFTER IT. `.af-mu-centre` takes `order: 3` here, which on
+    a phone pushes the win-probability card below both team rows — and left the
+    unscored-week note sitting BETWEEN the teams and the card it explains.
+    Ordering is opt-in per item, so the note needs its own.
+  */
+  .af-mu-basis {
+    order: 4;
   }
   .af-mu-missing li {
     flex-direction: column;

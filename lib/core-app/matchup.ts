@@ -2,6 +2,10 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import {
+  composePlayerIdentities,
+  type ComposedPlayerIdentity,
+} from './playerIdentityCompose'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -32,20 +36,6 @@ function asImageUrl(raw: string | null | undefined, platform: string | null): st
 
 /** Sleeper writes an unfilled starting slot as "0". It is a hole, not a player. */
 const EMPTY_SLOT = '0'
-
-/**
- * A headshot we can actually put in a `src`.
- *
- * ⚠ 959 OF 16,362 NFL ROWS CARRY A BARE FILENAME, NOT A URL — production values
- * include `915a6006-e2da-5f51-a7a7-85de69ccc088.png` (Patrick Mahomes). Rendered
- * straight into `<img src>` those resolve against the current route and 404, and
- * a broken-image glyph is worse than the initial it would have replaced.
- */
-function asHeadshotUrl(raw: string | null | undefined): string | null {
-  const v = raw?.trim()
-  if (!v) return null
-  return /^(https?:)?\/\//i.test(v) || v.startsWith('/') ? v : null
-}
 
 /**
  * Long-form positions, as several ingest paths store them.
@@ -82,6 +72,30 @@ function asHeadshotUrl(raw: string | null | undefined): string | null {
  * Rosters pair by matchupId: two roster ids sharing one matchupId are the two
  * sides of a game. rosterId joins to LeagueTeam.externalId.
  */
+
+/**
+ * Who is playing, with no claim about the score.
+ *
+ * ⚠ SPLIT OUT OF `MatchupSide` BECAUSE IDENTITY AND SCORE BECOME KNOWN AT
+ * DIFFERENT TIMES. Both crests, both team names and both records are on file
+ * from the moment the week's fixture is, which is days before anyone scores a
+ * point — and `sides` is unavailable for the whole of that window on purpose
+ * (a 0-0 is a scheduled week, not a result). Rendering the head-to-head from
+ * `sides` alone therefore blanked the hero of this screen for most of the week,
+ * crests included, over a number nobody had claimed yet.
+ */
+export type MatchupTeam = {
+  teamName: string
+  ownerName: string
+  record: string | null
+  isYou: boolean
+  /**
+   * The manager's own crest, as the platform published it. Already a full URL
+   * on every row production carries — 984 of 1,130 `LeagueTeam` rows have one —
+   * and a bare Sleeper hash is expanded before it reaches here.
+   */
+  avatarUrl: string | null
+}
 
 export type MatchupSide = {
   teamName: string
@@ -146,6 +160,12 @@ export type MatchupData = {
     sourceLink: SourceLink | null
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
+  /**
+   * The two managers, available as soon as both rosters are identified — scored
+   * week or not. `sides` below stays the SCORE, and stays unavailable until
+   * there is one.
+   */
+  teams: SectionState<{ you: MatchupTeam; opponent: MatchupTeam }>
   sides: SectionState<{ you: MatchupSide; opponent: MatchupSide }>
   /**
    * The slot-by-slot board — your starter against theirs, at the same slot.
@@ -233,6 +253,15 @@ export async function getMatchupData(
         season: league.season,
         action: 'matchup',
       }),
+    },
+    /*
+     * The default for every early-return path. Overridden the moment both
+     * rosters are identified — which happens before anyone scores, which is the
+     * whole reason this section is separate from `sides`.
+     */
+    teams: {
+      available: false as const,
+      reason: 'no matchup resolved, so there are no teams to name',
     },
     lineups: {
       available: false as const,
@@ -532,21 +561,18 @@ export async function getMatchupData(
   ])
 
   /*
-   * ⚠ `sleeperId` IS NOT UNIQUE IN `SportsPlayer` — 501 distinct roster ids
-   * resolved to 1,231 rows elsewhere in this codebase. First row wins, same as
-   * dash34.ts, so one athlete cannot occupy a slot twice.
+   * ⚠ `sleeperId` IS NOT UNIQUE IN `SportsPlayer`, AND THE DUPLICATES ARE NOT
+   * COPIES — see `composePlayerIdentities`, which holds the measurement and the
+   * reason. Taking the first row arbitrarily is what rendered Mike Evans, David
+   * Montgomery and Evan Engram as grey letters in one lineup on this screen.
    */
-  const bySleeperId = new Map<string, (typeof identityRows)[number]>()
-  for (const r of identityRows) {
-    if (!r.sleeperId || bySleeperId.has(r.sleeperId)) continue
-    bySleeperId.set(r.sleeperId, r)
-  }
+  const bySleeperId = composePlayerIdentities(identityRows)
 
   /*
    * Re-keyed onto the roster's own ids, so every reader below is unchanged. A
    * Sleeper league maps id-to-itself and this is a no-op for it.
    */
-  const identityBy = new Map<string, (typeof identityRows)[number]>()
+  const identityBy = new Map<string, ComposedPlayerIdentity>()
   for (const rosterId of new Set(lineupIds)) {
     const row = bySleeperId.get(sleeperIdByRosterId.get(rosterId) ?? rosterId)
     if (row) identityBy.set(rosterId, row)
@@ -603,7 +629,8 @@ export async function getMatchupData(
        */
       team: normalizeTeamAbbrev(identity?.team),
       sport,
-      imageUrl: asHeadshotUrl(identity?.imageUrl),
+      // Already vetted by `asHeadshotUrl` when the identity was composed.
+      imageUrl: identity?.imageUrl ?? null,
       projected: entry.projected,
       actual: actualBy.get(entry.playerId) ?? null,
       empty: false,
@@ -685,10 +712,55 @@ export async function getMatchupData(
    * base's placeholders here would have withheld the two numbers with the most
    * value, on the grounds that the game had not started.
    */
+  const recordOf = (t?: { wins: number; losses: number; ties: number }) =>
+    !t || (t.wins === 0 && t.losses === 0 && t.ties === 0)
+      ? null
+      : t.ties > 0
+        ? `${t.wins}-${t.losses}-${t.ties}`
+        : `${t.wins}-${t.losses}`
+
+  /*
+   * ⚠ BUILT BEFORE THE UNPLAYED-WEEK GUARD, NOT AFTER IT. Everything here —
+   * both crests, both team names, both records — is on file as soon as the
+   * fixture is, and none of it is a claim about the score. Building it below the
+   * guard is what left this screen's head-to-head as a single grey sentence for
+   * every hour between the schedule landing and the first Thursday kickoff.
+   */
+  const teamsSection: MatchupData['teams'] = {
+    available: true,
+    data: {
+      you: {
+        teamName: myTeam.teamName,
+        ownerName: myTeam.ownerName,
+        record: recordOf(myTeam),
+        isYou: true,
+        avatarUrl: asImageUrl(myTeam.avatarUrl, platform),
+      },
+      opponent: opponentRow
+        ? {
+            teamName: oppTeam?.teamName ?? `Roster ${opponentRow.rosterId}`,
+            ownerName: oppTeam?.ownerName ?? '',
+            record: recordOf(oppTeam),
+            isYou: false,
+            avatarUrl: asImageUrl(oppTeam?.avatarUrl, platform),
+          }
+        : {
+            // A bye, or a row the pairing could not match. Named as such rather
+            // than invented, and still crested with nothing.
+            teamName: 'Opponent not identified',
+            ownerName: '',
+            record: null,
+            isYou: false,
+            avatarUrl: null,
+          },
+    },
+  }
+
   if (!anyPoints) {
     return {
       ...base,
       week,
+      teams: teamsSection,
       projectedFinal,
       winProbability,
       lineups,
@@ -700,14 +772,6 @@ export async function getMatchupData(
       },
     }
   }
-
-
-  const recordOf = (t?: { wins: number; losses: number; ties: number }) =>
-    !t || (t.wins === 0 && t.losses === 0 && t.ties === 0)
-      ? null
-      : t.ties > 0
-        ? `${t.wins}-${t.losses}-${t.ties}`
-        : `${t.wins}-${t.losses}`
 
   const you: MatchupSide = {
     teamName: myTeam.teamName,
@@ -724,6 +788,7 @@ export async function getMatchupData(
     return {
       ...base,
       week,
+      teams: teamsSection,
       sides: {
         available: true,
         data: {
@@ -744,6 +809,7 @@ export async function getMatchupData(
   return {
     ...base,
     week,
+    teams: teamsSection,
     projectedFinal,
     winProbability,
     lineups,
