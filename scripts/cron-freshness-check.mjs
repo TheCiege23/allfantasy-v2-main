@@ -191,6 +191,17 @@ export const PROBES = {
   // Every 6h, so 9h allows one missed fire before it goes red.
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
 
+  // OUTPUT probe on purpose, and the stronger claim is the point. A heartbeat here would report
+  // green for the exact bug this job was written to end: `notification_outbox` was write-only for
+  // months (4 rows, all pending, attemptCount 0, newest 2026-06-21) because no consumer existed.
+  // `sentAt` only moves when mail actually goes out, so a drain that runs and delivers nothing
+  // still goes red.
+  //
+  // ⚠ EXPECT THIS RED UNTIL THE FIRST REAL NOTIFICATION SENDS. Pre-season the producers are idle,
+  // so max(sentAt) is null. That is correct and it resolves itself the first time waivers process.
+  // Do not mute it to get a green board.
+  '/api/cron/notification-outbox-relay': { table: 'notification_outbox', column: 'sentAt' },
+
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
   // an output table. It answers "did this job RUN", which is a strictly weaker claim than "did it
@@ -329,6 +340,23 @@ export const NO_PROBE = {
     'any table probe here is satisfied by another job. Needs a heartbeat on the route, which is ' +
     'the same fix ?rosters=1 is waiting on.',
 
+  /*
+   * The two in-season image sweeps, added 2026-08-30 alongside the fantasy-position priority tier.
+   * They exist because `?sport=all` rotates the sport order by day-of-year, so NFL and NCAAF each
+   * got the budget one day in seven — which is how 408 of 7,427 rostered NFL players ended up with
+   * a headshot while this job's probe stayed green all season.
+   *
+   * Unprobed for the ordinary reason: they write the same sports_core_player_images.fetched_at that
+   * `?sport=all` already probes an hour earlier, so a table probe here is satisfied by that job
+   * instead. Same shape as ?riProfiles=1 above, and the same fix — a per-route heartbeat.
+   */
+  '/api/cron/sync-player-images?sport=NFL&limit=500&scope=players':
+    'writes the same sports_core_player_images.fetched_at that ?sport=all probes, so a table probe ' +
+    'here is satisfied by that job. Needs its own heartbeat.',
+  '/api/cron/sync-player-images?sport=NCAAF&limit=500&scope=players':
+    'writes the same sports_core_player_images.fetched_at that ?sport=all probes, so a table probe ' +
+    'here is satisfied by that job. Needs its own heartbeat.',
+
   // The eight CONDITIONAL jobs that used to live here -- waivers, redraft score-sync and
   // waiver-process, guillotine eliminate, tournament automation, draft-tick, legacy-import-drain
   // and the playoff schedule refresh -- are now instrumented with withSyncJobRun and have moved
@@ -342,6 +370,26 @@ export const NO_PROBE = {
 
   // ── HAS NEVER PRODUCED ANYTHING ──
   '/api/cron/trade-weekly-recalibration': 'TradeLearningStats holds ZERO rows -- this job has never produced output on any scheduler. Investigate before probing.',
+
+  /*
+   * Classified 2026-08-30. It had been an UNCLASSIFIED gap since it was added, which is the one
+   * state this module treats as a bug rather than a decision -- and it kept
+   * __tests__/cron-tier-and-freshness.test.ts red, which in turn made that whole guard easy to
+   * ignore.
+   *
+   * `?xnews=1` is a query-param mode of the SAME route as the base import-news job, and it writes
+   * the same player_news rows. The base job runs every 15 minutes against this one's 6 hours, so
+   * any table probe here is satisfied by the base job's writes long before this one is due --
+   * the shared-probe false green. Zero new rows is also a legitimate outcome (X may have had
+   * nothing in the window), so an output probe would be wrong even if it were not shared.
+   *
+   * The fix is the same one ?riProfiles=1 and ?rosters=1 are waiting on: a per-mode heartbeat.
+   * Its notification dispatch half is separately covered now -- see the outbox relay probe above.
+   */
+  '/api/cron/import-news?xnews=1&sport=NFL':
+    'a query-param mode of the import-news route writing the same player_news the base job writes ' +
+    'every 15 minutes, so a table probe here is satisfied by that job. Zero new rows is also ' +
+    'legitimate (X may have nothing in the window). Needs a per-mode heartbeat.',
 }
 
 /**

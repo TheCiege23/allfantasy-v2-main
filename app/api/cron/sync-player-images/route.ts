@@ -48,6 +48,36 @@ export const maxDuration = 300;
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 500;
+
+/**
+ * Positions worth spending the image budget on first, per sport.
+ *
+ * These are the players who appear on a roster, a draft board, a trade screen or a waiver list —
+ * i.e. the only ones whose missing headshot a user ever notices. A sport absent from this map
+ * simply has no priority tier and falls back to the previous flat ordering, so adding a sport is
+ * additive and never regresses one.
+ *
+ * Kept in step with `FANTASY_POSITIONS` in `lib/redraft-war-room/redraftFreeAgentPool.ts` for the
+ * football codes, including IDP — an IDP league's defenders are as visible as its running backs.
+ */
+const FANTASY_POSITIONS_BY_SPORT: Record<string, string[]> = {
+  NFL: [
+    "QB", "RB", "FB", "HB", "WR", "TE", "K", "PK",
+    "DST", "DEF", "D/ST", "DEF/ST",
+    "DL", "DE", "DT", "EDGE", "LB", "ILB", "OLB", "MLB",
+    "DB", "CB", "S", "FS", "SS",
+  ],
+  NCAAF: [
+    "QB", "RB", "FB", "HB", "WR", "TE", "K", "PK",
+    "DL", "DE", "DT", "EDGE", "LB", "ILB", "OLB", "MLB",
+    "DB", "CB", "S", "FS", "SS",
+  ],
+  NBA: ["PG", "SG", "SF", "PF", "C", "G", "F"],
+  NCAAB: ["PG", "SG", "SF", "PF", "C", "G", "F"],
+  NHL: ["C", "LW", "RW", "D", "G"],
+  MLB: ["P", "SP", "RP", "C", "1B", "2B", "3B", "SS", "OF", "LF", "CF", "RF", "DH"],
+  SOCCER: ["GK", "DEF", "MID", "FWD"],
+};
 /** Stop resolving with headroom to spare so the route always returns a real summary. */
 const TIME_BUDGET_MS = 240_000;
 /** Courtesy delay between provider lookups, matching the script this replaces. */
@@ -325,13 +355,71 @@ async function handle(req: NextRequest) {
           providerIds: true,
         } as const;
 
-        // ── Pass A: canonical players with no image at all ──
-        const missing = await prisma.player.findMany({
-          where: { sport, imageUrl: null },
-          take: limit,
-          orderBy: { lastSyncedAt: "asc" },
-          select: canonicalSelect,
-        });
+        /*
+         * ── Pass A: canonical players with no image at all ──
+         *
+         * ⚠ FANTASY-RELEVANT PLAYERS FIRST. THE ORDER IS THE WHOLE FIX.
+         *
+         * This was a flat `orderBy: lastSyncedAt asc` over every imageless player in the sport,
+         * spending a bounded daily budget in table order across tables that are overwhelmingly
+         * retired, practice-squad and never-rostered players.
+         *
+         * ⚠ AND THE SPORT THIS MATTERS FOR IS NOT THE NFL. Measured 2026-08-30 against canonical
+         * `Player.imageUrl`:
+         *
+         *     NFL     12,853 / 13,010   (99%)
+         *     SOCCER     811 /  2,303   (35%)
+         *     NBA        122 /  1,756   (7%)
+         *     NHL         94 /  4,109   (2%)
+         *     NCAAF       60 / 44,887   (0.1%)   <-- season opens this week
+         *     NCAAB        7 / 18,119   (0%)
+         *     MLB          4 /  7,291   (0%)
+         *
+         * The NFL is effectively done, and it also has a CDN fallback the others do not:
+         * `lib/sports-data/headshots.ts` builds a Sleeper URL straight from a player id, so most
+         * NFL surfaces render a face with no database row at all. Sleeper does not cover college,
+         * so for NCAAF a missing row is a missing face — with the season days away.
+         *
+         * Two tiers, one budget: active + rostered + fantasy-position players are taken first, and
+         * only leftover headroom goes to the general population. Paired with the dedicated
+         * per-sport sweeps in cron-schedule.json (`?sport=all` rotates the sport order by
+         * day-of-year, so NCAAF previously got the budget one day in seven), that is what closes
+         * the college gap before kickoff rather than some time next year.
+         */
+        const priorityPositions = FANTASY_POSITIONS_BY_SPORT[sport];
+
+        const priority = priorityPositions
+          ? await prisma.player.findMany({
+              where: {
+                sport,
+                imageUrl: null,
+                active: true,
+                team: { not: null },
+                position: { in: priorityPositions },
+              },
+              take: limit,
+              orderBy: { lastSyncedAt: "asc" },
+              select: canonicalSelect,
+            })
+          : [];
+
+        /* Top up with the general population only if the priority tier did not fill the budget. */
+        const backfillRoom = limit - priority.length;
+        const backfill =
+          backfillRoom > 0
+            ? await prisma.player.findMany({
+                where: {
+                  sport,
+                  imageUrl: null,
+                  ...(priority.length ? { id: { notIn: priority.map((p) => p.id) } } : {}),
+                },
+                take: backfillRoom,
+                orderBy: { lastSyncedAt: "asc" },
+                select: canonicalSelect,
+              })
+            : [];
+
+        const missing = [...priority, ...backfill];
 
         // ── Pass B: players whose canonical image has aged out ──
         const stale = await prisma.playerImage.findMany({

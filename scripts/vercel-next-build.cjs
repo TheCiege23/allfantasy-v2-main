@@ -176,6 +176,10 @@ let buildFailure = null // { step, message, stack, exitCode, signal }
 const filesToKeep = new Set([
   path.join('app', 'api', 'cron', '_auth.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'waivers', 'route.ts').replace(/\\/g, '/'),
+  // Drains notification_outbox. Kept next to `waivers` deliberately: that job is what fills the
+  // queue, and a build that ships the producer without the consumer restores the exact write-only
+  // outbox this route was added to end.
+  path.join('app', 'api', 'cron', 'notification-outbox-relay', 'route.ts').replace(/\\/g, '/'),
   // ── Sports-data ingestion crons — MUST ship (regression fix 2026-07-19) ──────
   // `app/api/cron` is disabled wholesale above under the comment "keep non-core
   // diagnostic/dev surfaces out of production route budget". That was never true of these
