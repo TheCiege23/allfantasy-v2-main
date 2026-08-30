@@ -472,8 +472,24 @@ like an answer.**
   itself**, so it passed while the branch genuinely was moving. ⚠ A staleness
   guard must compare against the value you actually built with, captured once —
   never a re-read of the thing you are trying to detect movement in.
+- **A fifth, later the same day, and the cheapest of the lot to avoid.** A wait
+  loop guarded on `! pgrep -f "tsc.js"` to decide whether `npm run typecheck`
+  had finished. 🛑 **`pgrep` IS NOT INSTALLED IN THIS REPO'S GIT BASH.**
+  `command not found` exits **127**, `! 127` is true, so the "the process is
+  gone" branch fired on the first iteration — before the loop ever reached its
+  `sleep` — so it announced the run settled while `tsc` had ~10 minutes to go. Same
+  family as the `timeout` 124 above: **a status that is neither 0 nor 1 is not a
+  verdict**, and here it came from the tool being absent rather than failing.
+  Reading the redirect file then found the npm banner and nothing else: **zero
+  `error TS` lines and no crash dump — precisely the profile the OOM rule above
+  says to trust.** ⚠ So that tell cannot separate "finished clean" from "has not
+  written yet". On a repo carrying a **157-error baseline**, a typecheck
+  reporting *cleaner than the baseline* is itself the tell. Never ask the OS
+  whether a process is alive — make the command say so, append a sentinel
+  (`…; echo "DONE=$?"`), and treat a missing sentinel as *still running*, never
+  as a result.
 
-🛑 **THE COST WAS NEARLY 400 LINES.** That last guard let a branch tip move
+🛑 **THE COST WAS NEARLY 400 LINES.** That staleness guard let a branch tip move
 unseen, and the reconciliation was about to substitute `main`'s tree for the
 third time — a move that had been *correct twice*. The third time the branch
 held `__tests__/values/idpCeilingBand.test.ts` (147 lines) and
