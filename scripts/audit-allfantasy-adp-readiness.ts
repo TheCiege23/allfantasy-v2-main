@@ -37,6 +37,7 @@
 import { prisma } from '@/lib/prisma'
 import { buildContextHash } from '@/lib/adp/computeAllFantasyAdp'
 import { buildDraftContext } from '@/lib/adp/draftContextKey'
+import { loadAdpBoard } from '@/lib/adp/loadAdpBoard'
 
 function argValue(name: string): string | null {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
@@ -112,12 +113,19 @@ async function main() {
       session: league.draftSessions ?? null,
     })
     const hash = buildContextHash(context)
-    const rows = await prisma.allFantasyAdpSnapshot.count({
-      where: { contextHash: hash, draftMode: 'real' },
-    })
+    /*
+     * loadAdpBoard, not a raw count: it is what the reader and the draft pool both call, so
+     * this measures what a manager actually sees. A count of the EXACT tier alone reported
+     * em-dashes for every non-12-team league while the cross-size tier was serving them.
+     */
+    const board = await loadAdpBoard(context, { draftMode: 'real' })
+    const rows = board.entries.length
     if (rows > 0) ready++
 
-    const label = rows > 0 ? `${rows} players` : 'EM-DASHES (no rows)'
+    const label =
+      rows > 0
+        ? `${rows} players (${board.exactCount} exact + ${board.crossSizeCount} cross-size)`
+        : 'EM-DASHES (no rows)'
     console.log(`\n  ${league.name ?? league.id}  [${league.id}]`)
     console.log(
       `    context: ${context.sport} ${context.leagueType} ${context.draftType} ` +
@@ -179,9 +187,10 @@ async function main() {
    * draftType is part of the context hash, so NO real league can ever resolve to one: a league's
    * own draftType is snake, linear or auction, never imported.
    *
-   * That quarantine is intended - it is why imported data cannot corrupt a live board - but it
-   * also means those rows serve zero users until something reads them deliberately. Printing the
-   * split stops "we ingested 264 drafts" from being mistaken for "managers can see them".
+   * The quarantine still holds for the EXACT tier - imported data never becomes a board a
+   * league resolves to directly. It is no longer a dead end: lib/adp/loadAdpBoard.ts pools
+   * these rows into the CROSS-SIZE tier, normalised through rounds, so they now reach every
+   * league size. Before that tier existed they served nobody, and this comment said so.
    */
   const byDraftType = await prisma.allFantasyAdpSnapshot.groupBy({
     by: ['draftType'],
@@ -191,7 +200,7 @@ async function main() {
   console.log('\n=== Boards by draftType (real) ===')
   for (const row of byDraftType.sort((a, b) => b._count._all - a._count._all)) {
     const note =
-      row.draftType === 'imported' ? '   <- quarantined: no league resolves to this' : ''
+      row.draftType === 'imported' ? '   <- reachable only via the cross-size tier' : ''
     console.log(`  ${row.draftType.padEnd(12)} ${String(row._count._all).padStart(7)} rows${note}`)
   }
 

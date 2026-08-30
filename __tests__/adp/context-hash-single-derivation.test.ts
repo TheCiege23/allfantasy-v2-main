@@ -39,11 +39,10 @@ const root = resolve(__dirname, '..', '..')
  */
 const ALLOWED: Record<string, string> = {
   'lib/adp/computeAllFantasyAdp.ts': 'defines buildContextHash',
-  'lib/adp/readSnapshotForLeague.ts': 'reader â hashes the output of buildDraftContext',
-  'lib/adp/recomputeAllFantasyAdp.ts': 'writer â hashes the output of buildDraftContext',
-  'lib/draft-room/getResolvedDraftPoolForLeague.ts':
-    'draft pool overlay â hashes the output of buildDraftContext',
-  'scripts/audit-allfantasy-adp-readiness.ts': 'readiness audit â hashes the output of buildDraftContext',
+  'lib/adp/loadAdpBoard.ts':
+    'THE board loader - hashes the output of buildDraftContext; both readers go through it',
+  'scripts/audit-allfantasy-adp-readiness.ts':
+    'readiness audit - hashes the output of buildDraftContext',
   'scripts/seed-test-adp-drafts.ts': 'test-data seeder, not a production read path',
 }
 
@@ -97,10 +96,9 @@ describe('one derivation of the ADP context tuple', () => {
 
   it('finds the known callers - a positive control, so an empty list cannot pass', () => {
     // If the scan is broken, this fails rather than silently reporting "no violations".
-    expect(callers.length).toBeGreaterThanOrEqual(3)
+    expect(callers.length).toBeGreaterThanOrEqual(2)
     expect(callers).toContain('lib/adp/computeAllFantasyAdp.ts')
-    expect(callers).toContain('lib/adp/readSnapshotForLeague.ts')
-    expect(callers).toContain('lib/draft-room/getResolvedDraftPoolForLeague.ts')
+    expect(callers).toContain('lib/adp/loadAdpBoard.ts')
   })
 
   /*
