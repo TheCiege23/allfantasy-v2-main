@@ -449,6 +449,46 @@ had OOMed and emitted nothing at all, so the grep matched nothing for the worst
 possible reason. If you want a scoped typecheck, scope the *inputs* and read the
 unpiped exit status.
 
+#### The wider shape: a failure that returns a plausible VALUE
+
+The three above are all exit-status bugs. On 2026-08-30 four more landed in one
+evening, none of them about `$?`, and the guards that failed had been written
+*that same evening specifically to prevent this*. The common shape is worse than
+a check that cannot fail: **the check fails and hands back a value that looks
+like an answer.**
+
+- `timeout 60 git merge-base --is-ancestor <sha> origin/main` — the tree was
+  contended, git hung, `timeout` returned **124**, and the `if` read non-zero as
+  "not an ancestor". It reported a deployed commit as missing from `main`.
+  Inspect the code: `0` yes, `1` no, **anything else is not a verdict**. `143`
+  (SIGTERM from a harness timeout) fails the same way.
+- `git log -S … ` killed mid-run had already printed part of its output. A
+  truncated list is indistinguishable from a complete one, and the newest entry
+  looked like a confident answer. Confirm a pickaxe hit directly —
+  `git show <sha>^:<path>` and `<sha>:<path>` must differ — before believing it.
+- A "did the branch move" guard compared `git rev-parse` (40 chars) against a
+  9-char abbreviation and reported a move that had not happened.
+- The repair for that one then compared a **fresh read of the moving ref against
+  itself**, so it passed while the branch genuinely was moving. ⚠ A staleness
+  guard must compare against the value you actually built with, captured once —
+  never a re-read of the thing you are trying to detect movement in.
+
+🛑 **THE COST WAS NEARLY 400 LINES.** That last guard let a branch tip move
+unseen, and the reconciliation was about to substitute `main`'s tree for the
+third time — a move that had been *correct twice*. The third time the branch
+held `__tests__/values/idpCeilingBand.test.ts` (147 lines) and
+`scripts/probe-idp-ceiling-sensitivity.ts` (246), neither on `main`. No conflict
+marker, no failing test. It was caught by one command:
+
+```
+git diff --name-status <local> <candidate> | grep '^D'   # must be empty
+```
+
+**Run that before ANY tree substitution**, and note the trap is the same one the
+conflict rules already name, reached from the opposite side: not a habit of
+taking one side, but a habit of **reusing a resolution that worked before**.
+Twice correct is not evidence about the third time.
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 User's decision, 2026-08-29, and the larger half of the build bill. The
