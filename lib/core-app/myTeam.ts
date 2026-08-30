@@ -7,7 +7,7 @@ import { latestProjectionWeek, lookupProjections, summariseLineup } from './play
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
-import { isPreseason, resolveSportsWeek, type SportsWeek } from './sportsWeek'
+import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { describeScoringDifferences, hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
 import { getNextMatchup, type NextMatchup } from './nextMatchup'
@@ -19,6 +19,8 @@ import { resolveCurrentWeekForLeague } from './currentWeek'
 import { myRosterCandidates } from './myRoster'
 import { parseDescriptiveId } from './descriptiveId'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
+import { composePlayerIdentities } from './playerIdentityCompose'
+import { buildNextGameMap } from './nextGameMap'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
@@ -217,7 +219,19 @@ export type MyTeamData = {
     ownerName: string
     /** Their own avatar, not the league crest. Already a full URL when present. */
     managerAvatarUrl: string | null
+    /**
+     * "8-4", "8-4-1", or the sentence that says why there is no record yet.
+     *
+     * ⚠ RENDER IT AGAINST `recordKnown`, NOT AGAINST ITS LENGTH. The absent
+     * case is prose, and the tile that shows it styles its value as a 24px
+     * tabular figure — so "no results read yet" rendered as the largest thing
+     * on the screen, wrapping across three lines of a numeric slab. Same shape
+     * as `rosterGrade`'s unavailable state: an em dash in the value, the reason
+     * underneath it.
+     */
     record: string
+    /** False before the league has scored a single game. */
+    recordKnown: boolean
     rank: number | null
     pointsFor: number
     pointsAgainst: number
@@ -411,6 +425,40 @@ async function resolvePlayers(
   })
 
   /*
+   * ⚠ ONE ATHLETE PER SLEEPER ID, COMPOSED — NOT WHICHEVER VENDOR ROW LANDED
+   * LAST. `sleeperId` is not unique in `SportsPlayer` and the duplicates are one
+   * player as several vendors describe him; `composePlayerIdentities` holds the
+   * measurement and the reasoning. This loop used to write `out.set(r.sleeperId,
+   * …)` once per row, so the LAST row seen won every field — the mirror of the
+   * first-row-wins pick that rendered three starters as grey letters on
+   * `/core/matchup`. Both screens render the SAME lineup and the comments in
+   * both files say they must never disagree about it; sharing this composer is
+   * what makes that true rather than asserted.
+   *
+   * ⚠ AND IT IS NOT ONLY THE PORTRAIT. The composed `team` is folded to an
+   * abbreviation, which is what the fixture join below is keyed on. Measured on
+   * production 2026-08-30: 1,172 of 11,960 NFL sleeperIds carry more than one
+   * spelling of their club, and the schedule lookup could only ever match one of
+   * them — see the note on `rosterTeams`.
+   */
+  const identityBy = composePlayerIdentities(rows)
+
+  /*
+   * Every spelling each vendor has for one player, kept only to look injuries up
+   * by. 39 of those 11,960 ids disagree about the name — "Chris Rodriguez" and
+   * "Chris Rodriguez Jr." are one running back — and `SportsInjury` is keyed on
+   * a name, not an id. Composing down to a single spelling before the lookup
+   * would silently drop the match for whichever half is not stored.
+   */
+  const namesById = new Map<string, string[]>()
+  for (const r of rows) {
+    if (!r.sleeperId) continue
+    const held = namesById.get(r.sleeperId)
+    if (held) held.push(r.name)
+    else namesById.set(r.sleeperId, [r.name])
+  }
+
+  /*
    * ⚠ SCOPED TO A SEASON AND A WEEK, NOT TO "THE FUTURE".
    *
    * This asked for every game after now, ordered by kickoff, and took the first
@@ -433,15 +481,26 @@ async function resolvePlayers(
    * sixteen fixtures — and up to four rows each, because the unique key includes
    * `source` — so this is a small set by construction.
    */
-  const teams = [...new Set(rows.map((r) => r.team).filter(Boolean))] as string[]
-  const wanted = new Map<string, string>()
-  for (const t of teams) {
-    const norm = normalizeTeamAbbrev(t)
-    if (norm) wanted.set(norm, t)
-  }
+  /*
+   * ⚠ KEYED ON THE FOLDED ABBREVIATION, WHICH IS WHAT `SportsGame` IS ALSO
+   * FOLDED TO BELOW. This was a `Map<normalised, raw>` built from every raw
+   * spelling on every vendor row, and `Map.set` resolves a duplicate key to the
+   * LAST pair — so when one player carried both "SF" and "San Francisco 49ers",
+   * the fixture map ended up keyed on exactly one of them and a lookup with the
+   * other returned nothing. That is no opponent, no kickoff, no venue and no
+   * lineup lock for that starter, with nothing on screen to say why.
+   *
+   * 1,172 of 11,960 NFL sleeperIds carry more than one spelling of their club
+   * (production, 2026-08-30), so this was not an edge case. Composing folds the
+   * club once per player, which lets both sides of this join speak one
+   * vocabulary and removes the raw-spelling indirection entirely.
+   */
+  const rosterTeams = new Set(
+    [...identityBy.values()].map((p) => p.team).filter((t): t is string => Boolean(t)),
+  )
 
   const weekGames =
-    wanted.size > 0 && week
+    rosterTeams.size > 0 && week
       ? await prisma.sportsGame
           .findMany({
             where: {
@@ -471,68 +530,17 @@ async function resolvePlayers(
           .catch(() => [])
       : []
 
-  type Candidate = {
-    opponent: string
-    home: boolean
-    at: Date
-    preseason: boolean
-    venue: string | null
-    /** Whether the provider row that produced this knew its season type. */
-    typed: boolean
-  }
-
-  const best = new Map<string, Candidate>()
-
-  /**
-   * Is `next` a better row for this team than what we already have?
-   *
-   * ⚠ THE SAME FIXTURE ARRIVES UP TO FOUR TIMES, ONE PER PROVIDER, AND THEY DO
-   * NOT AGREE. The unique key includes `source`, and `seasonType` is populated
-   * on the Rolling Insights and ESPN rows but null on TheSportsDB's row for the
-   * same game — deliberately, because that provider does not carry the field.
-   * Whichever row happened to sort first would otherwise decide at random
-   * whether a game could be labelled preseason at all.
-   *
-   * Earlier kickoff wins, because that is the one that locks the lineup. On a
-   * tie — which is what duplicate rows for one fixture look like — the row that
-   * knows its season type wins.
+  /*
+   * Keyed on the FOLDED club token, the same vocabulary `rosterTeams` and every
+   * composed player carry — see `buildNextGameMap` for what the translation
+   * layer this replaced was costing.
    */
-  function better(next: Candidate, current: Candidate | undefined): boolean {
-    if (!current) return true
-    if (next.at.getTime() !== current.at.getTime()) return next.at < current.at
-    if (next.typed !== current.typed) return next.typed
-    // Same kickoff, same knowledge: prefer the row that carries a venue.
-    return current.venue == null && next.venue != null
-  }
-
-  for (const g of weekGames) {
-    if (!g.startTime) continue
-    const home = normalizeTeamAbbrev(g.homeTeam)
-    const away = normalizeTeamAbbrev(g.awayTeam)
-    for (const [team, opponent, isHome] of [
-      [home, away, true],
-      [away, home, false],
-    ] as const) {
-      if (!team || !opponent) continue
-      const rosterTeam = wanted.get(team)
-      if (!rosterTeam) continue
-
-      const candidate: Candidate = {
-        opponent,
-        home: isHome,
-        at: g.startTime,
-        preseason: isPreseason(g.seasonType),
-        venue: g.venue ?? null,
-        typed: g.seasonType != null,
-      }
-      if (better(candidate, best.get(rosterTeam))) best.set(rosterTeam, candidate)
-    }
-  }
-
-  const nextGameFor = best
+  const nextGameFor = buildNextGameMap(weekGames, rosterTeams)
 
   const injuries = await prisma.sportsInjury
     .findMany({
+      // Every vendor spelling, deliberately — see `namesById`. A superset costs
+      // one `IN` list and is the only way the 39 divergent names both match.
       where: { sport, playerName: { in: rows.map((r) => r.name) } },
       orderBy: { fetchedAt: 'desc' },
       select: { playerName: true, status: true },
@@ -555,6 +563,28 @@ async function resolvePlayers(
   }
 
   /*
+   * ⚠ RESOLVED PER PLAYER, ACROSS EVERY SPELLING HE IS STORED UNDER. The lookup
+   * used to run against whichever vendor row the loop was on, so for the 39 ids
+   * whose vendors disagree about the name it was a coin toss whether a status
+   * was found at all — and a missed status is not cosmetic here: `ruledOut`
+   * turns a projection into a hard 0.0.
+   *
+   * A hit on ANY spelling counts. Two spellings both matching is possible in
+   * principle; the first wins, and `injuryByName` above has already kept the
+   * newest row per name, so neither candidate is stale.
+   */
+  const injuryById = new Map<string, string | null>()
+  for (const [id, names] of namesById) {
+    for (const n of names) {
+      const status = injuryByName.get(n.trim().toLowerCase())
+      if (status) {
+        injuryById.set(id, status)
+        break
+      }
+    }
+  }
+
+  /*
    * ⚠ PROJECTIONS ARE JOINED HERE BECAUSE THIS IS WHERE THE IDS ALREADY ARE, and
    * because the ids are the same shape the feed is keyed by — Sleeper ids. That
    * coincidence is the whole reason both screens can be priced at all; it is not a
@@ -572,25 +602,37 @@ async function resolvePlayers(
    * The opponent comes from the schedule join this function already did, rather than from a
    * second `SportsGame` query with its own chances of picking the wrong fixture.
    */
-  const byId = rows.filter((r) => r.sleeperId)
+  /*
+   * ⚠ BUILT FROM THE COMPOSED PLAYER, NOT FROM RAW ROWS. `new Map(pairs)`
+   * resolves a duplicate key to the LAST pair, so each of these three maps was
+   * taking its value from whichever vendor row Postgres happened to return last
+   * — a different arbitrary pick from the one the render loop below made, which
+   * meant the position a player was PRICED as could differ from the position he
+   * was SHOWN as.
+   */
+  const composed = [...identityBy.entries()]
   const projections = await lookupProjections(lookupIds, projectionWeek, {
     scoringSettings,
-    positionBySleeperId: new Map(byId.map((r) => [r.sleeperId as string, r.position])),
+    positionBySleeperId: new Map(composed.map(([id, p]) => [id, p.position])),
     opponentBySleeperId: new Map(
-      byId.map((r) => [r.sleeperId as string, (r.team ? nextGameFor.get(r.team)?.opponent : null) ?? null])
+      composed.map(([id, p]) => [id, (p.team ? nextGameFor.get(p.team)?.opponent : null) ?? null])
     ),
-    injuryBySleeperId: new Map(
-      byId.map((r) => [r.sleeperId as string, injuryByName.get(r.name.toLowerCase()) ?? null])
-    ),
+    injuryBySleeperId: new Map(composed.map(([id]) => [id, injuryById.get(id) ?? null])),
   })
 
-  for (const r of rows) {
-    if (!r.sleeperId) continue
-    const g = r.team ? nextGameFor.get(r.team) : undefined
+  /*
+   * ⚠ ONE PASS PER PLAYER, NOT ONE PER ROW. This iterated `rows` and wrote
+   * `out.set(r.sleeperId, …)` each time, so a player with three vendor rows was
+   * built three times and the last one won every field — headshot, position and
+   * club together. Iterating the composed map makes each player's fields come
+   * from whichever vendor actually holds them.
+   */
+  for (const [sleeperId, p] of identityBy) {
+    const g = p.team ? nextGameFor.get(p.team) : undefined
     const time = formatKickoff(g?.at ?? null)
-    const injuryStatus = injuryByName.get(r.name.toLowerCase()) ?? null
+    const injuryStatus = injuryById.get(sleeperId) ?? null
     const ruledOut = isRuledOut(injuryStatus)
-    const projection = projections.get(r.sleeperId) ?? null
+    const projection = projections.get(sleeperId) ?? null
     const feedProjection = projection?.projectedPoints ?? null
 
     /*
@@ -606,19 +648,25 @@ async function resolvePlayers(
 
     // Indoors is a fact about the home stadium, so it is resolved from whoever
     // is hosting — the player's own team when at home, his opponent when away.
-    const hostTeam = g ? (g.home ? r.team : g.opponent) : null
+    const hostTeam = g ? (g.home ? p.team : g.opponent) : null
     const venueInfo = hostTeam
       ? resolveVenueForTeam({ sport: sport as 'NFL', teamAbbrev: normalizeTeamAbbrev(hostTeam) })
       : { kind: 'none' as const }
 
-    out.set(r.sleeperId, {
-      sleeperId: r.sleeperId,
-      name: r.name,
-      position: displayPosition(r.position),
-      team: r.team,
+    out.set(sleeperId, {
+      sleeperId,
+      /*
+       * ⚠ NEVER EMPTY. `SportsPlayer.name` is non-nullable, so a composed name is
+       * null only if every row for this id held whitespace — but `LineupPlayer.name`
+       * is a `string` a slot renders directly, and a blank one reads as a rendering
+       * bug rather than as a missing row.
+       */
+      name: p.name ?? `Unnamed player ${sleeperId}`,
+      position: displayPosition(p.position),
+      team: p.team,
       sport,
-      imageUrl: r.imageUrl,
-      gameContext: g ? `${r.team} ${g.home ? 'vs' : '@'} ${g.opponent}${time ? ` · ${time}` : ''}` : null,
+      imageUrl: p.imageUrl,
+      gameContext: g ? `${p.team} ${g.home ? 'vs' : '@'} ${g.opponent}${time ? ` · ${time}` : ''}` : null,
       kickoff: g?.at ?? null,
       preseason: g?.preseason ?? false,
       venue: g?.venue ?? null,
@@ -632,7 +680,7 @@ async function resolvePlayers(
        */
       projectedPoints: ruledOut
         ? 0
-        : leagueScoresIdp && isIdpPosition(r.position)
+        : leagueScoresIdp && isIdpPosition(p.position)
           ? null
           : feedProjection,
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
@@ -867,7 +915,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
         ? myTeamRow.ties > 0
           ? `${myTeamRow.wins}-${myTeamRow.losses}-${myTeamRow.ties}`
           : `${myTeamRow.wins}-${myTeamRow.losses}`
-        : 'no results read yet',
+        : 'No game in this league has been scored yet, so there is no record to read.',
+      recordKnown: anyResults,
       rank: myTeamRow.currentRank,
       pointsFor: myTeamRow.pointsFor,
       pointsAgainst: myTeamRow.pointsAgainst,
@@ -1276,6 +1325,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
         leagueId,
         platformLeagueId: league.platformLeagueId,
         myExternalId: myTeamRow.externalId,
+        // The third candidate key for OUR roster; see the join note in nextMatchup.ts.
+        userId,
         seasonYear: leagueWeek.seasonYear,
         week: leagueWeek.week,
         scoringSettings,
