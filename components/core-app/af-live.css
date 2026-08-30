@@ -758,3 +758,97 @@
     animation: none;
   }
 }
+
+/* ── Last play, inside the game card (design bundle, core/live) ─────────────
+ *
+ * The handoff's per-game play panel. Distinct from `.af-live-play`, which is a
+ * ROW in the sidebar's chronological feed and keeps its left-rule treatment —
+ * these two show the same kind of fact in different jobs: "what just happened
+ * in this game" versus "what has been happening across the slate".
+ *
+ * ⚠ NO FIELD/DIAMOND DIAGRAM HERE. The design draws one; the data layer has no
+ * yard line, down, base or out to draw it from (see the note at the JSX). The
+ * panel treatment is the part that carries over.
+ */
+.af-live-lastplay {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface2);
+  /* Tone on the left edge, the same language the sidebar feed already speaks,
+     so a turnover reads as a turnover in both places without a legend. */
+  border-left: 2px solid var(--line2);
+}
+.af-live-lastplay[data-tone='good'] { border-left-color: var(--good); }
+.af-live-lastplay[data-tone='warn'] { border-left-color: var(--warn); }
+.af-live-lastplay[data-tone='bad'] { border-left-color: var(--bad); }
+
+.af-live-lastplay-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+}
+
+.af-live-lastplay-type {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.af-live-lastplay-type[data-tone='good'] {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 30%, transparent);
+  background: var(--good-soft);
+}
+.af-live-lastplay-type[data-tone='warn'] {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+  background: var(--warn-soft);
+}
+.af-live-lastplay-type[data-tone='bad'] {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+  background: var(--bad-soft);
+}
+
+.af-live-lastplay-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-live-lastplay-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-live-lastplay-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-live-lastplay-team {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--chip);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
