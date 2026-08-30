@@ -4,7 +4,8 @@ import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
-import { getTeamInfo } from '@/lib/team-abbrev'
+import { composePlayerIdentities } from './playerIdentityCompose'
+import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import type {
   Dash34Brief,
@@ -755,11 +756,24 @@ export async function getDash34Data(
 
   /*
    * ⚠ `sleeperId` IS NOT UNIQUE IN `SportsPlayer` — 501 distinct roster ids
-   * resolved to 1,231 rows. Duplicates are near-identical records for the same
-   * athlete; first wins, and the count of *players* is taken from the id set
+   * resolved to 1,231 rows. The count of *players* is taken from the id set
    * rather than from the row count, which would have overstated every exposure
    * figure on this screen by roughly 2.5×.
+   *
+   * ⚠ AND THE DUPLICATES ARE NOT "NEAR-IDENTICAL RECORDS", WHICH IS WHAT THIS
+   * COMMENT USED TO SAY. They are one athlete as four vendors describe him, and
+   * they disagree about the fields this screen renders: `rolling_insights`
+   * stores a BARE FILENAME where a headshot URL belongs, `thesportsdb` spells
+   * the position and club out in full, and only the `sleeper` row carries a
+   * usable CDN headshot beside a code. `findMany` has no `orderBy`, so "first
+   * wins" was a coin toss — and the losing side of it renders as a grey initial
+   * in the triage rail, or as a BROKEN IMAGE, because a bare filename is truthy
+   * and went straight into `<img src>`.
+   *
+   * Composed field by field instead. Same fix, same module, as `/core/matchup`
+   * and `/core/my-team`; see `composePlayerIdentities` for the measurement.
    */
+  const composedById = composePlayerIdentities(playerRows)
   const playerById = new Map<
     string,
     {
@@ -770,14 +784,18 @@ export async function getDash34Data(
       imageUrl: string | null
     }
   >()
-  for (const p of playerRows) {
-    if (!p.sleeperId || playerById.has(p.sleeperId)) continue
-    playerById.set(p.sleeperId, {
-      name: p.name,
+  for (const [sleeperId, p] of composedById) {
+    playerById.set(sleeperId, {
+      /*
+       * `SportsPlayer.name` is non-nullable, so this is unreachable in practice —
+       * but `name` is a `string` every consumer renders and sorts on, and a blank
+       * one would read as a rendering fault rather than a missing row.
+       */
+      name: p.name ?? `Unnamed player ${sleeperId}`,
       position: p.position,
       team: p.team,
       sport: p.sport,
-      imageUrl: p.imageUrl ?? null,
+      imageUrl: p.imageUrl,
     })
   }
 
@@ -799,13 +817,36 @@ export async function getDash34Data(
    * user-independent query it was, so sixty concurrent home loads still cost
    * one read rather than sixty.
    */
+  /*
+   * ⚠ THE TEAM SIDE OF THIS INDEX IS FOLDED, BECAUSE `SportsInjury.team` HOLDS
+   * TWO VOCABULARIES IN ONE COLUMN. Measured on production 2026-08-30: of 6,550
+   * NFL rows, 3,013 store a code ("ARI") and 3,537 store the full name
+   * ("Arizona Cardinals"). `resolveVerifiedMatch` compares teams with a bare
+   * `trim().toUpperCase()`, so "ATL" and "ATLANTA FALCONS" never match.
+   *
+   * That matters more than it looks. Team narrowing only runs when a name has
+   * several candidates — and 1,016 of 1,536 distinct NFL injury names do. When
+   * the narrowing fails the result is `ambiguous`, which this loader treats as
+   * "we hold nothing", so the player DROPS OUT of the injury book entirely.
+   * A vocabulary mismatch does not show as a wrong badge; it shows as a healthy
+   * player, which is the more expensive of the two.
+   *
+   * Folding here rather than in `verifiedNameMatch` on purpose: that module has
+   * four other callers and no reason to know about an NFL club table. Both
+   * sides of THIS join now speak codes — the player side via
+   * `composePlayerIdentities`, which folds on the same NFL-only rule.
+   *
+   * Non-NFL rows are untouched: `normalizeTeamAbbrev` passes them through
+   * upper-cased, which is exactly what the matcher's own `normalizeToken` was
+   * going to do to them anyway.
+   */
   const injuryIndex = buildNameIndex(
     injuryRows
       .filter((i) => Boolean(i.status))
       .map((i) => ({
         name: i.playerName,
         position: i.position ?? null,
-        team: i.team ?? null,
+        team: normalizeTeamAbbrev(i.team) ?? null,
         row: i,
       })),
   )

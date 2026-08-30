@@ -28,7 +28,15 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 export type ComposedPlayerIdentity = {
   name: string | null
   position: string | null
-  /** Already folded by `normalizeTeamAbbrev` — a crest token, not a long name. */
+  /**
+   * The player's own sport, as the vendor rows state it. Kept because it
+   * decides whether the club below could be folded — see `foldClub`.
+   */
+  sport: string | null
+  /**
+   * Folded to a crest token by `normalizeTeamAbbrev` FOR NFL PLAYERS ONLY.
+   * Anything else keeps the best raw value the vendors offered.
+   */
   team: string | null
   /** Already vetted as something a `src` can take. Never a bare filename. */
   imageUrl: string | null
@@ -37,6 +45,14 @@ export type ComposedPlayerIdentity = {
 /** The shape this reads. A subset of `SportsPlayer`, so any select works. */
 export type PlayerIdentityRow = {
   sleeperId: string | null
+  /**
+   * ⚠ REQUIRED, SO A CALLER CANNOT SILENTLY OPT OUT OF THE CLUB FOLD. It is the
+   * only thing that decides whether `team` may be normalised, and a `select`
+   * that omits it would leave every player unfolded — which on the two screens
+   * that key a fixture map on the folded token is a silent regression, not a
+   * type error. Making it required turns that into a compile failure.
+   */
+  sport: string | null
   name?: string | null
   position?: string | null
   team?: string | null
@@ -61,21 +77,36 @@ export function asHeadshotUrl(raw: string | null | undefined): string | null {
  * The club as the crest lookup needs it — folded here, once, rather than left
  * for each reader.
  *
- * ⚠ `normalizeTeamAbbrev` FOLDS THE 32 NFL FULL NAMES AND PASSES EVERYTHING
- * ELSE STRAIGHT THROUGH UPPER-CASED. So "San Francisco 49ers" resolves to "SF",
- * but a club it does not know comes back as its own name in capitals — which
- * `teamLogoUrl` then asks the CDN for and gets nothing. Folding at compose time
- * makes the difference visible in ONE place: a value of four characters or
- * fewer resolved; a longer one is a passthrough and no crest will come back
- * for it.
+ * ⚠ `normalizeTeamAbbrev` IS AN NFL TABLE AND IT DOES NOT SAY SO IN ITS RETURN.
+ * It folds the 32 NFL full names and passes everything else through
+ * UPPER-CASED, so it looks like it resolved either way. Run over an NBA roster
+ * it turns "Atlanta Hawks" into "ATLANTA HAWKS" — not wrong exactly, but
+ * shoutier than the vendor's own string and no closer to a crest.
+ *
+ * So the fold is gated on the player's own sport. A non-NFL player keeps the
+ * best raw value the vendors offered, which for a club is the shortest token
+ * on offer.
+ *
+ * ⚠ CLUB CODES ARE NOT UNIQUE ACROSS SPORTS — ATL, CHI, DET, MIA and PHI are
+ * each both an NFL and an NBA club — which is the same reason `dash34.ts` gates
+ * its kickoff join on sport. Folding an NBA club through an NFL table is how a
+ * Hawks forward gets told he kicks off with the Falcons.
  */
-function foldClub(raw: string | null | undefined): string | null {
-  return normalizeTeamAbbrev(raw)
+function foldClub(raw: string | null | undefined, sport: string | null | undefined): string | null {
+  const v = raw?.trim()
+  if (!v) return null
+  return String(sport ?? '').toUpperCase() === 'NFL' ? normalizeTeamAbbrev(v) : v
 }
 
-/** Whether a folded club is one the crest lookup can actually use. */
-function isUsableClub(folded: string | null): boolean {
-  return folded != null && folded.length <= 4
+/**
+ * Whether a club value is one a crest lookup can actually use.
+ *
+ * Four characters or fewer means a code. Longer means either a name that no
+ * table folded or a sport this module does not fold for — in both cases no
+ * crest will come back for it, so a shorter sibling value replaces it.
+ */
+function isUsableClub(value: string | null): boolean {
+  return value != null && value.length <= 4
 }
 
 /**
@@ -97,13 +128,15 @@ export function composePlayerIdentities(
       out.set(r.sleeperId, {
         name: r.name?.trim() || null,
         position: r.position ?? null,
-        team: foldClub(r.team),
+        sport: r.sport ?? null,
+        team: foldClub(r.team, r.sport),
         imageUrl: asHeadshotUrl(r.imageUrl),
       })
       continue
     }
     held.name ??= r.name?.trim() || null
     held.position ??= r.position ?? null
+    held.sport ??= r.sport ?? null
     held.imageUrl ??= asHeadshotUrl(r.imageUrl)
     /*
      * The club is the one field where "already set" is not good enough: a name
@@ -111,7 +144,7 @@ export function composePlayerIdentities(
      * value that folds on a later row therefore REPLACES one that did not on an
      * earlier one, where every other field is first-wins.
      */
-    const folded = foldClub(r.team)
+    const folded = foldClub(r.team, r.sport ?? held.sport)
     if (held.team == null) held.team = folded
     else if (!isUsableClub(held.team) && isUsableClub(folded)) held.team = folded
   }

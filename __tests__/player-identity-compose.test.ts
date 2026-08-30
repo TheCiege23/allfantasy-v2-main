@@ -18,6 +18,7 @@ import {
 /** Mike Evans, sleeperId 2216, as each vendor actually writes him. */
 const ROLLING_INSIGHTS: PlayerIdentityRow = {
   sleeperId: '2216',
+  sport: 'NFL',
   name: 'Mike Evans',
   position: 'WR',
   team: 'San Francisco 49ers',
@@ -25,6 +26,7 @@ const ROLLING_INSIGHTS: PlayerIdentityRow = {
 }
 const THESPORTSDB: PlayerIdentityRow = {
   sleeperId: '2216',
+  sport: 'NFL',
   name: 'Mike Evans',
   position: 'Wide Receiver',
   team: 'San Francisco 49ers',
@@ -32,6 +34,7 @@ const THESPORTSDB: PlayerIdentityRow = {
 }
 const SLEEPER: PlayerIdentityRow = {
   sleeperId: '2216',
+  sport: 'NFL',
   name: 'Mike Evans',
   position: 'WR',
   team: 'SF',
@@ -97,11 +100,39 @@ describe('composePlayerIdentities', () => {
    * crest CDN, and this module's contract is that anything over four characters
    * did not fold.
    */
-  it('keeps an unfoldable club as the passthrough it is', () => {
+  /*
+   * ⚠ THE FOLD IS NFL-ONLY AND MUST LEAVE OTHER SPORTS ALONE.
+   * `normalizeTeamAbbrev` is an NFL table that passes anything else through
+   * UPPER-CASED, so running it over an NBA or soccer roster produces a shouty
+   * version of the vendor's own string and no closer to a crest. Gated on the
+   * row's own sport, a non-NFL club keeps the string the vendor gave.
+   */
+  it('does not fold a non-NFL club through the NFL table', () => {
     const soccer = composePlayerIdentities([
-      { sleeperId: '9', name: 'Someone', position: 'FW', team: 'West Ham United', imageUrl: null },
+      { sleeperId: '9', sport: 'SOCCER', name: 'Someone', position: 'FW', team: 'West Ham United', imageUrl: null },
     ]).get('9')
-    expect(soccer?.team).toBe('WEST HAM UNITED')
+    expect(soccer?.team).toBe('West Ham United')
+  })
+
+  /*
+   * ⚠ CLUB CODES ARE NOT UNIQUE ACROSS SPORTS. ATL, CHI, DET, MIA and PHI are
+   * each both an NFL and an NBA club, which is why `dash34.ts` gates its kickoff
+   * join on sport too. An NBA "Atlanta Hawks" must not come back as anything
+   * the NFL crest lookup would accept.
+   */
+  it('leaves an NBA club unfolded even when its code collides with an NFL one', () => {
+    const got = composePlayerIdentities([
+      { sleeperId: '77', sport: 'NBA', name: 'Some Forward', position: 'PF', team: 'Atlanta Hawks', imageUrl: null },
+    ]).get('77')
+    expect(got?.team).toBe('Atlanta Hawks')
+    expect(got?.sport).toBe('NBA')
+  })
+
+  it('still folds an NFL club spelled out in full', () => {
+    const got = composePlayerIdentities([
+      { sleeperId: '78', sport: 'NFL', name: 'Some Back', position: 'RB', team: 'Atlanta Falcons', imageUrl: null },
+    ]).get('78')
+    expect(got?.team).toBe('ATL')
   })
 
   /*
@@ -112,6 +143,7 @@ describe('composePlayerIdentities', () => {
   it('fills a null position from a sibling row', () => {
     const tsdbNoPosition: PlayerIdentityRow = {
       sleeperId: '13301',
+      sport: 'NFL',
       name: 'Antonio Williams',
       position: null,
       team: 'Washington Commanders',
@@ -119,6 +151,7 @@ describe('composePlayerIdentities', () => {
     }
     const sleeperRow: PlayerIdentityRow = {
       sleeperId: '13301',
+      sport: 'NFL',
       name: 'Antonio Williams',
       position: 'WR',
       team: 'WAS',
@@ -137,7 +170,7 @@ describe('composePlayerIdentities', () => {
   /* Rows with no Sleeper id cannot be addressed by any caller, so they are dropped. */
   it('drops rows carrying no sleeper id', () => {
     const map = composePlayerIdentities([
-      { sleeperId: null, name: 'Nobody', position: 'QB', team: 'BAL', imageUrl: null },
+      { sleeperId: null, sport: 'NFL', name: 'Nobody', position: 'QB', team: 'BAL', imageUrl: null },
       SLEEPER,
     ])
     expect(map.size).toBe(1)
@@ -148,7 +181,7 @@ describe('composePlayerIdentities', () => {
   it('never merges across sleeper ids', () => {
     const map = composePlayerIdentities([
       SLEEPER,
-      { sleeperId: '4881', name: 'Lamar Jackson', position: 'QB', team: 'BAL', imageUrl: null },
+      { sleeperId: '4881', sport: 'NFL', name: 'Lamar Jackson', position: 'QB', team: 'BAL', imageUrl: null },
     ])
     expect(map.get('2216')?.name).toBe('Mike Evans')
     expect(map.get('4881')?.name).toBe('Lamar Jackson')

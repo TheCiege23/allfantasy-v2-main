@@ -541,7 +541,9 @@ export async function getMatchupData(
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: lookupIds } },
-            select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
+            // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
+            // club fold, and omitting it would silently leave every club unfolded.
+            select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
           })
           .catch(() => [])
       : Promise.resolve([]),
