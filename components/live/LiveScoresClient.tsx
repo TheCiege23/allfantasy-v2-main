@@ -143,23 +143,37 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
  * ⚠ SAYS "UPDATED Ns AGO" ONLY WHEN IT KNOWS. An unparseable or missing
  * `fetchedAt` renders no age at all rather than "just now" — claiming freshness
  * we cannot demonstrate is the failure mode this page exists to avoid.
+ *
+ * ⚠ AND "MISSING" ONLY BECAME EXPRESSIBLE WHEN THE LOADER STOPPED INVENTING IT.
+ * This docblock always promised the behaviour, but `fetchedAt` was typed
+ * `string` and `getLivePageData` filled a failed or undated fetch with
+ * `new Date().toISOString()` — so the missing case could not arrive and the
+ * promise was never tested. `LivePageData.fetchedAt` is now `string | null`.
+ *
+ * The null check therefore has to run BEFORE `new Date`, not after: `new Date(null)`
+ * is the EPOCH, not an invalid date, so `Number.isNaN` never catches it and the
+ * badge would read "updated 20,000d ago" — a worse lie than the one this guard
+ * was written to prevent.
  */
-function FreshnessBadge({
+export function FreshnessBadge({
   fetchedAt,
   now,
   anyLive,
   isRefreshing,
 }: {
-  fetchedAt: string
+  fetchedAt: string | null
   now: number | null
   anyLive: boolean
   isRefreshing: boolean
 }) {
-  const at = new Date(fetchedAt).getTime()
-  // No age before mount and none for an unparseable timestamp — both render the
-  // badge without a claim about freshness rather than with a wrong one.
+  // No age when the loader could not date the feed, none before mount, and none
+  // for an unparseable timestamp. All three render the badge without a claim
+  // about freshness rather than with a wrong one.
+  const at = fetchedAt == null ? null : new Date(fetchedAt).getTime()
   const ageSeconds =
-    now == null || Number.isNaN(at) ? null : Math.max(0, Math.round((now - at) / 1000))
+    at == null || now == null || Number.isNaN(at)
+      ? null
+      : Math.max(0, Math.round((now - at) / 1000))
 
   return (
     <span
