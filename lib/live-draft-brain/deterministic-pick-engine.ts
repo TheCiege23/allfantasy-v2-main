@@ -189,8 +189,14 @@ export function runDeterministicPickEngine(args: {
   }
 
   const tierCliffWarnings: string[] = []
-  const top = scored.slice(0, 8)
-  if (top.length >= 2 && top[0].adpEdge - top[4]?.adpEdge > 12) {
+  /*
+   * Only rows with a real market ADP may form an "ADP-value gap" claim — the same rule the
+   * pick reasons and risk notes below already follow. `adpEdge` derives from `getAdp`, which
+   * falls back to the AI board and then to the synthetic `overall + 20` prior, so a pool
+   * mixing real and non-real ADPs manufactured the very spread this warning reports.
+   */
+  const top = scored.filter((r) => r.adpIsReal).slice(0, 8)
+  if (top.length >= 5 && top[0].adpEdge - top[4].adpEdge > 12) {
     tierCliffWarnings.push('Large ADP-value gap after your top cluster — tier drop may be near.')
   }
 
@@ -228,7 +234,9 @@ export function runDeterministicPickEngine(args: {
 
     const riskNotes: string[] = []
     if (row.adpIsReal && row.adp > overall + 4) riskNotes.push('Reach vs ADP — acceptable only if you prioritize need or scarcity')
-    if (!row.adpIsReal) riskNotes.push('No ADP data for this player — market comparison unavailable')
+    // "No market ADP", not "No ADP data" — the row may well carry an AI-board number that the
+    // scores are ordering by. What is missing, and what this note is about, is a market price.
+    if (!row.adpIsReal) riskNotes.push('No market ADP for this player — market comparison unavailable')
     if (breakdown.draftRiskScore > 70) riskNotes.push('Higher outcome variance than other targets')
     if (riskNotes.length === 0) riskNotes.push('Risk profile within normal range for this round')
 

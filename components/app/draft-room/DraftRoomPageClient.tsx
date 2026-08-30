@@ -1718,7 +1718,21 @@ export function DraftRoomPageClient({
       name: p.name,
       position: p.position,
       team: p.team ?? null,
-      adp: draftUISettings?.aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp,
+      /*
+       * 🛑 THE MARKET ADP ONLY. Do not substitute the AI board into this field.
+       *
+       * This used to send `aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp`, which handed
+       * the engine an AllFantasy-computed number wearing the market's field name. The engine's
+       * honesty guard (`hasRealAdp`) inspects exactly this field, so it returned true and every
+       * market claim fired on it — "typically drafted later (ADP ~N)", "usually goes before
+       * pick N", "Market edge: +N picks vs ADP". `aiAdpEnabled` defaults TRUE, so the guard was
+       * defeated by default rather than in an edge case.
+       *
+       * The AI number is NOT lost: it already travels in `aiAdpByKey` on this same payload
+       * (below), which is the channel the engine treats as an ordering fallback and refuses to
+       * narrate. Sending it here as well was redundant and was the only thing laundering it.
+       */
+      adp: p.adp ?? null,
       byeWeek: p.byeWeek ?? null,
       // Draft VORP slice: real pool projection when the row carries one.
       projectedPoints: p.nflDraftProjectionSplits?.projectedPoints ?? null,
@@ -3478,7 +3492,14 @@ export function DraftRoomPageClient({
             name: p.name,
             position: p.position,
             team: p.team ?? null,
-            adp: draftUISettings?.aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp,
+            /*
+             * 🛑 MARKET ADP ONLY — never the AI board. Same rule, and same reason, as the
+             * War Room payload above: `hasRealAdp` inspects this exact field, so substituting
+             * `p.aiAdp` here made every market claim fire on an in-house number. The AI value
+             * still reaches the engine through `aiAdpByKey` below, where it orders but does
+             * not speak.
+             */
+            adp: p.adp ?? null,
             // Draft VORP slice: real pool projection when the row carries one.
             projectedPoints: p.nflDraftProjectionSplits?.projectedPoints ?? null,
           }))
