@@ -13,7 +13,7 @@
  * arithmetic.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -260,6 +260,130 @@ describe('push-queue — the pusher gate', () => {
     writeFileSync(join(queueDir, 'pusher.json'), '{ half-written')
 
     expect(check(SHA_A).status).toBe(0)
+  })
+})
+
+describe('push-queue — the pusher lock has a heartbeat', () => {
+  const writePusher = (extra: Record<string, unknown> = {}) =>
+    writeFileSync(
+      join(queueDir, 'pusher.json'),
+      JSON.stringify({
+        name: 'session-61',
+        ref: 'allfantasy-v2-main-61',
+        token: 'tok-123',
+        since: Date.now(),
+        heartbeatAt: Date.now(),
+        ...extra,
+      }),
+    )
+  const pusherFileExists = () => existsSync(join(queueDir, 'pusher.json'))
+  const STALE = { heartbeatAt: Date.now() - 90 * 60_000 }
+
+  it('expires a lock nobody has refreshed, so a vanished pusher cannot block forever', () => {
+    writePusher(STALE)
+
+    const res = check(SHA_A)
+
+    expect(res.status).toBe(0) // gate is gone
+    expect(pusherFileExists()).toBe(false)
+    expect(readFileSync(join(queueDir, 'journal.jsonl'), 'utf8')).toContain('"event":"pusher-expired"')
+  })
+
+  it('keeps honouring a lock whose heartbeat is fresh', () => {
+    writePusher()
+
+    expect(check(SHA_A).status).toBe(1)
+    expect(pusherFileExists()).toBe(true)
+  })
+
+  it('refreshes the heartbeat when the token holder pushes', () => {
+    const old = Date.now() - 20 * 60_000
+    writePusher({ heartbeatAt: old })
+
+    check(SHA_A, { AF_PUSH_TOKEN: 'tok-123' })
+
+    const after = JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8'))
+    expect(after.heartbeatAt).toBeGreaterThan(old)
+  })
+
+  it('does NOT refresh on a push from someone who is not the holder', () => {
+    const old = Date.now() - 20 * 60_000
+    writePusher({ heartbeatAt: old })
+
+    check(SHA_A) // no token
+
+    const after = JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8'))
+    expect(after.heartbeatAt).toBe(old)
+  })
+
+  // 🛑 THE KNOWN POSITIVE FOR THE INCIDENT THIS EXISTS TO PREVENT: on
+  // 2026-08-30 a peer released a lock held by a session that was mid-batch,
+  // because the holder's NAME had stopped resolving. A live lock must refuse.
+  it('refuses --release from a session that does not hold a LIVE lock', () => {
+    writePusher()
+
+    const res = run(['pusher', '--release'], '')
+
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('the lock is LIVE')
+    expect(pusherFileExists()).toBe(true)
+  })
+
+  it('lets the token holder release their own lock', () => {
+    writePusher()
+
+    const res = run(['pusher', '--release'], '', { AF_PUSH_TOKEN: 'tok-123' })
+
+    expect(res.status).toBe(0)
+    expect(pusherFileExists()).toBe(false)
+    expect(readFileSync(join(queueDir, 'journal.jsonl'), 'utf8')).toContain('released by its holder')
+  })
+
+  it('lets anyone release a lock that has already gone stale', () => {
+    writePusher(STALE)
+
+    const res = run(['pusher', '--release'], '')
+
+    expect(res.status).toBe(0)
+    expect(pusherFileExists()).toBe(false)
+  })
+
+  it('allows --force, and records that it was forced', () => {
+    writePusher()
+
+    const res = run(['pusher', '--release', '--force'], '')
+
+    expect(res.status).toBe(0)
+    expect(pusherFileExists()).toBe(false)
+    expect(readFileSync(join(queueDir, 'journal.jsonl'), 'utf8')).toContain('FORCED')
+  })
+
+  it('refuses a claim that would take the role from a live holder', () => {
+    writePusher()
+
+    const res = run(['pusher', '--claim', 'someone-else'], '')
+
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('already holds the pusher role')
+    expect(JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8')).name).toBe('session-61')
+  })
+
+  it('allows a claim once the previous lock has expired', () => {
+    writePusher(STALE)
+
+    const res = run(['pusher', '--claim', 'someone-else'], '')
+
+    expect(res.status).toBe(0)
+    expect(JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8')).name).toBe('someone-else')
+  })
+
+  it('stamps a heartbeat on a fresh claim, so it is not instantly stale', () => {
+    const res = run(['pusher', '--claim', 'me'], '')
+
+    expect(res.status).toBe(0)
+    const p = JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8'))
+    expect(typeof p.heartbeatAt).toBe('number')
+    expect(Date.now() - p.heartbeatAt).toBeLessThan(60_000)
   })
 })
 
