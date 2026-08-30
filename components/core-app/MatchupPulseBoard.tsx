@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import type { MatchupPulse, PulseRow } from '@/lib/core-app/matchupPulse'
+import { columnsTooUneven } from '@/components/core-app/MyTeamBoard'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import '@/components/core-app/af-matchup-pulse.css'
 
@@ -179,17 +180,16 @@ export function MatchupPulseBoard({ pulse }: MatchupPulseBoardProps) {
 
       {pulse.ranked > 0 ? (
         /*
-          ⚠ ONE SIDE IS ROUTINELY EMPTY AND TWO EQUAL COLUMNS THEN LEAVE A HOLE.
-          "You are not behind in any league right now" is a single sentence
-          sitting beside up to five rows, and on a wide screen that reads as a
-          panel that failed to load rather than as good news. The same shape,
-          and the same fix, as the my-team board in MyTeamBoard.tsx — collapse to
-          one column and run the surviving list two-up, so the rows keep the
-          width the handoff draws them at instead of stretching across the board.
+          ⚠ THE TWO COLUMNS ARE ROUTINELY UNEQUAL AND THAT LEAVES A HOLE. Being
+          ahead in one league and behind in five is an ordinary week, and the
+          short column then reads as a panel that failed to load rather than as
+          a short list. Same shape and same threshold as the my-team board —
+          `columnsTooUneven` is shared with it deliberately, so the two cannot
+          drift into disagreeing about when to stack.
         */
         <div
           className="af-mp-cols"
-          data-one={pulse.leading.length === 0 || pulse.trailing.length === 0 || undefined}
+          data-stack={columnsTooUneven(pulse.leading.length, pulse.trailing.length) || undefined}
         >
           <div className="af-mp-col">
             <h3 className="af-label af-mp-col-head" data-tone="good">
