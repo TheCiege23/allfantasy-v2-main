@@ -3,7 +3,9 @@ import { createHash } from 'crypto'
 import { fetchAllFFCFormats, fetchFFCADP, getLiveADP, type FFCScoringFormat } from '@/lib/adp-data'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { normalizePlayerList } from '@/lib/draft-asset-pipeline'
+import { injuryCoverageFor, resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { findMultiADP, type ADPFormat } from '@/lib/multi-platform-adp'
+import { normalizePlayerName } from '@/lib/team-abbrev'
 import { loadSportAwareDraftPlayerPool } from '@/lib/mock-draft/sport-player-pool'
 import { prisma } from '@/lib/prisma'
 import { resolveSleeperIds } from '@/lib/sleeper/players-cache'
@@ -269,11 +271,39 @@ async function buildMockPoolPayload(params: MockDraftPoolRequest): Promise<MockD
   }))
   const normalized = normalizePlayerList(rawNormalized, sport)
 
+  /*
+   * 🛑 INJURIES COME FROM THE INJURY FEED, NOT FROM A CSV FROZEN IN MARCH.
+   *
+   * This used to read `findMultiADP(...)?.health`, i.e. the Health/Injury columns of
+   * `data/nfl-adp-multiplatform.csv` — a hand-placed export dated 2026-03-08. Two consequences,
+   * both bad on a draft board two weeks before the season:
+   *   - every badge was up to six months old, and a stale injury badge is a confident false
+   *     statement rather than a missing one;
+   *   - it was gated `!isRookie`, so the 2026 class got no injury line at all — and the CSV
+   *     predates their draft, so it could never have had one.
+   *
+   * `resolveInjuryFacts` reads `sports_injuries` (ESPN + Rolling Insights), keyed on the same
+   * normalizer, in ONE batched query for the whole pool rather than per player.
+   */
+  const coverage = injuryCoverageFor(sport)
+  const injuries = coverage.covered
+    ? await resolveInjuryFacts({
+        sport,
+        players: entries.map((e) => ({ name: e.name, position: e.position, team: e.team })),
+      }).catch(() => null)
+    : null
+
   return {
     entries: entries.map((entry, index) => {
       const isRookie = entry.source === 'devy' || entry.source === 'rookie-db'
       const multiPlatform = !isRookie ? findMultiADP(entry.name, entry.position, entry.team || undefined) : null
-      const injuryStatus = multiPlatform?.health?.injury ?? multiPlatform?.health?.status ?? null
+      /*
+       * A STALE ROW IS SUPPRESSED, NOT RENDERED. The read port's own contract says so: this
+       * board shows a plain badge with no age beside it, so an old designation reads as
+       * current. `ambiguous` names are already withheld by the port rather than guessed.
+       */
+      const fact = injuries?.byPlayer.get(normalizePlayerName(entry.name)) ?? null
+      const injuryStatus = fact && !fact.stale ? fact.status : null
       const display = normalized[index]?.display ?? null
       return {
         name: entry.name,
