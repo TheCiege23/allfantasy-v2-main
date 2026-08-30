@@ -141,6 +141,29 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   const activeSportLabel =
     data.counts.find((c) => c.sport === data.sport)?.label ?? data.sport
 
+  /*
+   * Newest play per game, for the in-card panel.
+   *
+   * ⚠ FIRST WINS, BECAUSE THE FEED IS NEWEST-FIRST. `impact.plays` documents
+   * itself as "the recent play feed for this slate, NEWEST FIRST", so the first
+   * entry seen for a gameId is the latest one and later entries are older —
+   * `has()` before `set()` keeps it rather than letting the oldest overwrite.
+   * Reversing this silently shows a stale play beside a live score, which is
+   * indistinguishable from a stuck feed.
+   *
+   * Memoised on `data.impact.plays` alone: it is rebuilt on every 20s poll and
+   * the slate can hold a dozen cards, so re-deriving it per card per render is
+   * the kind of quiet cost this screen's `contain: layout` note is about.
+   */
+  const latestPlayByGame = useMemo(() => {
+    const byGame = new Map<string, LivePageData['impact']['plays'][number]>()
+    for (const p of data.impact.plays) {
+      if (!p.gameId || byGame.has(p.gameId)) continue
+      byGame.set(p.gameId, p)
+    }
+    return byGame
+  }, [data.impact.plays])
+
   return (
     <div className="af-live">
       <header className="af-live-head">
@@ -255,7 +278,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             />
           ) : (
             data.games.map((game) => (
-              <GameCard key={game.gameId} game={game} selectedLeagueId={selectedLeagueId} />
+              <GameCard
+                key={game.gameId}
+                game={game}
+                selectedLeagueId={selectedLeagueId}
+                lastPlay={latestPlayByGame.get(game.gameId) ?? null}
+              />
             ))
           )}
         </section>
@@ -443,9 +471,23 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
 function GameCard({
   game,
   selectedLeagueId,
+  lastPlay,
 }: {
   game: LiveGameCard
   selectedLeagueId: string | null
+  /*
+   * The newest play from THIS game, or null. The handoff puts the last play
+   * inside the card it belongs to, and that is the one structural thing it gets
+   * righter than what shipped: the feed already carries `gameId`, but the plays
+   * rendered only in the sidebar, so reading "T. Hill 42-yd TD" and finding
+   * which of six cards it happened in was a manual name-match every time.
+   *
+   * ⚠ NFL-ONLY BY CONSTRUCTION, and that is the data layer's decision, not a
+   * gap here. `impact.plays` is fed from the literal cache key `pbp:feed:NFL`
+   * and every LiveEventType is an NFL play, so this panel is simply absent on
+   * the MLB and NCAAF tabs rather than captioning real plays with wrong games.
+   */
+  lastPlay: LivePageData['impact']['plays'][number] | null
 }) {
   const wp = game.winProbability
   const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
@@ -473,6 +515,56 @@ function GameCard({
         </span>
         <Side side={game.home} align="end" leading={leads(game.home.score, game.away.score)} />
       </div>
+
+      {/*
+        ── Last play, in the card it happened in ──────────────────────────────
+        ⚠ NO FIELD DIAGRAM, AND THAT IS THE HONEST READING OF THE HANDOFF.
+        The design draws a football field with the play plotted on it and a
+        baseball diamond with occupied bases — both need data this system does
+        not have and structurally cannot get. `PlayFeedItem` is
+        {type, playerName, team, teamLogoUrl, headline}: no yard line, no
+        down-and-distance, no bases, no outs. That is not an oversight in the
+        feed reader — `lib/live/eventDetector.ts` DERIVES plays from cumulative
+        stat deltas and says so in its header ("No play-by-play required, and no
+        guessing"), so a 25-yard run is inferred from carries+1 and yards+25.
+        It never knew where the ball was.
+
+        Drawing the diagram anyway would mean choosing a yard line, which is
+        inventing the one detail the picture exists to convey — on the screen
+        whose promise is that the numbers are real. Same refusal as the
+        determinate progress bar on the import screen, and the same reason
+        lib/ai/deterministic.ts already declines to "invent … box-score details".
+
+        The panel treatment itself is the part that carries over, and it is
+        worth having on its own: the play is grouped into a --surface2 block
+        under a LAST PLAY label, beside the score it changed.
+      */}
+      {lastPlay ? (
+        <div className="af-live-lastplay" data-tone={playTone(lastPlay.type)}>
+          <span className="af-label af-live-lastplay-head">
+            Last play
+            <span className="af-live-lastplay-type af-num" data-tone={playTone(lastPlay.type)}>
+              {PLAY_TYPE_LABEL[lastPlay.type] ?? lastPlay.type}
+            </span>
+          </span>
+          <p className="af-live-lastplay-text">{lastPlay.headline}</p>
+          <span className="af-live-lastplay-who">
+            <MiniPlayerImg
+              sleeperId={null}
+              name={lastPlay.playerName}
+              avatarUrl={lastPlay.imageUrl}
+              size={20}
+            />
+            <span className="af-live-lastplay-name">{lastPlay.playerName}</span>
+            {/* Only when the identity map actually resolved it — the feed sends
+                team: null on every Rolling Insights event, so a blank chip here
+                would be the normal case rather than the exception. */}
+            {lastPlay.team ? (
+              <span className="af-live-lastplay-team af-num">{lastPlay.team}</span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
 
       {/*
         Labelled "estimate" because the type makes it impossible to honestly do
