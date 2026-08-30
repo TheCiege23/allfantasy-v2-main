@@ -537,7 +537,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'idp_ai' ? (
             <IDPAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={payload?.canEdit ?? false} />
           ) : activeTab === 'idp_cap' ? (
-            <IDPCapPanel />
+            <IDPCapPanel leagueId={leagueId} />
           ) : activeTab === 'devy_format' ? (
             <DevyFormatPanel config={devyConfig} />
           ) : activeTab === 'devy_roster' ? (

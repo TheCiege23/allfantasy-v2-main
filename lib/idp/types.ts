@@ -57,6 +57,13 @@ export type IdpSettingsAuditAction =
   | 'eligibility_change'
   | 'unlock'
   | 'lock'
+  /**
+   * Salary-cap settings. Added when IDPCapConfig gained its first writer — a cap change is not
+   * a scoring change, and filing it as one would make the audit log lie about what a
+   * commissioner did. Created vs updated is carried in the entry's `metadata`, so the action
+   * stays one value per concern.
+   */
+  | 'cap_config_change'
 
 /** Grouped IDP positions (family). */
 export const IDP_GROUPED_POSITIONS = ['DL', 'LB', 'DB'] as const
