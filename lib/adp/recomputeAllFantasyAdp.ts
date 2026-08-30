@@ -1,5 +1,5 @@
 /**
- * D.5-scheduler â reusable recompute service for AllFantasy AI ADP.
+ * D.5-scheduler Ã¢ÂÂ reusable recompute service for AllFantasy AI ADP.
  *
  * Lifts the aggregation + upsert flow out of `scripts/recompute-allfantasy-adp.ts`
  * so a Vercel cron route (or any future caller) can run the recompute without
@@ -8,7 +8,7 @@
  * Default behavior (matches D.5 spec):
  *   - Real-mode picks only.
  *   - `source` NOT IN ('test_seed', 'undone', 'corrected', 'deleted').
- *   - `assetType` IN (null, 'player') â devy / dispersal picks excluded.
+ *   - `assetType` IN (null, 'player') Ã¢ÂÂ devy / dispersal picks excluded.
  *   - Sport NFL by default, but `options.sport` is overridable.
  *   - Mock and test draftModes can be opted in via flags (used by the CLI).
  *
@@ -17,6 +17,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { collectDraftFactSamples } from '@/lib/adp/draftFactSamples'
+import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { Prisma } from '@prisma/client'
@@ -31,7 +32,7 @@ import {
 } from '@/lib/adp/computeAllFantasyAdp'
 
 /**
- * Upsert computed **`AllFantasyAdpSnapshot`** rows â shared by cron/CLI and tests.
+ * Upsert computed **`AllFantasyAdpSnapshot`** rows Ã¢ÂÂ shared by cron/CLI and tests.
  * Does not run aggregation; pass **`AdpSnapshot`** from **`aggregateAdp`** / **`applyTrends`**.
  */
 export async function persistAllFantasyAdpSnapshots(
@@ -89,7 +90,7 @@ export interface RecomputeAllFantasyAdpOptions {
   sport?: string | null
   /** Default null = all seasons. */
   season?: string | null
-  /** Default 'real'. Pass 'all' or another mode to widen â cron should leave default. */
+  /** Default 'real'. Pass 'all' or another mode to widen Ã¢ÂÂ cron should leave default. */
   draftMode?: DraftMode | 'all'
   /** When false (default), test_seed picks AND draftMode='test' rows are excluded. */
   includeTest?: boolean
@@ -172,29 +173,39 @@ function deriveDraftMode(row: DraftPickWithSession): DraftMode {
   return 'real'
 }
 
+/*
+ * 🛑 BOTH OF THESE DELEGATE TO `buildDraftContext`. DO NOT REINLINE THEM.
+ * The reader (`lib/adp/readSnapshotForLeague.ts`) had its own copy of this derivation and the two
+ * disagreed on three of seven fields, so a reader found ZERO rows for players the recompute had
+ * just written - and an empty AI ADP board is what the product is SUPPOSED to render when there
+ * are genuinely no samples, so the mismatch was invisible. One function, both sides.
+ */
 function deriveLeagueType(row: DraftPickWithSession): string {
-  const variant = (row.session.league?.leagueVariant ?? '').trim().toLowerCase()
-  if (variant) return variant
-  if (row.session.league?.isDynasty) return 'dynasty'
-  return 'redraft'
+  return deriveContext(row).leagueType
 }
 
 function deriveContext(row: DraftPickWithSession) {
-  return {
-    sport: (row.session.league?.sport ?? row.session.sportType ?? 'NFL').toString().toUpperCase(),
-    leagueType: deriveLeagueType(row),
-    draftType: (row.session.draftType ?? 'snake').toLowerCase(),
-    scoringFormat: (row.session.league?.scoring ?? 'ppr').toLowerCase(),
-    rosterFormat: 'standard' as const,
-    teamCount: row.session.teamCount ?? 12,
-    season: String(row.session.league?.season ?? new Date().getUTCFullYear()),
-  }
+  const league = row.session.league
+  return buildDraftContext({
+    league: {
+      /* `League.sport` is a non-nullable enum on a required relation; the fallbacks are belt-and-braces. */
+      sport: (league?.sport ?? row.session.sportType ?? 'NFL').toString(),
+      season: Number(league?.season ?? new Date().getUTCFullYear()),
+      scoring: league?.scoring ?? null,
+      isDynasty: Boolean(league?.isDynasty),
+      leagueVariant: league?.leagueVariant ?? null,
+      /* The SESSION is authoritative for both of these - it is the draft these picks came from. */
+      leagueSize: null,
+      settings: null,
+    },
+    session: { draftType: row.session.draftType, teamCount: row.session.teamCount },
+  })
 }
 
 /**
  * Runs the recompute end-to-end and returns a structured report. Safe to call
  * from a Next route handler. Errors during individual upserts are captured in
- * `report.errors` rather than thrown â the caller decides on the HTTP status.
+ * `report.errors` rather than thrown Ã¢ÂÂ the caller decides on the HTTP status.
  */
 export async function recomputeAllFantasyAdp(
   options: RecomputeAllFantasyAdpOptions = {},
@@ -244,7 +255,7 @@ export async function recomputeAllFantasyAdp(
     const picksRaw = (await prisma.draftPick.findMany({
       where: {
         /*
-         * 🛑 SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
+         * ð SPORT IS SELECTED THROUGH THE LEAGUE, NOT `DraftPick.sportType`.
          *
          * `sportType` is nullable on BOTH DraftPick and DraftSession, and the writers that
          * matter most leave it null. `lib/draft/sleeperSync.ts` - the mirror for externally
