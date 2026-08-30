@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800;900&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+:root{
+  --bg:#06070f; --surface:#0d1020; --surface2:#0a0c1a;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
+  --text:#eef0fa; --text2:#c3c9e6; --muted:#8f97bd; --faint:#5d648a;
+  --accent:#22d3ee; --accent-ink:#04050c; --accent-soft:rgba(34,211,238,.09); --accent-line:rgba(34,211,238,.3);
+  --good:#34d399; --warn:#fbbf24; --bad:#fb5b78;
+  --good-soft:rgba(52,211,153,.1); --warn-soft:rgba(251,191,36,.1); --bad-soft:rgba(251,91,120,.1);
+  --chip:rgba(255,255,255,.05); --chip-line:rgba(255,255,255,.1);
+}
+html{background:var(--bg)} body{margin:0;background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,sans-serif}
+h1,h2,h3{margin:0;font-weight:900;letter-spacing:-.03em}
+a{color:var(--accent)} a:hover{color:#67e4f7}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg);padding:40px 0 100px">
+  <div style="max-width:1200px;margin:0 auto;padding:0 40px;display:flex;flex-direction:column;gap:22px">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">LAST LEAGUE LEFT · DEVY</div>
+        <h1 style="font-size:24px;color:var(--text)">Devy</h1>
+        <div style="font:400 12px/1.5 'Archivo',sans-serif;color:var(--muted);max-width:560px">College prospects rostered, available, and in motion — scoped to this league's devy slots and settings.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PREVIEW STATE</div>
+        <div style="display:flex;padding:4px;gap:3px;background:var(--chip);border:1px solid var(--chip-line);border-radius:10px">
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.main }};color:{{ v.tabColor.main }}" onClick="{{ setView_main }}">Populated</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.empty }};color:{{ v.tabColor.empty }}" onClick="{{ setView_empty }}">Empty</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.loading }};color:{{ v.tabColor.loading }}" onClick="{{ setView_loading }}">Loading</div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ v.isLoading }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:70px 30px;background:var(--surface);border:1px solid var(--line);border-radius:18px;text-align:center">
+        <div style="width:36px;height:36px;border-radius:50%;border:3px solid var(--chip-line);border-top-color:var(--accent);animation:spin 0.9s linear infinite"></div>
+        <div style="font:700 14px/1.4 'Archivo',sans-serif;color:var(--text2)">Loading this league's devy data…</div>
+        <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:520px">
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:70%"></div>
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:90%"></div>
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:55%"></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:60px 30px;background:var(--surface);border:1px solid var(--line);border-radius:18px;text-align:center">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--chip);display:flex;align-items:center;justify-content:center;font:900 18px/1 'Archivo',sans-serif;color:var(--faint)">—</div>
+        <div style="font:800 17px/1.3 'Archivo',sans-serif">This league hasn't turned on devy slots</div>
+        <div style="font:400 13px/1.5 'Archivo',sans-serif;color:var(--muted);max-width:460px">Devy needs a commissioner to add college-eligible bench slots in league settings — no roster changes happen until that's on.</div>
+        <div style="cursor:pointer;font:700 12px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent);padding:11px 18px;border-radius:9px">Enable in league settings</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.isMain }}" hint-placeholder-val="{{ true }}">
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">YOUR DEVY SLOTS</div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">{{ v.slotsFilled }} of {{ v.slotsTotal }} filled</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <sc-for list="{{ v.slots }}" as="s" hint-placeholder-count="3">
+            <sc-if value="{{ s.filled }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px">
+                <div style="position:relative;flex:none;width:46px;height:46px">
+                  <image-slot id="{{ s.photoId }}" shape="circle" placeholder="headshot" style="width:46px;height:46px"></image-slot>
+                  <div style="position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-radius:50%;background:{{ s.teamColor }};border:2px solid var(--surface);font:800 7px/14px 'Archivo',sans-serif;text-align:center;color:{{ s.teamColor2 }}">{{ s.teamAbbr }}</div>
+                </div>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                  <div style="font:800 13px/1.2 'Archivo',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.name }}</div>
+                  <div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ s.pos }} · {{ s.school }}</div>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ s.empty }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;justify-content:center;padding:14px;min-height:74px;background:transparent;border:1.5px dashed var(--line2);border-radius:13px">
+                <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint)">Empty devy slot</div>
+              </div>
+            </sc-if>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">AVAILABLE DEVY FREE AGENTS</div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ v.freeAgents }}" as="fa" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+              <image-slot id="{{ fa.photoId }}" shape="circle" placeholder="headshot" style="width:38px;height:38px;flex:none"></image-slot>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <div style="font:800 13px/1.2 'Archivo',sans-serif">{{ fa.name }}</div>
+                <div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ fa.pos }} · {{ fa.school }} · Grade {{ fa.grade }}</div>
+              </div>
+              <div style="cursor:pointer;font:800 11px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent);padding:9px 14px;border-radius:8px;flex:none">Add</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">DEVY DRAFT BOARD · ROUND 1</div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;color:var(--warn)">Pick due in 18h</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <sc-for list="{{ v.draftBoard }}" as="d" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:14px;background:{{ d.bg }};border:1px solid {{ d.border }};border-radius:13px">
+              <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ d.labelColor }}">{{ d.pickLabel }}</div>
+              <div style="font:800 12px/1.2 'Archivo',sans-serif">{{ d.team }}</div>
+              <div style="font:600 11px/1.4 'Archivo',sans-serif;color:{{ d.playerColor }}">{{ d.player }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">DEVY NEWS · THIS LEAGUE</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ v.leagueNews }}" as="n" hint-placeholder-count="2">
+            <div style="display:flex;gap:12px;padding:13px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px">
+              <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ n.tagColor }};background:{{ n.tagSoft }};border:1px solid {{ n.tagLine }};padding:5px 8px;border-radius:6px;flex:none;height:fit-content">{{ n.tag }}</div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="display:flex;align-items:center;gap:8px"><div style="font:800 12px/1.2 'Archivo',sans-serif">{{ n.name }}</div><div style="font:700 8px/1 'JetBrains Mono',monospace;color:var(--muted);background:var(--chip);border:1px solid var(--chip-line);padding:3px 6px;border-radius:4px">{{ n.ownership }}</div></div>
+                <div style="font:400 11px/1.5 'Archivo',sans-serif;color:var(--text2)">{{ n.blurb }}</div>
+              </div>
+              <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint);flex:none">{{ n.time }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">DEVY TRADE VALUES</div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 100px 100px 130px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)">
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PLAYER</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--accent);text-align:right">VALUE</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);text-align:right">TREND</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);text-align:right">STATUS</div>
+          </div>
+          <sc-for list="{{ v.tradeValues }}" as="t" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1fr 100px 100px 130px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)">
+              <div style="font:800 13px/1.2 'Archivo',sans-serif">{{ t.name }}</div>
+              <div style="font:900 13px/1 'JetBrains Mono',monospace;text-align:right">{{ t.value }}</div>
+              <div style="font:700 11px/1 'JetBrains Mono',monospace;text-align:right;color:{{ t.trendColor }}">{{ t.trend }}</div>
+              <div style="font:700 9px/1 'JetBrains Mono',monospace;text-align:right;color:{{ t.statusColor }}">{{ t.status }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font:400 10px/1.5 'Archivo',sans-serif;color:var(--faint)">Trade values are directional, league-scoped estimates — not an offer, and not pulled from any real trade market.</div>
+      </div>
+
+    </sc-if>
+
+  </div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const TEAM = {
+  osu:{abbr:'OSU', color:'#BB0000', color2:'#fff'},
+  tex:{abbr:'TEX', color:'#BF5700', color2:'#fff'},
+  uga:{abbr:'UGA', color:'#BA0C2F', color2:'#fff'},
+  ore:{abbr:'ORE', color:'#154733', color2:'#FEE123'},
+  lsu:{abbr:'LSU', color:'#461D7C', color2:'#FDD023'},
+  bama:{abbr:'BAM', color:'#9E1B32', color2:'#fff'},
+};
+
+const SLOTS = [
+  { filled:true, empty:false, name:'Malik Osei', pos:'QB', school:'Ohio State', team:'osu', photoId:'devyl-s1' },
+  { filled:true, empty:false, name:'Trey Whitfield', pos:'RB', school:'Texas', team:'tex', photoId:'devyl-s2' },
+  { filled:false, empty:true },
+].map(s => s.filled ? { ...s, teamAbbr:TEAM[s.team].abbr, teamColor:TEAM[s.team].color, teamColor2:TEAM[s.team].color2 } : s);
+
+const FREE_AGENTS = [
+  { name:'Deshawn Carrow', pos:'WR', school:'Georgia', grade:'93', photoId:'devyl-fa1' },
+  { name:'Bo Lindqvist', pos:'TE', school:'Oregon', grade:'90', photoId:'devyl-fa2' },
+  { name:'Cam Detry', pos:'WR', school:'LSU', grade:'89', photoId:'devyl-fa3' },
+  { name:'Jax Merrow', pos:'QB', school:'Alabama', grade:'91', photoId:'devyl-fa4' },
+];
+
+const DRAFT_BOARD = [
+  { pickLabel:'R1 · P1', team:'Dynasty Dynamos', player:'Malik Osei — drafted', bg:'var(--surface2)', border:'var(--line)', labelColor:'var(--faint)', playerColor:'var(--text2)' },
+  { pickLabel:'R1 · P2', team:'Your Team', player:'On the clock', bg:'var(--accent-soft)', border:'var(--accent-line)', labelColor:'var(--accent)', playerColor:'var(--accent)' },
+  { pickLabel:'R1 · P3', team:'Iron Throne', player:'Upcoming', bg:'var(--surface2)', border:'var(--line)', labelColor:'var(--faint)', playerColor:'var(--faint)' },
+  { pickLabel:'R1 · P4', team:'Gridiron Ghosts', player:'Upcoming', bg:'var(--surface2)', border:'var(--line)', labelColor:'var(--faint)', playerColor:'var(--faint)' },
+];
+
+const LEAGUE_NEWS = [
+  { tag:'BREAKOUT', name:'Trey Whitfield', ownership:'ROSTERED · YOU', blurb:'180 total yards and 2 TDs in a ranked win; RB1 in his class on usage share alone.', time:'2h ago', tagColor:'var(--good)', tagSoft:'var(--good-soft)', tagLine:'rgba(52,211,153,.3)' },
+  { tag:'COMBINE', name:'Deshawn Carrow', ownership:'FREE AGENT', blurb:'Ran an unofficial 4.42 at a regional camp; unverified hand-time, treat as directional only.', time:'1d ago', tagColor:'var(--warn)', tagSoft:'var(--warn-soft)', tagLine:'rgba(251,191,36,.3)' },
+];
+
+const TRADE_VALUES = [
+  { name:'Malik Osei', value:'8,400', trend:'↑ +300', status:'ROSTERED · YOU', trendColor:'var(--good)', statusColor:'var(--muted)' },
+  { name:'Trey Whitfield', value:'7,100', trend:'↑ +150', status:'ROSTERED · YOU', trendColor:'var(--good)', statusColor:'var(--muted)' },
+  { name:'Deshawn Carrow', value:'5,600', trend:'— even', status:'FREE AGENT', trendColor:'var(--faint)', statusColor:'var(--faint)' },
+  { name:'Bo Lindqvist', value:'3,900', trend:'↓ -100', status:'FREE AGENT', trendColor:'var(--bad)', statusColor:'var(--faint)' },
+];
+
+class Component extends DCLogic {
+  state = { view: 'main' };
+  renderVals() {
+    const view = this.state.view;
+    const tabBg = {}, tabColor = {};
+    ['main','empty','loading'].forEach(k => {
+      tabBg[k] = k === view ? 'var(--accent)' : 'transparent';
+      tabColor[k] = k === view ? 'var(--accent-ink)' : 'var(--muted)';
+    });
+    return {
+      v: {
+        isMain: view === 'main', isEmpty: view === 'empty', isLoading: view === 'loading',
+        tabBg, tabColor,
+        slots: SLOTS, slotsFilled: SLOTS.filter(s => s.filled).length, slotsTotal: SLOTS.length,
+        freeAgents: FREE_AGENTS, draftBoard: DRAFT_BOARD, leagueNews: LEAGUE_NEWS, tradeValues: TRADE_VALUES,
+      },
+      setView_main: () => this.setState({ view: 'main' }),
+      setView_empty: () => this.setState({ view: 'empty' }),
+      setView_loading: () => this.setState({ view: 'loading' }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
