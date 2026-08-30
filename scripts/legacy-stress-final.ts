@@ -102,7 +102,6 @@ async function main() {
     { name: "GET /api/sports/news", m: "GET", p: "/api/sports/news", n: TOTAL },
     { name: "GET /api/sports/injuries", m: "GET", p: "/api/sports/injuries", n: TOTAL },
     { name: "GET /api/sports/live-scores", m: "GET", p: "/api/sports/live-scores", n: TOTAL },
-    { name: "GET /api/devy/board", m: "GET", p: "/api/devy/board", n: TOTAL },
     { name: "GET /api/bracket/tournaments", m: "GET", p: "/api/bracket/tournaments", n: TOTAL },
     { name: "GET /api/bracket/public-pools", m: "GET", p: "/api/bracket/public-pools", n: TOTAL },
     { name: "GET /api/bracket/global-rankings", m: "GET", p: "/api/bracket/global-rankings", n: TOTAL },

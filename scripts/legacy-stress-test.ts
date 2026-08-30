@@ -498,7 +498,6 @@ async function phase3_apiTest() {
     { name: "GET /api/sports/news", method: "GET", path: "/api/sports/news", iterations: TOTAL },
     { name: "GET /api/sports/injuries", method: "GET", path: "/api/sports/injuries", iterations: TOTAL },
     { name: "GET /api/sports/live-scores", method: "GET", path: "/api/sports/live-scores", iterations: TOTAL },
-    { name: "GET /api/devy/board", method: "GET", path: "/api/devy/board", iterations: TOTAL },
     { name: "GET /api/bracket/tournaments", method: "GET", path: "/api/bracket/tournaments", iterations: TOTAL },
     { name: "GET /api/bracket/public-pools", method: "GET", path: "/api/bracket/public-pools", iterations: TOTAL },
     { name: "GET /api/bracket/global-rankings", method: "GET", path: "/api/bracket/global-rankings", iterations: TOTAL },

@@ -80,7 +80,6 @@ async function main() {
     ["GET /api/sports/news", "GET", "/api/sports/news", null, TOTAL],
     ["GET /api/sports/injuries", "GET", "/api/sports/injuries", null, TOTAL],
     ["GET /api/sports/live-scores", "GET", "/api/sports/live-scores", null, TOTAL],
-    ["GET /api/devy/board", "GET", "/api/devy/board", null, TOTAL],
     ["GET /api/bracket/tournaments", "GET", "/api/bracket/tournaments", null, TOTAL],
     ["GET /api/bracket/public-pools", "GET", "/api/bracket/public-pools", null, TOTAL],
     ["GET /api/bracket/global-rankings", "GET", "/api/bracket/global-rankings", null, TOTAL],

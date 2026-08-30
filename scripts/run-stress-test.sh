@@ -98,7 +98,6 @@ test_api "GET /api/sports/trending" GET "/api/sports/trending" "" 1000
 test_api "GET /api/sports/news" GET "/api/sports/news" "" 1000
 test_api "GET /api/sports/injuries" GET "/api/sports/injuries" "" 1000
 test_api "GET /api/sports/live-scores" GET "/api/sports/live-scores" "" 1000
-test_api "GET /api/devy/board" GET "/api/devy/board" "" 1000
 test_api "GET /api/bracket/tournaments" GET "/api/bracket/tournaments" "" 1000
 test_api "GET /api/bracket/public-pools" GET "/api/bracket/public-pools" "" 1000
 test_api "GET /api/bracket/global-rankings" GET "/api/bracket/global-rankings" "" 1000

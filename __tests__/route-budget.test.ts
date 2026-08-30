@@ -214,6 +214,51 @@ describe('Route budget — deleted routes must stay gone', () => {
       expect(src, `${rel} should not reference /api/ai/context`).not.toContain('/api/ai/context')
     }
   })
+
+  /*
+   * 🛑 `app/api/devy/board` WAS A SECOND DEVY BOARD THAT COULD NOT HAVE WORKED, AND THE
+   * TEMPTING FIX WAS THE WRONG ONE. It looked like it merely needed pointing at
+   * `buildDevyValueBoard`. Three things say otherwise:
+   *
+   *   - It exported POST only. Its ONLY five references were hand-run stress scripts, all
+   *     calling GET, so every "test" of it measured a 405.
+   *   - It queried `prisma.player` for `league='NCAA' AND devyEligible=true`. Every devy
+   *     writer in the repo — devy-classifier, devy-classification, CollegePlayerSeedService,
+   *     rightsWriter — targets `prisma.devyPlayer`. Nothing has ever set that predicate on
+   *     `Player`, so the query could only ever return an empty board.
+   *   - The real board already existed and was already correct.
+   *
+   * Wiring the value board into it would have pointed a surface at a table nothing populates
+   * — the failure CLAUDE.md records for `ingestCFBDStats` — and left two implementations to
+   * keep in sync. So it was deleted, the way `app/api/start-sit/weather.route.js` was.
+   */
+  it('app/api/devy/board/route.ts is removed from disk', () => {
+    expect(exists('app/api/devy/board/route.ts')).toBe(false)
+  })
+
+  it('the surviving devy board is the one that prices through buildDevyValueBoard', () => {
+    const rel = 'server/api-route-modules/legacy/devy-board/route.ts'
+    /* Positive control: if this route ever moves, the assertion below guards nothing. */
+    expect(exists(rel), `${rel} is the devy board; update this test if it moved`).toBe(true)
+
+    const src = read(rel)
+
+    /*
+     * ⚠ WORD-BOUNDARIED, BECAUSE `toContain` IS A SUBSTRING TEST AND THAT IS NOT ENOUGH.
+     * The first version of this assertion was `toContain('buildDevyValueBoard')`. Renaming
+     * the symbol to `buildDevyValueBoardXX` — i.e. breaking the wiring outright — still
+     * contained the substring, so the mutation passed and the guard was decorative. It also
+     * would have been satisfied by a COMMENT merely mentioning the name.
+     */
+    expect(src, 'the devy board must import buildDevyValueBoard').toMatch(
+      /import\s*\{[^}]*\bbuildDevyValueBoard\b[^}]*\}\s*from\s*['"]@\/lib\/devy\/devyValueBoard['"]/,
+    )
+    expect(src, 'the devy board must actually call buildDevyValueBoard').toMatch(
+      /\bbuildDevyValueBoard\s*\(/,
+    )
+    /* And it must read the table the devy writers actually populate. */
+    expect(src, 'the devy board must read DevyPlayer, not Player').toMatch(/\bprisma\.devyPlayer\b/)
+  })
 })
 
 describe('Admin AI monitor — gating and wiring', () => {
