@@ -9,7 +9,7 @@ import { computeAdpFromPicks, buildSnapshotDataAndMeta } from './compute-adp'
 import type { AiAdpPlayerEntry } from './types'
 import { LOW_SAMPLE_THRESHOLD_DEFAULT, MIN_SAMPLE_SIZE_DEFAULT } from './types'
 import { resolveAiAdpSegmentContext } from './segment-resolver'
-import { AI_ADP_MIN_DRAFTS_TO_PUBLISH } from './aiAdpConsumerFlag'
+import { AI_ADP_MIN_DRAFTS_TO_PUBLISH, isAiAdpConsumerEnabled } from './aiAdpConsumerFlag'
 
 export interface RunAiAdpJobResult {
   segmentsUpdated: number
@@ -275,6 +275,24 @@ export async function getAiAdp(
   stale: boolean
   ageHours: number | null
 } | null> {
+  /*
+   * 🛑 THE GATE LIVES HERE, NOT AT THE CALL SITES — I got this wrong the first time.
+   *
+   * `isAiAdpConsumerEnabled()` was originally applied only to the two HTTP routes, and the
+   * commit message claimed every reader was covered. It was not: FOUR server-side readers
+   * reach this table without passing through a route —
+   *   lib/live-draft-engine/autopickBestAvailableSubmit.ts (LIVE DRAFT AUTOPICK)
+   *   lib/workers/adp-blender.ts
+   *   lib/workers/adp-importer.ts (its own direct prisma read, gated separately)
+   *   lib/post-draft-manager-ranking/adpResolver.ts
+   * Nothing had broken only because the table was still empty; the first cron write would
+   * have switched autopick over silently.
+   *
+   * Gating the READ instead of the callers makes coverage structural: a reader added later
+   * is covered by construction rather than by remembering to enumerate it.
+   */
+  if (!isAiAdpConsumerEnabled()) return null
+
   const segment = resolveAiAdpSegmentContext({
     sport,
     leagueType,
