@@ -14,6 +14,8 @@ import { computeIdpFantasyPoints, getMergedScoringRulesForLeague } from '@/lib/i
 import { getLatestIdpStatSeason, getRealIdpLinesForRosterIds } from '@/lib/idp/realStatLines'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { buildIdpKickerValueMap } from '@/lib/idp-kicker-values'
+import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
+import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 
 /** Lib equivalent of route `requireAfSub()` — must run before any IDP AI work. */
 async function requireAfSub(): Promise<void> {
@@ -225,6 +227,21 @@ export function parseIdpPlayers(playerData: unknown): IdPlayerRow[] {
   return out
 }
 
+/**
+ * Every player rostered in the league, in Sleeper-id space.
+ *
+ * 🛑 THIS RETURNED AN EMPTY SET FOR EVERY IDP LEAGUE IN PRODUCTION, AND THE SYMPTOM WAS
+ * SILENT. It open-coded the parse and bailed on `!Array.isArray(playerData)` — but rosters
+ * store an OBJECT, `{ players: [...], starters: [...], taxi: [...], reserve: [...], ... }`.
+ * Measured 2026-08-29: all 10 IDP-scoring leagues have `Roster` rows (12 to 32 each) and every
+ * one of them parsed to ZERO ids, so `taken` was empty and `buildIdpWaiverPool` never excluded
+ * anybody. Chimmy has been free to recommend players who are already on a roster in the league,
+ * including the reader's own.
+ *
+ * `getRosterPlayerIds` is the shared parser and already handles both shapes — the bare array
+ * and the object. It is used by `waiver-intelligence`, whose rostered set was therefore always
+ * correct; only this copy was wrong. One parser, not two.
+ */
 async function allLeagueRosterPlayerIds(leagueId: string): Promise<Set<string>> {
   const rows = await prisma.roster.findMany({
     where: { leagueId },
@@ -232,13 +249,7 @@ async function allLeagueRosterPlayerIds(leagueId: string): Promise<Set<string>> 
   })
   const set = new Set<string>()
   for (const r of rows) {
-    if (!Array.isArray(r.playerData)) continue
-    for (const raw of r.playerData) {
-      if (!raw || typeof raw !== 'object') continue
-      const o = raw as Record<string, unknown>
-      const pid = String(o.playerId ?? o.id ?? o.sleeperPlayerId ?? '')
-      if (pid) set.add(pid)
-    }
+    for (const pid of getRosterPlayerIds(r.playerData)) if (pid) set.add(pid)
   }
   return set
 }
@@ -360,8 +371,49 @@ export async function getIDPWaiverTargets(
   )
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { isDynasty: true },
+    select: { isDynasty: true, settings: true, leagueSize: true },
   })
+
+  /*
+   * Rank the board by what THIS league projects these defenders to score over its own
+   * replacement level, rather than by how often Sleeper users search for them.
+   *
+   * ⚠ THE POOL MUST GO IN WITH THE ROSTERED PLAYERS, OR THE WHOLE THING IS A NO-OP.
+   * `loadLeagueIdpVorp` only ranks ids it is given, and every candidate here is by definition
+   * UNROSTERED — passing rosters alone would leave each one without a vorp, fall through to
+   * `search_rank`, and look exactly like a working migration.
+   *
+   * ⚠ AND THE ROSTERED HALF IS WHAT MAKES REPLACEMENT LEVEL REAL. Measured on production:
+   * against a 570-player board the league prices 252 defenders; against the pool alone it
+   * prices NONE, because 12 teams of starting slots exceed the pool itself.
+   */
+  const rosteredIds = await allLeagueRosterPlayerIds(leagueId)
+  const settings = (league?.settings ?? {}) as Record<string, unknown>
+  const rosterPositions = (settings.roster_positions ?? settings.rosterPositions ?? null) as
+    | string[]
+    | null
+  /*
+   * Declared size first, roster rows second — the same order `loadLeagueKickerValue` settled
+   * on, and for the same measured reason: the roster table over-counts and never under-counts.
+   * A wrong team count moves replacement level, which is the input this whole ranking turns on.
+   */
+  const declaredTeams = Number(league?.leagueSize)
+  const numTeams =
+    Number.isFinite(declaredTeams) && declaredTeams > 1
+      ? declaredTeams
+      : await prisma.roster.count({ where: { leagueId } }).catch(() => 0)
+
+  const idpVorp =
+    numTeams > 1
+      ? await loadLeagueIdpVorp({
+          prisma,
+          leagueId,
+          isDynasty: league?.isDynasty ?? false,
+          rosterPositions,
+          rosterPlayerIds: [...rosteredIds, ...pool.map((p) => p.playerId)],
+          numTeams,
+        }).catch(() => null)
+      : null
   /*
    * ⚠ DEFENDERS ONLY — NO KICKER REACHES THIS MAP, SO REMOVING THE KICKER LADDER CHANGED
    * NOTHING HERE. `buildIdpWaiverPool` filters every candidate through `isIdpPosition`,
@@ -375,6 +427,15 @@ export async function getIDPWaiverTargets(
   const tierValues = await buildIdpKickerValueMap(
     pool.map((p) => p.playerId),
     league?.isDynasty ?? false,
+    /*
+     * An empty map means "keep what you had" — a league that scores no IDP, or whose defenders
+     * cannot be projected, keeps the popularity order rather than getting a fabricated one.
+     * A candidate the league CAN price is ranked by projection; one it cannot still falls back,
+     * so the two orderings coexist inside one board by design.
+     */
+    idpVorp && idpVorp.vorpBySleeperId.size > 0
+      ? { vorpBySleeperId: idpVorp.vorpBySleeperId }
+      : undefined,
   )
 
   // Blend in RANK space: real ingested production and the tier-curve market

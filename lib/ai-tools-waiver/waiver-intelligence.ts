@@ -13,6 +13,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getTrendingPlayers } from '@/lib/sleeper-client'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { buildIdpKickerValueMap, idpTierValueCeiling, isIdpPosition } from '@/lib/idp-kicker-values'
+import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import { isIdpLeague } from '@/lib/idp/IDPLeagueConfig'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
@@ -825,8 +826,8 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
    * IDP leagues: FantasyCalc carries no individual defenders, so an IDP
    * candidate priced through the NFL bundle scores ~0 and could never be
    * recommended. Value defenders with the real tier-curve valuation instead
-   * (Sleeper search_rank tiers; power rankings now ranks the same curve by the
-   * league's own value over replacement, which this surface does not yet do).
+   * (the same market-shaped curve power rankings uses, ranked by this league's own
+   * value over replacement — see the VORP block below).
    *
    * ⚠ NO KICKER EVER REACHES `buildIdpKickerValueMap` FROM HERE, WHICH IS WHY THE KICKER
    * LADDER'S REMOVAL CHANGED NOTHING ON THIS SURFACE. The id list below is filtered through
@@ -844,7 +845,47 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
     const idpIds = candidates.filter((c) => isIdpPosition(c.position)).map((c) => c.externalId)
     if (idpIds.length > 0) {
       try {
-        idpTierValues = await buildIdpKickerValueMap(idpIds, idpDynasty)
+        /*
+         * Rank defenders by what THIS league projects them to score over its own replacement
+         * level, rather than by Sleeper's `search_rank` — which is a popularity poll.
+         *
+         * ⚠ THE CANDIDATES MUST GO IN ALONGSIDE THE ROSTERED PLAYERS. `loadLeagueIdpVorp`
+         * ranks only the ids it is handed, and every candidate here is a free agent by
+         * definition; passing rosters alone would leave each one unpriced, silently fall back
+         * to `search_rank`, and look exactly like a completed migration. The rostered half is
+         * also what makes replacement level real — measured on production, a 570-player board
+         * prices 248 defenders where the candidate pool alone prices none, because the
+         * league's starting slots outnumber the pool.
+         *
+         * ⚠ COVERAGE IS PARTIAL AND THAT IS NOT A BUG. A candidate the league can project is
+         * ranked by projection; one it cannot keeps the popularity order rather than being
+         * given an invented number. Both orderings coexist inside one board on purpose.
+         */
+        const lgSettings = (selectedLeague.settings ?? {}) as Record<string, unknown>
+        const idpRosterPositions = (lgSettings.roster_positions ??
+          lgSettings.rosterPositions ??
+          null) as string[] | null
+        const declaredTeams = Number(selectedLeague.leagueSize)
+        const idpNumTeams =
+          Number.isFinite(declaredTeams) && declaredTeams > 1 ? declaredTeams : 0
+        const idpVorp =
+          idpNumTeams > 1
+            ? await loadLeagueIdpVorp({
+                prisma,
+                leagueId: selectedLeague.id,
+                isDynasty: idpDynasty,
+                rosterPositions: idpRosterPositions,
+                rosterPlayerIds: [...rostered, ...idpIds],
+                numTeams: idpNumTeams,
+              }).catch(() => null)
+            : null
+        idpTierValues = await buildIdpKickerValueMap(
+          idpIds,
+          idpDynasty,
+          idpVorp && idpVorp.vorpBySleeperId.size > 0
+            ? { vorpBySleeperId: idpVorp.vorpBySleeperId }
+            : undefined,
+        )
       } catch {
         dataGaps.push('IDP tier valuation unavailable for defender candidates.')
       }
