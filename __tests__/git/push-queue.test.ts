@@ -377,6 +377,40 @@ describe('push-queue — the pusher lock has a heartbeat', () => {
     expect(JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8')).name).toBe('someone-else')
   })
 
+  // 🛑 THE DEFECT THE FIRST VERSION SHIPPED WITH, AS A KNOWN POSITIVE.
+  // Refreshing only inside `check` meant the heartbeat ticked only when the
+  // pusher pushed — so a pusher waiting on a long check went stale during
+  // exactly the window the TTL exists to cover. It expired a live lock after
+  // 92 minutes on its first real outing.
+  it('treats ANY command from the token holder as a heartbeat, not just a push', () => {
+    const old = Date.now() - 30 * 60_000
+    writePusher({ heartbeatAt: old })
+
+    run(['status'], '', { AF_PUSH_TOKEN: 'tok-123' })
+
+    const after = JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8'))
+    expect(after.heartbeatAt).toBeGreaterThan(old)
+  })
+
+  it('does not let a NON-holder refresh the lock by running commands', () => {
+    const old = Date.now() - 30 * 60_000
+    writePusher({ heartbeatAt: old })
+
+    run(['status'], '') // no token
+
+    const after = JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8'))
+    expect(after.heartbeatAt).toBe(old)
+  })
+
+  it('does not resurrect an ALREADY-stale lock by running a command', () => {
+    writePusher(STALE)
+
+    run(['status'], '', { AF_PUSH_TOKEN: 'tok-123' })
+
+    // Expired is expired — a late heartbeat must not undo it.
+    expect(existsSync(join(queueDir, 'pusher.json'))).toBe(false)
+  })
+
   it('stamps a heartbeat on a fresh claim, so it is not instantly stale', () => {
     const res = run(['pusher', '--claim', 'me'], '')
 
