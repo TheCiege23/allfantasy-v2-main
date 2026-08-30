@@ -1,9 +1,13 @@
 /**
  * The power-rankings picker lists one season — the newest the reader actually has.
  *
- * Measured on a real account: 557 leagues reached this picker, 68 of them the current season
- * and the other 489 the SAME leagues repeated back to 2020 (eight cards named "AFC Dreaming!",
- * one per year). All 557 rendered, at 7,335 DOM nodes.
+ * Measured on a real account: 557 leagues reached this picker and all 557 rendered, at 7,335
+ * DOM nodes. 68 were the current season.
+ *
+ * ⚠ THE OTHER 489 ARE NOT ALL DUPLICATES. Of 298 distinct names, 108 recur across seasons
+ * (six "AFC Dreaming!" cards, 2021-2026) — collapsing those is the win. But 234 names exist
+ * ONLY before 2026 and this filter hides them completely. A deliberate trade for a rankings
+ * board, not a duplicate cleanup.
  *
  * ⚠ THE TESTS THAT MATTER MOST ARE THE ONES ABOUT NOT SHOWING AN EMPTY PICKER. Filtering on
  * `new Date().getFullYear()` would be the obvious implementation and would blank the page for
