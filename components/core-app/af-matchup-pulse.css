@@ -70,6 +70,85 @@
   gap: 14px;
 }
 
+/* ── Live refresh ────────────────────────────────────────────────────────
+ *
+ * The freshness indicator in the board header — see MatchupPulseRefresh.tsx.
+ * Sits after the count and never takes width from it: on a phone the header
+ * already carries a heading, a rule and "5 leading · 5 trailing".
+ */
+.af-mp-live {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/*
+  ⚠ TONED ON `inPlay`, NOT ON "we have a component mounted". Green here means
+  points are moving; a pre-kickoff board gets the quiet dot, because a live
+  indicator over a board of projections claims a thing that is not happening.
+*/
+.af-mp-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.af-mp-live[data-inplay='true'] .af-mp-live-dot {
+  background: var(--good);
+}
+.af-mp-live[data-inplay='true'] .af-mp-live-text {
+  color: var(--good);
+}
+
+.af-mp-live-text {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.af-core .af-mp-live-btn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.af-core .af-mp-live-btn:hover:not(:disabled),
+.af-core .af-mp-live-btn:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-mp-live-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The whole indicator dims while a refresh is in flight, so "updating" is
+   visible without the row jumping. */
+.af-mp-live[data-pending] {
+  opacity: 0.65;
+}
+
+/*
+  ⚠ THE PULSE IS INFORMATION AND KEEPS TICKING UNDER REDUCED MOTION. Only the
+  transition is dropped; removing the indicator would take away the one thing
+  that says whether the numbers beneath it are current.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-mp-live-btn {
+    transition: none;
+  }
+}
+
 /*
   One list is empty — see the note in MatchupPulseBoard.tsx. Scoped above the
   phone breakpoint on purpose: below it the board is already one column, and a

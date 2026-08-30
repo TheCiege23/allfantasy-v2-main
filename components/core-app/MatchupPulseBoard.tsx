@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import type { MatchupPulse, PulseRow } from '@/lib/core-app/matchupPulse'
+import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import '@/components/core-app/af-matchup-pulse.css'
 
 /**
@@ -131,9 +132,30 @@ function gapNote(pulse: MatchupPulse): string | null {
   return `Not ranked: ${parts.join(', ')}.`
 }
 
+/**
+ * Can anything on this board still move?
+ *
+ * ⚠ `basis === 'scored'` ALONE IS NOT THE TEST, because a finished week is
+ * scored too. A row is in play only if points exist AND starters remain, which
+ * is what stops the fast cadence running all week on a board whose games ended
+ * on Monday night.
+ *
+ * ⚠ AND `startersLeft: null` COUNTS AS IN PLAY. Null means we could not place
+ * that lineup against a fixture list — a non-NFL league, or a week the schedule
+ * does not reach — so it is unknown, not zero. Treating an unknown as "nothing
+ * left" would freeze the board for exactly the leagues whose data we are worst
+ * at, which is the wrong way round.
+ */
+function anyInPlay(pulse: MatchupPulse): boolean {
+  return [...pulse.leading, ...pulse.trailing].some(
+    (r) => r.basis === 'scored' && (r.startersLeft == null || r.startersLeft > 0),
+  )
+}
+
 export function MatchupPulseBoard({ pulse }: MatchupPulseBoardProps) {
   const note = basisNote(pulse)
   const gap = gapNote(pulse)
+  const inPlay = anyInPlay(pulse)
 
   return (
     <section className="af-mp" aria-labelledby="af-mp-head">
@@ -145,6 +167,12 @@ export function MatchupPulseBoard({ pulse }: MatchupPulseBoardProps) {
         <span className="af-mp-count">
           {pulse.leading.length} leading · {pulse.trailing.length} trailing
         </span>
+        {/*
+          Only when there is something to keep current. On a board with nothing
+          ranked, a "live" indicator would be claiming to watch a thing that is
+          not there.
+        */}
+        {pulse.ranked > 0 ? <MatchupPulseRefresh inPlay={inPlay} /> : null}
       </header>
 
       {note ? <p className="af-mp-basis">{note}</p> : null}
