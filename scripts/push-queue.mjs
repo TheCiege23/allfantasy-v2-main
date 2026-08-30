@@ -1026,6 +1026,35 @@ const passIdx = rest.indexOf('--')
 const tail = passIdx >= 0 ? rest.slice(passIdx + 1) : []
 const opts = passIdx >= 0 ? rest.slice(0, passIdx) : rest
 
+/**
+ * 🛑 ANY COMMAND FROM THE TOKEN HOLDER IS A HEARTBEAT — NOT JUST A GATED PUSH.
+ *
+ * The first version refreshed only inside `check`, which meant the heartbeat
+ * ticked only when the pusher actually pushed. That is precisely backwards: a
+ * pusher goes quiet BECAUSE they are mid-batch — verifying a tip, waiting on a
+ * ratchet — and does nothing gated for the whole wait.
+ *
+ * It failed on its first real outing, mine: the lock expired after 92 minutes
+ * while its holder sat on a starved ratchet, during exactly the window the TTL
+ * justification named. The TTL length was not the defect; what refreshed it was.
+ *
+ * Refreshing on every verb costs one file write and means `push:status`,
+ * `push:wait`, `push:pusher` — anything the holder runs while working — all
+ * count as liveness, which is what "is this session still here" should have
+ * meant from the start.
+ */
+// `livePusher` rather than `readPusher`: a stale lock should clear on the next
+// command ANYONE runs, not linger until someone happens to attempt a push. That
+// makes expiry prompt, and it is still a measurement — nobody is judging whether
+// the holder exists.
+try {
+  const hbDir = queueDir()
+  if (hbDir) {
+    const hbLock = livePusher(hbDir)
+    if (hbLock && holdsPusherToken(hbLock)) touchPusher(hbDir, hbLock)
+  }
+} catch {}
+
 try {
   switch (verb) {
     case 'check':
