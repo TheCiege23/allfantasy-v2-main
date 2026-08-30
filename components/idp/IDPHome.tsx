@@ -11,13 +11,14 @@ import { ShareLeagueLinkCard } from '@/components/social/ShareLeagueLinkCard'
 import { LeagueStoryModal } from '@/components/league-story/LeagueStoryModal'
 import { IdpScoringStyleCard } from '@/components/idp/IdpScoringStyleCard'
 import { IDPWaiverSection } from '@/components/idp/IDPWaiverSection'
-import { IDPMatchupView } from '@/components/idp/IDPMatchupView'
-import { IDPPlayerModal } from '@/components/idp/IDPPlayerModal'
+import { IDPMatchupView } from '@/app/idp/components/IDPMatchupView'
+import { IDPPlayerModal } from '@/app/idp/components/IDPPlayerModal'
 import { Button } from '@/components/ui/button'
+import type { PlayerMap } from '@/lib/hooks/useSleeperPlayers'
 
 function pickFirstIdpPlayer(
   roster: unknown[]
-): { playerId: string; name: string; position: string } | null {
+): { playerId: string; name: string; position: string; team: string } | null {
   for (const row of roster) {
     if (!row || typeof row !== 'object') continue
     const o = row as Record<string, unknown>
@@ -29,6 +30,7 @@ function pickFirstIdpPlayer(
           playerId: id,
           name: String(o.name ?? o.full_name ?? 'Player'),
           position: pos,
+          team: String(o.team ?? o.editorial_team_abbr ?? ''),
         }
       }
     }
@@ -53,6 +55,15 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
   const weekNum = typeof week === 'number' ? week : 1
   const leagueName = (data as { leagueName?: string })?.leagueName ?? 'League'
   const sampleIdp = pickFirstIdpPlayer(roster)
+  /*
+   * The modal looks the player up as `players[playerId]`, so a one-entry map built from the row
+   * we already have is the whole contract. IDPHome has no Sleeper player map and fetching one to
+   * open a single modal would be a page-weight cost for nothing. Anything the modal wants beyond
+   * these fields it names as absent rather than filling in.
+   */
+  const idpPlayerMap: PlayerMap = sampleIdp
+    ? { [sampleIdp.playerId]: { id: sampleIdp.playerId, name: sampleIdp.name, position: sampleIdp.position, team: sampleIdp.team } }
+    : {}
 
   useEffect(() => {
     let active = true
@@ -94,12 +105,20 @@ export default function IDPHome({ leagueId, onOpenChimmy }: { leagueId: string; 
             >
               AI Analysis — {sampleIdp.name}
             </Button>
+            {/*
+              No rosterId here: IDPHome picks a sample defender off the overview payload, which
+              carries no roster row id. The modal degrades for that deliberately — it skips the
+              contract block and disables the trade link rather than inventing either.
+            */}
             <IDPPlayerModal
               leagueId={leagueId}
-              week={weekNum}
               playerId={sampleIdp.playerId}
-              playerName={sampleIdp.name}
+              name={sampleIdp.name}
               position={sampleIdp.position}
+              team={sampleIdp.team || null}
+              sport={sport ?? 'NFL'}
+              week={weekNum}
+              players={idpPlayerMap}
               open={playerModalOpen}
               onOpenChange={setPlayerModalOpen}
             />
