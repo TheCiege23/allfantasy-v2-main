@@ -344,6 +344,53 @@ staged set before committing.
 
 **This repo is public.** Secret-scan before every push.
 
+### 🛑 CHERRY-PICK ONTO `main`. DO NOT MERGE IN THE SHARED TREE.
+
+User's decision, 2026-08-29, after six sessions spent a day working two
+incompatible ways. Landing work goes:
+
+```
+git worktree add --detach <tmp> origin/main
+git cherry-pick <your commit>
+git push origin HEAD:main
+```
+
+**Why, and it is not about tidy history.** A merge performed *in the shared
+checkout* can clobber peers' UNCOMMITTED edits — measured overlap that day on
+`app/import/page.tsx` and `ImportV4.tsx`, both of which had been dirty in the
+tree since morning. Protecting work that is not yet committed beats a clean
+graph. Cherry-picking touches nothing anyone else is holding.
+
+**The cost is accepted, not a defect.** `shared/f-working-tree` accumulates
+commits whose content is already upstream, so a later merge of that branch
+trips over every one of them. That is expected. It is why the branch is a
+staging area and not something to merge wholesale.
+
+⚠ **A CONFLICT IS SAFE ONLY WHEN `git patch-id --stable` MATCHES.**
+
+```
+git show <mainSha>   --format="" --patch | git patch-id --stable
+git show <branchSha> --format="" --patch | git patch-id --stable
+```
+
+Equal ids mean one change under two SHAs — resolve to either side. This
+happened three times in one day and each looked alarming until measured.
+
+🛑 **AND THE INVERSE IS THE TRAP THIS CONVENTION CREATES.** Duplicates become
+common enough that "conflict → probably a duplicate → take either side" turns
+into a habit, and it is wrong. On that same day two of five conflicts were
+genuinely divergent rewrites, and the branch did **not** contain main's
+`ace7eb5b3`; an auto-resolve loop had already taken the branch for all five
+paths. Resolving on the pattern rather than the evidence would have deleted a
+deployed fix with no conflict marker and no failing test.
+
+When patch-ids differ, read `git diff <main>:<path> HEAD:<path>` in full, check
+`git merge-base --is-ancestor <theirCommit> HEAD`, and if both sides are real
+work, **stop and ask the author** — that is not a merge strategy question.
+
+⚠ Verify a push by SHA (`git ls-remote origin refs/heads/main`), never by
+grepping push output: a rejected push prints `-> main` too.
+
 ## Deploys cost money, and pushes are the meter
 
 🛑 **A PUSH TO `main` IS A DEPLOY. A COMMIT IS NOT.** Commit as often as you like;
