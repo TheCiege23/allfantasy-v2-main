@@ -254,6 +254,12 @@ function buildSourceCoverage(
     espnInjuryFeed: players.some((p) => p.sourceFlags.espnInjuryFeed),
     internalAdp: players.some((p) => p.sourceFlags.internalAdp),
     internalProjections: players.some((p) => p.sourceFlags.internalProjections),
+    // Player-derived like the five above, so it aggregates the same way. It was
+    // added to DeterministicSourceFlags as REQUIRED in 484053ecd and this
+    // construction site was never updated, which is why deployed main carries a
+    // TS2741 here. `PlayerStatsResolver` already sets the per-player flag
+    // (`marketAdp != null`); nothing but the fold was missing.
+    marketAdp: players.some((p) => p.sourceFlags.marketAdp),
     leagueScoringSettings:
       leagueScoringSettings != null && Object.keys(leagueScoringSettings).length > 0,
   };
