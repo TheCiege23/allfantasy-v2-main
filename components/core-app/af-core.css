@@ -624,3 +624,50 @@ html[data-mode='af'] .af-core {
 .af-core h3.af-label {
   margin: 0;
 }
+
+/* ── Visible focus, as a FLOOR rather than a rule ─────────────────────────
+ *
+ * af-core carried no `:focus-visible` rule at all until now — measured, the grep
+ * returned zero — so every interactive element in the scope fell through to the
+ * user agent's outline, which on `--bg: #06070f` is a dark ring on a dark
+ * ground. Roughly seventy-five controls across the af-* sheets have a ring today
+ * ONLY because someone wrote one locally while working on that screen. Anything
+ * nobody has opened has none.
+ *
+ * ⚠ EVERY PART OF THE SELECTOR IS IN `:where()`, AND THAT IS THE WHOLE DESIGN.
+ * `:where()` contributes ZERO specificity, so this rule weighs (0,1,0) — one
+ * pseudo-class. The obvious spelling, `.af-core button:focus-visible`, weighs
+ * (0,2,1) and would BEAT the ~40 existing rules written as a bare class
+ * (`.af-im-provider:focus-visible`, `.af-live-sport:focus-visible`,
+ * `.af-cm-poll-btn:focus-visible` …). Adding a baseline that silently repaints
+ * forty deliberate, screen-specific focus treatments is not a floor, it is a
+ * takeover. At (0,1,0) every one of them still wins, including the ones that set
+ * `outline: none` and draw their own halo.
+ *
+ * ⚠ AND IT USES `outline`, NOT `box-shadow` + `outline: none`. The local rules
+ * use the halo and should keep it: it is prettier and it is paired with a
+ * border-colour change that makes it legible. But a halo is the wrong shape for
+ * an UNREVIEWED floor — `--accent-soft` is 12% alpha, and as the *sole* indicator
+ * on some surface nobody has looked at it can be nearly invisible. An outline
+ * always renders, is never clipped by an ancestor's overflow, and follows the
+ * element's own border-radius. This rule can only ever ADD an indicator; it
+ * removes nothing.
+ *
+ * `[tabindex='-1']` is excluded on purpose: those are programmatic focus
+ * targets — the import screen's tabpanel, the live slate — moved to by script so
+ * a keyboard user lands in the right region. Ringing them flashes a border round
+ * a whole panel that the user did not tab to.
+ */
+:where(.af-core)
+  :where(
+    a[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]:not([tabindex='-1'])
+  ):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
