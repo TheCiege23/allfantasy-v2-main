@@ -1,5 +1,6 @@
 import { prisma } from '../prisma'
 import { pricePlayer, type ValuationContext } from '../hybrid-valuation'
+import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '../player-analytics'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { buildManagerProfile, type ManagerTendencyProfile } from './manager-tendency-engine'
@@ -321,6 +322,17 @@ export async function buildLeagueDecisionContext(
     })
   } catch { fcPlayers = [] }
 
+  /*
+   * This league's own defenders and kickers, priced by its own scoring and starting slots.
+   * The Sleeper payloads fetched at the top are handed through, so no round trip is repeated.
+   */
+  const leagueValuePatch = await resolveLeagueValuePatch({
+    platformLeagueId: leagueId,
+    sleeperLeague: leagueData,
+    prefetched: { rosters: rostersData },
+  })
+  const leagueValueByNameLower = leagueValuePatch.leagueValueByNameLower ?? null
+
   const valuationCtx: ValuationContext = {
     asOfDate: new Date().toISOString().slice(0, 10),
     isSuperFlex: isSF,
@@ -328,12 +340,24 @@ export async function buildLeagueDecisionContext(
     numTeams,
     ppr: leaguePpr,
     isDynasty: leagueSettings2.type === 2,
+    ...leagueValuePatch,
   }
 
+  /*
+   * ⚠ DEFENDERS WERE SKIPPED OUTRIGHT HERE, NOT MISPRICED — AND THE TWO NEED DIFFERENT FIXES.
+   * Nothing could price them, so every one came back unpriced and would have written a zero
+   * into a map the rest of this context treats as real value; excluding them was the honest
+   * behaviour at the time. It is still the honest behaviour for a league with no board.
+   *
+   * A defender is included now only when this league's own board actually priced him, which
+   * is the same rule `/api/trade-finder/matchmaking` applies for the same reason.
+   */
   const allPlayerNames = new Set<string>()
   for (const r of parsedRosters) {
     for (const p of r.players) {
-      if (p.name && !p.isIdp) allPlayerNames.add(p.name)
+      if (!p.name) continue
+      if (p.isIdp && !leagueValueByNameLower?.has(p.name.toLowerCase().trim())) continue
+      allPlayerNames.add(p.name)
     }
   }
   const uniqueNames = Array.from(allPlayerNames)

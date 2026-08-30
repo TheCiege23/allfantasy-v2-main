@@ -13,6 +13,7 @@ import {
   SleeperDraftPick,
 } from './sleeper-client';
 import { pricePlayer, pricePick, ValuationContext, PickInput } from './hybrid-valuation';
+import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch';
 import { openaiChatText } from './openai-client';
 
 const STRATEGY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -159,9 +160,25 @@ export async function computeSeasonStrategy(
 
   const currentWeek = detectCurrentWeek(league);
 
+  /*
+   * This league's own defenders and kickers, priced by its own scoring and starting slots.
+   *
+   * 🛑 WITHOUT THIS, EVERY ROSTER VALUE ON THIS PATH COUNTED DEFENDERS AT A FLAT PER-POSITION
+   * CONSTANT — see lib/values/leagueValuePatch.ts. In an IDP league that is most of a bench,
+   * so the strategy engine's contend/rebuild call was made on a roster total that could not
+   * tell an elite linebacker from a replaceable one.
+   *
+   * The Sleeper payloads fetched above are handed straight through, so this costs one indexed
+   * read for the ~100 of 110 leagues that do not score IDP rather than another round trip.
+   */
   const valuationCtx: ValuationContext = {
     asOfDate: new Date().toISOString().split('T')[0],
     isSuperFlex,
+    ...(await resolveLeagueValuePatch({
+      platformLeagueId: leagueId,
+      sleeperLeague: league,
+      prefetched: { rosters },
+    })),
   };
 
   const allTeamValues = await Promise.all(

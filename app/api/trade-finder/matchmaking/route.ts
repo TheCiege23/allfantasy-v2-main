@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { prisma } from '@/lib/prisma'
-import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
+import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import { type FantasyCalcSettings } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { convertSleeperToAssets } from '@/lib/trade-engine'
@@ -206,25 +205,33 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
     /*
      * This league's defenders, priced by its own scoring. Sleeper's league info and rosters
      * were already fetched above, so this costs a DB read rather than another round trip.
+     *
+     * ⚠ THE FORMAT USED TO BE READ HERE BY REGEX, AND IT COULD NEVER MATCH. Sleeper's
+     * `settings.type` is a NUMBER — 0 redraft, 1 keeper, 2 dynasty — so
+     * `/redraft/i.test(String(type))` tested "0", "1" or "2" for the word "redraft", was
+     * always false, and the negation reported EVERY league as dynasty. Two lines above, the
+     * FantasyCalc call in this same route resolved the same question correctly with
+     * `settings.type === 2`, so one request held two contradictory answers.
+     *
+     * Nothing user-visible moved, because every production league that genuinely scores IDP
+     * is dynasty today. It selects the IDP ceiling (5500 against 5300), the kicker value
+     * (500 against 650) and which of the two decay curves is read, so it goes wrong silently
+     * and only for the leagues that do not exist yet. `resolveLeagueValuePatch` now derives
+     * it from the league payload through `getLeagueType`, which is the repo's one authority.
      */
-    const leagueValues = await loadLeagueTradeValues({
-      prisma,
+    const leagueValuePatch = await resolveLeagueValuePatch({
       platformLeagueId: leagueId,
-      isDynasty: !/redraft/i.test(String((league as { settings?: { type?: unknown } })?.settings?.type ?? '')),
-      prefetched: {
-        rosters,
-        rosterPositions: league.roster_positions ?? null,
-        numTeams: league.total_rosters ?? null,
-      },
-    }).catch(() => null)
-    const leagueValueByNameLower = leagueValues && leagueValues.byNameLower.size > 0 ? leagueValues.byNameLower : null
+      sleeperLeague: league,
+      prefetched: { rosters },
+    })
+    const leagueValueByNameLower = leagueValuePatch.leagueValueByNameLower ?? null
 
     const ctx: ValuationContext = {
       asOfDate: new Date().toISOString().slice(0, 10),
       isSuperFlex: isSF,
       fantasyCalcPlayers: fcPlayers,
       numTeams: Number(numTeams),
-      ...(leagueValueByNameLower && { leagueValueByNameLower }),
+      ...leagueValuePatch,
     }
 
     const fantasyCalcValueMap: Record<string, { value: number; marketValue?: number; impactValue?: number; vorpValue?: number; volatility?: number }> = {}

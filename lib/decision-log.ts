@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { getLeagueRosters, getAllPlayers } from '@/lib/sleeper-client'
+import { getLeagueRosters, getAllPlayers, getLeagueInfo } from '@/lib/sleeper-client'
+import { resolveLeagueValuePatch } from '@/lib/values/leagueValuePatch'
 import type { ConfidenceRiskOutput, RiskTag } from '@/lib/analytics/confidence-risk-engine'
 
 export type DecisionType = 'trade' | 'waiver' | 'sit_start' | 'trade_proposal' | 'trade_finder'
@@ -79,9 +80,16 @@ export async function computeRosterValue(
   isSF: boolean
 ): Promise<{ totalValue: number; playerValues: Array<{ name: string; value: number }> }> {
   try {
-    const [rosters, allPlayers] = await Promise.all([
+    /*
+     * League info joins the existing parallel fetch rather than being added after it: the
+     * value patch below needs this league's starting slots and its format, and fetching them
+     * in sequence would put a second Sleeper round trip on the critical path for a number
+     * that is only used to decide how defenders are priced.
+     */
+    const [rosters, allPlayers, league] = await Promise.all([
       getLeagueRosters(leagueId),
       getAllPlayers(),
+      getLeagueInfo(leagueId).catch(() => null),
     ])
 
     const roster = rosters.find(r => r.roster_id === rosterId)
@@ -94,15 +102,31 @@ export async function computeRosterValue(
 
     const playerIds = roster.players.slice(0, 30)
 
+    /*
+     * ⚠ HOISTED OUT OF THE LOOP, WHICH IT WAS NOT BEFORE. A fresh context per player was
+     * merely wasteful while it held two literals; rebuilding one that carries this league's
+     * value board would re-run the board load up to thirty times per roster.
+     *
+     * The board itself is why this matters at all: without it every defender on the roster
+     * priced at a flat per-position constant, so a decision's recorded roster value moved
+     * with the offence and was blind to the defensive half of an IDP team. See
+     * lib/values/leagueValuePatch.ts.
+     */
+    const ctx: ValuationContext = {
+      asOfDate: new Date().toISOString().slice(0, 10),
+      isSuperFlex: isSF,
+      ...(await resolveLeagueValuePatch({
+        platformLeagueId: leagueId,
+        sleeperLeague: league,
+        prefetched: { rosters },
+      })),
+    }
+
     for (const pid of playerIds) {
       const p = allPlayers[pid]
       if (!p) continue
       const name = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim()
       try {
-        const ctx: ValuationContext = {
-          asOfDate: new Date().toISOString().slice(0, 10),
-          isSuperFlex: isSF,
-        }
         const priced = await pricePlayer(name, ctx)
         if (priced && priced.value > 0) {
           playerValues.push({ name, value: priced.value })
