@@ -2,6 +2,7 @@ import 'server-only'
 
 import { fetchAllFFCFormats } from '@/lib/adp-data'
 import { confidenceForConsensus } from '@/lib/adp/consensusConfidence'
+import { isAiAdpConsumerEnabled } from '@/lib/ai-adp-engine/aiAdpConsumerFlag'
 import { loadMultiPlatformADP } from '@/lib/multi-platform-adp'
 import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -263,10 +264,22 @@ export async function runAdpImporter(options?: {
         }
       }
     } else {
-      const snapshots = await prisma.aiAdpSnapshot.findMany({
-        where: { sport },
-        select: { leagueType: true, formatKey: true, snapshotData: true },
-      })
+      /*
+       * Gated like every other AI ADP read — see lib/ai-adp-engine/aiAdpConsumerFlag.ts.
+       * This one needs its own check because it queries the table DIRECTLY rather than
+       * through `getAiAdp`, so the service-level gate does not cover it. It emits rows with
+       * `source: 'ai_adp'` at SOURCE_WEIGHTS 0.85, i.e. it feeds the blended consensus.
+       *
+       * (Reached only in the non-NFL branch, and `adp_data` is 100% NFL today, so this is
+       * currently unreachable in practice — gated anyway, because "unreachable today" is not
+       * a property worth relying on.)
+       */
+      const snapshots = isAiAdpConsumerEnabled()
+        ? await prisma.aiAdpSnapshot.findMany({
+            where: { sport },
+            select: { leagueType: true, formatKey: true, snapshotData: true },
+          })
+        : []
 
       for (const snapshot of snapshots) {
         const entries = Array.isArray(snapshot.snapshotData) ? snapshot.snapshotData : []

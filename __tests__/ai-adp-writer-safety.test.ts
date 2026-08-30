@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 const snapshotFindMany = vi.fn()
 const snapshotFindFirst = vi.fn()
+const snapshotFindUnique = vi.fn()
 const draftPickFindMany = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
@@ -22,6 +23,7 @@ vi.mock('@/lib/prisma', () => ({
     aiAdpSnapshot: {
       findMany: (...a: unknown[]) => snapshotFindMany(...a),
       findFirst: (...a: unknown[]) => snapshotFindFirst(...a),
+      findUnique: (...a: unknown[]) => snapshotFindUnique(...a),
       upsert: vi.fn(),
       create: vi.fn(),
     },
@@ -42,6 +44,7 @@ const ORIGINAL = process.env.AI_ADP_CONSUMERS_ENABLED
 beforeEach(() => {
   snapshotFindMany.mockReset().mockResolvedValue([])
   snapshotFindFirst.mockReset().mockResolvedValue(null)
+  snapshotFindUnique.mockReset().mockResolvedValue(null)
   draftPickFindMany.mockReset().mockResolvedValue([])
 })
 
@@ -69,6 +72,29 @@ describe('isAiAdpConsumerEnabled', () => {
       process.env.AI_ADP_CONSUMERS_ENABLED = v
       expect(isAiAdpConsumerEnabled(), `value ${JSON.stringify(v)}`).toBe(true)
     }
+  })
+})
+
+describe('the gate covers readers that never touch an HTTP route', () => {
+  /*
+   * ⚠ THIS IS THE BUG THIS BLOCK EXISTS FOR. The flag was first applied only to
+   * /api/ai-adp and /api/leagues/[id]/ai-adp, and the commit claimed every reader was
+   * covered. Four server-side readers bypass both routes and call getAiAdp/getAiAdpForLeague
+   * directly — autopickBestAvailableSubmit (LIVE DRAFT AUTOPICK), adp-blender, adp-importer
+   * and post-draft-manager-ranking. Gating the service is what makes coverage structural.
+   */
+  it('getAiAdp returns null while disabled, without querying', async () => {
+    delete process.env.AI_ADP_CONSUMERS_ENABLED
+    const { getAiAdp } = await import('@/lib/ai-adp-engine/AiAdpService')
+    await expect(getAiAdp('NFL', 'redraft', 'default')).resolves.toBeNull()
+    expect(snapshotFindUnique).not.toHaveBeenCalled()
+  })
+
+  it('getAiAdpForLeague returns null while disabled — the autopick path', async () => {
+    delete process.env.AI_ADP_CONSUMERS_ENABLED
+    const { getAiAdpForLeague } = await import('@/lib/ai-adp-engine/AiAdpService')
+    await expect(getAiAdpForLeague('NFL', false, 'default')).resolves.toBeNull()
+    expect(snapshotFindUnique).not.toHaveBeenCalled()
   })
 })
 
