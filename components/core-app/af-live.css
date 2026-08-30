@@ -751,6 +751,46 @@
   .af-live-top-line {
     text-align: left;
   }
+
+  /*
+   * ⚠ THE TIE-IN ROW WRAPS RAGGED ON A PHONE, AND THE POINTS ARE THE COLUMN THAT
+   * LOSES. `.af-live-tiein` is a wrapping flex row: tag, name, points. At 390px
+   * whether it fits depends on the LEAGUE NAME's length, so "Turf Wars ·
+   * Starting" keeps its points inline while "Chimmy's Champions · Starting"
+   * pushes them onto a new line — LEFT-aligned, because a wrapped flex line
+   * starts at the beginning. Measured at 390 with three leagues: row 1 inline,
+   * rows 2 and 3 broken, and the three point values landing at three different
+   * x-positions.
+   *
+   * That is the one number in the block a person is actually scanning for, and
+   * it ends up positioned by the length of a league name they did not choose.
+   *
+   * A grid fixes it because the columns stop depending on content: the tag takes
+   * its own row, and name/points share the next with the points pinned right. It
+   * is the same shape at every league-name length, which is the property the
+   * flex row could not have.
+   */
+  .af-live-tiein {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'tag tag'
+      'name pts';
+    align-items: center;
+    gap: 5px 10px;
+  }
+  .af-live-tiein-tag {
+    grid-area: tag;
+    justify-self: start;
+  }
+  .af-live-tiein-name {
+    grid-area: name;
+    min-width: 0;
+  }
+  .af-live-tiein-pts {
+    grid-area: pts;
+    justify-self: end;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
