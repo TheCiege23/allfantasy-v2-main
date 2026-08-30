@@ -100,17 +100,38 @@ function Shield() {
  * Presentational only: the caller derives `current` from real phase, so this
  * cannot drift from what the screen is actually showing.
  */
+const STEP_NAMES = ['Account', 'Connect', 'Choose leagues'] as const
+
 function StepBar({ current, total }: { current: number; total: number }) {
   return (
-    <div className="af-im-steps" role="group" aria-label={`Step ${current} of ${total}`}>
-      {Array.from({ length: total }, (_, i) => (
-        <span
-          key={i}
-          className="af-im-step"
-          data-done={i < current ? 'true' : undefined}
-          aria-hidden
-        />
-      ))}
+    /*
+     * ⚠ THE BAR ALONE SAID NOTHING A SIGHTED USER COULD READ. Three 3px rules with
+     * two of them filled is a progress indicator only if you already know what is
+     * being counted — the meaning lived exclusively in `aria-label`, so the screen
+     * reader got the orientation and everyone else got decoration. The caption
+     * carries the same sentence from the same numbers, and is itself `aria-hidden`
+     * because the group's label already announces it; without that, a screen reader
+     * would read the step twice.
+     */
+    <div className="af-im-steps-wrap">
+      <div className="af-im-steps" role="group" aria-label={`Step ${current} of ${total}`}>
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className="af-im-step"
+            data-done={i < current ? 'true' : undefined}
+            aria-hidden
+          />
+        ))}
+      </div>
+      <p className="af-im-steps-cap af-num" aria-hidden>
+        <span className="af-im-steps-cap-num">
+          Step {current} of {total}
+        </span>
+        {STEP_NAMES[current - 1] ? (
+          <span className="af-im-steps-cap-name">{STEP_NAMES[current - 1]}</span>
+        ) : null}
+      </p>
     </div>
   )
 }
@@ -466,7 +487,16 @@ const PROVIDER_INITIAL: Partial<Record<ImportProvider, string>> = {
   fleaflicker: 'FL',
 }
 
+/*
+ * ⚠ SLEEPER WAS THE ONLY PILL WITHOUT A TAG, AND IT IS THE DEFAULT-SELECTED ONE.
+ * Five of the six read "· league ID"; the one that opens selected read nothing —
+ * so the active pill was visibly shorter than its neighbours and looked truncated
+ * rather than chosen, and the row's one job (tell me what each platform will ask
+ * for before I press it) had a hole exactly where most people start. Yahoo's slot
+ * is filled by the "Coming soon" branch, so this completes the set.
+ */
 const PROVIDER_PILL_TAG: Partial<Record<ImportProvider, string>> = {
+  sleeper: 'username',
   espn: 'league ID',
   mfl: 'league ID + key',
   fantrax: 'league ID',
@@ -1514,17 +1544,30 @@ export function ImportV4({
           sports it can carry. Both used to sit on every tile at once; here they
           describe the field immediately below them.
         */}
+        {/*
+          ⚠ IT DESCRIBED THE SELECTED PILL WITHOUT NAMING IT. Two quiet lines of grey
+          under a six-pill row is ambiguous by construction — "Finds your leagues
+          automatically" is true of Sleeper AND Yahoo, and nothing in the sentence
+          said which one it was about. Repeating the platform's own mark and name
+          anchors it, and it is the same mark that is lit in the row directly above,
+          so the eye connects the two without reading either.
+        */}
         <p className="af-im-context">
+          <span className="af-platform af-im-context-mark" data-platform={provider} aria-hidden>
+            {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
+          </span>
           <span className="af-im-context-meta">
             {selectable
               ? PROVIDER_TAGLINE[provider] ??
                 (canDiscover ? 'Finds your leagues automatically' : 'League ID · read-only')
               : BLOCKED_REASON[provider] ?? 'Not connectable yet.'}
           </span>
-          <span className="af-im-context-sports af-num">
-            {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
-              .join(' · ')}
-          </span>
+          {(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.supportedSports ?? [])
+            .map((sport) => (
+              <span key={sport} className="af-im-context-sport af-num">
+                {sport}
+              </span>
+            ))}
         </p>
 
         {/*
@@ -1541,22 +1584,6 @@ export function ImportV4({
           <p className="af-im-blocked" role="status">
             <span className="af-label">{providerLabel} selected?</span>
             <span>{BLOCKED_REASON[provider] ?? `${providerLabel} isn't available yet — coming soon.`}</span>
-          </p>
-        ) : null}
-
-        {/*
-          ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
-          Fantrax work removed the only pointer to the CSV uploader. The upload
-          is still the second way in — an export carries seasons the live API
-          does not expose, and a league the fxea API will not serve has nowhere
-          else to go — so the door stays. It is hidden only when the uploader is
-          already on screen, which is what it was really guarding.
-        */}
-        {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
-          <p className="af-im-fx-link">
-            <a href="/import?provider=fantrax">
-              Have a Fantrax CSV export? Bank it now →
-            </a>
           </p>
         ) : null}
 
@@ -1773,9 +1800,22 @@ export function ImportV4({
               makes ("read-only, no password, ever") is the same one the trust card below spells
               out, and it belongs here because this is the moment someone decides to type.
             */}
+            {/*
+              ⚠ IT TOLD A SIGNED-IN USER TO CREATE AN ACCOUNT. The handoff's sentence
+              — "Create a free account to connect your Sleeper league" — was written
+              for the unauthenticated landing variant of this screen. /import is not
+              that screen: app/import/page.tsx redirects to /login before rendering a
+              pixel, so LITERALLY EVERY person who reads this line already has the
+              account it asks them to make. Under a filled-in step bar that says
+              "Account" is done, it reads as the page having lost track of who you are.
+
+              The half that was worth keeping is the promise, not the call to action:
+              this is the moment someone decides to type an identifier, and it is where
+              "read-only, no password" has to be in view.
+            */}
             <p className="af-im-account-note">
-              <LockGlyph /> Create a free account to connect your {providerLabel} league &mdash;
-              read-only, no password, ever.
+              <LockGlyph /> We connect your {providerLabel} league read-only &mdash; no password,
+              ever, and nothing on {providerLabel} changes.
             </p>
 
             {phase.k === 'discovering' ? <Working label="Looking up your leagues…" /> : null}
@@ -1827,6 +1867,29 @@ export function ImportV4({
         ) : null}
 
         <ReadOnlyPromise />
+
+        {/*
+          ⚠ THIS LINK WAS CONDITIONED ON FANTRAX BEING UNAVAILABLE, so making
+          Fantrax work removed the only pointer to the CSV uploader. The upload
+          is still the second way in — an export carries seasons the live API
+          does not expose, and a league the fxea API will not serve has nowhere
+          else to go — so the door stays. It is hidden only when the uploader is
+          already on screen, which is what it was really guarding.
+
+          ⚠ AND IT MOVED TO THE FOOT OF THE CARD. It used to sit between the pill
+          row and the input — underlined, and the only link in that stretch, so it
+          was the loudest thing on the path between "pick your platform" and "type
+          your username". A one-provider fallback cannot stand in the middle of the
+          road every provider walks down. Below the trust panel it is still one
+          scroll from the top and still findable by anyone looking for it.
+        */}
+        {provider !== 'fantrax' && defaultProvider !== 'fantrax' ? (
+          <p className="af-im-fx-link af-im-fx-link--foot">
+            <a href="/import?provider=fantrax">
+              Have a Fantrax CSV export? Bank it now →
+            </a>
+          </p>
+        ) : null}
       </section>
       )}
 

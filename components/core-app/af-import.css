@@ -3,17 +3,62 @@
  * Scoped under `.af-core`; tokens are identical across both handoffs (diffed).
  */
 
+/*
+ * ⚠ 660px IS THE HANDOFF'S NUMBER AND IT IS A READABILITY DECISION, NOT A STYLE ONE.
+ * This was 860, which put the sub-paragraph, the field help and both halves of the
+ * trust card at ~95 characters a line — well past the 45-75 that prose is legible
+ * at, on a screen whose whole job is to be believed before you hand over an account.
+ * The pill row is the only thing that WANTED the extra width, and it wraps, so it
+ * lost nothing.
+ *
+ * The league list further down is the one place the narrower column bites: name and
+ * meta on the left, outcome badge and button on the right. It already stacks at the
+ * 720px breakpoint below, so at 660 the desktop row is the tight case — measured at
+ * a 54-character league name with a "Needs your confirmation" badge and it holds.
+ */
+/*
+ * ⚠ THE COLUMN AND THE WASH ARE TWO DIFFERENT WIDTHS, AND MERGING THEM SHOWED.
+ * `max-width` used to sit on this element, so `--hero` — a pair of radial
+ * gradients positioned at 18%/88% of their own box — was clipped to the content
+ * column. At 860px that read as a slightly brighter panel; at the handoff's 660 it
+ * is an obvious lit stripe with two hard edges down a dark page, and the gradient's
+ * left lobe lands in the middle of the text instead of off in the corner.
+ *
+ * So the element goes full-bleed and carries only the background, and the cap moves
+ * to its children. `align-items: center` keeps them centred without a second
+ * wrapper element, which matters because every direct child here (topbar, step bar,
+ * header, the cards, the error and note strips, the Fantrax disclosure) would
+ * otherwise need one.
+ */
 .af-im {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 16px;
-  max-width: 860px;
-  margin: 0 auto;
   padding: 48px 16px;
   min-height: 100vh;
   background: var(--bg);
   background-image: var(--hero);
   background-repeat: no-repeat;
+}
+
+/*
+ * ⚠ `box-sizing` IS LOAD BEARING HERE, not boilerplate. These children were flex
+ * items being STRETCHED to the content box before, so their padding was absorbed by
+ * the flex algorithm; `align-items: center` turns stretch off, and `width: 100%`
+ * then measures the CONTENT box — so `.af-im-card`'s 20px of padding is added on
+ * top and the card overflows its parent by 40px. Caught at 390px, where the card
+ * ran off the right edge of the viewport and took a horizontal scrollbar with it.
+ *
+ * Tailwind's preflight happens to set border-box app-wide, so this would have
+ * looked fine in the product and broken anywhere af-import.css is loaded without
+ * it. A stylesheet whose own header says it stands on af-core alone should not
+ * silently depend on a third one.
+ */
+.af-im > * {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 660px;
 }
 
 /* ── Head ────────────────────────────────────────────────────────────── */
@@ -38,7 +83,9 @@
 
 .af-im-sub {
   margin: 0;
-  max-width: 620px;
+  /* Capped by measure, not by pixels: at 620px this was the full width of the new
+     660px column, so the cap had stopped doing anything. */
+  max-width: 60ch;
   font-size: 15px;
   line-height: 1.6;
   color: var(--muted);
@@ -95,6 +142,32 @@
 .af-im-provider:hover:not([data-available='false']) {
   border-color: var(--line2);
   background: var(--chip);
+  /* The `transform` was already in the transition list above and nothing ever set
+     it, so the row's hover had no motion at all. One pixel: enough to feel pressable,
+     not enough to shift the line the pill sits on. */
+  transform: translateY(-1px);
+}
+
+/*
+ * ⚠ THE ROW HAD NO FOCUS STYLE OF ITS OWN. af-core defines none either, so a
+ * keyboard user tabbing the six primary controls of this screen got whatever the
+ * UA draws — a thin dark ring, on a near-black surface. This is the same
+ * accent-soft halo the input below already uses for the same reason, so focus
+ * looks like one thing across the screen.
+ */
+.af-im-provider:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-im-provider {
+    transition: border-color 0.14s ease, background 0.14s ease;
+  }
+  .af-im-provider:hover:not([data-available='false']) {
+    transform: none;
+  }
 }
 
 /*
@@ -167,36 +240,117 @@
 }
 
 @media (max-width: 560px) {
-  .af-im-provider-label,
+  /*
+   * ⚠ THE ROW BECAME FIVE LINES ON A PHONE. Six pills of six different widths wrap
+   * greedily, so at 390px it settled as 2-1-1-1-1 — nearly 300px of vertical space
+   * to choose one platform, and four of the six lines with a hole beside them that
+   * looked like a missing option. Two equal columns instead: same six pills, three
+   * tidy rows.
+   */
+  .af-im-providers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /*
+   * ⚠ AND THE TAG GETS ITS OWN LINE, because `white-space: normal` (which is what
+   * used to be here) breaks it in the middle: "· league / ID", "· Coming / soon",
+   * "· league ID + / key". A qualifier split across two lines mid-phrase is harder
+   * to read than no qualifier at all. Stacking under the name keeps each one whole
+   * and keeps the name — the thing being scanned for — first on its own line.
+   *
+   * A grid rather than a nested flex box, so this needs no extra element in the
+   * JSX: the mark spans both rows, the label takes the first and the tag the second.
+   */
+  .af-im-provider {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 1px;
+    min-width: 0;
+    padding: 5px 12px 5px 5px;
+  }
+  .af-im-provider[data-active='true'] {
+    padding: 4px 11px 4px 4px;
+  }
+  .af-im-mark {
+    grid-row: 1 / span 2;
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+  .af-im-provider-label {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 13.5px;
+  }
   .af-im-soon {
-    white-space: normal;
+    grid-column: 2;
+    grid-row: 2;
   }
 }
 
 /* ── What the chosen platform asks for ──────────────────────────────── */
 
+/*
+ * ⚠ IT WAS TWO GREY PHRASES FLOATING UNDER THE ROW AND READ AS ORPHANED COPY.
+ * `margin: -4px` pulled it towards the pills, which is the right instinct, but
+ * proximity alone cannot say WHICH pill — so it is now an inset strip carrying the
+ * selected platform's own mark. The strip is what makes it a caption on the row
+ * above rather than the first line of the section below.
+ */
 .af-im-context {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 9px;
   flex-wrap: wrap;
-  /* Pulled up against the pill row: it describes the pill you just pressed, and
-     at the card's own 14px gap it read as a stray line belonging to nothing. */
-  margin: -4px 0 0;
+  margin: 2px 0 0;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--chip);
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--muted);
 }
 
+/* Half the size of the pill's mark: this one identifies, it does not invite a
+   press, and at 34px it competed with the row it is describing. */
+.af-core .af-im-context-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.01em;
+}
+
 .af-im-context-meta {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--text2);
 }
 
-.af-im-context-sports {
+/*
+ * ⚠ THE SPORTS LINE WAS 9.5px `--faint` MONO AND EFFECTIVELY INVISIBLE — which is a
+ * problem, because "NCAAF" on the Fantrax tile is the ONLY place this screen says a
+ * college league can be imported at all. One chip per sport rather than a joined
+ * string, so two sports read as two facts instead of one wide label.
+ */
+.af-im-context-sport {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--surface2);
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: var(--faint);
+  color: var(--text2);
 }
 
 /* ── The coming-soon fallback strip (6a) ─────────────────────────────── */
@@ -274,11 +428,21 @@
   color: var(--faint);
 }
 
+/*
+ * ⚠ 11.5px ON `--faint` IS THE SMALLEST, PALEST TEXT ON THE SCREEN, and it is
+ * carrying the instructions — "leave it blank to use the linked account", "save
+ * your MFL API key first", "connect ESPN above". Those are the sentences that
+ * decide whether the import succeeds, set one tier below the sentences that do
+ * not. Up to 12.5px on `--muted` (the tier `--faint` is measured against in
+ * af-core's contrast ladder), and the measure is capped: at the card's full width
+ * this ran ~95 characters a line.
+ */
 .af-im-field-help {
   margin: 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--faint);
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
 }
 
 /* Same specificity trap as af-auth / af-my-team: `.af-core .af-btn` sets
@@ -589,9 +753,9 @@
   .af-im-title {
     font-size: 26px;
   }
-  .af-im-providers {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  /* `.af-im-providers { grid-template-columns }` used to sit here and had been dead
+     since the row stopped being a grid — the pill row is `display: flex` and wraps
+     on its own, so the declaration had no box to apply to. */
   .af-core .af-im-submit {
     align-self: stretch;
     width: 100%;
@@ -729,6 +893,20 @@
   row-gap: 8px;
 }
 
+/*
+ * ⚠ THE `?` WAS BOUND TO THE WRONG NEIGHBOUR. It explains the READ-ONLY chip, but
+ * `.af-im-hint-btn` carries `margin-left: 6px` for the case where it trails a label
+ * INSIDE one element — and here it is a sibling, so it sat 18px from the chip and
+ * 12px from "Skip for now". Proximity is the only thing saying what a bare `?`
+ * refers to, and it was pointing at the escape hatch.
+ */
+.af-im-topbar-right .af-im-hint-btn {
+  margin-left: -4px;
+}
+.af-im-topbar-right .af-im-skip {
+  margin-left: 6px;
+}
+
 /* The read-only promise, stated in the chrome rather than only in body copy —
    it is the single most reassuring fact about this screen. */
 .af-im-readonly {
@@ -770,10 +948,16 @@
   color: var(--text);
 }
 
+.af-im-steps-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
 .af-im-steps {
   display: flex;
   gap: 6px;
-  margin-bottom: 20px;
 }
 
 .af-im-step {
@@ -781,9 +965,34 @@
   height: 3px;
   border-radius: 999px;
   background: var(--line2);
+  transition: background 0.2s ease;
 }
 .af-im-step[data-done='true'] {
   background: var(--accent);
+}
+
+/*
+ * The caption that makes the bar mean something. Two tiers on one line: the count
+ * is the orienting fact and stays quiet, the step's NAME is what the person is
+ * actually about to do and carries the accent — so a glance answers "where am I"
+ * and "what is this" in that order.
+ */
+.af-im-steps-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.af-im-steps-cap-num {
+  color: var(--faint);
+}
+.af-im-steps-cap-name {
+  color: var(--accent);
 }
 
 /* ── League selection (handoff 4d) ────────────────────────────────────── */
@@ -913,6 +1122,18 @@
 .af-im-fx-link { margin: 12px 0 0; font-size: 12.5px; }
 .af-im-fx-link a { color: var(--text2); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .af-im-fx-link a:hover { color: var(--accent); }
+
+/*
+ * The card-foot placement. A rule above it rather than more margin, because it is
+ * now the last thing in the card and needs to read as an aside to everything above
+ * — not as a trailing sentence of the trust panel it sits under.
+ */
+.af-im-fx-link--foot {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.af-im-fx-link--foot a { color: var(--muted); }
 
 .af-im-fx {
   margin-top: 16px;
