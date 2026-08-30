@@ -1561,7 +1561,9 @@ export function ImportV4({
         ) : null}
 
         {/* ── Step 2: the provider's own field ──────────────────────── */}
-        {selectable && phase.k !== 'done' ? (
+        {/* `phase.k !== 'done'` used to guard this; `done` is now a takeover phase,
+            so this whole block is already unmounted then and the test was dead. */}
+        {selectable ? (
           <div className="af-im-field-block">
             {/*
               ── 6b: ESPN connects HERE, not on another page ─────────────────
@@ -1881,12 +1883,7 @@ export function ImportV4({
               <button
                 type="button"
                 className="af-btn af-im-bulk-btn"
-                disabled={
-                  bulkRunning ||
-                  selectedLeagues.length === 0 ||
-                  phase.k === 'previewing' ||
-                  phase.k === 'committing'
-                }
+                disabled={bulkRunning || selectedLeagues.length === 0}
                 onClick={() => void runBulkImport()}
               >
                 {bulkRunning
@@ -1914,8 +1911,14 @@ export function ImportV4({
 
           <ul className="af-im-league-list">
             {leagues.map((l) => {
-              const busy =
-                (phase.k === 'previewing' || phase.k === 'committing') && phase.sourceId === l.sourceId
+              /*
+               * ⚠ THE PER-ROW "Reading…" STATE IS GONE, AND THAT IS THE TAKEOVER'S
+               * DOING. It marked the one row being previewed or committed while the
+               * list stayed on screen. 6c replaced that: those two phases now unmount
+               * the whole list and show the progress screen instead, so this could
+               * only ever have been false — TypeScript said so (TS2367, and
+               * `phase.sourceId` on type `never`), and the compiler was right.
+               */
               return (
                 <li
                   key={l.sourceId}
@@ -1984,7 +1987,7 @@ export function ImportV4({
                         <button
                           type="button"
                           className="af-btn af-btn--ghost af-im-league-btn"
-                          disabled={busy || bulkRunning}
+                          disabled={bulkRunning}
                           onClick={() =>
                             setPhase({
                               k: 'attest',
@@ -2008,7 +2011,7 @@ export function ImportV4({
                         <button
                           type="button"
                           className="af-btn af-btn--ghost af-im-league-btn"
-                          disabled={busy || bulkRunning}
+                          disabled={bulkRunning}
                           onClick={() => void retryLeague(l.sourceId)}
                         >
                           Retry
@@ -2019,10 +2022,10 @@ export function ImportV4({
                     <button
                       type="button"
                       className="af-btn af-btn--ghost af-im-league-btn"
-                      disabled={busy || bulkRunning}
+                      disabled={bulkRunning}
                       onClick={() => void runPreview(l.sourceId)}
                     >
-                      {busy ? 'Reading…' : rowsAreTeams ? 'This is my team' : 'Import'}
+                      {rowsAreTeams ? 'This is my team' : 'Import'}
                     </button>
                   )}
                 </li>
