@@ -449,6 +449,39 @@ had OOMed and emitted nothing at all, so the grep matched nothing for the worst
 possible reason. If you want a scoped typecheck, scope the *inputs* and read the
 unpiped exit status.
 
+⚠ **AND THE SAME TRAP SURVIVES SCOPING THE INPUTS — IT JUST MOVES TO HOW YOU
+READ THE OUTPUT.** The rule above is about the pipe. On 2026-08-30 a session
+followed it exactly: unpiped `tsc`, full output captured to a file, exit status
+read, sentinel confirmed. Then it grepped that FILE for its own five committed
+paths, matched nothing, and attested "148 errors, zero in my files".
+
+That was true. The error was in the same file, a few lines further down:
+
+```
+components/live/LiveScoresClient.tsx(105,27): error TS2322:
+Type 'string | null' is not assignable to type 'string'.
+```
+
+The commit had widened `LivePageData.fetchedAt` to `string | null`. **A type
+widening surfaces in a CONSUMER's file, never in yours** — the author's own
+handover note said so in those words, and the check still could not see it,
+because "my paths" is the wrong unit for a change whose whole risk is
+cross-file. Filtering to them discards exactly the evidence the change needs.
+
+🛑 **SO READ THE TOTAL AGAINST A KNOWN BASELINE FIRST, AND NARROW SECOND.** A
+count you cannot explain is a finding even when nothing matches your paths. The
+pusher's cross-cutting smoke caught this one; so did a ratchet run reporting
+*147 against 154, two files gained*, which is the correct shape — a delta and
+the files that moved, not a filter. Narrowing to your own paths is the last step
+of reading a check, never the first, and never the only one.
+
+⚠ Note what this costs to get right: the baseline must come from the same kind
+of artifact. This repo's count drifts with every session's commits, so "the
+baseline" means *a detached worktree run at the commit's parent*, not a number
+remembered from an hour ago in a dirty checkout. If you have no trustworthy
+baseline, say the total and say you have nothing to compare it to — that is
+information. "Zero in my files" without a total is not.
+
 #### The wider shape: a failure that returns a plausible VALUE
 
 The three above are all exit-status bugs. On 2026-08-30 four more landed in one
@@ -838,6 +871,14 @@ set differs from the tree you checked — the path-scoped case above — the num
 you hand over describe something nobody will build. Check the SHA out detached
 and re-run. This has already put a non-compiling commit into a batch with a
 clean attestation on it.
+
+⚠ **AND GIVE THE TOTAL, NOT ONLY "NONE IN MY FILES".** Those are different
+claims and only one of them is checkable by the person receiving it. A pusher
+comparing your total against the tip they are assembling can see a gainer you
+cannot; a pusher given only your paths has been handed the one view guaranteed
+to miss a cross-file break. The same batch that produced this note had a commit
+attested "zero in my five files" whose tree did not compile — see the
+read-the-total rule above.
 
 ⚠ **AN AUTHOR'S "THE BATCH" AND A PUSHER'S "THE BATCH" DIVERGE BY CONSTRUCTION.**
 An author reads it off local `main`. The pusher pushes a **cherry-picked tip
