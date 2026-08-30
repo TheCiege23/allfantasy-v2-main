@@ -55,16 +55,29 @@ type PlayerRow = {
   status: string | null
 }
 
-function toResponseRow(r: PlayerRow, sport: string, adp: number | null) {
+/**
+ * Exactly the shape `DraftPlayerRow` declares — no more.
+ *
+ * 🛑 THE STUBS ARE GONE RATHER THAN CORRECTED, because the honest value for each was "this
+ * field has nothing behind it". Removed: `firstName: ''`, `lastName: ''`, `fullName`,
+ * `sport` (already on the envelope), `projPts`, `byeWeek`, `stats: {}` and `isDrafted: false`.
+ *
+ * `isDrafted: false` is the one that was an actual CLAIM rather than a blank — it asserted
+ * every player in the pool was undrafted, which is false the moment a draft starts. Nothing
+ * read it (the draft room computes its own from `isPlayerDraftedEntry`, and PlayerPool from
+ * `draftedIds.has(p.id)`), so it was a wrong answer nobody asked for.
+ *
+ * Safe to remove, established by TYPE rather than by grep: both callers annotate the response
+ * as `DraftPlayerRow[]` (`PlayerPool.tsx:63`, `DraftShell.tsx:151`) and neither casts, so no
+ * undeclared field was reachable. Keeping the response equal to the declared contract is also
+ * what stops this drifting back — a field that does not exist cannot be filled with a stub.
+ */
+function toResponseRow(r: PlayerRow, adp: number | null) {
   return {
     id: r.externalId,
-    firstName: '',
-    lastName: '',
-    fullName: r.name,
     name: r.name,
     position: r.position ?? '',
     team: r.team ?? '',
-    sport,
     imageUrl: r.imageUrl,
     status: r.status,
     adp,
@@ -77,16 +90,17 @@ function toResponseRow(r: PlayerRow, sport: string, adp: number | null) {
      * not a draft-board projection, and substituting one would repeat the category error this
      * route already made with ADP — a real number from the wrong question.
      *
-     * Nothing reads either field today (censused across app/, components/, lib/, hooks/), so
-     * null costs nothing now and forces the first real consumer to handle "unknown" instead of
-     * silently rendering 0.0 as a projection.
+     * Nothing reads it today, so null costs nothing now and forces the first real consumer to
+     * handle "unknown" instead of silently rendering 0.0 as a projection.
      */
-    projPts: null,
     proj: null,
-    byeWeek: null,
+    /*
+     * `SportsPlayer` carries no bye week, so this is genuinely unknown rather than withheld.
+     * Null is already the honest answer — noted only so a later reader does not mistake it for
+     * an oversight and fill it in.
+     */
     bye: null,
-    stats: {},
-    isDrafted: false,
+    // Declared by DraftPlayerRow and read by nothing. Empty is absence, not an invented label.
     keyStat: '',
   }
 }
@@ -136,7 +150,7 @@ export async function GET(req: NextRequest) {
       const row = byNormalizedName.get(normalizePlayerName(entry.name))
       // No player row means no externalId, and the UI keys drafted/queued state on that id.
       if (!row) continue
-      players.push(toResponseRow(row, sport, entry.adp))
+      players.push(toResponseRow(row, entry.adp))
     }
 
     return NextResponse.json({ sport, draftId: _draftId ?? null, players })
@@ -157,6 +171,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     sport,
     draftId: _draftId ?? null,
-    players: rows.map((r) => toResponseRow(r, sport, null)),
+    players: rows.map((r) => toResponseRow(r, null)),
   })
 }
