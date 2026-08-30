@@ -1001,9 +1001,15 @@ export async function ingestCFBDPassingProfile(season?: number): Promise<{ updat
       if (offense) {
         const teamData: any = {}
         if (offense.adot != null) teamData.teamPassAdot = offense.adot
-        if (offense.yardsAfterCatch != null && offense.yacCompletions != null && offense.yacCompletions > 0) {
-          teamData.teamPassYacPerComp = offense.yardsAfterCatch / offense.yacCompletions
-        }
+        // Prefer the vendor's own average: it is computed over the same
+        // availability count it used for ADOT. Divide only as a fallback, and
+        // only over yacCompletions — never over completions.
+        const teamYac =
+          offense.avgYardsAfterCatch ??
+          (offense.yardsAfterCatch != null && offense.yacCompletions != null && offense.yacCompletions > 0
+            ? offense.yardsAfterCatch / offense.yacCompletions
+            : null)
+        if (teamYac != null) teamData.teamPassYacPerComp = teamYac
 
         if (Object.keys(teamData).length > 0) {
           try {
