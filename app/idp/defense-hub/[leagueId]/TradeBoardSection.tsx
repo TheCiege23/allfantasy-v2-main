@@ -26,12 +26,12 @@ import type { LeagueDefenderBoard, DefenderBoardRow } from '@/lib/values/leagueD
  */
 
 function Dash() {
-  return <span className="text-[#3d4468]">—</span>
+  return <span className="text-[var(--faint)]">—</span>
 }
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
+    <div className="mb-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">
       {children}
     </div>
   )
@@ -92,7 +92,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
     return (
       <section>
         <Label>League trade board</Label>
-        <div className="rounded-[13px] border border-[#fb5b78]/30 bg-[#fb5b78]/[0.09] px-4 py-3.5 text-[13px] text-[#eef0fa]">
+        <div className="rounded-[13px] border border-[color-mix(in_srgb,var(--bad)_30%,transparent)] bg-[var(--bad-soft)] px-4 py-3.5 text-[13px] text-[var(--text)]">
           {error === 'not-a-member'
             ? 'You don’t have access to this league.'
             : 'We couldn’t load the league board. Nothing is shown rather than something wrong.'}
@@ -105,7 +105,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
     return (
       <section>
         <Label>League trade board</Label>
-        <div className="rounded-[13px] border border-white/[0.07] bg-[#0d1020] px-4 py-3.5 font-mono text-[11px] text-[#5d648a]">
+        <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 font-mono text-[11px] text-[var(--faint)]">
           Loading…
         </div>
       </section>
@@ -116,7 +116,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
     return (
       <section>
         <Label>League trade board</Label>
-        <div className="rounded-[13px] border border-white/[0.07] bg-[#0d1020] px-4 py-3.5 text-[13px] text-[#8f97bd]">
+        <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 text-[13px] text-[var(--muted)]">
           {BLOCKED_COPY[data.state] ?? 'This board is unavailable for this league.'}
         </div>
       </section>
@@ -127,7 +127,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
     <section>
       <Label>League trade board — what to offer</Label>
 
-      <p className="mb-3 max-w-[620px] text-[12px] leading-relaxed text-[#8f97bd]">
+      <p className="mb-3 max-w-[620px] text-[12px] leading-relaxed text-[var(--muted)]">
         Every defender rostered in this league, priced by this league’s own scoring and starting
         slots, with the team holding him.{' '}
         {/*
@@ -136,11 +136,11 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
           returns `projectedFor` specifically so a surface rendering these can say which one.
         */}
         {data.projectedFor ? (
-          <span className="text-[#c3c9e6]">
+          <span className="text-[var(--text2)]">
             Projections are for {data.projectedFor.season} week {data.projectedFor.week}.
           </span>
         ) : (
-          <span className="text-[#fbbf24]">
+          <span className="text-[var(--warn)]">
             We can’t say which week these projections are for, so read the values with that in
             mind.
           </span>
@@ -153,29 +153,29 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Find a player, team or manager…"
           aria-label="Filter the league trade board"
-          className="min-w-[220px] flex-1 rounded-[9px] border border-white/[0.09] bg-[#0d1020] px-3 py-2 text-[12px] text-[#eef0fa] outline-none placeholder:text-[#5d648a] focus:border-[#22d3ee]/50"
+          className="min-w-[220px] flex-1 rounded-[9px] border border-[var(--line2)] bg-[var(--surface)] px-3 py-2 text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--faint)] focus:border-[var(--accent-line)]"
         />
-        <label className="flex cursor-pointer items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[#8f97bd]">
+        <label className="flex cursor-pointer items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">
           <input
             type="checkbox"
             checked={hideMine}
             onChange={(e) => setHideMine(e.target.checked)}
-            className="accent-[#22d3ee]"
+            className="accent-[var(--accent)]"
           />
           Hide my players
         </label>
       </div>
 
-      <div className="overflow-x-auto rounded-[13px] border border-white/[0.07] bg-[#0d1020]">
+      <div className="overflow-x-auto rounded-[13px] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full min-w-[720px] text-left">
           <thead>
-            <tr className="border-b border-white/[0.07] font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
+            <tr className="border-b border-[var(--line)] font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--faint)]">
               <th className="px-4 py-3">Player</th>
               <th className="px-2 py-3">Pos</th>
               <th className="px-2 py-3 text-right">Proj</th>
               <th className="px-2 py-3 text-right">VORP</th>
               <th className="px-2 py-3 text-right">Pos rank</th>
-              <th className="px-2 py-3 text-right text-[#22d3ee]">Value ↓</th>
+              <th className="px-2 py-3 text-right text-[var(--accent)]">Value ↓</th>
               <th className="px-4 py-3">Held by</th>
             </tr>
           </thead>
@@ -188,7 +188,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
       </div>
 
       {rows.length === 0 && (
-        <p className="mt-2 text-[11px] text-[#5d648a]">
+        <p className="mt-2 text-[11px] text-[var(--faint)]">
           {query || hideMine
             ? 'No defender matches that filter.'
             : 'No defenders are priced in this league yet.'}
@@ -198,7 +198,7 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
       <Kickers data={data} />
 
       {data.notes.map((n) => (
-        <p key={n} className="mt-2 max-w-[720px] text-[11px] leading-relaxed text-[#5d648a]">
+        <p key={n} className="mt-2 max-w-[720px] text-[11px] leading-relaxed text-[var(--faint)]">
           {n}
         </p>
       ))}
@@ -209,26 +209,26 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
 function BoardRow({ row }: { row: DefenderBoardRow }) {
   return (
     <tr
-      className={`border-b border-white/[0.04] last:border-0 ${
-        row.ownedBy.isMine ? 'bg-[#22d3ee]/[0.05]' : ''
+      className={`border-b border-[var(--line)] last:border-0 ${
+        row.ownedBy.isMine ? 'bg-[var(--accent-soft)]' : ''
       }`}
     >
       <td className="px-4 py-3">
         <div className="text-[13px] font-extrabold">{row.name}</div>
-        <div className="font-mono text-[10px] text-[#5d648a]">{row.team ?? '—'}</div>
+        <div className="font-mono text-[10px] text-[var(--faint)]">{row.team ?? '—'}</div>
       </td>
-      <td className="px-2 py-3 font-mono text-[11px] text-[#c3c9e6]">{row.position ?? <Dash />}</td>
+      <td className="px-2 py-3 font-mono text-[11px] text-[var(--text2)]">{row.position ?? <Dash />}</td>
       {/*
         A dash, never 0.0. A defender this league's scoring could not price has an absent
         projection, and rendering that as zero tells a manager the player scores nothing.
       */}
-      <td className="px-2 py-3 text-right font-mono text-[12px] text-[#c3c9e6]">
+      <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
         {row.projectedPoints != null ? row.projectedPoints.toFixed(1) : <Dash />}
       </td>
       <td className="px-2 py-3 text-right font-mono text-[12px]">
         {row.vorp != null ? `${row.vorp > 0 ? '+' : ''}${row.vorp.toFixed(1)}` : <Dash />}
       </td>
-      <td className="px-2 py-3 text-right font-mono text-[12px] text-[#c3c9e6]">
+      <td className="px-2 py-3 text-right font-mono text-[12px] text-[var(--text2)]">
         {row.positionRank != null && row.position ? (
           `${row.position}${row.positionRank}`
         ) : (
@@ -247,7 +247,7 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
           </span>
         ) : row.valueIsFloor ? (
           <span
-            className="text-[#8b93b7]"
+            className="text-[var(--muted)]"
             title="Floor price: below this league's meaningful board, not a measured value. Do not compare two floor-priced defenders."
           >
             {row.value.toLocaleString()}
@@ -258,10 +258,10 @@ function BoardRow({ row }: { row: DefenderBoardRow }) {
         )}
       </td>
       <td className="px-4 py-3">
-        <div className="text-[12px] font-semibold text-[#c3c9e6]">
+        <div className="text-[12px] font-semibold text-[var(--text2)]">
           {row.ownedBy.teamName ?? <Dash />}
         </div>
-        <div className="font-mono text-[10px] text-[#5d648a]">
+        <div className="font-mono text-[10px] text-[var(--faint)]">
           {row.ownedBy.isMine ? 'you' : (row.ownedBy.ownerName ?? '—')}
         </div>
       </td>
@@ -286,21 +286,21 @@ function Kickers({ data }: { data: LeagueDefenderBoard }) {
   return (
     <div className="mt-[22px]">
       <Label>Kickers in this league</Label>
-      <div className="rounded-[13px] border border-white/[0.07] bg-[#0d1020] p-[13px]">
+      <div className="rounded-[13px] border border-[var(--line)] bg-[var(--surface)] p-[13px]">
         <div className="flex items-baseline gap-2.5">
-          <div className="font-mono text-[17px] font-black text-[#eef0fa]">
+          <div className="font-mono text-[17px] font-black text-[var(--text)]">
             {data.kickerValue.value?.toLocaleString()}
           </div>
-          <div className="text-[11px] text-[#8f97bd]">for any kicker in this league</div>
+          <div className="text-[11px] text-[var(--muted)]">for any kicker in this league</div>
         </div>
-        <p className="mt-1.5 max-w-[560px] text-[11px] leading-relaxed text-[#5d648a]">
+        <p className="mt-1.5 max-w-[560px] text-[11px] leading-relaxed text-[var(--faint)]">
           {data.kickerValue.basis}
         </p>
         <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
           {data.kickers.map((k) => (
-            <li key={k.sleeperId} className="text-[12px] text-[#c3c9e6]">
+            <li key={k.sleeperId} className="text-[12px] text-[var(--text2)]">
               {k.name}
-              <span className="ml-1.5 font-mono text-[10px] text-[#5d648a]">
+              <span className="ml-1.5 font-mono text-[10px] text-[var(--faint)]">
                 {k.ownedBy.isMine ? 'you' : (k.ownedBy.teamName ?? k.ownedBy.ownerName ?? '—')}
               </span>
             </li>
