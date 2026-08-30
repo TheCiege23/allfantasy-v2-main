@@ -1476,7 +1476,32 @@ async function buildStructuredFantasyContext(
             },
           })
         : Promise.resolve(null),
-      league.idpConfig ? buildIdpContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
+      /*
+       * 🛑 GATED ON idpConfig ALONE, THIS WAS DEAD FOR EVERY IDP LEAGUE IN PRODUCTION.
+       * Measured 2026-08-30: 10 leagues carry leagueVariant DYNASTY_IDP and `idp_league_configs`
+       * holds ZERO rows, so `league.idpConfig` is null for all of them and Chimmy received no
+       * IDP context, ever. A config row is written at league creation; these ten predate it or
+       * were imported, and nothing backfills one.
+       *
+       * `isIdpLeague` already treats the VARIANT as sufficient for exactly this reason — the
+       * config table is an enrichment, not the source of truth for "is this an IDP league". The
+       * variant test mirrors the one used for every other format on line ~936 of this file
+       * rather than importing IDP_VARIANTS, which is not exported; lowercasing covers all four
+       * spellings ('idp', 'IDP', 'DYNASTY_IDP', 'dynasty_idp').
+       *
+       * ⚠ Loosening the gate cannot produce wrong context. buildIdpContextForChimmy self-gates
+       * twice — on `isIdpLeague` (variant-aware) and then on `getIdpLeagueConfig`, which
+       * SYNTHESISES defaults for an IDP variant with no stored row and returns null for
+       * anything else. So a non-IDP league still gets ''. The cost of a false positive is one
+       * league read, which app/api/chat/chimmy/route.ts already pays by calling it
+       * unconditionally.
+       *
+       * Measured after the change: all four DYNASTY_IDP leagues sampled return 816 chars of
+       * context, with getIdpLeagueConfig reporting a synthesised config (configId="").
+       */
+      league.idpConfig || String(league.leagueVariant ?? '').toLowerCase().includes('idp')
+        ? buildIdpContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '')
+        : Promise.resolve(''),
       league.devyConfig ? buildDevyContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
       league.c2cConfig ? buildC2CContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
     ])
