@@ -655,6 +655,172 @@ everyone, which is worse than the duplicate builds this replaces.
 build is running, wait and retry. `AF_ALLOW_CONCURRENT_PUSH=1` exists for a
 genuine emergency and using it routinely turns the guard back into decoration.
 
+#### The push queue: "wait and retry" now means a place in line
+
+Added 2026-08-30. `scripts/push-queue.mjs`, run from the pre-push hook ahead of
+the build guard.
+
+**The gap it closes.** "Retry in ~N min" tells every blocked session the same
+thing, so they all retry at once and the winner is whoever's poll landed
+luckiest. A session that has waited twenty minutes loses to one that arrived
+thirty seconds ago, and it can lose repeatedly. The build guard was never wrong
+about *whether* anyone may push; it simply had no opinion about *whose turn* it
+is, and with ~9 concurrent sessions that is a starvation problem.
+
+So there are now two guards on a push to `main`, in this order:
+
+| | question | script |
+|---|---|---|
+| 1 | is it your **turn**? | `scripts/push-queue.mjs check` |
+| 2 | may **anyone** push right now? | `scripts/check-inflight-prod-build.mjs` |
+
+The queue runs first because it is local and cheap — only the head of the line
+ever spends a Vercel API call.
+
+**Use the wrapper; it is one command and it does the whole convention:**
+
+```
+npm run push:main                # take a ticket, wait your turn, push, release
+npm run push:status              # see the line
+npm run push:wait                # block until it is your turn
+```
+
+Nothing forces you to. A session that has never heard of any of this still gets
+a ticket automatically on its first `git push`, at the BACK, and is told where it
+stands — the same "needs no agreement" property the build guard was written for.
+
+⚠ **THE TICKET IS KEYED ON THE SHA YOU INTEND TO PUSH, not on a session id.**
+There is no usable session identity here: ~9 sessions share one checkout and
+shell state does not survive between commands. The consequence to know is that
+**amending after taking a ticket sends you to the back**, because the sha
+changed. `npm run push:rebind -- --to=<newSha>` moves your existing ticket and
+keeps your place. `npm run push:main` avoids the situation entirely.
+
+**It fails open, like the build guard, and for the same reason.** An unreadable
+queue directory, a corrupt ticket, a git that will not run — all exit 0 with a
+warning. The only refusal is a positive, parsed confirmation that a live ticket
+with a lower sequence number is ahead of yours.
+
+**And it cannot deadlock on a session that vanishes.** A ticket expires 15 min
+after its last heartbeat; one already waved through is released when its sha
+becomes `origin/main` (verified by `ls-remote`, per the rule above — never by
+reading push output) or after a 10-min grace. Every automatic release is written
+to `<git-common-dir>/af-push-queue/journal.jsonl`, so a ticket never disappears
+silently.
+
+The queue lives in the **git common dir**, so all worktrees share one line.
+Emergency override: `AF_SKIP_PUSH_QUEUE=1 git push …` — separate from
+`AF_ALLOW_CONCURRENT_PUSH`, because they excuse different things.
+
+⚠ **Two ways a SHA-keyed ticket gets orphaned, and only one is your own doing.**
+Amending is the obvious one. The other is that **this checkout rewrites history
+under running sessions** — a peer's rebase renamed a live commit on 2026-08-30
+(`5bc9cef07` → `4a84bc557`, and again `cc8593229` → `e0e444030`, both caught only
+because the patch-ids matched), and a ticket keyed on the old name loses its
+place through no action of its owner. So `check` now looks for a live ticket from
+your worktree that is **the same work under another name** and carries it
+forward automatically.
+
+🛑 **AND AN ANCESTOR TEST IS NOT THAT CHECK — THIS WAS SHIPPED WRONG ONCE AND
+CORRECTED WITHIN THE HOUR.** The first version matched on ancestry alone and was
+described here as covering the rebase case. It does not. **A rebase produces a
+SIBLING, not a descendant**: same patch, different parent, common ancestor behind
+both. Measured on the pair that actually happened:
+
+```
+git merge-base --is-ancestor cc8593229 e0e444030   → rc=1   (not an ancestor)
+git merge-base --is-ancestor e0e444030 cc8593229   → rc=1   (not one either)
+git show <each> --format="" --patch | git patch-id --stable
+                                    → d0d63cd16… for BOTH
+```
+
+So the ancestor test answers "no" in both directions for the exact case the
+rebind exists to catch — it works for an amend, which is where it was tested.
+`sameWork` now tries **patch-id first** (catches a RENAME) and ancestry second
+(catches an AMEND or an extension). Neither subsumes the other. ⚠ `null` never
+matches `null`: two commits whose patch-id could not be computed are not thereby
+the same commit, and treating them as equal hands one session's place to another.
+
+The `isAncestor` helper is three-valued on purpose: `merge-base --is-ancestor`
+exits 0 for yes and 1 for no, and **anything else is not a verdict** — this repo
+has already read a `timeout`'s 124 and a missing `pgrep`'s 127 as answers. A
+`null` means "do not act", never "no".
+
+⚠ **The regression test uses those two real SHAs as a positive control**, and
+asserts BOTH that the ancestor check is blind to them and that the ticket moves
+anyway — plus, on the descendant case, that the reason journaled is the ANCESTRY
+one. Pinning which signal fired is what stops the other branch becoming dead code
+under a green suite: a test asserting only "the rebind happened" would pass with
+the ancestor half deleted and patch-id quietly doing all the work. A rebind that
+silently declines is indistinguishable from having no rebind at all.
+
+⚠ **AND DO NOT GENERALISE `sameWork` TO A MERGE DECISION.** Patch-id equality
+means "the same change", not "safe to treat as interchangeable". Here that
+distinction does not bite — the question is only "is this my own work under a new
+name", which is exactly what patch-id answers. It bites the moment the same
+helper is used to resolve a conflict: the rules above already record a day when
+two of five conflicts were genuinely divergent rewrites and an auto-resolve loop
+took one side for all five, nearly deleting a deployed fix. Same test, different
+question, different stakes.
+
+Where **both** SHAs are in hand, the tree hash is stronger still —
+`git rev-parse <a>^{tree}` == `git rev-parse <b>^{tree}` says the two commits
+carry identical content, not merely an identical diff.
+
+#### `push:main` pushes the SHA, never `HEAD`
+
+🛑 **WAITING YOUR TURN TAKES MINUTES, AND `HEAD` MOVES UNDER YOU IN THIS
+CHECKOUT.** On 2026-08-30 a session re-read local `HEAD` at push time instead of
+using the SHA it had verified minutes earlier, and pushed **three other sessions'
+commits** by accident. A token gate stops the wrong SESSION pushing; it does
+nothing about the right session pushing the wrong RANGE.
+
+So `push:main` captures the sha once, pushes `<sha>:refs/heads/main` rather than
+`HEAD:main`, and **re-reads `HEAD` after the wait and refuses if it moved** —
+comparing against the value captured ONCE beforehand, never a fresh read against
+another fresh read, which is the staleness guard that passes while the branch
+genuinely moves. Verified end to end: with `HEAD` moved mid-wait the push is
+refused and `origin/main` still holds the intended commit.
+
+That inheritance also closes the honest half of a hole worth naming: without it,
+one session can hold **two live tickets under two SHAs and take two turns**,
+which is the exact unfairness the queue exists to remove. The dishonest half is
+not solvable without session identity, which does not exist here — but every
+rebind and release is journaled, so it is detectable after the fact.
+
+#### The pusher gate — one session pushes, and it is enforced
+
+User's decision, 2026-08-30: **every push to `main` is confirmed by the
+designated pusher.** The queue orders pushes; it does not batch them, and ten
+ordered pushes cost exactly what ten unordered ones do. Batching is where the
+money is, and until now batching was the one part nothing enforced.
+
+```
+npm run push:pusher -- --claim "<session-name>" --ref "<session-name>"
+npm run push:pusher                 # who holds it
+npm run push:pusher -- --release    # hand it back
+```
+
+A claim writes `pusher.json` into the queue directory and prints a token. The
+hook then refuses any push to `main` whose `AF_PUSH_TOKEN` does not match, and
+the refusal names the holder, tells you to hand over your SHA **with an
+attestation**, and reminds you that a migration is not pushable on your say-so.
+The gate runs **before** a ticket is taken — a session that is not pushing today
+should not be holding a place in the line either.
+
+⚠ **IT IS A STOP SIGN, NOT A LOCK, AND THAT IS NOT A DEFECT TO BE FIXED.** Every
+session runs as the same user on the same filesystem, so the token is readable by
+anyone who goes looking. A session that reads it to get past the gate has
+deliberately overridden it, which is what the documented override is for. What
+the gate buys is that **you cannot push past the pusher by accident** — which is
+the entire failure it exists to stop. No `pusher.json`, or an unreadable one,
+means no gate at all.
+
+⚠ **THE ROLE IS A ROLE, NOT A SESSION — SESSIONS END.** A pusher who vanishes
+silently blocks everyone, which is worse than the duplicate builds the role
+prevents. Announce a claim (`ListAgents` + `SendMessage`) and `--release` before
+finishing.
+
 #### What the pusher checks, and what authors owe
 
 ⚠ **BATCHING CHANGED WHAT A RED BUILD MEANS.** One SHA per session meant a
