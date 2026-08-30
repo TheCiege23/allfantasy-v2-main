@@ -425,3 +425,60 @@
     width: 100%;
   }
 }
+
+/* ── Reveal the pasted cookies ────────────────────────────────────────────
+ *
+ * Both fields are `type="password"` because these cookies are credentials. This
+ * is the escape hatch for the one thing that masking costs here: the values are
+ * COPIED from devtools rather than remembered, so a truncated selection or a
+ * trailing space is invisible until the connect fails — and that failure reads
+ * as "my cookies expired", not "I mis-copied".
+ *
+ * Styled as a quiet text control, not a button with chrome: it sits under two
+ * inputs and above the primary action, and a third filled button in that stack
+ * would compete with Connect for the eye.
+ */
+.af-core .af-espn-reveal-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -2px;
+}
+
+.af-core .af-espn-reveal {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+  /* 44px touch floor, like every other control in this panel. Padding rather
+     than height so the text stays optically close to the fields it acts on. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  border-radius: 8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.af-core .af-espn-reveal:hover {
+  color: var(--text);
+}
+
+/* The same accent-soft halo the fields and the provider tiles use, so focus
+   reads as one thing across the import flow rather than three. */
+.af-core .af-espn-reveal:focus-visible {
+  outline: none;
+  color: var(--text);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Revealed is a STATE, and a control that only changes its label leaves a
+   keyboard user to infer it from text alone. aria-pressed carries it to a
+   screen reader; the accent carries it to everyone else. */
+.af-core .af-espn-reveal[aria-pressed='true'] {
+  color: var(--accent);
+}
