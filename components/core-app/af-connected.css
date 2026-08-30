@@ -1,0 +1,276 @@
+/*
+ * AF Connected accounts — handoff 6e, on the core token layer.
+ * Scoped under `.af-core` like every other af-*.css: the tokens live there and
+ * nowhere else, and Settings is on the older `--panel`/`--border` set.
+ */
+
+.af-core .af-ca {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.af-core .af-ca-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-ca-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+/* The completion bar needs the head row to lay out as flex, not as a paragraph. */
+.af-core .af-ca-progress-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+}
+
+.af-core .af-ca-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-core .af-ca-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 64px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+/*
+ * ⚠ HANDOFF RULE 1 — ONLY `ACTION NEEDED` GETS A COLOURED BORDER. Connected and
+ * coming-soon rows stay visually quiet so the single row that wants attention is
+ * the one the eye lands on. Giving every connected row a green edge would make the
+ * one amber row disappear into a wall of colour.
+ */
+.af-core .af-ca-row[data-status='action-needed'] {
+  border-color: var(--warn);
+}
+
+.af-core .af-ca-row[data-status='coming-soon'] {
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+.af-core .af-ca-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  font-weight: 900;
+  font-size: 13px;
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.af-core .af-ca-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.af-core .af-ca-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-ca-handle {
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-core .af-ca-method {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-ca-tag {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line2);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-core .af-ca-row[data-status='connected'] .af-ca-tag {
+  border-color: var(--good);
+  color: var(--good);
+}
+.af-core .af-ca-row[data-status='action-needed'] .af-ca-tag {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-ca-row[data-status='coming-soon'] .af-ca-tag {
+  border-color: var(--line);
+  color: var(--faint);
+}
+
+.af-core .af-ca-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.af-core .af-ca-fix {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.af-core .af-ca-manage,
+.af-core .af-ca-disconnect {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+/* Destructive, and outlined rather than filled — handoff's colour contract. */
+.af-core .af-ca-disconnect {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.af-core .af-ca-msg {
+  margin: 0;
+  font-size: 12.5px;
+}
+.af-core .af-ca-msg--error {
+  color: var(--bad);
+}
+.af-core .af-ca-msg--good {
+  color: var(--good);
+}
+
+.af-core .af-ca-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ── Your data ───────────────────────────────────────────────────────── */
+
+.af-core .af-ca-data {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-core .af-ca-data-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.af-core .af-ca-data-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+.af-core .af-ca-data-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-ca-add {
+  min-height: 44px;
+  padding: 0 18px;
+  text-decoration: none;
+}
+
+/* ── The `?` on Your data ────────────────────────────────────────────── */
+
+.af-core .af-ca-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.af-core .af-ca-hint-btn {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+.af-core .af-ca-hint-btn:hover,
+.af-core .af-ca-hint-btn:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.af-core .af-ca-hint-bubble {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: min(320px, 74vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.af-core .af-ca-hint-bubble[hidden] {
+  display: none;
+}
+
+@media (max-width: 620px) {
+  .af-core .af-ca-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .af-core .af-ca-tag {
+    order: -1;
+  }
+}

@@ -317,6 +317,21 @@ html[data-mode='af'] .af-core {
   --p-espn-fg: #ffb8d4;
   --p-yahoo-bg: #3a1d55;
   --p-yahoo-fg: #dcb4ff;
+  /*
+   * The same four the dark and light blocks already carry. The `af` theme had
+   * only the original triplet, so on this theme alone a Fantrax, MFL or
+   * Fleaflicker mark fell through to the neutral chip while Sleeper, ESPN and
+   * Yahoo kept their colour — the exact half-marked state the dark block's note
+   * above says is not a mark at all.
+   */
+  --p-fantrax-bg: #1a3a2c;
+  --p-fantrax-fg: #7fe8be;
+  --p-mfl-bg: #3a2a14;
+  --p-mfl-fg: #f2bd78;
+  --p-fleaflicker-bg: #16303f;
+  --p-fleaflicker-fg: #8ad8f2;
+  --p-manual-bg: #2c2740;
+  --p-manual-fg: #c3bde0;
   --p-green-bg: #123a3a;
   --p-green-fg: #8ff0e2;
   --p-gold-bg: #3a2a12;
@@ -456,6 +471,30 @@ html[data-mode='af'] .af-core {
 .af-core .af-platform[data-platform='yahoo'] {
   background: var(--p-yahoo-bg);
   color: var(--p-yahoo-fg);
+}
+/*
+ * ⚠ THE TOKENS EXISTED AND NOTHING CONSUMED THEM. --p-fantrax-*, --p-mfl-*,
+ * --p-fleaflicker-* and --p-manual-* have been defined in the dark and light
+ * blocks since the note above was written, but `.af-platform` only ever matched
+ * the original three — so af-portfolio.css got the colour and every other
+ * surface using the shared primitive (the import picker included) still painted
+ * four platforms the same neutral chip. Same tokens, now actually reachable.
+ */
+.af-core .af-platform[data-platform='fantrax'] {
+  background: var(--p-fantrax-bg);
+  color: var(--p-fantrax-fg);
+}
+.af-core .af-platform[data-platform='mfl'] {
+  background: var(--p-mfl-bg);
+  color: var(--p-mfl-fg);
+}
+.af-core .af-platform[data-platform='fleaflicker'] {
+  background: var(--p-fleaflicker-bg);
+  color: var(--p-fleaflicker-fg);
+}
+.af-core .af-platform[data-platform='manual'] {
+  background: var(--p-manual-bg);
+  color: var(--p-manual-fg);
 }
 
 /*

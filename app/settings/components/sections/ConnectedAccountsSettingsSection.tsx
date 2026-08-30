@@ -18,9 +18,16 @@ import {
 import { ConnectedIdentityRenderer } from "@/components/connected-accounts/ConnectedIdentityRenderer"
 import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection"
 import { MflApiKeyConnection } from "@/components/settings/MflApiKeyConnection"
+import { ConnectedPlatforms } from "@/components/core-app/import/ConnectedPlatforms"
 import type { SettingsProfile } from "./settings-types"
 
-const IMPORT_PLATFORM_IDS = ["yahoo", "espn", "mfl", "fleaflicker", "fantrax"] as const
+/*
+ * ⚠ THE HARDCODED PLATFORM LIST IS GONE, NOT MOVED. It named five platforms as
+ * plain rows with no way to see whether any of them was connected.
+ * `ConnectedPlatforms` iterates IMPORT_PROVIDER_UI_OPTIONS instead — the authority
+ * for which providers exist and which are available — so a provider added or
+ * switched off there shows up here without a second edit.
+ */
 
 function signInProviderLabel(id: SignInProviderId, t: (key: string) => string): string {
   return t(`settings.connected.signInProvider.${id}`)
@@ -422,60 +429,33 @@ export function ConnectedAccountsSettingsSection({
         <p className="text-xs" style={{ color: "var(--muted)" }}>
           {t("settings.connected.fantasyPlatformsBody")}
         </p>
-        <ul className="space-y-3">
-          <li className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
-            <div>
-              <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.connected.sleeper")}</span>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
-                {profile?.sleeperUsername
-                  ? tInterpolate("settings.connected.linkedAs", { username: profile.sleeperUsername })
-                  : t("settings.connected.notLinked")}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {profile?.sleeperUsername ? (
-                <>
-                  <span className="text-xs text-emerald-500">{t("settings.connected.linkedBadge")}</span>
-                  <button
-                    type="button"
-                    onClick={() => void handleDisconnectSleeper()}
-                    className="rounded-lg border px-3 py-2 text-xs font-medium"
-                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
-                  >
-                    {t("settings.connected.disconnect")}
-                  </button>
-                </>
-              ) : (
-                <Link
-                  href="/settings/connect/sleeper"
-                  className="rounded-lg border px-3 py-2 text-sm font-medium"
-                  style={{ borderColor: "var(--border)", color: "var(--text)" }}
-                >
-                  {t("settings.connected.connectSleeper")}
-                </Link>
-              )}
-            </div>
-          </li>
-          {IMPORT_PLATFORM_IDS.map((id) => (
-            <li key={id} className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{t(`settings.connected.platform.${id}`)}</span>
-                  <p className="text-xs" style={{ color: "var(--muted)" }}>{t(`settings.connected.hint.${id}`)}</p>
-                </div>
-                <Link
-                  href="/import"
-                  className="shrink-0 rounded-lg border px-3 py-2 text-xs font-medium"
-                  style={{ borderColor: "var(--border)", color: "var(--text)" }}
-                >
-                  {t("settings.connected.openImport")}
-                </Link>
-              </div>
-              {id === "espn" && <EspnCookieConnection />}
-              {id === "mfl" && <MflApiKeyConnection />}
-            </li>
-          ))}
-        </ul>
+        {/*
+          ── 6e: Connected accounts ──────────────────────────────────────────
+          ⚠ THE STATUS LIST IS NOW ONE COMPONENT, AND THE CREDENTIAL FORMS STAY.
+          What this replaced was a per-platform row carrying only the platform's
+          name and an "Open import" link — it never reported whether the platform
+          was actually connected, which is the question this section exists to
+          answer. `ConnectedPlatforms` reads the real state from the existing
+          GET /api/league/auth, so no new endpoint and no new route.
+
+          The two credential forms below it are unchanged and deliberately kept:
+          the rows report status and route, the forms are where an ESPN cookie or
+          MFL key is actually entered.
+
+          ⚠ `.af-core` IS LOAD BEARING — Settings is on the older --panel/--border
+          token set and everything inside this div is authored against the core
+          one, so without the wrapper every var() resolves to nothing.
+        */}
+        <div className="af-core">
+          <ConnectedPlatforms
+            sleeperUsername={profile?.sleeperUsername ?? null}
+            onDisconnectSleeper={() => void handleDisconnectSleeper()}
+          />
+          <div className="mt-4 space-y-4">
+            <EspnCookieConnection />
+            <MflApiKeyConnection />
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2 pt-1">
           <Link
             href="/legacy-import"

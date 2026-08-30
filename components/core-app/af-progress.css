@@ -1,0 +1,450 @@
+/*
+ * AF Import progress + done — handoffs 6c and 6d, on the core token layer.
+ * Scoped under `.af-core` like every other af-*.css, and for the same reason: the
+ * tokens are declared there and nowhere else.
+ */
+
+/* ── 6c: progress ────────────────────────────────────────────────────── */
+
+.af-core .af-prog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 8px 0 4px;
+  text-align: center;
+}
+
+/*
+ * The ring is a conic-gradient driven by one custom property, so the fill and the
+ * number under it cannot disagree — both are computed from the same `--af-prog-pct`
+ * the component sets from `completed / total`.
+ */
+.af-core .af-prog-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      var(--accent) calc(var(--af-prog-pct, 0) * 1%),
+      var(--chip) calc(var(--af-prog-pct, 0) * 1%)
+    );
+  transition: background 0.35s ease;
+}
+.af-core .af-prog-ring[data-failed='true'] {
+  background:
+    conic-gradient(
+      var(--bad) calc(var(--af-prog-pct, 0) * 1%),
+      var(--chip) calc(var(--af-prog-pct, 0) * 1%)
+    );
+}
+/* The hole. A mask would be cleaner but paints wrong in Safari at this size. */
+.af-core .af-prog-ring::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.af-core .af-prog-ring-num {
+  position: relative;
+  z-index: 1;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--accent);
+}
+.af-core .af-prog-ring[data-failed='true'] .af-prog-ring-num {
+  color: var(--bad);
+}
+
+.af-core .af-prog-title {
+  margin: 6px 0 0;
+  font-size: clamp(24px, 3.4vw, 32px);
+  line-height: 1.12;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-core .af-prog-sub {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-core .af-prog-steps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+}
+
+.af-core .af-prog-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+/* Only the step actually running is emphasised — handoff rule 3. */
+.af-core .af-prog-step[data-state='working'] {
+  border-color: var(--accent-line, var(--accent));
+  background: var(--accent-soft);
+}
+.af-core .af-prog-step[data-state='failed'] {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-prog-step[data-state='queued'] {
+  opacity: 0.62;
+}
+
+.af-core .af-prog-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 900;
+}
+.af-core .af-prog-step[data-state='done'] .af-prog-mark {
+  color: var(--good);
+}
+.af-core .af-prog-step[data-state='failed'] .af-prog-mark {
+  color: var(--bad);
+}
+/* Queued: an empty circle, per the handoff's own glyph contract. */
+.af-core .af-prog-step[data-state='queued'] .af-prog-mark {
+  border: 1.5px solid var(--faint);
+  width: 12px;
+  height: 12px;
+}
+/*
+ * The running step's half-filled dot, pulsing. ONLY this state animates — handoff
+ * rule 3 — so a completed list is completely still.
+ */
+.af-core .af-prog-step[data-state='working'] .af-prog-mark {
+  border: 2px solid var(--accent);
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  width: 14px;
+  height: 14px;
+  animation: af-prog-spin 0.9s linear infinite;
+}
+
+@keyframes af-prog-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The label is the status and is announced regardless; the motion is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-prog-step[data-state='working'] .af-prog-mark {
+    animation: none;
+    border-color: var(--accent);
+  }
+  .af-core .af-prog-ring {
+    transition: none;
+  }
+}
+
+.af-core .af-prog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-core .af-prog-step-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-prog-step-detail {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-prog-tag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-core .af-prog-step[data-state='done'] .af-prog-tag {
+  color: var(--good);
+}
+.af-core .af-prog-step[data-state='working'] .af-prog-tag {
+  color: var(--accent);
+}
+.af-core .af-prog-step[data-state='failed'] .af-prog-tag {
+  color: var(--bad);
+}
+
+/* ── 6d: done ────────────────────────────────────────────────────────── */
+
+.af-core .af-done {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.af-core .af-done-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.af-core .af-done-check {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--good);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.af-core .af-done-title {
+  margin: 0;
+  font-size: clamp(26px, 3.8vw, 36px);
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-core .af-done-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+}
+
+.af-core .af-done-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+/*
+ * The deliberate odd one out. Handoff rule 1: it is only ever `--bad` when the
+ * count is above zero — a red 0 reports a problem that does not exist.
+ */
+.af-core .af-done-stat[data-tone='bad'] {
+  border-color: var(--bad);
+}
+.af-core .af-done-stat[data-tone='good'] {
+  border-color: var(--good);
+}
+
+.af-core .af-done-num {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+}
+.af-core .af-done-stat[data-tone='bad'] .af-done-num {
+  color: var(--bad);
+}
+.af-core .af-done-stat[data-tone='good'] .af-done-num {
+  color: var(--good);
+}
+
+.af-core .af-done-stat-label {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.af-core .af-done-issue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--bad);
+  background: var(--bad-soft);
+}
+
+.af-core .af-done-issue-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+  color: var(--bad);
+  font-weight: 900;
+}
+
+.af-core .af-done-issue-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.af-core .af-done-issue-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-done-issue-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.af-core .af-done-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-done-go {
+  min-height: 50px;
+  padding: 0 24px;
+  font-size: 15px;
+  flex: 1 1 240px;
+}
+
+.af-core .af-done-alt {
+  min-height: 50px;
+  padding: 0 20px;
+  font-size: 14px;
+}
+
+.af-core .af-done-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+@media (max-width: 560px) {
+  .af-core .af-done-go,
+  .af-core .af-done-alt {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+/* ── The Chimmy aside (6c / 6d) ──────────────────────────────────────── */
+
+.af-core .af-chimmy-note {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 15px;
+  border-radius: 13px;
+  border: 1px solid var(--accent-line, var(--accent));
+  background: var(--chimmy);
+  text-align: left;
+}
+
+.af-core .af-chimmy-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--accent-line, var(--accent));
+}
+
+.af-core .af-chimmy-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.af-core .af-chimmy-name {
+  color: var(--accent);
+}
+
+.af-core .af-chimmy-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* ── 6e: the completion bar ──────────────────────────────────────────── */
+
+.af-core .af-ca-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.af-core .af-ca-progress-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.af-core .af-ca-progress-pct {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent);
+}
+
+.af-core .af-ca-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+
+.af-core .af-ca-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-ca-progress-fill {
+    transition: none;
+  }
+}
