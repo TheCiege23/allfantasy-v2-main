@@ -75,10 +75,33 @@ describe('live sports questions', () => {
     expect(start.getUTCHours()).toBeGreaterThanOrEqual(4)
     expect(end.getTime()).toBeGreaterThan(start.getTime())
 
-    /* The 03:00-UTC kickoff has to land inside the window. */
-    const kickoff = new Date('2026-08-28T03:00:00.000Z').getTime()
-    expect(kickoff).toBeGreaterThanOrEqual(start.getTime())
-    expect(kickoff).toBeLessThan(end.getTime())
+    /*
+     * ⚠ DERIVED FROM THE WINDOW, NOT A LITERAL DATE — AND THAT IS THE WHOLE FIX.
+     * This read `new Date('2026-08-28T03:00:00.000Z')`, which is inside "today"
+     * only on the day it was written. `tryDeterministicAnswer` builds its window
+     * from the real clock and this suite never freezes it, so from 2026-08-29
+     * onwards the fixture sat two days behind the window and the assertion failed
+     * every run. It was reported as a product crash in the live slate; nothing
+     * was ever wrong with the code.
+     *
+     * 23:00 on the window's own ET day is the case this file exists for: in UTC
+     * that is 03:00 the NEXT calendar day, so a UTC-day window excludes it while
+     * an ET-day window does not.
+     */
+    const kickoff = new Date(start.getTime() + 23 * 60 * 60 * 1000)
+
+    /*
+     * ⚠ ASSERT THE FIXTURE IS STILL THE AWKWARD ONE. Without these two lines the
+     * test is trivially true — any window an hour longer than 23h would satisfy
+     * the bounds below and prove nothing. These pin the property that made the
+     * original bug possible: the instant is on the next UTC date, in the small
+     * hours, and must still be inside today.
+     */
+    expect(kickoff.getUTCDate()).not.toBe(start.getUTCDate())
+    expect(kickoff.getUTCHours()).toBeLessThan(5)
+
+    expect(kickoff.getTime()).toBeGreaterThanOrEqual(start.getTime())
+    expect(kickoff.getTime()).toBeLessThan(end.getTime())
   })
 
   /*

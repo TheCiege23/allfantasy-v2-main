@@ -47,7 +47,21 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/sports-live-scores-service', () => ({
+/*
+ * ⚠ PARTIAL, VIA importOriginal — A FULL MOCK ROTS THE MOMENT THE MODULE GROWS.
+ * This listed only the two fetchers, so when `liveScoresPage` started importing
+ * `hasStarted` from the same module the mock stopped supplying it and every test
+ * in this file died on "No 'hasStarted' export is defined on the mock" — a
+ * failure in the TEST HARNESS that reads exactly like a product crash in
+ * getLivePageData, which is where the stack pointed.
+ *
+ * Only the two network calls need stubbing. `hasStarted` is a pure status
+ * predicate with no I/O, and the assertions here depend on its real behaviour —
+ * stubbing it would let a broken predicate pass this suite. Spreading the actual
+ * module keeps every future pure helper working without another edit here.
+ */
+vi.mock('@/lib/sports-live-scores-service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/sports-live-scores-service')>()),
   getLiveScoresForSport: getLiveScores,
   getCachedLiveScoresForSport: getCachedLiveScores,
 }))
