@@ -1357,42 +1357,29 @@ export async function getResolvedDraftPoolForLeague(
        * column simply looks like a feature with no data yet, on the one screen a manager is
        * actually staring at mid-draft.
        */
-      const { buildContextHash } = await import('@/lib/adp/computeAllFantasyAdp')
       const { buildDraftContext } = await import('@/lib/adp/draftContextKey')
-      const ctxHash = buildContextHash(
-        buildDraftContext({
-          league: {
-            sport: String(sport ?? 'NFL'),
-            season: Number(league?.season ?? new Date().getUTCFullYear()),
-            scoring: league?.scoring ?? null,
-            isDynasty: Boolean(league?.isDynasty),
-            leagueVariant: league?.leagueVariant ?? null,
-            leagueSize: league?.leagueSize ?? null,
-            settings: league?.settings ?? null,
-          },
-          session: draftSession
-            ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null }
-            : null,
-        }),
-      )
-      const perfAiAdp = perfStart('10. allFantasyAdpSnapshot.findMany')
-      const adpRows = await prisma.allFantasyAdpSnapshot.findMany({
-        where: { contextHash: ctxHash, draftMode: 'real' },
-        select: {
-          playerKey: true,
-          averageOverallPick: true,
-          sampleSize: true,
-          sevenDayTrend: true,
-          thirtyDayTrend: true,
-          standardDeviation: true,
+      const { loadAdpBoard } = await import('@/lib/adp/loadAdpBoard')
+      const ctx = buildDraftContext({
+        league: {
+          sport: String(sport ?? 'NFL'),
+          season: Number(league?.season ?? new Date().getUTCFullYear()),
+          scoring: league?.scoring ?? null,
+          isDynasty: Boolean(league?.isDynasty),
+          leagueVariant: league?.leagueVariant ?? null,
+          leagueSize: league?.leagueSize ?? null,
+          settings: league?.settings ?? null,
         },
-        take: 4000,
+        session: draftSession
+          ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null }
+          : null,
       })
+      const perfAiAdp = perfStart('10. loadAdpBoard')
+      const board = await loadAdpBoard(ctx, { draftMode: 'real' })
       perfAiAdp()
       const LOW_SAMPLE_THRESHOLD = 10
-      for (const row of adpRows) {
+      for (const row of board.entries) {
         aiAdpByPlayerKey.set(row.playerKey, {
-          adp: row.averageOverallPick,
+          adp: row.adp,
           sampleSize: row.sampleSize,
           lowSample: row.sampleSize < LOW_SAMPLE_THRESHOLD,
           sevenDayTrend: row.sevenDayTrend,

@@ -245,7 +245,15 @@ describe('getResolvedDraftPoolForLeague exposes system adp and ai ADP fields', (
   it('maps aiAdp from snapshot overlay and keeps base row adp separate', () => {
     const src = read('lib/draft-room/getResolvedDraftPoolForLeague.ts')
     expect(src).toMatch(/\baiAdp\b/)
-    expect(src).toMatch(/averageOverallPick/)
+    /*
+     * The overlay now goes through lib/adp/loadAdpBoard.ts, so the column name it selects
+     * (`averageOverallPick`) lives there rather than here. Asserting on that name in THIS file
+     * was asserting on where a query happened to be written, which is exactly what moved.
+     * What matters is that the pool reads the AllFantasy board through the shared loader - the
+     * one that also supplies the cross-size tier every non-12-team league depends on.
+     */
+    expect(src).toContain('loadAdpBoard')
+    expect(src).toContain('buildDraftContext')
     expect(src).toMatch(/adp/)
   })
 })

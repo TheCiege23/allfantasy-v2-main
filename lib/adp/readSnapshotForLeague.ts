@@ -21,6 +21,7 @@ import {
   type DraftMode,
 } from './computeAllFantasyAdp'
 import { buildDraftContext } from '@/lib/adp/draftContextKey'
+import { loadAdpBoard } from '@/lib/adp/loadAdpBoard'
 
 export interface AllFantasyAdpEntry {
   playerName: string
@@ -38,6 +39,10 @@ export interface AllFantasyAdpEntry {
   lowSample: boolean
   sevenDayTrend: number | null
   thirtyDayTrend: number | null
+  /** `exact` = measured at this league size. `cross_size` = projected from other sizes. */
+  source?: 'exact' | 'cross_size'
+  /** Cross-size only: which league sizes contributed. Null for exact rows. */
+  contributingTeamCounts?: number[] | null
 }
 
 export interface AllFantasyAdpReadResult {
@@ -46,6 +51,10 @@ export interface AllFantasyAdpReadResult {
   computedAt: Date | null
   contextHash: string
   draftMode: DraftMode
+  /** Players measured at this exact league size. */
+  exactCount?: number
+  /** Players filled by projecting from other league sizes. */
+  crossSizeCount?: number
 }
 
 const LOW_SAMPLE_THRESHOLD = 10
@@ -55,58 +64,52 @@ export async function readAllFantasyAdpForContext(
   options: { draftMode?: DraftMode } = {},
 ): Promise<AllFantasyAdpReadResult> {
   const draftMode = options.draftMode ?? 'real'
-  const contextHash = buildContextHash(context)
 
-  const rows = await prisma.allFantasyAdpSnapshot.findMany({
-    where: { contextHash, draftMode },
-    orderBy: { averageOverallPick: 'asc' },
-    select: {
-      playerKey: true,
-      playerName: true,
-      sampleSize: true,
-      averageOverallPick: true,
-      averageRound: true,
-      averagePickInRound: true,
-      minOverallPick: true,
-      maxOverallPick: true,
-      sevenDayTrend: true,
-      thirtyDayTrend: true,
-      lastUpdatedAt: true,
-    },
-  })
+  /*
+   * Delegates to loadAdpBoard, which adds the CROSS-SIZE tier on top of the exact one. Before
+   * that tier existed, every league whose size had no board of its own read em-dashes - measured
+   * on production, that was every 8-, 14-, 22- and 27-team league, while 25,261 of 27,742 rows
+   * sat on imported boards no league could resolve to.
+   *
+   * The no-market-fallback rule in this file's header still holds and is not weakened: a
+   * cross-size entry is OUR OWN draft data from a different league size, projected through
+   * rounds. It is never external/market ADP wearing an AI ADP label.
+   */
+  const board = await loadAdpBoard(context, { draftMode })
+  const contextHash = board.contextHash
 
-  const entries: AllFantasyAdpEntry[] = rows.map((r) => {
-    // playerKey is `<name>|<position>` â split for the consumer shape.
-    const [, posLower] = r.playerKey.split('|')
+  const entries: AllFantasyAdpEntry[] = board.entries.map((e) => {
+    const [, posLower] = e.playerKey.split('|')
     return {
-      playerName: r.playerName,
+      playerName: e.playerName,
       position: (posLower ?? '').toUpperCase(),
-      team: null, // team isn't stored in the snapshot â UI joins to pool by playerKey.
-      playerKey: r.playerKey,
-      adp: r.averageOverallPick,
-      averageRound: r.averageRound,
-      averagePickInRound: r.averagePickInRound,
-      minPick: r.minOverallPick,
-      maxPick: r.maxOverallPick,
-      sampleSize: r.sampleSize,
-      lowSample: r.sampleSize < LOW_SAMPLE_THRESHOLD,
-      sevenDayTrend: r.sevenDayTrend,
-      thirtyDayTrend: r.thirtyDayTrend,
+      team: null,
+      playerKey: e.playerKey,
+      adp: e.adp,
+      averageRound: e.averageRound ?? 0,
+      averagePickInRound: e.averagePickInRound ?? 0,
+      minPick: e.minPick ?? 0,
+      maxPick: e.maxPick ?? 0,
+      sampleSize: e.sampleSize,
+      lowSample: e.sampleSize < LOW_SAMPLE_THRESHOLD,
+      sevenDayTrend: e.sevenDayTrend,
+      thirtyDayTrend: e.thirtyDayTrend,
+      source: e.source,
+      contributingTeamCounts: e.contributingTeamCounts,
     }
   })
 
-  // totalDrafts â derive from max sampleSize across entries (rough but useful for UI).
-  // The recompute script could store it separately later; for the test harness
-  // this is sufficient to surface "N drafts" in tooltips.
   const totalDrafts = entries.reduce((max, e) => Math.max(max, e.sampleSize), 0)
 
-  // computedAt â most recent lastUpdatedAt across the snapshot set.
-  let computedAt: Date | null = null
-  for (const r of rows) {
-    if (!computedAt || r.lastUpdatedAt > computedAt) computedAt = r.lastUpdatedAt
+  return {
+    entries,
+    totalDrafts,
+    computedAt: board.computedAt,
+    contextHash,
+    draftMode,
+    exactCount: board.exactCount,
+    crossSizeCount: board.crossSizeCount,
   }
-
-  return { entries, totalDrafts, computedAt, contextHash, draftMode }
 }
 
 /**
