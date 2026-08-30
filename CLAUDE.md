@@ -593,9 +593,44 @@ and the proof takes one command.
 
 **When it is required, stated narrowly so it does not become ceremony:** only
 when the commit's file set differs from the working tree's — a path-scoped commit
-out of a dirty tree, or a cherry-pick onto a base you have not built. A clean
-tree committed whole needs none of this; the tree you checked IS the tree you
-wrote.
+out of a dirty tree, or a cherry-pick onto a base you have not built.
+
+⚠ **BUT "A CLEAN TREE COMMITTED WHOLE IS SAFE" IS AN ASSUMPTION, NOT A FACT, IN A
+SHARED CHECKOUT.** This paragraph first ended "a clean tree committed whole needs
+none of this; the tree you checked IS the tree you wrote" — and the index
+incident above had already disproved it before the ink was dry. There the file
+was clean, the file set WAS the change, and the committed artifact still differed
+from the checked one, because a peer moved the INDEX in between. The same day
+`lib/core-app/myTeam.ts` changed under a session mid-edit, and
+`lib/core-app/matchup.ts` went from syntactically broken to compiling inside one
+window.
+
+So the gap is not only the commit's file set. It is the TIME between the check
+and the commit, and in this checkout that window is contended: HEAD, the index
+and the working tree have each moved under a session inside a single command.
+Before committing, confirm the paths are unchanged since you checked them —
+`git status --porcelain -- <paths>` and `git diff --cached --name-only`, each
+read in its OWN call. Chaining either to the commit with `&&` reproduces the
+failure this whole section is about.
+
+⚠ **AND `next dev` REWRITES `tsconfig.json`, SO THE CONFIG YOUR TYPECHECK READS
+IS NOT THE ONE CI READS.** Next.js appends `<distDir>/types/**/*.ts` to `include`
+on startup and says so in one line it scrolls past. Every session here runs its
+own dist dir (`AF_NEXT_DIST_DIR`, see `.claude/launch.json`), so the shared
+checkout's `tsconfig.json` accumulates one `include` entry per session and is
+dirty more or less permanently — `.next-dev-my-team` and `.next-dev-matchup` were
+both added on 2026-08-30 by sessions that never touched the file by hand.
+
+The entries are additive, so they can only ADD diagnostics, never hide one — but
+"my number is at worst too high" is not what an attestation claims, and two
+sessions withdrew green runs that day once they checked what config those runs
+had actually used. **A typecheck run in the shared checkout is not a measurement
+of any commit.** The detached-worktree form above is immune by construction: it
+carries the COMMITTED `tsconfig.json`.
+
+⚠ Do not "fix" it by reverting `tsconfig.json` wholesale — the other entries
+belong to sessions that are still running, and removing one breaks a peer's
+typecheck rather than yours. Leave the file; check somewhere else.
 
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
