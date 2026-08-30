@@ -839,6 +839,32 @@ you hand over describe something nobody will build. Check the SHA out detached
 and re-run. This has already put a non-compiling commit into a batch with a
 clean attestation on it.
 
+⚠ **AN AUTHOR'S "THE BATCH" AND A PUSHER'S "THE BATCH" DIVERGE BY CONSTRUCTION.**
+An author reads it off local `main`. The pusher pushes a **cherry-picked tip
+built onto `origin/main`**, per the landing rule above — a different artifact the
+moment anything is picked, and the convention guarantees picking. Reviewing the
+wrong one produces objections that are all true and none relevant.
+
+Measured on 2026-08-30, an author reported three blockers from local `main`: a
+non-fast-forward, a migration in the range, and sixteen commits of which thirteen
+were unattested. Every one was true of local `main`. The tip actually being
+pushed was **six commits, no `prisma/` file, zero `cfbdId` occurrences, and
+`merge-base --is-ancestor` rc=0** — none of the three applied. The author had
+used the same detached-worktree cherry-pick when holding the role hours earlier
+and still read the branch.
+
+**So ask the pusher what is in the range, then check that range** — never `main`:
+
+```
+git log --oneline origin/main..<tip>
+git diff --name-only origin/main..<tip> | grep -iE "prisma|\.sql$"
+git merge-base --is-ancestor origin/main <tip>     # 0, or it will bounce
+```
+
+⚠ And confirm your own commits are in it **by patch-id, not by subject line or
+ancestry** — a cherry-pick renames them, so ancestry answers "no" about work that
+is sitting right there in the range.
+
 **The pusher runs a fast smoke over the batch**, not a full re-verification: a
 scoped typecheck and the test files touched across the union of the batch. That
 catches the thing attestation structurally cannot — one session's change
