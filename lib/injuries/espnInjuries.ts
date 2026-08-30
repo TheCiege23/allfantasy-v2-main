@@ -14,9 +14,20 @@ import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
  *   verified 2026-08-15   NFL   32 team blocks, 800 injuries
  *                         NCAAF  3 team blocks,   3 injuries (preseason)
  *
- * The college count is small because the season has not started, not because
- * the feed is thin — and a feed that returns three rows in August is still the
- * difference between "no designation on file" and a wrong one.
+ * ⚠ THAT READING OF THE COLLEGE COUNT WAS WRONG, AND THE SEASON SETTLED IT. This said
+ * "the college count is small because the season has not started, not because the feed is
+ * thin". On 2026-08-29 — the day the season OPENED — it still returned the same THREE
+ * rows, whose reports are dated 2020-11-21, 2022-11-03 and 2022-11-26. They are archival
+ * news items, not preseason designations. The feed is thin.
+ *
+ * The NFL half is unaffected and genuinely useful (800 injuries across 32 team blocks).
+ * Keep fetching college: it costs one request and would tell us the moment ESPN starts
+ * publishing. But nothing downstream may present it as coverage — `injuryCoverageFor` in
+ * lib/injuries/injuryReadPort.ts marks NCAAF unavailable so the panel says "we cannot
+ * know" rather than showing an empty list that reads as "nobody is hurt".
+ *
+ * Underneath it is a domain fact no integration fixes: the NCAA does not mandate injury
+ * reporting the way the NFL does, so there is no league-wide college report to publish.
  *
  * Writes with `source: 'espn'` into sports_injuries. The upsert key is
  * (sport, externalId, source), so ESPN rows sit ALONGSIDE Rolling Insights

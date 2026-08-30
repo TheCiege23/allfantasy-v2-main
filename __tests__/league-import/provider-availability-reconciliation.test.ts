@@ -16,7 +16,27 @@ import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-conf
 const EXPECTED_AVAILABILITY: Record<string, boolean> = {
   sleeper: true,
   espn: true,
-  yahoo: true,
+  /*
+   * ⚠ FLIPPED TO FALSE 2026-08-29 — the only entry here moving in this direction, and it
+   * is the audit this file asks for, run against production rather than against the code:
+   *
+   *     leagues where platform='yahoo'  0     import_runs provider='yahoo'  0 (EVER)
+   *     YahooLeague / YahooConnection   0/0   league_auths yahoo row  1, oauthToken NULL
+   *
+   * Not "unverified" like MFL below — actively broken, and structurally so. Two credential
+   * stores cannot see each other: /api/auth/yahoo (the only connect entry point /import
+   * offers) writes `YahooConnection`, the league-import callback writes `league_auths`, and
+   * /api/yahoo/leagues reads only the former. Its returnTo was `/import?provider=yahoo`, so
+   * pressing "Connect Yahoo" returned the user to a screen still asking them to connect
+   * Yahoo. `hasFullAdapter()` passes throughout, which is the blind spot this file exists
+   * to cover.
+   *
+   * ⚠ TO FLIP IT BACK, RECONCILE THE TWO STORES FIRST, then require
+   * `select count(*) from import_runs where provider='yahoo'` to be non-zero. A repaired
+   * code path is not evidence; a row is. And do NOT delete or recreate the Yahoo app while
+   * doing it — its fantasy-read permission is captured at consent time.
+   */
+  yahoo: false,
   /*
    * Flipped 2026-08-27 with the missing piece built, not to unblock anything.
    * Fantrax has a live read API (`fxea`), so the import runs from a league id:

@@ -141,16 +141,31 @@ export async function loadLeagueKickerValue(
    * never created. `TheCiege24's 12-Team NFL Redraft League` counted ONE roster row, which put
    * replacement at K2 instead of K13 and priced a kicker at 133 instead of 287.
    *
-   * A count of 0 or 1 is not a one-team league, it is a missing answer. So roster rows still
-   * win wherever they are real, and the declared size is the fallback rather than the source —
-   * which leaves every imported league on exactly the path it was already on.
+   * A count of 0 or 1 is not a one-team league, it is a missing answer.
+   *
+   * 🛑 AND THE DECLARED SIZE WINS OUTRIGHT — ROSTER ROWS ARE NOW ONLY THE FALLBACK. Preferring
+   * the count made this module disagree with `league-rankings-v2` about the SAME league, which
+   * a manager sees as two different prices for one kicker. Observed on production 2026-08-29:
+   * `$20 12 man tree keeper` showed 301 (replacement K14) on My Team and 287 (K13) on Power
+   * Rankings, because the rankings engine counts Sleeper's own rosters (12, and its header says
+   * "12 managers") while this counted 13 rows in `Roster`.
+   *
+   * ⚠ THE ROSTER TABLE OVER-COUNTS AND NEVER UNDER-COUNTS, WHICH IS WHAT SETTLES THE ORDER.
+   * Measured across all 33 kicker leagues: 26 agree, 6 disagree, and in EVERY disagreement the
+   * row count is HIGHER than the declared size (13v12, 14v12, 15v14) or is the 0/1 non-answer.
+   * Stale and duplicate roster rows are a thing; a league shrinking below its declared size
+   * without the column being updated is not.
+   *
+   * ⚠ AND THE ORIGINAL PREMISE FOR COUNTING ROWS DOES NOT HOLD HERE. It was chosen because
+   * `leagueSize` is "frequently null on imported leagues" — but only ONE of the 33 lacks a
+   * declared size, so the fallback is the rare path, not the common one.
    */
   const rosterCount = await args.prisma.roster
     .count({ where: { leagueId: league.id } })
     .catch(() => 0)
 
   const declared = declaredTeamCount(league.leagueSize, league.settings)
-  const numTeams = rosterCount > 1 ? rosterCount : declared
+  const numTeams = declared ?? (rosterCount > 1 ? rosterCount : null)
 
   /*
    * ⚠ NULL RATHER THAN A GUESS. With no roster rows and no declared size there is nothing to

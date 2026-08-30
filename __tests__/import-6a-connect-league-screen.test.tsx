@@ -35,6 +35,7 @@ vi.mock('next/link', () => ({
 }))
 
 import ImportV4 from '@/components/core-app/screens/ImportV4'
+import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
 
 /*
  * ⚠ THE ESPN PANEL FETCHES ITS OWN STATUS ON MOUNT, and without a stub that promise
@@ -106,9 +107,23 @@ describe('6a rule 1 — the field follows the platform, and is never generic', (
    * Yahoo is the exception the rule has to survive: it takes no identifier at
    * all, so it must NOT render a username box that would sit there doing nothing.
    */
-  it('Yahoo asks for no identifier and says so', async () => {
+  /*
+   * ⚠ GATED ON CONFIG, NOT ON THE ASSUMPTION THAT YAHOO IS LIVE. Yahoo was
+   * switched off after this suite was written (import_runs provider='yahoo' = 0,
+   * ever), and a disabled pill ignores the click — so the assertion failed as if
+   * the screen had regressed when the product had simply changed underneath it.
+   */
+  it('Yahoo asks for no identifier and says so, while it is live', async () => {
+    const yahooLive = IMPORT_PROVIDER_UI_OPTIONS.some(
+      (o) => o.provider === 'yahoo' && o.available,
+    )
     render(<ImportV4 />)
     fireEvent.click(pill(/Yahoo/))
+    if (!yahooLive) {
+      /* Off: the pill must still be visible and must refuse the click. */
+      expect(pill(/Yahoo/)).toBeDisabled()
+      return
+    }
     expect(await screen.findByText(/Yahoo account/i)).toBeTruthy()
     expect(screen.getByText(/there is no username to enter/i)).toBeTruthy()
   })

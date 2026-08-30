@@ -22,7 +22,7 @@
  * Pure: no prisma, no fetch, no clock.
  */
 
-import { normalizeIdpPosition } from '@/lib/idp-kicker-values'
+import { idpPositionGroup } from '@/lib/core-app/scoringNotes'
 
 /** The three groups Sleeper actually rosters defenders as. */
 export type IdpGroup = 'LB' | 'DL' | 'DB'
@@ -178,7 +178,27 @@ export function buildIdpValuations(input: BuildIdpValuationsInput): IdpValuation
     DB: [],
   }
   for (const p of input.players) {
-    const group = normalizeIdpPosition(String(p.position ?? '')) as IdpGroup | null
+    /*
+     * 🛑 `idpPositionGroup`, NOT `normalizeIdpPosition` — THE TWO VOCABULARIES DISAGREED AND
+     * DEFENDERS FELL DOWN THE GAP.
+     *
+     * `isIdpPosition` (lib/core-app/scoringNotes.ts) decides who is ADMITTED to a league's
+     * board, and it accepts long-form spellings because the player cache genuinely stores them.
+     * `normalizeIdpPosition` (lib/idp-kicker-values.ts) is abbreviations only, so every one of
+     * those players resolved to NO GROUP here — no group means no replacement level, which
+     * means no VORP and no value at all.
+     *
+     * Measured on production 2026-08-29: 29 rostered NFL defenders were admitted and then
+     * silently unpriced this way, including Cameron Heyward ("Defensive End"), Minkah
+     * Fitzpatrick ("Safety"), Montez Sweat ("Defensive Lineman") and Isaiah Simmons ("Inside
+     * Linebacker"). They surfaced as "ranked, but replacement level at his position could not
+     * be established" — an honest message for a cause that was ours.
+     *
+     * ⚠ THE ADMISSION PREDICATE AND THE GROUPING FOLD MUST SHARE ONE VOCABULARY. They now both
+     * live in scoringNotes.ts, and a test asserts every spelling `isIdpPosition` admits also
+     * folds to a group.
+     */
+    const group = idpPositionGroup(p.position)
     if (!group || !byGroup[group]) continue
     if (typeof p.projectedPoints !== 'number' || !Number.isFinite(p.projectedPoints)) continue
     byGroup[group].push({ playerId: p.playerId, points: p.projectedPoints })

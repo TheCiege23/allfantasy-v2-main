@@ -255,11 +255,32 @@ export async function getLeagueMatchups(leagueId: string, week: number): Promise
   }
 }
 
+/**
+ * Sleeper answers 200 with a literal `null` body for a bracket that does not exist.
+ *
+ * 🛑 THIS IS NOT AN ERROR PATH AND THE EXISTING GUARDS NEVER SAW IT. `!response.ok` is false
+ * and nothing throws, so `return await response.json()` handed back `null` from a function
+ * DECLARED to return an array — a type lie that TypeScript cannot catch across a `json()`
+ * boundary. The first thing to touch it (`bracket.length`) threw.
+ *
+ * Measured 2026-08-29 while backfilling league history: 13 of 69 Sleeper leagues died on
+ * exactly this, every one an elimination format — Guillotine, Survivor, Elimination Station,
+ * Chopped, Zombie. Those leagues have no winners bracket, so Sleeper says `null` rather than
+ * `[]`. Verified directly: `/winners_bracket` for "Elimination Station 2" is `200` with body
+ * `null`, while "NFL Dreaming!" returns a populated array from the same endpoint.
+ *
+ * One league's missing bracket used to abort its entire `previous_league_id` walk, so a
+ * guillotine league could never have its season history recorded at all.
+ */
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export async function getPlayoffBracket(leagueId: string): Promise<SleeperPlayoffBracket[]> {
   try {
     const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/winners_bracket`);
     if (!response.ok) return [];
-    return await response.json();
+    return asArray<SleeperPlayoffBracket>(await response.json());
   } catch {
     return [];
   }
@@ -269,11 +290,20 @@ export async function getLosersBracket(leagueId: string): Promise<SleeperPlayoff
   try {
     const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/losers_bracket`);
     if (!response.ok) return [];
-    return await response.json();
+    /* Same endpoint family, same `null` for a league that has no bracket. */
+    return asArray<SleeperPlayoffBracket>(await response.json());
   } catch {
     return [];
   }
 }
+
+/*
+ * ⚠ THE OTHER ARRAY-TYPED FETCHERS IN THIS FILE STILL RETURN `await response.json()` RAW.
+ * The same 200-with-null shape would break them identically, but I only OBSERVED it on the
+ * two bracket endpoints and did not want to churn ten functions on a guess. If one of them
+ * ever throws "Cannot read properties of null", `asArray` above is the fix — do not add a
+ * second copy of it.
+ */
 
 export async function getLeagueInfo(leagueId: string): Promise<SleeperLeague | null> {
   try {

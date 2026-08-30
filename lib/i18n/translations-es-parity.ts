@@ -589,6 +589,10 @@ export const translationsEsParity: Record<string, string> = {
   "powerRankingsPage.phase.midPack": "Mitad de tabla",
   "powerRankingsPage.phase.rebuilding": "Reconstrucción",
   "powerRankingsPage.position.benchDepth": "Profundidad de banquillo:",
+  "powerRankingsPage.seasonFilterNote":
+    "Mostrando tus ligas de {{season}}. {{n}} de temporadas anteriores no aparecen.",
+  "powerRankingsPage.seasonWindowNote":
+    "Mostrando ligas activas en {{season}} o la temporada anterior. {{n}} más antiguas no aparecen.",
   "powerRankingsPage.position.kickers": "Pateadores",
   "powerRankingsPage.position.kickerEach": "Cada pateador de esta liga vale {{value}}.",
   "powerRankingsPage.position.kickerBasis":

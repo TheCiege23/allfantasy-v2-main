@@ -126,6 +126,41 @@ describe('GET /api/draft/players', () => {
     expect(body.players[0].adp).toBeNull()
   })
 
+  it('reports projections as null, never a fabricated 0', async () => {
+    /*
+     * `projPts: 0` / `proj: 0` asserted that every player in the pool projects to score
+     * nothing. `fantasy_projections` does exist (1,001 NFL rows, 2026) but only at week 1 — a
+     * weekly number is not a draft-board projection, so null is the honest value rather than
+     * substituting a real number that answers a different question.
+     */
+    getLiveAdpByNameMock.mockResolvedValue(boardOf([['Real Player', 4]]))
+    findManyMock.mockResolvedValue([player('Real Player', 'r1')])
+
+    const body = await callRoute()
+    expect(body.players[0].proj).toBeNull()
+    expect(body.players[0].proj).not.toBe(0)
+  })
+
+  it('returns exactly the declared DraftPlayerRow contract, with no stub fields', async () => {
+    /*
+     * The removed stubs were `firstName: ''`, `lastName: ''`, `fullName`, `sport`, `projPts`,
+     * `byeWeek`, `stats: {}` and `isDrafted: false`. The last was an actual claim — every
+     * player asserted undrafted, false the moment a draft starts — and nothing read any of
+     * them. A field that does not exist cannot be refilled with a stub, which is the point.
+     */
+    getLiveAdpByNameMock.mockResolvedValue(boardOf([['Real Player', 4]]))
+    findManyMock.mockResolvedValue([player('Real Player', 'r1')])
+
+    const body = await callRoute()
+    expect(Object.keys(body.players[0]).sort()).toEqual(
+      ['adp', 'bye', 'id', 'imageUrl', 'keyStat', 'name', 'position', 'proj', 'status', 'team'].sort(),
+    )
+    // Named individually so a regression says WHICH stub came back.
+    for (const dead of ['firstName', 'lastName', 'fullName', 'sport', 'projPts', 'byeWeek', 'stats', 'isDrafted']) {
+      expect(body.players[0]).not.toHaveProperty(dead)
+    }
+  })
+
   it('honours the limit', async () => {
     getLiveAdpByNameMock.mockResolvedValue(
       boardOf(Array.from({ length: 10 }, (_, i) => [`Player ${i}`, i + 1] as [string, number])),

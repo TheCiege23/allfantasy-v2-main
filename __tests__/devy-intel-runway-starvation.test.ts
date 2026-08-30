@@ -42,7 +42,12 @@ vi.mock('@/lib/devy-classification', () => ({
   ingestCFBDUsageAndPPA: (...a: unknown[]) => ingest(...a),
   ingestCFBDTeamContext: (...a: unknown[]) => ingest(...a),
   ingestCFBDRecruitingData: (...a: unknown[]) => ingest(...a),
+  // Added with the passing-profile phase. A mock that lists the ingest
+  // functions by name stops covering the module the moment a phase is added —
+  // the real prisma-backed ingest would then run inside a unit test.
+  ingestCFBDPassingProfile: (...a: unknown[]) => ingest(...a),
 }))
+vi.mock('@/lib/devy/devyStatsRefresh', () => ({ defaultStatSeason: () => 2026 }))
 
 /** A budget with a known amount of runway left. */
 function budgetWith(remainingMs: number) {

@@ -23,6 +23,18 @@ import { ChimmyNote } from '@/components/core-app/import/ChimmyNote'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import { ConnectedPlatforms } from '@/components/core-app/import/ConnectedPlatforms'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
+import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
+
+/*
+ * ⚠ NEVER HARDCODE HOW MANY PLATFORMS ARE LIVE. These assertions originally read
+ * "2 of 6" and "33%", which broke the day Yahoo was measured (import_runs
+ * provider='yahoo' = 0, ever) and switched off. The component derives the
+ * denominator from config precisely so it survives that; a test that does not
+ * derive it just becomes a second place to edit — and the failure looks like a
+ * regression rather than a config change.
+ */
+const LIVE = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available)
+const YAHOO_LIVE = LIVE.some((o) => o.provider === 'yahoo')
 
 function steps(states: Array<ImportStep['state']>): ImportStep[] {
   return states.map((state, i) => ({
@@ -161,7 +173,13 @@ describe('6e — connected accounts', () => {
     const yahoo = [...document.querySelectorAll('.af-ca-row')].find((r) =>
       /Yahoo/.test(r.textContent ?? ''),
     )!
-    expect(yahoo.getAttribute('data-status')).toBe('action-needed')
+    /* Off in config ⇒ the row is coming-soon and carries no CTA, which is rule 1
+       working rather than a regression. Only the live case can assert the rest. */
+    expect(yahoo.getAttribute('data-status')).toBe(YAHOO_LIVE ? 'action-needed' : 'coming-soon')
+    if (!YAHOO_LIVE) {
+      expect(yahoo.querySelector('.af-ca-fix')).toBeNull()
+      return
+    }
     /* Matched on the BUTTON, not the text: the row's method line also says
        "re-authorize to complete it", so a text match finds two nodes. */
     expect(within(yahoo as HTMLElement).getByRole('link', { name: /Re-authorize/i })).toBeTruthy()
@@ -182,7 +200,9 @@ describe('6e — connected accounts', () => {
     render(<ConnectedPlatforms sleeperUsername="guap" />)
     expect(await screen.findByText(/Connected by username/i)).toBeTruthy()
     expect(screen.getByText(/Connected with your ESPN cookies · stored encrypted/i)).toBeTruthy()
-    expect(screen.getByText(/never finished/i)).toBeTruthy()
+    /* The "started but never finished" wording is the Yahoo action-needed case. */
+    if (YAHOO_LIVE) expect(screen.getByText(/never finished/i)).toBeTruthy()
+    else expect(screen.getByText(/Not available yet/i)).toBeTruthy()
   })
 
   /** Handoff rule 5: "Add a platform" re-enters the connect flow, not a settings form. */
@@ -355,12 +375,17 @@ describe('6e — the completion bar counts live platforms', () => {
   it('reports a real fraction and a matching percentage', async () => {
     render(<ConnectedPlatforms sleeperUsername="guap" />)
     await waitFor(() => expect(document.querySelector('.af-ca-progress')).toBeTruthy())
-    expect(screen.getByText(/2 of 6 live platforms connected/i)).toBeTruthy()
-    expect(screen.getByText('33%')).toBeTruthy()
+
+    /* Sleeper (profile) + ESPN (cookies present) are connected in this fixture. */
+    const connected = 2
+    const total = LIVE.length
+    const pct = Math.round((connected / total) * 100)
+    expect(screen.getByText(new RegExp(`${connected} of ${total} live platforms connected`, 'i'))).toBeTruthy()
+    expect(screen.getByText(`${pct}%`)).toBeTruthy()
 
     const bar = document.querySelector('[role="progressbar"]')!
-    expect(bar.getAttribute('aria-valuenow')).toBe('2')
-    expect(bar.getAttribute('aria-valuemax')).toBe('6')
+    expect(bar.getAttribute('aria-valuenow')).toBe(String(connected))
+    expect(bar.getAttribute('aria-valuemax')).toBe(String(total))
   })
 
   /**
@@ -371,7 +396,13 @@ describe('6e — the completion bar counts live platforms', () => {
   it('takes the denominator from the live-provider config', async () => {
     render(<ConnectedPlatforms sleeperUsername={null} />)
     await waitFor(() => expect(document.querySelector('.af-ca-progress')).toBeTruthy())
-    const live = document.querySelectorAll('.af-ca-row').length
-    expect(screen.getByText(new RegExp(`of ${live} live platforms`, 'i'))).toBeTruthy()
+    /*
+     * ⚠ ROWS ARE NOT THE DENOMINATOR. Counting `.af-ca-row` counts every platform
+     * INCLUDING the coming-soon ones, which is exactly the number the bar must not
+     * use — a switched-off platform is not something you have failed to connect.
+     * This asserted "of 6" against a bar correctly saying "of 5".
+     */
+    expect(document.querySelectorAll('.af-ca-row').length).toBeGreaterThan(LIVE.length)
+    expect(screen.getByText(new RegExp(`of ${LIVE.length} live platforms`, 'i'))).toBeTruthy()
   })
 })

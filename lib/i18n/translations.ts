@@ -1580,6 +1580,10 @@ export const translations: Record<string, Record<string, string>> = {
     "powerRankingsPage.detail.positionValues": "Position Values",
     "powerRankingsPage.position.starterValue": "Starter Value:",
     "powerRankingsPage.position.benchDepth": "Bench Depth:",
+    "powerRankingsPage.seasonFilterNote":
+      "Showing your {{season}} leagues. {{n}} from earlier seasons aren't listed.",
+    "powerRankingsPage.seasonWindowNote":
+      "Showing leagues active in {{season}} or the season before. {{n}} older ones aren't listed.",
     "powerRankingsPage.position.kickers": "Kickers",
     "powerRankingsPage.position.kickerEach": "Every kicker in this league is worth {{value}}.",
     "powerRankingsPage.position.kickerBasis":

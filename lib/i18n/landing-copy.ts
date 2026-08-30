@@ -89,10 +89,10 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
   meta: {
     title: 'AllFantasy.ai — Every League You Play. One Screen. | NFL, NBA, NHL, MLB & More',
     description:
-      'Connect Sleeper, ESPN and Yahoo and see every fantasy league you play on one screen. Cross-league player finder, lineup and waiver alerts, trade grades. Season-long fantasy only — no gambling, no DFS.',
+      'Connect Sleeper and ESPN and see every fantasy league you play on one screen. Cross-league player finder, lineup and waiver alerts, trade grades. Season-long fantasy only — no gambling, no DFS.',
     ogTitle: 'AllFantasy.ai — Every League You Play. One Screen.',
     ogDescription:
-      'Connect Sleeper, ESPN and Yahoo. See what needs you across every league, and exactly where to go and fix it.',
+      'Connect Sleeper and ESPN. See what needs you across every league, and exactly where to go and fix it.',
   },
   nav: {
     how: 'How it works',
@@ -108,7 +108,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
     eyebrow: 'Fantasy sports only · no gambling',
     h1a: 'Every league you play.',
     h1b: 'One screen.',
-    sub: 'Connect Sleeper, ESPN and Yahoo. See what needs you across every league, and exactly where to go and fix it.',
+    sub: 'Connect Sleeper and ESPN. See what needs you across every league, and exactly where to go and fix it.',
     ctaPrimary: 'Get started free',
     ctaSecondary: 'See how it works',
     reassure: 'Free forever for players · Read-only · Cancel anytime',
@@ -128,7 +128,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
       {
         n: '01',
         title: ['All your leagues,', 'one board.'],
-        body: 'Sleeper, ESPN and Yahoo, with your real rosters and history. One Sunday view instead of four tabs.',
+        body: 'Sleeper and ESPN, with your real rosters and history. One Sunday view instead of four tabs.',
       },
       {
         n: '02',
@@ -154,8 +154,8 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
     h2: 'Questions managers ask',
     items: [
       {
-        q: 'Can I import my Sleeper, ESPN and Yahoo leagues?',
-        a: 'Yes — read-only. We copy your real rosters, matchups and scoring, and never change anything on the platform.',
+        q: 'Can I import my Sleeper and ESPN leagues?',
+        a: 'Yes — read-only. We copy your real rosters, matchups and scoring, and never change anything on the platform. Yahoo, MFL and Fantrax are not connected yet.',
       },
       {
         q: 'How does the cross-league player finder work?',
@@ -216,10 +216,10 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
   meta: {
     title: 'AllFantasy.ai — Todas tus ligas. Una sola pantalla. | NFL, NBA, NHL, MLB y más',
     description:
-      'Conecta Sleeper, ESPN y Yahoo y mira todas tus ligas de fantasy en una sola pantalla. Buscador de jugadores entre ligas, alertas de lineup y waivers, calificación de cambios. Solo fantasy de temporada — sin apuestas, sin DFS.',
+      'Conecta Sleeper y ESPN y mira todas tus ligas de fantasy en una sola pantalla. Buscador de jugadores entre ligas, alertas de lineup y waivers, calificación de cambios. Solo fantasy de temporada — sin apuestas, sin DFS.',
     ogTitle: 'AllFantasy.ai — Todas tus ligas. Una sola pantalla.',
     ogDescription:
-      'Conecta Sleeper, ESPN y Yahoo. Mira qué necesita tu atención en cada liga, y exactamente dónde entrar a resolverlo.',
+      'Conecta Sleeper y ESPN. Mira qué necesita tu atención en cada liga, y exactamente dónde entrar a resolverlo.',
   },
   nav: {
     how: 'Cómo funciona',
@@ -235,7 +235,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
     eyebrow: 'Solo fantasy · sin apuestas',
     h1a: 'Todas tus ligas.',
     h1b: 'Una sola pantalla.',
-    sub: 'Conecta Sleeper, ESPN y Yahoo. Mira qué necesita tu atención en cada liga, y exactamente dónde entrar a resolverlo.',
+    sub: 'Conecta Sleeper y ESPN. Mira qué necesita tu atención en cada liga, y exactamente dónde entrar a resolverlo.',
     ctaPrimary: 'Empieza gratis',
     ctaSecondary: 'Mira cómo funciona',
     reassure: 'Gratis para siempre · Solo lectura · Cancela cuando quieras',
@@ -255,7 +255,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
       {
         n: '01',
         title: ['Todas tus ligas,', 'un solo tablero.'],
-        body: 'Sleeper, ESPN y Yahoo, con tus rosters y tu historial reales. Una sola vista el domingo en vez de cuatro pestañas.',
+        body: 'Sleeper y ESPN, con tus rosters y tu historial reales. Una sola vista el domingo en vez de cuatro pestañas.',
       },
       {
         n: '02',
@@ -281,8 +281,8 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
     h2: 'Lo que preguntan los managers',
     items: [
       {
-        q: '¿Puedo importar mis ligas de Sleeper, ESPN y Yahoo?',
-        a: 'Sí — en modo solo lectura. Copiamos tus rosters, enfrentamientos y reglas de puntuación reales, y nunca cambiamos nada en la plataforma original.',
+        q: '¿Puedo importar mis ligas de Sleeper y ESPN?',
+        a: 'Sí — en modo solo lectura. Copiamos tus rosters, enfrentamientos y reglas de puntuación reales, y nunca cambiamos nada en la plataforma original. Yahoo, MFL y Fantrax todavía no están conectados.',
       },
       {
         q: '¿Cómo funciona el buscador de jugadores entre ligas?',

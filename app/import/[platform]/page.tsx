@@ -51,6 +51,19 @@ export async function generateMetadata({
   if (!landing) return {}
 
   const url = `${SITE}/import/${landing.slug}`
+  /*
+   * ⚠ NEVER ASK GOOGLE TO INDEX A PLATFORM THAT DOES NOT WORK. These pages exist to
+   * rank for "import my <platform> league", and this one nearly shipped doing that
+   * for Yahoo the same day a peer measured that Yahoo has NEVER imported a league —
+   * `import_runs` where provider='yahoo' is 0, ever — and flipped it to
+   * `available: false`.
+   *
+   * The visible CTA already followed provider-ui-config, but the title, description,
+   * FAQ and HowTo did not: the page would have been an indexable advert for a dead
+   * feature. Availability now gates indexing too, so switching a provider off in one
+   * config file withdraws its marketing page in the same commit.
+   */
+  const indexable = isImportProviderAvailable(landing.provider)
   return {
     title: landing.title,
     description: landing.description,
@@ -69,7 +82,7 @@ export async function generateMetadata({
       title: landing.title,
       description: landing.description,
     },
-    robots: { index: true, follow: true },
+    robots: { index: indexable, follow: true },
   }
 }
 
@@ -94,17 +107,28 @@ export default async function ImportPlatformLandingPage({
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'HowTo',
-        name: landing.heading,
-        description: landing.description,
-        totalTime: 'PT2M',
-        step: landing.steps.map((text, i) => ({
-          '@type': 'HowToStep',
-          position: i + 1,
-          text,
-        })),
-      },
+      /*
+       * ⚠ THE HowTo IS DROPPED WHEN THE PLATFORM IS OFF. Publishing "here are the four
+       * steps to import a Yahoo league" as structured data, for a path that returns you
+       * still disconnected, is a rich-result claim we cannot honour — and Google treats
+       * an unfollowable HowTo as a quality problem quite apart from it being untrue.
+       * The FAQ and breadcrumb stay: both remain accurate either way.
+       */
+      ...(available
+        ? [
+            {
+              '@type': 'HowTo',
+              name: landing.heading,
+              description: landing.description,
+              totalTime: 'PT2M',
+              step: landing.steps.map((text, i) => ({
+                '@type': 'HowToStep',
+                position: i + 1,
+                text,
+              })),
+            },
+          ]
+        : []),
       {
         '@type': 'FAQPage',
         mainEntity: landing.faq.map((f) => ({
@@ -158,6 +182,24 @@ export default async function ImportPlatformLandingPage({
         {/* Exactly one h1, and it names the platform — that is the query. */}
         <h1 className="af-lp-h1">{landing.heading}</h1>
         <p className="af-lp-intro">{landing.intro}</p>
+
+        {/*
+          ⚠ THE PAGE LEADS WITH THE TRUTH, NOT JUST A DISABLED BUTTON. Swapping the CTA
+          was not enough: everything above it — the headline, the intro, the four steps —
+          still read as a working feature, so a visitor scanned a page that promised an
+          import and only discovered otherwise at the button. Said once, at the top,
+          before any of the copy that assumes it works.
+        */}
+        {available ? null : (
+          <p className="af-lp-unavailable" role="status">
+            <span className="af-label">Not connectable right now</span>
+            <span>
+              {landing.name} imports are switched off while we fix the connection. Everything
+              below describes how it works when it is on &mdash; nothing here will import a
+              league today.
+            </span>
+          </p>
+        )}
 
         <p className="af-lp-needs">
           <span className="af-label">What you need</span>

@@ -55,7 +55,14 @@ export type DraftPlayerRow = {
    * missing ADP has to be expressible, or the only way to fill the field is to invent one.
    */
   adp: number | null
-  proj: number
+  /**
+   * Projected points, or NULL when unknown — which is currently always.
+   *
+   * Same reasoning as `adp` above: /api/draft/players sent a literal `0`, asserting that every
+   * player in the pool would score nothing. `fantasy_projections` exists but holds week-1
+   * weekly rows, and a weekly number is not a draft projection.
+   */
+  proj: number | null
   bye: number | null
   keyStat: string
 }

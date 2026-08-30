@@ -5,9 +5,11 @@ import {
   getCFBRecruits, getCFBTransferPortal, getCFBReturningProduction,
   getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings,
   getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing,
+  getCFBPassingPlayerSeason, getCFBPassingTeamSeason,
   type CFBPlayer, type CFBPlayerStats, type CFBDraftPick,
   type CFBRecruit, type CFBTransferPortalEntry, type CFBReturningProduction,
   type CFBPlayerUsage, type CFBPlayerPPA, type CFBTeamSPRating, type CFBPlayerWEPA,
+  type CFBPassingProfile, type CFBTeamPassingSummary,
 } from '@/lib/cfb-player-data'
 import { describeCfbdFailure } from '@/lib/cfbd-fetch'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
@@ -928,6 +930,133 @@ export async function ingestCFBDUsageAndPPA(season?: number): Promise<{ updated:
     }
   } catch (err: any) {
     errors.push(`Usage/PPA bulk fetch failed: ${err.message?.slice(0, 100)}`)
+  }
+
+  return { updated, errors }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// CFBD v2: Passing Detail Ingestion — air yards, ADOT, location, YAC
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Write the passing profile onto the devy pool.
+ *
+ * SHAPE COPIED FROM `ingestCFBDUsageAndPPA` DELIBERATELY: two season-wide
+ * fetches (one player, one team), then a write loop over TOP_CFB_TEAMS. The
+ * provider cost is 2 calls; the time cost is the DB loop. That is why this
+ * belongs on the cadence-gated intel schedule and not on the per-team stat
+ * slice.
+ *
+ * ⚠ PASS THE SEASON IN. The bare `getFullYear()` fallback is only a floor: in
+ * February it names a season that has not kicked off, and CFBD answers with an
+ * empty set. That is harmless here — an empty response writes nothing and
+ * stamps no season — but it burns a cadence slot on a question with no answer.
+ * The scheduler passes `defaultStatSeason()`, which holds the completed season
+ * until September and then follows the live one. This does not import it
+ * directly: `devyStatsRefresh` already imports this module, and reaching back
+ * would close the cycle.
+ *
+ * ⚠ NULLS ARE WRITTEN, ZEROS ARE NOT. A passer the feed has no air-yard data for
+ * gets null, never 0 — the distinction the migration exists for. And a field is
+ * only written when the feed supplied it, so a partially-covered response cannot
+ * blank a column that a better-covered earlier run had filled.
+ */
+export async function ingestCFBDPassingProfile(season?: number): Promise<{ updated: number; errors: string[] }> {
+  const year = season || new Date().getFullYear()
+  let updated = 0
+  const errors: string[] = []
+
+  try {
+    const [passers, teamUnits] = await Promise.all([
+      getCFBPassingPlayerSeason(year),
+      getCFBPassingTeamSeason(year),
+    ])
+
+    const teamSet = new Set(TOP_CFB_TEAMS)
+
+    const passersByTeam = new Map<string, Map<string, CFBPassingProfile>>()
+    for (const p of passers) {
+      if (!p.playerName || !p.team || !teamSet.has(p.team)) continue
+      if (!passersByTeam.has(p.team)) passersByTeam.set(p.team, new Map())
+      passersByTeam.get(p.team)!.set(normalizeName(p.playerName), p)
+    }
+
+    // OFFENSE ONLY. The defensive row is how deep opponents threw AGAINST this
+    // school; writing it into teamPassAdot would make a good pass defence read
+    // as a vertical offence, which is the exact inversion the adapter's
+    // `unit` discriminator exists to prevent.
+    const teamOffense = new Map<string, CFBTeamPassingSummary>()
+    for (const t of teamUnits) {
+      if (t.unit !== 'offense' || !t.team || !teamSet.has(t.team)) continue
+      teamOffense.set(t.team, t)
+    }
+
+    for (const team of TOP_CFB_TEAMS) {
+      const passerMap = passersByTeam.get(team) || new Map<string, CFBPassingProfile>()
+      const offense = teamOffense.get(team)
+
+      // School-wide context first: one updateMany for every eligible player at
+      // the school, the same way ingestCFBDTeamContext writes SP+.
+      if (offense) {
+        const teamData: any = {}
+        if (offense.adot != null) teamData.teamPassAdot = offense.adot
+        if (offense.yardsAfterCatch != null && offense.yacCompletions != null && offense.yacCompletions > 0) {
+          teamData.teamPassYacPerComp = offense.yardsAfterCatch / offense.yacCompletions
+        }
+
+        if (Object.keys(teamData).length > 0) {
+          try {
+            await prisma.devyPlayer.updateMany({
+              where: { school: team, devyEligible: true },
+              data: { ...teamData, lastSyncedAt: new Date() },
+            })
+          } catch (dbErr: any) {
+            errors.push(`Team passing context failed for ${team}: ${dbErr.message?.slice(0, 80)}`)
+          }
+        }
+      }
+
+      for (const [name, p] of passerMap) {
+        try {
+          const existing = await prisma.devyPlayer.findFirst({
+            where: { normalizedName: name, school: team },
+          })
+          if (!existing) continue
+
+          const updateData: any = { lastSyncedAt: new Date() }
+
+          if (p.attempts != null) updateData.passAttempts = p.attempts
+          if (p.completions != null) updateData.passCompletions = p.completions
+          if (p.airYards != null) updateData.airYards = p.airYards
+          if (p.adot != null) updateData.adot = p.adot
+          if (p.airYardsAttempts != null) updateData.airYardsAttempts = p.airYardsAttempts
+          if (p.yardsAfterCatch != null) updateData.yardsAfterCatch = p.yardsAfterCatch
+          if (p.yacCompletions != null) updateData.yacCompletions = p.yacCompletions
+
+          const hasLocations = Object.keys(p.locations).length > 0
+          if (hasLocations) updateData.passLocations = p.locations
+
+          // Only stamp the season once something from this season actually
+          // landed. Stamping it on an empty response would date a profile that
+          // is still last season's.
+          if (Object.keys(updateData).length > 1) {
+            updateData.passingProfileSeason = p.season || year
+            await prisma.devyPlayer.update({ where: { id: existing.id }, data: updateData })
+            updated++
+          }
+        } catch (dbErr: any) {
+          errors.push(`Passing profile update failed for ${name}: ${dbErr.message?.slice(0, 80)}`)
+        }
+      }
+    }
+  } catch (err: any) {
+    // CfbdUnavailableError must reach the scheduler intact: it is the difference
+    // between "no passer at these schools threw a measured ball" and "the key is
+    // over quota". The intel sweep catches it by type and reports a labeled
+    // skip; swallowing it here into an error string would report a clean zero.
+    if (err instanceof CfbdUnavailableError) throw err
+    errors.push(`Passing profile bulk fetch failed: ${err.message?.slice(0, 100)}`)
   }
 
   return { updated, errors }

@@ -104,13 +104,30 @@ describe('loadLeagueKickerValue — the AF-native slot map', () => {
 })
 
 describe('loadLeagueKickerValue — team count', () => {
-  it('prefers real roster rows over the declared size', async () => {
-    /* 14 actual rosters beats a stale leagueSize of 12 — this is the imported-league path. */
+  it('prefers the declared size over the roster-row count', async () => {
+    /*
+     * ⚠ THIS ASSERTION IS THE REVERSE OF WHAT IT ORIGINALLY SAID, AND THE REVERSAL IS THE POINT.
+     * Counting rows made this module quote a different price from `league-rankings-v2` for the
+     * same league: `$20 12 man tree keeper` read 301 (K14) on My Team and 287 (K13) on Power
+     * Rankings, because the rankings engine counts Sleeper's own rosters — 12, as its own header
+     * says — while this counted 13 `Roster` rows.
+     *
+     * Measured across all 33 production kicker leagues: 26 agree, and in every one of the 6
+     * disagreements the row count is HIGHER (13v12, 14v12, 15v14). The table over-counts; it
+     * never under-counts. So the declared size wins and 14 stale rows do not move replacement.
+     */
     const res = await loadLeagueKickerValue({
       prisma: fakePrisma(NATIVE({ K: 1 }), 14),
       leagueId: 'l1',
     })
-    expect(res!.replacementRank).toBe(15)
+    expect(res!.replacementRank).toBe(13) // declared 12, not the 14 rows
+  })
+
+  it('falls back to roster rows when nothing declares a size', async () => {
+    /* The rare path — exactly one of the 33 production kicker leagues lands here. */
+    const league = { ...NATIVE({ K: 1 }), leagueSize: null }
+    const res = await loadLeagueKickerValue({ prisma: fakePrisma(league, 10), leagueId: 'l1' })
+    expect(res!.replacementRank).toBe(11)
   })
 
   it('falls back to the declared size when roster rows are missing', async () => {

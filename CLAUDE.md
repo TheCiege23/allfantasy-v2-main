@@ -344,6 +344,152 @@ staged set before committing.
 
 **This repo is public.** Secret-scan before every push.
 
+### 🛑 CHERRY-PICK ONTO `main`. DO NOT MERGE IN THE SHARED TREE.
+
+User's decision, 2026-08-29, after six sessions spent a day working two
+incompatible ways. Landing work goes:
+
+```
+git worktree add --detach <tmp> origin/main
+git cherry-pick <your commit>
+git push origin HEAD:main
+```
+
+**Why, and it is not about tidy history.** A merge performed *in the shared
+checkout* can clobber peers' UNCOMMITTED edits — measured overlap that day on
+`app/import/page.tsx` and `ImportV4.tsx`, both of which had been dirty in the
+tree since morning. Protecting work that is not yet committed beats a clean
+graph. Cherry-picking touches nothing anyone else is holding.
+
+**The cost is accepted, not a defect.** `shared/f-working-tree` accumulates
+commits whose content is already upstream, so a later merge of that branch
+trips over every one of them. That is expected. It is why the branch is a
+staging area and not something to merge wholesale.
+
+⚠ **A CONFLICT IS SAFE ONLY WHEN `git patch-id --stable` MATCHES.**
+
+```
+git show <mainSha>   --format="" --patch | git patch-id --stable
+git show <branchSha> --format="" --patch | git patch-id --stable
+```
+
+Equal ids mean one change under two SHAs — resolve to either side. This
+happened three times in one day and each looked alarming until measured.
+
+🛑 **AND THE INVERSE IS THE TRAP THIS CONVENTION CREATES.** Duplicates become
+common enough that "conflict → probably a duplicate → take either side" turns
+into a habit, and it is wrong. On that same day two of five conflicts were
+genuinely divergent rewrites, and the branch did **not** contain main's
+`ace7eb5b3`; an auto-resolve loop had already taken the branch for all five
+paths. Resolving on the pattern rather than the evidence would have deleted a
+deployed fix with no conflict marker and no failing test.
+
+**The rule, in order:**
+
+1. `git patch-id --stable` both sides. Equal → resolve to either side.
+2. Not equal → the two sides are independent changes and **neither is a
+   superset**. Read `git diff <main>:<path> HEAD:<path>` in full and check
+   `git merge-base --is-ancestor <theirCommit> HEAD`.
+3. Both sides real work → **stop and find the author.** Not a merge-strategy
+   question.
+4. **Never auto-resolve a whole conflict set to one side.** That is how step 3
+   gets skipped.
+
+⚠ **`git commit -- <paths>` SCOPES TO PATHS, NOT TO YOUR HUNKS INSIDE THEM.** A
+peer's uncommitted edits in a file you commit ride along with no conflict and no
+marker — the mirror image of the trap above. So `git diff` read in full is the
+check in BOTH directions: what you might drop on a merge, and what you might
+sweep on a commit. It also only accepts already-TRACKED paths, and staging and
+committing in separate turns is how work gets swept into a peer's commit — do
+both in one command.
+
+⚠ Verify a push by SHA (`git ls-remote origin refs/heads/main`), never by
+grepping push output: a rejected push prints `-> main` too, and a pipe (`| tail`)
+reports the PIPE's exit code, so `$?` reads 0 over a failed push.
+
+### ⚠ A CHECK THAT CANNOT FAIL READS AS A PASS
+
+Three sessions hit this in one day, each in a different tool, each believing
+they had verified something. The common cause: **a pipeline's exit status is the
+LAST command's**, so the thing being tested never decides the result. Use
+`${PIPESTATUS[0]}`, or do not pipe the command whose status you are reading.
+
+- `git push … | tail` printed a success line over a rejection. **Verify a push
+  by comparing SHAs, never by reading its output or its exit status through a
+  pipe** — a rejected push prints `-> main` too, so grepping the text for
+  success fails the same way `$?` does. `git ls-remote origin refs/heads/main`
+  against the SHA you pushed is the only check that holds.
+- `ls <dir> | head && echo "HAS"` always takes the HAS branch, because `head`
+  exits 0 whether or not `ls` found anything. That reported a `node_modules`
+  junction in a worktree which had none, and nearly triggered a destructive
+  cleanup. For a junction, ask the filesystem: PowerShell
+  `(Get-Item <path> -Force).LinkType` is null when there is no link.
+- `npx tsc --noEmit` OOMs at the default heap on this repo, prints a V8 crash
+  dump instead of diagnostics, and `grep -c "error TS"` then returns 0 — which
+  reads exactly like a clean typecheck. Use the repo's own setting rather than a
+  remembered number: `npm run typecheck` is
+  `node --max-old-space-size=8192 …/tsc.js --noEmit`, so
+  `NODE_OPTIONS=--max-old-space-size=8192 npx tsc --noEmit` is the equivalent
+  when a script path will not resolve (a worktree with no local `node_modules`).
+  ⚠ This repo carries a standing error baseline, so a **non-zero exit is
+  normal** — the tell for the OOM is a crash dump and no `error TS` lines at
+  all, not the exit code.
+
+🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
+POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
+and confirm the check reports it. A green check that has never once gone red is
+not evidence, and on a long session it is the most expensive kind of comfort.
+
+### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
+
+User's decision, 2026-08-29, and the larger half of the build bill. The
+cherry-pick rule above settles HOW work lands; this settles WHEN.
+
+The pre-push hook states the cost from real data: **165 of 326 production builds
+in one 4.7-day window were superseded before they finished. Both billed, one
+served.** Six sessions each pushing as they finish reproduces that indefinitely —
+three builds went out inside a few minutes the day this was written.
+
+So: **commit freely, push rarely, and let ONE session do it.** Everyone else
+lands work on `shared/f-working-tree` and tells the pusher. The pusher batches
+and cherry-picks the batch onto `main`.
+
+⚠ **THE PUSHER IS A ROLE, NOT A SESSION — SESSIONS END.** Whoever holds it must
+announce it to the others (`ListAgents` + `SendMessage`), and hand it over
+explicitly when finishing. A designated pusher who vanishes silently blocks
+everyone, which is worse than the duplicate builds this replaces.
+
+⚠ **AND WAITING IS THE INTENDED RESPONSE TO THE HOOK.** If it refuses because a
+build is running, wait and retry. `AF_ALLOW_CONCURRENT_PUSH=1` exists for a
+genuine emergency and using it routinely turns the guard back into decoration.
+
+#### What the pusher checks, and what authors owe
+
+⚠ **BATCHING CHANGED WHAT A RED BUILD MEANS.** One SHA per session meant a
+failure named its author. A batch of six commits from four sessions that fails
+names nobody, and the person bisecting is the pusher — who wrote none of it and
+cannot tell an expected failure from a new one. User's decision on how that is
+covered:
+
+**Authors attest.** When handing work to the pusher, state what you ran and what
+it said — suite names and counts, not "tests pass". An author who cannot say
+which checks they ran is asking the pusher to guess.
+
+**The pusher runs a fast smoke over the batch**, not a full re-verification: a
+scoped typecheck and the test files touched across the union of the batch. That
+catches the thing attestation structurally cannot — one session's change
+breaking another's, which neither author would ever have run.
+
+**Neither is a full CI run.** If it goes red on main anyway, that is the
+accepted cost of fewer builds, and the pusher bisects with the authors rather
+than alone.
+
+⚠ **A MIGRATION IS NOT PUSHABLE WORK.** Code that ships ahead of its migration
+does NOT no-op — a generated client that knows about columns production lacks
+raises P2022, and a missing table raises P2021. Landing the code is a deploy;
+applying the schema change is a separate decision that belongs to the user. The
+pusher does neither on the author's say-so.
+
 ## Deploys cost money, and pushes are the meter
 
 🛑 **A PUSH TO `main` IS A DEPLOY. A COMMIT IS NOT.** Commit as often as you like;

@@ -14,6 +14,7 @@ import {
 } from "@/lib/sport-scope";
 import { useLanguage } from "@/components/i18n/LanguageProviderClient";
 import { KickerValuationBand, type KickerValuationView } from "./KickerValuationBand";
+import { selectLatestSeasonLeagues } from "./latestSeasonLeagues";
 
 type LeagueFormat = "redraft" | "dynasty" | "keeper";
 type RankingView = "power" | "dynasty" | "composite";
@@ -702,6 +703,28 @@ function LeagueGate({
   onSelect: (league: UserLeague) => void;
 }) {
   const { t, tInterpolate } = useLanguage();
+
+  /*
+   * TWO LAYERS, AND THEY DO DIFFERENT JOBS.
+   *
+   * The SERVER collapses by series (`?collapseSeries=1`), grouping a league's seasons on the
+   * `previous_league_id` chain so six cards named "AFC Dreaming!" become one at 2026. That is
+   * the deduplication, and it is what the earlier one-global-season filter got wrong: it also
+   * hid 234 leagues whose newest edition simply is not the current year.
+   *
+   * This is the RECENCY cut on top. Measured after collapse: 374 cards, of which 68 are the
+   * current season, 9 the previous, and 194 are 2021-2022 — leagues that genuinely ended, plus
+   * entries whose chains were never walked. A two-season window keeps what a manager might
+   * still rank and drops the dead tail.
+   *
+   * ⚠ It hides real leagues, so the count is stated below rather than left to be noticed.
+   */
+  const SEASON_WINDOW = 2;
+  const { visibleLeagues, latestSeason, hiddenCount } = useMemo(
+    () => selectLatestSeasonLeagues(leagues, SEASON_WINDOW),
+    [leagues],
+  );
+
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
       <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
@@ -713,6 +736,16 @@ function LeagueGate({
           </div>
           <h1 className="mt-2 text-3xl font-black">{t("powerRankingsPage.selectLeagueTitle")}</h1>
           <p className="mt-2 text-sm text-white/45">{t("powerRankingsPage.selectLeagueBody")}</p>
+          {/* Hidden leagues are counted out loud — a picker that quietly drops them reads as data loss. */}
+          {latestSeason && hiddenCount > 0 ? (
+            <p className="mt-1 text-xs text-white/35">
+              {tInterpolate("powerRankingsPage.seasonWindowNote", {
+                season: latestSeason,
+                n: hiddenCount,
+              })}
+            </p>
+          ) : null}
+
         </div>
       </div>
 
@@ -745,9 +778,9 @@ function LeagueGate({
           </div>
         ) : null}
 
-        {!loading && leagues.length > 0 ? (
+        {!loading && visibleLeagues.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {leagues.map((league) => {
+            {visibleLeagues.map((league) => {
               const platform = PLATFORM_LABELS[league.platform] ?? PLATFORM_LABELS.sleeper;
               return (
                 <button
@@ -1596,7 +1629,20 @@ export default function PowerRankingsPage() {
       setLeagueError(null);
 
       try {
-        const response = await fetch("/api/league/list", { cache: "no-store" });
+        /*
+         * `summary=1` drops `settings` and `rosters`, which this picker never reads —
+         * `normalizeLeagueFromList` below touches only top-level scalars. Measured: 5.28 MB
+         * across 557 leagues, of which those two fields are 94%.
+         *
+         * `collapseSeries=1` returns ONE row per league series at its newest season, grouped
+         * on the `previous_league_id` chain in `LeagueSeason`. That replaces the blunt
+         * current-season filter this page used to apply on the client, which collapsed the
+         * six copies of "AFC Dreaming!" correctly but also hid 234 leagues that have no
+         * current-season edition at all.
+         */
+        const response = await fetch("/api/league/list?summary=1&collapseSeries=1", {
+          cache: "no-store",
+        });
         if (response.ok) {
           const payload = (await response.json().catch(() => ({}))) as {
             leagues?: unknown[];

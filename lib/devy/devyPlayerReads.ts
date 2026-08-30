@@ -353,3 +353,144 @@ export async function getDevyStatsByNameFromDb(
   }
   return byName
 }
+
+/**
+ * Passing profile for the devy pool — air yards, ADOT, location, YAC.
+ *
+ * DB-first read of the columns `ingestCFBDPassingProfile` writes on the
+ * `passingProfile` phase of `/api/cron/import-players?intel=1`.
+ *
+ * ⚠ `adot` IS A RATIO OVER A PARTIAL DENOMINATOR, AND THIS RETURNS THE
+ * DENOMINATOR SO A CALLER CANNOT FORGET. CFBD's air-yard coverage is partial —
+ * its own note says 2025 is thin and even 2026 games can have gaps — so a
+ * passer with 40 measured attempts and one with 400 both report an ADOT and
+ * they are not comparable. `airYardsAttempts` is how many throws are actually
+ * behind the number. A surface that ranks on `adot` without a minimum on it is
+ * ranking noise at the top.
+ *
+ * Rows the phase has never written are EXCLUDED rather than returned as zeroes,
+ * the same rule `getDevyStatsByNameFromDb` follows: no profile is absence, not
+ * a passer who threw everything at the line of scrimmage.
+ */
+export interface DevyPassingProfile {
+  name: string
+  school: string
+  position: string
+  season: number | null
+  attempts: number | null
+  completions: number | null
+  airYards: number | null
+  adot: number | null
+  /** ⚠ ADOT's real denominator. NOT `attempts`. */
+  airYardsAttempts: number | null
+  yardsAfterCatch: number | null
+  yacCompletions: number | null
+  /** Sparse short/deep × left/middle/right grid; `{}` when no play carried one. */
+  locations: Record<string, unknown>
+  /** School offensive context, for reading a passer's own ADOT against scheme. */
+  teamPassAdot: number | null
+  teamPassYacPerComp: number | null
+}
+
+const PASSING_SELECT = {
+  name: true,
+  normalizedName: true,
+  school: true,
+  position: true,
+  passingProfileSeason: true,
+  passAttempts: true,
+  passCompletions: true,
+  airYards: true,
+  adot: true,
+  airYardsAttempts: true,
+  yardsAfterCatch: true,
+  yacCompletions: true,
+  passLocations: true,
+  teamPassAdot: true,
+  teamPassYacPerComp: true,
+} as const
+
+type PassingRow = {
+  name: string
+  normalizedName: string
+  school: string
+  position: string
+  passingProfileSeason: number | null
+  passAttempts: number | null
+  passCompletions: number | null
+  airYards: number | null
+  adot: number | null
+  airYardsAttempts: number | null
+  yardsAfterCatch: number | null
+  yacCompletions: number | null
+  passLocations: unknown
+  teamPassAdot: number | null
+  teamPassYacPerComp: number | null
+}
+
+function toPassingProfile(row: PassingRow): DevyPassingProfile {
+  return {
+    name: row.name,
+    school: row.school,
+    position: row.position,
+    season: row.passingProfileSeason,
+    attempts: row.passAttempts,
+    completions: row.passCompletions,
+    airYards: row.airYards,
+    adot: row.adot,
+    airYardsAttempts: row.airYardsAttempts,
+    yardsAfterCatch: row.yardsAfterCatch,
+    yacCompletions: row.yacCompletions,
+    locations:
+      row.passLocations && typeof row.passLocations === 'object' && !Array.isArray(row.passLocations)
+        ? (row.passLocations as Record<string, unknown>)
+        : {},
+    teamPassAdot: row.teamPassAdot,
+    teamPassYacPerComp: row.teamPassYacPerComp,
+  }
+}
+
+/**
+ * Passing profiles keyed by normalized name.
+ *
+ * `schools` narrows the read for callers that already know their scope; omitting
+ * it reads every passer the phase has written.
+ */
+export async function getDevyPassingProfilesByNameFromDb(
+  schools?: string[],
+): Promise<Map<string, DevyPassingProfile>> {
+  const rows = await prisma.devyPlayer.findMany({
+    where: {
+      ...(schools && schools.length > 0 ? { school: { in: schools } } : {}),
+      // Only rows the passing phase has actually written — see the header.
+      passingProfileSeason: { not: null },
+    },
+    select: PASSING_SELECT,
+    orderBy: { passingProfileSeason: 'desc' },
+  })
+
+  const byName = new Map<string, DevyPassingProfile>()
+  for (const row of rows) {
+    if (!byName.has(row.normalizedName)) byName.set(row.normalizedName, toPassingProfile(row))
+  }
+  return byName
+}
+
+/**
+ * One passer's profile, or null when the phase has never written one for them.
+ *
+ * Null is the honest answer for a player outside TOP_CFB_TEAMS, a non-passer, or
+ * a season CFBD has no air-yard coverage for. A caller must not substitute zero.
+ */
+export async function getDevyPassingProfileFromDb(name: string): Promise<DevyPassingProfile | null> {
+  const needle = normalizeDevyName(name)
+  if (needle.length < 2) return null
+
+  const row = await prisma.devyPlayer.findFirst({
+    where: { normalizedName: needle, passingProfileSeason: { not: null } },
+    select: PASSING_SELECT,
+    orderBy: { passingProfileSeason: 'desc' },
+  })
+
+  return row ? toPassingProfile(row) : null
+}
