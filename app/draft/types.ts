@@ -47,7 +47,14 @@ export type DraftPlayerRow = {
   imageUrl?: string | null
   /** Sleeper/RI injury/availability code (e.g. "Questionable", "IR", "Out"). */
   status?: string | null
-  adp: number
+  /**
+   * Real consensus ADP, or NULL when the market has not priced this player.
+   *
+   * Nullable deliberately: /api/draft/players used to send the row's ALPHABETICAL index here
+   * (`adp: i + 1` over `orderBy: name asc`), which the pool rendered under an ADP column. A
+   * missing ADP has to be expressible, or the only way to fill the field is to invent one.
+   */
+  adp: number | null
   proj: number
   bye: number | null
   keyStat: string

@@ -265,7 +265,9 @@ export function PlayerPool({ sport, draftedIds, onDraft, onQueue, canDraft, onPl
                   </div>
                 </td>
                 <td className="px-2 py-1 text-white/55">{p.position}</td>
-                <td className="px-2 py-1 text-white/45">{p.adp}</td>
+                {/* An em dash, not a blank and never a stand-in number: "the market has not
+                    priced this player" is information, and it is the honest cell here. */}
+                <td className="px-2 py-1 text-white/45">{p.adp ?? '—'}</td>
                 <td className="whitespace-nowrap px-2 py-1">
                   <button
                     type="button"
