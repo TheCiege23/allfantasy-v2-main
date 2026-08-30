@@ -8,7 +8,7 @@ import { ScheduleView } from './redraft/ScheduleView'
 import { StandingsView } from './redraft/StandingsView'
 import { TradeCenter } from './redraft/TradeCenter'
 import { WaiverCenter } from './redraft/WaiverCenter'
-import { IDPWaiverSection } from '@/app/idp/components/IDPWaiverSection'
+import { IDPWaiverSection } from '@/components/idp/IDPWaiverSection'
 import {
   LeagueDashboardPremiumShells,
   MatchupPremiumShells,
