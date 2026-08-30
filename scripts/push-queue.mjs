@@ -275,12 +275,21 @@ function createTicket(dir, { sha, label, branch, worktree }) {
   return null
 }
 
-function describeContext() {
+/**
+ * ⚠ `subjectFor` TAKES THE SHA BEING PUSHED, NOT `HEAD`. The pusher routinely
+ * pushes a cherry-picked batch tip that is not this checkout's HEAD, and HEAD
+ * moves under every session here anyway. Labelling a ticket from HEAD wrote the
+ * wrong commit subject into the journal twice on 2026-08-30 — the ticket was
+ * right, the audit trail described someone else's work. A journal that names the
+ * wrong commit is worse than one with no label.
+ */
+function describeContext(sha) {
+  const head = git(['rev-parse', 'HEAD'])
   return {
-    sha: git(['rev-parse', 'HEAD']),
+    sha: head,
     branch: git(['rev-parse', '--abbrev-ref', 'HEAD']),
     worktree: git(['rev-parse', '--show-toplevel']),
-    subject: git(['log', '-1', '--format=%s']),
+    subject: git(['log', '-1', '--format=%s', sha || head || 'HEAD']),
   }
 }
 
@@ -517,7 +526,7 @@ function cmdCheck() {
     process.exit(1)
   }
 
-  const ctx = describeContext()
+  const ctx = describeContext(sha)
   const { degraded, reason, live, mine, created } = ticketFor(dir, sha, ctx)
   if (degraded) allow(reason)
 
