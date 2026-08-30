@@ -620,7 +620,7 @@ async function resolvePlayers(
       composed.map(([id, p]) => [id, (p.team ? nextGameFor.get(p.team)?.opponent : null) ?? null])
     ),
     injuryBySleeperId: new Map(composed.map(([id]) => [id, injuryById.get(id) ?? null])),
-  })
+  }, sport)
 
   /*
    * ⚠ ONE PASS PER PLAYER, NOT ONE PER ROW. This iterated `rows` and wrote

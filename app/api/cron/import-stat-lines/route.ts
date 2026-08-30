@@ -41,6 +41,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncRollingInsightsPlayerStatsToDb } from "@/lib/stats/rollingInsightsPlayerStats"
 import { syncCfbdPlayerStatsToDb } from "@/lib/stats/cfbdPlayerStats"
+import { backfillCfbdIdsForNcaaf } from "@/lib/sports-data/cfbdIdentityBridge"
 import { backfillIdentityMapForSport } from "@/lib/sports-data/multiSportIdentityMap"
 import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
@@ -144,6 +145,38 @@ async function runOneSport(
     if (source === "cfbd") {
       const cfbd = await syncCfbdPlayerStatsToDb({ season })
       const ok = cfbd.written > 0
+
+      /*
+       * Link the CFBD ids onto PlayerIdentityMap in the same tick that creates them.
+       *
+       * 🛑 THIS IS THE SCHEDULED CALLER, AND SKIPPING IT IS THE FAILURE THIS REPO KEEPS
+       * REPEATING. `ingestCFBDStats` and the four devy intel feeds were each correct code
+       * with nothing calling them, and each time the columns sat empty in production while
+       * every surface reading them looked healthy. A bridge nobody runs is worse than no
+       * bridge: `/core` would query AFProjectionSnapshot for college players, join on a
+       * `cfbdId` that is null everywhere, and render an empty lineup that looks like "no
+       * projections exist" rather than "nothing linked them".
+       *
+       * Here rather than on its own schedule because this is the moment new CFBD ids
+       * appear — a separate cadence would always be one run behind the roster.
+       *
+       * ⚠ ITS FAILURE MUST NOT FAIL THE STAT IMPORT. The stat lines are already written and
+       * are useful on their own; a bridge error is reported on the response and nowhere
+       * else. It is also the first thing to raise P2022 if the `cfbdId` migration has not
+       * been applied yet, which is a deploy-ordering problem and not a reason to lose the
+       * stats.
+       */
+      let bridge: Awaited<ReturnType<typeof backfillCfbdIdsForNcaaf>> | null = null
+      let bridgeError: string | null = null
+      if (ok) {
+        try {
+          bridge = await backfillCfbdIdsForNcaaf({ season: String(cfbd.season) })
+        } catch (e) {
+          bridgeError = (e instanceof Error ? e.message : String(e)).slice(0, 160)
+          console.warn(`[cron/import-stat-lines] NCAAF cfbdId bridge failed:`, bridgeError)
+        }
+      }
+
       return {
         body: {
           ok,
@@ -155,6 +188,7 @@ async function runOneSport(
           written: cfbd.written,
           skippedNonFantasy: cfbd.skippedNonFantasy,
           errors: cfbd.errors,
+          cfbdIdBridge: bridgeError ? { error: bridgeError } : bridge,
           durationMs: Date.now() - startedAt,
         },
         failed: !ok,
