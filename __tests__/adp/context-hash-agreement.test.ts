@@ -3,8 +3,8 @@
  *
  * `AllFantasyAdpSnapshot` is keyed on a sha256 over seven fields. The recompute built that tuple
  * from `DraftSession`; `readSnapshotForLeague` built it from `League` and `settings.draft.type`.
- * Three of the seven could differ, and any one of them means a reader finds ZERO rows for players
- * written seconds earlier.
+ * TWO of the seven could differ - `draftType` and `teamCount` - and either one means a reader
+ * finds ZERO rows for players written seconds earlier.
  *
  * 🛑 THE FAILURE IS INVISIBLE BY CONSTRUCTION. readSnapshotForLeague never falls back to market
  * ADP — deliberately — so an empty result renders as em-dashes, which is exactly what the product
@@ -47,10 +47,13 @@ import { buildDraftContext } from '@/lib/adp/draftContextKey'
 import { buildContextHash } from '@/lib/adp/computeAllFantasyAdp'
 
 /*
- * Every one of these is a field the two sides used to disagree about:
- *   leagueVariant 'Dynasty'  — writer lowercased it, reader did not
- *   draftType     session says 'linear', settings says 'snake' — reader read settings
- *   teamCount     session says 10, leagueSize is null — reader defaulted to 12
+ * The fixture keeps both real divergences live at once:
+ *   draftType     session says 'linear', settings says 'snake' - the reader read settings
+ *   teamCount     session says 10, leagueSize is null - the reader defaulted to 12
+ *
+ * `leagueVariant` is capitalised here too, but that is NOT a third divergence: `buildContextHash`
+ * lowercases leagueType itself, so 'Dynasty' and 'dynasty' have always hashed identically. It is
+ * left in the fixture as a standing check that the hash keeps normalising it.
  */
 const LEAGUE_ROW = {
   sport: 'NFL',
@@ -148,7 +151,12 @@ describe('writer and reader agree on the context hash', () => {
 })
 
 describe('each field that historically diverged', () => {
-  it('lowercases leagueVariant on both sides', () => {
+  /*
+   * This one PASSED BEFORE THE FIX TOO, and is kept as a normalisation guard rather than a
+   * regression test. buildContextHash lowercases leagueType, so casing never changed a hash.
+   * It would only start failing if someone removed that normalisation.
+   */
+  it('normalizes leagueVariant casing in the hash itself', () => {
     const upper = buildDraftContext({
       league: { ...LEAGUE_ROW, leagueVariant: 'Dynasty' },
       session: LEAGUE_ROW.draftSessions,
