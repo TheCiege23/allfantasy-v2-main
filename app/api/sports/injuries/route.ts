@@ -117,8 +117,23 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
       refreshed: false,
       isStale: stale,
       lastSyncedAt: latestFetched?.toISOString() ?? null,
-      message:
-        injuries.length === 0
+      /*
+       * ⚠ "NO SOURCE" AND "NO INJURIES" ARE OPPOSITE CLAIMS AND USED TO RENDER IDENTICALLY.
+       *
+       * This route returned `injuries: []` with "No cached NCAAF injuries are available yet"
+       * for college — a sentence whose "yet" implies the feed is merely behind. It is not:
+       * the NCAA mandates no injury report and no provider we carry publishes one, so the
+       * list will be empty every day of the season. A college manager reading that on a
+       * Saturday reasonably concludes their starters are fine.
+       *
+       * `sourceAvailable` now comes from the read port itself (see InjuryFactList.coverage),
+       * so it cannot drift from the verdict every other surface gets.
+       */
+      sourceAvailable: factList.coverage.sourceAvailable,
+      coverageNote: factList.coverage.reason,
+      message: !factList.coverage.sourceAvailable
+        ? factList.coverage.reason
+        : injuries.length === 0
           ? `No cached ${parsedSport.isWorldCup ? 'World Cup' : parsedSport.sport} injuries are available yet.`
           : stale
             ? 'Cached injury data is stale. Admin/cron sync must refresh provider data.'

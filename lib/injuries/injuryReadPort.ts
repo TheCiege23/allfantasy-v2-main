@@ -170,6 +170,16 @@ export interface InjuryResolution {
   newestFetchedAt: Date | null
   /** True when the whole feed is stale, i.e. ingestion itself has stopped. */
   feedStale: boolean
+  /**
+   * Whether any feed can answer for this sport at all. See the note on
+   * {@link InjuryFactList.coverage} — same verdict, same reason for carrying it in the
+   * payload rather than trusting each of 22 callers to ask separately.
+   *
+   * ⚠ AN EMPTY `byPlayer` WITH `sourceAvailable: false` MEANS "WE CANNOT KNOW", and a
+   * caller must not render it as "no injury news". For a college roster those are opposite
+   * claims.
+   */
+  coverage: { sourceAvailable: boolean; reason: string | null }
 }
 
 interface InjuryRow {
@@ -294,13 +304,21 @@ export async function resolveInjuryFacts(args: {
 }): Promise<InjuryResolution> {
   const now = args.now ?? new Date()
   const sport = args.sport.toUpperCase()
+  const cov = injuryCoverageFor(sport)
+  const coverage = { sourceAvailable: cov.covered, reason: cov.reason }
+
   const empty: InjuryResolution = {
     byPlayer: new Map(),
     ambiguous: [],
     newestFetchedAt: null,
     feedStale: true,
+    coverage,
   }
   if (args.players.length === 0) return empty
+
+  /* No source for this sport — say so instead of querying and returning a bare empty map.
+   * `feedStale: false` because nothing is broken: there is simply nothing to be stale. */
+  if (!coverage.sourceAvailable) return { ...empty, feedStale: false }
 
   let rows: InjuryRow[] = []
   try {
@@ -381,6 +399,7 @@ export async function resolveInjuryFacts(args: {
     ambiguous,
     newestFetchedAt,
     feedStale: feedAgeHours > INJURY_STALE_AFTER_HOURS,
+    coverage,
   }
 }
 
@@ -396,6 +415,22 @@ export interface InjuryFactList {
   newestFetchedAt: Date | null
   /** True when the whole feed is stale, i.e. ingestion itself has stopped. */
   feedStale: boolean
+  /**
+   * Whether any feed can answer for this sport AT ALL — the same verdict
+   * {@link injuryCoverageFor} gives, returned here so a list consumer cannot miss it.
+   *
+   * ⚠ RETURNED, NOT JUST AVAILABLE. `injuryCoverageFor` has existed since NCAAF was
+   * established as unsourceable, and the doc on it said "callers should render `reason`
+   * instead of an empty list". Measured 2026-08-30: of the 22 modules reading this port,
+   * exactly TWO called it — `/api/start-sit/injuries` and the mock-draft pool. Every other
+   * surface, including the public `/api/sports/injuries`, Decision OS and Chimmy, rendered
+   * `facts: []` for a college league with nothing to distinguish it from a clean bill of
+   * health. "Callers should" is not a mechanism; putting the verdict in the payload they
+   * already destructure is.
+   *
+   * `sourceAvailable: false` means WE CANNOT KNOW. It never means nobody is hurt.
+   */
+  coverage: { sourceAvailable: boolean; reason: string | null }
 }
 
 /**
@@ -430,7 +465,25 @@ export async function listInjuryFacts(args: {
   const now = args.now ?? new Date()
   const sport = args.sport.toUpperCase()
   const limit = Math.max(1, Math.min(args.limit ?? 300, 1000))
-  const empty: InjuryFactList = { facts: [], newestFetchedAt: null, feedStale: true }
+
+  /*
+   * Resolved BEFORE the query, and attached to every return path including the error one.
+   * An unsourceable sport must carry its reason even when the read throws — that is exactly
+   * the moment a caller is most likely to render a bare empty list.
+   */
+  const cov = injuryCoverageFor(sport)
+  const coverage = { sourceAvailable: cov.covered, reason: cov.reason }
+
+  const empty: InjuryFactList = { facts: [], newestFetchedAt: null, feedStale: true, coverage }
+
+  /*
+   * ⚠ ANSWER "NO SOURCE" WITHOUT LOOKING. For NCAAF the table is not empty — it holds the
+   * three archival rows ESPN's college feed replays, dated 2020-11-21, 2022-11-03 and
+   * 2022-11-26. The report-age cutoff below correctly drops them, so the query returns [] and
+   * `feedStale: true`, which is indistinguishable from "the feed broke". Short-circuiting here
+   * makes the difference explicit and saves the query.
+   */
+  if (!coverage.sourceAvailable) return { ...empty, feedStale: false }
 
   const maxReportAgeHours =
     args.maxReportAgeHours === undefined ? INJURY_PRIOR_SEASON_AFTER_HOURS : args.maxReportAgeHours
@@ -536,6 +589,7 @@ export async function listInjuryFacts(args: {
     facts,
     newestFetchedAt,
     feedStale: feedAgeHours > INJURY_STALE_AFTER_HOURS,
+    coverage,
   }
 }
 

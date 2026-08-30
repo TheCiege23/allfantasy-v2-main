@@ -28,6 +28,7 @@ import { fetchWithChain } from "@/lib/workers/api-chain"
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { getWeekBoard } from "@/lib/sports-data/sleeperMarketService"
+import { projectionCoverageFor } from "@/lib/projections/projectionCoverage"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -57,10 +58,17 @@ const PROJECTION_TTL_MS = 7 * 24 * 60 * 60 * 1000
  * That distinction matters operationally. A sport with no source is not a
  * failing sport: reporting it as an error forever teaches the operator to
  * ignore this cron, which is exactly how the next REAL failure gets missed.
+ *
+ * ⚠ MOVED TO A SHARED DEFINITION SITE 2026-08-30, and the move IS the fix.
+ * This knowledge lived only here, so the ingest knew not to bother while every
+ * reader downstream rendered a blank projection with no way to find out why. It
+ * now comes from `lib/projections/projectionCoverage.ts`, which the read paths
+ * consult too — the writer and the readers can no longer disagree about which
+ * sports have a feed.
  */
 const HAS_PROJECTION_SOURCE: Record<ProjectionSport, boolean> = {
-  NFL: true,
-  NCAAF: false,
+  NFL: projectionCoverageFor("NFL").weeklyFeedAvailable,
+  NCAAF: projectionCoverageFor("NCAAF").weeklyFeedAvailable,
 }
 
 const SEASON_ACTIVE_MONTHS: Record<ProjectionSport, readonly number[]> = {
