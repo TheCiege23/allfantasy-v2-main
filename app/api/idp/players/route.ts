@@ -8,6 +8,7 @@ import { isIdpPosition } from '@/lib/idp-kicker-values'
 import { getRosteredPlayerIdsInLeague, matchesIdpPositionFilter } from '@/lib/idp/idpRouteHelpers'
 import { prisma } from '@/lib/prisma'
 import { loadDefenseHub } from '@/lib/idp-projections/defenseHub'
+import { loadLeagueDefenderBoard } from '@/lib/values/leagueDefenderBoard'
 import { loadLeagueKickerValue } from '@/lib/kicker-values/loadLeagueKickerValue'
 import {
   resolveLeagueValueSurfaces,
@@ -108,6 +109,24 @@ export async function GET(req: NextRequest) {
   if (view === 'kicker-value') {
     const payload = await loadLeagueKickerValue({ prisma, leagueId })
     return NextResponse.json(payload ?? { value: null })
+  }
+  /*
+   * The trade board: every defender in the league and what he is worth HERE, with the team
+   * holding him.
+   *
+   * 🛑 THE DIFFERENCE FROM `defense-hub` IS ONE WORD, AND IT IS THE WHOLE FEATURE. The hub
+   * prices the entire league — it must, because replacement level is a property of the league —
+   * and then renders only the caller's own players. So a manager could see what HIS linebacker
+   * was worth and had no way to ask what the one he wants to trade for is worth. The values
+   * were already computed and thrown away.
+   *
+   * ⚠ SAME PLACEMENT LOGIC AS THE HUB: before the `isIdpLeague` guard, because "this league
+   * does not roster defenders" is a state worth rendering rather than a 404, and on this route
+   * rather than a new one because the repo is at its route ceiling.
+   */
+  if (view === 'trade-board') {
+    const payload = await loadLeagueDefenderBoard({ prisma, leagueId, userId })
+    return NextResponse.json(payload)
   }
   if (view === 'waiver-board') {
     const lim = Number(searchParams?.get('limit'))
