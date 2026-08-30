@@ -79,6 +79,43 @@ describe('idpPositionGroup', () => {
   })
 })
 
+/**
+ * 🛑 THE VALUATION PATH MUST USE THE SAME VOCABULARY AS THE ADMISSION PREDICATE.
+ *
+ * `isIdpPosition` decides who enters a league's board; `idpValuation` folds them into DL/LB/DB
+ * to establish replacement level. When those disagreed, a defender was admitted and then had
+ * NO group — no group, no replacement level, no VORP, no value. Measured on production
+ * 2026-08-29: 29 rostered defenders were unpriced this way, including Cameron Heyward, Minkah
+ * Fitzpatrick, Montez Sweat and Isaiah Simmons.
+ *
+ * A source assertion, because the failure is a MISSING import rather than a wrong output — the
+ * old resolver returned null perfectly happily.
+ */
+describe('the valuation path shares the admission vocabulary', () => {
+  it('groups with idpPositionGroup rather than the abbreviation-only resolver', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const src = readFileSync(resolve(process.cwd(), 'lib/idp-projections/idpValuation.ts'), 'utf8')
+    expect(src).toContain("import { idpPositionGroup } from '@/lib/core-app/scoringNotes'")
+    /*
+     * The IMPORT, not any mention — the comment above the fold names the old resolver on
+     * purpose, so a bare `not.toContain` would fail on the explanation rather than the code.
+     */
+    expect(src).not.toMatch(/import \{[^}]*normalizeIdpPosition[^}]*\}/)
+    expect(src).toMatch(/const group = idpPositionGroup\(/)
+  })
+
+  /** The spellings that were actually dropped, named so a regression is recognisable. */
+  it('groups every spelling that was silently unpriced in production', () => {
+    for (const p of [
+      'Cornerback', 'Linebacker', 'Defensive Tackle', 'Safety', 'Defensive End',
+      'Inside Linebacker', 'Defensive Lineman', 'Outside Linebacker',
+    ]) {
+      expect(idpPositionGroup(p), `${p} must fold`).not.toBeNull()
+    }
+  })
+})
+
 describe('shortIdpPosition', () => {
   it('abbreviates the long forms so one column spells them one way', () => {
     expect(shortIdpPosition('Cornerback')).toBe('CB')
