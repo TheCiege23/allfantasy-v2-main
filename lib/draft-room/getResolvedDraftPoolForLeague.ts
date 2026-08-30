@@ -106,10 +106,10 @@ export type DraftPoolRawRow = {
   fantasyPointsPerGame?: number | null
   lifetimeValue?: number | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits
-  /** D.7 — Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
+  /** D.7 â Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
   yearsExp?: number | null
   isRookie?: boolean | null
-  /** Block B.2-A — rookie inference metadata for non-NFL sports.
+  /** Block B.2-A â rookie inference metadata for non-NFL sports.
    * Sport propagated so the predicate can branch on per-sport rules.
    * Year fields normalized to camelCase here; pool rows may surface either
    * snake_case or camelCase from upstream sources. */
@@ -127,7 +127,7 @@ export type DraftPoolRawRow = {
 export type GetResolvedDraftPoolOptions = {
   limit?: number
   poolType?: PoolType | null
-  /** Normalized lowercase trimmed names — excludes rows matching drafted picks by name. */
+  /** Normalized lowercase trimmed names â excludes rows matching drafted picks by name. */
   excludeDraftedNames?: ReadonlySet<string>
   excludeDraftedPlayerIds?: ReadonlySet<string>
   /**
@@ -159,7 +159,7 @@ type SportPoolRow = {
   status?: string | null
   player_id?: string | null
   age?: number | null
-  /** Block B.2-A — rookie inference inputs surfaced from SportsPlayer when
+  /** Block B.2-A â rookie inference inputs surfaced from SportsPlayer when
    * available. Both snake_case (DB) and camelCase (already-normalized) are
    * accepted so the resolver can read either shape without a refactor. */
   draft_year?: number | string | null
@@ -202,7 +202,7 @@ function injuryNameKey(name: string | null | undefined): string {
  * Phase 2 (Player Pool Identity Cleanup): delegates to the shared
  * `canonicalName` helper which strips apostrophes, dots, suffixes (Jr/Sr/III)
  * and collapses single-letter token pairs. The previous body (`.trim().toLowerCase()`)
- * left Ja'Marr/Jamarr, A.J./AJ, MHJ/MH-Jr as different keys — every SportsPlayer
+ * left Ja'Marr/Jamarr, A.J./AJ, MHJ/MH-Jr as different keys â every SportsPlayer
  * cache lookup MISSED, which is why the audit reported `missing sleeperId: 1963/1963`.
  *
  * Both the cache build and the lookup go through this function, so equality
@@ -220,7 +220,7 @@ function normalizeKeyPart(value: string | null | undefined): string {
  * Map-build only: TheSportsDB stores full English position names ("Wide Receiver",
  * "Running Back") while every other source and all pool rows use abbreviations
  * ("WR", "RB"). Without this normalization, the sportsPlayer maps get keyed on
- * "wide receiver" while pool lookups use "wr" — they never match and the
+ * "wide receiver" while pool lookups use "wr" â they never match and the
  * TheSportsDB high-quality cutout images are silently skipped.
  *
  * Called only when building the sportsPlayer maps; the lookup side uses the
@@ -266,10 +266,10 @@ const LOOSE_NAME_ALIASES: Record<string, string> = {
 }
 
 /**
- * Phase 2 — delegated to shared `canonicalName`. The previous body turned
- * apostrophes into spaces and special-cased only `de von → devon`, missing
+ * Phase 2 â delegated to shared `canonicalName`. The previous body turned
+ * apostrophes into spaces and special-cased only `de von â devon`, missing
  * Ja'Marr / D'Andre / O'Donnell etc. `canonicalName` strips apostrophes outright
- * and applies the same rule to every name. The `LOOSE_NAME_ALIASES` map (`cam → cameron`)
+ * and applies the same rule to every name. The `LOOSE_NAME_ALIASES` map (`cam â cameron`)
  * is no longer applied; if a Cam vs. Cameron alias is needed it should be a
  * documented player-mapping table, not a generic substitution.
  */
@@ -466,7 +466,7 @@ function mergeDbPoolIntoRawList(
     seenNames.add(norm)
     rawList.push({
       name: p.full_name,
-      position: p.position ?? '—',
+      position: p.position ?? 'â',
       team: p.team_abbreviation ?? null,
       playerId: p.external_source_id ?? p.player_id ?? null,
       adp: null,
@@ -537,7 +537,7 @@ function jrAliasBaseKey(name: string, position: string, team: string | null | un
 }
 
 /**
- * Phase 2 — strict identity dedupe.
+ * Phase 2 â strict identity dedupe.
  *
  * Primary key is `strictIdentityKey(name, position)` (canonicalName + canonicalPos),
  * deliberately team-AGNOSTIC. The audit revealed 33 duplicate identity groups
@@ -550,8 +550,8 @@ function jrAliasBaseKey(name: string, position: string, team: string | null | un
  *   +120  has a non-FA, non-blank team
  *   +120  has a valid sleeperId
  *   +60   has a valid ADP
- *   +20   ADP is in the realistic range (≤ 400)
- *   +5    longer display name (tiebreaker — prefers "A.J. Brown" over "AJ Brown")
+ *   +20   ADP is in the realistic range (â¤ 400)
+ *   +5    longer display name (tiebreaker â prefers "A.J. Brown" over "AJ Brown")
  */
 function dedupeEnrichedRawRows(rows: DraftPoolRawRow[]): DraftPoolRawRow[] {
   const bestByKey = new Map<string, DraftPoolRawRow>()
@@ -662,7 +662,7 @@ function filterExcludedDraftEntries(
 }
 
 /**
- * Phase 3b — perf instrumentation. Set `AF_DRAFT_POOL_PERF=1` (env) or
+ * Phase 3b â perf instrumentation. Set `AF_DRAFT_POOL_PERF=1` (env) or
  * `process.env.AF_DRAFT_POOL_PERF` to log per-step timings to stderr. Off by
  * default so we don't spam in production.
  */
@@ -731,7 +731,8 @@ export async function getResolvedDraftPoolForLeague(
     }),
     prisma.draftSession.findUnique({
       where: { leagueId },
-      select: { devyConfig: true, c2cConfig: true, keeperSelections: true, draftType: true },
+      /* `teamCount` is here for the AI ADP context hash below - see the block comment there. */
+      select: { devyConfig: true, c2cConfig: true, keeperSelections: true, draftType: true, teamCount: true },
     }),
   ])
   perfLeagueDraft()
@@ -775,7 +776,7 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   /**
-   * Block A — multi-sport ADP seed.
+   * Block A â multi-sport ADP seed.
    * Build a sport-agnostic raw-list seed from the averaged ADP rows so non-NFL
    * pools (NBA / NHL / MLB / NCAAB / SOCCER) can start from real ADP order
    * instead of falling through to a SportsPlayer-only slice. Caller decides
@@ -836,14 +837,14 @@ export async function getResolvedDraftPoolForLeague(
   const injuryByPlayerId = new Map<string, InjuryLookupRow>()
   const injuryByNameTeam = new Map<string, InjuryLookupRow>()
   const injuryByName = new Map<string, InjuryLookupRow>()
-  /** Names held by more than one distinct athlete — never bind these by name alone. */
+  /** Names held by more than one distinct athlete â never bind these by name alone. */
   const injuryNameCollisions = new Set<string>()
   try {
-    // Canonical injury read port — TTL-respected, ONE row per player, freshest
+    // Canonical injury read port â TTL-respected, ONE row per player, freshest
     // source wins. Replaces the InjuryReportRecord batch load (no scheduled
     // writer; measured 103.8 days stale in prod). Facts carry no provider
     // playerId, so the id tier below simply never populates and binding runs
-    // on the verified name+team / collision-refusing name tiers — the tiers
+    // on the verified name+team / collision-refusing name tiers â the tiers
     // that already carried the Slice 15 protections.
     const perfInjuries = perfStart(`5a. injury read port batch load (${sport})`)
     const factList = await listInjuryFacts({ sport, maxAgeHours: 21 * 24, limit: 1000 })
@@ -904,7 +905,7 @@ export async function getResolvedDraftPoolForLeague(
       .catch(() => [] as any[])
     rawList = devyPlayers.map((p: any) => ({
       name: p.name,
-      position: p.position ?? '—',
+      position: p.position ?? 'â',
       team: p.school ?? p.nflTeam ?? null,
       adp: p.devyAdp != null ? Number(p.devyAdp) : null,
       college: p.school ?? null,
@@ -948,7 +949,7 @@ export async function getResolvedDraftPoolForLeague(
           seenNames.add(norm)
           rawList.push({
             name: p.full_name,
-            position: p.position ?? '—',
+            position: p.position ?? 'â',
             team: p.team_abbreviation ?? null,
             playerId: p.external_source_id ?? (p as { player_id?: string | null }).player_id ?? null,
             adp: null,
@@ -981,7 +982,7 @@ export async function getResolvedDraftPoolForLeague(
     }
   } else {
     /**
-     * Block A — non-NFL sports (NBA / NHL / MLB / NCAAB / SOCCER + NCAAF
+     * Block A â non-NFL sports (NBA / NHL / MLB / NCAAB / SOCCER + NCAAF
      * non-redraft / specialty paths). Prefer the averaged-ADP seed when
      * present so the pool starts in real draft order; merge the SportsPlayer
      * pool rows behind it for breadth + image / age / injury / secondary-pos
@@ -1012,7 +1013,7 @@ export async function getResolvedDraftPoolForLeague(
         status: (p as { status?: string | null }).status ?? null,
         imageUrl: (p as { image_url?: string | null }).image_url ?? null,
         age: (p as { age?: number | null }).age ?? null,
-        // Block B.2-A — surface rookie inference inputs from SportsPlayer when
+        // Block B.2-A â surface rookie inference inputs from SportsPlayer when
         // available. Predicate (rookieFilterPredicate) reads sport + year/age
         // fields to classify rookies for non-NFL sports without changing
         // existing NFL behavior. Both snake_case + camelCase tolerated.
@@ -1056,7 +1057,7 @@ export async function getResolvedDraftPoolForLeague(
         proNames.add(norm)
         rawList.push({
           name: p.name,
-          position: p.position ?? '—',
+          position: p.position ?? 'â',
           team: p.school ?? p.nflTeam ?? null,
           adp: p.devyAdp != null ? Number(p.devyAdp) : null,
           college: p.school ?? null,
@@ -1240,7 +1241,7 @@ export async function getResolvedDraftPoolForLeague(
   if (rawListFiltered.length > 0) {
     try {
       /**
-       * Bug fix (post-E.1.6): every NFL player has TWO SportsPlayer rows — one
+       * Bug fix (post-E.1.6): every NFL player has TWO SportsPlayer rows â one
        * `source='rolling_insights'` (from syncNFLPlayersToDb, sometimes carrying a
        * naked-filename URL like "ee4a97dd-...png" with no protocol) and one
        * `source='backfill'` (from scripts/backfill-player-headshots.ts, with a
@@ -1248,10 +1249,10 @@ export async function getResolvedDraftPoolForLeague(
        *
        * Two corrections:
        *   1. Order by source DESC alphabetical so thesportsdb rows are seen first
-       *      (priority: thesportsdb > sleeper > rolling_insights > backfill) — the
+       *      (priority: thesportsdb > sleeper > rolling_insights > backfill) â the
        *      first valid URL to be set for a (name, position) key wins; lower-quality
        *      sources only fill gaps.
-       *   2. Validate the URL via classifyAvatarSource before caching — naked
+       *   2. Validate the URL via classifyAvatarSource before caching â naked
        *      filenames (no `https://`) classify as `'null'` and are skipped, so
        *      they can never poison the map.
        */
@@ -1312,15 +1313,15 @@ export async function getResolvedDraftPoolForLeague(
         }
       }
     } catch {
-      /* swallow — pool falls through to placeholder behavior */
+      /* swallow â pool falls through to placeholder behavior */
     }
   }
 
   /**
-   * D.5 — overlay AI ADP from `AllFantasyAdpSnapshot` keyed by the league's draft
+   * D.5 â overlay AI ADP from `AllFantasyAdpSnapshot` keyed by the league's draft
    * context (sport / leagueType / draftType / scoring / rosterFormat / teamCount /
    * season). Default draftMode is 'real'. If no snapshot rows match, the map is
-   * empty and downstream rows render em-dash for the AI ADP cell — by design,
+   * empty and downstream rows render em-dash for the AI ADP cell â by design,
    * the resolver does NOT fall back to external/market ADP and label it AI ADP
    * (per D.5 spec).
    *
@@ -1340,18 +1341,40 @@ export async function getResolvedDraftPoolForLeague(
   >()
   if (rawListFiltered.length > 0) {
     try {
+      /*
+       * 🛑 THE CONTEXT TUPLE IS BUILT BY `buildDraftContext`, NOT INLINE. DO NOT REINLINE IT.
+       * This was the THIRD independent copy of this derivation, and it disagreed with the writer
+       * on the two fields that matter:
+       *
+       *   draftType   read `settings.draft.type` FIRST and the session second - the opposite
+       *               precedence from the recompute, which reads the session.
+       *   teamCount   read `League.leagueSize` (the league TODAY) rather than
+       *               `DraftSession.teamCount` (the draft the picks came from).
+       *
+       * `contextHash` is a sha256 over all seven fields, so either disagreement returns ZERO rows
+       * - and the comment below is right that an empty map renders em-dashes by design, which is
+       * exactly what a genuinely empty board renders. A mismatch here is invisible: the AI ADP
+       * column simply looks like a feature with no data yet, on the one screen a manager is
+       * actually staring at mid-draft.
+       */
       const { buildContextHash } = await import('@/lib/adp/computeAllFantasyAdp')
-      const settingsForCtx = (league?.settings as Record<string, unknown> | null) ?? {}
-      const draftFromSettings = (settingsForCtx.draft as { type?: string } | undefined)?.type ?? draftSession?.draftType ?? 'snake'
-      const ctxHash = buildContextHash({
-        sport: String(sport ?? 'NFL').toUpperCase(),
-        leagueType: league?.leagueVariant ?? (league?.isDynasty ? 'dynasty' : 'redraft'),
-        draftType: String(draftFromSettings).toLowerCase(),
-        scoringFormat: String(league?.scoring ?? 'ppr').toLowerCase(),
-        rosterFormat: 'standard',
-        teamCount: league?.leagueSize ?? 12,
-        season: String(league?.season ?? new Date().getUTCFullYear()),
-      })
+      const { buildDraftContext } = await import('@/lib/adp/draftContextKey')
+      const ctxHash = buildContextHash(
+        buildDraftContext({
+          league: {
+            sport: String(sport ?? 'NFL'),
+            season: Number(league?.season ?? new Date().getUTCFullYear()),
+            scoring: league?.scoring ?? null,
+            isDynasty: Boolean(league?.isDynasty),
+            leagueVariant: league?.leagueVariant ?? null,
+            leagueSize: league?.leagueSize ?? null,
+            settings: league?.settings ?? null,
+          },
+          session: draftSession
+            ? { draftType: draftSession.draftType ?? null, teamCount: draftSession.teamCount ?? null }
+            : null,
+        }),
+      )
       const perfAiAdp = perfStart('10. allFantasyAdpSnapshot.findMany')
       const adpRows = await prisma.allFantasyAdpSnapshot.findMany({
         where: { contextHash: ctxHash, draftMode: 'real' },
@@ -1378,7 +1401,7 @@ export async function getResolvedDraftPoolForLeague(
         })
       }
     } catch {
-      /* swallow — pool renders em-dashes for the AI ADP column when snapshot is unavailable */
+      /* swallow â pool renders em-dashes for the AI ADP column when snapshot is unavailable */
     }
   }
 
@@ -1399,7 +1422,7 @@ export async function getResolvedDraftPoolForLeague(
     }
   }
 
-  /** D.7 — Sleeper-backed rookie lookup. Only built for NFL pools. The lookup is
+  /** D.7 â Sleeper-backed rookie lookup. Only built for NFL pools. The lookup is
    * `null` for non-NFL sports (no upstream years_exp available); UI surfaces a
    * "Rookie data unavailable" message in that case. Failures inside the helper
    * degrade silently to `hasData=false` rather than breaking the pool fetch. */
@@ -1410,14 +1433,14 @@ export async function getResolvedDraftPoolForLeague(
     // (24h in-process memory cache). A future hardening pass should back this
     // with a DB-persisted SleeperPlayersCache table so no cold-start API call
     // is made from the pool read path. Failures degrade silently to hasData=false.
-    const perfRookie = perfStart('11. loadNflRookieLookup (Sleeper API — 24h cache)')
+    const perfRookie = perfStart('11. loadNflRookieLookup (Sleeper API â 24h cache)')
     const rookieBundle = await loadNflRookieLookup().catch(() => null)
     nflRookieLookup = rookieBundle?.lookup ?? null
     nflRookieFetchSource = rookieBundle?.fetchSource ?? null
     perfRookie()
   }
 
-  /** Accumulates identity mismatches in memory for one batched write below — never per player. */
+  /** Accumulates identity mismatches in memory for one batched write below â never per player. */
   const mismatchCollector = new PlayerMismatchCollector()
 
   const perfSprMaps = perfStart('11b. sportsPlayerRecord maps (cross-sport stats/images)')
@@ -1544,7 +1567,7 @@ export async function getResolvedDraftPoolForLeague(
     const riSlice = idn ? riSeasonByPlayerId.get(idn.rollingInsightsPlayerId) ?? null : null
     // F.2: Fallback to PlayerSeasonStats if RI identity didn't resolve
     const fallbackRiSlice = !riSlice && sport === 'NFL' ? fallbackSeasonByPoolKey.get(poolAnalyticsKey) ?? null : null
-    // Fallback matches are unambiguous name+position matches — treat with same confidence as RI
+    // Fallback matches are unambiguous name+position matches â treat with same confidence as RI
     const effectiveRiSlice = riSlice ?? fallbackRiSlice
     const effectiveConfidence: 'high' | 'none' = idn ? 'high' : effectiveRiSlice ? 'high' : 'none'
     const resolvedAnalytics =
@@ -1581,15 +1604,15 @@ export async function getResolvedDraftPoolForLeague(
 
     /** E.1.5: real headshot lookup from the backfilled SportsPlayer cache, keyed by
      * (normalizedName | normalizedPosition). Wins over synth/data-URI/team-logo URLs that the
-     * upstream pool produced — but only when classifyAvatarSource flags the upstream as bogus.
+     * upstream pool produced â but only when classifyAvatarSource flags the upstream as bogus.
      * If there's no cache hit, leave the upstream URL alone so the runtime PlayerAvatar's
      * classifier still rejects it and falls back to the silhouette. */
     let backfilledHeadshot: string | null = null
     if (!inJrAliasConflict) {
-      /** Phase 2 — image confidence ladder
-       *  1. Loose team key  (name + position + team)  — highest confidence when team is known.
-       *  2. Name + position match                     — fills gaps when team differs between sources.
-       *  3. Name-only match (no team on pool row)     — last resort; skipped when team is present
+      /** Phase 2 â image confidence ladder
+       *  1. Loose team key  (name + position + team)  â highest confidence when team is known.
+       *  2. Name + position match                     â fills gaps when team differs between sources.
+       *  3. Name-only match (no team on pool row)     â last resort; skipped when team is present
        *     to avoid mis-assigning a same-name player on a different roster (e.g., two Tyler Johnsons).
        */
       const lookupName = normalizeDraftPoolNameForDedupe(name)
@@ -1601,7 +1624,7 @@ export async function getResolvedDraftPoolForLeague(
       backfilledHeadshot = teamMatch ?? namePosMatch ?? nameOnlyMatch ?? null
     }
 
-    /** D.5 — AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
+    /** D.5 â AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
      * `<normalized name>|<normalized position>` matching the same shape the
      * recompute script writes (see lib/adp/computeAllFantasyAdp.buildPlayerKey). */
     const aiAdpHit = aiAdpByPlayerKey.get(
@@ -1630,7 +1653,7 @@ export async function getResolvedDraftPoolForLeague(
 
     const backfilledSleeperId = !inJrAliasConflict
         ? (() => {
-            /** Phase 2 — sleeperId confidence ladder
+            /** Phase 2 â sleeperId confidence ladder
              *  Same 3-tier structure as the image ladder above.
              */
             const lookupName = normalizeDraftPoolNameForDedupe(name)
@@ -1750,8 +1773,8 @@ export async function getResolvedDraftPoolForLeague(
         undefined,
       rollingInsightsSupplemental: resolvedAnalytics?.rollingInsightsSupplemental ?? undefined,
       ...(sport === 'NFL' && nflDraftProjectionSplits ? { nflDraftProjectionSplits } : {}),
-      /** D.5 — AI ADP comes from AllFantasyAdpSnapshot ONLY. Empty when no snapshot
-       * exists for this context — the table renders em-dashes (no external ADP fallback). */
+      /** D.5 â AI ADP comes from AllFantasyAdpSnapshot ONLY. Empty when no snapshot
+       * exists for this context â the table renders em-dashes (no external ADP fallback). */
       ...(aiAdpHit
         ? {
             aiAdp: aiAdpHit.adp,
@@ -1762,7 +1785,7 @@ export async function getResolvedDraftPoolForLeague(
             aiAdpStandardDeviation: aiAdpHit.standardDeviation,
           }
         : { aiAdp: null }),
-      /** D.7 — attach Sleeper years_exp for NFL rows. Devy rows that have not
+      /** D.7 â attach Sleeper years_exp for NFL rows. Devy rows that have not
        * been promoted to the NFL retain `isRookie=true` regardless of yearsExp
        * (their Sleeper match is typically absent). Promoted rows fall through
        * to the Sleeper lookup so a former devy player who has played a season
@@ -1824,7 +1847,7 @@ export async function getResolvedDraftPoolForLeague(
 
   /**
    * One batched write for every mismatch seen above. Previously this path issued one un-awaited
-   * `create()` per player from inside the map — a single league produced 512,840 inserts in a day.
+   * `create()` per player from inside the map â a single league produced 512,840 inserts in a day.
    * `flush()` never throws (diagnostics must not fail a draft resolve) and logs its own failures,
    * so the result is intentionally unused here.
    */
@@ -1872,7 +1895,7 @@ export async function getResolvedDraftPoolForLeague(
   )
 
   // Phase 2: filter out teamless (free-agent/released) players from the live pool.
-  // DEF/DST units are exempt — they legitimately may not carry a team abbreviation.
+  // DEF/DST units are exempt â they legitimately may not carry a team abbreviation.
   entries = entries.filter((e) => {
     const pos = canonicalPosition(e.position ?? '')
     if (pos === 'DEF' || pos === 'DST') return true
