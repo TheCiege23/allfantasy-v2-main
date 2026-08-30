@@ -56,8 +56,19 @@ function seasonNumber(season: unknown): number {
   return Number.isFinite(n) && n > 0 ? n : NaN
 }
 
+/**
+ * @param seasonWindow how many seasons back from the newest to keep. 1 = the newest only.
+ *
+ * ⚠ 2 IS THE PICKER'S CHOICE AND IT IS A TRADE, NOT AN OPTIMUM. Measured on a real account
+ * after series collapse: 374 cards, of which 68 are the current season, 9 are the previous one
+ * and 194 are 2021-2022 — leagues that genuinely ended years ago, plus entries whose chains
+ * were never walked so they never grouped. A window of 2 keeps the ~77 a manager might still
+ * rank and drops the long-dead tail. It DOES hide leagues that are real; that is the cost, and
+ * the surface says so rather than letting them vanish.
+ */
 export function selectLatestSeasonLeagues<T extends SeasonScoped>(
   leagues: readonly T[],
+  seasonWindow = 1,
 ): LatestSeasonResult<T> {
   const seasons = leagues.map((l) => seasonNumber(l.season)).filter((n) => Number.isFinite(n))
 
@@ -70,7 +81,12 @@ export function selectLatestSeasonLeagues<T extends SeasonScoped>(
   }
 
   const latest = Math.max(...seasons)
-  const visibleLeagues = leagues.filter((l) => seasonNumber(l.season) === latest)
+  /* A window below 1 would keep nothing; clamp rather than blank the picker on a bad caller. */
+  const oldestKept = latest - Math.max(1, Math.floor(seasonWindow)) + 1
+  const visibleLeagues = leagues.filter((l) => {
+    const n = seasonNumber(l.season)
+    return Number.isFinite(n) && n >= oldestKept && n <= latest
+  })
   return {
     visibleLeagues: [...visibleLeagues],
     latestSeason: String(latest),

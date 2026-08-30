@@ -403,6 +403,10 @@ sweep on a commit. It also only accepts already-TRACKED paths, and staging and
 committing in separate turns is how work gets swept into a peer's commit — do
 both in one command.
 
+⚠ Verify a push by SHA (`git ls-remote origin refs/heads/main`), never by
+grepping push output: a rejected push prints `-> main` too, and a pipe (`| tail`)
+reports the PIPE's exit code, so `$?` reads 0 over a failed push.
+
 ### ⚠ A CHECK THAT CANNOT FAIL READS AS A PASS
 
 Three sessions hit this in one day, each in a different tool, each believing
@@ -435,6 +439,15 @@ LAST command's**, so the thing being tested never decides the result. Use
 POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
 and confirm the check reports it. A green check that has never once gone red is
 not evidence, and on a long session it is the most expensive kind of comfort.
+
+⚠ **A FILTERED CHECK IS NOT A SCOPED CHECK.** `tsc … | grep <my files>` looks
+like deliberate narrowing — more careful than an unscoped run — and so it earns
+*more* trust while being strictly less trustworthy. Filtering a check's output
+discards the status of the thing you are testing; it does not scope it. Two
+sessions shipped assurances that way in one day, one of them over a `tsc` that
+had OOMed and emitted nothing at all, so the grep matched nothing for the worst
+possible reason. If you want a scoped typecheck, scope the *inputs* and read the
+unpiped exit status.
 
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
