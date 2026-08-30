@@ -376,12 +376,20 @@ model PlayerIdentityMap {
   espnId            String?
   fleaflickerId     String?
   clearSportsId     String?
+  /// CollegeFootballData athlete id. The ONLY bridge from an NCAAF projection to a
+  /// roster: `AFProjectionSnapshot.playerId` for college is a CFBD id (it comes
+  /// through `FantasyStatLine.playerId`, which `cfbdPlayerStats` keys on CFBD's
+  /// athlete id), while every NCAAF row in `SportsPlayer` is Rolling-Insights keyed
+  /// and carries no `sleeperId`. Without this column the two id spaces cannot meet
+  /// and 4,528 computed college projections join to nothing.
+  cfbdId            String?
 
   @@index([normalizedName])
   @@index([fantasyCalcId])
   @@index([rollingInsightsId])
   @@index([apiSportsId])
   @@index([espnId])
+  @@index([cfbdId])
   @@index([clearSportsId])
   @@index([currentTeam])
   @@index([sport, position])
