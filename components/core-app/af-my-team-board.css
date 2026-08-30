@@ -80,17 +80,20 @@
 }
 
 /*
-  One list is empty — see the note in MyTeamBoard.tsx. The columns collapse and
-  the surviving rows run two-up, so nothing stretches and nothing is left blank.
+  The two lists are too unequal to sit side by side — see `columnsTooUneven` in
+  MyTeamBoard.tsx for the threshold and the measurement behind it. The columns
+  collapse and each list runs two-up, so nothing stretches and no column is left
+  standing empty beside a full one.
+
   Scoped above the phone breakpoint on purpose: below it everything is already
   one column and a two-up row grid would be two 160px rows.
 */
 @media (min-width: 781px) {
-  .af-mtb-cols[data-one] {
+  .af-mtb-cols[data-stack] {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
-  .af-mtb-cols[data-one] .af-mtb-rows {
+  .af-mtb-cols[data-stack] .af-mtb-rows {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-content: start;

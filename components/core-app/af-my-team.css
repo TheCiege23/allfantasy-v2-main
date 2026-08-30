@@ -660,6 +660,26 @@
   border-color: transparent;
 }
 
+/*
+ * ⚠ THEY GROW INTO THE ROW THEY WRAPPED ONTO, AND THEY DO NOT GROW ANYWHERE
+ * ELSE. Below roughly 1100px the header runs out of room, the roster-value tile
+ * drops to a second line, and it sat there at its content width with the rest of
+ * the row empty — measured at 760px as a 207px tile beside 415px of nothing,
+ * which reads as a tile that failed to load rather than as a wrapped one.
+ *
+ * ⚠ AND THIS WAS REJECTED ONCE ON AN ASSUMPTION THAT MEASURED FALSE. The
+ * objection was that letting the tiles grow would stretch the cluster across the
+ * whole header on desktop. It does not: `.af-mt-tiles` carries `margin-left:auto`
+ * and shrink-wraps its content, so at 1280px there is no free space to grow into
+ * and the three tiles render at 339 / 176 / 207 with and without this rule —
+ * byte-identical geometry. Free space only exists on the row a tile has WRAPPED
+ * onto, which is the only place this fires.
+ */
+.af-mt-tiles > .af-mt-tile,
+.af-mt-tiles > .af-mt-projgroup {
+  flex: 1 1 auto;
+}
+
 @media (max-width: 720px) {
   /* Share is the first thing to go: it is the least load-bearing of the three
      and the two point totals must stay side by side to be comparable at all. */

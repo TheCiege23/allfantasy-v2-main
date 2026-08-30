@@ -327,8 +327,33 @@
   color: var(--text);
 }
 
+/*
+ * ⚠ THE BOTTOM PADDING CLEARS THE FLOATING BUTTONS, AND 40px DID NOT.
+ *
+ * `.af-cm-launch` is `position: fixed`, 56px tall, inset by `--af-fab-inset`
+ * (18px), so it owns the bottom 74px of the viewport on every screen. Content
+ * scrolled to the very end sat under it with nowhere left to scroll — measured
+ * on /core/my-team: 40px of padding beneath a last element that needed 74px, so
+ * the coverage footnote was permanently half-covered.
+ *
+ * ⚠ MID-SCROLL OVERLAP IS NOT A BUG AND IS NOT FIXED HERE. A floating button
+ * passing over content you can scroll past is what a floating button is; giving
+ * every screen a permanent 74px right-hand gutter to avoid it would cost real
+ * width at every scroll position to solve a problem that only exists at one.
+ * The END of the document is the only place the overlap is unescapable.
+ *
+ * Derived from the button's own inset rather than a matching magic number, so
+ * moving the inset moves the clearance with it.
+ *
+ * ⚠ THE 56px IS THE BUTTON'S REAL HEIGHT AND `--af-fab-size` IS 48px. They
+ * disagree: af-core.css declares the token at 48 while `.af-cm-launch` in
+ * af-comms.css hardcodes `width/height: 56px`, and the rendered button measures
+ * 56. Substituting the token here would under-clear by eight pixels and look
+ * tidier while being wrong. Reconcile the two in af-comms.css first if you want
+ * the token in this expression.
+ */
 .af-content {
-  padding: 20px 18px 40px;
+  padding: 20px 18px calc(var(--af-fab-inset, 18px) + 56px + 16px);
   min-width: 0;
 }
 
@@ -445,13 +470,51 @@
   }
   .af-topbar {
     flex-wrap: wrap;
+    /* 12px top and bottom was tuned for a single row; the topbar wraps to two
+       here, so the padding is paid twice over. */
+    padding: 8px 12px;
   }
   .af-search {
     flex: 1 1 100%;
     order: 2;
   }
+
+  /*
+   * ⚠ THE STATUS CHIPS WRAPPED ONTO A SECOND ROW AND COST 38px OF A PHONE.
+   *
+   * Measured at 390px: the row is 354px wide and its three children — READ-ONLY
+   * (105), "synced 4m ago" (70) and FREE 20 TOKENS LEFT (171) — total 370 before
+   * gaps, so the plan chip always fell to its own line and `.af-topbar-right`
+   * stood 69px tall. Together with the rail and the nav that put the first line
+   * of actual content 289px down an 844px screen, better than a third of it,
+   * before a manager has seen a single lineup.
+   *
+   * They scroll instead of wrapping, which is the idiom this shell already uses
+   * one row up: `.af-rail` and `.af-nav-items` both become horizontal scrollers
+   * at this same breakpoint. Nothing is hidden and nothing is truncated — the
+   * row is reachable by swipe, the way the league crests above it already are.
+   */
+  .af-topbar-right {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px;
+    /* Without this the row can be squeezed by the search input rather than
+       scrolling, which is the failure this replaces wearing different clothes. */
+    min-width: 0;
+    max-width: 100%;
+  }
+  .af-topbar-right::-webkit-scrollbar {
+    display: none;
+  }
+  .af-topbar-right > * {
+    flex: 0 0 auto;
+  }
   .af-content {
-    padding: 14px 12px 32px;
+    /* Same clearance as above; only the side padding tightens here. The phone
+       tab bar sits below this and is accounted for separately. */
+    padding: 14px 12px calc(var(--af-fab-inset, 18px) + 56px + 16px);
   }
 }
 

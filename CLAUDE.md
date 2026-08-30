@@ -440,6 +440,30 @@ POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
 and confirm the check reports it. A green check that has never once gone red is
 not evidence, and on a long session it is the most expensive kind of comfort.
 
+⚠ **AND CSS HAS ITS OWN MEMBER OF THIS FAMILY, WHICH NO CHECK IN THIS REPO
+WATCHES.** Inserting a new `@media` block in the middle of an existing one closes
+the outer query early, and every rule below the insertion point silently moves
+into the new, narrower query. On 2026-08-30 a `@media (max-width: 560px)` block
+added inside `@media (max-width: 780px)` in `af-matchup.css` carried four rules
+out of the 780px band with it — including `.af-mu-centre { order: 3 }`, which is
+what pushes the win-probability card below both team rows on a phone. Those rules
+stopped applying between 561px and 780px.
+
+**Brace balance stayed 0, nothing threw, no test failed, and a CSS lint cannot
+see it** — the file is valid CSS either way, it just means something else. This
+is the check-that-cannot-fail in a language nobody has been watching, and the
+tell is the same as everywhere else: read the EFFECT, not the syntax.
+`getComputedStyle(el).<prop>` at a width inside each band, before and after.
+Braces balancing is not evidence that a rule is still in the query you put it in.
+
+⚠ **THE SAME READ-THE-EFFECT RULE RETIRES CSS ASSUMPTIONS, WHICH ARE CHEAPER TO
+MEASURE THAN TO ARGUE ABOUT.** A tile-row fix was rejected here on the reasoning
+that letting flex children grow would stretch a right-aligned cluster across the
+whole header on desktop. Measured: the container carries `margin-left: auto` and
+shrink-wraps, so at 1280px the geometry is byte-identical with and without the
+rule, and the growth only fires on a row a tile has WRAPPED onto — which was the
+entire point of the fix. The rejection cost more than the probe would have.
+
 ⚠ **A FILTERED CHECK IS NOT A SCOPED CHECK.** `tsc … | grep <my files>` looks
 like deliberate narrowing — more careful than an unscoped run — and so it earns
 *more* trust while being strictly less trustworthy. Filtering a check's output

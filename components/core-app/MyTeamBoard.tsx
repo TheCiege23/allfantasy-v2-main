@@ -201,6 +201,25 @@ function More({ shown, total, noun }: { shown: number; total: number; noun: stri
   )
 }
 
+/**
+ * Are the two columns too unequal to sit side by side?
+ *
+ * ⚠ THIS USED TO ASK "IS ONE SIDE EMPTY", AND EMPTY IS THE RARE CASE. Observed
+ * on a real 66-league portfolio: 1 needing a change against 5 set, which left
+ * roughly 160px of blank column under the single row — four rows of nothing
+ * beside five rows of content. That is the STEADY state, not an edge case: most
+ * weeks a manager has one or two lineups to fix and dozens already set, so the
+ * balanced layout the two-column grid assumes is the one that almost never
+ * happens.
+ *
+ * Three rows of difference is where the shorter column stops reading as a list
+ * and starts reading as a panel that failed to load. Below that the gap is small
+ * enough that side-by-side still compares better than stacking.
+ */
+export function columnsTooUneven(a: number, b: number): boolean {
+  return Math.abs(a - b) >= 3
+}
+
 export function MyTeamBoard({ pulse, now = Date.now() }: MyTeamBoardProps) {
   const bye = byeNote(pulse)
   const gap = gapNote(pulse)
@@ -221,19 +240,20 @@ export function MyTeamBoard({ pulse, now = Date.now() }: MyTeamBoardProps) {
 
       {pulse.checked > 0 ? (
         /*
-          ⚠ ONE SIDE IS ROUTINELY EMPTY, AND TWO EQUAL COLUMNS THEN LEAVE A HOLE.
+          ⚠ THE TWO COLUMNS ARE ROUTINELY UNEQUAL, AND THAT LEAVES A HOLE.
           "Nothing needs a change" is the state this board exists to reach, and
-          in it the left column is a single sentence sitting beside five rows —
-          measured at 1440px as roughly 180px of blank column, which reads as a
-          panel that failed to load rather than as good news.
+          one-against-five is what it actually looks like most weeks — measured
+          on a real portfolio as ~160px of blank column beside five rows of
+          content, which reads as a panel that failed to load rather than as
+          good news. See `columnsTooUneven` for where the threshold sits and why.
 
-          Collapsing to one column and running the surviving list two-up keeps
-          the rows at the width the handoff draws them (~460px) instead of
-          stretching one row across the whole board.
+          Collapsing to one column and running each list two-up keeps the rows at
+          the width the handoff draws them (~460px) instead of stretching one row
+          across the whole board.
         */
         <div
           className="af-mtb-cols"
-          data-one={pulse.needs.length === 0 || pulse.set.length === 0 || undefined}
+          data-stack={columnsTooUneven(pulse.needs.length, pulse.set.length) || undefined}
         >
           <div className="af-mtb-col">
             <h3 className="af-label af-mtb-col-head" data-tone="bad">

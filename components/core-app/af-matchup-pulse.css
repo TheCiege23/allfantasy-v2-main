@@ -150,16 +150,18 @@
 }
 
 /*
-  One list is empty — see the note in MatchupPulseBoard.tsx. Scoped above the
-  phone breakpoint on purpose: below it the board is already one column, and a
-  two-up row grid there would be two 160px rows.
+  The two lists are too unequal to sit side by side — `columnsTooUneven` is
+  shared with MyTeamBoard.tsx so the two boards cannot drift into disagreeing
+  about when to stack. Scoped above the phone breakpoint on purpose: below it the
+  board is already one column, and a two-up row grid there would be two 160px
+  rows.
 */
 @media (min-width: 781px) {
-  .af-mp-cols[data-one] {
+  .af-mp-cols[data-stack] {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
-  .af-mp-cols[data-one] .af-mp-rows {
+  .af-mp-cols[data-stack] .af-mp-rows {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-content: start;
