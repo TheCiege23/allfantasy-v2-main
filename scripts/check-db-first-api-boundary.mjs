@@ -641,6 +641,55 @@ function isMonitoredHost(hostname) {
   return DATA_API_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
 }
 
+/*
+ * Vendors that serve an IMAGE CDN and a DATA API from ONE hostname, told apart
+ * by path rather than by host.
+ *
+ * ⚠ WHY THIS IS NOT ANOTHER HOST EXCLUSION. `media.api-sports.io` is excluded
+ * up in DATA_API_HOST_PATTERNS with a note giving exactly this rationale — an
+ * <img src> carries no key, returns nothing to cache, and is not a data-API
+ * call — and that worked because api-sports puts its images on a hostname of
+ * their own. TheSportsDB does not: `www.thesportsdb.com/api/v1/json/...` is the
+ * keyed feed and `www.thesportsdb.com/images/media/player/cutout/x.png` is a
+ * headshot, same host. So the same reasoning has to key on the path.
+ *
+ * A host-level exclusion here would ALSO be wrong in a way the path rule is
+ * not: excluding `r2.thesportsdb.com` outright would blind this guard to a data
+ * fetch from that subdomain forever, to silence image literals. This cannot —
+ * anything outside `/images/` on any TheSportsDB host still reports.
+ *
+ * Measured on a full scan, 2026-08-30: 117 violations before, 104 after, and
+ * the set diff was checked in both directions — 13 removed, 0 ADDED. Every one
+ * of the 13 is an `<img src>` literal and every one is in a test file. Ten of
+ * them predate the change; they are the noise this vendor was contributing and
+ * the reason a real finding on it would have been hard to see.
+ *
+ * All eight genuine feed lines survive, which is the check that matters:
+ * lib/sports-router.ts x4, server/api-route-modules/legacy/trade/analyze,
+ * lib/sports-data/playerAssetsService, contracts/thesportsdb/scripts/probe.mjs
+ * and the v2 URL-builder test.
+ *
+ * One genuinely ambiguous line is deliberately LEFT REPORTED —
+ * `__tests__/fantasy-os/canonical-image-service.test.ts:15` uses
+ * `https://thesportsdb.com/y.png`, which is not under `/images/`. Failing
+ * toward reporting is the guard's standing rule and a synthetic URL is not
+ * worth widening it for.
+ *
+ * ⚠ PATHNAME IS SAFE TO READ HERE, UNLIKE THE AUTH-SEGMENT TEST ABOVE. That one
+ * runs against the whole LINE because the URL matcher stops at `}` and an auth
+ * segment usually sits AFTER an interpolation. These segments sit at the START
+ * of the path, before any `${`, so `https://www.thesportsdb.com/api/v1/json/${apiKey`
+ * still parses to a pathname beginning `/api/`.
+ */
+const IMAGE_CDN_PATHS = [
+  { host: /(^|\.)thesportsdb\.com$/i, path: /^\/images\//i },
+];
+
+/** An asset a browser renders, not a feed a request path fetches. */
+function isImageAsset(hostname, pathname) {
+  return IMAGE_CDN_PATHS.some((r) => r.host.test(hostname) && r.path.test(pathname));
+}
+
 function isAllowedCaller(filePath) {
   const normalized = toPosixPath(filePath);
   return ALLOWED_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
@@ -757,9 +806,12 @@ function collectViolations(rootDir, filesToScan, changedLines = null) {
       for (const match of matches) {
         const rawUrl = match[0];
         let hostname;
+        let pathname;
 
         try {
-          hostname = new URL(rawUrl).hostname;
+          const parsed = new URL(rawUrl);
+          hostname = parsed.hostname;
+          pathname = parsed.pathname;
         } catch {
           continue;
         }
@@ -769,6 +821,12 @@ function collectViolations(rootDir, filesToScan, changedLines = null) {
         }
 
         if (!isMonitoredHost(hostname)) {
+          continue;
+        }
+
+        // An image on a vendor that shares one hostname between its CDN and its
+        // feed. See IMAGE_CDN_PATHS for why this is a path test and not a host one.
+        if (isImageAsset(hostname, pathname)) {
           continue;
         }
 
