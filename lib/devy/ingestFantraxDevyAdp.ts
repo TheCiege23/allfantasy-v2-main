@@ -29,6 +29,21 @@ import {
   type FantraxPlayerRef,
 } from '@/lib/league-import/fantrax/fantraxApi'
 
+/**
+ * ⚠ A DAY, NOT A TICK. The intel cron fires every 6 hours; ADP moves on the
+ * timescale of recruiting news and draft chatter, not hours. Running it every
+ * tick costs two provider fetches (997 ADP rows + the 16,886-row CFB map) and up
+ * to 997 database round trips for data that has not changed.
+ *
+ * The marker mirrors `devyIntelRefresh`'s: a `sportsDataCache` row whose TTL
+ * outlives the cadence, so a lapsed phase stays visible rather than looking like
+ * one that never ran.
+ */
+const ADP_CADENCE_MS = 24 * 60 * 60 * 1000
+const ADP_MARKER_KEY = 'fantrax:devy-adp:last-run'
+/* Outlives the cadence on purpose — see above. */
+const ADP_MARKER_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
 export type DevyAdpIngestResult = {
   /** Players Fantrax priced. */
   priced: number
@@ -39,6 +54,15 @@ export type DevyAdpIngestResult = {
   unmatched: number
   /** Skipped because the name+school matched more than one row — never guessed. */
   ambiguous: number
+  /**
+   * True when the cadence gate declined to run.
+   *
+   * ⚠ SKIPPED IS NOT FAILED AND IS NOT A ZERO RUN. "Inside its cadence" and "it
+   * found nothing" look identical in a bare result object, and the second is a
+   * problem while the first is the system working.
+   */
+  skipped?: boolean
+  reason?: string
   error?: string
 }
 
@@ -89,8 +113,25 @@ export function attachSchools(
   })
 }
 
-export async function ingestFantraxDevyAdp(): Promise<DevyAdpIngestResult> {
+export async function ingestFantraxDevyAdp(
+  opts?: { force?: boolean },
+): Promise<DevyAdpIngestResult> {
   const empty: DevyAdpIngestResult = { priced: 0, withSchool: 0, updated: 0, unmatched: 0, ambiguous: 0 }
+
+  if (opts?.force !== true) {
+    const marker = await prisma.sportsDataCache
+      .findUnique({ where: { cacheKey: ADP_MARKER_KEY } })
+      .catch(() => null)
+    const at =
+      marker?.data && typeof marker.data === 'object' && !Array.isArray(marker.data)
+        ? (marker.data as Record<string, unknown>).at
+        : null
+    const lastMs = typeof at === 'string' ? new Date(at).getTime() : NaN
+    if (Number.isFinite(lastMs) && Date.now() - lastMs < ADP_CADENCE_MS) {
+      const hours = Math.round((Date.now() - lastMs) / 3_600_000)
+      return { ...empty, skipped: true, reason: `ran ${hours}h ago; cadence is 24h` }
+    }
+  }
 
   const [adpRes, mapRes] = await Promise.all([getFantraxAdp('NCAAF'), getFantraxPlayerIds('CFB')])
   if (!adpRes.ok) return { ...empty, error: adpRes.failure.message }
@@ -163,6 +204,29 @@ export async function ingestFantraxDevyAdp(): Promise<DevyAdpIngestResult> {
         result.unmatched += 1
       })
   }
+
+  /*
+   * ⚠ THE MARKER IS WRITTEN EVEN WHEN NOTHING MATCHED. The run happened, and the
+   * cost of the run is the two provider fetches — repeating them in an hour
+   * because zero rows matched would burn the quota for exactly the league whose
+   * players we cannot match yet. A failed marker write is swallowed for the same
+   * reason devyIntelRefresh swallows its own: the ingest already succeeded.
+   */
+  const expiresAt = new Date(Date.now() + ADP_MARKER_TTL_MS)
+  const data = {
+    at: new Date().toISOString(),
+    priced: result.priced,
+    updated: result.updated,
+    unmatched: result.unmatched,
+    ambiguous: result.ambiguous,
+  }
+  await prisma.sportsDataCache
+    .upsert({
+      where: { cacheKey: ADP_MARKER_KEY },
+      update: { data, expiresAt },
+      create: { cacheKey: ADP_MARKER_KEY, data, expiresAt },
+    })
+    .catch(() => {})
 
   return result
 }

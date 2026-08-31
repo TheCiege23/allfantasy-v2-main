@@ -7,6 +7,42 @@ import { pathToFileURL } from "node:url";
 import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 
 const DATA_API_HOST_PATTERNS = [
+  // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
+  // rosters, standings, schedules, live matchup scores and college ADP, all from
+  // www.fantrax.com/fxea/general. It has been read by the import stack since
+  // 2026-08-26 and by the matchup-parity collector since 2026-08-30, and not one
+  // of those calls was ever checked, because the host was never on this list.
+  //
+  // This is the same lesson the api-sports.io and CollegeFootballData entries
+  // already record, met a third time: the list is not a census of our providers,
+  // and a provider absent from it is unwatched no matter how heavily it is used.
+  // Found by asking the question directly rather than by reading the list.
+  //
+  // ⚠ THE API IS UNAUTHENTICATED, so unlike Rolling Insights there is no
+  // credential to leak in a logged URL. The exposure is availability, not
+  // secrecy: a Fantrax outage on a request path is a user waiting on a page.
+  //
+  // Adding it reports FOUR lines, and they are not equally bad. Left REPORTED
+  // rather than allowlisted, exactly as CFBD and the Sleeper five were:
+  //   lib/league-import/fantrax/fantraxApi.ts — THE REAL ONE. An importer census
+  //       in all four import forms found it reached from two REQUEST PATHS:
+  //       app/api/leagues/import/discover/route.ts (dynamic import of
+  //       getFantraxLeagues) and server/api-route-modules/legacy/franchise/route.ts.
+  //       Same shape as sleeperMarketService: a vendor outage lands on a user
+  //       waiting for a page. It is NOT ingestion-only and must not be
+  //       allowlisted on the strength of living under lib/league-import.
+  //   lib/league-links/sourceLinkResolver.ts — a FALSE POSITIVE of the
+  //       media.api-sports.io class. `homepage` and `allowedHosts` build an href
+  //       a user clicks; nothing fetches it. A host pattern cannot separate this
+  //       from the API because both are www.fantrax.com, so it is documented
+  //       here rather than silenced.
+  //   the two __tests__ hits — fixtures asserting link shapes, same class again.
+  //
+  // ⚠ SO THIS MAKES THE GUARD FAIL FOR ANY PR TOUCHING fantraxApi.ts until those
+  // two routes read Postgres instead. That is the guard working, and it is a
+  // real cost to whoever lands next — it is stated here so it is met as a known
+  // consequence rather than as a surprise.
+  /(^|\.)fantrax\.com$/i,
   /(^|\.)api\.sleeper\.app$/i,
   // ⚠ api.sleeper.COM IS A DIFFERENT HOST FROM api.sleeper.APP ABOVE, and it was
   // unmonitored while its sibling was watched — the same near-collision that let

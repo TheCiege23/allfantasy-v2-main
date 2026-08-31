@@ -138,11 +138,34 @@ async function handle(req: NextRequest) {
            * It is inside the same heartbeat because it is the same tick: one
            * row per fire, whatever the tick managed to do.
            */
+          /*
+           * ⚠ ADP BEFORE HEADSHOTS, BY THE RULE STATED DIRECTLY ABOVE. It changes
+           * what the product KNOWS — `DevyPlayer.devyAdp` is the market signal
+           * `devyOutlook` says nothing prices, read in a dozen places and until
+           * now written by nothing — where a headshot changes how a card looks.
+           * When the budget is short, the picture is the right thing to defer.
+           *
+           * ⚠ IT CADENCE-GATES ITSELF at 24h rather than running every tick. The
+           * cron fires every 6 hours; ADP does not move that fast, and a tick
+           * costs two provider fetches plus up to 997 row lookups. `skipped` in
+           * the response means the gate declined, NOT that it found nothing —
+           * they are different states and only one is a problem.
+           */
+          const { ingestFantraxDevyAdp } = await import('@/lib/devy/ingestFantraxDevyAdp')
+          const devyAdp = await ingestFantraxDevyAdp().catch((err: unknown) => ({
+            priced: 0,
+            withSchool: 0,
+            updated: 0,
+            unmatched: 0,
+            ambiguous: 0,
+            error: err instanceof Error ? err.message : String(err),
+          }))
+
           const devyHeadshots = await refreshDevyHeadshots(budget)
           // SportsPlayer is what the player cards and search actually read —
           // the devy pool is 1,718 of 73,883 NCAAF rows.
           const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
-          return { devyIntelSources, devyHeadshots, collegeHeadshots }
+          return { devyIntelSources, devyAdp, devyHeadshots, collegeHeadshots }
         },
       )
 
