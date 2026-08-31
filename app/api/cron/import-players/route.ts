@@ -266,6 +266,99 @@ async function handle(req: NextRequest) {
       devyStats = { error: message.slice(0, 200) }
     }
 
+    /*
+     * Retire prospects who have been drafted.
+     *
+     * 🛑 `classifyDraftStatus` HAD NO CALLER, AND IT IS THE SOLE WRITER OF FOUR COLUMNS.
+     * `draftYear`, `graduatedToNFL`, `devyEligible=false` and `league='NFL'` are set nowhere
+     * else, so with nothing calling it the devy pool never shed a drafted player. Measured on
+     * production 2026-08-30: 1,721 DevyPlayer rows, ZERO with `graduatedToNFL = true`, ZERO
+     * carrying a `draftYear`, and 335 sitting at `draftEligibleYear` 2026 — a draft that has
+     * already happened. This is the same shape as `ingestCFBDStats` and the notification outbox:
+     * a correct writer nobody scheduled.
+     *
+     * ⚠ AND THE `auto_graduation_after_draft` JOB IS NOT A SUBSTITUTE — it is a decoy. It keys
+     * on `draftYear = seasonYear`, a column only this function writes, so its predicate matched
+     * 0 rows for every year and would even if something enqueued it (nothing does) and Redis
+     * were configured (the worker disables itself without it).
+     *
+     * ⚠ IT DOES NOT BLANKET-GRADUATE THE 335. It graduates only prospects it can MATCH to a real
+     * CFBD draft pick; the rest keep their existing status. The count that moves is therefore
+     * the drafted subset, not the eligible cohort.
+     *
+     * BLAST RADIUS MEASURED BEFORE WIRING, not assumed: `DevyRights` holds 0 rows, and a scan of
+     * all 1,153 rosters found ZERO referencing a devy player by id or by sleeperId. No league
+     * holds a devy asset, so retiring a drafted prospect cannot remove anything anyone owns.
+     * That is why this is safe to schedule now rather than being a migration-shaped decision.
+     */
+    /*
+     * ⚠ RUNWAY AND CADENCE, BECAUSE THIS PHASE IS NOT BUDGET-AWARE INTERNALLY. Its siblings take
+     * the budget and stop politely mid-slice; `classifyDraftStatus` does not — it pulls the whole
+     * Sleeper NFL index (~5MB) and walks the entire devy pool in one pass. Starting it with a
+     * thin remainder is how this handler reaches the platform's 300s edge cut and returns a 502,
+     * which loses every phase's result, not just this one. 60s is deliberately generous next to
+     * devyHeadshotRefresh's 20s: that phase can stop between items and this one cannot.
+     *
+     * ⚠ AND ONCE A DAY, NOT EVERY SIX HOURS. Draft status changes a handful of times a YEAR — the
+     * draft, declarations, undrafted signings. Re-running it every tick would spend a full Sleeper
+     * index fetch and a full-pool walk to discover nothing four times a day. The marker is the
+     * same `sportsDataCache` convention the pool and stats phases already gate on.
+     */
+    const DRAFT_STATUS_MIN_RUNWAY_MS = 60_000
+    const DRAFT_STATUS_CADENCE_MS = 20 * 60 * 60 * 1000
+    let devyDraftStatus: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
+    const draftStatusMarker = 'devy_draft_status_classify'
+    let draftStatusDue = true
+    try {
+      const last = await prisma.sportsDataCache.findFirst({
+        where: { cacheKey: draftStatusMarker },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (last && Date.now() - last.createdAt.getTime() < DRAFT_STATUS_CADENCE_MS) {
+        draftStatusDue = false
+        devyDraftStatus = { skipped: 'within cadence', lastRunAt: last.createdAt.toISOString() }
+      }
+    } catch {
+      /* A marker we cannot read is not a reason to skip real work — fall through and run. */
+    }
+
+    if (!draftStatusDue) {
+      /* already reported above */
+    } else if (budget.exhausted() || budget.remainingMs() < DRAFT_STATUS_MIN_RUNWAY_MS) {
+      deferredPhases.push('devyDraftStatus')
+      devyDraftStatus = { skipped: 'no runway', remainingMs: budget.remainingMs() }
+    } else try {
+      const { classifyDraftStatus } = await import('@/lib/devy-classification')
+      devyDraftStatus = await classifyDraftStatus(new Date().getFullYear())
+      /*
+       * ⚠ UPSERT, NOT CREATE — `cacheKey` is the model's @id, so a second run would collide.
+       * And `expiresAt` has no default, so it must be set on both branches. Both of those were
+       * wrong in the first draft of this block and would have thrown on the very first repeat
+       * fire, turning a working phase into a logged error every tick.
+       */
+      const draftStatusExpiry = new Date(Date.now() + DRAFT_STATUS_CADENCE_MS * 2)
+      await prisma.sportsDataCache
+        .upsert({
+          where: { cacheKey: draftStatusMarker },
+          update: { data: toPrismaJsonInput(devyDraftStatus), expiresAt: draftStatusExpiry },
+          create: {
+            cacheKey: draftStatusMarker,
+            data: toPrismaJsonInput(devyDraftStatus),
+            expiresAt: draftStatusExpiry,
+          },
+        })
+        .catch(() => {
+          /* The marker is a cadence hint, not the work. Failing to write it costs one extra
+             run tomorrow, which is cheaper than failing a phase that already succeeded. */
+        })
+    } catch (classifyError) {
+      // Maintenance must never fail the player import it rides along with.
+      const message = classifyError instanceof Error ? classifyError.message : String(classifyError)
+      console.error('[cron/import-players] devy draft-status classification failed:', message)
+      devyDraftStatus = { error: message.slice(0, 200) }
+    }
+
     // Devy intel metrics ride along here because this is a built, scheduled
     // player-data cron. The natural home, /api/devy/automation, is excluded
     // from the production build by scripts/vercel-next-build.cjs (route budget)
@@ -466,6 +559,7 @@ async function handle(req: NextRequest) {
       budgetElapsedMs: budget.elapsedMs(),
       devyPool,
       devyStats,
+      devyDraftStatus,
       devyIntelSources,
       devyIntel,
       sleeperRows,
