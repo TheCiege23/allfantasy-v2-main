@@ -37,11 +37,17 @@ const ctx = () => {
 
 describe('T-009 · the ordered plan', () => {
   it('deletes the Restrict blockers BEFORE the league', () => {
-    // The entire reason this is not just `DELETE FROM leagues`. Two relations
-    // to League carry no onDelete, so Prisma defaults them to Restrict and they
-    // abort the delete rather than cascading.
+    // The entire reason this is not just `DELETE FROM leagues`. ONE relation to
+    // League carries no onDelete, so Prisma defaults it to Restrict and it
+    // aborts the delete rather than cascading.
+    //
+    // ⚠ THIS SAID "Two relations" AND LISTED TournamentLeague. Measured against
+    // pg_constraint the first time T-009's drift check ran (2026-08-31),
+    // tournament_leagues.leagueId is confdeltype 'c' — CASCADE — so it was never
+    // a blocker. The unit test agreed with the constant because both were written
+    // from the same unverified reading of the schema; only the database disagreed.
     const plan = planLeaguePurge().map((s) => s.model)
-    expect(plan).toEqual(['TournamentLeague', 'LeagueManagerClaim', 'League'])
+    expect(plan).toEqual(['LeagueManagerClaim', 'League'])
     for (const blocker of LEAGUE_PURGE_BLOCKERS) {
       expect(plan.indexOf(blocker)).toBeLessThan(plan.indexOf('League'))
     }
@@ -88,7 +94,6 @@ describe('T-009 · execution', () => {
 
     expect(r.ok).toBe(true)
     expect(calls).toEqual([
-      ['TournamentLeague', { leagueId: 'l1' }],
       ['LeagueManagerClaim', { leagueId: 'l1' }],
       // The league itself is keyed on `id`, not `leagueId` — an easy and
       // completely silent mistake: `{ leagueId: 'l1' }` on the leagues table
@@ -102,7 +107,6 @@ describe('T-009 · execution', () => {
     const r = await purgeLeague({ deleteMany }, 'l1')
     if (!r.ok) throw new Error('expected success')
     expect(r.value.deleted).toEqual([
-      { model: 'TournamentLeague', rows: 3 },
       { model: 'LeagueManagerClaim', rows: 3 },
       { model: 'League', rows: 1 },
     ])
@@ -123,7 +127,7 @@ describe('T-009 · execution', () => {
     // the FK violation anyway. Continuing turns one clear error into two, and
     // the second is the less informative one.
     const deleteMany = vi.fn(async (model: string) => {
-      if (model === 'TournamentLeague') throw new Error('permission denied for table')
+      if (model === 'LeagueManagerClaim') throw new Error('permission denied for table')
       return 1
     })
     await expect(purgeLeague({ deleteMany }, 'l1')).rejects.toThrow(/permission denied/)
