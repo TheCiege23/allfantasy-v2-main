@@ -205,6 +205,31 @@ BEGIN
   -- which is true, unhelpful, and says nothing about the database being wrong.
   -- Probe with to_regclass, which returns NULL instead of raising, so the script
   -- can explain rather than crash.
+  -- ⚠ CHECK THE ROLE FIRST. The Connect dialog has a ROLE dropdown as well as a
+  -- database one, and after T-001 this branch has several login roles to choose
+  -- from - commish_app, commish_migrate, commish_platform, commish_purge - plus
+  -- Neon's own authenticator / neon_auth. Any of them authenticates fine and
+  -- then fails on the very next statement with:
+  --
+  --   ERROR:  permission denied for schema public
+  --
+  -- which names the schema, not the role, and so reads as a broken database
+  -- rather than a wrong dropdown. has_schema_privilege needs no schema access
+  -- itself, so this check works even when everything after it would not.
+  IF NOT has_schema_privilege(current_user, 'public', 'USAGE') THEN
+    RAISE EXCEPTION
+      'Connected as "%", which has no USAGE on schema public - so this is the wrong ROLE, not a broken branch. The Neon Connect dialog has a Role dropdown next to the Database one; select the project owner (normally "neondb_owner"). This script performs ALTER ROLE and needs the owner.',
+      current_user;
+  END IF;
+
+  -- Owner-ness, not merely access: ALTER ROLE needs CREATEROLE, and a role can
+  -- have USAGE on public while being unable to alter anything.
+  IF NOT (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) THEN
+    RAISE EXCEPTION
+      'Connected as "%", which lacks CREATEROLE. This script sets role passwords and needs the project owner (normally "neondb_owner"). Change the Role dropdown in the Neon Connect dialog.',
+      current_user;
+  END IF;
+
   IF to_regclass('public._prisma_migrations') IS NULL THEN
     SELECT string_agg(datname, ', ' ORDER BY datname) INTO dbs
       FROM pg_database WHERE NOT datistemplate;
