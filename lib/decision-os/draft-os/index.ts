@@ -29,12 +29,33 @@ import { HOURS } from '../domain-os/types'
  * roster-runtime (1) and schedule-runtime (1) all pay for the same ruleset, which is why League OS
  * exists and why it is the one that is wired.
  *
- * SO: if you are here to give the draft runtime a route, use League OS's loader unless you can say
- * why a draft needs the longer life — and if you can, say it here rather than assuming the 6h was
- * chosen for you. If instead the draft runtime is being retired in favour of `live-draft-engine`,
- * this module goes with it; nothing else imports it. That decision is tracked as 1.2b in
- * docs/decision-os/HUB_BUILD_PLAN.md and is deliberately left open rather than settled by whoever
- * happened to touch this file.
+ * ── 1.2b, DECIDED 2026-08-31: DO NOT GIVE THE DRAFT RUNTIME A ROUTE ─────────────────────────
+ *
+ * The tempting argument is symmetry — three of four canonical runtime resolvers have routes, so
+ * the fourth looks unfinished. That is an aesthetic claim, and acting on it would manufacture the
+ * exact defect this codebase keeps paying for: a SECOND way to read draft state alongside
+ * `live-draft-engine`, which is the adopted one and serves `/api/draft/room/state` and the
+ * commissioner draft route today.
+ *
+ * The evidence for how that ends is in this repository, three times over: three modules computing
+ * league health, two entry points for waiver settings, and a ruleset cached twice at different
+ * lifetimes. Every one began as a reasonable second implementation. None of them is cheap to
+ * reconcile now.
+ *
+ * ⚠ THE MODULE IS NOT DELETED, AND THAT IS ALSO A DECISION. It is tested, it is harmless, and
+ * `live-draft-engine` has not been shown to cover everything the canonical resolver models.
+ * Deleting on "nothing calls it" alone would be the same confidence that produced the three
+ * duplicates above, pointed the other way.
+ *
+ * 🛑 SO IT IS DEPRECATED IN PLACE, WITH THE CONDITION FOR RETIRING IT WRITTEN DOWN RATHER THAN
+ * LEFT TO JUDGEMENT: when someone confirms `live-draft-engine` covers every fact
+ * `resolveNflRedraftDraftRuntime` returns, delete the resolver AND this module together, since
+ * nothing else imports either. Until that confirmation exists, adding callers to either is the
+ * one move that makes the eventual cleanup harder.
+ *
+ * If you are here anyway to wire something: use League OS's loader, not this one, unless you can
+ * say why a draft needs the longer life — and if you can, say it here rather than assuming the 6h
+ * was chosen for you.
  *
  * ⚠ THIS DOMAIN HAS EXACTLY ONE SOURCE, AND THE TWO IT DOES **NOT** HAVE ARE THE POINT.
  *
