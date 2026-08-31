@@ -37,15 +37,30 @@ const ctx = () => {
 
 describe('T-009 · the ordered plan', () => {
   it('deletes the Restrict blockers BEFORE the league', () => {
-    // The entire reason this is not just `DELETE FROM leagues`. ONE relation to
-    // League carries no onDelete, so Prisma defaults it to Restrict and it
-    // aborts the delete rather than cascading.
+    // The entire reason this is not just `DELETE FROM leagues`. One relation to
+    // League is REQUIRED and carries no onDelete, so Prisma defaults it to
+    // Restrict and it aborts the delete rather than cascading.
     //
-    // ⚠ THIS SAID "Two relations" AND LISTED TournamentLeague. Measured against
-    // pg_constraint the first time T-009's drift check ran (2026-08-31),
-    // tournament_leagues.leagueId is confdeltype 'c' — CASCADE — so it was never
-    // a blocker. The unit test agreed with the constant because both were written
-    // from the same unverified reading of the schema; only the database disagreed.
+    // 🛑 THE DISCRIMINATOR IS OPTIONALITY, NOT THE ABSENCE OF `onDelete`.
+    // Prisma's referential default depends on whether the relation is required:
+    //
+    //     league League      (required, no onDelete)  → Restrict   BLOCKS
+    //     league League?     (optional, no onDelete)  → SetNull    does not block
+    //
+    // ⚠ THIS COMMENT SAID "Two relations ... carry no onDelete", and listed
+    // TournamentLeague. Both halves were wrong in the same way: TournamentLeague
+    // ALSO carries no onDelete, so "no onDelete" cannot be what distinguishes
+    // them. It is optional (`League?`), so its default is SetNull and it never
+    // blocked anything. LeagueManagerClaim is `League`, required — the only
+    // blocker. Corrected after a peer session read the schema properly; the
+    // conclusion was right and the stated reason was not.
+    //
+    // Verified against the database rather than inferred, so schema and DDL are
+    // known to agree rather than assumed to:
+    //     LeagueManagerClaim.leagueId      confdeltype 'r'  RESTRICT   (required)
+    //     tournament_shell_leagues.leagueId            'n'  SET NULL   (optional)
+    // The unit test previously agreed with the constant because both were written
+    // from the same unverified reading; only the database disagreed.
     const plan = planLeaguePurge().map((s) => s.model)
     expect(plan).toEqual(['LeagueManagerClaim', 'League'])
     for (const blocker of LEAGUE_PURGE_BLOCKERS) {

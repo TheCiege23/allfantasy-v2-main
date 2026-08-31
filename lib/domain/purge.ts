@@ -84,8 +84,26 @@ function readDays(name: string, fallback: number): number {
  *
  * The list was written from the claim that these were "the 2 of 148 League
  * relations that default to Restrict". That was asserted from reading the Prisma
- * schema, not measured against pg_constraint, and it was wrong: the tournament
- * relation carries an explicit onDelete.
+ * schema, not measured against pg_constraint, and it was wrong.
+ *
+ * 🛑 AND THE FIRST CORRECTION WAS ALSO WRONG, WHICH IS THE USEFUL PART.
+ * It said the tournament relation "carries an explicit onDelete". It does not —
+ * `TournamentLeague.league` has no onDelete at all. The discriminator is
+ * OPTIONALITY:
+ *
+ *     league League      (required, no onDelete)  → Restrict   BLOCKS
+ *     league League?     (optional, no onDelete)  → SetNull    does not block
+ *
+ * So "carries no onDelete" is true of BOTH and explains neither. Getting the
+ * right answer for the wrong reason is how the next entry gets added wrongly.
+ *
+ * Schema and database agree, checked both ways rather than assumed:
+ *     LeagueManagerClaim  league League                 → confdeltype 'r'  RESTRICT
+ *     TournamentLeague    league League?                → confdeltype 'n'  SET NULL
+ *       (maps to tournament_shell_leagues — NOT tournament_leagues, which is a
+ *        different model, LegacyTournamentLeague, with an explicit Cascade.
+ *        That near-identical table name is worth a second look before concluding
+ *        anything about either.)
  *
  * ⚠ AN OVER-INCLUSIVE ENTRY HERE IS NOT HARMLESS, WHICH IS WHY IT IS WORTH
  * DELETING RATHER THAN LEAVING. `describeLeaguePurge` renders each entry with the
