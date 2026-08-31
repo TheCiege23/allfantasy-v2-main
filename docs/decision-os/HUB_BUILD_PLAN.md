@@ -26,9 +26,9 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **1.1b** Split waiver/trade settings derives so they are schedulable | Both split. Waiver now scheduled; trade blocked on a season key, not on the derive |
 | ✅ | **0.6** Diff the two waiver-settings resolvers | §2.14. **No divergence** — they are layered, not rival. The alarm was a truncated grep |
 | ✅ | **1.2a** League OS — cached ruleset on the three resolvers that have routes | 60s TTL, GET only. §4 Phase 1.2 |
-| ⬜ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | Product decision: give it a route, or retire it for `live-draft-engine` |
+| ✅ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | **DECIDED: no route.** Deprecated in place with a written retirement condition. §4 Phase 1.2 |
 | 🔄 | **1.3** Propagate `drainOutcomes()` | **Premise was wrong** — see §4 Phase 1.3. Telemetry half was already done; League OS now emits too. Response half deferred to Phase 4 |
-| ⬜ | **1.4** Schedule `classifyDraftStatus` | Do not backfill |
+| ✅ | **1.4** Schedule `classifyDraftStatus` | **Already done** by `ad514a334`, on main. My §2.6 claim was stale — see §2.15 |
 | ⬜ | **2.1** Define `CanonicalValue` | Unblocked for NFL. College blocked on 0.4 |
 | ⬜ | **2.2** One adapter per producer | |
 | ⬜ | **2.3** Register `'value'` as an `OsDomain` | |
@@ -836,11 +836,56 @@ nothing.* The `--listFiles` count had already said so (6 occurrences where 1 was
 expected) and was read past. **Establish a zero baseline first; only then does a
 control's red mean anything.**
 
-**1.2b** — decide whether `resolveNflRedraftDraftRuntime` should get a route at
-all, or whether `live-draft-engine` is the adopted path and the canonical draft
-resolver should be retired. **A product decision, not a wiring task.** Note that
-`draft-os` now duplicates League OS's fact under a wronger name and a 6h TTL; if
-1.2b retires the draft resolver, `draft-os` goes with it.
+**1.2b ✅ DECIDED 2026-08-31: no route, deprecated in place, retirement
+condition written down.**
+
+The tempting argument is symmetry — three of four canonical runtime resolvers
+have routes, so the fourth looks unfinished. That is aesthetic, and acting on it
+would manufacture a **second way to read draft state** alongside
+`live-draft-engine`, which is the adopted one serving `/api/draft/room/state`
+and the commissioner draft route today.
+
+The evidence for how that ends is in this repo three times over: three modules
+computing league health (§2.2), two entry points for waiver settings (§2.14),
+and one ruleset cached twice at different lifetimes (§4 Phase 1.2). Each began
+as a reasonable second implementation; none is cheap to reconcile now.
+
+**Not deleted, and that is also a decision.** It is tested, harmless, and
+`live-draft-engine` has not been *shown* to cover everything the canonical
+resolver models. Deleting on "nothing calls it" alone is the same confidence
+that produced those three duplicates, pointed the other way.
+
+🛑 **The retirement condition, so it is not left to judgement later:** when
+someone confirms `live-draft-engine` covers every fact
+`resolveNflRedraftDraftRuntime` returns, delete the resolver **and** `draft-os`
+together — nothing else imports either. Until then, adding callers to either is
+the one move that makes the eventual cleanup harder.
+
+### 2.15 1.4 was already done, and my evidence for it was a comment
+
+**`classifyDraftStatus` has a caller.** `app/api/cron/import-players/route.ts:359`
+runs it as the `devyDraftStatus` phase behind a 20h cadence gate, with runway
+checks and honest deferral — landed as `ad514a334`, already on `origin/main`.
+
+§2.6 of this file said it had none. That claim came verbatim from a comment in
+`lib/devy/devyMarketBridge.ts:13`, which was true when written and stale by the
+time I read it. **I quoted it as a measured fact and never grepped.**
+
+⚠ **Second time tonight, same class.** The three-brain header (§2.3) said the
+stack was unwired; six runtime paths said otherwise. Both times the plan
+recorded a module's own comment as evidence. The rule this file already states —
+*where a header and a measurement disagree, record the measurement* — only works
+if a measurement is actually taken.
+
+The source comment has been corrected in place, with a note saying explicitly
+that it was mis-quoted into a plan, so the next reader does not repeat it.
+
+⚠ **And the caution §2.6 attached to 1.4 was aimed at the wrong risk.** It warned
+against backfilling. `classifyDraftStatus` does not backfill — it classifies the
+current board against real CFBD draft picks for the current and prior year. It
+also already **fails closed**: if zero draft years or zero team rosters load, it
+aborts *before writing* rather than turning a CFBD outage into a fact about
+every player. The real hazard was already handled by its author.
 
 **1.3 🔄 Propagate `drainOutcomes()` — the premise was wrong, and the correction
 splits it in two.**

@@ -7,14 +7,25 @@
  * therefore refused rather than graded, because grading it would mean inventing a conversion
  * and not saying so.
  *
- * ⚠ AND THE OBSERVATION SET IS EMPTY, NOT MERELY SMALL — measured on production 2026-08-30.
- * The honest way to earn this number is to watch what devy assets turn out to be worth once
- * they reach the NFL. That cannot be done today: `DevyPlayer` holds 1,721 rows of which ZERO
- * have `graduatedToNFL = true` and ZERO carry a `draftYear`, because `classifyDraftStatus` in
- * lib/devy-classification.ts — the sole writer of both — has no caller. 335 players were
- * draft-eligible in 2026 and none left the pool. Until that runs there is nothing to fit a
- * rate to, so the choice is between refusing forever and letting the league state its own
- * exchange rate explicitly.
+ * ⚠ THE OBSERVATION SET WAS EMPTY, AND THE REASON HAS SINCE BEEN FIXED. Measured on production
+ * 2026-08-30, `DevyPlayer` held 1,721 rows of which ZERO had `graduatedToNFL = true` and ZERO
+ * carried a `draftYear` — 335 players draft-eligible in 2026 and none left the pool — because
+ * `classifyDraftStatus` in lib/devy-classification.ts, the sole writer of both, had no caller.
+ *
+ * ✅ It has one now: `app/api/cron/import-players` runs it as the `devyDraftStatus` phase behind
+ * a 20h cadence gate (`ad514a334`). So the series has started accumulating rather than being
+ * structurally impossible, and the honest way to earn a real rate — watching what devy assets
+ * turn out to be worth once they reach the NFL — is now open where it was closed.
+ *
+ * 🛑 THAT DOES NOT MAKE THE BRIDGE OBSOLETE, AND WILL NOT FOR YEARS. One draft class is not a
+ * fitted rate; it is one point. Until there are enough graduated cohorts to fit against, a
+ * commissioner-stated exchange rate is still the only alternative to refusing forever, and every
+ * converted value still carries `DEVY_BRIDGE_CAVEAT`.
+ *
+ * ⚠ AND DO NOT RE-DERIVE THE OLD CLAIM FROM THIS COMMENT. The "has no caller" sentence above was
+ * quoted verbatim into a planning document on 2026-08-31 and recorded there as a measured fact,
+ * by a reader who did not grep. It was already stale. If you need to know whether a writer runs,
+ * check the callers — not a comment about them, including this one.
  *
  * This module is the second option, built so it cannot be mistaken for the first:
  *
