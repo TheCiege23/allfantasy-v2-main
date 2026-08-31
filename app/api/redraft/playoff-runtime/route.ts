@@ -11,6 +11,7 @@ import {
   overrideNflRedraftPlayoffMatchup,
   resolveNflRedraftPlayoffRuntime,
 } from '@/lib/playoff-runtime'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,11 +85,15 @@ export async function GET(req: NextRequest) {
   if (!member.ok) return NextResponse.json({ error: 'Forbidden' }, { status: member.status })
   const commissioner = await assertLeagueCommissioner(leagueId, userId)
 
+  // League OS supplies the ruleset from maintained state when it is under 60s old. GET only —
+  // the generate/advance/finalize paths in POST persist rows and must read live rules.
+  const { loadRules } = createLeagueOsLoaders()
+
   const resolved = await resolveNflRedraftPlayoffRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
-  })
+  }, { loadRules })
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })

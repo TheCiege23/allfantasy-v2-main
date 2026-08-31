@@ -11,6 +11,7 @@ import {
   generateNflRedraftScheduleForSeason,
   resolveNflRedraftScheduleRuntime,
 } from '@/lib/schedule-runtime'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +56,12 @@ export async function GET(req: NextRequest) {
   const gate = await resolveSeasonGate({ seasonId, leagueId, userId })
   if (!gate.ok) return gate.response
 
-  const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: gate.season.id })
+  // League OS supplies the ruleset from maintained state when it is under 60s old.
+  // ⚠ GET ONLY. The second call site in POST re-resolves after `updateStandings` to return the
+  // state the caller just produced; it keeps live rules deliberately, because "show me the result
+  // of what I just did" is the one place a cached input is most likely to be read as a bug.
+  const { loadRules } = createLeagueOsLoaders()
+  const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: gate.season.id }, { loadRules })
   if (!resolved.ok) return NextResponse.json({ error: resolved.reason }, { status: 409 })
 
   return NextResponse.json({

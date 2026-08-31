@@ -166,11 +166,29 @@ function toScheduleMatchupInput(row: {
   }
 }
 
+/**
+ * Injectable fact loaders, matching `DraftRuntimeDeps` on the draft resolver.
+ *
+ * 🛑 THIS SEAM IS ON THE READ ENTRY POINT ONLY, AND DELIBERATELY NOT ON
+ * `generateNflRedraftScheduleForSeason` BELOW. That function takes the same ruleset and PERSISTS a
+ * schedule derived from it. A stale ruleset on a read shows someone an old number for a minute; a
+ * stale ruleset on a generate writes it into the database, where nothing afterwards reveals that
+ * the schedule was built under settings the league had already changed. The write path keeps
+ * calling `resolveCanonicalLeagueRules` directly, and should stay that way.
+ */
+export interface ScheduleRuntimeDeps {
+  loadRules: (leagueId: string) => Promise<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
+}
+
+const defaultScheduleRuntimeDeps: ScheduleRuntimeDeps = {
+  loadRules: (leagueId) => resolveCanonicalLeagueRules(leagueId),
+}
+
 export async function resolveNflRedraftScheduleRuntime(input: {
   leagueId?: string | null
   seasonId?: string | null
   now?: Date
-}): Promise<NflRedraftScheduleRuntimeResolved> {
+}, deps: Partial<ScheduleRuntimeDeps> = {}): Promise<NflRedraftScheduleRuntimeResolved> {
   const season = await prisma.redraftSeason.findFirst({
     where: input.seasonId ? { id: input.seasonId } : { leagueId: input.leagueId ?? undefined },
     orderBy: input.seasonId ? undefined : { createdAt: 'desc' },
@@ -181,7 +199,8 @@ export async function resolveNflRedraftScheduleRuntime(input: {
   })
   if (!season) return { ok: false, reason: 'season_not_found' }
 
-  const rules = await resolveCanonicalLeagueRules(season.leagueId)
+  const loadRules = deps.loadRules ?? defaultScheduleRuntimeDeps.loadRules
+  const rules = await loadRules(season.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (String(rules.general.sport).toUpperCase() !== 'NFL' || normalize(rules.general.format) !== 'redraft') {
     return { ok: false, reason: 'not_nfl_redraft' }
