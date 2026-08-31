@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import posthog from 'posthog-js'
 
 interface Player {
   id: string
@@ -199,6 +200,12 @@ export function WaiverWireClient({ leagueId, preselectPlayerId = null }: WaiverW
         setClaims(claimsData.claims || [])
       }
       
+      posthog.capture('waiver_claim_submitted', {
+        player_id: selectedPlayer.id,
+        player_position: selectedPlayer.position,
+        bid_amount: bid,
+        league_id: leagueId,
+      })
       setSelectedPlayer(null)
       setBidAmount("")
       setSuccess(`Claim submitted for ${selectedPlayer.name} with $${bid} bid`)

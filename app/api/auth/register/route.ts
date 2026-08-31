@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
+import { getPostHogClient } from '@/lib/posthog-server'
 import { prisma } from "@/lib/prisma"
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup"
@@ -698,6 +699,29 @@ export async function POST(req: Request) {
       } catch (avatarErr) {
         console.warn("[register] avatar upload persistence failed (non-blocking):", avatarErr)
       }
+    }
+
+    // PostHog server-side: capture registration event. Best-effort — never throws.
+    try {
+      const posthog = getPostHogClient()
+      if (posthog) {
+        posthog.capture({
+          distinctId: user.id,
+          event: 'user_registered',
+          properties: {
+            verification_method: method,
+            has_referral_code: Boolean(referralCode),
+            has_sleeper_link: Boolean(sleeperData.sleeperUsername),
+          },
+        })
+        posthog.identify({
+          distinctId: user.id,
+          properties: { username: user.username ?? undefined },
+        })
+        await posthog.flush()
+      }
+    } catch {
+      // Non-blocking: analytics must never prevent account creation
     }
 
     // G15.2b — best-effort emit (never throws). Account is created at this point.

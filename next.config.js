@@ -268,6 +268,27 @@ const nextConfig = {
     "http://localhost:5000",
   ],
 
+  async rewrites() {
+    return [
+      // PostHog ingestion proxy — avoids ad-blocker interference
+      {
+        source: '/ingest/static/:path*',
+        destination: 'https://us-assets.i.posthog.com/static/:path*',
+      },
+      {
+        source: '/ingest/array/:path*',
+        destination: 'https://us-assets.i.posthog.com/array/:path*',
+      },
+      {
+        source: '/ingest/:path*',
+        destination: 'https://us.i.posthog.com/:path*',
+      },
+    ]
+  },
+
+  // This is required to support PostHog trailing slash API requests
+  skipTrailingSlashRedirect: true,
+
   async redirects() {
     return [
       // Alias pages removed from build to stay under Vercel's 2048-route cap.

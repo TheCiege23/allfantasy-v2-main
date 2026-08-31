@@ -5,6 +5,7 @@ import type { Session } from "next-auth"
 import { LanguageProviderClient } from "@/components/i18n/LanguageProviderClient"
 import SessionAppProvider from "@/components/providers/SessionAppProvider"
 import { ThemeProvider } from "@/components/theme/ThemeProvider"
+import { PHProvider, PostHogUserIdentifier } from "@/components/providers/PostHogProvider"
 
 export function AppProviders({
   children,
@@ -14,10 +15,14 @@ export function AppProviders({
   session?: Session | null
 }) {
   return (
-    <LanguageProviderClient>
-      <SessionAppProvider session={session}>
-        <ThemeProvider>{children}</ThemeProvider>
-      </SessionAppProvider>
-    </LanguageProviderClient>
+    <PHProvider>
+      <LanguageProviderClient>
+        <SessionAppProvider session={session}>
+          {/* PostHogUserIdentifier must be inside SessionAppProvider so useSession() works */}
+          <PostHogUserIdentifier />
+          <ThemeProvider>{children}</ThemeProvider>
+        </SessionAppProvider>
+      </LanguageProviderClient>
+    </PHProvider>
   )
 }
