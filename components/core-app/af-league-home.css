@@ -1166,13 +1166,36 @@
   font-weight: 600;
 }
 
+/* 🛑 THIS WAS `color: inherit; text-decoration: none`, WHICH MADE EVERY LINK IN
+   THE FRANCHISE PANEL INDISTINGUISHABLE FROM PLAIN TEXT until you happened to
+   hover it.
+
+   Reported as "the Fantrax league doesn't show up as its own league any more".
+   It did, and the panel was already linking to it — the name on the college
+   half is an anchor to /core?league=<id>, verified resolving to a real League
+   row. The route existed and nothing on screen said so, which for a reader is
+   the same thing as not having one.
+
+   ⚠ The current half deliberately renders as plain text, not as a dead link, so
+   colour here is what separates "somewhere you can go" from "where you are". */
 .af-lh-paired-link {
-  color: inherit;
+  color: var(--accent, #4fd1ff);
   text-decoration: none;
 }
 
-.af-lh-paired-link:hover {
+.af-lh-paired-link:hover,
+.af-lh-paired-link:focus-visible {
   text-decoration: underline;
+}
+
+/* ⚠ COLOUR ALONE IS NOT AN AFFORDANCE. At 15px/600 in a dark card it reads as
+   emphasis rather than as a link, and it is invisible to anyone who cannot
+   separate those hues. The arrow is the part that does not depend on seeing a
+   colour difference. `aria-hidden` via content: the accessible name is the
+   league name, and a screen reader already announces the anchor as a link. */
+.af-lh-paired-title .af-lh-paired-link::after {
+  content: ' →';
+  font-weight: 400;
 }
 
 .af-lh-paired-meta,
