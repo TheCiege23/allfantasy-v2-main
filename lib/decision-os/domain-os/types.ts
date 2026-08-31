@@ -52,7 +52,9 @@ export type OsScopeLevel = (typeof OS_SCOPE_LEVELS)[number]
  *
  * Widening this union needs no migration — `DomainOsFacts.domain` is a `VarChar(16)`.
  */
-export type OsDomain = 'lineup' | 'waiver' | 'trade' | 'draft' | 'league' | 'value' | 'projection'
+export type OsDomain =
+  | 'lineup' | 'waiver' | 'trade' | 'draft'
+  | 'league' | 'value' | 'projection' | 'import'
 
 export interface OsFactEnvelope<T> {
   facts: T
