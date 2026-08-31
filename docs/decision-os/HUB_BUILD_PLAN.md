@@ -26,7 +26,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ⬜ | **1.1b** Split waiver/trade settings derives so they are schedulable | The other four sources cannot be refreshed until this lands |
 | ✅ | **1.2a** League OS — cached ruleset on the three resolvers that have routes | 60s TTL, GET only. §4 Phase 1.2 |
 | ⬜ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | Product decision: give it a route, or retire it for `live-draft-engine` |
-| ⬜ | **1.3** Propagate `drainOutcomes()` | |
+| 🔄 | **1.3** Propagate `drainOutcomes()` | **Premise was wrong** — see §4 Phase 1.3. Telemetry half was already done; League OS now emits too. Response half deferred to Phase 4 |
 | ⬜ | **1.4** Schedule `classifyDraftStatus` | Do not backfill |
 | ⬜ | **2.1** Define `CanonicalValue` | Unblocked for NFL. College blocked on 0.4 |
 | ⬜ | **2.2** One adapter per producer | |
@@ -789,10 +789,41 @@ resolver should be retired. **A product decision, not a wiring task.** Note that
 `draft-os` now duplicates League OS's fact under a wronger name and a 6h TTL; if
 1.2b retires the draft resolver, `draft-os` goes with it.
 
-**1.3 Propagate `drainOutcomes()`.** Three request paths already call it and
-discard the result. Carry `servedFrom` / `ageMs` / `confidence` into the
-response so a surface can say *"facts up to 4 h old"*. This is invariant P2
-applied to the cache layer, where it currently is not applied.
+**1.3 🔄 Propagate `drainOutcomes()` — the premise was wrong, and the correction
+splits it in two.**
+
+This said *"three request paths already call it and discard the result."* They
+do not. All three — `today/lineup-actions`, `waiver-ai/engine`,
+`redraft/trade-proposals` — call `drainOutcomes()` and pass it to
+`emitFeedOutcomes(domain, …)`, which emits `decision.os_feed` telemetry **and**
+writes a durable `ApiUsageEvent` row via `recordDecisionOsFeed`. Its own comment
+explains why: the console line is log-drain-only and unqueryable, and the
+store-vs-live split is *"the ONLY evidence for whether `domain_os_facts` is
+worth migrating."* So the telemetry half of 1.3 was built before this plan
+existed.
+
+**Done: League OS now emits too.** That was a hole in 1.2a's own work — the
+module header claims the hit rate is *"MEASURABLE rather than assumed"*, and
+the three routes did not emit, so it was neither. Each now builds the loader
+**once per request** (so `drainOutcomes()` sees every fact that request
+resolved) and calls `emitFeedOutcomes('league', …)`, matching what
+lineup/waiver/trade already do. This is what makes the 60s TTL's value
+checkable rather than argued.
+
+**Deferred: the response half.** Carrying `servedFrom` / `ageMs` into the
+*payload*, so a surface can say "facts up to 4h old", is genuinely not built —
+telemetry goes to `ApiUsageEvent`, not to the caller. But **it has no consumer
+until Phase 4**, and adding a field nothing reads is the exact pattern this
+plan has now criticised three times (Draft OS, `lib/domain`,
+`decision-os/canonical`). It belongs with `buildDecisionOsGroundingPacket()`
+(4.1), which is the first thing that needs it — D16's per-fact
+`isConclusive` cannot work without it.
+
+⚠ **Note the shape this correction shares with 1.2.** Both plan items were
+written from module headers and grep counts rather than from following the call
+through, and both were wrong in the same direction: they described work as
+missing that was partly done, and missed where the real gap was. The fix in
+both cases came from trying to USE the thing.
 
 **1.4 Schedule `classifyDraftStatus`** (§2.6). The sole writer of
 `graduatedToNFL` / `draftYear` has no caller, so no devy player has ever left

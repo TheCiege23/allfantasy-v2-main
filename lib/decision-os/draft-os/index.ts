@@ -10,6 +10,32 @@ import { HOURS } from '../domain-os/types'
  *
  * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
  *
+ * 🛑 READ THIS BEFORE WIRING ANYTHING TO IT. `lib/decision-os/league-os/` HOLDS THE SAME FACT.
+ *
+ * Both cache `resolveCanonicalLeagueRules`. The duplication is deliberate and the two TTLs are two
+ * correct answers to two different access patterns, not a bug and a fix:
+ *
+ *   draft-os   6h   right for a DRAFT. Rules do not change mid-event, the reader is inside one,
+ *                   and a live draft polls constantly — a short TTL would re-derive seven queries
+ *                   over and over for a fact that provably is not moving. Pinned by
+ *                   __tests__/draft-os.test.ts, so it is a decision rather than a default.
+ *   league-os  60s  right for ORDINARY READS. The realistic sequence there is "commissioner
+ *                   changes scoring, then opens the roster screen", and a 6h entry answers that
+ *                   with the old rules while looking authoritative.
+ *
+ * ⚠ AND ONLY ONE OF THEM IS REACHED BY ANYTHING. Measured 2026-08-31:
+ * `resolveNflRedraftDraftRuntime` — this module's sole consumer — has ZERO callers. Live drafts
+ * run on `lib/live-draft-engine/DraftSessionService`. Meanwhile playoff-runtime (4 routes),
+ * roster-runtime (1) and schedule-runtime (1) all pay for the same ruleset, which is why League OS
+ * exists and why it is the one that is wired.
+ *
+ * SO: if you are here to give the draft runtime a route, use League OS's loader unless you can say
+ * why a draft needs the longer life — and if you can, say it here rather than assuming the 6h was
+ * chosen for you. If instead the draft runtime is being retired in favour of `live-draft-engine`,
+ * this module goes with it; nothing else imports it. That decision is tracked as 1.2b in
+ * docs/decision-os/HUB_BUILD_PLAN.md and is deliberately left open rather than settled by whoever
+ * happened to touch this file.
+ *
  * ⚠ THIS DOMAIN HAS EXACTLY ONE SOURCE, AND THE TWO IT DOES **NOT** HAVE ARE THE POINT.
  *
  * `resolveNflRedraftDraftRuntime` loads three things. Only one of them can be cached at all:
