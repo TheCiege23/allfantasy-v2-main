@@ -123,6 +123,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
   const [filter, setFilter] = useState<NotificationFilter>('all')
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const [marking, setMarking] = useState(false)
+  const [markedAll, setMarkedAll] = useState(false)
 
   const match = useCallback(
     (r: NotificationRow) => filter === 'all' || r.kind === filter,
@@ -157,6 +158,7 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: payload }),
     }).catch(() => null)
+    if (payload === 'all') setMarkedAll(true)
     setReadIds((prev) => {
       const next = new Set(prev)
       if (payload === 'all') for (const r of data.rest) next.add(r.id)
@@ -166,7 +168,23 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
     setMarking(false)
   }, [data.rest])
 
-  const unread = rest.filter((r) => !r.read).length + actToday.length
+  /*
+   * 🛑 THE TRUE COUNT, FROM THE LOADER - DO NOT RECOMPUTE IT FROM `rest`.
+   * `rest` holds only the newest 60 stored rows, so counting unread inside it
+   * reports "unread among the ones we loaded" while the sentence below reads as
+   * a claim about the whole account. That is how this screen came to say
+   * "Nothing is waiting on you" beside a nav badge reading 55.
+   *
+   * ⚠ AND IT IS DELIBERATELY NOT FILTER-SENSITIVE. The chips filter the LIST;
+   * they do not change how much is waiting on you. The old count moved with the
+   * active chip, so selecting an empty one also claimed nothing was waiting.
+   *
+   * Marking read is reconciled locally so the number moves when the user acts:
+   * 'all' sends `ids: 'all'`, which clears every row for this user server-side,
+   * so it goes to zero rather than dropping by the 60 that happen to be listed.
+   */
+  const locallyRead = data.rest.filter((r) => !r.read && readIds.has(r.id)).length
+  const unread = markedAll ? 0 : Math.max(0, data.unread - locallyRead)
 
   return (
     <div className="af-nt">
@@ -181,11 +199,18 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
                 : 'Nothing is waiting on you.'}
           </p>
         </div>
+        {/*
+          * ⚠ GATED ON THE TRUE COUNT, NOT ON THE LISTED ROWS. This tested
+          * `data.rest.every(read)`, so once the newest 60 were read the button
+          * went disabled while older unread rows still existed - leaving the
+          * only control that can clear them unreachable, in exactly the state
+          * where a user most wants it. `ids: 'all'` clears them server-side.
+          */}
         <button
           type="button"
           className="af-nt-markall"
           onClick={() => markRead('all')}
-          disabled={marking || data.rest.every((r) => r.read || readIds.has(r.id))}
+          disabled={marking || unread === 0}
         >
           {marking ? 'Marking…' : 'Mark all read'}
         </button>
@@ -225,6 +250,19 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
 
       <section className="af-nt-section">
         <h2 className="af-nt-sectiontitle">Everything else</h2>
+        {/*
+          * Says the window out loud. The chip counts are computed from the rows
+          * on this page, so with more stored than the loader fetches they are a
+          * page total wearing the appearance of an account total - the same
+          * mistake the header used to make, one element over.
+          */}
+        {data.olderNotListed > 0 ? (
+          <p className="af-nt-sectionnote">
+            The {data.listed} most recent are listed here. {data.olderNotListed} older{' '}
+            {data.olderNotListed === 1 ? 'notification is' : 'notifications are'} not shown, so the
+            counts above describe this page rather than everything you have.
+          </p>
+        ) : null}
         {rest.length > 0 ? (
           <ul className="af-nt-list">
             {rest.map((r) => (
