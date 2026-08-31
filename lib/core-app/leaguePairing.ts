@@ -31,6 +31,7 @@
  */
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { getDraftHqAll } from './draftHqAll'
 import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
 
 /** One half of a franchise, described identically whichever half it is. */
@@ -45,6 +46,16 @@ export type FranchiseSide = {
   /** Roster size, or null when that half's roster cannot be read. */
   playerCount: number | null
   unavailableReason: string | null
+  /**
+   * That half's draft, when one is on file.
+   *
+   * ⚠ READ THROUGH `getDraftHqAll`, THE SAME AGGREGATOR THE LEAGUE HOME USES.
+   * Writing a second draft query here is how one screen comes to say "draft has
+   * ended" while the panel beside it says "no draft on file" about the same
+   * league. Null means no draft row — which for a Fantrax half is the ordinary
+   * case, since the snapshot import captures no draft at all.
+   */
+  draft: { phase: string; headline: string; detail: string | null; href: string | null } | null
 }
 
 export type PairedHalf = {
@@ -213,6 +224,7 @@ export async function resolvePairedHalf(
         season: snap?.season ?? null,
         teamLabel: snap?.userTeam ?? member.teamExternalId,
         playerCount: mine && mine.length > 0 ? mine.length : null,
+        draft: null,
         unavailableReason:
           snap == null
             ? 'the linked Fantrax league no longer exists'
@@ -285,6 +297,7 @@ export async function resolvePairedHalf(
       season: lg?.season ?? null,
       teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || member.teamExternalId,
       playerCount: players,
+      draft: null,
       unavailableReason:
         lg == null
           ? 'the linked league no longer exists'
@@ -306,6 +319,85 @@ export async function resolvePairedHalf(
     : null
 
   const other = otherMember ? await describeSide(otherMember) : null
+
+  /*
+   * ⚠ ONE LOOKUP FOR BOTH HALVES, AFTER THEY ARE RESOLVED. `getDraftHqAll` takes
+   * a LIST, so asking it once for both leagues costs one round trip rather than
+   * two — and, more importantly, both halves are then described by the same call,
+   * so they cannot disagree about a draft the way two separate queries could.
+   *
+   * ⚠ A FANTRAX HALF USUALLY HAS NO ROW, AND THAT IS NOT AN ERROR. The snapshot
+   * import captures no draft, so `draft` stays null and the panel simply says
+   * nothing rather than claiming the league never drafted.
+   */
+  const draftIds = Array.from(
+    new Set([self?.leagueId, other?.leagueId].filter((id): id is string => typeof id === 'string')),
+  )
+  if (draftIds.length > 0) {
+    const draftAll = await getDraftHqAll(
+      ownerUserId,
+      draftIds.map((id) => ({ id })),
+    ).catch(() => null)
+    const byLeague = new Map((draftAll?.rows ?? []).map((r) => [r.leagueId, r]))
+    for (const side of [self, other]) {
+      if (!side?.leagueId) continue
+      const row = byLeague.get(side.leagueId)
+      if (!row) continue
+      side.draft = {
+        phase: row.phase,
+        headline:
+          row.phase === 'live'
+            ? 'Draft is live'
+            : row.phase === 'done'
+              ? /* The season is the useful half — "draft complete" on a dynasty
+                   league says nothing about WHICH draft. Same reasoning the
+                   league home applies to the identical string. */
+                `${side.season ?? ''} draft has ended`.trim()
+              : row.phase === 'unknown'
+                ? row.rawStatus
+                : 'Draft not started',
+        detail:
+          [
+            row.rounds != null ? `${row.rounds} rounds` : null,
+            row.draftType,
+            row.yourSlot != null ? `you pick ${row.yourSlot}` : null,
+            row.picksMade != null
+              ? `${row.picksMade} ${row.picksMade === 1 ? 'pick' : 'picks'} recorded`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || null,
+        href: `/core/draft-hq?league=${encodeURIComponent(side.leagueId)}`,
+      }
+    }
+  }
+
+  /*
+   * 🛑 NO DRAFT ROW ON A LEAGUE WITH FULL ROSTERS IS A GAP IN OUR DATA, NOT A
+   * FACT ABOUT THE LEAGUE.
+   *
+   * `getDraftHqAll` returns nothing for either half here — measured on
+   * production, both Peach Bowl and Cream Bowl — because no DraftSession was
+   * ingested. Rendering silence would imply there was no draft, while the league
+   * home one panel down already says "…draft has ended · rosters are populated,
+   * so this league drafted, but we did not capture the board itself". Saying two
+   * different things about one league on one screen is the failure; this mirrors
+   * the wording rather than inventing a second story.
+   *
+   * ⚠ GATED ON A ROSTER WE ACTUALLY READ. `playerCount` is null exactly when the
+   * roster could not be read, and inferring a draft from a roster we never saw
+   * would be a guess dressed as a finding.
+   */
+  for (const side of [self, other]) {
+    if (!side || side.draft || side.unavailableReason) continue
+    if ((side.playerCount ?? 0) <= 0) continue
+    side.draft = {
+      phase: 'done',
+      headline: `${side.season ?? ''} draft has ended`.trim(),
+      detail: 'rosters are populated, but we did not capture the board',
+      href: null,
+    }
+  }
 
   return { ...base, self, other }
 }
