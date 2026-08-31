@@ -36,6 +36,7 @@ import type {
 } from '@/lib/chimmy-context/types'
 import { getEligibleDevyPlayers } from '@/lib/devy-classification'
 import { buildDevyValueBoard } from '@/lib/devy/devyValueBoard'
+import { getDevyPassingProfilesByNameFromDb, normalizeDevyName } from '@/lib/devy/devyPlayerReads'
 
 /** How many prospects to hand the prompt. The board is built from the full pool. */
 const TOP_N = 25
@@ -78,10 +79,33 @@ export class DevyContextProvider implements ChimmyContextProvider<DevyContextSli
         new Date().getFullYear(),
       )
 
-      const topProspects: DevyProspect[] = board.entries
-        .filter((e) => e.devyRank != null)
-        .slice(0, TOP_N)
-        .map((e) => ({
+      const ranked = board.entries.filter((e) => e.devyRank != null).slice(0, TOP_N)
+
+      /*
+       * Passing profiles for the passers on the board, from the DB-first read.
+       *
+       * ⚠ ONE QUERY FOR THE WHOLE BOARD, NOT ONE PER PROSPECT. Chimmy's bundle is built on
+       * a user request and every provider shares that latency budget; twenty-five sequential
+       * lookups is how a context engine becomes the reason a chat reply is slow.
+       *
+       * Failure is swallowed to null rather than propagated: a missing passing profile makes
+       * the answer thinner, and taking the whole devy slice down over it would make Chimmy
+       * blind to the board as well.
+       */
+      const passingByName = await getDevyPassingProfilesByNameFromDb().catch(() => new Map())
+
+      const topProspects: DevyProspect[] = ranked.map((e) => {
+        const prof = passingByName.get(normalizeDevyName(e.name)) ?? null
+
+        /*
+         * ⚠ ADOT IS CARRIED WITH ITS DENOMINATOR OR NOT AT ALL. `airYardsAttempts` is what
+         * makes the number comparable between two passers, and a profile without it is a
+         * ratio over an unrecorded sample — the exact state production shipped once. Rather
+         * than hand Chimmy half of it, the whole passing object is dropped.
+         */
+        const usable = prof && prof.adot != null && prof.airYardsAttempts != null && prof.airYardsAttempts > 0
+
+        return {
           name: e.name,
           position: e.position,
           school: e.school,
@@ -90,7 +114,23 @@ export class DevyContextProvider implements ChimmyContextProvider<DevyContextSli
           devyRank: e.devyRank,
           // Board points, null when unranked — never 0. See DevyContextSlice.
           value: e.value.value,
-        }))
+          passing:
+            usable && prof
+              ? {
+                  season: prof.season ?? 0,
+                  attempts: prof.attempts,
+                  adot: prof.adot,
+                  adotAttempts: prof.airYardsAttempts,
+                  yacPerCompletion:
+                    prof.yardsAfterCatch != null && prof.yacCompletions != null && prof.yacCompletions > 0
+                      ? prof.yardsAfterCatch / prof.yacCompletions
+                      : null,
+                  yacCompletions: prof.yacCompletions,
+                  schoolAdot: prof.teamPassAdot,
+                }
+              : null,
+        }
+      })
 
       return {
         ok: true,
