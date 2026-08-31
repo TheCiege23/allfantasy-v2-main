@@ -469,6 +469,18 @@ LAST command's**, so the thing being tested never decides the result. Use
   ⚠ This repo carries a standing error baseline, so a **non-zero exit is
   normal** — the tell for the OOM is a crash dump and no `error TS` lines at
   all, not the exit code.
+- 🛑 **AND "NO CRASH DUMP" NO LONGER CLEARS AN EMPTY TSC RUN.** On 2026-08-31 a
+  detached worktree's `node_modules` junction **silently failed to create**, so
+  `node ./node_modules/typescript/lib/tsc.js` never started tsc at all. Exit 1,
+  **zero `error TS` lines, and no crash dump** — the precise profile the rule
+  above says to treat as "OOM or clean". The tell was `Cannot find module` in the
+  first few lines of output. **Check for it as its own control**, not as a
+  footnote to the crash dump, and note this is the third distinct way to get an
+  empty tsc run (OOM, process-never-started, and the not-yet-written case under
+  the missing-`pgrep` entry below). All three look identical if you only count
+  `error TS` lines. Verify the junction with `(Get-Item <path> -Force).LinkType`
+  **before** trusting any number the run produces — `mklink` printing a success
+  line is not evidence, as the entry above already records.
 
 🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
 POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
@@ -596,6 +608,77 @@ git diff --name-status <local> <candidate> | grep '^D'   # must be empty
 conflict rules already name, reached from the opposite side: not a habit of
 taking one side, but a habit of **reusing a resolution that worked before**.
 Twice correct is not evidence about the third time.
+
+#### An escaping layer eats a backslash and the regex still runs
+
+🛑 **`\s+` INSIDE A SQL REGEX BECOMES `s+` IF ANY LAYER BETWEEN YOU AND POSTGRES
+EATS THE BACKSLASH — AND `s+` IS A VALID REGEX MATCHING THE LETTER `s`.** Nothing
+throws, no query fails, and the number that comes back is entirely plausible.
+
+Measured on 2026-08-31, comparing normalized player names between `SportsPlayer`
+and `PlayerIdentityMap`. `regexp_replace(name, 's+', ' ', 'g')` stripped every
+`s` out of every name, compared the wreckage against the registry, and reported:
+
+```
+candidate pool   48,074   really 38,976
+roster estimate  "+7"     really +17
+```
+
+Both wrong in the safe-looking direction, and both survived being re-read twice.
+The layers that can eat it are ordinary: a bash heredoc with an unquoted
+delimiter, a nested template literal, a `.replace()` chain, a shell `-e` string.
+
+**Two rules, and the second is the durable one:**
+
+1. Make the query print the SQL it actually sends and byte-compare against the
+   string you think you wrote. That is what settled the 9,098-row disagreement
+   above; re-reading the source did not, twice.
+2. **Prefer `[[:space:]]+` over `\s+` in any SQL that passes through a layer.**
+   The POSIX class needs no escaping and cannot fail this way. Verify a swap is
+   behaviour-preserving by confirming every headline figure is byte-identical
+   before and after — an "equivalent" regex that moves a number was not
+   equivalent.
+
+⚠ **AND DO NOT REIMPLEMENT A NORMALIZER IN SQL AT ALL WHEN ONE EXISTS IN JS.**
+The same day, a SQL copy of `normalizePlayerName` was compared against the real
+one on 500 rows and disagreed on **36 (7.2%)** — generational suffixes and
+apostrophes (`Danny Lockhart Jr.`, `Patrick O'Brien`). Writing rows keyed by the
+SQL copy would have produced ~42,000 rows the resolver can never look up: they
+exist, they count as inserted, and no read finds them. Two implementations of one
+rule is the bug. Deleting one is the fix; a better SQL regex is not.
+
+#### A NUL byte in source, and a diff that cannot fail
+
+🛑 **AN UNQUOTED BASH HEREDOC (`<<PY`, not `<<'PY'`) EXPANDS BACKTICKS AND `$` IN
+THE BODY.** Feeding one a script containing a JS template literal wrote a **NUL
+byte** into a TypeScript source file on 2026-08-31, where a space belonged:
+
+```
+const key = `${normalized}\x00${team}`
+```
+
+**All 16 tests still passed**, because a NUL is as good a key separator as a
+space. `grep -n` printed `Binary file … matches` rather than the line, which is
+the only visible tell, and it is easy to read as noise. It was caught by
+inspecting bytes (`python … repr(s[i:i+50])`), not by any check in the repo.
+Quote the delimiter, or write the file with the editor rather than through a
+shell.
+
+⚠ **AND THE CHECK THAT SHOULD HAVE CAUGHT IT COULD NOT: `git diff` ON AN
+UNTRACKED FILE PRINTS NOTHING, WHATEVER THE CONTENT.** A mutation-testing loop
+"restored" its file and confirmed it with `git diff --stat -- <path>` reading
+empty. The file was new, so git had never seen it and the command was empty by
+construction — a check that cannot fail, in the exact form this whole section is
+about. **Restore-verify with `diff -q <backup> <file>`**, or `git show
+<sha>:<path>` once committed, and scan the committed blob for NULs
+(`git show <sha>:<path> | tr -dc '\000' | wc -c`) when a shell wrote it.
+
+⚠ A mutation control has the same requirement in a second place, learned the same
+day on CRLF files: **prove the mutation APPLIED before believing a green run.**
+Three controls "passed" because a `perl -0pi` pattern matching `\n` silently
+matched nothing in CRLF sources. A no-op mutation is indistinguishable from a
+test that cannot fail. Assert the file changed (`diff -q`, expecting failure)
+between mutating and running.
 
 #### The third shape: a check that PASSES, on something you did not ship
 
