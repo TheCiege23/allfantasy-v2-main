@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime'
 import { canViewLeague, isElevatedCommissioner } from '@/server/services/permissionService'
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 
 function positiveWeek(value: string | null): number | null {
   if (!value) return null
@@ -55,13 +56,19 @@ export async function GET(
   // League OS supplies the ruleset from maintained state when it is under 60s old, so several
   // resolvers in one page load do not each pay `resolveCanonicalLeagueRules`'s seven queries.
   // GET only — the ruleset must be live wherever it is used to persist rows.
-  const { loadRules } = createLeagueOsLoaders()
+  //
+  // Built ONCE per request so `drainOutcomes()` sees every fact this request resolved, matching
+  // how lineup/waiver/trade already do it. The store-vs-live split is the ONLY evidence for
+  // whether a 60s entry earns its keep, so emitting it is what makes that claim checkable
+  // instead of asserted.
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
 
   const resolved = await resolveNflRedraftRosterRuntime({
     leagueId,
     rosterId,
     scoringWeek: positiveWeek(searchParams.get('week')),
   }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
 
   if (!resolved.ok) {
     const status = resolved.reason === 'league_not_found' ? 404 : resolved.reason === 'not_nfl_redraft' ? 400 : 404

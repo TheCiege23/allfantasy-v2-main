@@ -12,6 +12,7 @@ import {
   resolveNflRedraftPlayoffRuntime,
 } from '@/lib/playoff-runtime'
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,13 +88,15 @@ export async function GET(req: NextRequest) {
 
   // League OS supplies the ruleset from maintained state when it is under 60s old. GET only —
   // the generate/advance/finalize paths in POST persist rows and must read live rules.
-  const { loadRules } = createLeagueOsLoaders()
+  // Built ONCE per request so drainOutcomes() sees every fact this request resolved.
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
 
   const resolved = await resolveNflRedraftPlayoffRuntime({
     seasonId,
     leagueId,
     week: parsedWeek.value,
   }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
     return NextResponse.json({ error: resolved.reason }, { status })

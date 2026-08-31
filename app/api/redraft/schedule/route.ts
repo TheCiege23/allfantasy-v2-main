@@ -12,6 +12,7 @@ import {
   resolveNflRedraftScheduleRuntime,
 } from '@/lib/schedule-runtime'
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { emitFeedOutcomes } from '@/lib/decision-os/core/parity'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,8 +61,10 @@ export async function GET(req: NextRequest) {
   // ⚠ GET ONLY. The second call site in POST re-resolves after `updateStandings` to return the
   // state the caller just produced; it keeps live rules deliberately, because "show me the result
   // of what I just did" is the one place a cached input is most likely to be read as a bug.
-  const { loadRules } = createLeagueOsLoaders()
+  // Built ONCE per request so drainOutcomes() sees every fact this request resolved.
+  const { loadRules, drainOutcomes } = createLeagueOsLoaders()
   const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: gate.season.id }, { loadRules })
+  emitFeedOutcomes('league', drainOutcomes())
   if (!resolved.ok) return NextResponse.json({ error: resolved.reason }, { status: 409 })
 
   return NextResponse.json({
