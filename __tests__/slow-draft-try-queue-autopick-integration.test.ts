@@ -26,6 +26,18 @@ vi.mock('@/lib/live-draft-engine/PickSubmissionService', () => ({
   submitPick: hm.submitPick,
 }))
 
+// This file pulls in the live-draft engine graph (@/lib/live-draft-engine/*) behind its mocks, and
+// the first test pays the whole cold Vite transform for it - measured at 7.8s of transform against
+// 12.9s of test time when run alone. That fits inside the default 30s budget on an idle machine and
+// does NOT fit when the suite is sharded across a loaded one: the sharded run timed out at 36.1s
+// while the same test passes 2/2 in isolation.
+//
+// So this is a transform-cost timeout, not a logic hang, and it is the same shape already recorded
+// in commissionerOsRecommendations.test.ts and league-create-defaults-api.test.ts. Raised for the
+// whole file rather than the one slow test because the cost lands on whichever test runs FIRST,
+// and that is an ordering detail no annotation should depend on.
+vi.setConfig({ testTimeout: 60000 })
+
 describe('tryQueueAutoPick (slow-draft worker path)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
