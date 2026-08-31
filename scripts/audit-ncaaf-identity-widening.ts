@@ -2,6 +2,25 @@
  * DRY RUN. Reports exactly what widening the NCAAF identity registry from
  * `SportsPlayer` would insert, and writes nothing.
  *
+ * 🛑 THIS SCRIPT IS THE SHAPE OF THE POOL. IT IS NOT THE AUTHORITATIVE COUNT.
+ * `widenNcaafIdentities({ dryRun: true })` in
+ * `lib/devy/ingestNcaafIdentitiesFromSportsPlayer.ts` is — and the two disagree
+ * on purpose:
+ *
+ *   this script  44,692 pairs   normalizes in SQL
+ *   the writer   42,546 pairs   normalizes with `normalizePlayerName`
+ *
+ * The writer uses the one normalizer the resolver also uses, so its number is
+ * what would actually be written and read back. This script reimplements the
+ * rule in SQL to let Postgres do the grouping, and a comparison of the two on
+ * 500 real rows found 36 disagreements (7.2%) — generational suffixes and
+ * apostrophes: `Danny Lockhart Jr.` and `Patrick O'Brien`.
+ *
+ * That gap is why the WRITER does not normalize in SQL at all. It is tolerated
+ * HERE because this script only characterises the pool — junk rate, staleness,
+ * provenance, collision structure — and none of those conclusions move by 5%.
+ * Do not quote this file's totals as the insert size.
+ *
  * 🛑 THIS SCRIPT CONTAINS NO WRITE CALL, AND THAT IS THE POINT. `PlayerIdentityMap`
  * is the canonical table the whole app resolves players against — `AFProjectionSnapshot.playerId`
  * lands on it, the Fantrax and CFBD bridges hang off it, and an insert of this size
