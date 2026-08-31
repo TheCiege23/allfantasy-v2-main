@@ -141,7 +141,7 @@ function MappingTable({ data }: { data: DiscordBridgeData }) {
               <td>
                 {!m.available ? (
                   <span className="af-dc-unavail">
-                    Needs a migration — <code>surface</code> column not applied yet
+                    Not relayed yet — nothing posts to this surface
                   </span>
                 ) : m.mapped ? (
                   <a className="af-dc-chan" href={m.channelUrl ?? '#'} target="_blank" rel="noreferrer">
@@ -282,11 +282,10 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
             </h2>
             {data.surfacesPending ? (
               <p className="af-dc-pending">
-                Only <strong>league chat</strong> can be mapped right now. Mapping the other three
-                surfaces needs a database column that is written but not yet applied — see{' '}
-                <code>prisma/migrations/20260823120000_discord_bridge_surfaces</code>. They are shown
-                here so the shape is visible, with their controls disabled rather than pretending to
-                work.
+                Only <strong>league chat</strong> can be mapped right now. The other three surfaces
+                are built here but nothing posts to them yet, so mapping one would give you a
+                channel that stays silent. They are shown so the shape is visible, with their
+                controls disabled rather than pretending to work.
               </p>
             ) : null}
             <MappingTable data={data} />
