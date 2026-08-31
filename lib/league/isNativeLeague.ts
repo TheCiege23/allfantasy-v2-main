@@ -19,6 +19,16 @@ export const NATIVE_PLATFORMS: ReadonlySet<string> = new Set([
   'af',
   'manual',
   'native',
+  /*
+   * AF-created ADP seed fixtures (18 leagues in production). These are real `League` rows we
+   * generated, not imports — there is no host platform holding their schedule — so the weekly
+   * processor may pair and score them like any other native league.
+   *
+   * Listed explicitly rather than by prefix: `startsWith('allfantasy')` would silently adopt every
+   * future `allfantasy_*` string, which is the denylist failure mode the header warns about,
+   * pointing the other way. A new seed platform should be a deliberate line here.
+   */
+  'allfantasy_test_adp_seed',
   '',
 ])
 
