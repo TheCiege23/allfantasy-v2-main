@@ -32,6 +32,40 @@
 --   npm run test:commissioner-os
 --
 -- IDEMPOTENT. Safe to re-run; re-running does not reset passwords.
+--
+-- 🛑 WHY `SELECT format(...) ... \gexec` AND NOT `DO $$ ... EXECUTE format ... $$`.
+-- THIS FILE COULD NOT RUN AT ALL UNTIL 2026-08-31 AND NOBODY NOTICED, because
+-- nobody had run it: the production roles were created by hand through the Neon
+-- API, not by this script.
+--
+-- psql does NOT interpolate `:'var'` inside a QUOTED literal, and a dollar-quoted
+-- string is a quoted literal. Every role block used to read:
+--
+--     DO $$ BEGIN
+--       IF NOT EXISTS (...) THEN
+--         EXECUTE format('CREATE ROLE ... PASSWORD %L', :'migrate_password');
+--       END IF;
+--     END $$;
+--
+-- so the `:'migrate_password'` sat inside `$$ ... $$`, psql passed the colon
+-- through verbatim, and the server rejected the statement:
+--
+--     ERROR:  syntax error at or near ":"
+--
+-- Measured, in exactly that form, on 2026-08-31 — a sibling script hit it against
+-- production and failed before writing anything.
+--
+-- ⚠ THE `DO` BLOCK LOOKED LIKE THE MORE CAREFUL CHOICE, which is why it survived
+-- review: it carries the IF NOT EXISTS idempotency guard, and `format(%L)` quotes
+-- the password server-side. Both goals are real. But the guard has to live where
+-- psql can still substitute, so it moves into a `WHERE NOT EXISTS` on a plain
+-- SELECT, and `\gexec` runs the generated statement. `format(%L)` still does the
+-- quoting; it is simply evaluated by the server as SQL rather than sitting inside
+-- a literal psql refuses to look into.
+--
+-- ⚠ `\gexec` IS A psql META-COMMAND. This file therefore cannot be run through a
+-- driver, `prisma db execute`, or the Neon SQL editor — it needs psql. That was
+-- already true of `\set` on the next line, and it is why this is not a migration.
 
 \set ON_ERROR_STOP on
 
@@ -44,15 +78,11 @@
 -- Granting BYPASSRLS here would silently make that policy unnecessary, and the
 -- day someone removes the policy nothing would fail.
 -- ---------------------------------------------------------------------------
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_migrate') THEN
-    EXECUTE format(
-      'CREATE ROLE commish_migrate LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
-      :'migrate_password');
-  END IF;
-END
-$$;
+SELECT format(
+  'CREATE ROLE commish_migrate LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+  :'migrate_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_migrate')
+\gexec
 
 -- ---------------------------------------------------------------------------
 -- 2 · commish_app — the running app. Owns nothing. RLS enforced.
@@ -60,15 +90,11 @@ $$;
 -- The single most important role in the system, and the one defined entirely by
 -- what it CANNOT do.
 -- ---------------------------------------------------------------------------
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_app') THEN
-    EXECUTE format(
-      'CREATE ROLE commish_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
-      :'app_password');
-  END IF;
-END
-$$;
+SELECT format(
+  'CREATE ROLE commish_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+  :'app_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_app')
+\gexec
 
 -- ⚠ THE ATTRIBUTES ARE INLINE ON `CREATE ROLE` ABOVE, NOT A SEPARATE
 -- `ALTER ROLE`. The first version of this script hardened each role with a
@@ -93,15 +119,11 @@ $$;
 -- point of §3.3, and it is why cross-tenant access is a role rather than the
 -- `app.platform_override` GUC an earlier design used.
 -- ---------------------------------------------------------------------------
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_platform') THEN
-    EXECUTE format(
-      'CREATE ROLE commish_platform LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
-      :'platform_password');
-  END IF;
-END
-$$;
+SELECT format(
+  'CREATE ROLE commish_platform LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+  :'platform_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_platform')
+\gexec
 
 
 -- ---------------------------------------------------------------------------
@@ -112,15 +134,11 @@ $$;
 -- all (section 5), so a `deleteMany` that slips past the T-005 lint rule fails
 -- at the database instead of succeeding quietly.
 -- ---------------------------------------------------------------------------
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_purge') THEN
-    EXECUTE format(
-      'CREATE ROLE commish_purge LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
-      :'purge_password');
-  END IF;
-END
-$$;
+SELECT format(
+  'CREATE ROLE commish_purge LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+  :'purge_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_purge')
+\gexec
 
 
 -- ---------------------------------------------------------------------------

@@ -88,10 +88,16 @@ fi
 # in shell history, in ps output, or in a logged statement string.
 psql "$DIRECT_URL" --no-psqlrc --quiet -v ON_ERROR_STOP=1 \
   -v app_pw="$APP_PW" -v plt_pw="$PLT_PW" -v mig_pw="$MIG_PW" -v prg_pw="$PRG_PW" <<'SQL'
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_app      LOGIN PASSWORD %L', :'app_pw'); END $$;
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_platform LOGIN PASSWORD %L', :'plt_pw'); END $$;
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_migrate  LOGIN PASSWORD %L', :'mig_pw'); END $$;
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_purge    LOGIN PASSWORD %L', :'prg_pw'); END $$;
+-- 🛑 NO `DO $$ ... $$` WRAPPER. psql does not interpolate :'var' inside a QUOTED
+-- literal, and a dollar-quoted string is one. Wrapping these in
+-- DO $$ ... EXECUTE format('... %L', :'app_pw') ... $$ sends the colon to the
+-- server verbatim:  ERROR: syntax error at or near ":".
+-- Bare :'app_pw' expands to a properly quoted, escape-safe literal before the
+-- statement is sent — the same guarantee, without the wrapper that breaks it.
+ALTER ROLE commish_app      LOGIN PASSWORD :'app_pw';
+ALTER ROLE commish_platform LOGIN PASSWORD :'plt_pw';
+ALTER ROLE commish_migrate  LOGIN PASSWORD :'mig_pw';
+ALTER ROLE commish_purge    LOGIN PASSWORD :'prg_pw';
 SQL
 
 # ── Build the two app URLs from the admin URL, swapping role and password. ───

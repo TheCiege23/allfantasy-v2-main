@@ -98,11 +98,24 @@ if (($all | Select-Object -Unique).Count -ne 4) {
 # appears in PowerShell history, in the process command line, or in a logged
 # statement string. Single-quoted here-string: PowerShell does not interpolate,
 # so $$ and :'app_pw' reach psql untouched.
+# 🛑 NO `DO $$ ... $$` HERE, AND THAT IS NOT A STYLE CHOICE.
+# psql does NOT interpolate :'var' inside a QUOTED literal, and a dollar-quoted
+# string is a quoted literal. The first version wrapped each statement in
+# DO $$ BEGIN EXECUTE format('... %L', :'app_pw'); END $$ — so psql passed the
+# colon through untouched and the server saw it:
+#
+#   ERROR:  syntax error at or near ":"
+#   LINE 1: ...('ALTER ROLE commish_app LOGIN PASSWORD %L', :'app_pw')...
+#
+# Bare `:'app_pw'` is the correct form: psql expands it to a properly
+# single-quoted, escape-safe SQL literal before sending. Same server-side
+# quoting guarantee that format(%L) would have given, without the wrapper that
+# breaks the substitution.
 $sql = @'
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_app      LOGIN PASSWORD %L', :'app_pw'); END $$;
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_platform LOGIN PASSWORD %L', :'plt_pw'); END $$;
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_migrate  LOGIN PASSWORD %L', :'mig_pw'); END $$;
-DO $$ BEGIN EXECUTE format('ALTER ROLE commish_purge    LOGIN PASSWORD %L', :'prg_pw'); END $$;
+ALTER ROLE commish_app      LOGIN PASSWORD :'app_pw';
+ALTER ROLE commish_platform LOGIN PASSWORD :'plt_pw';
+ALTER ROLE commish_migrate  LOGIN PASSWORD :'mig_pw';
+ALTER ROLE commish_purge    LOGIN PASSWORD :'prg_pw';
 '@
 
 # ⚠ ErrorActionPreference is relaxed for exactly this call. psql writes notices
