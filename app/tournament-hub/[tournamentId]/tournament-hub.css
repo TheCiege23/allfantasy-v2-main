@@ -1,0 +1,373 @@
+/*
+ * Tournament commissioner hub.
+ *
+ * ⚠ A NEW FILE, APPENDED TO NOTHING. Inserting rules into an existing stylesheet
+ * risks landing inside one of its `@media` blocks, which is silent: the file
+ * stays valid CSS, brace balance stays 0, no lint sees it, and every rule below
+ * the insertion point quietly narrows to that breakpoint.
+ *
+ * ⚠ Every colour is a token with a literal fallback. This route renders outside
+ * the core shell, and a missed import should degrade to a readable table rather
+ * than transparent rows on a transparent page.
+ */
+
+.af-th {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--fg, #e6e8ef);
+}
+
+.af-th-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.af-th-title {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.af-th-sub,
+.af-th-note,
+.af-th-foot {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted, rgba(230, 232, 239, 0.62));
+}
+
+.af-th-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-th-copy {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--af-blue, #3b82f6);
+  background: var(--af-blue, #3b82f6);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.af-th-warn {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--warn, #f59e0b);
+  color: var(--warn, #f59e0b);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.af-th-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-th-tab {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.18));
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.af-th-tab--on {
+  border-color: var(--af-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.af-th-league {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.12));
+  border-radius: 10px;
+}
+
+.af-th-league-name {
+  margin: 0;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.af-th-league-warn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--warn, #f59e0b);
+  border: 1px solid var(--warn, #f59e0b);
+}
+
+/* ⚠ A wide table scrolls INSIDE its own box; the page body must never scroll
+   sideways, which is what a 6-column table does on a phone otherwise. */
+.af-th-scroll {
+  overflow-x: auto;
+}
+
+.af-th-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.af-th-table th,
+.af-th-table td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line, rgba(230, 232, 239, 0.08));
+}
+
+.af-th-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, rgba(230, 232, 239, 0.62));
+}
+
+.af-th-row--unmatched td {
+  color: var(--muted, rgba(230, 232, 239, 0.55));
+}
+
+.af-th-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid currentColor;
+}
+
+.af-th-chip--in {
+  color: var(--ok, #34d399);
+}
+
+.af-th-chip--bubble {
+  color: var(--warn, #f59e0b);
+}
+
+.af-th-chip--out {
+  color: var(--muted, rgba(230, 232, 239, 0.5));
+}
+
+.af-th-chip--unmatched {
+  color: var(--danger, #f87171);
+}
+
+/* ── Manager linking ─────────────────────────────────────────────────────
+ *
+ * ⚠ APPENDED AT TOP LEVEL. This file has no `@media` blocks today, and adding
+ * these at the end keeps it that way — a rule dropped inside a query is silent:
+ * valid CSS, brace balance unchanged, and every rule after it narrows.
+ */
+
+.af-th-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.af-th-select {
+  min-height: 36px;
+  max-width: 220px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.24));
+  background: var(--surface, #12141c);
+  color: inherit;
+  font-size: 12px;
+}
+
+.af-th-linkbtn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--af-blue, #3b82f6);
+  background: transparent;
+  color: var(--af-blue, #3b82f6);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.af-th-linkbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.af-th-linkerr {
+  font-size: 11px;
+  color: var(--danger, #f87171);
+  white-space: normal;
+  max-width: 260px;
+}
+
+.af-th-linknote {
+  font-size: 11px;
+  color: var(--muted, rgba(230, 232, 239, 0.6));
+}
+
+.af-th-linknote--soft {
+  color: var(--warn, #f59e0b);
+}
+
+/* Label kept for screen readers; the row's name column carries it visually. */
+.af-th-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Tournament setup ────────────────────────────────────────────────────
+ * Appended at top level; this file still has no `@media` blocks.
+ */
+
+.af-th-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.af-th-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted, rgba(230, 232, 239, 0.62));
+}
+
+.af-th-input {
+  min-height: 40px;
+  min-width: 200px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.2));
+  background: transparent;
+  color: var(--fg, #e6e8ef);
+  font-size: 14px;
+}
+
+.af-th-input--num {
+  min-width: 84px;
+  max-width: 110px;
+}
+
+.af-th-weeks {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.af-th-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+/* 44px min so each row is a real tap target. */
+.af-th-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.14));
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.af-th-pick--on {
+  border-color: var(--af-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Taken or claimed elsewhere: visibly not available, but still readable — a
+   league that vanishes from the list gives a commissioner nothing to act on. */
+.af-th-pick--off {
+  opacity: 0.55;
+}
+
+.af-th-pick-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, #e6e8ef);
+}
+
+.af-th-pick-meta {
+  font-size: 11px;
+  color: var(--muted, rgba(230, 232, 239, 0.58));
+}
+
+/* ── Broadcast ───────────────────────────────────────────────────────────
+ * Appended at top level; this file still has no real media queries.
+ */
+
+.af-th-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.af-th-pastebox {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.18));
+  background: transparent;
+  color: var(--fg, #e6e8ef);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.af-th-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.af-th-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line, rgba(230, 232, 239, 0.12));
+  border-radius: 8px;
+}
+
+.af-th-paste-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
