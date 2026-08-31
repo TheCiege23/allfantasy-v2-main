@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { composePlayerIdentities } from './playerIdentityCompose'
 
 /**
  * Draft HQ — "before the draft: your picks, the lottery, the board settings and
@@ -43,6 +44,20 @@ export type MadePick = {
   playerName: string
   position: string
   team: string | null
+  /**
+   * The headshot, vetted so it can go straight into a `src`. Null for a pick we
+   * could not resolve, and for every non-Sleeper league — see
+   * `ResolvedDraftPlayer.imageUrl`.
+   *
+   * ⚠ ON THIS LIST ONLY, NOT ON THE FULL BOARD, AND THAT IS A DELIBERATE
+   * OMISSION RATHER THAN AN UNFINISHED ONE. `BoardPick` is every pick by every
+   * team — a twelve-team, eighteen-round draft is 216 cells — and a face in
+   * each is 216 image requests for a grid whose cells are one line tall. This
+   * list is YOUR picks, a dozen rows, where a face is the fastest way to read
+   * the row. If the board ever wants them it should ask for them lazily, not
+   * inherit them from here.
+   */
+  imageUrl: string | null
 }
 
 /** One pick on the completed board - any team's, not just yours. */
@@ -184,11 +199,27 @@ export function computePickSlots(
  * the personal pick list and the full board so the two can never disagree about who a
  * pick was.
  */
+type ResolvedDraftPlayer = {
+  name: string
+  position: string | null
+  team: string | null
+  /**
+   * The headshot, vetted so it can go straight into a `src`.
+   *
+   * ⚠ NULL FOR EVERY NON-SLEEPER LEAGUE, AND THAT IS NOT A BUG TO FIX HERE.
+   * `PlayerProviderIdentity` carries a display name and nothing else, so an
+   * ESPN or Yahoo board resolves a name with no face. Rendering an initial
+   * there is the honest outcome; inventing a lookup by name across providers is
+   * exactly the collision this function's own note is about.
+   */
+  imageUrl: string | null
+}
+
 async function resolvePlayerNames(
   playerIds: string[],
   platform: string,
-): Promise<Map<string, { name: string; position: string | null; team: string | null }>> {
-  const out = new Map<string, { name: string; position: string | null; team: string | null }>()
+): Promise<Map<string, ResolvedDraftPlayer>> {
+  const out = new Map<string, ResolvedDraftPlayer>()
   if (playerIds.length === 0) return out
 
   /*
@@ -228,20 +259,46 @@ async function resolvePlayerNames(
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: playerIds } },
-            select: { sleeperId: true, name: true, position: true, team: true },
+            // `sport` is required by `composePlayerIdentities` — it gates the
+            // NFL-only club fold. `imageUrl` is what puts a face on the board.
+            select: {
+              sleeperId: true, name: true, position: true, team: true,
+              sport: true, imageUrl: true,
+            },
           })
           .catch(() => [])
       : Promise.resolve([]),
   ])
 
-  for (const pl of players) {
-    if (pl.sleeperId && !out.has(pl.sleeperId)) {
-      out.set(pl.sleeperId, { name: pl.name, position: pl.position, team: pl.team })
-    }
+  /*
+   * ⚠ COMPOSED, NOT FIRST-ROW-WINS. This was `if (!out.has(id)) out.set(...)`,
+   * and `sleeperId` is not unique in `SportsPlayer` — the duplicates are one
+   * athlete as several vendors describe him, and `findMany` carries no
+   * `orderBy`. So which vendor described a pick was decided by whatever
+   * Postgres returned first: 126 of 11,960 NFL ids disagree about the folded
+   * position and 20 about the normalised club, and only one vendor row in three
+   * carries a usable headshot for the players that have one at all.
+   *
+   * Same fix, same module, as /core/matchup, /core/my-team, /core and
+   * /core/live. See `composePlayerIdentities` for the measurement.
+   */
+  for (const [sleeperId, p] of composePlayerIdentities(players)) {
+    if (out.has(sleeperId)) continue
+    out.set(sleeperId, {
+      // `SportsPlayer.name` is non-nullable, so the fallback is unreachable —
+      // but `name` is a `string` the board renders and sorts on.
+      name: p.name ?? `Player ${sleeperId}`,
+      position: p.position,
+      team: p.team,
+      imageUrl: p.imageUrl,
+    })
   }
   for (const i of identities) {
     if (i.displayName && !out.has(i.providerPlayerId)) {
-      out.set(i.providerPlayerId, { name: i.displayName, position: null, team: null })
+      // Name only — see `ResolvedDraftPlayer.imageUrl` for why there is no face.
+      out.set(i.providerPlayerId, {
+        name: i.displayName, position: null, team: null, imageUrl: null,
+      })
     }
   }
   return out
@@ -550,6 +607,7 @@ async function loadImportedDraftPicks(
         playerName: hit?.name ?? `Player ${r.playerId} (not yet mapped)`,
         position: hit?.position ?? '—',
         team: hit?.team ?? null,
+        imageUrl: hit?.imageUrl ?? null,
       }
     }),
   }
@@ -671,9 +729,35 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     ? await prisma.draftPick.findMany({
         where: { sessionId: session.id, rosterId: String(myTeam.externalId) },
         orderBy: { overall: 'asc' },
-        select: { overall: true, round: true, slot: true, playerName: true, position: true, team: true },
+        select: {
+          overall: true, round: true, slot: true,
+          playerName: true, position: true, team: true,
+          // Only for the headshot — name, position and club are denormalised on
+          // the row already and stay authoritative over anything looked up.
+          playerId: true,
+        },
       })
     : []
+
+  /*
+   * The face for a LIVE draft's picks.
+   *
+   * ⚠ THIS PATH AND THE IMPORTED-BOARD PATH BUILD THE SAME `MadePick` TYPE, so
+   * they have to agree about whether a pick has a face. They resolve it from
+   * different places — the imported board joins identities to build the whole
+   * row, while a live pick already carries name, position and club denormalised
+   * — but the type is shared, and a field that is populated on one path and
+   * silently null on the other is the kind of divergence nobody notices until a
+   * screen looks broken on one draft and fine on another.
+   *
+   * `playerId` is nullable here, and only Sleeper ids resolve — see
+   * `ResolvedDraftPlayer.imageUrl`. Both cases fall through to a null face and
+   * an initial, which is what the row renders for an unresolved pick anyway.
+   */
+  const madeFaces = await resolvePlayerNames(
+    [...new Set(made.map((p) => p.playerId).filter((id): id is string => Boolean(id)))],
+    String(league.platform ?? '').toLowerCase(),
+  ).catch(() => new Map<string, ResolvedDraftPlayer>())
 
   const madePicks: SectionState<MadePick[]> =
     made.length > 0
@@ -692,6 +776,7 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
             playerName: p.playerName,
             position: p.position,
             team: p.team,
+            imageUrl: p.playerId ? madeFaces.get(p.playerId)?.imageUrl ?? null : null,
           })),
         }
       : {
