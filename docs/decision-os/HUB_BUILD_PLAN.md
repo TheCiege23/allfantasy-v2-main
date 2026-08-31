@@ -34,7 +34,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **2.3** Register `'value'` as an `OsDomain` | Union widened; no migration (`VarChar(16)`). Level split documented on the type |
 | ✅ | **2.4** Rescore-at-read for IDP + kicker | **Not needed** — `buildIdpKickerValueMap` takes league rules as an argument, so there is no canonical row to rescore |
 | ✅ | **3.1** `'projection'` domain | `lib/decision-os/projection/facts.ts`. Rescore-at-read wired; writer verified scheduled |
-| ⬜ | **2.5** `OsFactSource` for value + projection | ⚠ Gap I created: both domains are registered and have loaders, but nothing wires them into a FEED yet |
+| ✅ | **2.5** `OsFactSource` for value + projection + import | Closed. 4 sources across 3 feeds. IDP/kicker deliberately has none — see `value-os` |
 | ✅ | **3.2** `'import'` domain + four assertions | `lib/decision-os/import/assertions.ts`. Reads what the collectors already recorded and nothing could read |
 | ✅ | **3.3** `isConclusive(fact)` | `lib/decision-os/conclusive.ts`. Per-fact profiles + remedy on every blocker. Two controls proven red |
 | ⬜ | **4.1** `buildDecisionOsGroundingPacket()` | |
