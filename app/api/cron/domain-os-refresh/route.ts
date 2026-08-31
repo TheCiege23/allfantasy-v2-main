@@ -32,8 +32,32 @@ import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
  * Exactly one can:
  *
  *   ✅ draftRulesSource   derive = resolveCanonicalLeagueRules(leagueId).  League in, league out.
- *                         Also the most expensive: seven queries on every draft-runtime resolve,
- *                         which during a live draft is every poll and every pick.
+ *
+ * ⚠ AND THIS FILE'S FIRST VERSION OVERCLAIMED WHAT THAT SAVES. It said "seven queries on every
+ * draft-runtime resolve, which during a live draft is every poll and every pick", quoting
+ * `draft-os/index.ts`. The figure is real; the traffic is not. `resolveNflRedraftDraftRuntime` —
+ * the only consumer of `draftRulesSource` — has **zero callers**. No route, no component, no
+ * service; the sole reference in the tree is `__tests__/draft-os.test.ts`. Live drafts run on
+ * `lib/live-draft-engine/DraftSessionService` and never reach it.
+ *
+ * So today this cron warms a fact that is true, cheap, and read by nothing. That is the inverse of
+ * the `ingestCFBDStats` failure this repo records — not a surface reading a table nobody writes,
+ * but a writer filling a cache nobody reads. Harmless, and worth stating plainly rather than
+ * leaving a number in place that a later decision might be justified with.
+ *
+ * 🛑 THE SAVING IS REAL AND IT IS SOMEWHERE ELSE. `resolveCanonicalLeagueRules` IS on live request
+ * paths — just not that one:
+ *
+ *     playoff-runtime   4 routes        roster-runtime   1 route
+ *     schedule-runtime  1 route         draft-runtime    0   <- the odd one out of four
+ *
+ * The fact this source maintains is LEAGUE RULES, not draft rules. It is misplaced in `draft-os`
+ * rather than wrong, and pointed at those three resolvers it would deliver to real traffic exactly
+ * what the original sentence claimed. Tracked as 1.2a in docs/decision-os/HUB_BUILD_PLAN.md;
+ * whether the canonical draft resolver should get a route at all is 1.2b, and a product decision.
+ *
+ * ⚠ Found by opening the ticket to wire Draft OS and discovering it would connect a dead feed to a
+ * dead resolver — i.e. by trying to USE the thing, which is the only reason it surfaced at all.
  *
  *   ❌ waiverSettingsSource   level:'league', scopeKey: leagueId — but `derive` is the SHARED
  *                             deriveWorldFacts({ userId, leagueId }), which returns the whole
