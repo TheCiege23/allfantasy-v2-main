@@ -1195,3 +1195,47 @@
   display: inline-flex;
   align-items: center;
 }
+
+
+/* ── Both halves of a franchise, viewed league first ───────────────────────
+ *
+ * ⚠ APPENDED AT TOP LEVEL. This file has 9 @media blocks; inserting into the
+ * middle of one closes it early and silently narrows every rule below, with
+ * brace balance unchanged and nothing thrown. See CLAUDE.md.
+ */
+.af-lh-paired-sides {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-lh-paired-side {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+}
+
+/*
+ * The league you are standing in. Marked rather than merely first, because on a
+ * narrow screen the two rows scroll and "first" stops being visible on its own.
+ */
+.af-lh-paired-side[data-current='true'] {
+  border-color: var(--accent-line, var(--accent));
+}
+
+.af-lh-paired-sidelabel {
+  color: var(--faint);
+}
+.af-lh-paired-side[data-current='true'] .af-lh-paired-sidelabel {
+  color: var(--accent);
+}
+
+/* The side rows carry their own padding; the title no longer heads a card. */
+.af-lh-paired-side .af-lh-paired-title {
+  font-size: 15px;
+  margin: 0;
+}

@@ -33,24 +33,37 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
 
+/** One half of a franchise, described identically whichever half it is. */
+export type FranchiseSide = {
+  role: FranchiseRole
+  platform: string
+  /** Route target, when it is a League we can link to. */
+  leagueId: string | null
+  name: string
+  season: number | null
+  teamLabel: string | null
+  /** Roster size, or null when that half's roster cannot be read. */
+  playerCount: number | null
+  unavailableReason: string | null
+}
+
 export type PairedHalf = {
   linkId: string
   franchiseName: string
   /** Which half the league being viewed is. */
   viewingRole: FranchiseRole
+  /**
+   * The league being VIEWED, described the same way as the other half.
+   *
+   * ⚠ THIS IS WHAT MAKES THE ORDER RIGHT. The panel renders `self` first and
+   * `other` second, so the pro league leads on the pro page and the college
+   * league leads on the college page — neither reads as the primary with the
+   * other as an afterthought. Null only if the membership row went missing
+   * between the two reads.
+   */
+  self: FranchiseSide | null
   /** The other half. Null when the franchise only has one side attached. */
-  other: {
-    role: FranchiseRole
-    platform: string
-    /** Route target for the other half, when it is a League we can link to. */
-    leagueId: string | null
-    name: string
-    season: number | null
-    teamLabel: string | null
-    /** Roster size, or null when the other half's roster cannot be read. */
-    playerCount: number | null
-    unavailableReason: string | null
-  } | null
+  other: FranchiseSide | null
 }
 
 /**
@@ -107,6 +120,9 @@ export async function resolvePairedHalf(
   if (!membership?.link) return null
 
   const viewingRole = membership.role as FranchiseRole
+  const selfMember = membership.link.members.find(
+    (m) => m.platform === key.platform && m.leagueId === key.memberLeagueId,
+  )
   const otherMember = membership.link.members.find(
     (m) => !(m.platform === key.platform && m.leagueId === key.memberLeagueId),
   )
@@ -116,127 +132,165 @@ export async function resolvePairedHalf(
     franchiseName: membership.link.name,
     viewingRole,
   }
-  if (!otherMember) return { ...base, other: null }
 
-  const otherPlatform = String(otherMember.platform ?? '').toLowerCase()
+  /*
+   * ⚠ ONE DESCRIBER FOR BOTH HALVES, NOT TWO.
+   *
+   * The panel used to render only the OTHER league, so only the other league was
+   * ever resolved. Showing both — with the one you are standing in first — needs
+   * the same summary for each, and writing that twice is how the two sides drift
+   * into disagreeing about what "your roster" means. The Fantrax and League
+   * branches below differ because the STORAGE differs (a snapshot's resolved
+   * array vs a `Roster` row), not because the halves do.
+   */
+  const describeSide = async (member: {
+    role: string
+    platform: string
+    leagueId: string
+    teamExternalId: string | null
+  }): Promise<FranchiseSide> => {
+    const platform = String(member.platform ?? '').toLowerCase()
+    const role = member.role as FranchiseRole
 
-  if (otherPlatform === 'fantrax') {
-    const snap = await prisma.fantraxLeague.findUnique({
-      where: { id: otherMember.leagueId },
-      select: { id: true, leagueName: true, season: true, userTeam: true, roster: true },
-    })
-    /*
-     * The League row that mirrors this snapshot, so the other half is clickable.
-     * Null is fine — the panel still names the league, it just does not link.
-     */
-    const mirror = snap
-      ? await prisma.league.findFirst({
-          where: { platform: 'fantrax', platformLeagueId: snap.id, userId: ownerUserId },
-          select: { id: true },
-        })
-      : null
-    const roster = Array.isArray(snap?.roster) ? (snap?.roster as unknown[]) : null
-    return {
-      ...base,
-      other: {
-        role: otherMember.role as FranchiseRole,
-        platform: otherPlatform,
+    if (platform === 'fantrax') {
+      const snap = await prisma.fantraxLeague.findUnique({
+        where: { id: member.leagueId },
+        select: { id: true, leagueName: true, season: true, userTeam: true, roster: true },
+      })
+      /*
+       * The League row that mirrors this snapshot, so the side is clickable.
+       * Null is fine — the panel still names the league, it just does not link.
+       */
+      const mirror = snap
+        ? await prisma.league.findFirst({
+            where: { platform: 'fantrax', platformLeagueId: snap.id, userId: ownerUserId },
+            select: { id: true },
+          })
+        : null
+      /*
+       * 🛑 `FantraxLeague.roster` IS THE WHOLE LEAGUE, NOT YOUR TEAM.
+       *
+       * Measured on production: 466 entries across 12 distinct `teamName`
+       * values, ~39 per manager. Counting the array reported "466 players on
+       * your roster" — a number no fantasy team can have, and the kind of wrong
+       * that reads as a broken feature rather than a miscount. Each entry
+       * carries `teamName`; `userTeam` names which of them is the viewer's.
+       *
+       * ⚠ AN EMPTY FILTER IS NOT AN EMPTY ROSTER. If `userTeam` matches nothing
+       * — a rename on Fantrax's side, or a snapshot taken before the team was
+       * identified — that is a gap we cannot see past, so it reports a reason
+       * rather than "0 players", which would claim the viewer rosters nobody.
+       */
+      const allRows = Array.isArray(snap?.roster) ? (snap?.roster as unknown[]) : null
+      const userTeam = String(snap?.userTeam ?? '').trim().toLowerCase()
+      const mine =
+        allRows && userTeam
+          ? allRows.filter((r) => {
+              const t = (r as { teamName?: unknown })?.teamName
+              return typeof t === 'string' && t.trim().toLowerCase() === userTeam
+            })
+          : null
+      return {
+        role,
+        platform,
         leagueId: mirror?.id ?? null,
         name: snap?.leagueName ?? 'Fantrax league',
         season: snap?.season ?? null,
-        teamLabel: snap?.userTeam ?? otherMember.teamExternalId,
-        playerCount: roster?.length ?? null,
+        teamLabel: snap?.userTeam ?? member.teamExternalId,
+        playerCount: mine && mine.length > 0 ? mine.length : null,
         unavailableReason:
           snap == null
             ? 'the linked Fantrax league no longer exists'
-            : roster == null
+            : allRows == null
               ? 'this Fantrax snapshot holds no roster — re-run the import'
-              : null,
-      },
+              : !userTeam
+                ? 'this Fantrax snapshot does not record which team is yours — re-run the import'
+                : mine && mine.length > 0
+                  ? null
+                  : `no players are filed under “${snap?.userTeam}” in this snapshot — re-run the import`,
+      }
+    }
+
+    const lg = await prisma.league.findUnique({
+      where: { id: member.leagueId },
+      select: { id: true, name: true, season: true },
+    })
+    /*
+     * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
+     * league-wide count would report every manager's players as yours.
+     */
+    const team = lg
+      ? await prisma.leagueTeam.findFirst({
+          where: { leagueId: lg.id, claimedByUserId: ownerUserId },
+          select: { teamName: true, ownerName: true, externalId: true, platformUserId: true },
+        })
+      : null
+    /*
+     * ⚠ `Roster.platformUserId` CARRIES TWO ID SPACES, AND THE VIEWER'S OWN TEAM
+     * IS THE ONE THAT USES THE OTHER ONE.
+     *
+     * For managers we only imported it holds the PLATFORM user id, which is what
+     * `LeagueTeam.platformUserId` also holds — so the join works for all of them.
+     * For the team the viewer has CLAIMED it holds the AllFantasy `AppUser.id`,
+     * which is how the rest of the app reads a viewer's own roster
+     * (`leagueSync.ts`, the waiver and Chimmy paths all query
+     * `{ leagueId, platformUserId: userId }`).
+     *
+     * Measured on production: of 12 teams in the paired Sleeper league, 11 keys
+     * matched and exactly one did not — the viewer's. Reading only the team's key
+     * therefore fails for precisely the roster this panel exists to show, and
+     * renders as "no roster on file", which reads as broken ingestion rather than
+     * a missed join.
+     *
+     * Both keys are tried, viewer id first. Still gated on a team they actually
+     * claimed, so this cannot fall back to a stranger's squad.
+     */
+    const rosterKeys = [ownerUserId, team?.platformUserId].filter(
+      (k): k is string => typeof k === 'string' && k.length > 0,
+    )
+    const roster =
+      lg && team && rosterKeys.length > 0
+        ? await prisma.roster
+            .findFirst({
+              where: { leagueId: lg.id, platformUserId: { in: rosterKeys } },
+              select: { playerData: true },
+            })
+            .catch(() => null)
+        : null
+    const players = (() => {
+      const data = roster?.playerData as { players?: unknown[] } | null | undefined
+      return Array.isArray(data?.players) ? data.players.length : null
+    })()
+
+    return {
+      role,
+      platform,
+      leagueId: lg?.id ?? null,
+      name: lg?.name?.trim() || 'League',
+      season: lg?.season ?? null,
+      teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || member.teamExternalId,
+      playerCount: players,
+      unavailableReason:
+        lg == null
+          ? 'the linked league no longer exists'
+          : players == null
+            ? 'no roster is on file for your team'
+            : null,
     }
   }
 
-  const other = await prisma.league.findUnique({
-    where: { id: otherMember.leagueId },
-    select: { id: true, name: true, season: true },
-  })
   /*
-   * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
-   * league-wide count would report every manager's players as yours.
+   * ⚠ `self` IS RESOLVED EVEN THOUGH THE VIEWER IS STANDING IN IT. The panel puts
+   * the league you are on FIRST and the connected half second, so on the pro
+   * league the pro side leads and on the college league the college side does.
+   * That ordering is only possible if both sides carry the same summary — the
+   * viewed league's own roster count included.
    */
-  const team = other
-    ? await prisma.leagueTeam.findFirst({
-        where: { leagueId: other.id, claimedByUserId: ownerUserId },
-        select: { teamName: true, ownerName: true, externalId: true, platformUserId: true },
-      })
+  const self = selfMember
+    ? await describeSide(selfMember)
     : null
-  /*
-   * ⚠ `Roster` KEYS ON `platformUserId`, NOT ON THE TEAM'S `externalId`. They are
-   * different columns holding different id spaces — `@@unique([leagueId,
-   * platformUserId])` is the roster's key. Querying the wrong one returns null
-   * for a team that has a full roster, which renders as "no roster on file" and
-   * reads as broken ingestion rather than a wrong join.
-   *
-   * ⚠ AND WITHOUT A TEAM THERE IS NO ROSTER TO READ. Falling back to "any roster
-   * in the league" would attribute a stranger's squad to the viewer, which is
-   * the same failure `importFantraxLeague` refuses to make when it will not guess
-   * which team is yours.
-   */
-  /*
-   * ⚠ `Roster.platformUserId` CARRIES TWO ID SPACES, AND THE VIEWER'S OWN TEAM IS
-   * THE ONE THAT USES THE OTHER ONE.
-   *
-   * For managers we only imported, it holds the PLATFORM user id (Sleeper's
-   * numeric id), which is what `LeagueTeam.platformUserId` also holds — so the
-   * join works for all of them. For the team the viewer has CLAIMED it holds the
-   * AllFantasy `AppUser.id` instead, which is how the rest of the app reads a
-   * viewer's own roster (`leagueSync.ts`, the waiver and Chimmy paths, a dozen
-   * others all query `{ leagueId, platformUserId: userId }`).
-   *
-   * Measured on production: of 12 teams in the paired Sleeper league, 11 keys
-   * matched and exactly one did not — the viewer's. `LeagueTeam` said
-   * 591462610482806784 while the roster row sat under the AppUser id with all 50
-   * players present. Reading only the team's key therefore fails for precisely
-   * the one roster this panel exists to show, and renders as "no roster is on
-   * file" — which reads as broken ingestion rather than a missed join.
-   *
-   * Both keys are tried, viewer id first because that is the row that belongs to
-   * them. Still scoped to a team they actually claimed, so this cannot fall back
-   * to a stranger's squad.
-   */
-  const rosterKeys = [ownerUserId, team?.platformUserId].filter(
-    (k): k is string => typeof k === 'string' && k.length > 0,
-  )
-  const roster =
-    other && team && rosterKeys.length > 0
-      ? await prisma.roster
-          .findFirst({
-            where: { leagueId: other.id, platformUserId: { in: rosterKeys } },
-            select: { playerData: true },
-          })
-          .catch(() => null)
-      : null
-  const players = (() => {
-    const data = roster?.playerData as { players?: unknown[] } | null | undefined
-    return Array.isArray(data?.players) ? data.players.length : null
-  })()
 
-  return {
-    ...base,
-    other: {
-      role: otherMember.role as FranchiseRole,
-      platform: otherPlatform,
-      leagueId: other?.id ?? null,
-      name: other?.name?.trim() || 'League',
-      season: other?.season ?? null,
-      teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || otherMember.teamExternalId,
-      playerCount: players,
-      unavailableReason:
-        other == null
-          ? 'the linked league no longer exists'
-          : players == null
-            ? 'no roster is on file for your team in that league'
-            : null,
-    },
-  }
+  const other = otherMember ? await describeSide(otherMember) : null
+
+  return { ...base, self, other }
 }
