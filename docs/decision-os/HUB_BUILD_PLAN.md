@@ -36,7 +36,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **3.1** `'projection'` domain | `lib/decision-os/projection/facts.ts`. Rescore-at-read wired; writer verified scheduled |
 | ⬜ | **2.5** `OsFactSource` for value + projection | ⚠ Gap I created: both domains are registered and have loaders, but nothing wires them into a FEED yet |
 | ✅ | **3.2** `'import'` domain + four assertions | `lib/decision-os/import/assertions.ts`. Reads what the collectors already recorded and nothing could read |
-| ⬜ | **3.3** `isConclusive(fact)` | |
+| ✅ | **3.3** `isConclusive(fact)` | `lib/decision-os/conclusive.ts`. Per-fact profiles + remedy on every blocker. Two controls proven red |
 | ⬜ | **4.1** `buildDecisionOsGroundingPacket()` | |
 | ⬜ | **4.2** Wire into `/api/chat/chimmy` | |
 | ⬜ | **4.3** Move orphaned grounding behind Decision OS | Read all 15 first |
