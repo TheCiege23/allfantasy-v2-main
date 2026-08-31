@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs'
 import { join, relative, extname } from 'path'
 import { fileURLToPath } from 'url'
+import { execFileSync } from 'child_process'
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..')
 const WARN_ONLY = process.argv.includes('--warn-only')
@@ -288,6 +289,100 @@ for (const key of usedNextPublicVars) {
   if (!envExampleContent.includes(key)) {
     finding('warn', envExamplePath, 0, `${key} is used in source but not documented in .env.example`)
   }
+}
+
+// ── Check 5: real credentials in TRACKED .env* files ──────────────────────────
+//
+// 🛑 .gitignore DOES NOT PROTECT A FILE THAT IS ALREADY TRACKED. `.env*` is in
+// .gitignore (line 131), which is why an untracked `.env` or `.env.prod-deploy`
+// cannot be committed by accident. But `.env.example`, `.env.local.example` and
+// `.env.production` are already tracked, so the ignore rule is silent about them
+// forever — anyone who pastes a real value into one and commits it publishes it.
+// This repo is public, so that is a live credential disclosure, not a lint issue.
+//
+// The risk is not hypothetical-looking: `.env.example` carries 194 non-empty
+// values including two postgres URLs. Every one is a placeholder today. Nothing
+// checked that, and nothing would have noticed the day one stopped being one.
+//
+// ⚠ THIS CHECK NEVER PRINTS A VALUE. A scanner that echoes the secret it found
+// into CI logs has moved the leak rather than closed it. Findings name the FILE,
+// LINE and KEY, plus why it looked real — which is enough to fix it and useless
+// to an attacker reading a build log.
+//
+// Deliberately conservative: it errors only on high-confidence shapes. A noisy
+// secret scanner gets disabled, and a disabled scanner is worse than none because
+// its presence is read as coverage.
+
+const PLACEHOLDER_MARKERS =
+  /(your|change|placeholder|example|xxx+|replace|dummy|redacted|generate|todo|\.\.\.|^<.*>$|^""$|^''$)/i
+
+// Vendor prefixes that are only ever emitted by the real issuer.
+const LIVE_TOKEN_PATTERNS = [
+  { re: /sk-[A-Za-z0-9_-]{20,}/, what: 'OpenAI-style secret key' },
+  { re: /(ghp|gho|ghu|ghs)_[A-Za-z0-9]{20,}/, what: 'GitHub token' },
+  { re: /github_pat_[A-Za-z0-9_]{30,}/, what: 'GitHub fine-grained PAT' },
+  { re: /xox[bpars]-[A-Za-z0-9-]{10,}/, what: 'Slack token' },
+  { re: /re_[A-Za-z0-9_]{20,}/, what: 'Resend API key' },
+  { re: /(sk|pk|rk)_live_[A-Za-z0-9]{20,}/, what: 'Stripe live key' },
+  { re: /AKIA[0-9A-Z]{16}/, what: 'AWS access key id' },
+  { re: /AIza[0-9A-Za-z_-]{35}/, what: 'Google API key' },
+]
+
+function looksLikeRealPostgresUrl(value) {
+  const m = value.match(/postgres(?:ql)?:\/\/[^:\s]+:([^@\s]+)@([^/\s"']+)/)
+  if (!m) return null
+  const [, password, host] = m
+  if (PLACEHOLDER_MARKERS.test(password) || PLACEHOLDER_MARKERS.test(host)) return null
+  if (/^(localhost|127\.0\.0\.1|::1|db|postgres)(:\d+)?$/i.test(host)) return null
+  // A real Neon endpoint is ep-<word>-<word>-<alnum>; the doc placeholder is ep-xxx.
+  const neon = /ep-[a-z]+-[a-z]+-[a-z0-9]{6,}/.test(host)
+  if (!neon && password.length < 12) return null
+  return neon ? 'Neon endpoint with a non-placeholder password' : 'database URL with a real-looking password'
+}
+
+console.log('[secret-scan] Checking tracked .env* files for real credentials...')
+
+let trackedEnvFiles = []
+try {
+  trackedEnvFiles = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+    .split('\0')
+    .filter((p) => /(^|\/)\.env($|\.)/.test(p))
+} catch {
+  // ⚠ Fail LOUD, not open. Every other guard in this repo fails open because the
+  // cost of a false stop is a blocked deploy. Here the cost of a false pass is a
+  // published credential, which is not recoverable by rotating a build.
+  finding('error', join(ROOT, '.env'), 0, 'could not list tracked env files via git; secret scan is UNVERIFIED')
+}
+
+for (const rel of trackedEnvFiles) {
+  const full = join(ROOT, rel)
+  if (!existsSync(full)) continue
+  const lines = readFileSync(full, 'utf8').split(/\r?\n/)
+  lines.forEach((raw, i) => {
+    const line = raw.trim()
+    if (!line || line.startsWith('#')) return
+    const eq = line.indexOf('=')
+    if (eq < 1) return
+    const key = line.slice(0, eq).trim()
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return
+    let value = line.slice(eq + 1).trim().replace(/^["']|["']$/g, '')
+    if (!value) return
+
+    const pg = looksLikeRealPostgresUrl(value)
+    if (pg) {
+      finding('error', full, i + 1, `${key} looks like a REAL credential (${pg}) in a tracked file — this repo is public`)
+      return
+    }
+    for (const { re, what } of LIVE_TOKEN_PATTERNS) {
+      if (re.test(value)) {
+        finding('error', full, i + 1, `${key} looks like a REAL credential (${what}) in a tracked file — this repo is public`)
+        return
+      }
+    }
+    if (value.length >= 32 && /^[A-Za-z0-9+/_=-]+$/.test(value) && !PLACEHOLDER_MARKERS.test(value)) {
+      finding('error', full, i + 1, `${key} is a ${value.length}-char high-entropy value in a tracked file with no placeholder marker — this repo is public`)
+    }
+  })
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────
