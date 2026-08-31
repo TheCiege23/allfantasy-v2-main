@@ -80,6 +80,28 @@ if ($BranchHost -notmatch '\.neon\.tech$') {
   Write-Error "REFUSING: host '$BranchHost' is not a *.neon.tech endpoint."
 }
 
+# 🛑 THE DIRECT HOST, NOT THE POOLER. This script runs ALTER ROLE - admin DDL -
+# and Neon's pooled endpoint is PgBouncer in transaction mode. Against the pooled
+# host the ALTER is refused with a message that points at the wrong thing
+# entirely:
+#
+#   ERROR:  permission denied to alter role
+#   DETAIL: Only roles with the CREATEROLE attribute and the ADMIN option on
+#           role "commish_app" may alter this role.
+#
+# Measured on 2026-08-31: the SAME statement, as the SAME role (neondb_owner,
+# rolcreaterole=true, admin_option=true on commish_app), SUCCEEDS on the direct
+# host and is refused through the pooler. So the DETAIL line is misleading -
+# nothing is wrong with the role's privileges, and following that message leads
+# into pg_auth_members instead of at the hostname.
+#
+# LOCAL-SETUP.md already says direct-for-migrations, pooled-for-the-app. This
+# makes it enforced rather than documented.
+if ($BranchHost -match '-pooler\.') {
+  $direct = $BranchHost -replace '-pooler\.', '.'
+  Write-Error "REFUSING: '$BranchHost' is the POOLED endpoint. Admin statements (ALTER ROLE) do not work through Neon's pooler and fail with a misleading 'permission denied to alter role'. Use the direct host instead: $direct  (In the Neon Connect dialog, turn OFF 'Connection pooling'.)"
+}
+
 # -- The production-host guard ------------------------------------------------
 # Read the production host from the repo's own env files rather than hardcoding
 # it, so this keeps working if the project moves.
@@ -144,6 +166,35 @@ if ((@($AppPw,$PltPw,$MigPw,$PrgPw) | Select-Object -Unique).Count -ne 4) {
 # inside a quoted literal, and a dollar-quoted string is one. That exact mistake
 # produced `syntax error at or near ":"` against production earlier today.
 $sql = @'
+-- 🛑 FINGERPRINT THE TARGET BEFORE TOUCHING IT.
+-- "Not production" is not the same question as "the right branch". On
+-- 2026-08-31 a connection string was copied for a DIFFERENT branch of the same
+-- project - the Neon console's Connect dialog remembers whatever was selected
+-- last - and the production guard correctly waved it through, because it really
+-- was not production. The run then failed deep inside ALTER ROLE with
+-- "permission denied to alter role", which says nothing about the actual
+-- mistake and sends you looking at privileges instead of at the host.
+--
+-- A branch that can run these suites has a specific shape: the four commish_*
+-- roles, and the seven Commissioner OS migrations recorded. Assert it, and say
+-- plainly what is wrong when it does not hold.
+DO $fingerprint$
+DECLARE
+  n_roles int;
+  n_migrations int;
+BEGIN
+  SELECT count(*) INTO n_roles      FROM pg_roles WHERE rolname LIKE 'commish\_%';
+  SELECT count(*) INTO n_migrations FROM _prisma_migrations
+   WHERE migration_name LIKE '%commissioner_os%' AND finished_at IS NOT NULL;
+
+  IF n_roles <> 4 OR n_migrations < 7 THEN
+    RAISE EXCEPTION
+      'This is not a prepared Commissioner OS branch: % commish_* roles (need 4), % applied Commissioner OS migrations (need >= 7). You have very likely copied the connection string for the WRONG BRANCH - the Neon Connect dialog defaults to the last branch you looked at. Re-copy it from the branch page itself.',
+      n_roles, n_migrations;
+  END IF;
+END
+$fingerprint$;
+
 ALTER ROLE commish_app      LOGIN PASSWORD :'app_pw';
 ALTER ROLE commish_platform LOGIN PASSWORD :'plt_pw';
 ALTER ROLE commish_migrate  LOGIN PASSWORD :'mig_pw';
