@@ -1273,3 +1273,34 @@
   color: var(--faint);
   font-style: italic;
 }
+
+/* Team crest inside a franchise half.
+
+   ⚠ APPENDED AT TOP LEVEL, and the depth was measured as 0 at EOF before
+   writing. See the note on .af-lh-paired-sides for why this file is never
+   edited mid-@media: a rule dropped inside an existing query silently changes
+   which widths it applies at, and nothing goes red.
+
+   Sized below the 48px matchup crest on purpose — the franchise panel is a
+   summary of two leagues, not a scoreboard, so the crest identifies the half
+   without competing with the league name beside it. */
+.af-lh-paired-crest {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  margin: 6px 0 2px;
+}
+/* The real crest, when the platform published one. Fantrax never does. */
+.af-lh-paired-crest--img {
+  object-fit: cover;
+  padding: 0;
+}

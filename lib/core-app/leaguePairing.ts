@@ -44,6 +44,22 @@ export type FranchiseSide = {
   name: string
   season: number | null
   teamLabel: string | null
+  /**
+   * That half's team crest.
+   *
+   * ⚠ NULL MEANS TWO DIFFERENT THINGS AND THE PANEL RENDERS BOTH THE SAME WAY,
+   * because the reader does not care which. Measured 2026-08-31: all 12 teams in
+   * the paired Sleeper league carry a `sleepercdn.com` avatar, while the Fantrax
+   * half can never carry one — Fantrax publishes no image field anywhere in its
+   * API, and that was checked rather than assumed (`teamInfo` entries are exactly
+   * `{name, id}`, across 269KB of `getLeagueInfo`, with zero image-ish keys in
+   * `getStandings` or `getTeamRosters` either).
+   *
+   * So a Fantrax crest falls back to initials — the same fallback a Sleeper team
+   * whose manager never set an avatar already gets everywhere else in the app.
+   * Inventing a logo for it would be fabricating data the platform does not have.
+   */
+  avatarUrl: string | null
   /** Roster size, or null when that half's roster cannot be read. */
   playerCount: number | null
   unavailableReason: string | null
@@ -239,6 +255,9 @@ export async function resolvePairedHalf(
         name: snap?.leagueName ?? 'Fantrax league',
         season: snap?.season ?? null,
         teamLabel: snap?.userTeam ?? member.teamExternalId,
+        /* Not a gap to be filled later: Fantrax publishes no image field at all,
+           so this half renders initials. See the type for the measurement. */
+        avatarUrl: null,
         playerCount: mine && mine.length > 0 ? mine.length : null,
         draft: null,
         /*
@@ -276,7 +295,15 @@ export async function resolvePairedHalf(
     const team = lg
       ? await prisma.leagueTeam.findFirst({
           where: { leagueId: lg.id, claimedByUserId: ownerUserId },
-          select: { teamName: true, ownerName: true, externalId: true, platformUserId: true },
+          /* `avatarUrl` rides the query that was already being made — the crest
+             costs no extra round trip. 995 of 1140 LeagueTeam rows carry one. */
+          select: {
+            teamName: true,
+            ownerName: true,
+            externalId: true,
+            platformUserId: true,
+            avatarUrl: true,
+          },
         })
       : null
     /*
@@ -323,6 +350,9 @@ export async function resolvePairedHalf(
       name: lg?.name?.trim() || 'League',
       season: lg?.season ?? null,
       teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || member.teamExternalId,
+      /* Only the team the viewer CLAIMED — `team` is already gated on that, so
+         this cannot show a stranger's crest on your half of the franchise. */
+      avatarUrl: team?.avatarUrl?.trim() || null,
       playerCount: players,
       draft: null,
       activity: lg
