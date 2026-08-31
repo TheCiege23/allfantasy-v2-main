@@ -1239,3 +1239,22 @@
   font-size: 15px;
   margin: 0;
 }
+
+
+/* Draft line inside a franchise half. Appended at top level — see the note on
+   .af-lh-paired-sides above for why this file is never edited mid-@media. */
+.af-lh-paired-draft {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-lh-paired-draft-head {
+  font-weight: 700;
+  color: var(--text2, var(--text));
+}
+/* A live draft is the one state that is time-critical, so it is the one that
+   earns colour. `done` and `upcoming` stay quiet. */
+.af-lh-paired-draft[data-phase='live'] .af-lh-paired-draft-head {
+  color: var(--accent);
+}

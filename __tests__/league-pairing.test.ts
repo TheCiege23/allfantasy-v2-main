@@ -21,6 +21,15 @@ const memberFindFirst = vi.fn()
 const teamFindFirst = vi.fn()
 const rosterFindFirst = vi.fn()
 
+const draftHqAll = vi.fn()
+/* The panel reads drafts through the SAME aggregator the league home uses, so
+   the two cannot disagree about one league. Mocked here to return no rows —
+   which is the production case for both halves and the one the inference below
+   exists for. */
+vi.mock('@/lib/core-app/draftHqAll', () => ({
+  getDraftHqAll: (...a: unknown[]) => draftHqAll(...a),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: {
@@ -51,6 +60,7 @@ beforeEach(() => {
   leagueFindMany.mockResolvedValue([])
   fantraxFindMany.mockResolvedValue([])
   memberFindMany.mockResolvedValue([])
+  draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 0 })
   memberFindFirst.mockResolvedValue(null)
   teamFindFirst.mockResolvedValue(null)
   rosterFindFirst.mockResolvedValue(null)
@@ -355,5 +365,70 @@ describe('resolving the other half from a league', () => {
 
     expect(rosterFindFirst).not.toHaveBeenCalled()
     expect(out?.other?.playerCount).toBeNull()
+  })
+
+  /**
+   * 🛑 NO DRAFT ROW ON A LEAGUE WITH FULL ROSTERS IS A GAP IN OUR DATA, NOT A
+   * FACT ABOUT THE LEAGUE. Measured on production: neither half of the paired
+   * franchise has a DraftSession, yet both have full rosters and obviously
+   * drafted. Rendering silence would imply otherwise, and the league home one
+   * panel down already says so in as many words — two different stories about
+   * one league on one screen is the failure this prevents.
+   */
+  it('infers a finished draft from a populated roster when no draft row exists', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'link-1',
+        name: 'F',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: '4' },
+          { platform: 'fantrax', leagueId: 'fx-1', role: 'college', teamExternalId: 'Ciege82' },
+        ],
+      },
+    })
+    fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
+    leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
+    teamFindFirst.mockResolvedValue({ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77' })
+    rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
+    draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 2 })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    expect(out?.self?.draft?.headline).toContain('draft has ended')
+    expect(out?.self?.draft?.detail).toContain('did not capture the board')
+    /* Inferred, so there is no board to open — a link would 404 into an empty HQ. */
+    expect(out?.self?.draft?.href).toBeNull()
+  })
+
+  /**
+   * ⚠ AND IT MUST NOT INFER FROM A ROSTER WE NEVER READ. `playerCount` is null
+   * exactly when the roster is unreadable; guessing a draft from that would be a
+   * guess dressed as a finding.
+   */
+  it('does not infer a draft when the roster could not be read', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'link-1',
+        name: 'F',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: '4' },
+          { platform: 'fantrax', leagueId: 'fx-1', role: 'college', teamExternalId: null },
+        ],
+      },
+    })
+    fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: null })
+    leagueFindFirst.mockResolvedValue(null)
+    teamFindFirst.mockResolvedValue(null)
+    rosterFindFirst.mockResolvedValue(null)
+    draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 2 })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    expect(out?.other?.playerCount).toBeNull()
+    expect(out?.other?.draft).toBeNull()
   })
 })

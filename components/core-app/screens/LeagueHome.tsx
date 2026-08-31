@@ -260,6 +260,30 @@ function PairedBand({
                 {sd.playerCount} {sd.playerCount === 1 ? 'player' : 'players'} on your roster
               </p>
             )}
+            {/*
+              ⚠ ABSENT IS NOT "NEVER DRAFTED". A half with no draft row — the
+              ordinary case for a Fantrax snapshot, which imports no draft at all
+              — renders nothing here rather than claiming the league has not
+              drafted. The league home makes the same distinction one panel down.
+            */}
+            {sd.draft ? (
+              <p className="af-lh-paired-draft" data-phase={sd.draft.phase}>
+                <span className="af-lh-paired-draft-head">{sd.draft.headline}</span>
+                {sd.draft.detail ? <span> · {sd.draft.detail}</span> : null}
+                {sd.draft.href ? (
+                  <>
+                    {' '}
+                    <Link href={sd.draft.href} className="af-lh-paired-link">
+                      {sd.draft.phase === 'live'
+                        ? 'Go to the draft room →'
+                        : sd.draft.phase === 'done'
+                          ? 'Open the board →'
+                          : 'Open Draft HQ →'}
+                    </Link>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
           </div>
         ))}
       </div>
