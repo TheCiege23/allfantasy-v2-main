@@ -66,7 +66,7 @@ describe('Promotion/Relegation route contracts', () => {
   })
 
   it('enforces auth/membership and validates sport on divisions list', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/divisions/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/divisions/handler')
 
     getServerSessionMock.mockResolvedValueOnce(null)
     const unauthRes = await GET(new Request('http://localhost/api/leagues/lg-1/divisions'), {
