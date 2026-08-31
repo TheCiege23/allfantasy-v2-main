@@ -34,20 +34,33 @@ import { readFileSync } from 'node:fs'
 // secrets. They are passed explicitly because `.vercel/` is gitignored and does
 // NOT exist in the ~70 worktrees this repo runs from; relying on the project
 // link would silently disable the guard everywhere except the primary checkout.
-// 🛑 THESE WERE BOTH WRONG AND THE GUARD SAID NOTHING FOR TEN DAYS.
-// `allfantasy-v2-main-a6wc` / `cafeconchimmy-1100s-projects` do not exist —
-// `vercel ls` answers "The specified scope does not exist", which is a non-zero
-// exit, which this file's fail-open policy correctly turns into allow(). So every
-// push sailed through a check that had never once queried a real project. The
-// values below are read off `vercel project ls`, and both were verified to return
-// a deployment list before being committed.
+// 🛑 DO NOT "CORRECT" THESE FROM A `vercel ls` FAILURE. THAT WAS DONE ON
+// 2026-08-31 AND IT BROKE THE GUARD.
 //
-// ⚠ A FAIL-OPEN GUARD CANNOT REPORT ITS OWN MISCONFIGURATION. That is the whole
-// hazard: a typo here is indistinguishable from "no build is running", forever.
-// If you change these, run the command by hand first and confirm it lists
-// deployments — a guard that has never once refused is not evidence of anything.
-const PROJECT = process.env.AF_VERCEL_PROJECT || 'allfantasy-v2-main'
-const SCOPE = process.env.AF_VERCEL_SCOPE || 'cafeconchimmy'
+// The values below are RIGHT: production deploys run as
+// `allfantasy-v2-main-a6wc` under the `cafeconchimmy-1100s-projects` scope.
+//
+// What happened: a CLI session authenticated to a DIFFERENT team (`cafeconchimmy`)
+// ran `vercel ls … --scope cafeconchimmy-1100s-projects` and got
+// "The specified scope does not exist". That message means "this token cannot see
+// it", NOT "it is not there" — an AUTHORIZATION failure reading exactly like a
+// configuration error. `vercel project ls` then listed a stale look-alike,
+// `allfantasy-v2-main` under `cafeconchimmy`, whose newest deployment was ten days
+// old. Pointing the guard at that project made it watch something nobody deploys,
+// and produced a confident, entirely false conclusion that production had not
+// built in nine days.
+//
+// ⚠ BEFORE CHANGING THESE, CONFIRM WHICH TEAM YOUR CLI IS IN: `vercel teams ls`.
+// If the scope below is not listed, you cannot verify these constants from this
+// machine and an empty/erroring `vercel ls` tells you nothing about them.
+//
+// ⚠ AND THE STANDING HAZARD IS STILL REAL, which is why this note is long: a
+// fail-open guard cannot report its own misconfiguration. A wrong constant here is
+// indistinguishable from "no build is running", forever. But the fix for that is a
+// deploy-listing you have actually seen for THIS project — not a rename driven by
+// a command that failed for a reason you did not check.
+const PROJECT = process.env.AF_VERCEL_PROJECT || 'allfantasy-v2-main-a6wc'
+const SCOPE = process.env.AF_VERCEL_SCOPE || 'cafeconchimmy-1100s-projects'
 
 // States that mean a build is burning CPU minutes right now.
 const IN_FLIGHT = new Set(['BUILDING', 'QUEUED', 'INITIALIZING'])
