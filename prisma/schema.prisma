@@ -6114,6 +6114,7 @@ model League {
   aiOpponentTeamAssignments             AiOpponentTeamAssignment[]
   aiOpponentActionLogs                  AiOpponentActionLog[]
   aiBotMessageHistory                   AiBotMessageHistory[]
+  draftRoomQueueItems                   DraftRoomQueueItem[]
 
   @@unique([userId, platform, platformLeagueId, season])
   @@index([userId])
@@ -17304,4 +17305,56 @@ model CrossPlatformTradeLeg {
   @@unique([tradeId, role])
   @@index([tradeId])
   @@map("cross_platform_trade_legs")
+}
+
+/// The draft room's collaborative music queue.
+///
+/// ⚠ THE TABLE EXISTS IN PRODUCTION AND THIS MODEL IS WHY IT SURVIVES.
+/// Created by migrations/20260823130000_draft_room_music_queue, applied
+/// 2026-08-30. The model was absent from this file until 2026-08-30, which meant
+/// `prisma migrate dev` read the live table as drift and would have offered to
+/// DROP it. Nothing reads or writes it yet; the model earns its place by keeping
+/// a real table out of a generated drop statement, not by serving a caller.
+///
+/// ⚠ ONE INDEX IS DELIBERATELY NOT DECLARED HERE. The migration also creates a
+/// PARTIAL unique index:
+///     ("leagueId", "trackId") WHERE "playedAt" IS NULL
+/// — the same track twice in a row is a double-tap, not a request. Prisma's
+/// schema language cannot express a partial index. Do NOT "fix" that by
+/// declaring a plain `@@unique([leagueId, trackId])`: it would be wrong in two
+/// directions, letting the client `findUnique` on a constraint that stops
+/// holding once a row is played, and asking migrate to widen the real index to
+/// cover played rows.
+/// Measured rather than assumed, with `prisma migrate diff` against production
+/// on 2026-08-30: leaving it undeclared costs nothing. The diff does not mention
+/// this table at all — not the table, not the FK, not the partial index. The
+/// same diff run with this model deleted emits `DROP TABLE` for it, which is the
+/// positive control proving the check can go red and that this model is what
+/// stops it.
+///
+/// ⚠ THE QUEUE IS SHARED. THE AUDIO IS NOT. Do not add `position` or `isPlaying`
+/// expecting them to synchronise anyone's speakers — Spotify's public API cannot
+/// broadcast audio to several listeners, so each person plays the queue on their
+/// own device. Those columns would encode a promise the platform cannot keep.
+model DraftRoomQueueItem {
+  id            String    @id @default(cuid())
+  leagueId      String
+  /// Null for a league with no stored draft session; the queue still works.
+  draftId       String?
+  trackId       String    @db.VarChar(64)
+  trackName     String
+  artistName    String
+  albumArt      String?
+  durationMs    Int       @default(0)
+  /// Spotify has no preview clip for every track. Null is a real value and the
+  /// free-account fallback has to degrade gracefully when it is null.
+  previewUrl    String?
+  addedByUserId String
+  /// Denormalised so a queue row still renders if the profile read fails.
+  addedByName   String
+  createdAt     DateTime  @default(now())
+  playedAt      DateTime?
+  league        League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
 }
