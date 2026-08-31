@@ -959,6 +959,109 @@ export async function getCFBSPRatings(year: number, team?: string): Promise<CFBT
 }
 
 // ──────────────────────────────────────────────────────────────────
+// CFBD v2: Head coaches
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * One coach and the seasons he led, as `/coaches?year=` returns them.
+ *
+ * ⚠ HEAD COACHES ONLY. The endpoint carries no coordinators, so this cannot
+ * answer "did the offensive coordinator change" — which is the question that
+ * actually moves a skill player's outlook. What it CAN answer is whether the
+ * programme changed hands, which is a weaker signal in the same direction, and
+ * the column comments say so rather than letting a reader assume otherwise.
+ */
+export interface CFBCoachSeason {
+  school: string
+  year: number
+  games: number | null
+  spOffense: number | null
+}
+
+export interface CFBCoach {
+  id: number | null
+  name: string
+  /** When the coach was hired, per CFBD. Null for older records. */
+  hireDate: string | null
+  seasons: CFBCoachSeason[]
+}
+
+/**
+ * Head coaches for a season.
+ *
+ * ⚠ MORE ROWS THAN SCHOOLS, AND THAT IS THE INTERESTING PART. Measured on
+ * `year=2025`: 161 rows against ~134 FBS programmes, because a school that fires
+ * a coach mid-season returns BOTH men. Any consumer that assumes one coach per
+ * school per year will silently pick whichever happens to come first in the
+ * array — which for Oregon State in 2025 is the interim hired in October, not
+ * the man who coached most of the season. `primaryCoachBySchool` below is the
+ * only sanctioned way to collapse this.
+ */
+export async function getCFBCoaches(year: number): Promise<CFBCoach[]> {
+  const apiKey = getCfbdApiKey()
+  if (!apiKey) return []
+
+  const cacheKey = `cfbd-coaches-${year}`
+
+  const result = await getCachedOrFetch<CFBCoach[]>(cacheKey, THIRTY_DAYS, async () => {
+    const response = await fetch(`${CFBD_BASE}/coaches?year=${year}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
+    })
+    assertCfbdAvailable(response)
+    if (!response.ok) return []
+
+    const data = await response.json()
+    return (Array.isArray(data) ? data : []).map((c: any) => ({
+      id: c.id ?? null,
+      name: [c.firstName, c.lastName].filter(Boolean).join(' ').trim(),
+      hireDate: c.hireDate ?? null,
+      seasons: (Array.isArray(c.seasons) ? c.seasons : []).map((s: any) => ({
+        school: s.school || '',
+        year: s.year ?? year,
+        games: s.games ?? null,
+        spOffense: s.spOffense ?? null,
+      })),
+    }))
+  })
+
+  return result || []
+}
+
+/**
+ * The coach who actually led each school in `year` — the one with the most
+ * games, not the first in the array.
+ *
+ * ⚠ TIES AND MISSING GAME COUNTS RESOLVE TO NOBODY, DELIBERATELY. If two coaches
+ * split a season evenly, or the feed carries no `games`, there is no primary
+ * coach and the school is absent from the map. A consumer then writes null,
+ * which is the honest answer; picking one arbitrarily would report a coaching
+ * change (or the absence of one) that nothing measured.
+ */
+export function primaryCoachBySchool(
+  coaches: CFBCoach[],
+  year: number,
+): Map<string, { name: string; games: number; hireDate: string | null }> {
+  const bySchool = new Map<string, Array<{ name: string; games: number; hireDate: string | null }>>()
+
+  for (const coach of coaches) {
+    for (const season of coach.seasons) {
+      if (season.year !== year || !season.school || season.games == null) continue
+      const list = bySchool.get(season.school) ?? []
+      list.push({ name: coach.name, games: season.games, hireDate: coach.hireDate })
+      bySchool.set(season.school, list)
+    }
+  }
+
+  const primary = new Map<string, { name: string; games: number; hireDate: string | null }>()
+  for (const [school, list] of bySchool) {
+    const sorted = [...list].sort((a, b) => b.games - a.games)
+    if (sorted.length > 1 && sorted[0].games === sorted[1].games) continue // a tie names nobody
+    if (sorted[0]) primary.set(school, sorted[0])
+  }
+  return primary
+}
+
+// ──────────────────────────────────────────────────────────────────
 // CFBD v2: WEPA (Adjusted Metrics)
 // ──────────────────────────────────────────────────────────────────
 

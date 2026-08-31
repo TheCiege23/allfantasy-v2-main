@@ -72,13 +72,56 @@ describe('projectDevyOutlook', () => {
     expect(out.pReachesRelevance).toBeNull()
   })
 
-  it('the placeholder table is empty and declares itself unmeasured', async () => {
-    const { DRAFT_RATES, DRAFT_RATE_PROVENANCE, draftRateFor } = await import(
+  /*
+   * ⚠ THIS TEST USED TO ASSERT THE PLACEHOLDER — `DRAFT_RATES` empty and
+   * `measured: false`. The backfill has since run (recruit classes 2013-2020
+   * against draft years 2016-2025), so that assertion is obsolete rather than
+   * broken. It is replaced by the CONTRACT rather than by the numbers: exact
+   * rates legitimately move every time the backfill is re-run against a newer
+   * draft year, and a test pinned to them would fail on a correct refresh.
+   */
+  it('the table is measured, and says so in its provenance', async () => {
+    const { DRAFT_RATES, DRAFT_RATE_PROVENANCE } = await import(
       '@/lib/devy/draftRates.generated'
     )
-    expect(DRAFT_RATES).toEqual([])
-    expect(DRAFT_RATE_PROVENANCE.measured).toBe(false)
+    expect(DRAFT_RATE_PROVENANCE.measured).toBe(true)
+    expect(DRAFT_RATES.length).toBeGreaterThan(0)
+    expect(DRAFT_RATE_PROVENANCE.totalRecruits).toBeGreaterThan(0)
+
+    // Every cell carries its own denominator, so a consumer can always see how
+    // much evidence a rate rests on rather than inferring it from the rate.
+    for (const cell of DRAFT_RATES) {
+      expect(cell.recruits).toBeGreaterThan(0)
+      expect(cell.drafted).toBeLessThanOrEqual(cell.recruits)
+      expect(cell.rate).toBeCloseTo(cell.drafted / cell.recruits, 5)
+    }
+  })
+
+  /*
+   * ⚠ THE POSITIVE CONTROL FOR THE WHOLE BRIDGE. Without this, deleting
+   * `draftRateFor`'s lookup and returning null unconditionally would leave every
+   * other test in this file green — they all assert the DEGRADED answer, which
+   * is exactly what a broken bridge also produces.
+   */
+  it('returns a measured rate for a well-sampled cell', async () => {
+    const { draftRateFor } = await import('@/lib/devy/draftRates.generated')
+    const cell = draftRateFor('QB', 3)
+    expect(cell).not.toBeNull()
+    expect(cell!.recruits).toBeGreaterThanOrEqual(50)
+    expect(cell!.rate).toBeGreaterThan(0)
+    expect(cell!.rate).toBeLessThan(1)
+  })
+
+  /*
+   * ⚠ AND THE SAMPLE FLOOR STILL BITES WHERE IT SHOULD. Five-star cells are the
+   * most valuable devy assets and the smallest cohorts — QB 18, RB 27, WR 31,
+   * TE 4 recruits — so all four sit under `minSample = 50` and must degrade to
+   * null rather than quote a rate off a handful of players.
+   */
+  it('declines to state a rate for an under-sampled cell', async () => {
+    const { draftRateFor } = await import('@/lib/devy/draftRates.generated')
     expect(draftRateFor('WR', 5)).toBeNull()
+    expect(draftRateFor('TE', 5)).toBeNull()
   })
 
   it('always names the missing market, so a score is never mistaken for a price', () => {
