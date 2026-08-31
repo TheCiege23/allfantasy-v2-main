@@ -183,13 +183,28 @@ export async function resolvePairedHalf(
        */
       const allRows = Array.isArray(snap?.roster) ? (snap?.roster as unknown[]) : null
       const userTeam = String(snap?.userTeam ?? '').trim().toLowerCase()
+      const teamOf = (r: unknown): string => {
+        const t = (r as { teamName?: unknown })?.teamName
+        return typeof t === 'string' ? t.trim().toLowerCase() : ''
+      }
+      /*
+       * ⚠ ONLY FILTER WHEN THE ROWS ACTUALLY CARRY A TEAM. Two snapshot shapes
+       * exist: the current one stores the WHOLE league and tags each row with
+       * `teamName` (466 rows over 12 teams on production), while older ones store
+       * the viewer's roster alone with no team on it. Filtering the second shape
+       * matches nothing and would report a manager who owns nobody — turning a
+       * correct count into a false gap. If no row names a team, the array is
+       * already the team.
+       */
+      const rowsCarryTeams = allRows?.some((r) => teamOf(r) !== '') ?? false
       const mine =
-        allRows && userTeam
-          ? allRows.filter((r) => {
-              const t = (r as { teamName?: unknown })?.teamName
-              return typeof t === 'string' && t.trim().toLowerCase() === userTeam
-            })
-          : null
+        allRows == null
+          ? null
+          : !rowsCarryTeams
+            ? allRows
+            : userTeam
+              ? allRows.filter((r) => teamOf(r) === userTeam)
+              : null
       return {
         role,
         platform,
@@ -203,7 +218,7 @@ export async function resolvePairedHalf(
             ? 'the linked Fantrax league no longer exists'
             : allRows == null
               ? 'this Fantrax snapshot holds no roster — re-run the import'
-              : !userTeam
+              : rowsCarryTeams && !userTeam
                 ? 'this Fantrax snapshot does not record which team is yours — re-run the import'
                 : mine && mine.length > 0
                   ? null

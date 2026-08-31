@@ -103,8 +103,14 @@ describe('which half a league would be', () => {
       { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', season: 2026, sport: 'nfl', isDynasty: true, leagueType: 'dynasty' },
     ])
     memberFindMany.mockResolvedValue([
-      { platform: 'sleeper', leagueId: 'lg-1', linkId: 'link-1', link: { name: 'My franchise' } },
-      { platform: 'fantrax', leagueId: 'fx-1', linkId: 'link-1', link: { name: 'My franchise' } },
+      /*
+       * ⚠ THE MOCK MUST CARRY `link.ownerUserId` AND `link.members`. The query
+       * selects both: ownerUserId decides MINE vs another account's claim, and
+       * members is how "complete" is counted. A mock missing them makes a
+       * complete franchise of the viewer's look unclaimed and half-built.
+       */
+      { platform: 'sleeper', leagueId: 'lg-1', linkId: 'link-1', link: { name: 'My franchise', ownerUserId: USER, members: [{ id: 'm1' }, { id: 'm2' }] } },
+      { platform: 'fantrax', leagueId: 'fx-1', linkId: 'link-1', link: { name: 'My franchise', ownerUserId: USER, members: [{ id: 'm1' }, { id: 'm2' }] } },
     ])
     const out = await listPairableLeagues(USER)
     expect(out.pro).toEqual([])
@@ -123,7 +129,7 @@ describe('which half a league would be', () => {
       { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', season: 2026, sport: 'nfl', isDynasty: true, leagueType: 'dynasty' },
     ])
     memberFindMany.mockResolvedValue([
-      { platform: 'sleeper', leagueId: 'lg-1', linkId: 'link-1', link: { name: 'My franchise' } },
+      { platform: 'sleeper', leagueId: 'lg-1', linkId: 'link-1', link: { name: 'My franchise', ownerUserId: USER, members: [{ id: 'm1' }] } },
     ])
     const out = await listPairableLeagues(USER)
     expect(out.pro.map((l) => l.id)).toEqual(['lg-1'])
@@ -306,7 +312,20 @@ describe('resolving the other half from a league', () => {
     const out = await resolvePairedHalf('fx-lg', USER)
 
     expect(teamFindFirst.mock.calls[0][0].where.claimedByUserId).toBe(USER)
-    expect(rosterFindFirst.mock.calls[0][0].where.platformUserId).toBe('sleeper-user-77')
+    /*
+     * ⚠ BOTH ID SPACES, VIEWER FIRST. `Roster.platformUserId` holds the PLATFORM
+     * id for managers we imported but the AllFantasy `AppUser.id` for the team
+     * the viewer has CLAIMED. Measured on production: 12 teams, 11 keys matched
+     * and the one that did not was the viewer's, whose 50-player roster sat
+     * under the AppUser id. Asserting a single key here is what let that ship —
+     * the panel reported "no roster on file" for a roster that existed.
+     */
+    expect(rosterFindFirst.mock.calls[0][0].where.platformUserId).toEqual({
+      in: [USER, 'sleeper-user-77'],
+    })
+    /* Still scoped to a team the viewer actually claimed — this is what stops
+       the fallback picking up a stranger's squad. */
+    expect(teamFindFirst.mock.calls[0][0].where.claimedByUserId).toBe(USER)
     expect(out?.other?.playerCount).toBe(3)
     expect(out?.viewingRole).toBe('college')
   })
