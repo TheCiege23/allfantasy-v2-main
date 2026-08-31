@@ -95,6 +95,23 @@ export type TenantMismatchDomainError = {
   readonly innerTenantId: string
 }
 
+/**
+ * The tenant has spent its request allowance. T-114.
+ *
+ * ⚠ A SEPARATE VARIANT FROM `NOT_ENTITLED`, THOUGH BOTH ARE PLAN LIMITS. They
+ * are different sentences to the operator: NOT_ENTITLED is "your plan does not
+ * include this" and the fix is to upgrade; RATE_LIMITED is "not this second"
+ * and the fix is to wait. Collapsing them would send someone to a billing page
+ * over a burst, and 402 is not a code any HTTP client retries.
+ */
+export type RateLimitedError = {
+  readonly code: 'RATE_LIMITED'
+  readonly limit: number
+  /** Seconds until the caller may retry. Becomes the Retry-After header. */
+  readonly retryAfterSeconds: number
+  readonly windowSeconds: number
+}
+
 export type DomainError =
   | ForbiddenError
   | WrongPhaseError
@@ -102,6 +119,7 @@ export type DomainError =
   | ReasonRequiredError
   | NotEntitledError
   | ConflictError
+  | RateLimitedError
   | TenantMismatchDomainError
 
 export type DomainErrorCode = DomainError['code']
@@ -123,6 +141,7 @@ export const DOMAIN_ERROR_CODES = [
   'REASON_REQUIRED',
   'NOT_ENTITLED',
   'CONFLICT',
+  'RATE_LIMITED',
   TENANT_MISMATCH,
 ] as const satisfies readonly DomainErrorCode[]
 
@@ -172,6 +191,12 @@ export const conflict = (resource: string, detail: string): ConflictError => ({
   resource,
   detail,
 })
+
+export const rateLimited = (
+  limit: number,
+  retryAfterSeconds: number,
+  windowSeconds = 60,
+): RateLimitedError => ({ code: 'RATE_LIMITED', limit, retryAfterSeconds, windowSeconds })
 
 export const tenantMismatch = (
   outerTenantId: string,
@@ -341,6 +366,26 @@ export function toHttpResponse(error: DomainError): HttpErrorResponse {
             details: { resource: error.resource },
             // The only retryable variant: re-reading and re-submitting can
             // legitimately succeed. Everything else would fail identically.
+            retryable: true,
+          },
+        },
+      }
+
+    case 'RATE_LIMITED':
+      // 429, and the ONLY other retryable variant besides CONFLICT. Retry-After
+      // is in `details` rather than only in a header so a non-HTTP consumer —
+      // a queue worker, an internal caller — can honour it too.
+      return {
+        status: 429,
+        body: {
+          error: {
+            code: error.code,
+            message: `Rate limit exceeded: ${error.limit} requests per ${error.windowSeconds}s. Retry in ${error.retryAfterSeconds}s.`,
+            details: {
+              limit: error.limit,
+              windowSeconds: error.windowSeconds,
+              retryAfterSeconds: error.retryAfterSeconds,
+            },
             retryable: true,
           },
         },

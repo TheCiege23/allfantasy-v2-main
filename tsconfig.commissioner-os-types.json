@@ -48,6 +48,8 @@
     "lib/domain/export.ts",
     "lib/domain/apiKeys.ts",
     "lib/domain/apiActor.ts",
+    "lib/domain/webhooks.ts",
+    "lib/domain/rateLimit.ts",
     "lib/domain/tenantScopedTables.ts"
   ]
 }
