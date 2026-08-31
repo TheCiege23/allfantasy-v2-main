@@ -12,6 +12,21 @@ import '@/components/core-app/af-my-team-board.css'
  * `/core/my-team`, the same way the matchup pulse does on `/core/matchup`, and
  * leaves both of them alone.
  *
+ * ⚠ THAT DIVERGES FROM THE HANDOFF ON PURPOSE, BY DECISION, NOT OVERSIGHT.
+ * The handoff says this board "replaces the old 'Needs you first' + 'Or pick a
+ * league' placeholder entirely". User's call, 2026-08-30: it sits above and both
+ * stay. Do not "reconcile" the code to the handoff later — the handoff is the
+ * older opinion, and this note exists because that doc is not in the repo, so a
+ * future reader meets the instruction with nothing recording that it was
+ * answered.
+ *
+ * The reason it cannot replace them: this component is passed as `above=` and
+ * renders NOTHING when there is no pulse to show — see the `return null` below,
+ * and the call site in `app/core/[[...screen]]/page.tsx`, which passes `null`
+ * outright when `myTeamPulse` is absent. Replacing the placeholders would leave
+ * a manager with no urgent lineup looking at an empty screen, and strand the one
+ * who has not imported a league yet: the picker is their only route in.
+ *
  * ⚠ EVERY COUNT ON A ROW IS A LOSS THAT HAS ALREADY HAPPENED OR IS CERTAIN TO.
  * An empty slot, a starter ruled out and a starter on bye all score zero, which
  * is why they share a colour and add up into one urgency. A QUESTIONABLE
