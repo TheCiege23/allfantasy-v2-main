@@ -16,7 +16,7 @@ const svcWith = (desc: CertifiedScheduleDescription) => new CertifiedTradeIntegr
 
 const root = process.cwd()
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
-const PROPOSAL = 'app/api/leagues/[leagueId]/trades/route.ts'
+const PROPOSAL = 'app/api/leagues/[leagueId]/trades/handler.ts'
 const ACCEPT = 'app/api/leagues/[leagueId]/trades/[tradeId]/accept/route.ts'
 const PROCESS = 'app/api/leagues/[leagueId]/trades/[tradeId]/process/route.ts'
 const DETAIL = 'app/api/leagues/[leagueId]/trades/[tradeId]/route.ts'

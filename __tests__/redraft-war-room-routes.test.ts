@@ -119,7 +119,7 @@ function makeContext(opts: { isCommissioner?: boolean } = {}): RedraftWarRoomCon
 }
 
 async function getState(leagueId = 'lg1') {
-  const { GET } = await import('@/app/api/leagues/[leagueId]/redraft-war-room/route')
+  const { GET } = await import('@/app/api/leagues/[leagueId]/redraft-war-room/handler')
   return GET(new Request('http://t/x') as never, { params: Promise.resolve({ leagueId }) })
 }
 async function postAction(action: string, body: Record<string, unknown>, leagueId = 'lg1') {

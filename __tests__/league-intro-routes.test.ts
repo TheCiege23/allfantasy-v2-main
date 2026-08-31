@@ -28,8 +28,8 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { GET as getIntroStatus } from '@/app/api/leagues/[leagueId]/intro-status/route'
-import { POST as postIntroSeen } from '@/app/api/leagues/[leagueId]/intro-seen/route'
+import { GET as getIntroStatus } from '@/app/api/leagues/[leagueId]/intro-status/handler'
+import { POST as postIntroSeen } from '@/app/api/leagues/[leagueId]/intro-seen/handler'
 
 describe('league intro routes', () => {
   beforeEach(() => {
