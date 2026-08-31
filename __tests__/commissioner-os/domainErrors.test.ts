@@ -17,6 +17,7 @@ import {
   type DomainErrorCode,
   conflict,
   forbidden,
+  rateLimited,
   invariant,
   notEntitled,
   reasonRequired,
@@ -33,6 +34,7 @@ const SPECIMENS: Record<DomainErrorCode, DomainError> = {
   REASON_REQUIRED: reasonRequired('league.rollbackWeek', 'TOO_SHORT', 12),
   NOT_ENTITLED: notEntitled('maxLeagues', 'trial', { current: 5, allowed: 5 }),
   CONFLICT: conflict('League', 'The league moved to POSTSEASON while you were editing.'),
+  RATE_LIMITED: rateLimited(60, 12),
   [TENANT_MISMATCH]: tenantMismatch('tenant-a', 'tenant-b'),
 }
 
@@ -70,6 +72,7 @@ describe('T-003 · DomainError', () => {
       ['REASON_REQUIRED', 400],
       ['NOT_ENTITLED', 402],
       ['CONFLICT', 409],
+      ['RATE_LIMITED', 429],
       [TENANT_MISMATCH, 500],
     ] as const)('%s → %i', (code, status) => {
       expect(toHttpResponse(SPECIMENS[code]).status).toBe(status)
@@ -81,11 +84,19 @@ describe('T-003 · DomainError', () => {
       expect(toHttpResponse(SPECIMENS.NOT_ENTITLED).status).not.toBe(403)
     })
 
-    it('CONFLICT is the only retryable variant', () => {
+    it('exactly CONFLICT and RATE_LIMITED are retryable', () => {
+      // Both mean "try again", for different reasons — CONFLICT because
+      // re-reading may succeed, RATE_LIMITED because waiting will. Everything
+      // else would fail identically on a retry, and telling a client otherwise
+      // turns one refusal into five.
+      //
+      // ⚠ RATE_LIMITED was added at T-114 and this assertion is what noticed.
+      // It said `['CONFLICT']` and went red — which is the list being a claim
+      // about the whole union rather than a spot check.
       const retryable = DOMAIN_ERROR_CODES.filter(
         (c) => toHttpResponse(SPECIMENS[c]).body.error.retryable,
       )
-      expect(retryable).toEqual(['CONFLICT'])
+      expect(retryable.sort()).toEqual(['CONFLICT', 'RATE_LIMITED'])
     })
   })
 
