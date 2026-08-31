@@ -1376,7 +1376,7 @@
     border-radius: 0;
   }
   .af-cm[data-mode='docked'] { width: 100vw; }
-  .af-cm-launch { right: 14px; bottom: 76px; }
+  .af-cm-launch { right: 14px; bottom: var(--af-fab-inset-phone, 76px); }
 }
 
 /*

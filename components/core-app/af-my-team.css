@@ -1041,9 +1041,16 @@
     align-self: center;
   }
 
-  /* Column 2 row 2 is free again now the chip has moved, so taxi years sit
-     under the name where they are read. */
-  .af-mt-row > .af-mt-taxi-years { grid-row: 2; grid-column: 2; }
+  /*
+   * ⚠ COLUMN 2 ROW 2 IS NOT FREE — I PUT THE PLAYER CELL THERE MYSELF. This
+   * rule was written when the player occupied row 1 only; the same change that
+   * stacked the status chip under the slot badge also made
+   * `.af-mt-player` span `1 / span 2`, so the taxi chip landed ON TOP of the
+   * kickoff line. Measured at 390px: chip at x79 y473, meta at x117 y473 —
+   * overlapping, with "no taxi years left" struck through "BAL @ IND · Sun
+   * 5:00p". A third row is the only free cell in that column.
+   */
+  .af-mt-row > .af-mt-taxi-years { grid-row: 3; grid-column: 2; }
 
   /* ⚠ THE BADGE WAS WIDER THAN ITS OWN TRACK. `.af-mt-slot` carries an explicit
      46px while the narrow grid declares 40px, so it was spilling six pixels into
