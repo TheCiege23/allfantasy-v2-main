@@ -481,6 +481,40 @@ LAST command's**, so the thing being tested never decides the result. Use
   `error TS` lines. Verify the junction with `(Get-Item <path> -Force).LinkType`
   **before** trusting any number the run produces — `mklink` printing a success
   line is not evidence, as the entry above already records.
+- 🛑 **AND A FOURTH WAY, WHICH EXITS 0 AND IS THE ONLY ONE NO TELL ABOVE CATCHES.**
+  `extends` inherits `exclude`, and the inherited `exclude` silently drops matching
+  entries from your `include`. This repo excludes `scripts`, `__tests__`, `e2e` and
+  `tests`, so a throwaway config that extends `tsconfig.json` to typecheck one
+  script compiles **nothing**. Whether that is loud or silent turns on entries that
+  look irrelevant — measured 2026-08-31 against the same planted
+  `const n: number = "not a number"`:
+
+  ```
+  include: ["scripts/probe.ts"]                        exit 2, TS18003 — LOUD
+  include: [ …same, "next-env.d.ts", "types/**/*.d.ts" ] exit 0, 0 errors, 0 BYTES
+  ```
+
+  If EVERY entry is dropped you get `TS18003 "No inputs were found in config file"`,
+  which names the include and exclude paths that produced the emptiness — exit 2,
+  and it matches `grep "error TS"`, so every tell above catches it. If ANY entry
+  survives, even a `.d.ts` that cannot contain an error, tsc succeeds on the
+  survivors and reports clean. The silent run compiled **506 files** and did real
+  work; the file under test was simply absent from the set.
+
+  🛑 **THE BOILERPLATE IS WHAT MAKES IT LIE.** Adding `next-env.d.ts` and
+  `types/**/*.d.ts` for completeness is what a careful person does, and it is
+  exactly what suppresses TypeScript's own warning. **The more thorough config is
+  the one that lies.** Exit code, error count, crash dump and `Cannot find module`
+  all read clean. The only check that works is confirming the file under test is in
+  the compile set: `--listFiles | grep <yourfile>`.
+
+  ⚠ **AND NOTE WHAT THIS DOES TO THE RULE DIRECTLY BELOW.** Inject-a-known-error
+  DID fire — it reported the run as blind. It did not say why; the first mechanism
+  offered was wrong (the inherited `exclude` alone, which is the LOUD case); and a
+  wrong explanation with a working fix attached is what nearly shipped. **A positive
+  control tells you a check is broken. It does not diagnose it, and it does not
+  license the first mechanism you think of.** Found by one session, reproduced
+  independently by another, and the first causal story died on that second run.
 
 🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
 POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
