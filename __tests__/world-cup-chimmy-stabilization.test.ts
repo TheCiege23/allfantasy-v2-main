@@ -349,6 +349,25 @@ describe("generateWorldCupChimmyPrivateReply — stabilization", () => {
   })
 
   it("team schedule question uses cached fixtures without model calls", async () => {
+    /*
+     * ⚠ A DATE TIME-BOMB, NOT A CONTRACT CHANGE. This fixture used to hardcode
+     * `startsAt: "2026-06-16T20:00:00.000Z"`, and buildScheduleReply filters a
+     * requested team's fixtures with
+     *
+     *     .filter((m) => !m.startsAt || new Date(m.startsAt) >= now || m.status === "live")
+     *
+     * against `const now = new Date()` — the REAL clock, with no injection point.
+     * The moment that kickoff fell into the past the match was filtered out,
+     * `relevant.length === 0`, and the code correctly answered "no fresh cached
+     * fixture for Brazil". The code was right; the fixture had expired.
+     *
+     * Anchored to run time so it cannot expire again. The offset is what makes
+     * the test meaningful — a fixture at `Date.now()` sits exactly on the
+     * boundary the filter compares against.
+     */
+    const kickoff = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    expect(kickoff.getTime()).toBeGreaterThan(Date.now())
+
     const result = await replyWith({
       prompt: "@chimmy who does Brazil play next?",
       context: baseContext({
@@ -367,7 +386,7 @@ describe("generateWorldCupChimmyPrivateReply — stabilization", () => {
             status: "scheduled",
             minute: null,
             injuryTime: null,
-            startsAt: "2026-06-16T20:00:00.000Z",
+            startsAt: kickoff.toISOString(),
             venueName: null,
             venueCity: null,
             apiStatusShort: "NS",
@@ -432,10 +451,28 @@ describe("generateWorldCupChimmyPrivateReply — stabilization", () => {
       }),
     })
 
+    /*
+     * ⚠ THE REFUSAL GOT MORE SPECIFIC, WHICH IS AN IMPROVEMENT THIS TEST WAS
+     * PINNED AGAINST. It required the GENERIC "I don't have reliable data for
+     * that yet ... Ask me for pool standings" fallback. A prompt that names a
+     * team and asks for player stats now takes a dedicated roster branch
+     * (worldCupChimmyReplyPolicy.ts:653) which says WHICH data is missing and
+     * WHAT an admin must run, instead of a generic shrug.
+     *
+     * Both messages still exist — the generic redirect at :1052 continues to
+     * serve prompts that do not name a team — so this is a routing change, not a
+     * deletion. Every invariant the test actually exists to protect is unchanged
+     * and still asserted below: no model call, deterministic provider, and no
+     * fabricated scoreline.
+     *
+     * The `not.toContain` is deliberate: it pins the specialization, so a
+     * regression back to the generic shrug for this prompt fails here.
+     */
     expect(routeTextCallMock).not.toHaveBeenCalled()
     expect(result.provider).toBe("deterministic")
-    expect(result.reply).toContain(reliableDataUnavailableMessage("en"))
-    expect(result.reply).toContain("Ask me for pool standings")
+    expect(result.reply).toContain("roster loaded yet")
+    expect(result.reply).toContain("syncWorldCupRosters")
+    expect(result.reply).not.toContain(reliableDataUnavailableMessage("en"))
     expect(result.reply).not.toMatch(/\b\d{1,2}-\d{1,2}\b/)
   })
 

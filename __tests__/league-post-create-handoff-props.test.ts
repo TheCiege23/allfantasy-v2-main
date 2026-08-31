@@ -11,7 +11,21 @@ describe('league post-create handoff props wiring', () => {
     const src = read('app/league/[leagueId]/page.tsx')
     expect(src).toContain('const createdFromLeagueCreate = isPostCreateLeagueShellHandoff(sp)')
     expect(src).toContain('const defaultShowInvite = isTruthySearchParam(sp.showInvite)')
-    expect(src).toContain("const defaultOpenChat = normalizeOpenChatQueryParam(firstSearchParam(sp.openChat)) === 'league' ? 'league' : null")
+    /*
+     * ⚠ WHITESPACE-EXACT, AND THE FORMATTER MOVED THE LINE. The expression is
+     * unchanged; it is simply wrapped after the `=` now:
+     *
+     *     const defaultOpenChat =
+     *       normalizeOpenChatQueryParam(firstSearchParam(sp.openChat)) === 'league' ? 'league' : null
+     *
+     * A `toContain` on a full source line cannot survive a reflow, and nothing
+     * about this test's intent depends on where the break falls. Matched with a
+     * whitespace-tolerant regex so the assertion tracks the LOGIC — normalize the
+     * query param, accept only 'league', otherwise null.
+     */
+    expect(src).toMatch(
+      /const defaultOpenChat =\s*normalizeOpenChatQueryParam\(firstSearchParam\(sp\.openChat\)\) === 'league' \? 'league' : null/,
+    )
     expect(src).toContain('const shouldPlayIntro = isTruthySearchParam(sp.playIntro)')
     expect(src).toContain('createdFromLeagueCreate={createdFromLeagueCreate}')
     expect(src).toContain('defaultShowInvite={defaultShowInvite}')

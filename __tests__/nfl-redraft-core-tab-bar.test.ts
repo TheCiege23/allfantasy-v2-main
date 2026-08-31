@@ -85,11 +85,26 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
     // Each forbidden id, when present in the branch, would surface as a
     // primary tab — defeating the compact redraft shell. (War Room / AF Legacy
     // now lives in the draft-room dock, not the league tab bar.)
-    const forbidden = ['history', 'ai_coaching', 'redraft', 'trend', 'finance']
+    /*
+     * ⚠ `ai_coaching` CAME OFF THIS LIST DELIBERATELY. The guard is about tabs
+     * LEAKING in from the generic path — ids that appear with no curation and
+     * bloat the compact redraft shell. ai_coaching is now the opposite of that:
+     * an explicit `{ id: 'ai_coaching', label: 'AI Coaching' }` sitting in the
+     * hand-written core list between `decide` and `draft`, with a label, which
+     * an injected tab would not have.
+     *
+     * The other four are unchanged and still absent — verified against the
+     * branch's full id set — so the guard still does the job it was written for.
+     * Its presence is asserted positively below, so removing the tab is a
+     * failure here too rather than a silent loss.
+     */
+    const forbidden = ['history', 'redraft', 'trend', 'finance']
     for (const id of forbidden) {
       const re = new RegExp(`id:\\s*'${id}'`)
       expect(branch, `forbidden tab id '${id}' leaked into the nflRedraftCore branch`).not.toMatch(re)
     }
+    // Curated, not injected: present AND labelled, in the hand-written list.
+    expect(branch).toMatch(/\{ id: 'ai_coaching', label: 'AI Coaching' \}/)
   })
 
   it('only exposes the Settings tab in the redraft branch behind an isCommissioner gate', () => {

@@ -169,8 +169,20 @@ describe('Behavior 6: failed pool fetch does not clear a valid draft session', (
     )
     expect(poolCbMatch).not.toBeNull()
     const body = poolCbMatch![1]
-    // setDraftPool(null) appears in both the non-ok branch and the catch block.
-    expect(body).toContain('setDraftPool(null)')
+    /*
+     * ⚠ THE GUARANTEE GOT STRONGER AND THIS ASSERTION WENT RED FOR IT. The test
+     * demanded `setDraftPool(null)` on the failure paths. Both of them — the
+     * non-ok branch and the catch — now call `setPoolError(true)` and do not
+     * touch the pool at all, so a failed refetch leaves a good pool on screen
+     * instead of blanking it.
+     *
+     * That is exactly what this describe block is named for ("failed pool fetch
+     * does not clear a valid draft session"), so the old assertion had come to
+     * require the weaker of the two behaviours. Asserted as the invariant now:
+     * the failure paths flag the error and clear NOTHING.
+     */
+    expect(body).toContain('setPoolError(true)')
+    expect(body).not.toContain('setDraftPool(null)')
     // The catch/error path must never clear the session.
     expect(body).not.toContain('setSession')
   })
@@ -188,7 +200,14 @@ describe('Behavior 7: successful cached pool response populates player pool', ()
     expect(poolCbMatch).not.toBeNull()
     const body = poolCbMatch![1]
     expect(body).toMatch(/if \(res\.ok && Array\.isArray\(data\.entries\)\)/)
-    expect(body).toContain('setDraftPool({')
+    /*
+     * The payload moved out of the call into a `nextPool` const, and the setter
+     * became a functional update that keeps a non-empty previous pool rather than
+     * replacing it with an empty response. `setDraftPool({` therefore no longer
+     * appears; the population it stood for still does.
+     */
+    expect(body).toMatch(/const nextPool: DraftPoolClientPayload = \{/)
+    expect(body).toMatch(/setDraftPool\(\(prev\) =>/)
     expect(body).toContain('entries: data.entries')
   })
 
