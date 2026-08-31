@@ -61,8 +61,15 @@ export interface PlatformIdentityLinkRequest {
   displayName?: string | null
 }
 
-/** Reuses playerIdResolver's existing confidence vocabulary rather than inventing a new one. */
-export type PlayerIdentityConfidence = 'direct' | 'name_match' | 'miss'
+/**
+ * Reuses playerIdResolver's existing confidence vocabulary rather than inventing a new one.
+ *
+ * ⚠ `ambiguous` MEANS THE REGISTRY HELD SEVERAL PEOPLE OF THAT NAME AND THE
+ * RESOLVER REFUSED TO PICK ONE. It is deliberately not folded into `miss`: a
+ * caller that treats them the same is still correct, but one that reports them
+ * separately can tell a coverage gap from a discriminator gap.
+ */
+export type PlayerIdentityConfidence = 'direct' | 'name_match' | 'ambiguous' | 'miss'
 
 export interface PlayerIdentityResult {
   canonicalPlayerId: string | null

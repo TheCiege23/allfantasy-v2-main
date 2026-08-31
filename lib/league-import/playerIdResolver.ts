@@ -28,7 +28,15 @@ import type { ImportProvider } from './types'
 
 export interface PlayerIdResolveResult {
   canonicalId: string | null
-  confidence: 'direct' | 'name_match' | 'miss'
+  /**
+   * ⚠ `ambiguous` IS NOT A KIND OF `miss`, AND SEPARATING THEM IS THE POINT.
+   * "We hold no row for this player" and "we hold several and cannot choose"
+   * are different problems with different fixes — the first wants wider
+   * ingestion, the second wants a better discriminator. Folding the second into
+   * `miss` is how it stays invisible while the coverage numbers look merely
+   * disappointing.
+   */
+  confidence: 'direct' | 'name_match' | 'ambiguous' | 'miss'
 }
 
 type ProviderColumn = 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId'
@@ -87,14 +95,44 @@ export async function resolveCanonicalPlayerId(args: {
   if (args.nameHint) {
     const normalized = normalizeName(args.nameHint)
     if (normalized.length > 0) {
-      const byName = await prisma.playerIdentityMap.findFirst({
+      /*
+       * 🛑 MORE THAN ONE MATCH IS NOT A MATCH.
+       *
+       * This was `findFirst`, which returns whichever row the database happened
+       * to reach first when several people share a name — and then reports it as
+       * a `name_match`, indistinguishable from a real one. Measured on production
+       * 2026-08-31: 1,227 NCAAF normalized names in `PlayerIdentityMap` are
+       * already held by more than one row, so this was already arbitrary for
+       * them, silently.
+       *
+       * ⚠ AND IT WOULD GET MUCH WORSE, WHICH IS WHY THE GUARD LANDS WITH THE
+       * WIDENING RATHER THAN AFTER IT. Widening the NCAAF registry from
+       * `SportsPlayer` adds 44,692 rows keyed on (name, team) precisely BECAUSE
+       * 4,925 colliding names are different people at different schools — Ryan
+       * Davis is 8 rows across 7 schools. Adding those rows while `findFirst`
+       * still picks one at random converts a coverage gap into confident wrong
+       * answers, which is the worse of the two failures: a miss shows a gap, a
+       * mis-link shows another player's projection on your roster.
+       *
+       * `take: 2` is enough to tell "one" from "more than one" without counting
+       * the whole set, and the position hint narrows before we decide.
+       */
+      const byName = await prisma.playerIdentityMap.findMany({
         where: {
           normalizedName: normalized,
           ...(args.positionHint ? { position: args.positionHint.toUpperCase() } : {}),
         },
         select: { id: true },
+        take: 2,
       })
-      if (byName) return { canonicalId: byName.id, confidence: 'name_match' }
+      if (byName.length === 1) return { canonicalId: byName[0]!.id, confidence: 'name_match' }
+      /*
+       * Two or more: refuse. Reported as `ambiguous` rather than `miss` so a
+       * caller can tell "we have no row for this player" from "we have several
+       * and cannot choose" — different problems with different fixes, and
+       * folding them together is how the second one stays invisible.
+       */
+      if (byName.length > 1) return { canonicalId: null, confidence: 'ambiguous' }
     }
   }
 
