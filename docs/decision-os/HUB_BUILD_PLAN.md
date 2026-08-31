@@ -705,9 +705,52 @@ temp tsconfig including only the route), and an injected type error was
 confirmed reported at the right line **before** the clean run — which is what
 makes the exit-0 meaningful rather than merely empty.
 
-**1.2 Wire Draft OS** (D12). It has one honest source and no consumer.
-`resolveNflRedraftDraftRuntime` is the call site; the comment at line 120
-already points at it.
+**1.2 ⏸ Wire Draft OS — BLOCKED, and the reason corrects 1.1's own claim.**
+
+The plan said `resolveNflRedraftDraftRuntime` is the call site. It is — the
+`DraftRuntimeDeps.loadRules` seam already exists and `createDraftOsLoaders()`
+returns exactly that shape, so the wiring itself is two lines.
+
+🛑 **BUT `resolveNflRedraftDraftRuntime` HAS ZERO CONSUMERS.** No route, no
+component, no service. The only reference anywhere is
+`__tests__/draft-os.test.ts`. Wiring Draft OS into it connects a dead feed to a
+dead resolver.
+
+It is the odd one out in a family of four, which is why this reads as a missing
+route rather than an abandoned module:
+
+| canonical runtime resolver | live routes |
+|---|---|
+| `playoff-runtime` | 4 |
+| `roster-runtime` | 1 |
+| `schedule-runtime` | 1 |
+| **`draft-runtime`** | **0** |
+
+Live drafts do not go through it at all — they run on
+`lib/live-draft-engine/DraftSessionService` (`buildSessionSnapshot`), reached
+from `/api/draft/room/state` and the commissioner draft route.
+
+⚠ **THIS CORRECTS 1.1's HEADLINE CLAIM, INCLUDING IN ITS COMMIT MESSAGE.**
+`draft-os/index.ts` describes `draftRulesSource` as costing *"seven queries on
+every draft-runtime resolve, which during a live draft is every poll and every
+pick"*, and 1.1 repeated it. That describes a cost **nothing is currently
+paying**, because there are no draft-runtime resolves. The cron is correct,
+cheap and harmless — it maintains a true fact — but today **nothing reads what
+it warms**.
+
+**The value is real and it is somewhere else.** `resolveCanonicalLeagueRules`
+IS called on live request paths — by `playoff-runtime` (4 routes),
+`roster-runtime` (1) and `schedule-runtime` (1). The fact `draftRulesSource`
+maintains is *league rules*, not draft rules; it is misplaced in `draft-os`
+rather than wrong.
+
+So 1.2 splits into two, and they are different sizes:
+- **1.2a** — give the league-rules fact its own home and an injectable
+  `loadRules` seam on the three resolvers that already have routes. Delivers
+  the cost saving 1.1 claimed, to real traffic. Small.
+- **1.2b** — decide whether `resolveNflRedraftDraftRuntime` should get a route
+  at all, or whether `live-draft-engine` is the adopted path and the canonical
+  draft resolver should be retired. **A product decision, not a wiring task.**
 
 **1.3 Propagate `drainOutcomes()`.** Three request paths already call it and
 discard the result. Carry `servedFrom` / `ageMs` / `confidence` into the
