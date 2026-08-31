@@ -43,6 +43,25 @@ beforeAll(async () => {
   migrate = new PrismaClient({ datasources: { db: { url: MIGRATE } } })
   await Promise.all([app.$connect(), migrate.$connect()])
 
+  // 🛑 CLEAN FIRST. THIS SUITE COULD ONLY PASS ONCE.
+  // The tests below INSERT fixed ids (tu-live-2) and the control asserts an
+  // exact TenantUser count of 1. On a second run against the same database both
+  // fail — duplicate key, and count 2 — with errors that describe leftovers
+  // rather than the behaviour under test. Three of the four failures on the
+  // second-ever run of this suite were exactly that.
+  //
+  // ⚠ A SUITE THAT PASSES ONLY ON A VIRGIN DATABASE HAS NOT BEEN VERIFIED, it
+  // has been observed once. Re-runnability is what makes a green run evidence,
+  // and it is why this cleanup is at the START rather than in afterAll: an
+  // afterAll does not run if the process dies, and the next run inherits the mess.
+  //
+  // Child tables first — TenantMember.tenantUserId references TenantUser.
+  for (const table of ['TenantMember', 'TenantApiKey', 'TenantWebhook', 'TenantUser']) {
+    await migrate.$executeRawUnsafe(
+      `DELETE FROM "${table}" WHERE "tenantId" IN ('${LIVE}', '${SUSP}')`,
+    )
+  }
+
   for (const [id, status] of [
     [LIVE, 'ACTIVE'],
     [SUSP, 'SUSPENDED'],
@@ -56,6 +75,29 @@ beforeAll(async () => {
     await migrate.$executeRawUnsafe(
       `INSERT INTO "TenantUser" (id, "tenantId", "userId", "displayName", email, "updatedAt")
        VALUES ('tu-${id}', '${id}', 'u1', 'Probe', 'probe@example.com', now())
+       ON CONFLICT (id) DO NOTHING`,
+    )
+
+    // 🛑 AND A ROW IN THE OTHER THREE TABLES, WHICH IS THE WHOLE POINT OF THE
+    // `it.each` BELOW AND WAS MISSING. The comment above promised "a row in each
+    // tenant"; only TenantUser got one. An UPDATE that matches ZERO rows does not
+    // fire the policy's WITH CHECK — it succeeds, returning 0. So the suspension
+    // assertions for TenantMember and TenantWebhook failed for a reason that had
+    // nothing to do with suspension, the first time this suite was ever run
+    // (2026-08-31).
+    await migrate.$executeRawUnsafe(
+      `INSERT INTO "TenantMember" (id, "tenantId", "tenantUserId", "updatedAt")
+       VALUES ('tm-${id}', '${id}', 'tu-${id}', now())
+       ON CONFLICT (id) DO NOTHING`,
+    )
+    await migrate.$executeRawUnsafe(
+      `INSERT INTO "TenantApiKey" (id, "tenantId", prefix, hash, label, "createdBy")
+       VALUES ('tk-${id}', '${id}', 'cos_test_${id}', 'x', 'probe', 'u1')
+       ON CONFLICT (id) DO NOTHING`,
+    )
+    await migrate.$executeRawUnsafe(
+      `INSERT INTO "TenantWebhook" (id, "tenantId", url, "secretRef", "updatedAt")
+       VALUES ('tw-${id}', '${id}', 'https://example.invalid/hook', 'ref', now())
        ON CONFLICT (id) DO NOTHING`,
     )
   }
@@ -160,18 +202,43 @@ describe('T-106 · 🛑 a SUSPENDED tenant cannot write, at the database', () =>
     ).rejects.toThrow()
   })
 
-  it.each(['TenantMember', 'TenantApiKey', 'TenantWebhook'])(
-    '%s is covered too, not just TenantUser',
-    async (table) => {
-      // The predicate is applied by a loop in the migration. A table missing
-      // from that array simply stays writable, and nothing else would notice.
-      await expect(
-        asTenant(SUSP, (tx) =>
-          tx.$executeRawUnsafe(`UPDATE "${table}" SET "updatedAt" = now() WHERE "tenantId" = '${SUSP}'`),
-        ),
-      ).rejects.toThrow()
-    },
-  )
+  // ⚠ THE COLUMN IS PER-TABLE, AND THAT IS NOT A TIDY-UP. Every case used to
+  // SET "updatedAt", but TenantApiKey HAS NO updatedAt COLUMN — so that case
+  // passed by raising `column "updatedAt" does not exist`, which is an error,
+  // which satisfies `.rejects.toThrow()`. It asserted nothing about suspension
+  // and would have kept passing with the entire T-106 policy deleted.
+  //
+  // One false pass and two false failures in a three-case loop, all from the
+  // same line. Assert on a column each table actually has.
+  it.each([
+    ['TenantMember', '"updatedAt" = now()'],
+    ['TenantApiKey', `label = 'changed'`],
+    ['TenantWebhook', '"updatedAt" = now()'],
+  ])('%s is covered too, not just TenantUser', async (table, assignment) => {
+    // The predicate is applied by a loop in the migration. A table missing
+    // from that array simply stays writable, and nothing else would notice.
+    await expect(
+      asTenant(SUSP, (tx) =>
+        tx.$executeRawUnsafe(`UPDATE "${table}" SET ${assignment} WHERE "tenantId" = '${SUSP}'`),
+      ),
+    ).rejects.toThrow()
+  })
+
+  // 🛑 THE CONTROL THAT MAKES THE THREE ABOVE MEAN SOMETHING. Each of them can
+  // pass for two unrelated reasons: the policy refused the write, or the write
+  // never matched a row. This asserts the same statement SUCCEEDS for the LIVE
+  // tenant — so the rows exist and are reachable, and the only difference is
+  // the tenant's status.
+  it.each([
+    ['TenantMember', '"updatedAt" = now()'],
+    ['TenantApiKey', `label = 'changed'`],
+    ['TenantWebhook', '"updatedAt" = now()'],
+  ])('%s IS writable for a LIVE tenant (proves the row exists)', async (table, assignment) => {
+    const n = await asTenant(LIVE, (tx) =>
+      tx.$executeRawUnsafe(`UPDATE "${table}" SET ${assignment} WHERE "tenantId" = '${LIVE}'`),
+    )
+    expect(Number(n)).toBeGreaterThan(0)
+  })
 
   it('the refusal comes from the POLICY, not from application code', async () => {
     // Raw SQL, no domain layer anywhere in the call. If this passes, the
