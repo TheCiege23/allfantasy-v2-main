@@ -61,6 +61,13 @@ export type CoreNavKey =
   | 'rankings'
   | 'commissioner'
   | 'tools'
+  /*
+   * Devy splits in two because the handoff does: `devy` is the CROSS-LEAGUE hub and
+   * always available, `devy-league` is the per-league tab and appears only for a league
+   * whose commissioner has set devy slots. Same conditional shape as `defense-hub`.
+   */
+  | 'devy'
+  | 'devy-league'
   // Handoff screens 24a/24b, 26b, 26a and 22c. All behind the same catch-all
   // route as everything else here — the repo is at Vercel's 2048-route ceiling.
   | 'week'
@@ -148,6 +155,12 @@ export type AfCoreShellProps = {
    * flicker an item in after paint on every navigation.
    */
   hasIdpDefense?: boolean
+  /*
+   * Devy slots this league rosters, or 0. Gates the per-league Devy tab the same way
+   * `hasIdpDefense` gates Defense Hub — a league with no devy slots must not be offered
+   * a tab promising prospects it cannot hold.
+   */
+  devySlotCount?: number
   /**
    * Feeds the communications drawer (23a/23b) and the support modal (25b), both
    * mounted once here so every screen inherits them. Omitted on surfaces that
@@ -206,11 +219,11 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   { label: null, keys: ['home'] },
   {
     label: 'This league',
-    keys: ['my-team', 'matchup', 'trades', 'waivers', 'draft-hq', 'war-room'],
+    keys: ['my-team', 'matchup', 'trades', 'waivers', 'devy-league', 'draft-hq', 'war-room'],
   },
   {
     label: 'Across leagues',
-    keys: ['week', 'live-scores', 'players', 'season-outlook', 'portfolio', 'my-leagues'],
+    keys: ['week', 'live-scores', 'players', 'devy', 'season-outlook', 'portfolio', 'my-leagues'],
   },
   {
     label: 'You',
@@ -345,6 +358,24 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/draft-hq',
     },
+    {
+      key: 'devy',
+      label: 'Devy',
+      glyph: '◇',
+      /* Cross-league, but still carries the league so the rail keeps its selection —
+         the same rule the comment at the top of navItems sets out. */
+      href: inLeague('/core/devy'),
+    },
+    ...(props.devySlotCount && props.devySlotCount > 0 && props.selectedLeagueId
+      ? [
+          {
+            key: 'devy-league' as const,
+            label: 'Devy (league)',
+            glyph: '◈',
+            href: `/core/devy-league?league=${encodeURIComponent(props.selectedLeagueId)}`,
+          },
+        ]
+      : []),
     { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: inLeague('/core/portfolio') },
     /*
      * ⚠ LEAGUE SYNC IS GONE FROM THE RAIL, AND FROM THE APP. /leagues/sync was

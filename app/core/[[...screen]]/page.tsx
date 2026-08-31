@@ -17,6 +17,9 @@ import type { UserLeague } from '@/app/dashboard/types'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
+import DevyCore from '@/components/core-app/screens/DevyCore'
+import DevyLeagueTab from '@/components/core-app/screens/DevyLeagueTab'
+import { getDevyCoreData, leagueDevySlotCount } from '@/lib/core-app/devy'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
 import { DashScheduleBand } from '@/components/core-app/screens/DashScheduleBand'
@@ -137,6 +140,10 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   'war-room': 'war-room',
   'draft-hq': 'draft-hq',
   'defense-hub': 'defense-hub',
+  /* Two segments because the handoff is two screens: a cross-league hub and a
+     per-league tab. See the CoreNavKey note in AfCoreShell. */
+  devy: 'devy',
+  'devy-league': 'devy-league',
   portfolio: 'portfolio',
   career: 'career',
   rankings: 'rankings',
@@ -223,6 +230,14 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   'defense-hub': {
     title: 'Defense Hub',
     description: 'Your defenders and kickers, priced by this league’s own scoring and starting slots.',
+  },
+  devy: {
+    title: 'Devy',
+    description: 'College prospects tracked across every league you are in — rankings, exposure and news.',
+  },
+  'devy-league': {
+    title: 'Devy',
+    description: 'This league’s devy slots, free agents, draft board and prospect values.',
   },
   portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
   career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
@@ -685,6 +700,26 @@ export default async function AfCorePage({
   const hasIdpDefense = selectedLeagueId
     ? (await resolveLeagueValueSurfaces(prisma, selectedLeagueId).catch(() => null))?.hasIdp ?? false
     : false
+
+  /*
+   * Devy slot count — computed for EVERY render, not just the devy screens, for the same
+   * reason `hasIdpDefense` is: it gates a nav item, and a nav item has to be decidable
+   * before you are on the screen it links to. One indexed read of DevyLeagueConfig, no
+   * provider call, degrading to 0 so an error hides the entry rather than showing a dead one.
+   */
+  const devySlotCount = selectedLeagueId ? await leagueDevySlotCount(selectedLeagueId).catch(() => 0) : 0
+
+  /*
+   * Devy data is loaded only on the devy screens — it is several queries across the whole
+   * prospect pool and no other screen reads it.
+   */
+  const devyCore =
+    activeKey === 'devy' && userId
+      ? await getDevyCoreData(
+          userId,
+          rail.map((l) => l.id),
+        ).catch(() => null)
+      : null
 
   /*
    * 38a·2 — the live slate.
@@ -1343,6 +1378,7 @@ export default async function AfCorePage({
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       selectedLeagueId={selectedLeagueId}
       hasIdpDefense={hasIdpDefense}
+      devySlotCount={devySlotCount}
       weekLabel={dash34?.weekLabel ?? null}
       plan={plan}
       commissionerCount={commissionerCount}
@@ -1593,6 +1629,56 @@ export default async function AfCorePage({
             tabKey="waivers"
             title="Waivers"
             blurb="FAAB, waiver order and bid pricing are all per-league — the same player is worth a different amount in a different league."
+            issues={issues}
+            leagues={rail}
+          />
+        )
+      ) : activeKey === 'devy' ? (
+        /*
+         * Cross-league, so it renders without a league selected — no PickALeague gate.
+         * `viewState` is derived from what the loader returned, never from a control on
+         * the screen: the handoff's own state pills are a QA affordance its README says
+         * must not ship.
+         *
+         * An empty prospect pool and a failed load both land on `empty` deliberately.
+         * The screen's copy ("connect a league with devy or taxi slots") is true in both
+         * cases, and inventing a third "something went wrong" state would tell a user
+         * with no devy leagues that the product is broken.
+         */
+        <DevyCore viewState={devyCore && devyCore.prospects.length > 0 ? 'populated' : 'empty'} {...(devyCore ?? { prospects: [], exposure: [], rankingsByPosition: {}, watchlist: [], colleges: [], news: [] })} />
+      ) : activeKey === 'devy-league' ? (
+        selectedLeagueId ? (
+          /*
+           * ⚠ SLOT COUNT DRIVES THE STATE, NOT THE PRESENCE OF PROSPECTS. A league with
+           * devy slots and nobody rostered yet is populated-and-empty-handed, which the
+           * screen draws as dashed slots. A league with NO slots is the `empty` state,
+           * and its copy is commissioner-gated because only a commissioner can act on it.
+           *
+           * The remaining sections are unwired on purpose — free agents, the devy draft
+           * board and per-league trade values each need league-scoped queries that do not
+           * exist yet. They render their own empty copy rather than fabricated rows.
+           */
+          <DevyLeagueTab
+            viewState={devySlotCount > 0 ? 'populated' : 'empty'}
+            leagueName={rail.find((l) => l.id === selectedLeagueId)?.name ?? 'This league'}
+            /* Per-league, from the loader's own flag — `commissionerCount` is an
+               account-wide total and would show the CTA to a manager who commissions
+               some OTHER league. */
+            isCommissioner={Boolean(playedLeagues.find((l) => l.id === selectedLeagueId)?.isCommissioner)}
+            slots={Array.from({ length: devySlotCount }, (_, i) => ({ id: `slot-${i}`, player: null }))}
+            freeAgents={[]}
+            draftRoundLabel="Round 1"
+            draftCountdown={null}
+            draftBoard={[]}
+            news={[]}
+            tradeValues={[]}
+            settingsHref={`/core/commissioner?league=${encodeURIComponent(selectedLeagueId)}`}
+          />
+        ) : (
+          <PickALeague
+            tabKey="devy-league"
+            title="Devy"
+            blurb="Devy slots, the devy draft and prospect values are all per-league, so pick a league."
             issues={issues}
             leagues={rail}
           />
