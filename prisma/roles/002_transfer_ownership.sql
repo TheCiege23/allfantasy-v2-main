@@ -100,6 +100,43 @@ $$;
 -- GRANT SELECT, DELETE          ON ALL TABLES    IN SCHEMA public TO commish_purge;
 
 -- ---------------------------------------------------------------------------
+-- 🛑 RE-ASSERT THE AUDIT REVOKES. `ON ALL TABLES` MEANS ALL TABLES, INCLUDING
+-- THE ONE THAT IS SUPPOSED TO BE APPEND-ONLY.
+--
+-- The four grants above are blanket. T-007 ends with two targeted REVOKEs that
+-- make `AuditEvent` append-only at the privilege layer:
+--
+--     REVOKE UPDATE, DELETE ON "AuditEvent" FROM commish_app;
+--     REVOKE UPDATE, DELETE ON "AuditEvent" FROM commish_purge;
+--
+-- Running this file AFTER T-007 silently undoes both. Measured on a Neon branch,
+-- 2026-08-31, immediately after the grants above:
+--
+--     has_table_privilege('commish_app',  '"AuditEvent"','UPDATE') → true
+--     has_table_privilege('commish_purge','"AuditEvent"','DELETE') → true
+--
+-- ⚠ NOTHING FAILS WHEN THIS HAPPENS, AND THAT IS THE PROBLEM. In the documented
+-- order (001 → 002 → migrate deploy) T-007 runs last and re-applies its own
+-- REVOKEs, so the hole never appears. But 002 is re-runnable and looks harmless,
+-- and any order that puts it after the migrations reopens both privileges with
+-- no error, no warning and no failing test.
+--
+-- ⚠ THE APPEND-ONLY TRIGGER STILL HELD WHEN THIS WAS FOUND, WHICH IS WHY IT WAS
+-- NEARLY MISSED. A tamper attempt as commish_app reported success and changed
+-- nothing — but only because RLS gives commish_app no UPDATE policy on
+-- AuditEvent, so the statement matched zero rows and the trigger never ran. Two
+-- unrelated defences happened to cover for the missing third. Verified the
+-- trigger does fire when a row IS matched:
+--
+--     ERROR: AuditEvent is append-only: UPDATE refused (row id 1).
+--
+-- Re-asserting here makes the file order-independent rather than relying on it.
+-- ---------------------------------------------------------------------------
+
+-- REVOKE UPDATE, DELETE ON "AuditEvent" FROM commish_app;
+-- REVOKE UPDATE, DELETE ON "AuditEvent" FROM commish_purge;
+
+-- ---------------------------------------------------------------------------
 -- Verify by effect, not by the absence of an error:
 --
 --   SELECT tableowner, count(*) FROM pg_tables
