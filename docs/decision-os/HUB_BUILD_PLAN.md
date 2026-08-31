@@ -23,7 +23,8 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **0.4** Find what creates name-only NCAAF identity rows | §2.12. Peer commit `7beaa8811`, deliberate backfill. Audit caught a migration mid-run |
 | ✅ | **0.5** Add name+team resolution to the coverage audit | §2.13. False alarm now impossible, not merely documented. Re-run needed for figures |
 | ✅ | **1.1** Refresh scheduler | `app/api/cron/domain-os-refresh`. **One source, not five** — see §4 Phase 1 |
-| ⬜ | **1.1b** Split waiver/trade settings derives so they are schedulable | The other four sources cannot be refreshed until this lands |
+| ⬜ | **1.1b** Split waiver/trade settings derives so they are schedulable | Scope **confirmed** — the League-OS-obsoletes-it hypothesis was tested and disproved, §2.14 |
+| ✅ | **0.6** Diff the two waiver-settings resolvers | §2.14. **No divergence** — they are layered, not rival. The alarm was a truncated grep |
 | ✅ | **1.2a** League OS — cached ruleset on the three resolvers that have routes | 60s TTL, GET only. §4 Phase 1.2 |
 | ⬜ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | Product decision: give it a route, or retire it for `live-draft-engine` |
 | 🔄 | **1.3** Propagate `drainOutcomes()` | **Premise was wrong** — see §4 Phase 1.3. Telemetry half was already done; League OS now emits too. Response half deferred to Phase 4 |
@@ -562,6 +563,58 @@ the clean run. Note what it did and did not do here — it told me the run was
 blind, it did not tell me why, and the first "why" I supplied was wrong. The
 control is what makes a clean run mean something; it is not a substitute for
 diagnosing the failure it reveals.
+
+### 2.14 The two waiver-settings entry points are LAYERED, not rival — and how the alarm was manufactured
+
+**0.6, answered: there is no divergence.** This section first claimed the
+opposite, and the way that happened is the more useful half.
+
+`getWaiverConfigForLeague` **calls** `getEffectiveLeagueWaiverSettings`. It is a
+composition, not a competitor:
+
+```
+getWaiverConfigForLeague(leagueId)          lib/waiver-defaults/WaiverConfigResolver.ts
+  ├─ getWaiverProcessingConfigForLeague()   type, days, locks, claim limits
+  ├─ getFAABConfigForLeague()               faab_enabled / faab_budget / reset rules
+  └─ getEffectiveLeagueWaiverSettings()     tiebreakRule, instantFaAfterClear
+```
+
+And the one field where a disagreement would actually hurt — the FAAB budget —
+resolves identically on both paths:
+
+| | source |
+|---|---|
+| `FAABConfigResolver:48` | `fromSettings(settings?.faabBudget, defaults.FAAB_budget_default)` |
+| `settings-service:168` | `overrides.faabBudget ?? defaults.FAAB_budget_default` |
+
+Same settings row, same default. **They agree by construction, not by luck**, so
+there is nothing to reconcile and no runtime check to add.
+
+🛑 **HOW A FALSE ALARM GOT COMMITTED: `grep … | head -6` ON A QUERY WHOSE WHOLE
+POINT WAS COMPLETENESS.** The importer list for
+`getEffectiveLeagueWaiverSettings` is 13 lines. `head -6` showed the first two
+files and cut `WaiverConfigResolver.ts:7` off the bottom — the single line that
+disproves the finding. The conclusion "neither imports the other" was then drawn
+from a deliberately truncated view and written up with confidence.
+
+⚠ **It compounds with a second miss**: that import comes through the
+`@/lib/waiver-wire` **barrel**, not `@/lib/waiver-wire/settings-service`, so
+even an untruncated grep for the deep path would have missed it. CLAUDE.md's
+"check all four import forms" rule exists for exactly this, and following it is
+what a barrel defeats.
+
+**The rule worth keeping is narrower than the general pipe warning already in
+CLAUDE.md:** truncating a search is safe when you want *an* example, and
+disqualifying when you want to know whether something exists **nowhere**. Those
+read identically at the terminal. A census must never be piped through `head`.
+
+**Consequence for 1.1b:** unchanged in scope, for a different reason than the
+one first written. The hypothesis that League OS's fact already covers
+`waiverSettingsSource` still fails — but because `WaiverWorldFacts` carries
+user-scoped data (`faabRemaining`, `waiverPriority`, `rosterSize`) that
+`CanonicalLeagueRules` has no notion of, not because the settings disagree. So
+1.1b remains "split the shared derive", and the split is now known to be clean:
+the league half genuinely is league-shaped.
 
 ## 3. Target architecture
 
