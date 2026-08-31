@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
+import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
@@ -539,6 +540,30 @@ export default async function AfCorePage({
         }),
       ).defaultLeagueImageUrl,
   }))
+
+  /*
+   * Whether the selected league has any scored week, for the nav gate.
+   *
+   * 🛑 FOUR TABS READ SCORED WEEKS AND NOTHING ELSE. On a league with none —
+   * an imported college league before week 1, measured with 60 fixtures and 0
+   * scores — Matchup, Your week, Standings and Season outlook each land on a
+   * variation of "we cannot tell which week this league is in yet". Offering
+   * them makes an early league look like a broken one.
+   *
+   * ⚠ NULL WHEN THERE IS NO LEAGUE IN CONTEXT, which the shell reads as unknown
+   * and shows everything. The cross-league screens are not gated by one league's
+   * emptiness.
+   */
+  const leagueHasScoredWeek = selectedLeagueId
+    ? (
+        await getLeagueDataSignals({
+          leagueId: selectedLeagueId,
+          platformLeagueId:
+            (playedLeagues.find((l) => l.id === selectedLeagueId) as { platformLeagueId?: string | null } | undefined)
+              ?.platformLeagueId ?? null,
+        }).catch(() => ({ hasScoredWeek: null }))
+      ).hasScoredWeek
+    : null
 
   /*
    * The selected league's display name, for the in-league tab bar.
@@ -1424,6 +1449,7 @@ export default async function AfCorePage({
       leagues={rail}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}
+      leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}

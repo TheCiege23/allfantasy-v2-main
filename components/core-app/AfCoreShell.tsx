@@ -173,6 +173,23 @@ export type AfCoreShellProps = {
    */
   devySlotCount?: number
   /**
+   * Whether this league has any scored week.
+   *
+   * 🛑 FOUR TABS READ SCORED WEEKS AND NOTHING ELSE — Matchup, Your week,
+   * Standings, Season outlook. A league with none renders four tabs that each
+   * land on a variation of "we cannot tell which week this league is in yet",
+   * and a user cannot tell a broken feature from an early one.
+   *
+   * ⚠ `undefined`/`null` MEANS UNKNOWN AND SHOWS EVERYTHING. Only a measured
+   * `false` hides. Hiding a working league's tabs because one count failed is a
+   * worse failure than showing an empty one, so the absent case is permissive.
+   *
+   * ⚠ AND IT IS A DATA SIGNAL, NOT A PLATFORM ONE. A Fantrax league mid-season
+   * has scores and keeps its tabs; a Sleeper league imported before kickoff has
+   * none and loses them until it does. The tabs return on their own.
+   */
+  leagueHasScoredWeek?: boolean | null
+  /**
    * Feeds the communications drawer (23a/23b) and the support modal (25b), both
    * mounted once here so every screen inherits them. Omitted on surfaces that
    * have no league context to offer.
@@ -259,6 +276,19 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       ? `${path}?league=${encodeURIComponent(props.selectedLeagueId)}`
       : path
 
+  /*
+   * ⚠ ONLY A MEASURED `false` HIDES. `undefined` and `null` both mean "we did
+   * not determine it", and hiding on an unknown would take a working league's
+   * tabs away because one count failed. Permissive on absence, strict on a
+   * measured zero.
+   */
+  const unscored = props.leagueHasScoredWeek === false
+  /* Keeps the four scored-week entries out of the list without four copies of
+     the same spread, so they cannot drift apart. */
+  /* Typed as NavItem rather than generic: a generic erases the literal `key`
+     narrowing, so every entry degrades to `string` and stops matching CoreNavKey. */
+  const ifScored = (item: NavItem): NavItem[] => (unscored ? [] : [item])
+
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
     // My team is league-scoped in the handoff, so the link carries the selected
@@ -282,14 +312,15 @@ function navItems(props: AfCoreShellProps): NavItem[] {
           },
         ]
       : []),
-    {
+    /* Reads a scored week — hidden until this league has one. */
+    ...ifScored({
       key: 'matchup',
       label: 'Matchup',
       glyph: '⚔',
       href: props.selectedLeagueId
         ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/matchup',
-    },
+    }),
     {
       key: 'trades',
       label: 'Trades',
@@ -326,14 +357,15 @@ function navItems(props: AfCoreShellProps): NavItem[] {
      * league view, do not replace the cross-league board). The screen reads the
      * parameter; the cross-league board is still what renders without it.
      */
-    {
+    /* Reads a scored week — hidden until this league has one. */
+    ...ifScored({
       key: 'week',
       label: 'Your week',
       glyph: '◱',
       href: props.selectedLeagueId
         ? `/core/week?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/week',
-    },
+    }),
     /*
      * 38a — the live slate, inside the shell. Cross-league by definition: the
      * question it answers is "what is happening right now across everything I
@@ -431,22 +463,24 @@ function navItems(props: AfCoreShellProps): NavItem[] {
      * is not a thing, because two leagues' scoring settings make their point
      * values incomparable.
      */
-    {
+    /* Ranks by points scored, so it needs a scored week. */
+    ...ifScored({
       key: 'standings',
       label: 'Standings',
       glyph: '≡',
       href: props.selectedLeagueId
         ? `/core/standings?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/standings',
-    },
-    {
+    }),
+    /* Projects from played weeks — nothing to project from yet. */
+    ...ifScored({
       key: 'season-outlook',
       label: 'Season Outlook',
       glyph: '◎',
       href: props.selectedLeagueId
         ? `/core/season-outlook?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/season-outlook',
-    },
+    }),
     {
       key: 'rankings',
       label: 'Rankings',
