@@ -371,3 +371,28 @@
   gap: 10px;
   font-size: 13px;
 }
+
+/* Tournament cards on the index — a whole-card link needs its own reset. */
+.af-th-card {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease;
+}
+
+.af-th-card:hover {
+  border-color: var(--af-blue, #3b82f6);
+}
+
+/* Blocker acknowledgement — a real tap target, and never mistakable for prose. */
+.af-th-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--warn, #f59e0b);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}

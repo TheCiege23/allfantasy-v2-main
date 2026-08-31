@@ -8,6 +8,7 @@ import {
   matchParticipantsToRecords,
   readImportedLeagueRecords,
 } from '@/lib/tournament/importedStandingsSource'
+import { composeBubble } from '@/lib/tournament/bubbleComposition'
 
 export type StandingRow = {
   tournamentLeagueParticipantId: string
@@ -338,8 +339,11 @@ export async function identifyQualifiers(
 
     const wc = shell.wildcardCount
     const wcPids: string[] = []
+    /* Kept because the bubble is composed from the bottom of THIS group. */
+    const wcRows: typeof nonQual = []
     for (let i = 0; i < wc && i < nonQual.length; i++) {
       const row = nonQual[i]!
+      wcRows.push(row)
       wcPids.push(row.participantId)
       wildcards.push(row.participantId)
       await prisma.tournamentLeagueParticipant.update({
@@ -364,20 +368,41 @@ export async function identifyQualifiers(
 
     const rest = nonQual.slice(wc)
     if (shell.bubbleEnabled && isOpeningRound) {
-      const half = Math.min(shell.bubbleSize, rest.length)
+      /*
+       * 🛑 THE BUBBLE IS NOT A WINDOW BELOW THE CUT. This used to take the next
+       * `bubbleSize` managers by RANK and leave everyone inside the cut safe.
+       * The rule these tournaments actually run puts the BOTTOM of the cut at
+       * risk and fills the other half with the top SCORERS below the line — who
+       * are usually not the next names by rank, because rank is wins-first.
+       *
+       * `composeBubble` is shared with the standings board precisely so a
+       * manager is never shown as safe here and eliminated there.
+       */
+      const composition = composeBubble(
+        /* The bubble is decided across the wildcards and everyone under them —
+           direct league qualifiers keep the place they won outright. */
+        [...wcRows, ...rest],
+        {
+          cut: wcRows.length,
+          bubbleSize: shell.bubbleSize,
+          enabled: true,
+          pointsOf: (row) => row.pointsFor,
+        },
+      )
+
       const bubblePids: string[] = []
-      for (let i = 0; i < half; i++) {
-        const row = rest[i]!
+      for (const row of [...composition.atRisk, ...composition.challengers]) {
         bubblePids.push(row.participantId)
         bubble.push(row.participantId)
+        /* ⚠ An at-risk manager was marked `wildcard_eligible` moments ago. This
+           demotes them to `bubble`: they have not advanced, they are defending. */
         await prisma.tournamentLeagueParticipant.update({
           where: { id: row.id },
           data: { advancementStatus: 'bubble' },
         })
       }
       const elimAfterBubble: string[] = []
-      for (let i = half; i < rest.length; i++) {
-        const row = rest[i]!
+      for (const row of composition.eliminated) {
         elimAfterBubble.push(row.participantId)
         eliminated.push(row.participantId)
         await prisma.tournamentLeagueParticipant.update({

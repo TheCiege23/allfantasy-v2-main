@@ -11,6 +11,10 @@ import {
   formatRecord,
 } from '@/lib/tournament/standingsExport'
 import { BroadcastPanel } from './BroadcastPanel'
+import { SettingsPanel } from './SettingsPanel'
+import { AdvancementPanel } from './AdvancementPanel'
+import { CompliancePanel } from './CompliancePanel'
+import { TopPerformersPanel } from './TopPerformersPanel'
 import './tournament-hub.css'
 
 /**
@@ -217,6 +221,14 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
           from the cut and from conference points — link them before advancing anyone.
         </p>
       ) : null}
+
+      <TopPerformersPanel tournamentId={board.tournamentId} />
+
+      <CompliancePanel tournamentId={board.tournamentId} />
+
+      <AdvancementPanel tournamentId={board.tournamentId} />
+
+      <SettingsPanel board={board} />
 
       <BroadcastPanel board={board} />
 

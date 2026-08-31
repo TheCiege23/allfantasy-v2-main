@@ -27,6 +27,7 @@ import {
   matchParticipantsToRecords,
   readImportedLeagueRecords,
 } from '@/lib/tournament/importedStandingsSource'
+import { composeBubble } from '@/lib/tournament/bubbleComposition'
 
 export type BoardRow = {
   /** `TournamentLeagueParticipant.id` — what a link is written against. */
@@ -287,16 +288,28 @@ export async function getTournamentStandingsBoard(
     const qualifyingCount = perLeague + Math.max(0, shell.wildcardCount)
 
     ranked.forEach((row, i) => {
-      if (row.unmatched) {
-        row.standing = 'out'
-        return
-      }
-      row.conferenceRank = i + 1
-      if (i < qualifyingCount) row.standing = 'in'
-      else if (shell.bubbleEnabled && i < qualifyingCount + Math.max(0, shell.bubbleSize)) {
-        row.standing = 'bubble'
-      } else row.standing = 'out'
+      row.conferenceRank = row.unmatched ? 0 : i + 1
     })
+
+    /*
+     * ⚠ THE BUBBLE IS COMPOSED BY THE SHARED RULE, NOT BY A WINDOW BELOW THE
+     * CUT. Seeds at the bottom of the cut are DEFENDING their place, and the
+     * challengers are the top SCORERS below the line rather than the next few by
+     * rank — see `composeBubble`. A board that worked this out for itself would
+     * show a manager as safe and then watch the engine eliminate them.
+     */
+    const scored = ranked.filter((r) => !r.unmatched)
+    const { safe, atRisk, challengers, eliminated } = composeBubble(scored, {
+      cut: qualifyingCount,
+      bubbleSize: Math.max(0, shell.bubbleSize),
+      enabled: shell.bubbleEnabled,
+      pointsOf: (r) => r.pointsFor,
+    })
+    for (const r of safe) r.standing = 'in'
+    for (const r of atRisk) r.standing = 'bubble'
+    for (const r of challengers) r.standing = 'bubble'
+    for (const r of eliminated) r.standing = 'out'
+    for (const r of ranked) if (r.unmatched) r.standing = 'out'
 
     outConferences.push({
       id: conf.id,

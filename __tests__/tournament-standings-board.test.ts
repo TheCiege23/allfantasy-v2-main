@@ -88,15 +88,44 @@ describe('the conference cut', () => {
     ])
   })
 
-  it('marks the top N as in, then the bubble, then out', async () => {
+  /**
+   * 🛑 THE BOTTOM OF THE CUT IS NOT SAFE. With a cut of 2 and a bubble of 1,
+   * `emmae` is inside the cut and DEFENDING that place against the highest
+   * scorer below the line — the commissioner's own rule is "seeds 59-64 plus the
+   * top 6 scorers from 65-120", so six inside the cut are at risk. The earlier
+   * behaviour advanced `emmae` outright and put the next manager by RANK in a
+   * bubble of their own, which is a different contest between different people.
+   */
+  it('puts the bottom of the cut at risk and the top scorer below it in the bubble', async () => {
     const board = await getTournamentStandingsBoard('t1', 'commish')
     const rows = board!.conferences[0].leagues[0].rows
     expect(rows.map((r) => [r.displayName, r.standing])).toEqual([
       ['TyT1', 'in'],
-      ['emmae', 'in'],
+      ['emmae', 'bubble'],
       ['Spokee', 'bubble'],
       ['zedlav', 'out'],
     ])
+  })
+
+  /**
+   * 🛑 CHALLENGERS ARE PICKED BY POINTS, NOT BY RANK, and that is the half of the
+   * rule a rank-window gets wrong. Rank is wins-first, so a losing team that
+   * outscored the conference is not the next name in the standings — but it is
+   * exactly who "top scorers from 65-120" means.
+   */
+  it('takes the highest scorer below the line, not the next by rank', async () => {
+    leagueTeamFindMany.mockResolvedValue([
+      leagueTeam({ externalId: '1', platformUserId: 's-1', wins: 9, losses: 0, pointsFor: 1300 }),
+      leagueTeam({ externalId: '2', platformUserId: 's-2', wins: 8, losses: 1, pointsFor: 1200 }),
+      /* Ranks 3rd on record, scored least. */
+      leagueTeam({ externalId: '3', platformUserId: 's-3', wins: 7, losses: 2, pointsFor: 500 }),
+      /* Ranks last on record, outscored everyone below the line. */
+      leagueTeam({ externalId: '4', platformUserId: 's-4', wins: 0, losses: 9, pointsFor: 1400 }),
+    ])
+    const board = await getTournamentStandingsBoard('t1', 'commish')
+    const rows = board!.conferences[0].leagues[0].rows
+    const standing = Object.fromEntries(rows.map((r) => [r.displayName, r.standing]))
+    expect(standing).toMatchObject({ TyT1: 'in', emmae: 'bubble', zedlav: 'bubble', Spokee: 'out' })
   })
 
   it('ranks against the whole conference, not within the league', async () => {
