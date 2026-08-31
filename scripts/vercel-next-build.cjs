@@ -247,6 +247,13 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'cron', 'trade-grade-notify', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'weekly-awards', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'morning-briefing', 'route.ts').replace(/\\/g, '/'),
+  // Tournament commissioner hub (Aug 2026) — announcements hourly, weekly scores daily 10:00.
+  // Scheduled in cron-schedule.json, NOT vercel.json: the Hobby plan refuses to build a sub-daily
+  // cron declaration there, which is why the guard above reads that file first. `app/api/cron` is
+  // excluded wholesale, so both need a keep-line or Vercel fires the schedule into a 404 forever —
+  // the #284 class again, caught by the guard on the 9482c82dc deploy instead of in production.
+  path.join('app', 'api', 'cron', 'tournament-announcements', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'tournament-weekly-scores', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
