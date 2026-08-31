@@ -208,6 +208,48 @@ export function flattenFantraxSchedule(info: FantraxLeagueInfo): FantraxSchedule
 }
 
 /**
+ * Fantrax's error strings are written for a web page, not for an API consumer.
+ *
+ * 🛑 THEY CONTAIN HTML, AND WE WERE PUTTING IT ON SCREEN RAW. Observed in
+ * production on 2026-08-31, in the red box on `/import`, exactly as the user
+ * saw it:
+ *
+ *     …apologise if this is the case.<br/><br/> <b style="font-size:14px">This
+ *     problem should be resolved within the next 1-24 hours.</b><br/><br/>…
+ *
+ * React escapes it, correctly, so the markup renders as literal text and the
+ * message reads like something broke twice. The vendor is entitled to format
+ * their own copy; the fix belongs here, at the point we take the string, so no
+ * consumer has to remember. Every caller of `fxeaGet` gets it.
+ *
+ * ⚠ STRIP, NEVER RENDER. The alternative — passing this through
+ * `dangerouslySetInnerHTML` so the tags format — would put a third party's
+ * markup, including a `style` attribute, into our page from a response body. A
+ * vendor error string is untrusted input no matter how ordinary it looks.
+ *
+ * ⚠ AND IT MUST NOT WIDEN WHAT WE ECHO. `getFantraxLeagues` takes a Secret ID,
+ * which is a credential, and its failure messages deliberately do not repeat it
+ * (see the note there). This only ever removes characters — tags, entities and
+ * runs of whitespace — so it cannot introduce anything that was not already in
+ * the message we were showing.
+ */
+export function humanizeVendorMessage(raw: string | null | undefined): string {
+  const text = String(raw ?? '')
+  if (!text) return ''
+  return text
+    /* A tag becomes a space so sentences either side do not run together. */
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
  * One GET, with Fantrax's 200-for-errors behaviour handled.
  */
 async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
@@ -253,7 +295,7 @@ async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
    */
   const asRecord = parsed as { error?: { message?: string } }
   if (asRecord && typeof asRecord === 'object' && asRecord.error) {
-    const message = asRecord.error.message ?? 'unknown Fantrax error'
+    const message = humanizeVendorMessage(asRecord.error.message) || 'unknown Fantrax error'
     const notFound = /not found/i.test(message)
     return {
       ok: false,
