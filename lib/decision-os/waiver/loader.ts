@@ -108,6 +108,64 @@ export async function loadWaiverWorldFacts(
   }
 }
 
+/**
+ * The LEAGUE half of {@link WaiverWorldFacts}, derivable without a user.
+ *
+ * 🛑 WHY THIS EXISTS: `waiverSettingsSource` IS DECLARED `level: 'league'` AND COULD NOT BE
+ * DERIVED AT THE LEAGUE LEVEL. Both Waiver OS sources shared `loadWaiverWorldFacts`, which needs
+ * a `userId` and returns that manager's FAAB and priority. So a scheduler had no way to warm the
+ * league entry without inventing a user and then storing ONE MANAGER'S PRIVATE RESOURCES UNDER A
+ * LEAGUE-SCOPED KEY — which is the read-side failure `waiver-os/index.ts` warns about ("tell
+ * someone they can afford a bid they cannot"), reached from the write side.
+ *
+ * ⚠ AND IT WAS NOT ONLY A SCHEDULING PROBLEM. `loadWaiverWorldFacts` returns null when the user
+ * has no roster in the league, so the league-level fact was underivable for a commissioner tool,
+ * an admin view, or any caller who is not a member. League settings do not depend on who is
+ * asking; this loader does not ask.
+ */
+export interface WaiverLeagueFacts {
+  sport: string
+  leagueId: string
+  settings: WaiverSettingsFacts
+  /** False when the league has no settings row and the values above are sport/variant defaults. */
+  settingsKnown: boolean
+}
+
+/**
+ * Derive the league-shaped waiver facts. Three of the five deps, and no user.
+ *
+ * Returns null rather than throwing, per the `OsFactSource.derive` contract — and null here means
+ * "could not derive", never "no waivers", which is why the caller must not flatten it to a default.
+ */
+export async function loadWaiverLeagueFacts(
+  leagueId: string,
+  deps: WaiverLoaderDeps = defaultWaiverLoaderDeps,
+): Promise<WaiverLeagueFacts | null> {
+  try {
+    const [settings, sport, hasRow] = await Promise.all([
+      deps.loadEffectiveSettings(leagueId),
+      deps.loadLeagueSport(leagueId),
+      deps.hasSettingsRow(leagueId),
+    ])
+    return {
+      sport: String(sport ?? 'NFL'),
+      leagueId,
+      settings: {
+        waiverType: settings.waiverType,
+        normalizedWaiverType: settings.normalizedWaiverType,
+        faabBudget: settings.faabBudget,
+        claimLimitPerPeriod: settings.claimLimitPerPeriod,
+        claimLimitPerWeek: settings.claimLimitPerWeek,
+        maxDropsPerWeek: settings.maxDropsPerWeek,
+        lockType: settings.lockType,
+      },
+      settingsKnown: hasRow,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Shape loaded World facts into the World Resolution input (pure glue at the seam). */
 export function worldInputFromFacts(facts: WaiverWorldFacts, nextProcessAtIso?: string | null): WaiverWorldInput {
   return {

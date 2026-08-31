@@ -4,8 +4,9 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
-import { createOsStore, safeRead } from '@/lib/decision-os/domain-os'
+import { createOsStore, safeRead, type OsDomain, type OsFactSource, type OsFeed } from '@/lib/decision-os/domain-os'
 import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
+import { createWaiverOs, waiverSettingsSource } from '@/lib/decision-os/waiver-os'
 
 /**
  * GET /api/cron/domain-os-refresh
@@ -23,15 +24,15 @@ import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
  * `get` derives on a miss. But every league-level fact was re-derived per USER instead of once per
  * league, so the entire saving the level split exists to produce was never collected.
  *
- * ── 🛑 WHY THIS SCHEDULES EXACTLY ONE SOURCE, AND NOT THE OTHER FOUR ────────────────────────
+ * ── 🛑 WHICH SOURCES THIS WALKS, AND WHY THE REST ARE NOT ELIGIBLE ──────────────────────────
  *
- * The plan this implements said "call `feed.refresh(source, args)` for every registered source".
- * Reading the sources says otherwise, and shipping the wider version would have planted a bug.
+ * The plan said "call `feed.refresh(source, args)` for every registered source". That was wrong
+ * and shipping it would have planted a bug. A source is eligible only if ALL THREE hold: its
+ * `derive` is satisfiable from a league id alone, its `scopeKey` is the league id alone, and its
+ * TTL is long enough that a 30-minute fire can keep it warm.
  *
- * A source is schedulable only if its `derive` can be satisfied from LEAGUE-level inputs alone.
- * Exactly one can:
- *
- *   ✅ draftRulesSource   derive = resolveCanonicalLeagueRules(leagueId).  League in, league out.
+ *   ✅ draftRulesSource      derive = resolveCanonicalLeagueRules(leagueId). League in, league out.
+ *   ✅ waiverSettingsSource  eligible SINCE 1.1b, and it is why 1.1b existed — see below.
  *
  * ⚠ AND THIS FILE'S FIRST VERSION OVERCLAIMED WHAT THAT SAVES. It said "seven queries on every
  * draft-runtime resolve, which during a live draft is every poll and every pick", quoting
@@ -59,27 +60,32 @@ import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
  * ⚠ Found by opening the ticket to wire Draft OS and discovering it would connect a dead feed to a
  * dead resolver — i.e. by trying to USE the thing, which is the only reason it surfaced at all.
  *
- *   ❌ waiverSettingsSource   level:'league', scopeKey: leagueId — but `derive` is the SHARED
- *                             deriveWorldFacts({ userId, leagueId }), which returns the whole
- *                             WaiverWorldFacts INCLUDING that user's FAAB balance and priority.
- *   ❌ tradeSettingsSource    same shape: scopeKey is `${leagueId}:${seasonId}`, but `derive`
- *                             needs an ordered roster PAIR and returns both sides' record and
- *                             FAAB.
+ * ── WAIVER: WHY IT WAS INELIGIBLE, AND WHAT 1.1b CHANGED ────────────────────────────────────
  *
- * Refreshing either from a scheduler means inventing a userId or a roster pair, and then storing
- * ONE MANAGER'S PRIVATE RESOURCE FACTS UNDER A LEAGUE-SCOPED KEY. Nothing reads those entries
- * today — reads go through the user-level sources — so it would not break anything now. It would
- * lie later, the first time anyone reads through the league entry, and it is the precise failure
- * `waiver-os/index.ts` warns about reached from the WRITE side instead of the read side: it would
- * "let the system tell someone they can afford a bid they cannot".
+ * `waiverSettingsSource` was always declared `level: 'league'` with `scopeKey: leagueId`, and was
+ * still underivable at the league level: it shared `deriveWorldFacts({ userId, leagueId })` with
+ * the user source, which returns the whole `WaiverWorldFacts` INCLUDING that manager's FAAB
+ * balance and priority. Warming it from here would have meant inventing a userId and storing ONE
+ * MANAGER'S PRIVATE RESOURCES UNDER A LEAGUE-SCOPED KEY — the write-side form of the exact failure
+ * `waiver-os/index.ts` warns about: it would "let the system tell someone they can afford a bid
+ * they cannot".
  *
- *   Making those two schedulable is a real, small refactor — split the shared `derive` so the
- *   settings source derives only the league-shaped subset — and it belongs in its own change with
- *   its own test, not smuggled into a cron. Until then, one honest source beats three that include
- *   a lie, which is `draft-os`'s own argument for declaring one source in the first place.
+ * 1.1b split it. `loadWaiverLeagueFacts(leagueId)` derives the league half from three deps and no
+ * user, so the source is now genuinely what it always claimed to be. It also stopped being
+ * underivable for a non-member — the old path returned null when the caller had no roster.
  *
- *   ❌ lineupWarehouseSource / lineupSignalSource are user- and week-parameterised by nature
- *      (playerIds, week, a specific roster). They are not league facts and never will be.
+ * ── STILL NOT ELIGIBLE, WITH THE SPECIFIC REASON EACH ───────────────────────────────────────
+ *
+ *   ❌ tradeSettingsSource   ITS DERIVE IS SPLIT TOO (1.1b), so this one is not about the derive:
+ *                            it is keyed `${leagueId}:${seasonId}` and this walk has no season.
+ *                            Bridging that means deciding which season is "current" for a league
+ *                            and what to do when several qualify — and a wrong answer warms the
+ *                            WRONG SEASON'S entry, which is worse than warming nothing.
+ *   ❌ leagueRulesSource     60s TTL. Expired long before the next 30-minute fire, so scheduling
+ *                            it would spend the derive, warm nothing, and report healthy work.
+ *                            Short-TTL facts are read-through by nature.
+ *   ❌ lineup sources        user- and week-parameterised (playerIds, week, a specific roster).
+ *                            Not league facts, and never will be.
  *
  * ── Bounds, copied from decision-os-activity-ingest's hard-won shape ─────────────────────────
  *
@@ -149,6 +155,30 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(result)
 }
 
+/**
+ * Bind one league-keyed source to its feed, erasing the fact type at the boundary.
+ *
+ * ⚠ THE HELPER IS NOT DECORATION. `OsFactSource<TArgs, TFacts>` is INVARIANT in `TFacts` — its
+ * optional `measure(facts: TFacts)` puts the type in an input position — so an array typed
+ * `OsFactSource<…, unknown>[]` will not accept a concrete source, however obviously compatible it
+ * looks. Capturing each source inside a closure while it still has its real type is what lets two
+ * domains share one walk.
+ */
+function target<TFacts>(
+  domain: OsDomain,
+  feed: OsFeed,
+  source: OsFactSource<{ leagueId: string }, TFacts>,
+) {
+  return {
+    domain,
+    kind: source.kind,
+    level: source.level,
+    ttlMs: source.ttlMs,
+    scopeKey: source.scopeKey,
+    refresh: (args: { leagueId: string }) => feed.refresh(source, args),
+  }
+}
+
 async function run(): Promise<RefreshCounts> {
   const budget = createRunBudget()
   const counts: RefreshCounts = {
@@ -171,7 +201,25 @@ async function run(): Promise<RefreshCounts> {
   if (leagues.length === 0) return counts
 
   const store = createOsStore()
-  const feed = createDraftOs({ store })
+
+  /**
+   * Every league-keyed source this cron warms.
+   *
+   * ⚠ THE LIST IS NOT "EVERY SOURCE", AND IT CANNOT BE. Membership requires all three: a
+   * `derive` satisfiable from a league id alone, a `scopeKey` of the league id alone, and a TTL
+   * long enough that a 30-minute fire can actually keep it warm.
+   *
+   *   draft   rules     ✅ but read by nothing — resolveNflRedraftDraftRuntime has no callers
+   *   waiver  settings  ✅ and the reason 1.1b existed: its derive used to need a userId
+   *   trade   settings  ❌ keyed `${leagueId}:${seasonId}`; this walk has no season
+   *   league  rules     ❌ 60s TTL — expired long before the next fire; read-through by nature
+   *   lineup  both      ❌ user- and week-parameterised; not league facts
+   */
+  const targets = [
+    target('draft', createDraftOs({ store }), draftRulesSource),
+    target('waiver', createWaiverOs({ store }), waiverSettingsSource),
+  ]
+
   const ordered = rotateForFairness(leagues, ROTATION_PERIOD_MS)
 
   for (const league of ordered) {
@@ -185,6 +233,7 @@ async function run(): Promise<RefreshCounts> {
 
     const args = { leagueId: league.id }
 
+    for (const t of targets) {
     /**
      * DUE-NESS IS A READ, NOT A GUESS. `refresh()` re-derives unconditionally, so calling it on
      * every league every fire would do the expensive work even when the stored fact is still
@@ -193,11 +242,11 @@ async function run(): Promise<RefreshCounts> {
      * do. Producer and consumer therefore share one definition of stale instead of drifting.
      */
     const hit = await safeRead(store, {
-      domain: 'draft',
-      kind: draftRulesSource.kind,
-      level: draftRulesSource.level,
-      scopeKey: draftRulesSource.scopeKey(args),
-      ttlMs: draftRulesSource.ttlMs,
+      domain: t.domain,
+      kind: t.kind,
+      level: t.level,
+      scopeKey: t.scopeKey(args),
+      ttlMs: t.ttlMs,
     })
     if (hit) continue
 
@@ -207,14 +256,15 @@ async function run(): Promise<RefreshCounts> {
     // already swallows a derive rejection into 'unavailable'; this catch covers a store write
     // failing, which it does not.
     try {
-      const outcome = await feed.refresh(draftRulesSource, args)
+      const outcome = await t.refresh(args)
       if (outcome === 'written') counts.written += 1
       else counts.unavailable += 1
     } catch (e) {
       counts.failed += 1
       if (counts.errors.length < 10) {
-        counts.errors.push(`${league.id}: ${e instanceof Error ? e.message : String(e)}`)
+        counts.errors.push(`${t.domain}/${league.id}: ${e instanceof Error ? e.message : String(e)}`)
       }
+    }
     }
   }
 

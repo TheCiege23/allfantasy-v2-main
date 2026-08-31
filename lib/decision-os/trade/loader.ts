@@ -22,6 +22,58 @@ export interface TradeWorldFacts {
   receiver: TradeRosterFacts
 }
 
+/**
+ * The LEAGUE+SEASON half of {@link TradeWorldFacts}, derivable without a roster pair.
+ *
+ * 🛑 SAME DEFECT AS WAIVER'S, AND THE STAKES ARE HIGHER. `tradeSettingsSource` declares
+ * `level: 'league'` and shared `loadTradeWorldFacts`, which needs an ordered pair of roster ids
+ * and returns BOTH sides' record, points and FAAB. Warming that from a scheduler would have
+ * stored two specific managers' standings under a key scoped to the whole league.
+ *
+ * ⚠ `trade-os/index.ts` calls trade "the highest-stakes domain" and gives it the shortest TTLs in
+ * the system for that reason. A league-scoped entry carrying one pair's balances is exactly the
+ * confidently-wrong input that reasoning is guarding against.
+ */
+export interface TradeLeagueFacts {
+  sport: string
+  leagueId: string
+  seasonId: string
+  currentWeek: number
+  settings: TradeSettingsFacts
+}
+
+/**
+ * Derive the league+season-shaped trade facts. Two of the three deps, and no roster ids.
+ *
+ * Returns null rather than throwing, per the `OsFactSource.derive` contract.
+ */
+export async function loadTradeLeagueFacts(
+  input: { leagueId: string; seasonId: string },
+  deps: TradeLoaderDeps = defaultTradeLoaderDeps,
+): Promise<TradeLeagueFacts | null> {
+  try {
+    const [league, season] = await Promise.all([
+      deps.loadLeagueSettings(input.leagueId),
+      deps.loadSeason(input.seasonId, input.leagueId),
+    ])
+    if (!league || !season) return null
+    return {
+      sport: String(league.sport ?? 'NFL'),
+      leagueId: input.leagueId,
+      seasonId: input.seasonId,
+      currentWeek: Math.max(1, Number(season.currentWeek ?? 1) || 1),
+      settings: {
+        reviewType: 'commissioner',
+        tradeReviewHours: league.tradeReviewHours ?? null,
+        tradeDeadlineWeek: league.tradeDeadlineWeek ?? null,
+        draftPickTrading: Boolean(league.draftPickTrading),
+      },
+    }
+  } catch {
+    return null
+  }
+}
+
 export interface TradeLoaderDeps {
   loadLeagueSettings: (leagueId: string) => Promise<{
     sport: string | null

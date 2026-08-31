@@ -23,7 +23,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **0.4** Find what creates name-only NCAAF identity rows | §2.12. Peer commit `7beaa8811`, deliberate backfill. Audit caught a migration mid-run |
 | ✅ | **0.5** Add name+team resolution to the coverage audit | §2.13. False alarm now impossible, not merely documented. Re-run needed for figures |
 | ✅ | **1.1** Refresh scheduler | `app/api/cron/domain-os-refresh`. **One source, not five** — see §4 Phase 1 |
-| ⬜ | **1.1b** Split waiver/trade settings derives so they are schedulable | Scope **confirmed** — the League-OS-obsoletes-it hypothesis was tested and disproved, §2.14 |
+| ✅ | **1.1b** Split waiver/trade settings derives so they are schedulable | Both split. Waiver now scheduled; trade blocked on a season key, not on the derive |
 | ✅ | **0.6** Diff the two waiver-settings resolvers | §2.14. **No divergence** — they are layered, not rival. The alarm was a truncated grep |
 | ✅ | **1.2a** League OS — cached ruleset on the three resolvers that have routes | 60s TTL, GET only. §4 Phase 1.2 |
 | ⬜ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | Product decision: give it a route, or retire it for `live-draft-engine` |
