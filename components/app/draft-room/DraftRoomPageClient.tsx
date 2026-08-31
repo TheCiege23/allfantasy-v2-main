@@ -584,9 +584,24 @@ export function DraftRoomPageClient({
           // D.5-proper — when the AllFantasy snapshot flag is on, the resolver-provided
           // `e.aiAdp` is the single source of truth. Skip the legacy lookup so we never
           // overwrite resolver values with cross-context data.
-          const ai = draftUISettings?.aiAdpEnabled && !useAllFantasyAdp
-            ? lookupAiAdpMatch(aiAdpLookupMaps, name, position, team)
-            : null
+          /*
+           * The AllFantasy board is now PRIMARY and the legacy overlay only fills gaps.
+           *
+           * Before this, the flag was a hard either/or and its default (off) let the legacy
+           * client overlay OVERRIDE the resolver value wherever it had a match - so the fixed
+           * board was being shadowed by the old engine on the one screen that matters. Flipping
+           * the flag on fixed that but discarded legacy coverage for players our board lacks.
+           * Neither branch was right: one shadowed the good data, the other threw away the
+           * fallback.
+           *
+           * Default now: `e.aiAdp` wins, legacy fills only where we have nothing. Strictly
+           * additive - no league loses a value it had. NEXT_PUBLIC_USE_ALLFANTASY_ADP=true keeps
+           * its documented meaning as STRICT mode: AllFantasy only, no legacy fill.
+           */
+          const ai =
+            draftUISettings?.aiAdpEnabled && !useAllFantasyAdp
+              ? lookupAiAdpMatch(aiAdpLookupMaps, name, position, team)
+              : null
           return {
             id: e.playerId ?? e.display?.playerId ?? name,
             name,
@@ -594,13 +609,12 @@ export function DraftRoomPageClient({
             team,
             adp: e.adp ?? e.display?.stats?.adp ?? null,
             byeWeek: e.byeWeek ?? e.display?.metadata?.byeWeek ?? null,
-            aiAdp: useAllFantasyAdp
-              ? (e.aiAdp ?? null)
-              : draftUISettings?.aiAdpEnabled && ai
-                ? ai.adp
-                : (e.aiAdp ?? null),
-            aiAdpSampleSize: useAllFantasyAdp ? e.aiAdpSampleSize : ai?.sampleSize,
-            aiAdpLowSample: useAllFantasyAdp ? e.aiAdpLowSample : ai?.lowSample,
+            aiAdp: e.aiAdp ?? (ai ? ai.adp : null),
+            aiAdpSampleSize: e.aiAdp != null ? e.aiAdpSampleSize : ai?.sampleSize,
+            aiAdpLowSample: e.aiAdp != null ? e.aiAdpLowSample : ai?.lowSample,
+            /* Provenance travels with the value so the cell can say projected vs measured. */
+            aiAdpSource: e.aiAdp != null ? e.aiAdpSource ?? null : null,
+            aiAdpTeamCounts: e.aiAdp != null ? e.aiAdpTeamCounts ?? null : null,
             display: e.display ?? null,
             isDevy: e.isDevy,
             school: e.school ?? null,
@@ -617,9 +631,11 @@ export function DraftRoomPageClient({
           const position = e.position ?? ''
           const team = e.team ?? null
           // D.5-proper — see note above; flag bypasses legacy lookup.
-          const ai = draftUISettings?.aiAdpEnabled && !useAllFantasyAdp
-            ? lookupAiAdpMatch(aiAdpLookupMaps, name, position, team)
-            : null
+          /* See the note on the first branch: board first, legacy fills gaps. */
+          const ai =
+            draftUISettings?.aiAdpEnabled && !useAllFantasyAdp
+              ? lookupAiAdpMatch(aiAdpLookupMaps, name, position, team)
+              : null
           return {
             id: e.id ?? e.playerId ?? name,
             name,
@@ -627,13 +643,12 @@ export function DraftRoomPageClient({
             team,
             adp: e.adp ?? e.rank ?? null,
             byeWeek: e.byeWeek ?? null,
-            aiAdp: useAllFantasyAdp
-              ? (e.aiAdp ?? null)
-              : draftUISettings?.aiAdpEnabled && ai
-                ? ai.adp
-                : (e.aiAdp ?? null),
-            aiAdpSampleSize: useAllFantasyAdp ? e.aiAdpSampleSize : ai?.sampleSize,
-            aiAdpLowSample: useAllFantasyAdp ? e.aiAdpLowSample : ai?.lowSample,
+            aiAdp: e.aiAdp ?? (ai ? ai.adp : null),
+            aiAdpSampleSize: e.aiAdp != null ? e.aiAdpSampleSize : ai?.sampleSize,
+            aiAdpLowSample: e.aiAdp != null ? e.aiAdpLowSample : ai?.lowSample,
+            /* Provenance travels with the value so the cell can say projected vs measured. */
+            aiAdpSource: e.aiAdp != null ? e.aiAdpSource ?? null : null,
+            aiAdpTeamCounts: e.aiAdp != null ? e.aiAdpTeamCounts ?? null : null,
           }
         })
   }, [draftPool, draftData, aiAdpLookupMaps, draftUISettings?.aiAdpEnabled, useAllFantasyAdp])
