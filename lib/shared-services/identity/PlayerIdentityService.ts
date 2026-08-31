@@ -8,12 +8,19 @@
  * actively used by scoring lookups; this module gives it the Identity Service's typed
  * contract shape (matchedField, sourceAttribution) without duplicating its logic.
  *
- * KNOWN GAP (do not silently paper over): `PlayerIdentityMap` has dedicated columns for
- * sleeperId / espnId / mflId / fleaflickerId, but NOT for yahoo or fantrax. Resolution for
- * those two providers falls back to normalized-name matching only, inherited directly from
- * the underlying resolver. This is tracked as a "missing normalization" blocker in the
- * Migration Plan (Part 9) — closing it requires a schema change, which is out of scope for
- * this additive phase.
+ * KNOWN GAP, HALF CLOSED 2026-08-31 (do not silently paper over the rest):
+ * `PlayerIdentityMap` has dedicated columns for sleeperId / espnId / mflId /
+ * fleaflickerId, and now `fantraxId` — the schema change this docstring said was out of
+ * scope has been made, and the column is written weekly by
+ * `lib/devy/ingestFantraxPlayerIdentities.ts`. **Yahoo is still uncovered** and still
+ * falls back to normalized-name matching only.
+ *
+ * ⚠ FANTRAX COVERAGE IS 25%, NOT 100%, AND THE REMAINDER IS NOT A MATCHING BUG.
+ * Measured on the first real run: 4,210 of 16,904 ids linked, 12,694 unmatched and
+ * **0 ambiguous** — a zero that is the whole diagnosis, since it says every failure was
+ * "no such player in the registry" rather than "could not choose between two". The
+ * NCAAF identity registry is the thin part (3,126 of 20,027 rows sourced from CFBD).
+ * Widening it is the real unlock; this column is what lets the 25% resolve by id at all.
  */
 
 import { resolveCanonicalPlayerId, resolveCanonicalPlayerIds } from '@/lib/league-import/playerIdResolver'
@@ -25,7 +32,8 @@ const PROVIDER_COLUMN: Partial<Record<ImportProvider, string>> = {
   espn: 'espnId',
   mfl: 'mflId',
   fleaflicker: 'fleaflickerId',
-  // yahoo / fantrax intentionally absent — see module docstring.
+  fantrax: 'fantraxId',
+  // yahoo intentionally absent — see module docstring.
 }
 
 export async function resolvePlayerIdentity(args: {

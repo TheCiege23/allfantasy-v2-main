@@ -31,14 +31,28 @@ export interface PlayerIdResolveResult {
   confidence: 'direct' | 'name_match' | 'miss'
 }
 
-type ProviderColumn = 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId'
+type ProviderColumn = 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId'
 
 const PROVIDER_COLUMN: Partial<Record<ImportProvider, ProviderColumn>> = {
   sleeper: 'sleeperId',
   espn: 'espnId',
   mfl: 'mflId',
   fleaflicker: 'fleaflickerId',
-  // yahoo / fantrax have no dedicated column yet — fallback to name match.
+  /*
+   * `fantraxId` was added to PlayerIdentityMap on 2026-08-31 and is written
+   * weekly by `lib/devy/ingestFantraxPlayerIdentities.ts`. Before that, Fantrax
+   * had no column and this comment said so.
+   *
+   * ⚠ COVERAGE IS PARTIAL AND THAT IS SAFE HERE. Measured on the first real
+   * run: 4,210 of 16,904 Fantrax CFB ids linked (25%), because the NCAAF
+   * identity registry itself is thin — `ambiguous: 0` across the whole run,
+   * which says the bottleneck is registry coverage rather than matching. A miss
+   * returns no row and falls through to the same name match this provider used
+   * for everything before, so enabling the column is strictly better than the
+   * previous behaviour and never worse.
+   */
+  fantrax: 'fantraxId',
+  // yahoo has no dedicated column yet — fallback to name match.
 }
 
 /**
