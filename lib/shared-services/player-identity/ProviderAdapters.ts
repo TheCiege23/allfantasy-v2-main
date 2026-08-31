@@ -2,10 +2,20 @@
  * Provider capability table — Phase 14 audit findings, not assumptions.
  *
  * `PlayerIdentityMap` has dedicated columns for sleeperId / espnId / mflId /
- * fleaflickerId — confirmed by reading prisma/schema.prisma directly. It has
- * NO yahooId or fantraxId column (a real, pre-existing gap first documented
- * in the Phase 1 Identity Service, still true today; closing it requires a
- * schema migration, out of scope for this additive phase).
+ * fleaflickerId — confirmed by reading prisma/schema.prisma directly — and, since
+ * 2026-08-31, `fantraxId`. The migration this note called out of scope has been
+ * applied, and the column is written weekly by
+ * `lib/devy/ingestFantraxPlayerIdentities.ts`.
+ *
+ * There is still **NO yahooId column** — a real, pre-existing gap first documented in
+ * the Phase 1 Identity Service, and still true. Yahoo resolution falls straight to
+ * name/team/position matching (step 4 of the resolution strategy).
+ *
+ * ⚠ `supportsDirectId: true` FOR FANTRAX IS A STATEMENT ABOUT THE COLUMN, NOT ABOUT
+ * COVERAGE. 4,210 of 16,904 Fantrax CFB ids are linked (25%); the rest miss because the
+ * NCAAF registry has no row for that player, not because matching failed — the first
+ * run recorded **0 ambiguous**. A miss returns no row and the resolver falls through to
+ * name matching exactly as it did before, so this is strictly better and never worse.
  *
  * `SportsPlayer` additionally has its own, separately-populated `sleeperId`
  * column (confirmed via schema + a real query against Phase 13's validation
@@ -44,9 +54,9 @@ const CAPABILITIES: Record<ImportProvider, ProviderCapability> = {
     directIdSources: [{ table: 'PlayerIdentityMap', column: 'fleaflickerId' }],
     supportsDirectId: true,
   },
-  // yahoo / fantrax: no dedicated id column on either table today — real,
-  // disclosed gap. Resolution for these providers falls straight to
-  // name/team/position matching (step 4 of the resolution strategy).
+  // yahoo: no dedicated id column on either table today — real, disclosed gap.
+  // Resolution falls straight to name/team/position matching (step 4 of the
+  // resolution strategy).
   yahoo: {
     provider: 'yahoo',
     directIdSources: [],
@@ -54,8 +64,8 @@ const CAPABILITIES: Record<ImportProvider, ProviderCapability> = {
   },
   fantrax: {
     provider: 'fantrax',
-    directIdSources: [],
-    supportsDirectId: false,
+    directIdSources: [{ table: 'PlayerIdentityMap', column: 'fantraxId' }],
+    supportsDirectId: true,
   },
 }
 
