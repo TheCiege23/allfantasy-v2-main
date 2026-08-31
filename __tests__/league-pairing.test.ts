@@ -477,4 +477,81 @@ describe('resolving the other half from a league', () => {
     expect((out?.other?.activity as { reason: string }).reason).toContain('no transactions endpoint')
     expect(out?.other?.activity).not.toHaveProperty('trades')
   })
+
+  /**
+   * The crest each half renders.
+   *
+   * ⚠ THE PANEL DISCARDED AN AVATAR IT ALREADY HAD. Measured 2026-08-31: all 12
+   * teams in the paired Sleeper league carry a `sleepercdn.com` avatar, and 995
+   * of 1140 `LeagueTeam` rows overall — and `describeSide` selected every other
+   * column from that row and not this one, so both halves rendered crestless.
+   *
+   * ⚠ AND THE FANTRAX NULL IS A PLATFORM FACT, NOT A GAP TO FILL LATER. Fantrax
+   * publishes no image field anywhere: `teamInfo` entries are exactly
+   * `{name, id}` across 269KB of `getLeagueInfo`, with none in `getStandings` or
+   * `getTeamRosters` either. That was probed rather than assumed, and it is why
+   * the half renders initials as its FINISHED state.
+   */
+  it('carries the claimed team’s crest on the pro half and none on the Fantrax half', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'link-1',
+        name: 'F',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: '4' },
+          { platform: 'fantrax', leagueId: 'fx-1', role: 'college', teamExternalId: 'Ciege82' },
+        ],
+      },
+    })
+    fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
+    leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
+    teamFindFirst.mockResolvedValue({
+      teamName: 'T',
+      ownerName: null,
+      externalId: '4',
+      platformUserId: 'sleeper-77',
+      avatarUrl: 'https://sleepercdn.com/avatars/thumbs/abc123',
+    })
+    rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
+    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    expect(out?.self?.avatarUrl).toBe('https://sleepercdn.com/avatars/thumbs/abc123')
+    expect(out?.other?.avatarUrl).toBeNull()
+    /* 🛑 THE COLUMN MUST BE ASKED FOR. The bug was a missing `select` key, not a
+       missing render — so asserting the output alone would pass against a query
+       that never reads it once a default-select regression puts it back. */
+    expect(teamFindFirst.mock.calls[0][0].select).toMatchObject({ avatarUrl: true })
+  })
+
+  /**
+   * ⚠ A CREST IS SCOPED TO THE TEAM THE VIEWER CLAIMED, like the roster beside
+   * it. No claimed team means no crest — showing a stranger's avatar on "your"
+   * half is the same guess the roster read already refuses to make.
+   */
+  it('shows no crest when the viewer has claimed no team', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'link-1',
+        name: 'F',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: '4' },
+          { platform: 'fantrax', leagueId: 'fx-1', role: 'college', teamExternalId: 'Ciege82' },
+        ],
+      },
+    })
+    fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
+    leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
+    teamFindFirst.mockResolvedValue(null)
+    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    expect(out?.self?.avatarUrl).toBeNull()
+  })
 })

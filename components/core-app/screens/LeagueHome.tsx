@@ -124,6 +124,17 @@ function Unavailable({ reason }: { reason: string }) {
   )
 }
 
+/** Two letters for a team with no crest. Never blank, never a broken image. */
+function initialsOf(name: string): string {
+  const words = name
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+  if (words.length === 0) return '—'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
 /** A titled panel. `tone` drives the 3b border colour on Commissioner Hub. */
 /**
  * The other half of this league's franchise, or an offer to name it.
@@ -229,6 +240,32 @@ function PairedBand({
               {sd.role === 'pro' ? 'Pro half' : 'College half'}
               {i === 0 ? ' · you are here' : ''}
             </span>
+            {/*
+              The crest, so the two halves read as two teams rather than two
+              paragraphs. Both halves get one; only the source differs.
+
+              ⚠ INITIALS ARE NOT A PLACEHOLDER FOR A LOGO WE FAILED TO FETCH.
+              The Fantrax half can never have one — the platform publishes no
+              image field anywhere in its API — so this is the finished state
+              for that side, and the same fallback a Sleeper manager who never
+              set an avatar already gets across the app. `alt=""` because the
+              team name is rendered as text directly beneath it.
+            */}
+            {sd.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className="af-lh-paired-crest af-lh-paired-crest--img"
+                src={sd.avatarUrl}
+                alt=""
+                width={36}
+                height={36}
+                loading="lazy"
+              />
+            ) : (
+              <span className="af-lh-paired-crest" aria-hidden>
+                {initialsOf(sd.teamLabel || sd.name)}
+              </span>
+            )}
             <h3 className="af-lh-paired-title">
               {sd.leagueId && i !== 0 ? (
                 <Link
