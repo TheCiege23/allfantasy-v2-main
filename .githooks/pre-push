@@ -65,6 +65,45 @@ run_guard() {
   printf '%s\n' "$payload" | node "$script" "$@"
 }
 
+# ── Guard 0: never publish a credential ───────────────────────────────────────
+#
+# 🛑 THIS ONE FAILS CLOSED. Every other guard here fails open, because the cost
+# of a false stop is a delayed deploy and the cost of a false pass is money. Here
+# the cost of a false pass is a live credential in a PUBLIC repository, which no
+# later commit takes back — you rotate the secret, you do not un-publish it.
+#
+# It runs FIRST, ahead of the queue, so a push that must not happen never takes a
+# place in line. And it runs for EVERY ref, not just `main`: a feature branch on a
+# public remote is just as public as the default one.
+#
+# scripts/secret-scan.mjs existed for a long time with NO caller — not in a hook,
+# not in CI, only an npm script nobody ran. That is the same shape as the
+# ingestCFBDStats bug recorded in CLAUDE.md: the writer existed, so the work
+# looked done. Wiring it is the whole point of this block.
+#
+# Escape hatch, for a genuine emergency only:  AF_SKIP_SECRET_SCAN=1 git push ...
+if [ "$AF_SKIP_SECRET_SCAN" != "1" ]; then
+  if [ -f "$scripts/secret-scan.mjs" ]; then
+    if ! node "$scripts/secret-scan.mjs"; then
+      printf '\n  🛑 push blocked: secret-scan found a credential-shaped value.\n\n' >&2
+      printf '     This repository is PUBLIC. A pushed secret is disclosed the moment it\n' >&2
+      printf '     lands, and rewriting history does not undo that -- rotate it instead.\n\n' >&2
+      printf '     Fix the finding above, or if it is a false positive, make the value an\n' >&2
+      printf '     obvious placeholder ("your-key-here", empty quotes) rather than skipping.\n\n' >&2
+      printf '     Genuinely urgent?  AF_SKIP_SECRET_SCAN=1 git push <args>\n\n' >&2
+      exit 1
+    fi
+  else
+    # Fail CLOSED on a missing scanner. A credential guard that silently does not
+    # run is indistinguishable from one that passed, which is the failure mode
+    # this whole file is a monument to.
+    printf '\n  🛑 push blocked: scripts/secret-scan.mjs not found, so nothing checked for\n' >&2
+    printf '     leaked credentials. Run `npm run hooks:install` from the primary checkout.\n' >&2
+    printf '     Override: AF_SKIP_SECRET_SCAN=1 git push <args>\n\n' >&2
+    exit 1
+  fi
+fi
+
 run_guard "$scripts/push-queue.mjs" check || exit 1
 run_guard "$scripts/check-inflight-prod-build.mjs" || exit 1
 
