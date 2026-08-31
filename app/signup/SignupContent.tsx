@@ -19,6 +19,7 @@ import { useGeoRestriction } from "@/lib/geo/useGeoRestriction"
 import { NocturneAuthShell } from "@/components/auth/NocturneAuthShell"
 import NocturneOAuthGrid from "@/components/auth/NocturneOAuthGrid"
 import { Loader2, TriangleAlert, Eye, EyeOff, CheckCircle2, ShieldCheck } from "lucide-react"
+import posthog from 'posthog-js'
 
 /** Password-strength segment colors, level 1 → 4 (weak → strong). */
 const STRENGTH_COLORS = [
@@ -204,6 +205,15 @@ export default function SignupContent() {
 
       trackMetaEventsFromResponse(data)
       trackSignupConversion(refParam ? "signup_form_referral" : "signup_form")
+
+      const newUserId = typeof data.userId === 'string' ? data.userId : undefined
+      if (newUserId) {
+        posthog.identify(newUserId)
+      }
+      posthog.capture('user_signed_up', {
+        method: 'email',
+        has_referral_code: Boolean(refParam),
+      })
 
       if (typeof data.emailVerificationPrepared === "boolean") {
         setEmailVerificationPrepared(data.emailVerificationPrepared)

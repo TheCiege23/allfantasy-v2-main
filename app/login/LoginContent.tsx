@@ -15,6 +15,7 @@ import {
 } from "@/lib/auth/UnifiedAuthOrchestrator"
 import { NocturneAuthShell } from "@/components/auth/NocturneAuthShell"
 import NocturneOAuthGrid from "@/components/auth/NocturneOAuthGrid"
+import posthog from 'posthog-js'
 
 const CARD_STYLE: CSSProperties = {
   maxWidth: 420,
@@ -164,6 +165,7 @@ export default function LoginContent() {
       if (result?.error) {
         setError(resolveLoginErrorMessage(result.error))
       } else {
+        posthog.capture('user_logged_in', { method: 'credentials' })
         clearUnifiedAuthDestination()
         router.replace(postLoginRedirect)
       }
