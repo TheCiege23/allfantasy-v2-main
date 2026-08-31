@@ -75,10 +75,31 @@ async function main() {
   console.log(`  ${'elapsed'.padEnd(12)} ${secs}s`)
 
   const after = await prisma.playerIdentityMap.count({ where: { sport: 'NCAAF' } })
-  console.log(`\n  NCAAF rows after     ${after.toLocaleString()}   (delta ${after - before})`)
-  if (!apply && after !== before) console.log('  🛑 A DRY RUN CHANGED THE ROW COUNT — investigate before doing anything else.')
+  const delta = after - before
+  console.log(`\n  NCAAF rows after     ${after.toLocaleString()}   (delta ${delta})`)
+
   if (!apply) {
-    console.log('  proof nothing was written: row count unchanged')
+    /*
+     * ⚠ A ROW-COUNT DELTA IS NOT EVIDENCE THIS RUN WROTE, AND THE FIRST VERSION
+     * OF THIS BLOCK CLAIMED IT WAS — then printed "row count unchanged"
+     * immediately underneath, unconditionally, so it contradicted itself in the
+     * same breath. Observed live on 2026-08-31 while an `--apply` run was still
+     * writing from another shell: delta 26, alarm raised, "unchanged" printed.
+     *
+     * The count is shared. Any concurrent writer moves it, and a dry run cannot
+     * write regardless — `widenNcaafIdentities({ dryRun: true })` returns before
+     * it reaches a single `create()`. So the honest claim is about the code path
+     * taken, and the delta is reported as what it is: news about the table, not
+     * about this process.
+     */
+    if (delta === 0) {
+      console.log('  row count unchanged, consistent with a run that issued no writes')
+    } else {
+      console.log(`  ⚠ the table moved by ${delta} while this dry run was reading it.`)
+      console.log('    That is ANOTHER writer — most likely an --apply run in progress.')
+      console.log('    A dry run reaches no create() at all, so this is not evidence')
+      console.log('    that THIS run wrote. Re-run once the count is static.')
+    }
     await prisma.$disconnect()
     return
   }
