@@ -34,6 +34,7 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { TenantMismatchError } from './errors'
+import type { TenantRole } from './roles'
 
 export { TenantMismatchError } from './errors'
 
@@ -177,6 +178,47 @@ export function createWithTenant(getDb: () => Pick<PrismaClient, '$transaction'>
  * it. An app-level filter is a convenience layer, not the control (§2).
  */
 export const withTenant = createWithTenant(getClient)
+
+// ─── The bootstrap: which tenant is this user in? ────────────────────────────
+
+export type TenantMembership = { readonly tenantId: string; readonly role: TenantRole }
+
+/**
+ * Resolve a user's tenant memberships. **Runs OUTSIDE any tenant scope.**
+ *
+ * 🛑 THIS IS THE CHICKEN-AND-EGG, AND IT IS WHY T-102 SHIPPED A SECURITY DEFINER
+ * FUNCTION. Every read inside `withTenant` is filtered by `app.tenant_id`. To set
+ * that GUC you need the tenant id. To learn the tenant id you must read
+ * `TenantMember`/`TenantUser` — which are RLS-protected, so as `commish_app` with
+ * no scope set they return ZERO ROWS. Asked naively, the question can never be
+ * answered: you cannot look up your tenant without already knowing it.
+ *
+ * `app.resolve_user_tenants` breaks the cycle. It is SECURITY DEFINER and owned
+ * by `commish_migrate`, so it executes with the maintenance policy's visibility
+ * rather than the caller's, and `commish_app` holds EXECUTE on it and nothing
+ * more. The escape from RLS is one function with a fixed body and a single
+ * parameter — not a role that can read across tenants.
+ *
+ * ⚠ DO NOT "FIX" AN EMPTY RESULT WITH A DEFAULT TENANT. Today every league
+ * belongs to `allfantasy`, so `?? 'allfantasy'` would make this work immediately
+ * and would be the single most dangerous line in the codebase: the moment a
+ * second operator exists, an unrecognised user silently acquires access to the
+ * bootstrap tenant, and RLS cannot catch it because the rows are legitimately
+ * readable by the tenant they were scoped to. Empty means NOT ENTITLED. That is
+ * the whole answer.
+ *
+ * ⚠ AND IT IS DELIBERATELY NOT CACHED. Membership is an authorization input;
+ * caching it means a revoked member keeps access for the cache's lifetime. If
+ * this becomes a latency problem the fix is a shorter-lived session, not a
+ * longer-lived copy of a permission.
+ */
+export async function resolveTenantsForUser(userId: string): Promise<TenantMembership[]> {
+  if (!userId.trim()) return []
+  const rows = await getClient().$queryRaw<{ tenant_id: string; role: TenantRole }[]>`
+    SELECT tenant_id, role FROM app.resolve_user_tenants(${userId})
+  `
+  return rows.map((r) => ({ tenantId: r.tenant_id, role: r.role }))
+}
 
 /**
  * Close the pool. For test teardown and graceful shutdown only.

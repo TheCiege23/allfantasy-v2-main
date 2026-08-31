@@ -71,6 +71,7 @@ export const ACTION_KEYS = [
   'league.settings.update',
   'league.phase.advance',
   'league.sync.reconcile',
+  'league.sync.read',
   'audit.read',
   'analytics.read',
   'data.readDeleted',
@@ -131,6 +132,16 @@ export const API_SCOPES = [
   'audit:read',
   'analytics:read',
   'export:read',
+  // Arrives WITH `league.sync.read`, in the same change, exactly as the note
+  // above asks. The two removed scopes were removed for being unused; this one
+  // is used by the action added in this commit, and the "every scope is used by
+  // at least one action" test is what keeps that honest.
+  //
+  // ⚠ A READ SCOPE, AND THERE IS NO `sync:write` COUNTERPART. Reconcile is
+  // deliberately closed to API keys — an operator's key must not be able to
+  // drive provider-shaped data into a league — so a write scope here would have
+  // no action to attach to and would read as delegable when it is not.
+  'sync:read',
 ] as const
 
 export type ApiScope = (typeof API_SCOPES)[number]
@@ -227,6 +238,24 @@ export const PERMISSION_MATRIX: Record<ActionKey, ActionRule> = {
     scope: 'league',
     tenant: [...OWNER_ADMIN],
     league: [...COMMISH],
+  },
+  // Reading the sync health of a league's provider bindings. Added when
+  // /api/commissioner-os/sync-health became the first request path through
+  // withTenant — a new capability gets a matrix row, which is what makes the
+  // ActionKey union turn a missing one into a compile error rather than an
+  // ungoverned read.
+  //
+  // ⚠ WIDER THAN league.sync.reconcile ON PURPOSE, and the pairing is the point.
+  // Reconcile WRITES provider data into a league and is closed to API keys
+  // entirely; this only reports whether sync is stale. TENANT_SUPPORT is exactly
+  // the role that gets asked "why is this league's data old?" and must be able
+  // to answer without holding the ability to trigger a sync.
+  'league.sync.read': {
+    write: false,
+    scope: 'league',
+    tenant: ['TENANT_OWNER', 'TENANT_ADMIN', 'TENANT_SUPPORT'],
+    league: [...COMMISH],
+    apiScope: 'sync:read',
   },
   'audit.read': {
     write: false,

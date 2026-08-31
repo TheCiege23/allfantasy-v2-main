@@ -32,6 +32,7 @@
       "files": [
         "app/commissioner-os/**/*.ts",
         "app/commissioner-os/**/*.tsx",
+        "app/api/commissioner-os/**/*.ts",
         "lib/commissioner-os/**/*.ts",
         "lib/commissioner-os/**/*.tsx",
         "__tests__/commissioner-os/eslint-fixtures/**/*.ts"
@@ -113,6 +114,7 @@
       "files": [
         "app/commissioner-os/**/*.ts",
         "app/commissioner-os/**/*.tsx",
+        "app/api/commissioner-os/**/*.ts",
         "lib/commissioner-os/**/*.ts",
         "lib/commissioner-os/**/*.tsx",
         "lib/domain/**/*.ts",
