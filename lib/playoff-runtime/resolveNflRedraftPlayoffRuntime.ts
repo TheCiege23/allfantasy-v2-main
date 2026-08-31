@@ -235,16 +235,38 @@ function toMatchupInput(round: {
   }))
 }
 
+/**
+ * Injectable fact loaders, matching `DraftRuntimeDeps` on the draft resolver.
+ *
+ * 🛑 READ ENTRY POINT ONLY. `generateNflRedraftPlayoffRuntimeBracket`,
+ * `advanceNflRedraftPlayoffRuntimeRound`, `finalizeNflRedraftPlayoffRuntimeSeason` and
+ * `overrideNflRedraftPlayoffMatchup` all PERSIST rows derived from the ruleset, and none of them
+ * gets this seam. A stale ruleset on a read is visible and short-lived; on a bracket generation it
+ * is written into the database and nothing afterwards says which settings produced it.
+ *
+ * ⚠ NOTE THE `?? fallbackRulesForSeason(season)` BELOW. This resolver already tolerates a null
+ * ruleset, so an injected loader returning null degrades exactly as the live one does — which is
+ * why the feed's "null rather than throw" contract composes here without a special case.
+ */
+export interface PlayoffRuntimeDeps {
+  loadRules: (leagueId: string) => Promise<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
+}
+
+const defaultPlayoffRuntimeDeps: PlayoffRuntimeDeps = {
+  loadRules: (leagueId) => resolveCanonicalLeagueRules(leagueId),
+}
+
 export async function resolveNflRedraftPlayoffRuntime(input: {
   seasonId?: string | null
   leagueId?: string | null
   week?: number | null
   preloadedSeason?: PlayoffSeasonForRuntime | null
-}): Promise<NflRedraftPlayoffRuntimeResolved> {
+}, deps: Partial<PlayoffRuntimeDeps> = {}): Promise<NflRedraftPlayoffRuntimeResolved> {
   const season = input.preloadedSeason ?? (await resolveSeason(input))
   if (!season) return { ok: false, reason: 'season_not_found' }
 
-  const rules = (await resolveCanonicalLeagueRules(season.leagueId)) ?? fallbackRulesForSeason(season)
+  const loadRules = deps.loadRules ?? defaultPlayoffRuntimeDeps.loadRules
+  const rules = (await loadRules(season.leagueId)) ?? fallbackRulesForSeason(season)
   const general = rules.general ?? {}
   const sport = String(general.sport ?? season.sport ?? 'NFL').toUpperCase()
   const format = 'format' in general ? String((general as { format?: unknown }).format ?? 'redraft') : 'redraft'

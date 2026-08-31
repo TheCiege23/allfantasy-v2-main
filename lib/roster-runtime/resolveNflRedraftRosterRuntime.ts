@@ -39,13 +39,31 @@ function coverage(state: CanonicalRosterRuntimeState): NflRedraftRosterRuntimeCo
   }
 }
 
+/**
+ * Injectable fact loaders, matching `DraftRuntimeDeps` on the draft resolver.
+ *
+ * ⚠ ONLY THE RULES ARE INJECTABLE. Everything else this resolver reads is roster state, which
+ * changes on every transaction and must never be served from a copy.
+ *
+ * The default is the live resolver, so behaviour is unchanged unless a caller opts in. Routes that
+ * want the cached ruleset pass `createLeagueOsLoaders()` — see lib/decision-os/league-os.
+ */
+export interface RosterRuntimeDeps {
+  loadRules: (leagueId: string) => Promise<Awaited<ReturnType<typeof resolveCanonicalLeagueRules>>>
+}
+
+const defaultRosterRuntimeDeps: RosterRuntimeDeps = {
+  loadRules: (leagueId) => resolveCanonicalLeagueRules(leagueId),
+}
+
 export async function resolveNflRedraftRosterRuntime(input: {
   leagueId: string
   rosterId?: string | null
   now?: Date
   scoringWeek?: number | null
-}): Promise<NflRedraftRosterRuntimeResolved> {
-  const rules = await resolveCanonicalLeagueRules(input.leagueId)
+}, deps: Partial<RosterRuntimeDeps> = {}): Promise<NflRedraftRosterRuntimeResolved> {
+  const loadRules = deps.loadRules ?? defaultRosterRuntimeDeps.loadRules
+  const rules = await loadRules(input.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') {
     return { ok: false, reason: 'not_nfl_redraft' }

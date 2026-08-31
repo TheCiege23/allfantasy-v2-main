@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime'
 import { canViewLeague, isElevatedCommissioner } from '@/server/services/permissionService'
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
 
 function positiveWeek(value: string | null): number | null {
   if (!value) return null
@@ -51,11 +52,16 @@ export async function GET(
     rosterId = ownRoster.id
   }
 
+  // League OS supplies the ruleset from maintained state when it is under 60s old, so several
+  // resolvers in one page load do not each pay `resolveCanonicalLeagueRules`'s seven queries.
+  // GET only — the ruleset must be live wherever it is used to persist rows.
+  const { loadRules } = createLeagueOsLoaders()
+
   const resolved = await resolveNflRedraftRosterRuntime({
     leagueId,
     rosterId,
     scoringWeek: positiveWeek(searchParams.get('week')),
-  })
+  }, { loadRules })
 
   if (!resolved.ok) {
     const status = resolved.reason === 'league_not_found' ? 404 : resolved.reason === 'not_nfl_redraft' ? 400 : 404

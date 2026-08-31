@@ -35,8 +35,18 @@ import 'server-only'
 export const OS_SCOPE_LEVELS = ['app', 'league', 'user'] as const
 export type OsScopeLevel = (typeof OS_SCOPE_LEVELS)[number]
 
-/** Which feed produced this. One row space, partitioned by domain. */
-export type OsDomain = 'lineup' | 'waiver' | 'trade' | 'draft'
+/**
+ * Which feed produced this. One row space, partitioned by domain.
+ *
+ * ⚠ `'league'` is not a decision domain like the other four — it carries the canonical league
+ * ruleset, which several decision domains and four runtime resolvers all need. It is here rather
+ * than inside one of them because `draft-os` already made the opposite choice and got it wrong:
+ * it holds the same fact under the name "draft rules", cached for the one runtime resolver that
+ * has no callers, while three that do have routes paid for it uncached. See `league-os/index.ts`.
+ *
+ * Widening this union needs no migration — `DomainOsFacts.domain` is a `VarChar(16)`.
+ */
+export type OsDomain = 'lineup' | 'waiver' | 'trade' | 'draft' | 'league'
 
 export interface OsFactEnvelope<T> {
   facts: T

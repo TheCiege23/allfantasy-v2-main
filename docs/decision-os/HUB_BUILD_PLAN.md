@@ -24,7 +24,8 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **0.5** Add name+team resolution to the coverage audit | §2.13. False alarm now impossible, not merely documented. Re-run needed for figures |
 | ✅ | **1.1** Refresh scheduler | `app/api/cron/domain-os-refresh`. **One source, not five** — see §4 Phase 1 |
 | ⬜ | **1.1b** Split waiver/trade settings derives so they are schedulable | The other four sources cannot be refreshed until this lands |
-| ⬜ | **1.2** Wire Draft OS | |
+| ✅ | **1.2a** League OS — cached ruleset on the three resolvers that have routes | 60s TTL, GET only. §4 Phase 1.2 |
+| ⬜ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | Product decision: give it a route, or retire it for `live-draft-engine` |
 | ⬜ | **1.3** Propagate `drainOutcomes()` | |
 | ⬜ | **1.4** Schedule `classifyDraftStatus` | Do not backfill |
 | ⬜ | **2.1** Define `CanonicalValue` | Unblocked for NFL. College blocked on 0.4 |
@@ -745,12 +746,48 @@ maintains is *league rules*, not draft rules; it is misplaced in `draft-os`
 rather than wrong.
 
 So 1.2 splits into two, and they are different sizes:
-- **1.2a** — give the league-rules fact its own home and an injectable
-  `loadRules` seam on the three resolvers that already have routes. Delivers
-  the cost saving 1.1 claimed, to real traffic. Small.
-- **1.2b** — decide whether `resolveNflRedraftDraftRuntime` should get a route
-  at all, or whether `live-draft-engine` is the adopted path and the canonical
-  draft resolver should be retired. **A product decision, not a wiring task.**
+
+**1.2a ✅ DONE.** `lib/decision-os/league-os/` — the ruleset as a league-level
+fact, plus a `deps.loadRules` seam on the three resolvers that have routes,
+wired at their **GET** call sites.
+
+- **60 seconds, not `draft-os`'s 6 hours.** Owner's decision, and the reasoning
+  is the point: 6h is right for a draft (rules do not change mid-event) and
+  wrong for an ordinary read path, where the realistic sequence is *"commissioner
+  changes scoring, then opens the roster screen"*. A 6h entry answers that with
+  the old rules and looks authoritative doing it — a worse bug than the query
+  cost it saves. What 60s still buys is the burst: several resolvers reaching
+  the same ruleset within one page load, each previously paying seven queries.
+- 🛑 **No cron entry, deliberately.** `/api/cron/domain-os-refresh` fires every
+  30 minutes; a 60-second fact is long expired before the next fire, so
+  scheduling it would spend the derive and warm nothing while reporting healthy
+  work. **Short-TTL facts are read-through by nature** — this is the boundary
+  between what a scheduler is for and what it is not.
+- 🛑 **Write paths deliberately excluded.** `generate*` / `advance*` /
+  `finalize*` persist rows derived from the ruleset. Stale input on a read shows
+  an old number for a minute; on a generate it writes one into the database,
+  where nothing afterwards reveals which settings produced it. Also excluded:
+  the schedule route's **second** call site, inside POST after `updateStandings`
+  — "show me the result of what I just did" is where a cached input is most
+  likely to be read as a bug.
+- The seam is proven, not asserted: a control passing `loadRules: 123` fails
+  the typecheck at the call site, so `deps` is enforced rather than decorative.
+
+⚠ **A near-miss worth recording, and it is tonight's shape for the third time.**
+The three route imports were inserted with `sed` after the last line matching
+`^import `. In two files that line was **inside a multi-line `import { … }`
+block**, which broke both files' syntax. The control then reported **the same 10
+errors as the baseline** — and 9e's formulation is exactly right: *a control
+that produces the same answer as the thing it is controlling has told you
+nothing.* The `--listFiles` count had already said so (6 occurrences where 1 was
+expected) and was read past. **Establish a zero baseline first; only then does a
+control's red mean anything.**
+
+**1.2b** — decide whether `resolveNflRedraftDraftRuntime` should get a route at
+all, or whether `live-draft-engine` is the adopted path and the canonical draft
+resolver should be retired. **A product decision, not a wiring task.** Note that
+`draft-os` now duplicates League OS's fact under a wronger name and a 6h TTL; if
+1.2b retires the draft resolver, `draft-os` goes with it.
 
 **1.3 Propagate `drainOutcomes()`.** Three request paths already call it and
 discard the result. Carry `servedFrom` / `ageMs` / `confidence` into the
