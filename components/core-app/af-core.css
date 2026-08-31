@@ -597,6 +597,14 @@ html[data-mode='af'] .af-core {
  */
 :root {
   --af-fab-inset: 18px;
+  /*
+   * ⚠ THE PHONE LIFTS THE LAUNCHER OVER THE TAB BAR, AND THAT OFFSET WAS A BARE
+   * LITERAL IN TWO FILES. `.af-cm-launch` becomes `bottom: 76px` below 720px so
+   * it clears `.af-tabbar`, which is ~57px tall. Anything that needs to reserve
+   * room beneath the launcher — `.af-content`'s bottom padding does — has to
+   * know that number, and a second copy of it drifts the moment either moves.
+   */
+  --af-fab-inset-phone: 76px;
   --af-fab-size: 48px;
   --af-fab-gap: 12px;
   /* Slot 0 is the comms launcher. Each slot above it clears the last. */

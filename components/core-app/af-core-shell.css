@@ -512,9 +512,12 @@
     flex: 0 0 auto;
   }
   .af-content {
-    /* Same clearance as above; only the side padding tightens here. The phone
-       tab bar sits below this and is accounted for separately. */
-    padding: 14px 12px calc(var(--af-fab-inset, 18px) + 56px + 16px);
+    /* Side padding only. The bottom is set by the `.af-core .af-content` rule
+       further down this file, which outranks this selector — see the note
+       there. Setting it here too would be dead code. */
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 14px;
   }
 }
 
@@ -762,9 +765,27 @@
   /*
    * The bar is fixed, so the last thing on every screen would otherwise sit
    * underneath it. Reserved here once rather than by each screen remembering.
+   *
+   * ⚠ 78px CLEARED THE BAR AND NOT THE BUTTON, WHICH SITS ABOVE IT. The comms
+   * launcher moves to `--af-fab-inset-phone` (76px) below this breakpoint
+   * precisely so it rides over the bar, so the real obstruction measured up
+   * from the viewport bottom is 76 + 56 = 132px — the bar's ~57px is the
+   * smaller of the two and reserving for it alone is not enough.
+   *
+   * Measured at 390px, scrolled to the true document end: with 78px the last
+   * element's bottom was 766 against a launcher top of 712 — `underFab: true`,
+   * 54px of overlap — while the bar at 787 was clear. Reserving to the
+   * launcher's top clears both at once.
+   *
+   * ⚠ AND THIS SELECTOR IS THE ONE THAT WINS. `.af-core .af-content` is (0,2,0)
+   * against the bare `.af-content` earlier in this file; a bottom padding set
+   * there is dead code, which is exactly what a first attempt at this fix shipped
+   * and what measuring the COMPUTED value caught.
    */
   .af-core .af-content {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(
+      var(--af-fab-inset-phone, 76px) + 56px + 16px + env(safe-area-inset-bottom, 0px)
+    );
   }
 
   /* Headings would be five more rows in a horizontal strip. The strip is
