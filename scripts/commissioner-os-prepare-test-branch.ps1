@@ -97,6 +97,17 @@ if ($BranchHost -notmatch '\.neon\.tech$') {
 #
 # LOCAL-SETUP.md already says direct-for-migrations, pooled-for-the-app. This
 # makes it enforced rather than documented.
+# A Neon branch holds several databases and the Connect dialog remembers the last
+# one selected. `mydb_shadow` is Prisma's shadow database - empty by design - and
+# `postgres` is the cluster default. Both parse fine and connect fine; they simply
+# contain none of the schema, which surfaces much later as
+# `relation "_prisma_migrations" does not exist`. Catch it here, by name, before
+# a connection is even opened.
+$UrlDb = ($BranchUrl -replace '.*/', '') -replace '\?.*', ''
+if ($UrlDb -in @('mydb_shadow', 'postgres', 'template1')) {
+  Write-Error "REFUSING: the connection string names database '$UrlDb', which holds none of the application schema. mydb_shadow is Prisma's shadow database and postgres is the cluster default. Re-copy the string with the application database selected (normally 'neondb') in the Neon Connect dialog's Database dropdown."
+}
+
 if ($BranchHost -match '-pooler\.') {
   $direct = $BranchHost -replace '-pooler\.', '.'
   Write-Error "REFUSING: '$BranchHost' is the POOLED endpoint. Admin statements (ALTER ROLE) do not work through Neon's pooler and fail with a misleading 'permission denied to alter role'. Use the direct host instead: $direct  (In the Neon Connect dialog, turn OFF 'Connection pooling'.)"
@@ -182,15 +193,34 @@ DO $fingerprint$
 DECLARE
   n_roles int;
   n_migrations int;
+  dbs text;
 BEGIN
+  -- ⚠ CHECK THE DATABASE BEFORE QUERYING ITS TABLES. A Neon branch holds several
+  -- databases (here: neondb, mydb_shadow, postgres) and the Connect dialog has a
+  -- database selector that remembers its last value. Point at the wrong one and
+  -- the fingerprint query itself explodes:
+  --
+  --   ERROR:  relation "_prisma_migrations" does not exist
+  --
+  -- which is true, unhelpful, and says nothing about the database being wrong.
+  -- Probe with to_regclass, which returns NULL instead of raising, so the script
+  -- can explain rather than crash.
+  IF to_regclass('public._prisma_migrations') IS NULL THEN
+    SELECT string_agg(datname, ', ' ORDER BY datname) INTO dbs
+      FROM pg_database WHERE NOT datistemplate;
+    RAISE EXCEPTION
+      'Connected to database "%" on this branch, which has no _prisma_migrations table - so it is almost certainly the WRONG DATABASE, not the wrong branch. Databases here: %. The application database is the one carrying the schema (normally "neondb"); mydb_shadow is Prisma''s shadow database and is empty by design. Re-copy the connection string with the right database selected.',
+      current_database(), dbs;
+  END IF;
+
   SELECT count(*) INTO n_roles      FROM pg_roles WHERE rolname LIKE 'commish\_%';
   SELECT count(*) INTO n_migrations FROM _prisma_migrations
    WHERE migration_name LIKE '%commissioner_os%' AND finished_at IS NOT NULL;
 
   IF n_roles <> 4 OR n_migrations < 7 THEN
     RAISE EXCEPTION
-      'This is not a prepared Commissioner OS branch: % commish_* roles (need 4), % applied Commissioner OS migrations (need >= 7). You have very likely copied the connection string for the WRONG BRANCH - the Neon Connect dialog defaults to the last branch you looked at. Re-copy it from the branch page itself.',
-      n_roles, n_migrations;
+      'Database "%" is not a prepared Commissioner OS branch: % commish_* roles (need 4), % applied Commissioner OS migrations (need >= 7). Most likely the connection string is for the WRONG BRANCH - the Neon Connect dialog defaults to the last branch you looked at. Re-copy it from the branch page itself.',
+      current_database(), n_roles, n_migrations;
   END IF;
 END
 $fingerprint$;
