@@ -19,13 +19,21 @@ import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/consta
  * column default in the migration says the same, and the UI refuses to present
  * them as on-by-default. Three places, deliberately.
  *
- * ⚠ ONLY `league_chat` IS WIRED TODAY. `DiscordLeagueChannel` currently holds one
- * row per league and has no `surface` column — the migration that adds it
- * (20260823120000_discord_bridge_surfaces) is authored but NOT APPLIED, because
- * the only database .env.local points at is production. Until it is applied, the
- * other three surfaces report `mapped: false, available: false` and the screen
- * says so plainly rather than rendering a control that would silently do
- * nothing.
+ * ⚠ ONLY `league_chat` IS WIRED TODAY, AND THE REASON CHANGED ON 2026-08-30.
+ * It used to be the schema: `surface` did not exist. It does now —
+ * 20260823120000_discord_bridge_surfaces was applied to production that evening,
+ * and `surface` and `commissionerOnly` are live columns.
+ *
+ * The gate below stays anyway, because the BLOCKER MOVED rather than cleared:
+ * `lib/discord/sync-outbound.ts` has no notion of a surface. It relays to the
+ * one row it finds for a league. So mapping a channel to trades or the draft
+ * room would write a row nothing ever posts to — a control that silently does
+ * nothing, which is precisely what this module refuses to render.
+ *
+ * 🛑 SO DO NOT DELETE THE GATE ON THE STRENGTH OF THE COLUMN EXISTING. Make the
+ * relay surface-aware first, then remove the gate and `surfacesPending`
+ * together. Until then the other three report `mapped: false, available: false`
+ * and the screen says why.
  */
 
 export type BridgeDirection = 'both' | 'post-only' | 'off'
@@ -138,7 +146,7 @@ export type DiscordBridgeData = {
   /** The bot-install URL, with exactly the permissions the bridge needs. */
   installUrl: string | null
   /**
-   * True while the surface migration is unapplied. The screen prints this as a
+   * True while the outbound relay is not surface-aware. The screen prints this as a
    * plain sentence rather than hiding three dead controls.
    */
   surfacesPending: boolean
@@ -212,9 +220,11 @@ export async function getDiscordBridge(
 
   const mappings: BridgeMapping[] = BRIDGE_SURFACES.map((surface) => {
     /*
-     * Only league chat can be mapped until the `surface` column exists. The
-     * other three are reported as unavailable — a different thing from unmapped,
-     * and the screen says which.
+     * Only league chat can be mapped until the outbound relay knows about
+     * surfaces — see the header. The `surface` column exists as of 2026-08-30;
+     * it is `sync-outbound.ts` that does not read it yet. The other three are
+     * reported as unavailable — a different thing from unmapped, and the screen
+     * says which.
      */
     if (surface.id !== 'league_chat') {
       return {
