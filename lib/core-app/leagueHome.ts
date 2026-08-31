@@ -8,6 +8,7 @@ import {
   type TimelinePhase,
 } from './seasonTimeline'
 import { resolveCurrentWeekForLeague } from './currentWeek'
+import { resolvePairedHalf, type PairedHalf } from './leaguePairing'
 import { getLeagueActivity } from './leagueActivity'
 import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
 import type { ActivityPlayer } from './leagueActivity'
@@ -117,6 +118,16 @@ export type LeagueStanding = {
 export type SeasonStage = TimelinePhase
 
 export type LeagueHomeData = {
+  /**
+   * The other league in this one's franchise — the C2C half of an NFL league, or
+   * the NFL half of a C2C one.
+   *
+   * ⚠ NULL MEANS "NOT PAIRED", WHICH IS NOT THE SAME AS "CANNOT BE PAIRED", and
+   * the screen renders the two differently: an unpaired league gets an offer to
+   * pair, a paired one gets its other half. Collapsing them would either hide
+   * the feature from everyone or nag the people already using it.
+   */
+  pairing: PairedHalf | null
   league: {
     id: string
     name: string
@@ -660,9 +671,17 @@ export async function getLeagueHomeData(
    * not true. Reusing the SAME resolvers the other screens use, rather than a
    * second query, so two surfaces cannot disagree about one league's matchup.
    */
-  const [matchupData, rivalData] = await Promise.all([
+  const [matchupData, rivalData, pairing] = await Promise.all([
     preSeason ? Promise.resolve(null) : getMatchupData(league.id, userId).catch(() => null),
     preSeason ? Promise.resolve(null) : getRivalRecords(userId, [league.id]).catch(() => null),
+    /*
+     * ⚠ NOT GATED ON `preSeason`, UNLIKE THE TWO ABOVE. A franchise pairing is a
+     * fact about the leagues, not about the week — and a C2C pair is at its most
+     * useful precisely before the season, when the college half is drafting and
+     * the pro half has nothing to show. Gating it would hide the feature during
+     * the only window this user has actually been looking at it.
+     */
+    resolvePairedHalf(league.id, userId).catch(() => null),
   ])
 
   const resolvedMatchup: LeagueHomeData['matchup'] = preSeason
@@ -726,6 +745,7 @@ export async function getLeagueHomeData(
   return {
     stage,
     preSeason,
+    pairing,
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),

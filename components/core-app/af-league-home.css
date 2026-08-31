@@ -1109,3 +1109,89 @@
 .af-core .af-lh-cardlink {
   min-height: 44px;
 }
+
+/* ── The other half of the franchise ──────────────────────────────────────
+ *
+ * ⚠ APPENDED AT TOP LEVEL DELIBERATELY, AND VERIFIED RATHER THAN ASSUMED.
+ * This file's last `@media (max-width: 720px)` opens at line 884; it closes at
+ * 888, and the whole-file brace depth is 0 at EOF — so these rules are NOT
+ * inside a query. Dropping a block inside an existing `@media` is silent: the
+ * file stays valid CSS, brace balance stays 0, no lint sees it, and every rule
+ * below the insertion point quietly narrows to that breakpoint. Measured before
+ * writing, per the af-matchup.css incident.
+ */
+.af-lh-paired {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  border-left: 3px solid var(--accent, #38bdf8);
+}
+
+.af-lh-paired--offer {
+  border-left-color: var(--line, rgba(255, 255, 255, 0.14));
+}
+
+.af-lh-paired-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.af-lh-paired-kicker {
+  color: var(--muted, rgba(255, 255, 255, 0.55));
+}
+
+.af-lh-paired-role {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, rgba(255, 255, 255, 0.55));
+}
+
+/* Grows so the CTA keeps its own width, and wraps onto its own row on a phone. */
+.af-lh-paired-body {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.af-lh-paired-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.af-lh-paired-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.af-lh-paired-link:hover {
+  text-decoration: underline;
+}
+
+.af-lh-paired-meta,
+.af-lh-paired-text {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted, rgba(255, 255, 255, 0.6));
+}
+
+.af-lh-paired-platform {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+/* 44px so the CTA is a real tap target, which the agent tester checks for. */
+.af-lh-paired-cta {
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}

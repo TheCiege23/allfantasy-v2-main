@@ -1,0 +1,196 @@
+/*
+ * Connect-two-leagues flow.
+ *
+ * ⚠ A NEW FILE RATHER THAN AN APPEND, so there is no chance of landing inside
+ * one of af-league-home.css's seven `@media` blocks. Inserting a rule into an
+ * existing query is silent — valid CSS, brace balance unchanged, no lint sees
+ * it, and every rule below quietly narrows to that breakpoint.
+ *
+ * ⚠ Every colour is a token with a literal fallback. This route renders OUTSIDE
+ * AfCoreShell, and af-core.css is imported by the client component for exactly
+ * that reason — but a fallback means a missed import degrades to a readable page
+ * rather than transparent cards with 0px borders, which is how that failure
+ * presents and why it is hard to spot.
+ */
+
+.af-cl {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.af-cl-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.af-cl-lede {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--muted, rgba(255, 255, 255, 0.62));
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.af-cl-note {
+  color: var(--muted, rgba(255, 255, 255, 0.62));
+  font-size: 14px;
+}
+
+.af-cl-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--danger, #f87171);
+  color: var(--danger, #f87171);
+  font-size: 14px;
+}
+
+.af-cl-side,
+.af-cl-empty {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-cl-empty h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.af-cl-empty p {
+  margin: 0;
+  color: var(--muted, rgba(255, 255, 255, 0.62));
+  font-size: 14px;
+}
+
+/* 44px min so each row is a real tap target, which the agent tester checks. */
+.af-cl-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.af-cl-option--on {
+  border-color: var(--af-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+/*
+ * 🛑 THE SELECTED STATE HAS TO BE VISIBLE OR THE PRESELECTION IS NOT A FEATURE.
+ * A native radio rendered as an empty circle here whether checked or not, so the
+ * league this screen had already chosen looked unchosen and got clicked again.
+ *
+ * The input stays — it is what the keyboard and a screen reader drive, and the
+ * shared `name` is what makes each side a single choice — but it is taken out of
+ * the paint and a real box with a tick is drawn beside it. `opacity`, not
+ * `display: none`, because a hidden input is not focusable.
+ */
+.af-cl-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.af-cl-box {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 2px solid var(--line, rgba(255, 255, 255, 0.28));
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.af-cl-check {
+  width: 14px;
+  height: 14px;
+  color: #fff;
+  opacity: 0;
+}
+
+.af-cl-option--on .af-cl-box {
+  background: var(--af-blue, #3b82f6);
+  border-color: var(--af-blue, #3b82f6);
+}
+
+.af-cl-option--on .af-cl-check {
+  opacity: 1;
+}
+
+/* Keyboard focus has to land somewhere once the input itself is invisible. */
+.af-cl-radio:focus-visible + .af-cl-box {
+  outline: 2px solid var(--af-blue, #3b82f6);
+  outline-offset: 2px;
+}
+
+.af-cl-from {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--af-blue, #3b82f6);
+  border: 1px solid var(--af-blue, #3b82f6);
+  white-space: nowrap;
+}
+
+.af-cl-option-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-cl-option-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.af-cl-option-meta {
+  font-size: 12px;
+  color: var(--muted, rgba(255, 255, 255, 0.58));
+}
+
+.af-cl-namelabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-cl-name {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+}
+
+.af-cl-submit {
+  align-self: flex-start;
+  min-height: 44px;
+}
+
+.af-cl-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
