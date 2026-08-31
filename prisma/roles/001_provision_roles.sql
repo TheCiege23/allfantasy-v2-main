@@ -153,6 +153,36 @@ GRANT commish_migrate TO CURRENT_USER;
 
 GRANT USAGE ON SCHEMA public TO commish_app, commish_platform, commish_purge;
 
+-- 🛑 AND `commish_migrate` NEEDS **CREATE**, NOT JUST USAGE — THIS LINE WAS
+-- MISSING AND IT MADE 002 IMPOSSIBLE.
+--
+-- The role that OWNS every table was the one role granted nothing on the schema.
+-- Postgres requires a prospective owner to hold CREATE on the containing schema,
+-- so `REASSIGN OWNED BY neondb_owner TO commish_migrate` — the entire point of
+-- 002_transfer_ownership.sql — fails with a message that names neither the role
+-- nor the privilege that is actually missing:
+--
+--     ERROR: permission denied for schema public
+--
+-- Measured on a Neon branch, 2026-08-31, after 001 had run "successfully":
+--
+--     has_schema_privilege('commish_migrate','public','USAGE')  → false
+--     has_schema_privilege('commish_migrate','public','CREATE') → false
+--     has_schema_privilege('commish_app','public','USAGE')      → true
+--
+-- ⚠ THE FAILURE IS SAFE BUT DEEPLY MISLEADING. The transaction aborts and
+-- nothing moves, so there is no half-owned schema — but the error points at
+-- `public` and at the CONNECTED role, and the connected role (neondb_owner) has
+-- both privileges. Every obvious next step is a dead end: checking the connected
+-- user, checking schema ownership, re-running as a different superuser. The role
+-- that lacks the privilege is the one named in the TO clause, and nothing in the
+-- message says so.
+--
+-- CREATE as well as USAGE, deliberately: USAGE alone lets a role reference
+-- objects in the schema, but creating and owning them requires CREATE. Granting
+-- only USAGE here reproduces the same failure with an even smaller diff.
+GRANT USAGE, CREATE ON SCHEMA public TO commish_migrate;
+
 -- The app: read and write, never delete. DELETE belongs to commish_purge alone.
 ALTER DEFAULT PRIVILEGES FOR ROLE commish_migrate IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE ON TABLES TO commish_app;
