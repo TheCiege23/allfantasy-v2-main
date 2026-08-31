@@ -64,7 +64,22 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
     fetch(`/api/idp/players?leagueId=${encodeURIComponent(leagueId)}&view=trade-board`)
       .then(async (r) => {
         if (!r.ok) throw new Error(r.status === 403 ? 'not-a-member' : 'request-failed')
-        return (await r.json()) as LeagueDefenderBoard
+        const body = (await r.json()) as unknown
+        /*
+         * ⚠ VALIDATE THE SHAPE, DO NOT JUST ASSERT IT. This was `as
+         * LeagueDefenderBoard` on an unread body, so anything shaped otherwise -
+         * a proxy error page answering 200, a partial deploy, a route returning
+         * the hub payload - reached `data.rows.filter` inside a useMemo and threw
+         * where React cannot contain it. That unmounted the ENTIRE hub, breaking
+         * the isolation promised at the top of this file.
+         *
+         * `rows` is the right thing to test: every board carries it, and a
+         * blocked one carries `[]` rather than omitting it, so this admits every
+         * real response and rejects every shape that would crash the memo.
+         */
+        const board = body as LeagueDefenderBoard
+        if (!board || !Array.isArray(board.rows)) throw new Error('request-failed')
+        return board
       })
       .then((p) => live && setData(p))
       .catch((e: Error) => live && setError(e.message))
@@ -74,7 +89,20 @@ export function TradeBoardSection({ leagueId }: { leagueId: string }) {
   }, [leagueId])
 
   const rows = useMemo(() => {
-    if (!data) return []
+    /*
+     * ⚠ THIS GUARD MIRRORS THE `data.state !== 'ok'` RETURN BELOW, AND HAS TO.
+     * A hook runs before every early return in the render, so guarding only on
+     * `!data` still reached `data.rows` on a board that carries no rows - a
+     * blocked board has a state and nothing to list. That threw
+     * "Cannot read properties of undefined (reading 'filter')" out of a useMemo,
+     * which React cannot contain, so it unmounted the WHOLE hub.
+     *
+     * 🛑 THAT BREAKS THE INVARIANT AT THE TOP OF THIS FILE - "a failure here
+     * leaves the hub above it intact" - and it was false for as long as this memo
+     * dereferenced a shape it had not checked. Keep the two conditions in step:
+     * whatever the render treats as unrenderable, this must treat as no rows.
+     */
+    if (!data || data.state !== 'ok') return []
     const q = query.trim().toLowerCase()
     return data.rows.filter((r) => {
       if (hideMine && r.ownedBy.isMine) return false
