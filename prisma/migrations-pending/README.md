@@ -36,19 +36,48 @@ never has to fire.
 Commissioner OS T-101 — tenancy tables, `League.tenantId` three-step backfill,
 partial uniques, GIN index. See `docs/commissioner-os/SCOPE.md`.
 
-**Blocked on T-001.** Its own guard raises unless the four `commish_*` roles
-exist, and as of 2026-08-31 none of them do — measured, not assumed:
-`npm run test:commissioner-os` reports six of eight assertions failing, every
-one because the roles are absent.
+✅ **APPLIED TO PRODUCTION 2026-08-31, on the owner's explicit instruction.**
+Rehearsed first on a Neon branch cloned from production at HEAD, then applied.
+Verified by effect on production rather than by the command's exit status:
+116/116 league rows backfilled to the bootstrap tenant, 0 NULL, column NOT NULL,
+6 tenancy tables, 4 `leagues_tenantId*` indexes, the FK, and the GIN index.
 
-To apply it, in order:
+T-001 was landed first, as the guard requires, with the four roles created
+**`NOLOGIN`** — the owner's choice. Nothing connects as them yet, so no password
+exists to leak, and every T-001 assertion still holds (the suite asserts
+NOSUPERUSER / NOBYPASSRLS / member-of-nothing / owns-nothing, never LOGIN —
+checked before relying on it). Verified on production: all four NOLOGIN,
+`commish_app` a member of `NONE`, `commish_*` owning 0 tables, and the default
+ACLs read back from `pg_default_acl` as `commish_app=arw`, `commish_platform=r`,
+`commish_purge=rd`, sequences `commish_app=rU`.
 
-```
-1. psql "$DIRECT_URL" … -f prisma/roles/001_provision_roles.sql
-2. npm run test:commissioner-os          # must be green first
-3. git mv prisma/migrations-pending/20260831120000_commissioner_os_t101 prisma/migrations/
-4. npx prisma migrate deploy             # against a Neon branch, not production
-```
+⚠ `ALTER ROLE … LOGIN PASSWORD …` is the one-line follow-up when Phase 3 moves
+the app behind `commish_app`. Until then T-102's RLS isolation suite cannot
+connect as these roles, which is the accepted cost of holding no credentials.
 
-⚠ Step 3 is the point of no return for everyone sharing this checkout, not just
-for you. Do it as close to step 4 as possible.
+⚠ **It is recorded in `_prisma_migrations` by hand, not by Prisma**, because
+`psql` and Neon connection-string retrieval were both unavailable to the session
+that applied it, so the SQL went through the Neon MCP. The row carries the real
+`sha256` of `migration.sql` (`63cf8df2…`), so a later `migrate deploy` matches
+and skips rather than re-running. **If you edit that file, the checksum no longer
+matches and Prisma will complain about a modified applied migration.**
+
+⚠ **The directory is still HERE rather than in `prisma/migrations/`.** That is
+harmless — the record simply has no local directory, which is already true of
+eight other rows — and it keeps the migration out of every peer's deploy path.
+Moving it is safe whenever convenient, since it is already recorded.
+
+### `20260831200000_commissioner_os_t101b_drop_tenant_default`
+
+🛑 **PARKED ON PURPOSE. DO NOT APPLY YET.**
+
+T-101 sets `leagues.tenantId DEFAULT 'allfantasy'` and this drops it. The default
+is a deployment-window safety net for the app that is **currently serving**,
+whose Prisma client predates the column and whose INSERTs therefore do not
+mention it — without the default those hit a NOT NULL violation the minute T-101
+lands, taking out league creation and every import path.
+
+Apply this only once the tenant-aware build is **serving traffic** — merged is
+not the same as serving. And note it does not weaken the invariant meanwhile:
+`schema.prisma` still carries no `@default`, so the generated client makes
+`tenantId` required and application code cannot omit it.

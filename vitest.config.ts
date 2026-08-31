@@ -12,7 +12,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: [path.resolve(repoRoot, 'vitest.setup.ts')],
+    // 🛑 db-guard FIRST, and it must stay first. It pins DATABASE_URL/DIRECT_URL
+    // shut before anything can import @prisma/client, which loads .env — i.e.
+    // production — into process.env. See vitest.setup.db-guard.ts.
+    setupFiles: [
+      path.resolve(repoRoot, 'vitest.setup.db-guard.ts'),
+      path.resolve(repoRoot, 'vitest.setup.ts'),
+    ],
     include: ['__tests__/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}', 'lib/**/__tests__/**/*.test.{ts,tsx}'],
     testTimeout: 30000,
   },

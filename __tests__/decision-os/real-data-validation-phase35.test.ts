@@ -14,9 +14,15 @@ import { describe, expect, it } from 'vitest'
 // load time, which turned this deliberately-DB-gated audit suite into a hard
 // failure in DB-less environments. Skip the whole suite cleanly instead and
 // lazy-import the DB-touching modules inside the tests.
-const HAS_DB = Boolean(
-  process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL,
-)
+// ⚠ PRESENCE OF `DATABASE_URL` IS NOT EVIDENCE A DATABASE WAS CHOSEN, and this
+// gate used to test exactly that. Importing @prisma/client loads `.env` into
+// process.env, so the variable is ALWAYS set here — which made HAS_DB
+// permanently true and pointed this "real execution, no mocks" suite at the
+// PRODUCTION database on every `npm test`. It passed, which is why nobody
+// noticed. See vitest.setup.db-guard.ts.
+const HAS_DB =
+  process.env.VITEST_NO_DATABASE !== '1' &&
+  Boolean(process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL)
 const describeDb = HAS_DB ? describe : describe.skip
 
 const REAL_SLEEPER_LEAGUE_ID = 'a6f74157-b569-4dfd-86a6-2231a83d8e0f'

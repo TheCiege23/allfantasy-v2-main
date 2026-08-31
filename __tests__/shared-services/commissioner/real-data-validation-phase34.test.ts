@@ -20,7 +20,14 @@ const REAL_ACTIVE_LEAGUE_ID = '4a1853d7-f272-4a01-88e8-0230d224f32f'
 // A real Sleeper-imported league (platform: 'sleeper'), confirmed real via Phase 30-33's audits.
 const REAL_SLEEPER_LEAGUE_ID = 'a6f74157-b569-4dfd-86a6-2231a83d8e0f'
 
-describe('Commissioner OS — real .env.test execution (Phase 34, Track B, audit only)', () => {
+// ⚠ GATED ON A DELIBERATELY-NAMED DATABASE, NOT ON `DATABASE_URL` BEING SET.
+// Importing @prisma/client loads `.env`, so DATABASE_URL is always populated by
+// the time this runs — which meant this ungated "real execution, no mocks"
+// suite ran against the PRODUCTION database on every `npm test`, and passed.
+// vitest.setup.db-guard.ts sets VITEST_NO_DATABASE when nobody named a target.
+const NO_DB = process.env.VITEST_NO_DATABASE === '1'
+
+describe.skipIf(NO_DB)('Commissioner OS — real .env.test execution (Phase 34, Track B, audit only)', () => {
   it('evaluateCommissionerShadow executes against a real, active manual-platform league without crashing', async () => {
     const league = await prisma.league.findUnique({ where: { id: REAL_ACTIVE_LEAGUE_ID }, select: { userId: true } })
     if (!league) {
