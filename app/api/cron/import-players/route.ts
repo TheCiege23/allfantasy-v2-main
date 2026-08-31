@@ -158,6 +158,10 @@ async function handle(req: NextRequest) {
             updated: 0,
             unmatched: 0,
             ambiguous: 0,
+            /* Kept in step with the success shape on purpose — a failure path
+               that reports fewer fields makes the two runs look like different
+               jobs in the cron response. */
+            teamEntries: 0,
             error: err instanceof Error ? err.message : String(err),
           }))
 

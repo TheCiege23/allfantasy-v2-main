@@ -52,6 +52,14 @@ export type DevyAdpIngestResult = {
   updated: number
   /** Priced players with no DevyPlayer at that name+school. */
   unmatched: number
+  /**
+   * Team defence / special-teams rows, which are not people.
+   *
+   * ⚠ COUNTED SEPARATELY RATHER THAN FOLDED INTO `unmatched`, because "we hold
+   * no devy row for this player" and "this was never a player" are different
+   * facts and only the first one is a coverage problem.
+   */
+  teamEntries: number
   /** Skipped because the name+school matched more than one row — never guessed. */
   ambiguous: number
   /**
@@ -88,6 +96,35 @@ export function normalizePlayerName(raw: string): string {
     .trim()
 }
 
+/**
+ * Is this Fantrax row a TEAM rather than a person?
+ *
+ * 🛑 BOTH FEEDS CARRY TEAM ROWS AND BOTH INGESTIONS WERE COUNTING THEM AS
+ * MISSES. Fantrax lists team defence / special-teams units alongside players, so
+ * "Defense/Special Teams" and "Ark" were being name-matched against a registry of
+ * humans, failing, and landing in `unmatched` — which made coverage look worse
+ * than it is and spent one database round trip per row learning nothing.
+ *
+ * Measured on production 2026-08-31:
+ *   getPlayerIds?sport=CFB   690 of 16,904   5 distinct names
+ *                            (Defense/Special Teams, Special Teams, Team,
+ *                             Team Offense, Team Defense)
+ *   getAdp?sport=NCAAF        80 of    997   school abbreviations (Ark, Army…)
+ *
+ * ⚠ THE TEST IS THE COMMA, AND THAT IS A MEASUREMENT RATHER THAN A GUESS.
+ * Fantrax writes a person as "Last, First". On the CFB map the three candidate
+ * signals agree EXACTLY — no-comma, no-school, and both — at 690 rows each, so
+ * not one real player is missing a school and not one team row has a comma.
+ *
+ * ⚠ A MONONYM WOULD BE EXCLUDED BY THIS RULE. None exists in either feed today
+ * (checked, not assumed), and the trade is deliberate: excluding a real player
+ * leaves a visible gap, where admitting a team row risks attaching a defence's
+ * ADP to a person.
+ */
+export function isTeamEntry(entry: { name?: unknown }): boolean {
+  return !String(entry?.name ?? '').includes(',')
+}
+
 /** School strings differ in case and punctuation between the two sources. */
 export function normalizeSchool(raw: string): string {
   return String(raw ?? '')
@@ -116,7 +153,14 @@ export function attachSchools(
 export async function ingestFantraxDevyAdp(
   opts?: { force?: boolean },
 ): Promise<DevyAdpIngestResult> {
-  const empty: DevyAdpIngestResult = { priced: 0, withSchool: 0, updated: 0, unmatched: 0, ambiguous: 0 }
+  const empty: DevyAdpIngestResult = {
+    priced: 0,
+    withSchool: 0,
+    updated: 0,
+    unmatched: 0,
+    ambiguous: 0,
+    teamEntries: 0,
+  }
 
   if (opts?.force !== true) {
     const marker = await prisma.sportsDataCache
@@ -149,9 +193,16 @@ export async function ingestFantraxDevyAdp(
     updated: 0,
     unmatched: 0,
     ambiguous: 0,
+    teamEntries: 0,
   }
 
   for (const entry of withSchools) {
+    /* A team defence is not a player and can never match one. Counted on its
+       own so it never reads as a coverage gap. */
+    if (isTeamEntry(entry)) {
+      result.teamEntries += 1
+      continue
+    }
     if (!entry.school) {
       result.unmatched += 1
       continue

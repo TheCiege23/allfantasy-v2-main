@@ -20,7 +20,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFantraxPlayerIds, type FantraxPlayerRef } from '@/lib/league-import/fantrax/fantraxApi'
-import { normalizePlayerName, normalizeSchool } from './ingestFantraxDevyAdp'
+import { isTeamEntry, normalizePlayerName, normalizeSchool } from './ingestFantraxDevyAdp'
 
 export type FantraxIdentityIngestResult = {
   /** Ids in Fantrax's CFB map. */
@@ -28,6 +28,14 @@ export type FantraxIdentityIngestResult = {
   linked: number
   /** No identity row at that name + school. */
   unmatched: number
+  /**
+   * Team defence / special-teams rows, which are not people.
+   *
+   * ⚠ NOT FOLDED INTO `unmatched`. 690 of the 16,904 ids Fantrax publishes are
+   * team units, so counting them as misses understated coverage by four points
+   * and spent 690 database round trips per run failing to find a person.
+   */
+  teamEntries: number
   /** Name + school matched more than one identity row — never guessed. */
   ambiguous: number
   /** Already carried this exact id; no write needed. */
@@ -108,6 +116,7 @@ export async function ingestFantraxPlayerIdentities(
     unmatched: 0,
     ambiguous: 0,
     unchanged: 0,
+    teamEntries: 0,
   }
 
   if (opts?.force !== true) {
@@ -132,6 +141,12 @@ export async function ingestFantraxPlayerIdentities(
   const result: FantraxIdentityIngestResult = { ...empty, provided: refs.length }
 
   for (const ref of refs) {
+    /* Skipped BEFORE the surname query, which is where the saving is: a team
+       unit can never match a person, so the round trip was pure waste. */
+    if (isTeamEntry(ref)) {
+      result.teamEntries += 1
+      continue
+    }
     const fantraxId = String(ref.fantraxId ?? '').trim()
     const name = String(ref.name ?? '').trim()
     if (!fantraxId || !name) {
