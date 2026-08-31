@@ -1,0 +1,41 @@
+-- Fantrax's player id on the canonical identity registry.
+--
+-- WHY THIS COLUMN EXISTS
+-- `PlayerIdentityMap` is what `AFProjectionSnapshot.playerId` resolves to — verified
+-- 50/50 on a sample of NFL projection ids, and the same holds for every sport. It
+-- carries one nullable id per provider (sleeperId, espnId, mflId, fleaflickerId,
+-- clearSportsId, cfbdId), and it had none for Fantrax.
+--
+-- A Fantrax roster stores nothing but Fantrax ids. Without this column those ids
+-- meet nothing, so an imported Fantrax league cannot reach a headshot, a
+-- projection or a valuation. The schema comment on `cfbdId` already describes
+-- this problem from the CFBD side: "the ONLY bridge from an NCAAF projection to a
+-- roster ... without this column the two id spaces cannot meet."
+--
+-- ⚠ AND THE ORDINARY CROSSWALK CANNOT SERVE A COLLEGE LEAGUE AT ALL. Measured on
+-- production 2026-08-31: 0 of 73,883 NCAAF `SportsPlayer` rows carry a
+-- `sleeperId`, because those rows are Rolling-Insights / TheSportsDB keyed. So
+-- the sleeperId path used for Sleeper and ESPN leagues is structurally unavailable
+-- here — this is not a coverage gap that better matching would close.
+--
+-- NULLABLE, AND PERMANENTLY SO FOR MOST ROWS
+-- Fantrax's CFB map holds ~16,886 ids against 20,027 NCAAF identity rows, and the
+-- registry also holds NFL, NBA, NHL, MLB, NCAAB and SOCCER players that Fantrax's
+-- college map will never name. NULL here means "no Fantrax id known", which is the
+-- ordinary state rather than missing data.
+--
+-- DELIBERATELY NOT UNIQUE
+-- The ingestion matches on name + school and SKIPS anything ambiguous rather than
+-- guessing. A unique constraint would turn a duplicate match into a write error
+-- that fails the whole run, instead of the counted skip the ingestion records.
+--
+-- INDEXED because both the ingestion and the roster crosswalk look rows up BY this
+-- column, exactly as espnId and cfbdId are.
+--
+-- ⚠ ADDITIVE AND REVERSIBLE. A nullable column plus an index; no backfill, no
+-- constraint that can fail on existing rows, and nothing reads it until the
+-- ingestion runs.
+
+ALTER TABLE "PlayerIdentityMap" ADD COLUMN "fantraxId" TEXT;
+
+CREATE INDEX "PlayerIdentityMap_fantraxId_idx" ON "PlayerIdentityMap"("fantraxId");
