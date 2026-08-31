@@ -34,8 +34,20 @@ import { readFileSync } from 'node:fs'
 // secrets. They are passed explicitly because `.vercel/` is gitignored and does
 // NOT exist in the ~70 worktrees this repo runs from; relying on the project
 // link would silently disable the guard everywhere except the primary checkout.
-const PROJECT = process.env.AF_VERCEL_PROJECT || 'allfantasy-v2-main-a6wc'
-const SCOPE = process.env.AF_VERCEL_SCOPE || 'cafeconchimmy-1100s-projects'
+// 🛑 THESE WERE BOTH WRONG AND THE GUARD SAID NOTHING FOR TEN DAYS.
+// `allfantasy-v2-main-a6wc` / `cafeconchimmy-1100s-projects` do not exist —
+// `vercel ls` answers "The specified scope does not exist", which is a non-zero
+// exit, which this file's fail-open policy correctly turns into allow(). So every
+// push sailed through a check that had never once queried a real project. The
+// values below are read off `vercel project ls`, and both were verified to return
+// a deployment list before being committed.
+//
+// ⚠ A FAIL-OPEN GUARD CANNOT REPORT ITS OWN MISCONFIGURATION. That is the whole
+// hazard: a typo here is indistinguishable from "no build is running", forever.
+// If you change these, run the command by hand first and confirm it lists
+// deployments — a guard that has never once refused is not evidence of anything.
+const PROJECT = process.env.AF_VERCEL_PROJECT || 'allfantasy-v2-main'
+const SCOPE = process.env.AF_VERCEL_SCOPE || 'cafeconchimmy'
 
 // States that mean a build is burning CPU minutes right now.
 const IN_FLIGHT = new Set(['BUILDING', 'QUEUED', 'INITIALIZING'])
