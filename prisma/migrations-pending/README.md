@@ -29,6 +29,47 @@ writes a `finished_at IS NULL` row into `_prisma_migrations`, and every later
 A well-guarded refusal still blocks everyone. Parking it here means the guard
 never has to fire.
 
+## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
+
+Only `t101b` below is still parked. Everything else in this directory has been
+applied and recorded in `_prisma_migrations` with the real `sha256` of its
+`migration.sql`, so a later `migrate deploy` matches and skips rather than
+re-running:
+
+| migration | |
+|---|---|
+| `…_t101` | tenancy tables, League.tenantId backfill |
+| `…_t007_audit` | AuditEvent + append-only trigger |
+| `…_t008_constraints` | PlatformGrant partial unique |
+| `…_t102_rls` | RLS policies + `app.*` bootstrap functions |
+| `…_t106_suspension` | `app.tenant_is_writable` + policy tightening |
+| `…_t112_key_role` | TenantApiKey.role (**needed a fix — see below**) |
+| `…_t201_binding` | LeagueBinding, SyncJob |
+
+Verified on production by effect: 7 recorded, **0 rows with `finished_at IS NULL`**
+(so no P3009 landmine), 9 tables with RLS, 27 policies, the audit trigger present,
+5 `app.*` functions, and `leagues` still readable at 116 rows.
+
+**T-001's second half is also done.** All 688 public tables are now owned by
+`commish_migrate`; `commish_app` owns 0. `neondb_owner` — the role the running app
+connects as — keeps SELECT/INSERT/UPDATE/DELETE because it is a member of
+`commish_migrate` and inherits. That inheritance is what made the transfer safe;
+it is also a trap, see below.
+
+⚠ **The four roles are still `NOLOGIN`.** Nothing can connect as `commish_app`
+yet, so the eleven `.spec.ts` suites still cannot run and no request path can be
+routed through `withTenant` in a way that actually isolates.
+
+🛑 **AND "ROUTE SOMETHING THROUGH `withTenant`" IS NOT A CODE TASK UNTIL THAT
+CHANGES.** Measured on a branch: `neondb_owner` with `app.tenant_id` set to a
+tenant owning 1 row saw **5** — every row in the table. It inherits
+`commish_migrate`, matches the `maintenance` policy (`USING (true)`), and RLS
+hands it everything. So a request path wired through `withTenant` on the current
+connection sets the GUC, reads correctly, passes any test asserting `withTenant`
+was called, and isolates nothing. That is the failure `TENANCY.md` §3.1 names,
+reached from an angle the document does not: not "app and migrations share a
+role", but "the app's role is a MEMBER of the migration role".
+
 ## Currently parked
 
 ### `20260831120000_commissioner_os_t101`
