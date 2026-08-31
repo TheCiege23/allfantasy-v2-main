@@ -44,9 +44,15 @@ export type OsScopeLevel = (typeof OS_SCOPE_LEVELS)[number]
  * it holds the same fact under the name "draft rules", cached for the one runtime resolver that
  * has no callers, while three that do have routes paid for it uncached. See `league-os/index.ts`.
  *
+ * ⚠ `'value'` is the second non-decision domain, and it is the one where the LEVEL matters most.
+ * Market prices are `app`-level (one answer per sport+format for everyone); IDP and kicker values
+ * are `league`-level by construction, because they are derived from that league's own scoring.
+ * Storing a league-derived value at app level would price a tackle-heavy league's linebackers for
+ * everybody. See `lib/decision-os/value/contract.ts`.
+ *
  * Widening this union needs no migration — `DomainOsFacts.domain` is a `VarChar(16)`.
  */
-export type OsDomain = 'lineup' | 'waiver' | 'trade' | 'draft' | 'league'
+export type OsDomain = 'lineup' | 'waiver' | 'trade' | 'draft' | 'league' | 'value'
 
 export interface OsFactEnvelope<T> {
   facts: T
