@@ -5694,10 +5694,21 @@ model DiscordLeagueChannel {
   syncOutbound        Boolean          @default(true)
   syncInbound         Boolean          @default(false)
   createdAt           DateTime         @default(now())
+  /// Which AllFantasy surface this channel mirrors. Existing rows are all league chat, which is
+  /// what the bridge relays today, hence the default. Added by
+  /// migrations/20260823120000_discord_bridge_surfaces.
+  surface             String           @default("league_chat") @db.VarChar(32)
+  /// Commissioner-only surfaces default OFF wherever a row is created. The default lives in the
+  /// database as well as in `lib/core-app/discordBridge.ts` because a private note appearing in a
+  /// public Discord channel is a mistake you only make once.
+  commissionerOnly    Boolean          @default(false)
   guild               DiscordGuildLink @relation(fields: [guildId], references: [guildId])
   league              League           @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   @@unique([leagueId, guildId])
+  /// One mapping per (league, surface) — a single Discord channel must not be the target of two
+  /// surfaces, which is how a commissioner note ends up in the trades channel.
+  @@unique([leagueId, surface])
   @@index([leagueId])
   @@index([guildId])
   @@map("discord_league_channels")
