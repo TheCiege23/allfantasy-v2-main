@@ -277,9 +277,22 @@ export function getFantraxLeagueInfo(leagueId: string): Promise<FantraxResult<Fa
  */
 export async function getFantraxTeamRosters(
   leagueId: string,
+  /*
+   * ⚠ OPTIONAL, AND OMITTED MEANS "NOW" RATHER THAN "PERIOD 0". Fantrax returns
+   * the CURRENT roster when no period is given, which is what every existing
+   * caller wants; sending `period=0` instead would ask for a scoring period that
+   * does not exist. This parameter exists because roster state per period is the
+   * only route to transaction history — the API publishes no transactions
+   * endpoint at all — so `deriveFantraxTransactions` diffs consecutive periods.
+   */
+  period?: number,
 ): Promise<FantraxResult<Record<string, FantraxTeamRoster>>> {
+  const periodParam =
+    typeof period === 'number' && Number.isFinite(period) && period > 0
+      ? `&period=${encodeURIComponent(String(Math.trunc(period)))}`
+      : ''
   const res = await fxeaGet<Record<string, unknown>>(
-    `/getTeamRosters?leagueId=${encodeURIComponent(leagueId)}`,
+    `/getTeamRosters?leagueId=${encodeURIComponent(leagueId)}${periodParam}`,
   )
   if (!res.ok) return res
 
@@ -313,6 +326,82 @@ export async function getFantraxPlayerIds(
     return { ok: false, failure: { kind: 'api_error', message: `Fantrax returned no players for ${sport}` } }
   }
   return res
+}
+
+/**
+ * One college player's average draft position, straight from Fantrax.
+ *
+ * ⚠ THE FIELD IS `ADP_PPR`, NOT `adp`, AND THE PAYLOAD IS AN ARRAY. Verified
+ * against the live service 2026-08-31: `getAdp?sport=NCAAF` returns HTTP 200
+ * with `content-type: text/plain` carrying a JSON ARRAY of 997 entries shaped
+ *
+ *     { "ADP_PPR": 338.65, "pos": "TE", "name": "Abney, Christian", "id": "06a94" }
+ *
+ * — not the id-keyed object every other fxea endpoint returns. Assuming the
+ * house shape here would parse 997 players as zero.
+ *
+ * ⚠ AND IT CARRIES NO SCHOOL. Only pos, name and id, so matching these to a
+ * college player table on name alone is unsafe — two players share a name far
+ * more often than a name AND a school. `getPlayerIds?sport=CFB` holds the school
+ * for the same ids and is the intended cross-reference.
+ */
+/* Local, because this module deliberately shares nothing with the fetch service —
+   fantraxApi is the transport layer and imports no league logic. */
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+function readString(v: unknown): string {
+  return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+export type FantraxAdpEntry = {
+  fantraxId: string
+  name: string
+  position: string
+  /** Average draft position in PPR scoring. Lower is earlier. */
+  adp: number
+}
+
+/**
+ * Average draft position for college players.
+ *
+ * 🛑 THIS IS THE MARKET SIGNAL THE DEVY STACK HAS NEVER HAD. `DevyPlayer.devyAdp`
+ * is read in a dozen places and written by nothing — 337 of 1,721 rows carry a
+ * value and the rest are null — and `lib/trade-intel/devyOutlook.ts` states that
+ * no market prices college players. That was true of everything we held and is
+ * not true of this endpoint.
+ */
+export async function getFantraxAdp(
+  sport: FantraxSport = 'NCAAF',
+): Promise<FantraxResult<FantraxAdpEntry[]>> {
+  const res = await fxeaGet<unknown>(`/getAdp?sport=${sport}`)
+  if (!res.ok) return res
+
+  /* Array is the observed shape; an id-keyed object is accepted too so a vendor
+     change to the house convention degrades to fewer rows rather than zero. */
+  const raw: unknown[] = Array.isArray(res.data)
+    ? (res.data as unknown[])
+    : isPlainRecord(res.data)
+      ? Object.values(res.data)
+      : []
+
+  const entries: FantraxAdpEntry[] = []
+  for (const row of raw) {
+    if (!isPlainRecord(row)) continue
+    const fantraxId = readString(row.id)
+    const name = readString(row.name)
+    /* Accept the observed key and the obvious alternatives, so a rename does not
+       silently zero the feed. */
+    const adpRaw = row.ADP_PPR ?? row.adp ?? row.ADP
+    const adp = typeof adpRaw === 'number' ? adpRaw : Number(adpRaw)
+    if (!fantraxId || !name || !Number.isFinite(adp)) continue
+    entries.push({ fantraxId, name, position: readString(row.pos) || readString(row.position), adp })
+  }
+
+  if (entries.length === 0) {
+    return { ok: false, failure: { kind: 'api_error', message: `Fantrax returned no ADP for ${sport}` } }
+  }
+  return { ok: true, data: entries }
 }
 
 /**

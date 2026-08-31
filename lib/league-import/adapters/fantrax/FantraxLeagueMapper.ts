@@ -14,10 +14,15 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
       sport: normalizeToSupportedSport(source.league.sport),
       season: source.league.season,
       leagueSize: source.league.size,
-      rosterSize:
-        source.settings?.rosterPositions.length != null
-          ? source.settings.rosterPositions.reduce((total, slot) => total + Math.max(0, slot.count), 0)
-          : null,
+      /*
+       * ⚠ THE FETCH SERVICE NOW STATES THE REAL PER-TEAM SIZE, and this used to
+       * derive it by summing `rosterPositions` — which was a census of the whole
+       * league's player pool, so the sum was 466 on a 12-team league. Summing an
+       * empty list would now yield 0, which is a different wrong answer; the
+       * stated size is preferred and null is left as null rather than becoming a
+       * confident zero.
+       */
+      rosterSize: source.settings?.rosterSize ?? null,
       scoring: inferredScoring,
       isDynasty: source.league.isDevy,
       // Same fix as Sleeper/ESPN/Yahoo/MFL: `League.status` has no DB default,
