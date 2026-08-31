@@ -70,6 +70,7 @@ export const ACTION_KEYS = [
   // Inside one league.
   'league.settings.update',
   'league.phase.advance',
+  'league.sync.reconcile',
   'audit.read',
   'analytics.read',
   'data.readDeleted',
@@ -209,6 +210,23 @@ export const PERMISSION_MATRIX: Record<ActionKey, ActionRule> = {
     tenant: [...OWNER_ADMIN],
     league: [...COMMISH],
     apiScope: 'leagues:write',
+  },
+  // T-203. The ONE action provider sync may take.
+  //
+  // 🛑 IT IS GRANTABLE TO A COMMISSIONER, AND THAT IS THE INVARIANT.
+  // HANDOFF.md: "A provider can never trigger an action the matrix would deny a
+  // commissioner." That is only checkable if every action sync may take is one
+  // a commissioner holds — `reconcile.test.ts` asserts exactly that over
+  // SYNC_PERMITTED_ACTIONS rather than trusting this comment.
+  //
+  // ⚠ NO `apiScope`, so it is closed to API keys. Sync is driven by our own
+  // scheduler with a synthetic actor; an operator's key must not be able to
+  // trigger a reconcile with provider-shaped data of its own choosing.
+  'league.sync.reconcile': {
+    write: true,
+    scope: 'league',
+    tenant: [...OWNER_ADMIN],
+    league: [...COMMISH],
   },
   'audit.read': {
     write: false,

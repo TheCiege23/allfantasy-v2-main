@@ -15,10 +15,12 @@ import {
   rlsDeferredTables,
   rlsEnabledTables,
 } from '@/lib/domain/tenantScopedTables'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 const SCHEMA = readFileSync(path.resolve(process.cwd(), 'prisma/schema.prisma'), 'utf8')
+const PENDING = path.resolve(process.cwd(), 'prisma/migrations-pending')
+
 const MIGRATION = readFileSync(
   path.resolve(
     process.cwd(),
@@ -91,17 +93,48 @@ describe('T-102 · the register agrees with the schema', () => {
 })
 
 describe('T-102 · the migration agrees with the register', () => {
-  it('the policy loop covers exactly the enabled tables', () => {
-    // The loop is a literal ARRAY[...] in SQL, so it can drift from the
-    // register silently — a table added here and not there simply never gets a
-    // policy, and RLS-with-no-policy returns zero rows rather than erroring.
-    const arrayLiteral = /FOREACH t IN ARRAY ARRAY\[([^\]]+)\]/.exec(MIGRATION)
-    expect(arrayLiteral, 'policy loop not found in the migration').not.toBeNull()
-    const inMigration = arrayLiteral![1]
-      .split(',')
-      .map((s) => s.trim().replace(/^'|'$/g, ''))
-      .sort()
-    expect(inMigration).toEqual(rlsEnabledTables().map((t) => t.table).sort())
+  it('every enabled table gets a policy in SOME parked migration', () => {
+    // ⚠ THIS USED TO ASSERT AGAINST T-102's LOOP ALONE, AND T-201 CORRECTLY
+    // BROKE IT. New tenant-scoped tables get their policies in their OWN
+    // migration — LeagueBinding and SyncJob are created and policed by the
+    // T-201 migration, not retro-fitted into T-102's.
+    //
+    // So the invariant is not "one loop lists everything"; it is "every enabled
+    // table is policed somewhere, and no migration polices a table the register
+    // does not know about". That is the same guarantee and it survives the next
+    // table too. Generalised rather than relaxed: both directions are still
+    // asserted below.
+    const covered = new Set<string>()
+    for (const file of readdirSync(PENDING, { withFileTypes: true })) {
+      if (!file.isDirectory()) continue
+      const sqlPath = path.join(PENDING, file.name, 'migration.sql')
+      if (!existsSync(sqlPath)) continue
+      const sql = readFileSync(sqlPath, 'utf8')
+      for (const m of sql.matchAll(/FOREACH t IN ARRAY ARRAY\[([^\]]+)\]/g)) {
+        for (const raw of m[1].split(',')) covered.add(raw.trim().replace(/'/g, ''))
+      }
+    }
+
+    const enabled = rlsEnabledTables().map((t) => t.model)
+
+    // Every enabled table is policed by something.
+    const unpoliced = enabled.filter((t) => !covered.has(t))
+    expect(
+      unpoliced,
+      `enabled in the register but no migration creates a policy: ${unpoliced.join(', ')}`,
+    ).toEqual([])
+
+    // And nothing is policed that the register does not list — a policy on an
+    // unregistered table means T-103 is not watching it.
+    //
+    // ⚠ The T-106 suspension migration ALTERs four already-created policies
+    // rather than creating them, so its loop is a subset by design and is not
+    // evidence of an extra table.
+    const unregistered = [...covered].filter((t) => !enabled.includes(t))
+    expect(
+      unregistered,
+      `a migration polices tables the register does not list: ${unregistered.join(', ')}`,
+    ).toEqual([])
   })
 
   it('does NOT enable RLS on leagues', () => {

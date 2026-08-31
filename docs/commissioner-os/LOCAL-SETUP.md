@@ -120,6 +120,71 @@ DDL, and neither survives a transaction-mode pooler. **Why pooled for the app:**
 Prisma's named prepared statements break under pgbouncer transaction mode
 without `?pgbouncer=true`.
 
+## 🛑 Importing `@prisma/client` points you at production
+
+Repo-wide, not Commissioner OS specific — recorded here because this is where it
+nearly bit, and because it currently exists nowhere else in writing.
+
+**Importing the Prisma client populates `process.env` from `.env`.** Measured:
+
+```
+node -e "console.log(process.env.DIRECT_URL ? 'SET':'unset');
+         require('@prisma/client');
+         console.log(process.env.DIRECT_URL ? 'SET':'unset')"
+
+  DIRECT_URL before require: unset
+  DIRECT_URL after  require: SET
+  host after require       : ep-curly-block-….neon.tech
+```
+
+That host is the **production** database — the root `CLAUDE.md` names it as such
+in the `.env.staging` section, where it records that `next dev` reads
+`.env.local` rather than `.env.staging` and a "safe" staging check therefore
+described the wrong file set.
+
+This is the same trap one level down. The consequence:
+
+> **Any test in this repo that constructs a `PrismaClient` connects to
+> production unless something stops it** — with no `dotenv` call, no env var
+> passed, and nothing in the test that mentions a database URL.
+
+A test that looks entirely local is not. `npx tsx scripts/check-staging-env.ts`
+does not help either: it checks a FILE SET, not the connection a running process
+actually resolved.
+
+### The near miss
+
+On 2026-08-31 the Commissioner OS `.spec.ts` suites were run against that
+connection. Several of them `CREATE TABLE` scratch probes and seed tenants.
+**Nothing was written** — every suite failed at its first assertion, because the
+`commish_*` roles and the tenancy tables do not exist in production and the
+`CREATE TABLE` statements sit after those. Verified afterwards: zero scratch
+tables.
+
+⚠ **That is a near miss, not a safeguard.** They were stopped by the very thing
+they exist to set up. The moment T-001 and T-101 are applied, those assertions
+pass and the same command reaches the `CREATE TABLE`s against production.
+
+### The fix, and why it is an opt-in rather than a host check
+
+`vitest.commissioner-os.config.ts` now loads
+`__tests__/commissioner-os/dbSpecGuard.ts`, which refuses unless
+`COMMISH_DB_SPECS=1` is set:
+
+```bash
+npx tsx scripts/check-staging-env.ts      # exit 1 = not safe
+COMMISH_DB_SPECS=1 npm run test:commissioner-os
+```
+
+Deliberately an explicit flag and **not** hostname matching: the root
+`CLAUDE.md` records that a `.vercel.app` URL is not proof you are off the
+production database, because previews use it. A host allowlist would look
+careful and answer the wrong question. An env var someone has to set for this
+run cannot be satisfied by accident.
+
+⚠ **This gate covers the Commissioner OS specs only.** Every other
+database-touching test in the repo is still pointed at production by default.
+
 ## Current state
 
 `COMMISH_PLATFORM_URL` is documented and **not read by anything yet** — the

@@ -50,6 +50,10 @@
     "lib/domain/apiActor.ts",
     "lib/domain/webhooks.ts",
     "lib/domain/rateLimit.ts",
+    "lib/domain/providers.ts",
+    "lib/domain/sleeper.ts",
+    "lib/domain/reconcile.ts",
+    "lib/domain/syncHealth.ts",
     "lib/domain/tenantScopedTables.ts"
   ]
 }
