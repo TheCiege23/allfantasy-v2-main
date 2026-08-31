@@ -395,6 +395,41 @@ deployed fix with no conflict marker and no failing test.
 4. **Never auto-resolve a whole conflict set to one side.** That is how step 3
    gets skipped.
 
+🛑 **AND NEITHER TEST SURVIVES ALONE WHEN A HANDOVER ARRIVES ALREADY PICKED.** The
+rules above are for a conflict. This is the same trap reached from the other
+direction, and it cost nothing only because it was measured: on 2026-08-31 a
+session handed the pusher a four-commit tip, re-picked after their first handover
+looked unlanded. `git merge-base --is-ancestor` said **NOT ON MAIN about all
+four** — correctly, because a cherry-pick renames every commit it touches. Three
+of the four were already shipped minutes earlier under different SHAs. One was
+genuinely new.
+
+Two plausible habits both fail on that input:
+
+- trust ancestry → **re-land three commits that are already in production**
+- "renamed, so probably a duplicate" → **drop the one piece of real work**
+
+The only thing that separates them is a per-commit `patch-id` comparison against
+the *range*, not against the tip:
+
+```bash
+git log <base>..origin/main --format=%H | while read c; do
+  git show "$c" --format='' --patch | git patch-id --stable | cut -d' ' -f1
+done | sort -u > /tmp/mainpids
+git show <theirCommit> --format='' --patch | git patch-id --stable | cut -d' ' -f1
+```
+
+⚠ **WHERE BOTH SHAs ARE IN THE OBJECT STORE, THE TREE HASH IS STRONGER STILL** and
+is what settled it: `git rev-parse <a>^{tree}` == `git rev-parse <b>^{tree}` says
+the two commits carry identical CONTENT, not merely an identical diff. The author
+supplied that themselves and it agreed with the patch-ids.
+
+⚠ **AND THE HANDOVER THAT LOOKS WRONG IS USUALLY JUST STALE.** Three handovers
+went stale between measuring and arriving that day, on a `main` that moved seven
+times. Every one stayed safe for one reason: **the author sent the base sha they
+built on.** Send it even when you have verified a fast-forward — your `rc=0` is
+true when you run it and can be false by the time it is read.
+
 ⚠ **`git commit -- <paths>` SCOPES TO PATHS, NOT TO YOUR HUNKS INSIDE THEM.** A
 peer's uncommitted edits in a file you commit ride along with no conflict and no
 marker — the mirror image of the trap above. So `git diff` read in full is the
@@ -878,6 +913,21 @@ silently blocks everyone, which is worse than the duplicate builds the role
 prevents. Announce a claim (`ListAgents` + `SendMessage`) and `--release` before
 finishing.
 
+⚠ **THE LOCK FREES ITSELF ON EVERY SESSION RENAME, AND THAT IS A HOLE NOT A
+GLITCH.** `pusher.json` records a session NAME, and names are reassigned here. On
+2026-08-31 one session held the role under four successive names
+(`76 → d5 → 97 → 6f → 9e`) and the role went **vacant on every rotation** — three
+different sessions independently found `push:pusher` reporting "no designated
+pusher" while that session was mid-batch under its new name.
+
+Nothing broke, and only because all three did the right thing: they REPORTED the
+vacancy instead of claiming it. That is discipline covering a structural gap, and
+discipline is what this file exists to stop relying on.
+
+**So, until it is keyed to something that survives a rename:** if `push:pusher`
+says vacant, ASK before claiming. Someone is probably mid-batch. And a pusher
+whose name has rotated must re-claim — the role does not follow you.
+
 #### What the pusher checks, and what authors owe
 
 ⚠ **BATCHING CHANGED WHAT A RED BUILD MEANS.** One SHA per session meant a
@@ -1030,6 +1080,32 @@ server, read the effective value directly:
 ```bash
 grep -m1 '^DATABASE_URL=' .env.local .env | sed 's#.*@##; s#/.*##'
 ```
+
+🛑 **AND THE SAME TRAP REACHES ANY SCRIPT OR TEST, NOT JUST A DEV SERVER, BECAUSE
+`@prisma/client` POPULATES `process.env` FROM `.env` ON IMPORT.** You do not pass
+it a URL and you do not opt in. Importing the module is enough.
+
+Measured on 2026-08-31, twice, by two sessions that did not know about each other:
+`DIRECT_URL` unset before the `require`, **set after**, host `ep-curly-block-…` —
+the production endpoint this file names above. One session's acceptance suite ran
+`pg_roles` / `pg_tables` catalog queries against production. Another ran eleven
+`.spec.ts` suites, **several of which `CREATE TABLE`**.
+
+⚠ **NOTHING WAS WRITTEN, AND THE REASON IS THE ALARMING PART.** Every one of those
+specs failed at its first assertion because the roles and tables they exist to
+create were absent. They were stopped by *the very thing they were written to set
+up*. That is a near miss, not a safeguard — apply the schema first and the same
+run creates tables in production.
+
+**A local-looking test is not a local test.** A suite with no connection string in
+it, no `DATABASE_URL` in its config and no network code you can see will still
+reach production if anything in its import graph pulls in the Prisma client.
+
+The one suite set that is gated opts in explicitly (`COMMISH_DB_SPECS=1`) rather
+than sniffing a hostname — deliberately, because as recorded above a `.vercel.app`
+URL is not proof you are off the production database. ⚠ **That gate covers those
+suites only. Every other DB-touching test in this repo is still pointed at
+production by default.**
 
 **`npm run test:agent:readonly` is the default for an unfamiliar target.** It
 sets `AGENT_TESTER_READ_ONLY=1`, which skips the signup probe entirely and never
