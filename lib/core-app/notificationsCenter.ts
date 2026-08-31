@@ -61,7 +61,21 @@ export type NotificationsCenterData = {
   rest: NotificationRow[]
   /** Live counts per chip. Never static. */
   counts: Record<NotificationFilter, number>
+  /**
+   * How many notifications are ACTUALLY waiting, counted in the database.
+   *
+   * ⚠ NOT DERIVED FROM `rest`, AND THAT IS THE WHOLE POINT. `rest` is capped
+   * at the newest 60, so counting unread inside it answers "unread among the
+   * ones we happened to load" while reading like a statement about the account.
+   * Once more than 60 exist and the newest 60 are read, that count is 0 while
+   * the nav badge - an uncapped count on the same table - says 55. Both were
+   * on screen at once, contradicting each other, which is how this was found.
+   */
   unread: number
+  /** Stored rows this feed actually lists: the size of the `take` window. */
+  listed: number
+  /** Stored rows that exist beyond the window. 0 when nothing is truncated. */
+  olderNotListed: number
   /** What the phone would have shown, and what it held back. */
   push: PushSelection
   /** The league this feed is scoped to, or null for the account-wide feed. */
@@ -372,11 +386,34 @@ export async function getNotificationsCenter(input: {
         .catch(() => null)
     : null
 
+  /*
+   * Counted in the database rather than in the window above. Both are cheap:
+   * the model carries @@index([userId, readAt]) and @@index([userId, createdAt]),
+   * which is exactly why the nav badge can already afford an uncapped count on
+   * every screen. There was never a performance reason for the screen to
+   * estimate from its own page of rows.
+   *
+   * Falls back to the windowed figure rather than 0 if the count fails: a
+   * number that is too low is still better than confidently claiming nothing
+   * is waiting, which is the exact failure being fixed here.
+   */
+  const storedWhere = scope
+    ? { userId: input.userId, leagueId: scope }
+    : { userId: input.userId }
+  const [storedUnread, storedTotal] = await Promise.all([
+    prisma.platformNotification
+      .count({ where: { ...storedWhere, readAt: null } })
+      .catch(() => rest.filter((r) => !r.read).length),
+    prisma.platformNotification.count({ where: storedWhere }).catch(() => rest.length),
+  ])
+
   return {
     actToday: scopedActToday,
     rest,
     counts,
-    unread: rest.filter((r) => !r.read).length + scopedActToday.length,
+    unread: storedUnread + scopedActToday.length,
+    listed: rest.length,
+    olderNotListed: Math.max(0, storedTotal - rest.length),
     push: selectPushNotifications(input.issues, now),
     leagueId: scope,
     mentionsAvailable: scope ? mentionsSource != null : true,
