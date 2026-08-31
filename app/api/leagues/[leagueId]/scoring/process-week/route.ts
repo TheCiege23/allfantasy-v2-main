@@ -45,11 +45,15 @@ export async function POST(
       leagueId: params.leagueId,
       eventType: 'score_finalized',
       title: `Week ${week} scoring updated`,
-      message: 'Scores and matchups have been processed for this week.',
+      // An imported league gets per-player scores only — `processLeagueWeek` will not invent a
+      // schedule it cannot read, so claiming matchups were processed would be false for it.
+      message: result.matchupsWritten
+        ? 'Scores and matchups have been processed for this week.'
+        : "Player scores have been updated for this week. Matchups and standings still come from your league's original platform.",
       category: 'league_announcements',
       visibility: 'all_members',
       actorUserId: userId,
-      meta: { season, week },
+      meta: { season, week, matchupsWritten: result.matchupsWritten },
       dedupeKey: `score_finalized:${params.leagueId}:${season}-w${week}`,
     }).catch(() => {}),
   )
