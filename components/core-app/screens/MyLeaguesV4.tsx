@@ -196,6 +196,16 @@ export function MyLeaguesV4({
               Sync &amp; connect
             </Link>
           ) : null}
+          {/*
+            ⚠ OUTSIDE THE `syncHref` CONDITIONAL, deliberately. Pairing two
+            already-imported leagues has nothing to do with whether a sync
+            destination exists, and nesting it there would hide the only entry
+            point to the franchise flow from every user whose leagues cannot be
+            synced — which is most of them.
+          */}
+          <Link href="/core/connect-leagues" className="af-ml-btn af-ml-btn--ghost">
+            Connect two leagues
+          </Link>
           <Link href={importHref} className="af-ml-btn">
             Import more
           </Link>

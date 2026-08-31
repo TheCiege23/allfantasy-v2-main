@@ -11,6 +11,7 @@ import {
 } from '@/lib/franchise/franchiseService'
 import { describeCrossPlatformTrade } from '@/lib/franchise/franchiseLink'
 import { loadCollegeBoardForFranchise } from '@/lib/franchise/franchiseBoard'
+import { listPairableLeagues, collapseFantraxDuplicates } from '@/lib/franchise/pairableLeagues'
 import { getFantraxLeagues } from '@/lib/league-import/fantrax/fantraxApi'
 import {
   attachToFranchise,
@@ -37,6 +38,36 @@ async function ownedLink(linkId: string, userId: string) {
     select: { id: true },
   })
   return link != null
+}
+
+/**
+ * Does this user own the league they are asking to pair?
+ *
+ * 🛑 `attachToFranchise` DOES NOT ANSWER THIS. It checks who owns the FRANCHISE
+ * and whether the league is already attached to a different one — never whether
+ * the caller owns the league they named. Pairing is the first action that takes
+ * an arbitrary league id from the request body, so without this check any signed
+ * in account could attach a stranger's league to its own franchise and then read
+ * that team's whole roster back through `loadFranchiseDetail`.
+ *
+ * ⚠ TWO ID SPACES, AND THE PLATFORM DECIDES WHICH. `FranchiseLeagueMember`
+ * stores `League.id` for the pro side and `FantraxLeague.id` for the college
+ * side, keyed by different owner columns (`userId` vs `appUserId`). Checking the
+ * wrong table returns "not found" for a league the user really does own.
+ */
+async function ownsLeague(platform: string, leagueId: string, userId: string): Promise<boolean> {
+  if (platform === 'fantrax') {
+    const row = await prisma.fantraxLeague.findFirst({
+      where: { id: leagueId, appUserId: userId },
+      select: { id: true },
+    })
+    return row != null
+  }
+  const row = await prisma.league.findFirst({
+    where: { id: leagueId, userId },
+    select: { id: true },
+  })
+  return row != null
 }
 
 export const GET = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Franchise' })(
@@ -93,11 +124,136 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
       leagueId?: string
       teamName?: string
       franchiseName?: string
+      pro?: { platform?: string; leagueId?: string; teamExternalId?: string }
+      college?: { platform?: string; leagueId?: string; teamExternalId?: string }
     }
     try {
       body = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    /*
+     * Which already-imported leagues could be paired, and which half each would
+     * be. Read only — this proposes, a human confirms.
+     *
+     * ⚠ DISTINCT FROM `discover-leagues` BELOW, WHICH IS A DIFFERENT QUESTION.
+     * That one takes a Fantrax Secret ID and lists what exists on Fantrax so it
+     * can be IMPORTED. This one lists what is already in AllFantasy and needs no
+     * credential at all — which is the ordinary case: both leagues imported
+     * separately, and no way to say they are one franchise.
+     */
+    if (body.action === 'discover-pairable') {
+      const pairable = await listPairableLeagues(auth.userId)
+      /* Collapse the League row a Fantrax import also creates — see
+         `collapseFantraxDuplicates` for why offering both is worse than useless. */
+      const leagueRows = await prisma.league.findMany({
+        where: { userId: auth.userId },
+        select: { id: true, platform: true, platformLeagueId: true },
+      })
+      return NextResponse.json({
+        ...collapseFantraxDuplicates(pairable, leagueRows),
+        note: 'Pairing is a label, not a sync. Neither league is modified.',
+      })
+    }
+
+    /*
+     * Pair two already-imported leagues as one franchise.
+     *
+     * 🛑 THIS IS THE ACTION THAT DID NOT EXIST. `connect-league` below hardcodes
+     * `role: 'college'` and `platform: 'fantrax'` and IMPORTS from a Secret ID,
+     * so a franchise could only ever gain a college half and only by importing
+     * again. Nothing could attach the pro side, which meant the paired view
+     * `loadFranchiseDetail` already knows how to render could never have two
+     * halves to render.
+     *
+     * ⚠ BOTH SIDES ARE ATTACHED OR NEITHER IS. A franchise holding one half is
+     * indistinguishable from a pairing that half-failed, and the UI would show a
+     * "combined" team that is one league — so a failure on the second attach
+     * rolls the first back rather than leaving that state behind.
+     */
+    if (body.action === 'pair-leagues') {
+      const pro = body.pro
+      const college = body.college
+      if (!pro?.platform || !pro?.leagueId || !college?.platform || !college?.leagueId) {
+        return NextResponse.json(
+          { error: 'pro and college each need a platform and a leagueId.' },
+          { status: 400 },
+        )
+      }
+      const proPlatform = String(pro.platform).toLowerCase()
+      const collegePlatform = String(college.platform).toLowerCase()
+
+      /* ⚠ A LEAGUE CANNOT BE ITS OWN OTHER HALF. Both uniqueness constraints in
+         the schema are satisfied by (platform, leagueId) pairs that differ only
+         by role, so nothing below would reject this. */
+      if (proPlatform === collegePlatform && pro.leagueId === college.leagueId) {
+        return NextResponse.json(
+          { error: 'A league cannot be paired with itself.' },
+          { status: 400 },
+        )
+      }
+
+      const [ownsPro, ownsCollege] = await Promise.all([
+        ownsLeague(proPlatform, pro.leagueId, auth.userId),
+        ownsLeague(collegePlatform, college.leagueId, auth.userId),
+      ])
+      /* Same answer for "not yours" and "does not exist", matching the link
+         check above — a distinct 403 confirms a league exists to someone who
+         cannot see it. */
+      if (!ownsPro || !ownsCollege) {
+        return NextResponse.json({ error: 'League not found' }, { status: 404 })
+      }
+      if (body.linkId && !(await ownedLink(body.linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+
+      const attachedPro = await attachToFranchise({
+        ownerUserId: auth.userId,
+        franchiseName: body.franchiseName?.trim() || 'My franchise',
+        linkId: body.linkId ?? null,
+        role: 'pro',
+        platform: proPlatform,
+        leagueId: pro.leagueId,
+        teamExternalId: pro.teamExternalId ?? '',
+      })
+      if (!attachedPro.ok) {
+        return NextResponse.json({ error: attachedPro.error }, { status: 400 })
+      }
+
+      const attachedCollege = await attachToFranchise({
+        ownerUserId: auth.userId,
+        franchiseName: body.franchiseName?.trim() || 'My franchise',
+        linkId: attachedPro.linkId,
+        role: 'college',
+        platform: collegePlatform,
+        leagueId: college.leagueId,
+        teamExternalId: college.teamExternalId ?? '',
+      })
+      if (!attachedCollege.ok) {
+        /*
+         * ⚠ ROLL THE PRO HALF BACK. Leaving it attached produces a franchise with
+         * one half, which renders as a "combined" view of a single league and is
+         * indistinguishable from a correct pairing of a league with no college
+         * side. Scoped to the member row, and the LINK is only removed if this
+         * request created it — an existing franchise must survive a failed
+         * attempt to add a half to it.
+         */
+        await prisma.franchiseLeagueMember
+          .deleteMany({ where: { linkId: attachedPro.linkId, role: 'pro', platform: proPlatform, leagueId: pro.leagueId } })
+          .catch(() => {})
+        if (!body.linkId) {
+          await prisma.franchiseLink
+            .deleteMany({ where: { id: attachedPro.linkId, ownerUserId: auth.userId, members: { none: {} } } })
+            .catch(() => {})
+        }
+        return NextResponse.json({ error: attachedCollege.error }, { status: 400 })
+      }
+
+      return NextResponse.json({
+        linkId: attachedCollege.linkId,
+        note: 'Paired. Neither league was modified — this records that they are one franchise.',
+      })
     }
 
     /*

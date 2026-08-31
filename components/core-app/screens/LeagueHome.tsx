@@ -125,6 +125,114 @@ function Unavailable({ reason }: { reason: string }) {
 }
 
 /** A titled panel. `tone` drives the 3b border colour on Commissioner Hub. */
+/**
+ * The other half of this league's franchise, or an offer to name it.
+ *
+ * 🛑 "THE 2 LEAGUES NEED TO FEEL LIKE ITS ONE AND BE SHOWN ON 1 SCREEN." This is
+ * that band: on the NFL league it names the C2C half, on the C2C league it names
+ * the NFL half, and it sits directly under the header on both so neither reads
+ * as the primary and the other as an afterthought.
+ *
+ * ⚠ NOT PAIRED AND CANNOT PAIR ARE DIFFERENT, AND RENDER DIFFERENTLY. An
+ * unpaired league gets the offer; a paired one gets its other half. Showing the
+ * offer to someone already paired is nagging, and hiding it from everyone else
+ * is how a built feature stays invisible — which is exactly what happened here:
+ * the franchise API has existed all along with nothing in the app calling it.
+ */
+function PairedBand({
+  pairing,
+  leagueId,
+  leagueName,
+}: {
+  pairing: LeagueHomeData['pairing']
+  leagueId: string
+  leagueName: string
+}) {
+  const connectHref = `/core/connect-leagues?league=${encodeURIComponent(leagueId)}`
+
+  if (!pairing) {
+    return (
+      <section className="af-card af-lh-paired af-lh-paired--offer">
+        <div className="af-lh-paired-body">
+          <h2 className="af-lh-paired-title">Is {leagueName} half of a bigger team?</h2>
+          <p className="af-lh-paired-text">
+            If you run a college league alongside this one, connect them and AllFantasy will
+            show both rosters as one franchise.
+          </p>
+        </div>
+        <Link href={connectHref} className="af-btn af-lh-paired-cta">
+          Connect a league →
+        </Link>
+      </section>
+    )
+  }
+
+  const { other, viewingRole, franchiseName } = pairing
+  const otherLabel = viewingRole === 'pro' ? 'College half' : 'Pro half'
+
+  /*
+   * ⚠ A FRANCHISE WITH ONE HALF IS A REAL STATE AND SAYS SO. `pair-leagues`
+   * attaches both or neither, but a franchise can also be left half-built by the
+   * older `connect-league` action, which only ever attached a college side.
+   * Rendering that as a combined view would show one league labelled as two.
+   */
+  if (!other) {
+    return (
+      <section className="af-card af-lh-paired af-lh-paired--offer">
+        <div className="af-lh-paired-body">
+          <h2 className="af-lh-paired-title">{franchiseName} has only one half</h2>
+          <p className="af-lh-paired-text">
+            This league is filed as the {viewingRole} side. Add the other half to see them as
+            one team.
+          </p>
+        </div>
+        <Link href={connectHref} className="af-btn af-lh-paired-cta">
+          Add the other half →
+        </Link>
+      </section>
+    )
+  }
+
+  return (
+    <section className="af-card af-lh-paired">
+      <div className="af-lh-paired-head">
+        <span className="af-label af-lh-paired-kicker">{franchiseName}</span>
+        <span className="af-lh-paired-role">{otherLabel}</span>
+      </div>
+      <div className="af-lh-paired-body">
+        <h2 className="af-lh-paired-title">
+          {other.leagueId ? (
+            <Link href={`/core?league=${encodeURIComponent(other.leagueId)}`} className="af-lh-paired-link">
+              {other.name}
+            </Link>
+          ) : (
+            other.name
+          )}
+        </h2>
+        <p className="af-lh-paired-meta">
+          <span className="af-platform af-lh-paired-platform" data-platform={other.platform}>
+            {other.platform}
+          </span>
+          {other.season != null ? <span> · {other.season}</span> : null}
+          {other.teamLabel ? <span> · {other.teamLabel}</span> : null}
+        </p>
+        {/*
+          ⚠ A COUNT AND A REASON ARE MUTUALLY EXCLUSIVE. `playerCount` is null
+          exactly when the roster could not be read, and printing "0 players"
+          there would report an empty squad for a team we simply could not see.
+        */}
+        {other.unavailableReason ? (
+          <p className="af-lh-paired-text">_ {other.unavailableReason}</p>
+        ) : (
+          <p className="af-lh-paired-text">
+            {other.playerCount} {other.playerCount === 1 ? 'player' : 'players'} on your roster there
+          </p>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function Panel({
   title,
   help,
@@ -224,6 +332,9 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
           </Link>
         </div>
       </header>
+
+      {/* ── The other half of this franchise ────────────────────────── */}
+      <PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} />
 
       {/* ── Season timeline ─────────────────────────────────────────── */}
       <StatePanel
