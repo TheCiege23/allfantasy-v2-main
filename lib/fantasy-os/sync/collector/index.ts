@@ -35,3 +35,13 @@ export {
   type ExternalMatchupParityResult,
   type ExternalMatchupLeagueResult,
 } from './externalMatchupParity'
+// Fantrax weekly-matchup parity. Separate collector, same heartbeat: the fxea
+// API is unauthenticated, so the credential-candidate machinery above is dead
+// code for it — but it shares `applySchedule`, which is the part that defines
+// what a WeeklyMatchup row means and must never fork.
+export {
+  runFantraxMatchupParity,
+  enumerateFantraxMatchupConnections,
+  type FantraxMatchupParityResult,
+  type FantraxMatchupLeagueResult,
+} from './fantraxMatchupParity'

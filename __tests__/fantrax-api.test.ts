@@ -7,6 +7,10 @@ import {
   getFantraxStandings,
   flattenFantraxSchedule,
   getFantraxTeamRosters,
+  getFantraxMatchupScores,
+  resolveFantraxSeasonPosition,
+  applyFantraxScores,
+  fetchFantraxScheduleWithScores,
   resolveRosters,
 } from '@/lib/league-import/fantrax/fantraxApi'
 
@@ -376,19 +380,340 @@ describe('the schedule that was being thrown away', () => {
   })
 
   /**
-   * ⚠ NO SCORES, AND NO ZEROS STANDING IN FOR THEM. getLeagueInfo carries
-   * fixtures, not results; a stored 0-0 is indistinguishable from a real
-   * scoreless tie.
+   * ⚠ NO SCORES FROM THIS CALL, AND NO ZEROS STANDING IN FOR THEM.
+   * getLeagueInfo carries fixtures, not results; a stored 0-0 is
+   * indistinguishable from a real scoreless tie, so the score fields exist and
+   * are NULL rather than being absent or defaulted.
    */
-  it('carries no score fields at all', () => {
+  it('leaves scores null rather than zero', () => {
     const rows = flattenFantraxSchedule(infoWith({ matchups: TWO_PERIODS }))
     for (const row of rows) {
-      expect(Object.keys(row).sort()).toEqual(['awayTeam', 'homeTeam', 'isPlayoff', 'week'])
+      expect(row.awayScore).toBeNull()
+      expect(row.homeScore).toBeNull()
+      expect(row.played).toBe(false)
     }
+  })
+
+  /**
+   * ⚠ THE NAMES ARE NOT A KEY. Scores come from a different endpoint and are
+   * matched back on team id, so the ids have to survive the flatten.
+   */
+  it('carries the team ids the results endpoint keys on', () => {
+    const rows = flattenFantraxSchedule(infoWith({ matchups: TWO_PERIODS }))
+    expect(rows[0]).toMatchObject({ awayTeamId: 'a', homeTeamId: 'b' })
   })
 
   it('returns nothing rather than throwing when the league has no schedule', () => {
     expect(flattenFantraxSchedule(infoWith({}))).toEqual([])
     expect(flattenFantraxSchedule(infoWith({ matchups: null }))).toEqual([])
+  })
+})
+
+/**
+ * The results endpoint that was listed and never implemented.
+ *
+ * `getMatchupScores` sat in FANTRAX_ENDPOINTS with nothing calling it, so every
+ * Fantrax league imported a full fixture list carrying no score anywhere. That
+ * is the single cause of "no week has been scored yet", "we cannot tell which
+ * week this league is in yet", and a standings table where every record is 0-0.
+ *
+ * Every shape below was captured live against Cream Bowl (v2kzedypmm8jp61b) on
+ * 2026-08-30 — two days before its period 1 opens, which is exactly the state
+ * that makes the bug invisible.
+ */
+describe('getMatchupScores — the endpoint nothing called', () => {
+  /** Live shape, trimmed of the `categories` array the reader does not use. */
+  const PERIOD_1 = JSON.stringify({
+    period: 1,
+    matchups: [
+      {
+        away: { teamName: 'loganhall', score: 0.0, gamesPlayed: 0, teamId: 'a' },
+        categories: [{ name: 'Passing Yards', away: {}, home: {} }],
+        home: { teamName: 'Yourdyinggrandpa', score: 0.0, gamesPlayed: 0, teamId: 'b' },
+      },
+    ],
+  })
+
+  it('parses a period into id-keyed sides', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, PERIOD_1)))
+    const res = await getFantraxMatchupScores('v2kzedypmm8jp61b', 1)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.period).toBe(1)
+    expect(res.data.matchups).toHaveLength(1)
+    expect(res.data.matchups[0].away).toEqual({
+      teamId: 'a',
+      teamName: 'loganhall',
+      score: 0,
+      gamesPlayed: 0,
+    })
+  })
+
+  /**
+   * ⚠ OMITTING `period` ASKS FOR THE CURRENT ONE AND THE ANSWER SAYS WHICH.
+   * Assuming the response is period 1 because that is what came back today
+   * would silently mis-file every result once the season is under way.
+   */
+  it('reads the period back from the response rather than assuming it', async () => {
+    const body = JSON.stringify({ period: 7, matchups: [] })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
+    const res = await getFantraxMatchupScores('v2kzedypmm8jp61b')
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.period).toBe(7)
+  })
+
+  /**
+   * ⚠ AN OUT-OF-RANGE PERIOD IS AN HTTP 200 WITH AN ERROR BODY. Live:
+   * "Invalid 'period' parameter - period 99 not found". Reported as a failure,
+   * never as a period that legitimately holds no matchups — which is what a
+   * status-only check would have made of it.
+   */
+  it('a 200-with-error period is a failure, not an empty week', async () => {
+    const body = JSON.stringify({
+      error: {
+        onScreen: false,
+        code: 'WARNING',
+        message: "Invalid 'period' parameter - period 99 not found.",
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
+    const res = await getFantraxMatchupScores('v2kzedypmm8jp61b', 99)
+
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.failure.message).toMatch(/period 99 not found/i)
+  })
+
+  it('drops a half-read pairing rather than storing it against one side', async () => {
+    const body = JSON.stringify({
+      period: 1,
+      matchups: [{ away: { teamName: 'x', score: 10, gamesPlayed: 1, teamId: 'a' }, home: null }],
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
+    const res = await getFantraxMatchupScores('v2kzedypmm8jp61b', 1)
+
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.matchups).toEqual([])
+  })
+})
+
+/**
+ * ⚠ THE LEAGUE'S OWN CALENDAR ANSWERS THIS, NOT THE SPORT'S. This repo has
+ * already shipped "you are here · week 3" read off the next real-world kickoff,
+ * which happened to be NFL preseason.
+ */
+describe('where the league is in its own season', () => {
+  const PERIODS = [
+    { number: 1, startDate: '2026-09-01T12:00:00.0-0400', endDate: '2026-09-08T11:59:59.0-0400' },
+    { number: 2, startDate: '2026-09-08T12:00:00.0-0400', endDate: '2026-09-15T11:59:59.0-0400' },
+    { number: 3, startDate: '2026-09-15T12:00:00.0-0400', endDate: '2026-09-22T11:59:59.0-0400' },
+  ]
+
+  it('before the first period opens there is no current week, and nothing to score', () => {
+    const at = resolveFantraxSeasonPosition(
+      infoWith({ scoringPeriods: PERIODS }),
+      new Date('2026-08-30T12:00:00Z'),
+    )
+    expect(at).toEqual({ period: 1, state: 'preseason', scoredThrough: 0 })
+  })
+
+  it('inside a period, that period is current', () => {
+    const at = resolveFantraxSeasonPosition(
+      infoWith({ scoringPeriods: PERIODS }),
+      new Date('2026-09-10T12:00:00Z'),
+    )
+    expect(at).toMatchObject({ period: 2, state: 'in_progress', scoredThrough: 2 })
+  })
+
+  it('after the last period the season is complete, not stuck on week 1', () => {
+    const at = resolveFantraxSeasonPosition(
+      infoWith({ scoringPeriods: PERIODS }),
+      new Date('2027-01-01T12:00:00Z'),
+    )
+    expect(at).toMatchObject({ period: 3, state: 'complete', scoredThrough: 3 })
+  })
+
+  it('reports nothing rather than guessing when the league publishes no calendar', () => {
+    expect(resolveFantraxSeasonPosition(infoWith({}), new Date())).toBeNull()
+  })
+})
+
+/**
+ * 🛑 THE ONE THAT MATTERS. Fantrax reports `score: 0.0` for a period that has
+ * not been played, byte-identical to a genuine scoreless week — `gamesPlayed`
+ * is the only thing separating them. Writing the unplayed one as 0-0 produces
+ * exactly the "every record is 0-0" table this repo has already been burnt by.
+ */
+describe('merging results onto fixtures', () => {
+  const FIXTURES = [
+    {
+      week: 1,
+      awayTeam: 'loganhall',
+      homeTeam: 'Yourdyinggrandpa',
+      awayTeamId: 'a',
+      homeTeamId: 'b',
+      awayScore: null,
+      homeScore: null,
+      played: false,
+      isPlayoff: false,
+    },
+  ]
+
+  it('leaves an unplayed period unscored rather than writing 0-0', () => {
+    const merged = applyFantraxScores(FIXTURES, [
+      {
+        period: 1,
+        matchups: [
+          {
+            away: { teamId: 'a', teamName: 'loganhall', score: 0, gamesPlayed: 0 },
+            home: { teamId: 'b', teamName: 'Yourdyinggrandpa', score: 0, gamesPlayed: 0 },
+          },
+        ],
+      },
+    ])
+    expect(merged[0]).toMatchObject({ awayScore: null, homeScore: null, played: false })
+  })
+
+  /** A real scoreless tie IS stored — that is the whole point of the split. */
+  it('stores a genuine 0-0 once games have been played', () => {
+    const merged = applyFantraxScores(FIXTURES, [
+      {
+        period: 1,
+        matchups: [
+          {
+            away: { teamId: 'a', teamName: 'loganhall', score: 0, gamesPlayed: 3 },
+            home: { teamId: 'b', teamName: 'Yourdyinggrandpa', score: 0, gamesPlayed: 2 },
+          },
+        ],
+      },
+    ])
+    expect(merged[0]).toMatchObject({ awayScore: 0, homeScore: 0, played: true })
+  })
+
+  it('carries real scores through', () => {
+    const merged = applyFantraxScores(FIXTURES, [
+      {
+        period: 1,
+        matchups: [
+          {
+            away: { teamId: 'a', teamName: 'loganhall', score: 118.4, gamesPlayed: 8 },
+            home: { teamId: 'b', teamName: 'Yourdyinggrandpa', score: 96.2, gamesPlayed: 8 },
+          },
+        ],
+      },
+    ])
+    expect(merged[0]).toMatchObject({ awayScore: 118.4, homeScore: 96.2, played: true })
+  })
+
+  /**
+   * ⚠ ORIENTATION IS NOT GUARANTEED TO MATCH. Fantrax may report the pairing
+   * home/away the other way round from the fixture; attaching the scores by
+   * position would swap both teams' weeks.
+   */
+  it('matches a flipped pairing and keeps each score on its own team', () => {
+    const merged = applyFantraxScores(FIXTURES, [
+      {
+        period: 1,
+        matchups: [
+          {
+            away: { teamId: 'b', teamName: 'Yourdyinggrandpa', score: 96.2, gamesPlayed: 8 },
+            home: { teamId: 'a', teamName: 'loganhall', score: 118.4, gamesPlayed: 8 },
+          },
+        ],
+      },
+    ])
+    expect(merged[0]).toMatchObject({ awayScore: 118.4, homeScore: 96.2 })
+  })
+
+  it('leaves a fixture alone when no period was read for its week', () => {
+    expect(applyFantraxScores(FIXTURES, [])).toEqual(FIXTURES)
+  })
+})
+
+describe('fetching fixtures and results together', () => {
+  const PERIODS = [
+    { number: 1, startDate: '2026-09-01T12:00:00.0-0400', endDate: '2026-09-08T11:59:59.0-0400' },
+    { number: 2, startDate: '2026-09-08T12:00:00.0-0400', endDate: '2026-09-15T11:59:59.0-0400' },
+  ]
+  const MATCHUPS = [
+    { period: 1, matchupList: [{ away: { name: 'loganhall', id: 'a' }, home: { name: 'Ydg', id: 'b' } }] },
+    { period: 2, matchupList: [{ away: { name: 'Ydg', id: 'b' }, home: { name: 'loganhall', id: 'a' } }] },
+  ]
+
+  /**
+   * ⚠ A PRESEASON LEAGUE COSTS ZERO EXTRA REQUESTS. getMatchupScores is one
+   * round trip per period; asking a 13-period league for all of them in August
+   * spends thirteen requests to learn thirteen times that nothing has happened.
+   */
+  it('asks for no periods at all before the season opens', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await fetchFantraxScheduleWithScores(
+      'v2kzedypmm8jp61b',
+      infoWith({ matchups: MATCHUPS, scoringPeriods: PERIODS }),
+      { now: new Date('2026-08-30T12:00:00Z') },
+    )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(out.periodsRead).toBe(0)
+    expect(out.position?.state).toBe('preseason')
+    expect(out.rows).toHaveLength(2)
+    expect(out.rows.every((r) => r.awayScore === null)).toBe(true)
+  })
+
+  it('asks only for periods that could have been played, and merges them', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      resp(
+        200,
+        JSON.stringify({
+          period: 1,
+          matchups: [
+            {
+              away: { teamId: 'a', teamName: 'loganhall', score: 101.5, gamesPlayed: 9 },
+              home: { teamId: 'b', teamName: 'Ydg', score: 88.1, gamesPlayed: 9 },
+            },
+          ],
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await fetchFantraxScheduleWithScores(
+      'v2kzedypmm8jp61b',
+      infoWith({ matchups: MATCHUPS, scoringPeriods: PERIODS }),
+      { now: new Date('2026-09-03T12:00:00Z') },
+    )
+
+    /* Period 1 only — period 2 has not opened. */
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toContain('period=1')
+    expect(out.rows.find((r) => r.week === 1)).toMatchObject({
+      awayScore: 101.5,
+      homeScore: 88.1,
+      played: true,
+    })
+    /* Week 2 was never asked for, so it stays unknown rather than 0-0. */
+    expect(out.rows.find((r) => r.week === 2)).toMatchObject({ awayScore: null, played: false })
+  })
+
+  /**
+   * ⚠ A PERIOD THAT FAILS TO READ IS SKIPPED, NEVER ZEROED. Reporting it as
+   * 0-0 turns one transient outage into a permanently wrong week.
+   */
+  it('counts a failed period rather than scoring it zero', async () => {
+    const body = JSON.stringify({ error: { message: 'Fantrax is having a moment' } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, body)))
+    const out = await fetchFantraxScheduleWithScores(
+      'v2kzedypmm8jp61b',
+      infoWith({ matchups: MATCHUPS, scoringPeriods: PERIODS }),
+      { now: new Date('2026-09-03T12:00:00Z') },
+    )
+
+    expect(out.periodsRead).toBe(0)
+    expect(out.periodsFailed).toBe(1)
+    expect(out.rows.every((r) => r.awayScore === null && r.played === false)).toBe(true)
   })
 })

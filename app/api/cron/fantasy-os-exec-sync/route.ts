@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { resolveCadence } from '@/lib/fantasy-os/sync/season'
-import { runDueSleeperLeagues, runExternalMatchupParity } from '@/lib/fantasy-os/sync/collector'
+import {
+  runDueSleeperLeagues,
+  runExternalMatchupParity,
+  runFantraxMatchupParity,
+} from '@/lib/fantasy-os/sync/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
 
@@ -127,7 +131,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles, draftSessions, externalMatchups })
+    /*
+     * 🛑 THE WRITER IS THE HALF THAT IS EASY TO SKIP AND FATAL TO SKIP. A
+     * collector with no scheduled caller keeps its table empty in production
+     * while every local test of it passes — the same failure `ingestCFBDStats`
+     * shipped for months. Fantrax leagues had no WeeklyMatchup writer at all,
+     * which is why their league home reports "we cannot tell which week this
+     * league is in yet" and "no week has been scored yet".
+     *
+     * Bounded (one request per PLAYED period per league, three leagues a tick)
+     * and swallowed, same contract as the collectors above.
+     */
+    let fantraxMatchups: unknown = null
+    try {
+      fantraxMatchups = await runFantraxMatchupParity({ now, maxLeagues: 3 })
+    } catch (fantraxErr) {
+      fantraxMatchups = {
+        error:
+          fantraxErr instanceof Error
+            ? fantraxErr.message.slice(0, 160)
+            : 'fantrax matchup parity failed',
+      }
+    }
+
+    return NextResponse.json({
+      ...heartbeat,
+      executed: true,
+      summary,
+      profiles,
+      draftSessions,
+      externalMatchups,
+      fantraxMatchups,
+    })
   } catch (err) {
     return NextResponse.json(
       { ...heartbeat, executed: false, error: err instanceof Error ? err.message : 'sync failed' },

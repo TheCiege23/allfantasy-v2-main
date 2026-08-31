@@ -6,6 +6,7 @@ import type {
   FantraxImportTeam,
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
+import { assignFantraxTeamIds } from './fantraxTeamIds'
 
 type LegacyStanding = {
   rank?: unknown
@@ -15,6 +16,9 @@ type LegacyStanding = {
   ties?: unknown
   pointsFor?: unknown
   pointsAgainst?: unknown
+  /** Fantrax's durable team id, written by `summarise` so a rename does not
+      create a new team. Absent on CSV-era snapshots. */
+  fantraxTeamId?: unknown
 }
 
 type LegacyMatchup = {
@@ -24,6 +28,13 @@ type LegacyMatchup = {
   homeTeam?: unknown
   homeScore?: unknown
   isPlayoff?: unknown
+  /**
+   * Fantrax's own team ids, present on a live-API import and absent on a
+   * CSV-era snapshot. They are what the numeric roster id is derived from, so a
+   * team keeps its id across a rename.
+   */
+  awayTeamId?: unknown
+  homeTeamId?: unknown
 }
 
 type LegacyRosterPlayer = {
@@ -218,35 +229,63 @@ function parseTransactions(raw: unknown): LegacyTransaction[] {
   return transactions
 }
 
+/**
+ * Team label → the id every downstream surface keys on.
+ *
+ * 🛑 THIS USED TO EMIT `fantrax-team:<slug>`, AND THAT IS WHY A FANTRAX
+ * SCOREBOARD COULD NEVER WORK. `LeagueTeam.externalId` is read back as
+ * `Number(externalId)` by `lib/core-app/weekBoard.ts` and its siblings, so a
+ * slug is `NaN` and every Fantrax team is silently dropped from the roster-name
+ * and my-team lookups. Nothing errored; opponents simply had no names and your
+ * own team could not be found. `WeeklyMatchup.rosterId` is an `Int`, so a slug
+ * could never have been stored there either.
+ *
+ * ⚠ THE ID IS HASHED FROM FANTRAX'S OWN TEAM ID WHERE ONE EXISTS, so it survives
+ * a rename and does not depend on how many teams the league has. See
+ * `fantraxTeamIds.ts` for why an index-based numbering was rejected. The name is
+ * the fallback for CSV-era snapshots, which carry no Fantrax ids at all.
+ */
 function buildTeamIdMap(args: {
   standings: LegacyStanding[]
   matchups: LegacyMatchup[]
   userTeam: string
 }): Map<string, string> {
+  /*
+   * Collect every label alongside the durable id it was seen with. A team can
+   * appear in both standings and matchups; the first sighting that carries a
+   * real Fantrax id wins, because a name-derived hash is strictly weaker.
+   */
+  const sourceByLabel = new Map<string, string>()
   const labels: string[] = []
+  const note = (label: string, sourceId: string) => {
+    const trimmed = label.trim()
+    if (!trimmed) return
+    labels.push(trimmed)
+    const normalized = normalizeTeamLabel(trimmed)
+    if (sourceId && !sourceByLabel.get(normalized)) sourceByLabel.set(normalized, sourceId)
+  }
+
   for (const standing of args.standings) {
-    const teamName = asString(standing.team)
-    if (teamName) labels.push(teamName)
+    note(asString(standing.team), asString(standing.fantraxTeamId))
   }
   for (const matchup of args.matchups) {
-    const awayTeam = asString(matchup.awayTeam)
-    const homeTeam = asString(matchup.homeTeam)
-    if (awayTeam) labels.push(awayTeam)
-    if (homeTeam) labels.push(homeTeam)
+    note(asString(matchup.awayTeam), asString(matchup.awayTeamId))
+    note(asString(matchup.homeTeam), asString(matchup.homeTeamId))
   }
-  if (args.userTeam) labels.push(args.userTeam)
+  if (args.userTeam) note(args.userTeam, '')
 
-  const map = new Map<string, string>()
-  const slugCounts = new Map<string, number>()
+  const seen = new Set<string>()
+  const teams: Array<{ sourceTeamId: string | null; teamName: string }> = []
   for (const label of labels) {
     const normalized = normalizeTeamLabel(label)
-    if (!normalized || map.has(normalized)) continue
-    const baseSlug = slugify(normalized) || 'team'
-    const count = (slugCounts.get(baseSlug) ?? 0) + 1
-    slugCounts.set(baseSlug, count)
-    const suffix = count > 1 ? `-${count}` : ''
-    map.set(normalized, `fantrax-team:${baseSlug}${suffix}`)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    teams.push({ teamName: label, sourceTeamId: sourceByLabel.get(normalized) ?? null })
   }
+
+  const numeric = assignFantraxTeamIds(teams)
+  const map = new Map<string, string>()
+  for (const [normalized, id] of numeric) map.set(normalized, String(id))
   return map
 }
 
@@ -538,6 +577,27 @@ export async function fetchFantraxLeagueForImport(
       matchups: weekMatchups,
     }))
 
+  /*
+   * ⚠ THE CURRENT WEEK IS THE EARLIEST UNSCORED ONE, NEVER `max(week)`.
+   *
+   * This read `schedule[schedule.length - 1].week` — the LAST week on file —
+   * which is correct only while every stored week is a completed one. The
+   * schedule is bootstrapped whole from `getLeagueInfo`, so on Cream Bowl that
+   * resolved to week 13 on 2026-08-30, two days before period 1 opens. It is
+   * the same failure `lib/core-app/currentWeek.ts` documents at length for the
+   * Sleeper path, reached independently here.
+   *
+   * ⚠ AND A WEEK WITH NO SCORE ON FILE IS UNPLAYED, WHICH IS NOT THE SAME AS
+   * 0-0. `points1`/`points2` are `undefined` for a period Fantrax has not
+   * scored (the fetch deliberately does not default them to zero), so absence
+   * is the test — a genuine scoreless week has real zeros and counts as played.
+   */
+  const firstUnscored = schedule.find((week) =>
+    week.matchups.every((m) => m.points1 == null && m.points2 == null),
+  )
+  const currentWeek =
+    firstUnscored?.week ?? (schedule.length > 0 ? schedule[schedule.length - 1].week : null)
+
   const transactions: FantraxImportTransaction[] = transactionRows.map((transaction, index) => {
     const type = asString(transaction.type).toLowerCase()
     const normalizedType =
@@ -590,6 +650,12 @@ export async function fetchFantraxLeagueForImport(
       const round = transaction.pickRound ?? null
       const pickNumber = transaction.pickNumber ?? null
       if (round == null || pickNumber == null) return null
+      /*
+       * ⚠ DELIBERATELY NOT NUMERIC, NOW THAT REAL TEAM IDS ARE. This is the
+       * "we could not attribute this pick to anyone" sentinel; giving it a
+       * number would make it indistinguishable from a real team and silently
+       * award every unattributed pick to whoever hashed to that id.
+       */
       const teamId = transaction.teamIds[0] ?? userTeamId ?? 'fantrax-team:unknown'
       const draftPlayerId = `fantrax-draft-pick:r${round}:p${pickNumber}`
       return {
@@ -626,7 +692,7 @@ export async function fetchFantraxLeagueForImport(
       sport,
       season,
       size: leagueRecord.teamCount || teams.length,
-      currentWeek: schedule.length > 0 ? schedule[schedule.length - 1]?.week ?? null : null,
+      currentWeek,
       isFinished: season < new Date().getFullYear(),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),

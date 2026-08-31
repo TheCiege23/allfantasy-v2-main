@@ -2104,6 +2104,21 @@ model FantraxLeague {
   updatedAt     DateTime    @updatedAt
   isDevy        Boolean     @default(false)
   transactions  Json?
+  /// The Fantrax league id this snapshot was imported from, e.g. `v2kzedypmm8jp61b`.
+  ///
+  /// ⚠ WITHOUT THIS A SNAPSHOT CANNOT BE REFRESHED. `League.platformLeagueId` for a
+  /// Fantrax league is THIS ROW'S uuid, not Fantrax's id, and the id the import was
+  /// given was never persisted anywhere — so every scheduled refresh had nothing to
+  /// re-fetch with, which is what "Fantrax > Sync - never read" means on the league
+  /// home. Fixtures and results both live behind that id.
+  ///
+  /// Nullable because CSV-era rows were uploaded without one and can never acquire
+  /// one; a null here means "snapshot only, not refreshable", which is a real state
+  /// rather than missing data. NOT unique: two AllFantasy accounts importing the
+  /// same Fantrax league legitimately produce two rows (the key is
+  /// userId+leagueName+season), and a unique constraint would turn the second
+  /// person's import into a write error.
+  sourceLeagueId String?
   user          FantraxUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Import Security Closure phase: the real, authenticated AllFantasy user who
   /// uploaded this snapshot. Nullable for safe backfill of any pre-existing rows —
@@ -2117,6 +2132,7 @@ model FantraxLeague {
   @@index([userId, season])
   @@index([season])
   @@index([appUserId])
+  @@index([sourceLeagueId])
 }
 
 model manager_trade_tendencies {
