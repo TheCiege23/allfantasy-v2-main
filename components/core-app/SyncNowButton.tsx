@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { runSyncRounds } from '@/lib/core-app/syncRunLoop'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -24,17 +25,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * leagues were locked or failed — a button that says "Synced" over that is the
  * stale-data problem it was added to fix, wearing a success message.
  */
-
-type SyncRound = {
-  ok?: boolean
-  totalCandidates?: number
-  attempted?: number
-  synced?: number
-  locked?: number
-  failed?: number
-  remaining?: string[]
-  error?: string
-}
 
 type Phase = 'idle' | 'busy' | 'done' | 'error'
 
@@ -59,18 +49,6 @@ export type SyncNowButtonProps = {
   eligibleCount: number | null
 }
 
-/**
- * A backstop on the continuation loop, not a cap on the work.
- *
- * ⚠ IT MUST NEVER BE THE THING THAT ENDS A NORMAL RUN. The server guarantees at
- * least one league per platform per round, so the honest terminator is an empty
- * `remaining`. This only catches a server that starts answering with a
- * `remaining` it never shrinks — which would otherwise be an infinite POST loop
- * against the user's own providers. If it ever fires, the run is reported as
- * incomplete rather than done, because it is.
- */
-const MAX_ROUNDS = 40
-
 export function SyncNowButton({ variant = 'chip', eligibleCount }: SyncNowButtonProps) {
   const router = useRouter()
   const [phase, setPhase] = useState<Phase>('idle')
@@ -93,91 +71,39 @@ export function SyncNowButton({ variant = 'chip', eligibleCount }: SyncNowButton
     setPhase('busy')
     setMessage(null)
 
-    let only: string[] | null = null
-    let total = 0
-    let synced = 0
-    let locked = 0
-    let failed = 0
-    let rounds = 0
-    let exhausted = false
+    /*
+     * The loop itself is `runSyncRounds` in lib/core-app/syncRunLoop.ts — pure,
+     * injectable and unit-tested, because it is the one part of this feature
+     * that can do unbounded work against live vendor APIs. All this component
+     * supplies is the transport and the unmount guard.
+     */
+    const outcome = await runSyncRounds({
+      post: async (only) => {
+        try {
+          const res = await fetch('/api/core/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
+            body: JSON.stringify(only ? { only } : {}),
+          })
+          return { httpOk: res.ok, round: await res.json().catch(() => null) }
+        } catch {
+          return { httpOk: false, round: null }
+        }
+      },
+      onProgress: (text) => {
+        if (alive.current) setMessage(text)
+      },
+    })
 
-    while (rounds < MAX_ROUNDS) {
-      rounds += 1
-
-      let round: SyncRound | null = null
-      let httpOk = false
-      try {
-        const res = await fetch('/api/core/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-          body: JSON.stringify(only ? { only } : {}),
-        })
-        httpOk = res.ok
-        round = (await res.json().catch(() => null)) as SyncRound | null
-      } catch {
-        round = null
-      }
-      /* Navigated away mid-run. The rounds already sent still completed server-side. */
-      if (!alive.current) return
-
-      if (!httpOk || !round?.ok) {
-        setPhase('error')
-        setMessage(
-          synced > 0
-            ? `Stopped after ${synced} of ${total}`
-            : (round?.error ?? 'Sync did not run. Try again shortly.'),
-        )
-        return
-      }
-
-      /* The denominator comes from the first round and stays put — a later
-         round recomputes the same candidate set, so it should not move. */
-      if (rounds === 1) total = round.totalCandidates ?? 0
-      synced += round.synced ?? 0
-      locked += round.locked ?? 0
-      failed += round.failed ?? 0
-
-      if (total === 0) {
-        setPhase('done')
-        setMessage('No connected leagues to sync')
-        return
-      }
-
-      /*
-       * Progress between rounds, not just at the end. A 50-league account is
-       * minutes of work, and a button that sits on "Syncing…" for four of them
-       * is indistinguishable from one that has hung.
-       */
-      setMessage(`Synced ${synced + locked + failed} of ${total}…`)
-
-      const rest = Array.isArray(round.remaining) ? round.remaining : []
-      if (rest.length === 0) break
-      /* No forward progress this round — see MAX_ROUNDS. Stop rather than spin. */
-      if (!round.attempted) {
-        exhausted = true
-        break
-      }
-      only = rest
-      if (rounds >= MAX_ROUNDS) exhausted = true
-    }
-
+    /* Navigated away mid-run. Rounds already sent still completed server-side. */
     if (!alive.current) return
 
-    const stragglers = locked + failed
-    if (exhausted) {
-      setPhase('error')
-      setMessage(`Synced ${synced} of ${total} — press again to finish`)
-    } else if (stragglers > 0) {
-      setPhase('error')
-      setMessage(`Synced ${synced} of ${total}`)
-    } else {
-      setPhase('done')
-      setMessage(`Synced ${synced}`)
-    }
+    setPhase(outcome.tone === 'ok' ? 'done' : 'error')
+    setMessage(outcome.message)
 
     /*
-     * Every /core screen is server-rendered from the tables the resync just
+     * Every /core screen is server-rendered from the tables the sync just
      * wrote, so a refresh is what makes the press visible. Without it the
      * button reports success beside numbers that have not moved.
      */
