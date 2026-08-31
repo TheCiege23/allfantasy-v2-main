@@ -32,8 +32,21 @@ $EnvFile = '.env.local'
 # .gitignore carries `.env*`, but an ALREADY-TRACKED file is not protected by a
 # gitignore rule - that is exactly how .env.example and .env.production stay
 # tracked in this repo. This repository is public; check rather than assume.
-git ls-files --error-unmatch $EnvFile 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) {
+# ⚠ DO NOT USE `git ls-files --error-unmatch ... 2>$null` HERE. It was written
+# that way first and it CRASHED ON THE HEALTHY PATH. `--error-unmatch` reports an
+# untracked file by writing "error: pathspec ... did not match" to STDERR, and in
+# Windows PowerShell 5.1 redirecting a native command's stderr wraps each line in
+# an ErrorRecord (NativeCommandError) - which, under $ErrorActionPreference =
+# 'Stop', is fatal. So the one outcome we WANT (the file is untracked, credentials
+# are safe to write) was the one that killed the script:
+#
+#   git : error: pathspec '.env.local' did not match any file(s) known to git
+#   + CategoryInfo : NotSpecified: (...) [], RemoteException
+#
+# `git ls-files -- <path>` prints the path when tracked, prints nothing when not,
+# writes no stderr, and exits 0 either way. Read the OUTPUT, not the status.
+$tracked = git ls-files -- $EnvFile
+if (-not [string]::IsNullOrWhiteSpace($tracked)) {
   Write-Error "REFUSING: $EnvFile is tracked by git and this repo is public. Writing credentials into it would publish them on the next commit."
 }
 if (-not (Test-Path $EnvFile)) {
@@ -92,11 +105,28 @@ DO $$ BEGIN EXECUTE format('ALTER ROLE commish_migrate  LOGIN PASSWORD %L', :'mi
 DO $$ BEGIN EXECUTE format('ALTER ROLE commish_purge    LOGIN PASSWORD %L', :'prg_pw'); END $$;
 '@
 
-$sql | & psql $DirectUrl --no-psqlrc --quiet -v ON_ERROR_STOP=1 `
-  -v "app_pw=$AppPw" -v "plt_pw=$PltPw" -v "mig_pw=$MigPw" -v "prg_pw=$PrgPw"
+# ⚠ ErrorActionPreference is relaxed for exactly this call. psql writes notices
+# to stderr on a perfectly successful run, and under 'Stop' a native command's
+# stderr can be promoted to a terminating NativeCommandError in PS 5.1 - which
+# would abort a run that actually worked, leaving the passwords SET on the server
+# and no URLs in .env.local. That is the worst possible failure here: the roles
+# would have credentials nobody holds.
+#
+# The exit code is the authority, and it is read UNPIPED. `$sql | psql` pipes INTO
+# psql, so $LASTEXITCODE is still psql's - piping into a command is safe; it is
+# piping OUT of one that loses its status.
+$prev = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+  $sql | & psql $DirectUrl --no-psqlrc --quiet -v ON_ERROR_STOP=1 `
+    -v "app_pw=$AppPw" -v "plt_pw=$PltPw" -v "mig_pw=$MigPw" -v "prg_pw=$PrgPw"
+  $psqlExit = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $prev
+}
 
-if ($LASTEXITCODE -ne 0) {
-  Write-Error "psql exited $LASTEXITCODE - passwords were NOT set. Nothing written to $EnvFile."
+if ($psqlExit -ne 0) {
+  Write-Error "psql exited $psqlExit - passwords were NOT set (ON_ERROR_STOP=1 makes the batch atomic). Nothing written to $EnvFile."
 }
 
 # -- Write the two app URLs ----------------------------------------------------
