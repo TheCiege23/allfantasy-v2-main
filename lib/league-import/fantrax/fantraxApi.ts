@@ -141,15 +141,38 @@ export type FantraxScheduleRow = {
   awayTeam: string
   homeTeam: string
   isPlayoff: boolean
+  /**
+   * Fantrax's own team ids for the pairing.
+   *
+   * ⚠ THE NAMES ARE NOT A KEY. Scores arrive from a different endpoint and have
+   * to be matched back onto the fixture; matching on the display name breaks the
+   * moment somebody renames a team between the two reads, and two teams in one
+   * league may differ only by case. The ids are stable and are already in the
+   * same response the fixtures come from, so they are carried rather than
+   * re-derived.
+   */
+  awayTeamId: string
+  homeTeamId: string
+  /**
+   * ⚠ NULL IS NOT ZERO, AND THIS IS THE WHOLE POINT OF THE FIELD. A period that
+   * has not been played reports `score: 0.0` from Fantrax exactly like a real
+   * scoreless week. Only `gamesPlayed` separates them, so an unplayed side stays
+   * null here and `played` records which reading it was.
+   */
+  awayScore: number | null
+  homeScore: number | null
+  /** True only when Fantrax reported at least one game played on either side. */
+  played: boolean
 }
 
 /**
  * Flatten `getLeagueInfo.matchups` into per-pairing rows.
  *
- * ⚠ NO SCORES. `getLeagueInfo` carries the fixtures and not the results; those
- * live on `getMatchupScores?period=N`, one request per period. The rows are
- * deliberately left score-less rather than defaulted to 0, because a stored 0-0
- * is indistinguishable from a real scoreless tie.
+ * ⚠ NO SCORES FROM THIS CALL. `getLeagueInfo` carries the fixtures and not the
+ * results; those live on `getMatchupScores?period=N`, one request per period.
+ * The rows leave `awayScore`/`homeScore` null rather than defaulting to 0,
+ * because a stored 0-0 is indistinguishable from a real scoreless tie. Use
+ * `fetchFantraxScheduleWithScores` to get fixtures and results together.
  *
  * ⚠ A BYE IS SKIPPED, NOT HALF-STORED. An odd team count leaves a pairing with
  * only one side; writing it with an empty opponent would resolve to no team and
@@ -172,6 +195,11 @@ export function flattenFantraxSchedule(info: FantraxLeagueInfo): FantraxSchedule
         week,
         awayTeam: away,
         homeTeam: home,
+        awayTeamId: String(pairing?.away?.id ?? '').trim(),
+        homeTeamId: String(pairing?.home?.id ?? '').trim(),
+        awayScore: null,
+        homeScore: null,
+        played: false,
         isPlayoff: Number.isFinite(firstPlayoff) && week >= firstPlayoff,
       })
     }
@@ -249,9 +277,22 @@ export function getFantraxLeagueInfo(leagueId: string): Promise<FantraxResult<Fa
  */
 export async function getFantraxTeamRosters(
   leagueId: string,
+  /*
+   * ⚠ OPTIONAL, AND OMITTED MEANS "NOW" RATHER THAN "PERIOD 0". Fantrax returns
+   * the CURRENT roster when no period is given, which is what every existing
+   * caller wants; sending `period=0` instead would ask for a scoring period that
+   * does not exist. This parameter exists because roster state per period is the
+   * only route to transaction history — the API publishes no transactions
+   * endpoint at all — so `deriveFantraxTransactions` diffs consecutive periods.
+   */
+  period?: number,
 ): Promise<FantraxResult<Record<string, FantraxTeamRoster>>> {
+  const periodParam =
+    typeof period === 'number' && Number.isFinite(period) && period > 0
+      ? `&period=${encodeURIComponent(String(Math.trunc(period)))}`
+      : ''
   const res = await fxeaGet<Record<string, unknown>>(
-    `/getTeamRosters?leagueId=${encodeURIComponent(leagueId)}`,
+    `/getTeamRosters?leagueId=${encodeURIComponent(leagueId)}${periodParam}`,
   )
   if (!res.ok) return res
 
@@ -285,6 +326,82 @@ export async function getFantraxPlayerIds(
     return { ok: false, failure: { kind: 'api_error', message: `Fantrax returned no players for ${sport}` } }
   }
   return res
+}
+
+/**
+ * One college player's average draft position, straight from Fantrax.
+ *
+ * ⚠ THE FIELD IS `ADP_PPR`, NOT `adp`, AND THE PAYLOAD IS AN ARRAY. Verified
+ * against the live service 2026-08-31: `getAdp?sport=NCAAF` returns HTTP 200
+ * with `content-type: text/plain` carrying a JSON ARRAY of 997 entries shaped
+ *
+ *     { "ADP_PPR": 338.65, "pos": "TE", "name": "Abney, Christian", "id": "06a94" }
+ *
+ * — not the id-keyed object every other fxea endpoint returns. Assuming the
+ * house shape here would parse 997 players as zero.
+ *
+ * ⚠ AND IT CARRIES NO SCHOOL. Only pos, name and id, so matching these to a
+ * college player table on name alone is unsafe — two players share a name far
+ * more often than a name AND a school. `getPlayerIds?sport=CFB` holds the school
+ * for the same ids and is the intended cross-reference.
+ */
+/* Local, because this module deliberately shares nothing with the fetch service —
+   fantraxApi is the transport layer and imports no league logic. */
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+function readString(v: unknown): string {
+  return typeof v === 'string' ? v : v == null ? '' : String(v)
+}
+
+export type FantraxAdpEntry = {
+  fantraxId: string
+  name: string
+  position: string
+  /** Average draft position in PPR scoring. Lower is earlier. */
+  adp: number
+}
+
+/**
+ * Average draft position for college players.
+ *
+ * 🛑 THIS IS THE MARKET SIGNAL THE DEVY STACK HAS NEVER HAD. `DevyPlayer.devyAdp`
+ * is read in a dozen places and written by nothing — 337 of 1,721 rows carry a
+ * value and the rest are null — and `lib/trade-intel/devyOutlook.ts` states that
+ * no market prices college players. That was true of everything we held and is
+ * not true of this endpoint.
+ */
+export async function getFantraxAdp(
+  sport: FantraxSport = 'NCAAF',
+): Promise<FantraxResult<FantraxAdpEntry[]>> {
+  const res = await fxeaGet<unknown>(`/getAdp?sport=${sport}`)
+  if (!res.ok) return res
+
+  /* Array is the observed shape; an id-keyed object is accepted too so a vendor
+     change to the house convention degrades to fewer rows rather than zero. */
+  const raw: unknown[] = Array.isArray(res.data)
+    ? (res.data as unknown[])
+    : isPlainRecord(res.data)
+      ? Object.values(res.data)
+      : []
+
+  const entries: FantraxAdpEntry[] = []
+  for (const row of raw) {
+    if (!isPlainRecord(row)) continue
+    const fantraxId = readString(row.id)
+    const name = readString(row.name)
+    /* Accept the observed key and the obvious alternatives, so a rename does not
+       silently zero the feed. */
+    const adpRaw = row.ADP_PPR ?? row.adp ?? row.ADP
+    const adp = typeof adpRaw === 'number' ? adpRaw : Number(adpRaw)
+    if (!fantraxId || !name || !Number.isFinite(adp)) continue
+    entries.push({ fantraxId, name, position: readString(row.pos) || readString(row.position), adp })
+  }
+
+  if (entries.length === 0) {
+    return { ok: false, failure: { kind: 'api_error', message: `Fantrax returned no ADP for ${sport}` } }
+  }
+  return { ok: true, data: entries }
 }
 
 /**
@@ -473,6 +590,244 @@ export async function getFantraxStandings(
         gamesBack: Number.isFinite(Number(row.gamesBack)) ? Number(row.gamesBack) : null,
       }
     }),
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Results
+ * ------------------------------------------------------------------ */
+
+/** One side of a scored pairing, as `getMatchupScores` reports it. */
+export type FantraxMatchupSide = {
+  teamId: string
+  teamName: string
+  score: number
+  /**
+   * ⚠ THE ONLY THING THAT SEPARATES "0-0" FROM "NOT PLAYED YET". Fantrax
+   * reports `score: 0.0` for an unplayed period, which is byte-identical to a
+   * genuine scoreless week. Measured on Cream Bowl 2026-08-30, two days before
+   * period 1 opens: every side came back `score: 0.0, gamesPlayed: 0`. Storing
+   * that as a result is exactly the "every record is 0-0" table this repo has
+   * already been burnt by on standings.
+   */
+  gamesPlayed: number
+}
+
+export type FantraxPeriodScore = {
+  period: number
+  matchups: Array<{ away: FantraxMatchupSide; home: FantraxMatchupSide }>
+}
+
+function parseMatchupSide(raw: unknown): FantraxMatchupSide | null {
+  if (raw === null || typeof raw !== 'object') return null
+  const row = raw as Record<string, unknown>
+  const teamId = String(row.teamId ?? '').trim()
+  if (!teamId) return null
+  const score = Number(row.score)
+  const gamesPlayed = Number(row.gamesPlayed)
+  return {
+    teamId,
+    teamName: String(row.teamName ?? '').trim(),
+    score: Number.isFinite(score) ? score : 0,
+    gamesPlayed: Number.isFinite(gamesPlayed) ? gamesPlayed : 0,
+  }
+}
+
+/**
+ * One scoring period's results.
+ *
+ * ⚠ THIS ENDPOINT WAS LISTED AND NEVER IMPLEMENTED. `getMatchupScores` has sat
+ * in `FANTRAX_ENDPOINTS` since the API was first read, with no function calling
+ * it — so every Fantrax league imported its fixtures with null scores and then
+ * had no week that could ever be scored. That is the single cause of "no week
+ * has been scored yet", "we cannot tell which week this league is in", and a
+ * standings table where every record is 0-0.
+ *
+ * ⚠ OMITTING `period` IS NOT THE SAME AS ASKING FOR PERIOD 1. With no period
+ * Fantrax answers with the CURRENT one and echoes which that was, so the
+ * response is self-describing — the echoed `period` is read back rather than
+ * assumed to be the one requested.
+ *
+ * ⚠ AN OUT-OF-RANGE PERIOD IS AN HTTP 200 WITH AN ERROR BODY, like every other
+ * failure on this API ("Invalid 'period' parameter - period 99 not found").
+ * `fxeaGet` already inspects the body, so it surfaces as a failure rather than
+ * as a period with no matchups.
+ */
+export async function getFantraxMatchupScores(
+  leagueId: string,
+  period?: number,
+): Promise<FantraxResult<FantraxPeriodScore>> {
+  const query =
+    period == null
+      ? `?leagueId=${encodeURIComponent(leagueId)}`
+      : `?leagueId=${encodeURIComponent(leagueId)}&period=${encodeURIComponent(String(period))}`
+  const res = await fxeaGet<{ period?: unknown; matchups?: unknown }>(`/getMatchupScores${query}`)
+  if (!res.ok) return res
+
+  const echoed = Number(res.data?.period)
+  const list = Array.isArray(res.data?.matchups) ? res.data.matchups : []
+  const matchups: FantraxPeriodScore['matchups'] = []
+  for (const entry of list) {
+    if (entry === null || typeof entry !== 'object') continue
+    const away = parseMatchupSide((entry as Record<string, unknown>).away)
+    const home = parseMatchupSide((entry as Record<string, unknown>).home)
+    /* A half-read pairing cannot be attached to a fixture, so it is dropped
+       rather than stored against one side. */
+    if (!away || !home) continue
+    matchups.push({ away, home })
+  }
+
+  return {
+    ok: true,
+    data: {
+      period: Number.isFinite(echoed) && echoed > 0 ? echoed : (period ?? 0),
+      matchups,
+    },
+  }
+}
+
+export type FantraxSeasonPosition = {
+  /** The period the league is in now, or the last one if the season is over. */
+  period: number
+  state: 'preseason' | 'in_progress' | 'complete'
+  /** How many periods are worth asking for scores — never more than `period`. */
+  scoredThrough: number
+}
+
+/**
+ * Where in its own season a Fantrax league is, read from its own calendar.
+ *
+ * ⚠ THE LEAGUE'S CALENDAR, NOT THE SPORT'S. This repo has already shipped a
+ * header reading "you are here · week 3" off the next real-world kickoff, which
+ * happened to be NFL preseason. `getLeagueInfo.scoringPeriods` carries a real
+ * start and end date per period, published by the league itself, so the answer
+ * comes from the league rather than from a calendar that knows nothing about it.
+ *
+ * ⚠ AND BEFORE THE FIRST PERIOD OPENS THERE IS NO CURRENT WEEK, which is a
+ * different fact from "week 1". `state` says which of the three it is, so a
+ * caller can render a preseason league as preseason instead of as an
+ * unaccountably empty week 1. `scoredThrough` is 0 there — asking Fantrax for
+ * period 1 results two days before period 1 opens returns a full set of
+ * `score: 0.0 / gamesPlayed: 0` sides, which is the trap this whole file is
+ * about.
+ */
+export function resolveFantraxSeasonPosition(
+  info: FantraxLeagueInfo,
+  now: Date = new Date(),
+): FantraxSeasonPosition | null {
+  const periods = (info.scoringPeriods ?? [])
+    .map((p) => ({
+      number: Number(p?.number),
+      start: p?.startDate ? new Date(p.startDate).getTime() : Number.NaN,
+      end: p?.endDate ? new Date(p.endDate).getTime() : Number.NaN,
+    }))
+    .filter((p) => Number.isFinite(p.number) && p.number >= 1)
+    .sort((a, b) => a.number - b.number)
+  if (periods.length === 0) return null
+
+  const t = now.getTime()
+  const first = periods[0]
+  const last = periods[periods.length - 1]
+
+  if (Number.isFinite(first.start) && t < first.start) {
+    return { period: first.number, state: 'preseason', scoredThrough: 0 }
+  }
+  if (Number.isFinite(last.end) && t > last.end) {
+    return { period: last.number, state: 'complete', scoredThrough: last.number }
+  }
+
+  const live = periods.find(
+    (p) => (!Number.isFinite(p.start) || t >= p.start) && (!Number.isFinite(p.end) || t <= p.end),
+  )
+  const current = live ?? last
+  return { period: current.number, state: 'in_progress', scoredThrough: current.number }
+}
+
+/**
+ * Merge fetched results onto fixtures. Pure — the fetch is the caller's.
+ *
+ * ⚠ MATCHED ON TEAM ID PAIRS, IN EITHER ORIENTATION. Fantrax is free to report
+ * a pairing home/away the other way round from the fixture, and a name match
+ * would additionally break on any rename between the two reads.
+ *
+ * ⚠ A PERIOD WITH `gamesPlayed: 0` ON BOTH SIDES IS LEFT UNSCORED, not written
+ * as 0-0. That is the difference between "this week has not happened" and "both
+ * teams were shut out", and everything downstream — the current week, the power
+ * board, the standings — reads the wrong one as the other.
+ */
+export function applyFantraxScores(
+  rows: FantraxScheduleRow[],
+  periods: FantraxPeriodScore[],
+): FantraxScheduleRow[] {
+  const byWeek = new Map<number, FantraxPeriodScore['matchups']>()
+  for (const p of periods) byWeek.set(p.period, p.matchups)
+
+  return rows.map((row) => {
+    const pairings = byWeek.get(row.week)
+    if (!pairings || !row.awayTeamId || !row.homeTeamId) return row
+
+    for (const pairing of pairings) {
+      const straight =
+        pairing.away.teamId === row.awayTeamId && pairing.home.teamId === row.homeTeamId
+      const flipped =
+        pairing.away.teamId === row.homeTeamId && pairing.home.teamId === row.awayTeamId
+      if (!straight && !flipped) continue
+
+      const forAway = straight ? pairing.away : pairing.home
+      const forHome = straight ? pairing.home : pairing.away
+      const played = forAway.gamesPlayed > 0 || forHome.gamesPlayed > 0
+      if (!played) return row
+
+      return { ...row, awayScore: forAway.score, homeScore: forHome.score, played: true }
+    }
+    return row
+  })
+}
+
+/**
+ * Fixtures plus results, in the shape the snapshot column stores.
+ *
+ * ⚠ ONLY PERIODS THAT COULD HAVE BEEN PLAYED ARE REQUESTED. `getMatchupScores`
+ * is one request per period, and a 13-period league asked for all of them in
+ * August spends thirteen round trips to learn thirteen times that nothing has
+ * happened. Bounded by the league's own calendar: a preseason league costs zero
+ * extra requests, and a completed one costs one per period.
+ *
+ * ⚠ A PERIOD THAT FAILS TO READ IS SKIPPED, NEVER ZEROED. Its fixture keeps its
+ * null scores, which reads downstream as "not known" instead of "0-0".
+ */
+export async function fetchFantraxScheduleWithScores(
+  leagueId: string,
+  info: FantraxLeagueInfo,
+  options?: { now?: Date; maxPeriods?: number },
+): Promise<{
+  rows: FantraxScheduleRow[]
+  position: FantraxSeasonPosition | null
+  periodsRead: number
+  periodsFailed: number
+}> {
+  const rows = flattenFantraxSchedule(info)
+  const position = resolveFantraxSeasonPosition(info, options?.now ?? new Date())
+
+  const maxPeriods = options?.maxPeriods ?? 30
+  const through = Math.min(position?.scoredThrough ?? 0, maxPeriods)
+  if (through < 1) return { rows, position, periodsRead: 0, periodsFailed: 0 }
+
+  const wanted = Array.from({ length: through }, (_, i) => i + 1)
+  const results = await Promise.all(wanted.map((p) => getFantraxMatchupScores(leagueId, p)))
+
+  const scored: FantraxPeriodScore[] = []
+  let periodsFailed = 0
+  for (const res of results) {
+    if (res.ok) scored.push(res.data)
+    else periodsFailed++
+  }
+
+  return {
+    rows: applyFantraxScores(rows, scored),
+    position,
+    periodsRead: scored.length,
+    periodsFailed,
   }
 }
 

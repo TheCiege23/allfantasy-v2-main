@@ -13,6 +13,8 @@ export interface FantraxImportLeague {
 export interface FantraxImportSettings {
   scoringType: string | null
   rosterPositions: Array<{ position: string; count: number }>
+  /** Real per-team roster size, measured from the rosters. Null when unknown. */
+  rosterSize: number | null
   scoringRules: Array<{ statKey: string; points: number }>
   raw: Record<string, unknown>
 }

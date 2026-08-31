@@ -327,16 +327,44 @@ function buildTeamIdMap(args: {
   return map
 }
 
-function buildRosterPositionCounts(players: LegacyRosterPlayer[]): Array<{ position: string; count: number }> {
-  const counts = new Map<string, number>()
+/**
+ * 🛑 THIS COUNTED THE WHOLE LEAGUE'S PLAYER POOL AND CALLED IT A LINEUP.
+ *
+ * `roster_positions` means STARTING SLOTS — Sleeper's is ["QB","RB","RB","WR",…]
+ * — and this returned a census of every rostered player in the league. Measured
+ * on production: ["QB:89","RB:129","RWT:36","SFX:12","TE:51","WR:149"], which
+ * sums to 466, the entire 12-team pool. `rosterSize` is derived from that sum, so
+ * the League row claimed a 466-man roster.
+ *
+ * ⚠ FANTRAX'S API DOES NOT PUBLISH LINEUP SLOTS, so the honest output is nothing.
+ * Emitting a positional breakdown of the pool is worse than emitting none: it is
+ * confidently wrong, and every consumer that reads roster_positions as a lineup
+ * gets a 466-slot one. The per-team roster SIZE is real and is returned
+ * separately below.
+ */
+function buildRosterPositionCounts(): Array<{ position: string; count: number }> {
+  return []
+}
+
+/**
+ * How many players a team actually rosters, from the rosters themselves.
+ *
+ * ⚠ THE MEDIAN, NOT THE SUM AND NOT THE MAX. Teams legitimately differ (36–43 on
+ * the measured league) because of open slots and IR; the sum is the league pool
+ * and the max is whoever is carrying most. The median is the league's real roster
+ * size and is stable against one outlier.
+ */
+function medianRosterSize(players: LegacyRosterPlayer[]): number | null {
+  const byTeam = new Map<string, number>()
   for (const player of players) {
-    const position = asString(player.primaryPosition) || asString(player.position) || 'FLEX'
-    const normalized = position.toUpperCase()
-    counts.set(normalized, (counts.get(normalized) ?? 0) + 1)
+    const team = asString(player.teamName).trim().toLowerCase()
+    if (!team) continue
+    byTeam.set(team, (byTeam.get(team) ?? 0) + 1)
   }
-  return Array.from(counts.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([position, count]) => ({ position, count }))
+  const counts = Array.from(byTeam.values()).sort((a, b) => a - b)
+  if (counts.length === 0) return null
+  const mid = Math.floor(counts.length / 2)
+  return counts.length % 2 === 0 ? Math.round((counts[mid - 1]! + counts[mid]!) / 2) : counts[mid]!
 }
 
 function buildRosterPlayerMap(players: LegacyRosterPlayer[]): Record<string, { name: string; position: string; team: string }> {
@@ -752,7 +780,9 @@ export async function fetchFantraxLeagueForImport(
     },
     settings: {
       scoringType: leagueRecord.isDevy ? 'devy' : null,
-      rosterPositions: buildRosterPositionCounts(rosterPlayers),
+      rosterPositions: buildRosterPositionCounts(),
+      /* The real per-team size, so the mapper stops deriving it from the pool. */
+      rosterSize: medianRosterSize(rosterPlayers),
       scoringRules: liveScoringRules.map((r) => ({ statKey: r.stat_key, points: r.points_value })),
       raw: {
         isDevy: leagueRecord.isDevy,
