@@ -27,7 +27,14 @@ export default defineConfig({
     // 🛑 GATE. These suites write to a database, and @prisma/client loads .env
     // on import — so without this they point at production by default. See
     // dbSpecGuard.ts for the near miss that prompted it.
-    setupFiles: [path.resolve(repoRoot, '__tests__/commissioner-os/dbSpecGuard.ts')],
+    // Two gates, and they answer different questions. db-guard asks WHAT this
+    // run may connect to; dbSpecGuard asks WHETHER these suites may run at all.
+    // COMMISH_DB_SPECS=1 on its own used to be enough to reach production,
+    // because an unexported DATABASE_URL is not empty here — .env fills it in.
+    setupFiles: [
+      path.resolve(repoRoot, 'vitest.setup.db-guard.ts'),
+      path.resolve(repoRoot, '__tests__/commissioner-os/dbSpecGuard.ts'),
+    ],
     // Role and policy state is global to the database. Parallel files would
     // race each other's assumptions once T-102's isolation suite lands here.
     fileParallelism: false,

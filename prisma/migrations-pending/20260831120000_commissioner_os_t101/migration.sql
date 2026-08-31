@@ -314,6 +314,43 @@ $backfill$;
 -- 9e. Now it can be required.
 ALTER TABLE "leagues" ALTER COLUMN "tenantId" SET NOT NULL;
 
+-- 9e-bis. 🛑 A TRANSITION-ONLY DATABASE DEFAULT. READ BEFORE REMOVING, AND
+-- READ BEFORE COPYING — the header of this file argues AGAINST a default, and
+-- that argument is still right about the one it was aimed at.
+--
+-- The distinction is which default. A default in `schema.prisma` would let
+-- FUTURE APPLICATION CODE omit tenantId forever and land silently in the
+-- bootstrap tenant — the one mistake RLS cannot catch, because the row is then
+-- legitimately readable by that tenant. That default is still refused: League
+-- carries no @default, and the generated client proves it. Measured against a
+-- client generated from this schema:
+--
+--     LeagueUncheckedCreateInput  →  tenantId: string                    (required)
+--     LeagueCreateInput           →  tenant: TenantCreateNested…Input    (required)
+--
+-- No `?`. New code CANNOT omit it. This default is invisible to the type system
+-- and cannot weaken that.
+--
+-- What it exists for is the deployment window, and without it this migration is
+-- a production outage on the minute it runs. The deployed app is built from a
+-- client generated BEFORE this column existed, so its INSERTs do not mention
+-- tenantId. Against a NOT NULL column with no default, every one of them fails:
+--
+--     app/api/league/create, app/api/league/transfer,
+--     app/api/leagues/import/batch, lib/import/processImportJob,
+--     lib/league/sleeper-import-process, lib/league-sync-core, …
+--
+-- i.e. league creation and every import path, broken from this statement until
+-- the new build is live. Reads are unaffected (an old client selects only the
+-- columns it knows), which is why this is easy to miss: the app looks healthy
+-- and only writes fail.
+--
+-- ⚠ AND THE REVERSE ORDER IS NOT AVAILABLE EITHER. Landing the code first gives
+-- P2022 on ~1,023 league read sites, and lib/data/league-home.ts:707 swallows
+-- that class in `.catch(() => [])` and renders empty. Neither order works
+-- unaided; this default is what makes the two independent.
+ALTER TABLE "leagues" ALTER COLUMN "tenantId" SET DEFAULT 'allfantasy';
+
 -- 9f. Index before the FK — the FK's own lookups and every RLS predicate use it.
 CREATE INDEX "leagues_tenantId_idx" ON "leagues"("tenantId");
 CREATE INDEX "leagues_tenantId_lifecycleState_idx" ON "leagues"("tenantId", "lifecycleState");

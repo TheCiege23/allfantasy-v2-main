@@ -5830,11 +5830,52 @@ model League {
   // docs/commissioner-os/TENANCY.md §5.
   //
   // REQUIRED, and every existing row is backfilled to the bootstrap tenant
-  // `allfantasy` by the T-101 migration before the NOT NULL lands. There is
-  // deliberately NO @default here: a default would let a future insert silently
-  // land in the bootstrap tenant instead of failing, which is the one mistake
-  // RLS cannot catch (the row would be legitimately readable by that tenant).
-  tenantId                              String
+  // `allfantasy` by the T-101 migration before the NOT NULL lands.
+  //
+  // ⚠ THIS COMMENT USED TO SAY "deliberately NO @default", ON THE GROUND THAT A
+  // DEFAULT LETS A FUTURE INSERT SILENTLY LAND IN THE BOOTSTRAP TENANT — the one
+  // mistake RLS cannot catch, because the row is then legitimately readable by
+  // that tenant. That risk is real and the @default below does not deny it. What
+  // changed is the measured cost of the alternative, and the discovery that the
+  // alternative does not actually buy what it looked like it bought.
+  //
+  // Without a default, `tenantId` is required in the generated create inputs —
+  // measured against a client generated from this schema, not assumed:
+  //
+  //     LeagueUncheckedCreateInput  →  tenantId: string
+  //     LeagueCreateInput           →  tenant: TenantCreateNestedOneWithoutLeaguesInput
+  //
+  // There are 46 prisma.league.create/upsert sites, 21 of them in app/ and lib/
+  // (league create, league transfer, the import batch route, processImportJob,
+  // sleeper-import-process, league-sync-core, the tournament services). None
+  // passes a tenant. And next.config.js sets `ignoreBuildErrors: true`, so this
+  // does NOT fail the build — it ships green and throws
+  // PrismaClientValidationError at runtime on league creation and every import
+  // path.
+  //
+  // 🛑 THE DECIDING POINT: HAND-EDITING THOSE 21 SITES IS THE SAME DEFAULT,
+  // SPELLED 21 TIMES. Every one of them would pass the literal 'allfantasy' —
+  // there is exactly one Tenant row and every league legitimately belongs to it.
+  // That is not tenant-awareness, it is a constant denormalised across 21 files
+  // with 21 chances to typo and no mechanism keeping them in step. It LOOKS like
+  // each call site made a decision; none of them did. Real tenant-awareness is
+  // deriving tenantId from ActorContext through withTenant, which is Phase 3
+  // work, and neither option delivers it today.
+  //
+  // So the default is a COMPATIBILITY SHIM for call sites that predate tenancy,
+  // and the invariant is defended where it can actually be defended: by a
+  // ratchet. __tests__/commissioner-os/leagueCreateRatchet.test.ts fails when a
+  // NEW league.create site appears outside lib/domain/ — which is precisely the
+  // "future insert" this comment was always worried about, caught at the moment
+  // of risk rather than hoped away by a required field.
+  //
+  // ⚠ AND IT IS COUPLED TO THE DATABASE DEFAULT. Prisma implements a scalar
+  // @default IN THE DATABASE and omits the column on insert, so removing
+  // `DEFAULT 'allfantasy'` from the column while this line stands turns every
+  // omitting insert into a NOT NULL violation. See
+  // prisma/migrations-pending/20260831200000_commissioner_os_t101b_drop_tenant_default —
+  // the two come out together or not at all.
+  tenantId                              String                                 @default("allfantasy")
   tenant                                Tenant                                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId                                String
   platform                              String

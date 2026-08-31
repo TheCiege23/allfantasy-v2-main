@@ -1103,9 +1103,63 @@ reach production if anything in its import graph pulls in the Prisma client.
 
 The one suite set that is gated opts in explicitly (`COMMISH_DB_SPECS=1`) rather
 than sniffing a hostname — deliberately, because as recorded above a `.vercel.app`
-URL is not proof you are off the production database. ⚠ **That gate covers those
-suites only. Every other DB-touching test in this repo is still pointed at
-production by default.**
+URL is not proof you are off the production database.
+
+⚠ **BUT AN OPT-IN FLAG GATES *WHETHER* A SUITE RUNS, NEVER *WHAT IT CONNECTS TO*,
+AND THAT DISTINCTION IS THE WHOLE BUG.** Every DB suite here was already gated —
+`RUN_EVENT_DB_IT`, `IMPORT_INTEGRATION_DB`, `TEST_DATABASE_URL`, `COMMISH_DB_SPECS`.
+Each header says "point `DATABASE_URL` at a NON-prod DB", which is a sentence
+addressed to a human. Set the flag and forget the URL and the author's reasonable
+assumption — that an unset variable means "no database" — is false in this repo.
+It means production. `RUN_EVENT_DB_IT=1 npm test` was a live round-trip to prod.
+
+**Fixed 2026-08-31 by `vitest.setup.db-guard.ts`, first in `setupFiles` for both
+vitest configs.** Setup files run before any test module is imported, so `.env`
+has not been read yet — therefore `DATABASE_URL` being set *at that instant* means
+a human exported it deliberately, and being unset means the only thing that can
+fill it later is Prisma's `.env` load. So the guard pins the unset case to
+`127.0.0.1:1`. dotenv does not overwrite an existing variable, which is what makes
+the pin hold.
+
+No hostname matching and no escape-hatch flag: naming the URL you want IS the
+escape hatch, and unlike a flag it cannot be set once in a shell profile and then
+forgotten. Verified red before green — `RUN_EVENT_DB_IT=1 npx vitest run
+__tests__/events/outbox-db.integration.test.ts` now fails with `Can't reach
+database server at 127.0.0.1:1` and **zero** occurrences of the production host in
+its output. ⚠ Read that reason, not the exit code: the first attempt at the same
+control used a `--reporter` this vitest does not have and exited 1 before running
+a single test, which looked exactly like success.
+
+⚠ **`127.0.0.1:1` in a stack trace means that guard pinned it** — you did not name
+a database. It is not a broken local Postgres.
+
+🛑 **AND WHAT IT CAUGHT ON DAY ONE IS THE REASON THIS IS NOT PARANOIA.** Turning
+the guard on moved the suite from 93 failed files to 96. The three that moved were
+`real-data-validation-phase33`, `-phase34` and `-phase35` — each one described in
+its own header as **"real execution against `.env.test`, no mocks"**, and each one
+running in every plain `npm test`. Nobody was setting `DATABASE_URL`, so all three
+had been doing real, unmocked, write-capable execution **against production**, and
+**passing**. The baseline run contains the production host; the guarded run
+contains it zero times.
+
+⚠ **`phase35` WAS ALREADY GATED, AND THE GATE WAS THE SAME BUG IN MINIATURE:**
+
+```ts
+const HAS_DB = Boolean(process.env.DATABASE_URL || …)   // always true. always production.
+```
+
+Someone saw the risk and tested for *presence*. Presence is exactly what `.env`
+guarantees. **A gate on `DATABASE_URL` being set is not a gate** — the variable is
+never unset in this repo, so that condition is a constant. Gate on
+`VITEST_NO_DATABASE !== '1'`, which is false only when a human named a target.
+
+⚠ **AND PINNING THE URL IS ONLY HALF A FIX.** On its own it converts a silent
+production read into a permanently red suite, and a red suite nobody reads is how
+the problem survives in a new costume. A suite that needs a database must
+`describe.skipIf(NO_DB)` — **skip**, not fail, and skip rather than early-`return`
+so it still appears in the run summary. Verified both directions: with no target
+the three skip and open no connection; with `DATABASE_URL` named they run against
+that target and never the sentinel.
 
 **`npm run test:agent:readonly` is the default for an unfamiliar target.** It
 sets `AGENT_TESTER_READ_ONLY=1`, which skips the signup probe entirely and never
