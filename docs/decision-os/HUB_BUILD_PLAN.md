@@ -30,9 +30,9 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | 🔄 | **1.3** Propagate `drainOutcomes()` | **Premise was wrong** — see §4 Phase 1.3. Telemetry half was already done; League OS now emits too. Response half deferred to Phase 4 |
 | ✅ | **1.4** Schedule `classifyDraftStatus` | **Already done** by `ad514a334`, on main. My §2.6 claim was stale — see §2.15 |
 | ✅ | **2.1** Define `CanonicalValue` | `lib/decision-os/value/contract.ts`. Unit refusal enforced by a test proven red-then-green |
-| ⬜ | **2.2** One adapter per producer | |
+| ✅ | **2.2** One adapter per producer | **THREE, not four** — IDP+kicker already composed. market · devy · idpKicker, each with a trap pinned by a red-proven test |
 | ✅ | **2.3** Register `'value'` as an `OsDomain` | Union widened; no migration (`VarChar(16)`). Level split documented on the type |
-| ⬜ | **2.4** Rescore-at-read for IDP + kicker | |
+| ✅ | **2.4** Rescore-at-read for IDP + kicker | **Not needed** — `buildIdpKickerValueMap` takes league rules as an argument, so there is no canonical row to rescore |
 | ⬜ | **3.1** `'projection'` domain | |
 | ⬜ | **3.2** `'import'` domain + four assertions | |
 | ⬜ | **3.3** `isConclusive(fact)` | |
