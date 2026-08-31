@@ -49,6 +49,16 @@ type LegacyRosterPlayer = {
    * row belongs to the uploader's team.
    */
   teamName?: unknown
+  /**
+   * Fantrax's own lineup state for this player — `ACTIVE` for a starter,
+   * `RESERVE` for a bench slot. Present on live-API imports; absent on CSV-era
+   * snapshots, which never carried it.
+   *
+   * ⚠ THE FIELD WAS ALWAYS IN THE DATA AND NEVER IN THIS TYPE, which is why
+   * `starterPlayerIds` was hardcoded empty below: nothing downstream could see
+   * the one column that distinguishes a starter from a bench player.
+   */
+  status?: unknown
 }
 
 type LegacyTransaction = {
@@ -208,6 +218,34 @@ function parseStandings(raw: unknown): LegacyStanding[] {
 function parseMatchups(raw: unknown): LegacyMatchup[] {
   if (!Array.isArray(raw)) return []
   return raw.filter(isRecord) as LegacyMatchup[]
+}
+
+/**
+ * Split a team's players into the lineup and the bench, using Fantrax's own
+ * `status`.
+ *
+ * ⚠ NO STATUS MEANS NO CLAIM. A CSV-era snapshot carries no status at all, and
+ * guessing — first N are starters, say — would put players in a lineup their
+ * manager never set. When nothing is marked ACTIVE the split is refused and the
+ * caller keeps the previous "everything is bench" shape, which is honest about
+ * not knowing rather than confidently wrong.
+ *
+ * ⚠ ANYTHING NOT `ACTIVE` IS BENCH, not just `RESERVE`. Fantrax also emits
+ * injured-reserve and minor-league states; treating only the literal string
+ * RESERVE as bench would silently promote those into the starting lineup.
+ */
+export function splitLineup(players: LegacyRosterPlayer[]): { starters: string[]; reserve: string[] } | null {
+  const starters: string[] = []
+  const reserve: string[] = []
+  for (const p of players) {
+    const id = asString(p.fantraxId)
+    if (!id) continue
+    const status = asString(p.status).trim().toUpperCase()
+    if (status === 'ACTIVE') starters.push(id)
+    else reserve.push(id)
+  }
+  if (starters.length === 0) return null
+  return { starters, reserve }
 }
 
 function parseRoster(raw: unknown): LegacyRosterPlayer[] {
@@ -522,6 +560,12 @@ export async function fetchFantraxLeagueForImport(
         ? rosterPlayerMap
         : {}
     const rosterPlayerIds = Object.keys(teamPlayerMap)
+    /*
+     * The same source `teamPlayerMap` was built from, so the lineup split and
+     * the player map can never describe different squads.
+     */
+    const lineupSource = ownPlayers.length > 0 ? ownPlayers : isUserTeam ? rosterPlayers : []
+    const lineup = splitLineup(lineupSource)
     return {
       teamId,
       managerId: isUserTeam ? `fantrax-user:${username}` : `fantrax-manager:${slugify(teamName) || teamId}`,
@@ -544,8 +588,17 @@ export async function fetchFantraxLeagueForImport(
       faabRemaining: null,
       waiverPriority: null,
       rosterPlayerIds,
-      starterPlayerIds: [],
-      reservePlayerIds: rosterPlayerIds,
+      /*
+       * 🛑 THIS WAS HARDCODED `[]`, AND EVERY PLAYER WAS FILED AS BENCH.
+       * `Roster.playerData.starters` is what My Team renders a lineup from, so an
+       * empty array meant a Fantrax league showed "no starting lineup recorded"
+       * AND "no bench players recorded" while holding a full 39-man roster —
+       * measured on production before this change. The mapper, the normalized
+       * type and the persistence layer all carried `starter_ids` already; only
+       * this line never filled it.
+       */
+      starterPlayerIds: lineup?.starters ?? [],
+      reservePlayerIds: lineup?.reserve ?? rosterPlayerIds,
       playerMap: teamPlayerMap,
     }
   })
@@ -721,3 +774,10 @@ export async function fetchFantraxLeagueForImport(
     })),
   }
 }
+
+/**
+ * Test seam for `splitLineup`. Exported under a distinct name so the rule can be
+ * pinned by tests without inviting new production callers to reach past the
+ * fetch service for it.
+ */
+export { splitLineup as splitLineupForTest }
