@@ -224,6 +224,19 @@ describe("World Cup AI recap builder", () => {
     expect(source).toContain("Rewrite only the provided World Cup pool facts")
     expect(source).toContain("Do not add scores, schedules, match minutes, player stats, injuries, odds, lineups, or standings")
     expect(source).toContain("Source: stored AllFantasy pool data only; no external live feed is included")
-    expect(source).toContain("sanitizeRecapLine(text)")
+    /*
+     * ⚠ PINNED TO A LOCAL VARIABLE NAME, WHICH IS NOT THE BEHAVIOUR IT MEANT TO
+     * GUARD. This read `sanitizeRecapLine(text)`; the local was renamed to
+     * `rawText` and the assertion went red while the sanitizing it exists to
+     * protect never stopped happening — sanitizeRecapLine is applied at ten
+     * sites in this file, including both model-output paths.
+     *
+     * Asserted as the CHAIN instead, which is the actual guarantee: whatever the
+     * model returns is sanitized and then run through the validation contract
+     * before it can reach a user. A future rename of the local cannot break this;
+     * removing the sanitizer still does.
+     */
+    expect(source).toContain("sanitizeRecapLine(rawText)")
+    expect(source).toContain("applyValidationPipeline(sanitized, COMMISSIONER_VALIDATION_CONTRACT)")
   })
 })

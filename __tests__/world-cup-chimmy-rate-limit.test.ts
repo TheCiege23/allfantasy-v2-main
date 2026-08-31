@@ -34,7 +34,15 @@ vi.mock("@/lib/world-cup/worldCupNotifications", () => ({
   notifyWorldCupChimmyReply: notifyChimmyReplyMock,
 }))
 
-vi.mock("@/lib/world-cup/worldCupChimmyPrivateReply", () => ({
+/*
+ * ⚠ SPREAD THE REAL MODULE — A BARE FACTORY ROTS THE MOMENT THE MODULE GAINS AN
+ * EXPORT. This listed only the generator, and when the module added
+ * `ChimmyTokenSpendFailedError` (which the route imports and catches) vitest
+ * failed the whole suite with "No export is defined on the mock". Spreading
+ * importOriginal keeps every real export and stubs only the one we intend to.
+ */
+vi.mock("@/lib/world-cup/worldCupChimmyPrivateReply", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/world-cup/worldCupChimmyPrivateReply")>()),
   generateWorldCupChimmyPrivateReply: generateChimmyReplyMock,
 }))
 
@@ -55,6 +63,61 @@ vi.mock("@/lib/prisma", () => ({
     },
     worldCupBracketParticipant: {
       findMany: findManyParticipantsMock,
+    },
+    /*
+     * ⚠ REACHED THROUGH THE TOKEN FALLBACK, NOT THROUGH ANY CHAT MODEL. A free
+     * user now goes route -> prepareWorldCupAiTokenFallback ->
+     * TokenSpendService.previewSpend -> syncSeedDataIfNeeded, which upserts the
+     * token package seeds. Without these the suite dies on
+     * `Cannot read properties of undefined (reading 'upsert')` a long way from
+     * anything this file is about.
+     */
+    tokenPackage: {
+      upsert: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    // TokenSpendService.getBalance upserts THIS model (userTokenBalance), not
+    // `tokenBalance`. Zero balance = the free user cannot cover the spend.
+    userTokenBalance: {
+      upsert: vi.fn().mockResolvedValue({
+        balance: 0,
+        lifetimePurchased: 0,
+        lifetimeSpent: 0,
+        lifetimeRefunded: 0,
+        // getBalance does `new Date(balance.updatedAt).toISOString()` — an
+        // absent value throws RangeError long before any assertion runs.
+        updatedAt: new Date("2026-06-01T00:00:00.000Z"),
+      }),
+    },
+    tokenLedger: {
+      create: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    tokenSpendRule: {
+      upsert: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+      // An ACTIVE rule, or getActiveRule throws TokenSpendRuleNotFoundError and
+      // the route answers 500 "token_spend_rule_missing" — a seeding fault, not
+      // the refusal this test is about.
+      findUnique: vi.fn().mockResolvedValue({
+        code: "world_cup_chimmy_message",
+        featureLabel: "World Cup Chimmy",
+        tokenCost: 1,
+        requiresConfirmation: false,
+        isActive: true,
+      }),
+    },
+    tokenRefundRule: {
+      upsert: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    // EntitlementResolver.resolveSnapshot reads both of these when the route
+    // resolves a free user's plan. Empty = no subscription, no admin grant.
+    userSubscription: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    adminSubscriptionGrant: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }))
@@ -182,6 +245,20 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
       conversationId: "chimmy:user-1:world-cup:c1",
       provider: "openai",
       model: "gpt-test",
+      /*
+       * ⚠ NOT OPTIONAL, AND THE ROUTE DOES NOT TREAT IT AS OPTIONAL. The real
+       * generator always returns `billingDecision: AiBillingDecision`, and the
+       * route reads `.reason` / `.displayHint` / `.shouldChargeToken` off it with
+       * no `?.` — unlike `sourceFreshness`, which it does guard. So a fixture
+       * missing this field crashes the route rather than exercising it. Checked
+       * against the real return type before adding, so the mock is not inventing
+       * a shape the product does not produce.
+       */
+      billingDecision: {
+        reason: "llm_required",
+        displayHint: null,
+        shouldChargeToken: false,
+      },
     })
     findManyMessagesMock.mockResolvedValue([])
     findFirstMessageMock.mockResolvedValue(null)
@@ -200,6 +277,18 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
     )
   })
 
+  /*
+   * ⚠ THE 402 SURVIVED; THE CODE STRING DID NOT. This asserted
+   * `WORLD_CUP_CHIMMY_LOCKED`, which no longer exists anywhere on the server —
+   * Chimmy stopped being hard-locked behind Pro and became token-metered. A free
+   * user with no balance now meets `insufficientTokenResponse`, which is still a
+   * 402 and still carries `upgrade: true` and an upgradePath.
+   *
+   * So the behaviour this test guards — a free user is refused BEFORE any
+   * rate-limit counting happens — is unchanged and still worth asserting. Only
+   * the identifier moved, and the assertions below follow it rather than the
+   * test being deleted as obsolete.
+   */
   it("free user still hits 402 BEFORE the rate-limit check (no count query made)", async () => {
     hasAiMock.mockResolvedValue(false)
     const { POST } = await import("@/app/api/brackets/world-cup/[challengeId]/chat/route")
@@ -208,7 +297,8 @@ describe("World Cup chat route — Chimmy rate-limit integration", () => {
     const json = await res.json()
 
     expect(res.status).toBe(402)
-    expect(json.code).toBe("WORLD_CUP_CHIMMY_LOCKED")
+    expect(json.code).toBe("insufficient_token_balance")
+    expect(json.upgrade).toBe(true)
     expect(countMessagesMock).not.toHaveBeenCalled()
     expect(findManyMessagesMock).not.toHaveBeenCalled()
     expect(generateChimmyReplyMock).not.toHaveBeenCalled()

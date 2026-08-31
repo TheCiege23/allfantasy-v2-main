@@ -75,10 +75,29 @@ describe("Quick Actions i18n key fix (app/brackets/page.tsx)", () => {
 // ── 2. Chat 402 response shape ────────────────────────────────────────────────
 
 describe("WC chat route 402 response (Chimmy locked)", () => {
-  it("returns code WORLD_CUP_CHIMMY_LOCKED on 402", () => {
+  /*
+   * ⚠ THE HARD 402 LOCK IS RETIRED — Chimmy is TOKEN-METERED NOW, and this test
+   * was still asserting the old contract. The route's only remaining 402 is a
+   * failed token DEDUCTION (it carries `code: err.code`), while the gate a
+   * non-subscriber actually meets is `resolveWcCapTier` -> 429 with an
+   * upgradePath, which the "429 response" describe below covers and which passes.
+   *
+   * Checked before rewriting rather than assumed: `WORLD_CUP_CHIMMY_LOCKED` now
+   * appears in exactly ONE file, WorldCupBracketShell.tsx, and nowhere on the
+   * server. So the assertion could never pass again.
+   *
+   * ⚠ AND THE LEFTOVER IS WORTH KNOWING ABOUT, which is why this is a rewritten
+   * assertion and not a deletion: the CLIENT still branches on
+   * `res.status === 402 && data.code === "WORLD_CUP_CHIMMY_LOCKED"`
+   * (WorldCupBracketShell.tsx, in the chat error handler). Nothing emits that
+   * pair any more, so it is a dead branch — harmless, because the 429 path below
+   * carries the upgrade gate, but it should not be mistaken for a live one.
+   */
+  it("gates unentitled Chimmy through the tier cap, not a hard 402 lock", () => {
     const src = read("app/api/brackets/world-cup/[challengeId]/chat/route.ts")
-    expect(src).toContain("WORLD_CUP_CHIMMY_LOCKED")
-    expect(src).toContain('status: 402')
+    expect(src).toContain("resolveWcCapTier")
+    expect(src).toContain("checkWorldCupChimmyRateLimit")
+    expect(src).not.toContain("WORLD_CUP_CHIMMY_LOCKED")
   })
 
   it("402 response includes upgradePath pointing to pricing", () => {
@@ -87,9 +106,12 @@ describe("WC chat route 402 response (Chimmy locked)", () => {
     expect(src).toContain('upgradePath: "/pricing?from=wc-chimmy"')
   })
 
-  it("402 response sets upgrade: true for client gate detection", () => {
+  it("the refusal a free user meets carries a deep-link to pricing", () => {
     const src = read("app/api/brackets/world-cup/[challengeId]/chat/route.ts")
-    expect(src).toContain('upgrade: true')
+    // Replaces an `upgrade: true` flag that went away with the 402 contract.
+    // What the client needs is the destination, and that is still emitted.
+    expect(src).toContain('"/pricing?from=wc-chimmy"')
+    expect(src).toContain("getWcUpgradeMessage")
   })
 })
 
@@ -117,18 +139,32 @@ describe("WC chat route 429 response (daily limit reached)", () => {
 // ── 4. WorldCupBracketShell upgrade CTA (AI teaser) ──────────────────────────
 
 describe("WorldCupBracketShell AI teaser upgrade CTA", () => {
-  it("renders an Upgrade to AF Pro button for non-pro users in the Home AI teaser", () => {
+  /*
+   * ⚠ THE CTA IS STILL THERE — TWO STRING LITERALS UNDER IT MOVED, AND THIS TEST
+   * WAS PINNED TO THE OLD ONES. It asserted a `?from=wc-ai-teaser` deep-link and
+   * a `wc.home.ai.unlockHint` key; neither exists anywhere in the repo now.
+   *
+   * Checked before rewriting, because "the monetization CTA vanished" and "the
+   * test is stale" look identical from a red assertion: the component carries
+   * four /pricing links, an entitlement-aware `world-cup-ai-features-teaser`
+   * section, and `aiInsightsUnlocked` gating throughout. The upgrade path is
+   * intact; only the source param and the i18n key changed.
+   *
+   * Asserted below against the literals that are actually in the file, so the
+   * test keeps its original intent — a non-pro user is offered a way to upgrade
+   * from the AI surface — without pinning it to a query string nobody uses.
+   */
+  it("offers non-pro users an upgrade path from the AI surface", () => {
     const src = read("components/brackets/world-cup/WorldCupBracketShell.tsx")
-    // The teaser section must include a link to pricing and upgrade copy
-    expect(src).toContain("/pricing?from=wc-ai-teaser")
+    expect(src).toContain("/pricing?from=wc-chimmy")
     expect(src).toContain("Upgrade to AF Pro")
   })
 
-  it("AI teaser upgrade link is inside the non-pro else branch (aiInsightsUnlocked guard)", () => {
+  it("the upgrade link sits in the locked branch, behind an entitlement guard", () => {
     const src = read("components/brackets/world-cup/WorldCupBracketShell.tsx")
-    // Both the unlockHint i18n key and the upgrade button must coexist
-    expect(src).toContain('wc.home.ai.unlockHint')
-    expect(src).toContain('/pricing?from=wc-ai-teaser')
+    expect(src).toContain("wc.chat.aiHint.locked")
+    expect(src).toContain("aiInsightsUnlocked")
+    expect(src).toContain('data-testid="world-cup-ai-features-teaser"')
   })
 })
 
