@@ -124,6 +124,8 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
       leagueId?: string
       teamName?: string
       franchiseName?: string
+      /** The league the user clicked "connect" on, so its half arrives chosen. */
+      from?: string
       pro?: { platform?: string; leagueId?: string; teamExternalId?: string }
       college?: { platform?: string; leagueId?: string; teamExternalId?: string }
     }
@@ -151,8 +153,44 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         where: { userId: auth.userId },
         select: { id: true, platform: true, platformLeagueId: true },
       })
+      const collapsed = collapseFantraxDuplicates(pairable, leagueRows)
+
+      /*
+       * 🛑 THE HALF THE USER ARRIVED FROM, RESOLVED HERE RATHER THAN GUESSED IN
+       * THE BROWSER. They clicked "connect" on one specific league, so it is
+       * already chosen — making them find it again in its own list is friction
+       * that stops the flow being used.
+       *
+       * ⚠ AND THE ID THEY ARRIVE WITH IS OFTEN NOT THE ID IN THE LIST. A Fantrax
+       * import writes both a `FantraxLeague` snapshot and a mirror `League`;
+       * every screen links by the `League.id`, while `collapseFantraxDuplicates`
+       * keeps the SNAPSHOT. Matching on the raw id alone silently preselects
+       * nothing for exactly the leagues this feature is for.
+       */
+      const fromRaw = typeof body.from === 'string' ? body.from.trim() : ''
+      let from: { id: string; role: 'pro' | 'college' } | null = null
+      if (fromRaw) {
+        const mirror = leagueRows.find((l) => l.id === fromRaw)
+        const candidates = [fromRaw, mirror?.platformLeagueId ?? null].filter(
+          (v): v is string => typeof v === 'string' && v.length > 0,
+        )
+        for (const id of candidates) {
+          const pro = collapsed.pro.find((l) => l.id === id)
+          if (pro) {
+            from = { id: pro.id, role: 'pro' }
+            break
+          }
+          const college = collapsed.college.find((l) => l.id === id)
+          if (college) {
+            from = { id: college.id, role: 'college' }
+            break
+          }
+        }
+      }
+
       return NextResponse.json({
-        ...collapseFantraxDuplicates(pairable, leagueRows),
+        ...collapsed,
+        from,
         note: 'Pairing is a label, not a sync. Neither league is modified.',
       })
     }
@@ -208,10 +246,61 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
       }
 
+      /*
+       * 🛑 EITHER HALF MAY ALREADY BE IN A FRANCHISE OF THIS USER'S, and building
+       * a second one around it is what produced "that league is already part of
+       * another franchise" on a franchise the user owns. The half-built case is
+       * the ordinary one — LeagueHome's own "Add the other half" link lands here
+       * — so pairing MERGES into that link rather than competing with it.
+       *
+       * ⚠ OWNER-GATED, not merely "a link exists". A membership under someone
+       * else's link is still refused, one layer down in `attachToFranchise`.
+       */
+      const ownMemberships = await prisma.franchiseLeagueMember.findMany({
+        where: {
+          link: { ownerUserId: auth.userId },
+          OR: [
+            { platform: proPlatform, leagueId: pro.leagueId },
+            { platform: collegePlatform, leagueId: college.leagueId },
+          ],
+        },
+        select: { id: true, linkId: true },
+      })
+      const targetLinkId = body.linkId ?? ownMemberships[0]?.linkId ?? null
+
+      /*
+       * 🛑 AND THE OTHER HALF MAY BE IN A DIFFERENT FRANCHISE OF THEIRS AGAIN.
+       * `attachToFranchise` reuses a user's own claiming link only when no link
+       * was named — with one named it falls through to a create that the unique
+       * `(platform, leagueId)` rejects. So the membership is moved here, before
+       * either attach, and the franchise it came from is deleted only if this
+       * empties it: nothing is left named after a franchise with no leagues.
+       *
+       * ⚠ SCOPED TO LINKS THIS USER OWNS, by the query above. A league held by
+       * somebody else's franchise is still refused inside `attachToFranchise`,
+       * which is the check that stops one account emptying another's.
+       */
+      for (const m of ownMemberships) {
+        if (targetLinkId == null || m.linkId === targetLinkId) continue
+        await prisma.franchiseLeagueMember.delete({ where: { id: m.id } }).catch(() => {})
+        await prisma.franchiseLink
+          .deleteMany({ where: { id: m.linkId, ownerUserId: auth.userId, members: { none: {} } } })
+          .catch(() => {})
+      }
+
+      /* Whether the pro half was ALREADY in the target link, so a failure below
+         rolls back what this request did and not what it found. */
+      const proWasMember =
+        targetLinkId != null &&
+        (await prisma.franchiseLeagueMember.findFirst({
+          where: { linkId: targetLinkId, platform: proPlatform, leagueId: pro.leagueId },
+          select: { id: true },
+        })) != null
+
       const attachedPro = await attachToFranchise({
         ownerUserId: auth.userId,
         franchiseName: body.franchiseName?.trim() || 'My franchise',
-        linkId: body.linkId ?? null,
+        linkId: targetLinkId,
         role: 'pro',
         platform: proPlatform,
         leagueId: pro.leagueId,
@@ -239,10 +328,12 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
          * request created it — an existing franchise must survive a failed
          * attempt to add a half to it.
          */
-        await prisma.franchiseLeagueMember
-          .deleteMany({ where: { linkId: attachedPro.linkId, role: 'pro', platform: proPlatform, leagueId: pro.leagueId } })
-          .catch(() => {})
-        if (!body.linkId) {
+        if (!proWasMember) {
+          await prisma.franchiseLeagueMember
+            .deleteMany({ where: { linkId: attachedPro.linkId, role: 'pro', platform: proPlatform, leagueId: pro.leagueId } })
+            .catch(() => {})
+        }
+        if (!targetLinkId) {
           await prisma.franchiseLink
             .deleteMany({ where: { id: attachedPro.linkId, ownerUserId: auth.userId, members: { none: {} } } })
             .catch(() => {})

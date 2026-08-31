@@ -28,21 +28,35 @@ type Pairable = {
   role: 'pro' | 'college'
   roleReason: string
   linkedTo: string | null
+  linkId: string | null
 }
 
 type Discovery = {
   pro: Pairable[]
   college: Pairable[]
   alreadyLinked: Pairable[]
+  /** The half the user arrived from, resolved server-side across both id spaces. */
+  from: { id: string; role: 'pro' | 'college' } | null
 }
 
+/**
+ * ⚠ THE CONTROL IS A BOX WITH A TICK IN IT, AND THE TICK IS DRAWN BY US.
+ *
+ * A native radio was invisible against this surface — a checked one showed no
+ * mark the user could see, so a preselected league read as an unselected one and
+ * they clicked it again to be sure. The input stays in the markup (it is what
+ * keyboard and screen readers drive, and `name` still makes each side a single
+ * choice); only its rendering is replaced.
+ */
 function LeagueOption({
   league,
   selected,
+  fromHere,
   onSelect,
 }: {
   league: Pairable
   selected: boolean
+  fromHere: boolean
   onSelect: () => void
 }) {
   return (
@@ -54,11 +68,20 @@ function LeagueOption({
         className="af-cl-radio"
         name={`side-${league.role}`}
       />
+      <span className="af-cl-box" aria-hidden="true">
+        <svg viewBox="0 0 16 16" className="af-cl-check" focusable="false">
+          <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
       <span className="af-cl-option-body">
-        <span className="af-cl-option-name">{league.name}</span>
+        <span className="af-cl-option-name">
+          {league.name}
+          {fromHere ? <span className="af-cl-from">You came from here</span> : null}
+        </span>
         <span className="af-cl-option-meta">
           {league.platform}
           {league.season != null ? ` · ${league.season}` : ''} · {league.roleReason}
+          {league.linkedTo ? ` · part of ${league.linkedTo}, still missing its other half` : ''}
         </span>
       </span>
     </label>
@@ -85,20 +108,18 @@ export function ConnectLeaguesClient() {
       const res = await fetch('/api/legacy/franchise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'discover-pairable' }),
+        body: JSON.stringify({ action: 'discover-pairable', from: fromLeague ?? undefined }),
       })
       const body = (await res.json()) as Discovery & { error?: string }
       if (!res.ok) throw new Error(body.error ?? 'Could not read your leagues')
       setData(body)
       /*
-       * Preselect whichever side the user arrived from. They clicked "connect"
-       * on a specific league, so making them find it again in its own list is
-       * the kind of small friction that stops a flow being used.
+       * Preselect whichever side the user arrived from — the server resolved it,
+       * because the id in the URL is a `League.id` and the list may hold the
+       * Fantrax snapshot id for the same league.
        */
-      if (fromLeague) {
-        if (body.pro.some((l) => l.id === fromLeague)) setPro(fromLeague)
-        if (body.college.some((l) => l.id === fromLeague)) setCollege(fromLeague)
-      }
+      if (body.from?.role === 'pro') setPro(body.from.id)
+      if (body.from?.role === 'college') setCollege(body.from.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read your leagues')
     } finally {
@@ -123,14 +144,25 @@ export function ConnectLeaguesClient() {
         body: JSON.stringify({
           action: 'pair-leagues',
           franchiseName: name.trim() || undefined,
+          /* Merge into the half-built franchise either side is already in. */
+          linkId: proLeague?.linkId ?? collegeLeague?.linkId ?? undefined,
           pro: { platform: proLeague?.platform, leagueId: pro },
           college: { platform: collegeLeague?.platform, leagueId: college },
         }),
       })
       const body = (await res.json()) as { error?: string; linkId?: string }
       if (!res.ok) throw new Error(body.error ?? 'Could not connect those leagues')
-      /* Back to the league they came from, which now renders its other half. */
-      router.push(fromLeague ? `/core?league=${encodeURIComponent(fromLeague)}` : '/core')
+      /*
+       * Back to the league they came from, which now renders its other half.
+       *
+       * ⚠ `refresh()` AS WELL AS `push()`. LeagueHome is a server component and
+       * the client router cache can serve the copy rendered before the pairing
+       * existed — so the user lands back on the screen still offering to connect
+       * the league they just connected.
+       */
+      const back = fromLeague ? `/core?league=${encodeURIComponent(fromLeague)}` : '/core'
+      router.push(back)
+      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect those leagues')
       setSaving(false)
@@ -187,7 +219,13 @@ export function ConnectLeaguesClient() {
               <section className="af-card af-cl-side">
                 <h2 className="af-label">Pro half</h2>
                 {data.pro.map((l) => (
-                  <LeagueOption key={l.id} league={l} selected={pro === l.id} onSelect={() => setPro(l.id)} />
+                  <LeagueOption
+                    key={l.id}
+                    league={l}
+                    selected={pro === l.id}
+                    fromHere={data.from?.role === 'pro' && data.from.id === l.id}
+                    onSelect={() => setPro(l.id)}
+                  />
                 ))}
               </section>
 
@@ -198,6 +236,7 @@ export function ConnectLeaguesClient() {
                     key={l.id}
                     league={l}
                     selected={college === l.id}
+                    fromHere={data.from?.role === 'college' && data.from.id === l.id}
                     onSelect={() => setCollege(l.id)}
                   />
                 ))}

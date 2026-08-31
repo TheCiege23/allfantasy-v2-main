@@ -45,14 +45,23 @@ export type PairableLeague = {
   role: FranchiseRole
   /** Why we think it is that half — shown to the user, never just applied. */
   roleReason: string
-  /** Already part of a franchise; offered as context, never as a candidate. */
+  /** Already part of a franchise; named so the UI can say which. */
   linkedTo: string | null
+  /**
+   * The franchise it is already part of, when there is one.
+   *
+   * ⚠ CARRIED SO PAIRING CAN MERGE INTO IT RATHER THAN BUILD A SECOND ONE. A
+   * league already filed as the pro half of a half-built franchise must gain its
+   * college side inside THAT link — creating a new one and re-parenting the
+   * league would empty the first and leave an orphan named after it.
+   */
+  linkId: string | null
 }
 
 export type PairableLeagues = {
   pro: PairableLeague[]
   college: PairableLeague[]
-  /** Leagues already in a franchise, so the UI can say so instead of hiding them. */
+  /** Leagues in a COMPLETE franchise, so the UI can say so instead of hiding them. */
   alreadyLinked: PairableLeague[]
 }
 
@@ -94,17 +103,39 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
     }),
     prisma.franchiseLeagueMember.findMany({
       where: { link: { ownerUserId } },
-      select: { platform: true, leagueId: true, link: { select: { name: true } } },
+      select: { platform: true, leagueId: true, linkId: true, link: { select: { name: true } } },
     }),
   ])
 
   /* Keyed on (platform, leagueId) — the same pair the schema makes unique. */
-  const linked = new Map(members.map((m) => [`${m.platform}:${m.leagueId}`, m.link?.name ?? 'a franchise']))
+  const linked = new Map(
+    members.map((m) => [
+      `${m.platform}:${m.leagueId}`,
+      { name: m.link?.name ?? 'a franchise', linkId: m.linkId },
+    ]),
+  )
+
+  /*
+   * ⚠ A HALF-BUILT FRANCHISE IS THE CASE THIS SCREEN EXISTS FOR, and treating it
+   * as "already connected" was a dead end. LeagueHome sends a one-sided league
+   * here under "Add the other half"; if that same league is then filtered out of
+   * its own list, the user cannot name the half they arrived to complete, and
+   * the only leagues left to pick are two OTHER ones — which is how a pairing
+   * attempt ends on "that league is already part of another franchise".
+   *
+   * So: a league in an INCOMPLETE franchise stays a candidate, carrying its
+   * link id so pairing merges into that franchise. A league in a complete one is
+   * reported as context, because re-pairing it would empty the franchise it is
+   * in — the thing the uniqueness rule is protecting.
+   */
+  const memberCountByLink = new Map<string, number>()
+  for (const m of members) memberCountByLink.set(m.linkId, (memberCountByLink.get(m.linkId) ?? 0) + 1)
 
   const out: PairableLeagues = { pro: [], college: [], alreadyLinked: [] }
 
   const push = (row: PairableLeague) => {
-    if (row.linkedTo) out.alreadyLinked.push(row)
+    const complete = row.linkId != null && (memberCountByLink.get(row.linkId) ?? 0) >= 2
+    if (row.linkedTo && complete) out.alreadyLinked.push(row)
     else if (row.role === 'college') out.college.push(row)
     else out.pro.push(row)
   }
@@ -112,6 +143,7 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
   for (const l of leagues) {
     const platform = String(l.platform ?? '').toLowerCase()
     const { role, reason } = roleForSport(String(l.sport ?? ''), false)
+    const member = linked.get(`${platform}:${l.id}`) ?? null
     push({
       id: l.id,
       platform,
@@ -119,12 +151,14 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
       season: l.season ?? null,
       role,
       roleReason: reason,
-      linkedTo: linked.get(`${platform}:${l.id}`) ?? null,
+      linkedTo: member?.name ?? null,
+      linkId: member?.linkId ?? null,
     })
   }
 
   for (const f of fantrax) {
     const { role, reason } = roleForSport(String(f.sport ?? ''), Boolean(f.isDevy))
+    const member = linked.get(`fantrax:${f.id}`) ?? null
     push({
       id: f.id,
       platform: 'fantrax',
@@ -132,7 +166,8 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
       season: f.season ?? null,
       role,
       roleReason: reason,
-      linkedTo: linked.get(`fantrax:${f.id}`) ?? null,
+      linkedTo: member?.name ?? null,
+      linkId: member?.linkId ?? null,
     })
   }
 

@@ -72,6 +72,7 @@
 
 /* 44px min so each row is a real tap target, which the agent tester checks. */
 .af-cl-option {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -83,13 +84,73 @@
 }
 
 .af-cl-option--on {
-  border-color: var(--accent, #38bdf8);
+  border-color: var(--af-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.08);
 }
 
+/*
+ * 🛑 THE SELECTED STATE HAS TO BE VISIBLE OR THE PRESELECTION IS NOT A FEATURE.
+ * A native radio rendered as an empty circle here whether checked or not, so the
+ * league this screen had already chosen looked unchosen and got clicked again.
+ *
+ * The input stays — it is what the keyboard and a screen reader drive, and the
+ * shared `name` is what makes each side a single choice — but it is taken out of
+ * the paint and a real box with a tick is drawn beside it. `opacity`, not
+ * `display: none`, because a hidden input is not focusable.
+ */
 .af-cl-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.af-cl-box {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 2px solid var(--line, rgba(255, 255, 255, 0.28));
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.af-cl-check {
+  width: 14px;
+  height: 14px;
+  color: #fff;
+  opacity: 0;
+}
+
+.af-cl-option--on .af-cl-box {
+  background: var(--af-blue, #3b82f6);
+  border-color: var(--af-blue, #3b82f6);
+}
+
+.af-cl-option--on .af-cl-check {
+  opacity: 1;
+}
+
+/* Keyboard focus has to land somewhere once the input itself is invisible. */
+.af-cl-radio:focus-visible + .af-cl-box {
+  outline: 2px solid var(--af-blue, #3b82f6);
+  outline-offset: 2px;
+}
+
+.af-cl-from {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--af-blue, #3b82f6);
+  border: 1px solid var(--af-blue, #3b82f6);
+  white-space: nowrap;
 }
 
 .af-cl-option-body {

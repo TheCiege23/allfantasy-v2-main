@@ -93,16 +93,42 @@ describe('which half a league would be', () => {
     expect(out.pro[0].roleReason).toMatch(/devy/i)
   })
 
-  it('reports a league already in a franchise separately, never as a candidate', async () => {
+  /**
+   * ⚠ A COMPLETE FRANCHISE'S LEAGUES ARE CONTEXT, NOT CANDIDATES. Re-pairing one
+   * would empty the franchise it is in, which is what the unique (platform,
+   * leagueId) is protecting.
+   */
+  it('reports a league in a COMPLETE franchise separately, never as a candidate', async () => {
     leagueFindMany.mockResolvedValue([
       { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', season: 2026, sport: 'nfl', isDynasty: true, leagueType: 'dynasty' },
     ])
     memberFindMany.mockResolvedValue([
-      { platform: 'sleeper', leagueId: 'lg-1', link: { name: 'My franchise' } },
+      { platform: 'sleeper', leagueId: 'lg-1', linkId: 'link-1', link: { name: 'My franchise' } },
+      { platform: 'fantrax', leagueId: 'fx-1', linkId: 'link-1', link: { name: 'My franchise' } },
     ])
     const out = await listPairableLeagues(USER)
     expect(out.pro).toEqual([])
     expect(out.alreadyLinked.map((l) => l.linkedTo)).toEqual(['My franchise'])
+  })
+
+  /**
+   * 🛑 A HALF-BUILT FRANCHISE IS THE CASE THIS SCREEN EXISTS FOR. LeagueHome
+   * sends a one-sided league here under "Add the other half"; filtering that same
+   * league out of its own list leaves the user only OTHER leagues to pick, which
+   * is how a pairing attempt ends on "that league is already part of another
+   * franchise" about a franchise they own.
+   */
+  it('still offers a league whose franchise has only one half, carrying its link', async () => {
+    leagueFindMany.mockResolvedValue([
+      { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', season: 2026, sport: 'nfl', isDynasty: true, leagueType: 'dynasty' },
+    ])
+    memberFindMany.mockResolvedValue([
+      { platform: 'sleeper', leagueId: 'lg-1', linkId: 'link-1', link: { name: 'My franchise' } },
+    ])
+    const out = await listPairableLeagues(USER)
+    expect(out.pro.map((l) => l.id)).toEqual(['lg-1'])
+    expect(out.pro[0]).toMatchObject({ linkedTo: 'My franchise', linkId: 'link-1' })
+    expect(out.alreadyLinked).toEqual([])
   })
 })
 
@@ -118,8 +144,8 @@ describe('the same Fantrax league appearing twice', () => {
     const rows = {
       pro: [],
       college: [
-        { id: 'fx-1', platform: 'fantrax', name: 'Cream Bowl', season: 2026, role: 'college' as const, roleReason: '', linkedTo: null },
-        { id: 'lg-9', platform: 'fantrax', name: 'Cream Bowl', season: 2026, role: 'college' as const, roleReason: '', linkedTo: null },
+        { id: 'fx-1', platform: 'fantrax', name: 'Cream Bowl', season: 2026, role: 'college' as const, roleReason: '', linkedTo: null, linkId: null },
+        { id: 'lg-9', platform: 'fantrax', name: 'Cream Bowl', season: 2026, role: 'college' as const, roleReason: '', linkedTo: null, linkId: null },
       ],
       alreadyLinked: [],
     }
@@ -131,7 +157,7 @@ describe('the same Fantrax league appearing twice', () => {
 
   it('leaves non-Fantrax leagues alone', () => {
     const rows = {
-      pro: [{ id: 'lg-1', platform: 'sleeper', name: 'Peach Bowl', season: 2026, role: 'pro' as const, roleReason: '', linkedTo: null }],
+      pro: [{ id: 'lg-1', platform: 'sleeper', name: 'Peach Bowl', season: 2026, role: 'pro' as const, roleReason: '', linkedTo: null, linkId: null }],
       college: [],
       alreadyLinked: [],
     }
