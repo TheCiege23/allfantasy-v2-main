@@ -254,6 +254,11 @@ const filesToKeep = new Set([
   // the #284 class again, caught by the guard on the 9482c82dc deploy instead of in production.
   path.join('app', 'api', 'cron', 'tournament-announcements', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'tournament-weekly-scores', 'route.ts').replace(/\\/g, '/'),
+  // Domain OS feed refresh (Aug 2026, */30) — the gathering half of `OsFeed`, which had no caller
+  // anywhere in the repo until this cron. Scheduled in cron-schedule.json, so it needs a keep-line
+  // for the same reason the two tournament crons above do, and it is being added in the SAME change
+  // as the schedule entry rather than after it — 263cb59ce is what the other order costs.
+  path.join('app', 'api', 'cron', 'domain-os-refresh', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
