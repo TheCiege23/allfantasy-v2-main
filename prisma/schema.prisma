@@ -383,6 +383,21 @@ model PlayerIdentityMap {
   /// and carries no `sleeperId`. Without this column the two id spaces cannot meet
   /// and 4,528 computed college projections join to nothing.
   cfbdId            String?
+  /// Fantrax's own player id (e.g. `06k5m`), from `getPlayerIds?sport=CFB`.
+  ///
+  /// The same bridge problem the cfbdId comment above describes, from the other
+  /// side. A Fantrax roster stores nothing but these ids, so without this column
+  /// an imported Fantrax league cannot reach a headshot, a projection or a
+  /// valuation. Measured on production: 0 of 73,883 NCAAF `SportsPlayer` rows
+  /// carry a `sleeperId`, so the ordinary crosswalk cannot serve a college
+  /// league at all and the roster falls through to the name-only bridge, which
+  /// deliberately yields no headshot and no projection.
+  ///
+  /// Nullable and NOT unique, deliberately. Fantrax's CFB map holds ~16,886 ids
+  /// against 20,027 NCAAF identity rows, so most rows will never carry one, and
+  /// a unique constraint would turn an ambiguous match into a write error rather
+  /// than the skip the ingestion records.
+  fantraxId         String?
 
   @@index([normalizedName])
   @@index([fantasyCalcId])
@@ -391,6 +406,9 @@ model PlayerIdentityMap {
   @@index([espnId])
   @@index([cfbdId])
   @@index([clearSportsId])
+  /// Indexed like every other provider id - the ingestion and the roster
+  /// crosswalk both look rows up BY this column.
+  @@index([fantraxId])
   @@index([currentTeam])
   @@index([sport, position])
 }
