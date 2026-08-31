@@ -42,22 +42,22 @@ model PlayerValueSnapshot {
   id String @id @default(cuid())
 
   /// Sleeper player id — the join key every source in use can reach.
-  sleeperId String @db.VarChar(32)
+  sleeperId String  @db.VarChar(32)
   name      String
   position  String? @db.VarChar(8)
 
   /// FANTASYCALC | DYNASTYPROCESS | INTERNAL
-  source String @db.VarChar(24)
+  source   String @db.VarChar(24)
   /// DYNASTY | REDRAFT
-  format String @db.VarChar(12)
+  format   String @db.VarChar(12)
   /// ONE_QB | SUPERFLEX
   qbFormat String @db.VarChar(12)
 
-  value        Int
-  overallRank  Int?
-  positionRank Int?
+  value          Int
+  overallRank    Int?
+  positionRank   Int?
   /// 30-day movement, where the source publishes it.
-  trend30d     Int?
+  trend30d       Int?
   /// ⚠ LIQUIDITY, AND ALMOST NOBODY SURFACES IT. A high value with near-zero trade
   /// frequency is a thin, rarely-tested price — worth saying so on a trade screen.
   tradeFrequency Float?
@@ -96,15 +96,15 @@ model TeamTendencySeason {
   neutralPlays Int @default(0)
 
   /// Pass rate over expected. nflfastR `pass_oe`; NULL before 2006.
-  proe            Float?
-  proeN           Int?
-  shotgunRate     Float?
-  shotgunN        Int?
-  noHuddleRate    Float?
-  noHuddleN       Int?
+  proe         Float?
+  proeN        Int?
+  shotgunRate  Float?
+  shotgunN     Int?
+  noHuddleRate Float?
+  noHuddleN    Int?
   /// Seconds per play in neutral script — pace. Lower = more plays = more fantasy points.
-  secPerPlay      Float?
-  secPerPlayN     Int?
+  secPerPlay   Float?
+  secPerPlayN  Int?
 
   /// FTN charting, 2022+ only. NULL for earlier seasons by coverage, not by failure.
   playActionRate Float?
@@ -130,15 +130,15 @@ model TeamTendencySeason {
 model Coach {
   id String @id @default(cuid())
 
-  fullName String
+  fullName       String
   /// Lowercased, punctuation- and suffix-stripped. The fuzzy-match join key.
   nameNormalized String
 
   /// Disambiguates the Mike/Kyle Shanahan class of collision when known.
-  birthYear Int?
+  birthYear      Int?
   /// Best available external anchor.
-  pfrId           String?
-  coachingTreeId  String?
+  pfrId          String?
+  coachingTreeId String?
 
   stints    CoachStint[]
   createdAt DateTime     @default(now())
@@ -154,13 +154,13 @@ model CoachStint {
   coach   Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
 
   /// Franchise code, relocation-normalised (STL->LA, OAK->LV, SD->LAC).
-  teamId String @db.VarChar(8)
+  teamId  String @db.VarChar(8)
   /// The code exactly as the source gave it, so a relocation mapping stays auditable.
   teamRaw String @db.VarChar(8)
-  season Int
+  season  Int
 
   /// HC | OC | DC | STC | PASS_GAME_COORD | RUN_GAME_COORD | POSITION | ASSISTANT_HC | OTHER
-  role String @db.VarChar(24)
+  role    String  @db.VarChar(24)
   /// Source string verbatim — coaching titles are not standardised across the league.
   roleRaw String?
 
@@ -171,7 +171,7 @@ model CoachStint {
   isPlayCaller Boolean?
 
   /// COACHING_TREE | NFLVERSE | SPORTSDATAIO | WIKIPEDIA | MANUAL
-  source String @db.VarChar(24)
+  source           String @db.VarChar(24)
   /// HIGH | MEDIUM | LOW
   sourceConfidence String @db.VarChar(8)
 
@@ -196,7 +196,7 @@ model CoachStint {
 /// has, so `email` here is intentionally NOT unique: the same person may ask twice,
 /// and two rows are recoverable where a swallowed request is not.
 model BusinessDemoRequest {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   email   String
   company String?
   name    String?
@@ -788,7 +788,7 @@ model DecisionIntelligenceRun {
   lastError             String?   @map("last_error") @db.Text
   createdAt             DateTime  @default(now()) @map("created_at")
   startedAt             DateTime? @map("started_at")
-  completedAt          DateTime? @map("completed_at")
+  completedAt           DateTime? @map("completed_at")
   expiresAt             DateTime? @map("expires_at")
   lastAccessedAt        DateTime? @map("last_accessed_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
@@ -807,54 +807,54 @@ model DecisionIntelligenceRun {
 /// agnostic, read-only w.r.t. imported platforms. Separate from decision_intelligence_runs (which stores AI RUN
 /// state, not individual decisions).
 model CanonicalDecision {
-  id                   String    @id @default(cuid())
-  contractVersion      String    @map("contract_version") @db.VarChar(16)
-  decisionId           String    @unique @map("decision_id") @db.VarChar(191)
-  fingerprint          String    @map("fingerprint") @db.VarChar(191)
-  userId               String?   @map("user_id")
-  leagueId             String?   @map("league_id")
-  connectedFranchiseId String?   @map("connected_franchise_id")
-  sourcePlatform       String?   @map("source_platform") @db.VarChar(24)
-  sport                String    @db.VarChar(16)
-  season               Int?
-  period               String?   @db.VarChar(32)
-  category             String    @db.VarChar(48)
-  subtype              String?   @db.VarChar(48)
-  subjectKey           String?   @map("subject_key") @db.VarChar(191)
-  scope                String    @db.VarChar(16)
-  audience             String    @db.VarChar(16)
-  headline             String    @db.VarChar(300)
-  explanation          String    @db.Text
-  recommendedAction    String?   @map("recommended_action") @db.Text
-  evidence             Json?
-  confidencePct        Int?      @map("confidence_pct")
-  severity             String    @db.VarChar(16)
-  urgency              String    @db.VarChar(16)
-  priorityScore        Int?      @map("priority_score")
-  expectedImpact       String?   @map("expected_impact") @db.Text
-  players              Json?
-  teamRef              String?   @map("team_ref")
-  source               Json?
-  sourceExecutionPolicy String   @default("external_read_only") @map("source_execution_policy") @db.VarChar(32)
-  sourceReadOnly       Boolean   @default(true) @map("source_read_only")
-  dataAsOf             DateTime? @map("data_as_of")
-  generatedAt          DateTime  @map("generated_at")
-  staleAt              DateTime? @map("stale_at")
-  freshness            String    @db.VarChar(16)
-  entitlementTier      String    @map("entitlement_tier") @db.VarChar(24)
-  tokenCostClass       String    @map("token_cost_class") @db.VarChar(24)
-  status               String    @default("active") @db.VarChar(16)
-  suppressionReason    String?   @map("suppression_reason") @db.VarChar(128)
-  conflictGroupKey     String?   @map("conflict_group_key") @db.VarChar(191)
-  supersedesDecisionId String?   @map("supersedes_decision_id") @db.VarChar(191)
-  producer             String    @db.VarChar(64)
-  producerVersion      String    @map("producer_version") @db.VarChar(32)
-  runId                String?   @map("run_id")
-  extensions           Json?
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+  id                    String    @id @default(cuid())
+  contractVersion       String    @map("contract_version") @db.VarChar(16)
+  decisionId            String    @unique @map("decision_id") @db.VarChar(191)
+  fingerprint           String    @map("fingerprint") @db.VarChar(191)
+  userId                String?   @map("user_id")
+  leagueId              String?   @map("league_id")
+  connectedFranchiseId  String?   @map("connected_franchise_id")
+  sourcePlatform        String?   @map("source_platform") @db.VarChar(24)
+  sport                 String    @db.VarChar(16)
+  season                Int?
+  period                String?   @db.VarChar(32)
+  category              String    @db.VarChar(48)
+  subtype               String?   @db.VarChar(48)
+  subjectKey            String?   @map("subject_key") @db.VarChar(191)
+  scope                 String    @db.VarChar(16)
+  audience              String    @db.VarChar(16)
+  headline              String    @db.VarChar(300)
+  explanation           String    @db.Text
+  recommendedAction     String?   @map("recommended_action") @db.Text
+  evidence              Json?
+  confidencePct         Int?      @map("confidence_pct")
+  severity              String    @db.VarChar(16)
+  urgency               String    @db.VarChar(16)
+  priorityScore         Int?      @map("priority_score")
+  expectedImpact        String?   @map("expected_impact") @db.Text
+  players               Json?
+  teamRef               String?   @map("team_ref")
+  source                Json?
+  sourceExecutionPolicy String    @default("external_read_only") @map("source_execution_policy") @db.VarChar(32)
+  sourceReadOnly        Boolean   @default(true) @map("source_read_only")
+  dataAsOf              DateTime? @map("data_as_of")
+  generatedAt           DateTime  @map("generated_at")
+  staleAt               DateTime? @map("stale_at")
+  freshness             String    @db.VarChar(16)
+  entitlementTier       String    @map("entitlement_tier") @db.VarChar(24)
+  tokenCostClass        String    @map("token_cost_class") @db.VarChar(24)
+  status                String    @default("active") @db.VarChar(16)
+  suppressionReason     String?   @map("suppression_reason") @db.VarChar(128)
+  conflictGroupKey      String?   @map("conflict_group_key") @db.VarChar(191)
+  supersedesDecisionId  String?   @map("supersedes_decision_id") @db.VarChar(191)
+  producer              String    @db.VarChar(64)
+  producerVersion       String    @map("producer_version") @db.VarChar(32)
+  runId                 String?   @map("run_id")
+  extensions            Json?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  revisions            CanonicalDecisionRevision[]
+  revisions CanonicalDecisionRevision[]
 
   @@index([userId, category])
   @@index([leagueId, category])
@@ -2080,43 +2080,59 @@ model FantraxUser {
 }
 
 model FantraxLeague {
-  id            String      @id @default(uuid())
-  userId        String
-  leagueName    String
-  season        Int
-  sport         String      @default("cfb")
-  teamCount     Int         @default(12)
-  userTeam      String
-  isChampion    Boolean     @default(false)
-  champion      String?
-  wins          Int         @default(0)
-  losses        Int         @default(0)
-  ties          Int         @default(0)
-  pointsFor     Float       @default(0)
-  pointsAgainst Float       @default(0)
-  finalRank     Int?
-  playoffFinish String?
-  standings     Json?
-  matchups      Json?
-  roster        Json?
-  teamStats     Json?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  isDevy        Boolean     @default(false)
-  transactions  Json?
-  user          FantraxUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String      @id @default(uuid())
+  userId         String
+  leagueName     String
+  season         Int
+  sport          String      @default("cfb")
+  teamCount      Int         @default(12)
+  userTeam       String
+  isChampion     Boolean     @default(false)
+  champion       String?
+  wins           Int         @default(0)
+  losses         Int         @default(0)
+  ties           Int         @default(0)
+  pointsFor      Float       @default(0)
+  pointsAgainst  Float       @default(0)
+  finalRank      Int?
+  playoffFinish  String?
+  standings      Json?
+  matchups       Json?
+  roster         Json?
+  teamStats      Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  isDevy         Boolean     @default(false)
+  transactions   Json?
+  /// The Fantrax league id this snapshot was imported from, e.g. `v2kzedypmm8jp61b`.
+  ///
+  /// ⚠ WITHOUT THIS A SNAPSHOT CANNOT BE REFRESHED. `League.platformLeagueId` for a
+  /// Fantrax league is THIS ROW'S uuid, not Fantrax's id, and the id the import was
+  /// given was never persisted anywhere — so every scheduled refresh had nothing to
+  /// re-fetch with, which is what "Fantrax > Sync - never read" means on the league
+  /// home. Fixtures and results both live behind that id.
+  ///
+  /// Nullable because CSV-era rows were uploaded without one and can never acquire
+  /// one; a null here means "snapshot only, not refreshable", which is a real state
+  /// rather than missing data. NOT unique: two AllFantasy accounts importing the
+  /// same Fantrax league legitimately produce two rows (the key is
+  /// userId+leagueName+season), and a unique constraint would turn the second
+  /// person's import into a write error.
+  sourceLeagueId String?
+  user           FantraxUser @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Import Security Closure phase: the real, authenticated AllFantasy user who
   /// uploaded this snapshot. Nullable for safe backfill of any pre-existing rows —
   /// reads/commits fail closed (reject, not fabricate ownership) when null. This is
   /// the actual security boundary; `userId`/`FantraxUser` remains a separate,
   /// client-supplied "which Fantrax account" label, never trusted for authorization.
-  appUserId     String?
-  appUser       AppUser?    @relation(fields: [appUserId], references: [id], onDelete: SetNull)
+  appUserId      String?
+  appUser        AppUser?    @relation(fields: [appUserId], references: [id], onDelete: SetNull)
 
   @@unique([userId, leagueName, season])
   @@index([userId, season])
   @@index([season])
   @@index([appUserId])
+  @@index([sourceLeagueId])
 }
 
 model manager_trade_tendencies {
@@ -3257,8 +3273,8 @@ model Player {
   lastSyncedAt         DateTime  @updatedAt
   createdAt            DateTime  @default(now())
 
-  images               PlayerImage[]
-  providerIdentities   PlayerProviderIdentity[]
+  images             PlayerImage[]
+  providerIdentities PlayerProviderIdentity[]
 
   @@index([league])
   @@index([devyEligible])
@@ -3386,6 +3402,36 @@ model DevyPlayer {
   /// what makes a passer's own ADOT readable as scheme or as arm.
   teamPassAdot         Float?
   teamPassYacPerComp   Float?
+  /// Season the head-coach columns below describe. Separate from statSeason for
+  /// the same reason passingProfileSeason is: a row can carry a stat line from
+  /// one season and coach context from another, and a reader that conflates them
+  /// reports last year's staff against this year's production.
+  headCoachSeason      Int?
+  /// Head coach of this player's school in headCoachSeason. The coach with the
+  /// MOST GAMES that year — a school that fires mid-season returns two.
+  headCoachName        String?   @db.VarChar(96)
+  /// When CFBD says this coach was hired. Stored raw rather than converted to a
+  /// tenure count: `/coaches?year=N` filters each coach's seasons array to N, so
+  /// one call carries no history, and turning a hire DATE into a season count
+  /// requires guessing whether a November hire's first season is that year or
+  /// the next. The date is the fact; the count would be an inference.
+  headCoachHireDate    DateTime?
+  /// True when the school's primary coach differs from the prior season's.
+  /// ⚠ NULL MEANS UNKNOWN, NOT "NO CHANGE" — the prior season may be unreadable,
+  /// or the season may have no primary coach (a even split names nobody).
+  headCoachChanged     Boolean?
+  /// Season-TOTAL PPA — volume x quality, the sum over the player's plays.
+  /// ⚠ NOT the same quantity as `ppaTotal`, which despite its name stores
+  /// averagePPA.all (a per-play figure around 0.7). Measured over eight recruit
+  /// classes, the season total separates drafted from undrafted by 22-176x while
+  /// the per-play average separates by 0.88-2.19x and is INVERTED for WR and TE.
+  /// The two must never be substituted for one another.
+  ppaSeasonTotal       Float?
+  /// SP+ OFFENSIVE rating for the school, from the same /ratings/sp payload
+  /// teamSpRating already comes from. Higher is a better offence. This is the
+  /// closest available proxy for "offensive methodology"; it is a unit-quality
+  /// number, not a scheme descriptor, and nothing here identifies scheme.
+  teamSpOffense        Float?
   devyAdpHistory       DevyAdp[]
 
   @@unique([normalizedName, position, school], name: "uniq_devy_player")
@@ -5780,6 +5826,16 @@ enum LeagueLifecycleState {
 
 model League {
   id                                    String                                 @id @default(uuid())
+  // Commissioner OS tenancy — T-101. See prisma/tenancy.prisma and
+  // docs/commissioner-os/TENANCY.md §5.
+  //
+  // REQUIRED, and every existing row is backfilled to the bootstrap tenant
+  // `allfantasy` by the T-101 migration before the NOT NULL lands. There is
+  // deliberately NO @default here: a default would let a future insert silently
+  // land in the bootstrap tenant instead of failing, which is the one mistake
+  // RLS cannot catch (the row would be legitimately readable by that tenant).
+  tenantId                              String
+  tenant                                Tenant                                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   userId                                String
   platform                              String
   platformLeagueId                      String
@@ -6114,8 +6170,28 @@ model League {
   aiOpponentTeamAssignments             AiOpponentTeamAssignment[]
   aiOpponentActionLogs                  AiOpponentActionLog[]
   aiBotMessageHistory                   AiBotMessageHistory[]
+  draftRoomQueueItems                   DraftRoomQueueItem[]
 
   @@unique([userId, platform, platformLeagueId, season])
+  // ── Commissioner OS tenancy (T-101) ────────────────────────────────────────
+  // tenantId leads these because the RLS policy filters on it first.
+  //
+  // The fragment in tenancy.prisma asks for [tenantId, phase, deletedAt],
+  // [tenantId, visibility, deletedAt] and [tenantId, seasonYear]. None of those
+  // four columns exist on this League: the closest real equivalents are
+  // lifecycleState (phase) and season (seasonYear); `visibility` and
+  // `deletedAt` have no analogue at all, so those index components are dropped
+  // rather than invented. Recorded in SURVEY.md — this is a deviation, not an
+  // omission.
+  @@index([tenantId])
+  @@index([tenantId, lifecycleState])
+  @@index([tenantId, season])
+  @@index([tenantId, userId])
+  // ⚠ The seven indexes below PRE-DATE tenancy and are deliberately NOT
+  // rewritten to lead with tenantId. They serve the existing AllFantasy query
+  // paths on a populated table; re-leading them changes the plan for every one
+  // of those queries at once. T-101's "tenantId leads every composite index" is
+  // therefore only partially met on League, on purpose.
   @@index([userId])
   @@index([userId, updatedAt])
   @@index([userId, isDynasty])
@@ -11247,11 +11323,11 @@ model PlayerGameStat {
   sportType         String    @db.VarChar(12)
 
   /// Defense faced, e.g. "IND". From the provider row, not derived from a schedule join.
-  opponent String? @db.VarChar(8)
+  opponent String?   @db.VarChar(8)
   /// ⚠ The team AT THE TIME OF THE GAME, NOT the player's current team. A 2024 row for
   /// Tank Bigsby carries "JAX" while his current team is "PHI"; using the current team
   /// would attribute historical performance to a franchise he never played it for.
-  team     String? @db.VarChar(8)
+  team     String?   @db.VarChar(8)
   /// Kickoff date — the source for month-of-season effects.
   gameDate DateTime? @map("game_date") @db.Date
 
@@ -11503,16 +11579,16 @@ model AfLeagueTrade {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  league           League                         @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  proposedBy       AppUser                        @relation(fields: [proposedByUserId], references: [id], onDelete: Cascade)
-  proposerRoster   Roster                         @relation("AfLeagueTradeProposerRoster", fields: [proposerRosterId], references: [id], onDelete: Cascade)
-  receiverRoster   Roster                         @relation("AfLeagueTradeReceiverRoster", fields: [receiverRosterId], references: [id], onDelete: Cascade)
-  parentTrade      AfLeagueTrade?                 @relation("AfLeagueTradeCounterChain", fields: [parentTradeId], references: [id], onDelete: SetNull)
-  counterOffers    AfLeagueTrade[]                @relation("AfLeagueTradeCounterChain")
-  items            AfLeagueTradeItem[]
-  statusHistory    AfLeagueTradeStatusHistory[]
-  votes            AfLeagueTradeVote[]
-  processingEvents AfLeagueTradeProcessingEvent[]
+  league            League                         @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  proposedBy        AppUser                        @relation(fields: [proposedByUserId], references: [id], onDelete: Cascade)
+  proposerRoster    Roster                         @relation("AfLeagueTradeProposerRoster", fields: [proposerRosterId], references: [id], onDelete: Cascade)
+  receiverRoster    Roster                         @relation("AfLeagueTradeReceiverRoster", fields: [receiverRosterId], references: [id], onDelete: Cascade)
+  parentTrade       AfLeagueTrade?                 @relation("AfLeagueTradeCounterChain", fields: [parentTradeId], references: [id], onDelete: SetNull)
+  counterOffers     AfLeagueTrade[]                @relation("AfLeagueTradeCounterChain")
+  items             AfLeagueTradeItem[]
+  statusHistory     AfLeagueTradeStatusHistory[]
+  votes             AfLeagueTradeVote[]
+  processingEvents  AfLeagueTradeProcessingEvent[]
   executionSnapshot TradeExecutionSnapshot?
 
   @@index([leagueId, status])
@@ -13522,8 +13598,8 @@ model RedraftSeason {
   league                   League                     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   redraftTradeProposals    RedraftTradeProposal[]
   redraftWaiverClaims      RedraftWaiverClaim[]
-  tradeExecutionSnapshots TradeExecutionSnapshot[]
-  tradeReversals          TradeReversal[]
+  tradeExecutionSnapshots  TradeExecutionSnapshot[]
+  tradeReversals           TradeReversal[]
 
   @@unique([leagueId, season])
   @@index([leagueId])
@@ -13860,30 +13936,30 @@ model RedraftDraftEvent {
 }
 
 model RedraftTradeProposal {
-  id               String                     @id
-  leagueId         String
-  seasonId         String
-  proposerRosterId String
-  receiverRosterId String
-  status           String                     @default("pending")
-  vetoMode         String                     @default("commissioner")
-  vetoThreshold    Int?
-  reason           String?
-  expiresAt        DateTime?
-  acceptedAt       DateTime?
-  rejectedAt       DateTime?
-  cancelledAt      DateTime?
-  processedAt      DateTime?
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
-  assets           RedraftTradeAsset[]
-  decision         RedraftTradeDecision?
-  league           League                     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  proposerRoster   RedraftRoster              @relation("RedraftTradeProposalProposer", fields: [proposerRosterId], references: [id], onDelete: Cascade)
-  receiverRoster   RedraftRoster              @relation("RedraftTradeProposalReceiver", fields: [receiverRosterId], references: [id], onDelete: Cascade)
-  season           RedraftSeason              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  votes            RedraftTradeVote[]
-  valueSnapshot    RedraftTradeValueSnapshot?
+  id                String                     @id
+  leagueId          String
+  seasonId          String
+  proposerRosterId  String
+  receiverRosterId  String
+  status            String                     @default("pending")
+  vetoMode          String                     @default("commissioner")
+  vetoThreshold     Int?
+  reason            String?
+  expiresAt         DateTime?
+  acceptedAt        DateTime?
+  rejectedAt        DateTime?
+  cancelledAt       DateTime?
+  processedAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  assets            RedraftTradeAsset[]
+  decision          RedraftTradeDecision?
+  league            League                     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  proposerRoster    RedraftRoster              @relation("RedraftTradeProposalProposer", fields: [proposerRosterId], references: [id], onDelete: Cascade)
+  receiverRoster    RedraftRoster              @relation("RedraftTradeProposalReceiver", fields: [receiverRosterId], references: [id], onDelete: Cascade)
+  season            RedraftSeason              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  votes             RedraftTradeVote[]
+  valueSnapshot     RedraftTradeValueSnapshot?
   executionSnapshot TradeExecutionSnapshot?
 
   @@index([leagueId, status])
@@ -13893,32 +13969,32 @@ model RedraftTradeProposal {
 
 /// Immutable before/after evidence created atomically with a completed trade and its outbox event.
 model TradeExecutionSnapshot {
-  id                      String   @id @default(cuid())
-  tradeId                 String   @unique
-  tradeSource             String   @db.VarChar(32)
-  nativeTradeId           String?  @unique
-  genericTradeId          String?  @unique
+  id                      String                @id @default(cuid())
+  tradeId                 String                @unique
+  tradeSource             String                @db.VarChar(32)
+  nativeTradeId           String?               @unique
+  genericTradeId          String?               @unique
   leagueId                String
   seasonId                String?
-  tenantId                String   @default("allfantasy")
+  tenantId                String                @default("allfantasy")
   organizationId          String?
-  executionIdempotencyKey String   @unique
-  eventId                 String   @unique
+  executionIdempotencyKey String                @unique
+  eventId                 String                @unique
   executedAt              DateTime
   executedByActorId       String
-  executedByActorRole     String   @db.VarChar(32)
+  executedByActorRole     String                @db.VarChar(32)
   governance              Json
   validations             Json
   beforeState             Json
   afterState              Json
   assetSummary            Json
-  dependencies            Json     @default("{}")
-  completeness            String   @default("complete") @db.VarChar(16)
-  createdAt               DateTime @default(now())
-  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  season                  RedraftSeason? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  dependencies            Json                  @default("{}")
+  completeness            String                @default("complete") @db.VarChar(16)
+  createdAt               DateTime              @default(now())
+  league                  League                @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season                  RedraftSeason?        @relation(fields: [seasonId], references: [id], onDelete: SetNull)
   nativeTrade             RedraftTradeProposal? @relation(fields: [nativeTradeId], references: [id], onDelete: SetNull)
-  genericTrade            AfLeagueTrade? @relation(fields: [genericTradeId], references: [id], onDelete: SetNull)
+  genericTrade            AfLeagueTrade?        @relation(fields: [genericTradeId], references: [id], onDelete: SetNull)
   reversal                TradeReversal?
 
   @@index([leagueId, executedAt])
@@ -13928,24 +14004,24 @@ model TradeExecutionSnapshot {
 
 /// Immutable evidence that a completed native or generic trade was restored from its execution snapshot.
 model TradeReversal {
-  id             String   @id @default(cuid())
-  tradeId        String   @unique
-  snapshotId     String   @unique
+  id             String                 @id @default(cuid())
+  tradeId        String                 @unique
+  snapshotId     String                 @unique
   leagueId       String
   seasonId       String?
   actorId        String
-  actorRole      String   @db.VarChar(32)
+  actorRole      String                 @db.VarChar(32)
   reason         String
-  idempotencyKey String   @unique
+  idempotencyKey String                 @unique
   readiness      Json
   restoredState  Json
-  eventId        String   @unique
-  noticeKey      String   @unique
+  eventId        String                 @unique
+  noticeKey      String                 @unique
   reversedAt     DateTime
-  createdAt      DateTime @default(now())
+  createdAt      DateTime               @default(now())
   snapshot       TradeExecutionSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
-  league         League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  season         RedraftSeason? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  league         League                 @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season         RedraftSeason?         @relation(fields: [seasonId], references: [id], onDelete: SetNull)
 
   @@index([leagueId, reversedAt])
   @@map("trade_reversals")
@@ -15870,24 +15946,24 @@ enum LifecycleTelemetryEventKind {
 /// One renewal record per season cycle. Created when commissioner initiates renewal from `offseason`
 /// or `completed`. Tracks window, slot confirmations, and final execution.
 model LeagueRenewal {
-  id             String              @id @default(cuid())
-  leagueId       String              @db.VarChar(64)
-  season         Int
-  renewalKind    String              @db.VarChar(32)
-  status         LeagueRenewalStatus @default(pending)
-  initiatedBy    String              @db.VarChar(64)
-  initiatedAt    DateTime            @default(now())
-  windowClosesAt DateTime
-  executedAt     DateTime?
-  abandonedAt    DateTime?
-  nextSeason     Int?
-  priorSeasonId  String?
-  nextSeasonId   String?             @unique
-  deadlineAt     DateTime?
-  completedAt    DateTime?
-  archivedAt     DateTime?
-  createdByUserId String?             @db.VarChar(64)
-  majorChangeApprovalPolicy String?   @db.VarChar(32)
+  id                        String              @id @default(cuid())
+  leagueId                  String              @db.VarChar(64)
+  season                    Int
+  renewalKind               String              @db.VarChar(32)
+  status                    LeagueRenewalStatus @default(pending)
+  initiatedBy               String              @db.VarChar(64)
+  initiatedAt               DateTime            @default(now())
+  windowClosesAt            DateTime
+  executedAt                DateTime?
+  abandonedAt               DateTime?
+  nextSeason                Int?
+  priorSeasonId             String?
+  nextSeasonId              String?             @unique
+  deadlineAt                DateTime?
+  completedAt               DateTime?
+  archivedAt                DateTime?
+  createdByUserId           String?             @db.VarChar(64)
+  majorChangeApprovalPolicy String?             @db.VarChar(32)
   settingsProposalVersionId String?
   scoringProposalVersionId  String?
   /// Immutable copy of League.settings taken atomically at renewal completion time.
@@ -15915,23 +15991,23 @@ model LeagueRenewal {
 
 /// Per-manager slot in a renewal window. Tracks whether each manager confirms, declines, or abandons.
 model LeagueRenewalSlot {
-  id          String                  @id @default(cuid())
-  renewalId   String
-  leagueId    String                  @db.VarChar(64)
-  userId      String                  @db.VarChar(64)
-  status      LeagueRenewalSlotStatus @default(invited)
-  invitedAt   DateTime                @default(now())
-  respondedAt DateTime?
-  isReturning Boolean                 @default(true)
-  franchiseId String?                 @db.VarChar(64)
-  priorManagerId String?              @db.VarChar(64)
-  candidateManagerId String?          @db.VarChar(64)
-  confirmedManagerId String?          @db.VarChar(64)
-  confirmedAt DateTime?
-  confirmedByUserId String?           @db.VarChar(64)
+  id                      String                  @id @default(cuid())
+  renewalId               String
+  leagueId                String                  @db.VarChar(64)
+  userId                  String                  @db.VarChar(64)
+  status                  LeagueRenewalSlotStatus @default(invited)
+  invitedAt               DateTime                @default(now())
+  respondedAt             DateTime?
+  isReturning             Boolean                 @default(true)
+  franchiseId             String?                 @db.VarChar(64)
+  priorManagerId          String?                 @db.VarChar(64)
+  candidateManagerId      String?                 @db.VarChar(64)
+  confirmedManagerId      String?                 @db.VarChar(64)
+  confirmedAt             DateTime?
+  confirmedByUserId       String?                 @db.VarChar(64)
   replacementInvitationId String?
-  decisionAt DateTime?
-  removedFromNextSeason Boolean       @default(false)
+  decisionAt              DateTime?
+  removedFromNextSeason   Boolean                 @default(false)
 
   renewal LeagueRenewal @relation(fields: [renewalId], references: [id], onDelete: Cascade)
 
@@ -16602,7 +16678,7 @@ model PlayerProviderIdentity {
   // occupies the `uniq_player_provider_identity` slot below, so it BLOCKS re-linking that
   // provider id to the correct player. Identity rows are re-derivable from providers, and the
   // dedupe flow repoints them before deleting a player, so this never fires there.
-  player           Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([provider, sportKey, leagueKey, providerPlayerId], name: "uniq_player_provider_identity")
   @@index([playerId])
@@ -16637,7 +16713,7 @@ model PlayerImage {
   // silently pointed at players that do not exist — see the note on `writePrimaryPlayerImage`.
   // Cascade is right because these rows are a derived image cache: if the player is gone the
   // cached headshot is meaningless, and re-resolution costs one provider call.
-  player          Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  player Player? @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([playerId, imageType, url], name: "uniq_player_image_url")
   @@index([sportKey, leagueKey])
@@ -17305,3 +17381,383 @@ model CrossPlatformTradeLeg {
   @@index([tradeId])
   @@map("cross_platform_trade_legs")
 }
+
+/// The draft room's collaborative music queue.
+///
+/// ⚠ THE TABLE EXISTS IN PRODUCTION AND THIS MODEL IS WHY IT SURVIVES.
+/// Created by migrations/20260823130000_draft_room_music_queue, applied
+/// 2026-08-30. The model was absent from this file until 2026-08-30, which meant
+/// `prisma migrate dev` read the live table as drift and would have offered to
+/// DROP it. Nothing reads or writes it yet; the model earns its place by keeping
+/// a real table out of a generated drop statement, not by serving a caller.
+///
+/// ⚠ ONE INDEX IS DELIBERATELY NOT DECLARED HERE. The migration also creates a
+/// PARTIAL unique index:
+///     ("leagueId", "trackId") WHERE "playedAt" IS NULL
+/// — the same track twice in a row is a double-tap, not a request. Prisma's
+/// schema language cannot express a partial index. Do NOT "fix" that by
+/// declaring a plain `@@unique([leagueId, trackId])`: it would be wrong in two
+/// directions, letting the client `findUnique` on a constraint that stops
+/// holding once a row is played, and asking migrate to widen the real index to
+/// cover played rows.
+/// Measured rather than assumed, with `prisma migrate diff` against production
+/// on 2026-08-30: leaving it undeclared costs nothing. The diff does not mention
+/// this table at all — not the table, not the FK, not the partial index. The
+/// same diff run with this model deleted emits `DROP TABLE` for it, which is the
+/// positive control proving the check can go red and that this model is what
+/// stops it.
+///
+/// ⚠ THE QUEUE IS SHARED. THE AUDIO IS NOT. Do not add `position` or `isPlaying`
+/// expecting them to synchronise anyone's speakers — Spotify's public API cannot
+/// broadcast audio to several listeners, so each person plays the queue on their
+/// own device. Those columns would encode a promise the platform cannot keep.
+model DraftRoomQueueItem {
+  id            String    @id @default(cuid())
+  leagueId      String
+  /// Null for a league with no stored draft session; the queue still works.
+  draftId       String?
+  trackId       String    @db.VarChar(64)
+  trackName     String
+  artistName    String
+  albumArt      String?
+  durationMs    Int       @default(0)
+  /// Spotify has no preview clip for every track. Null is a real value and the
+  /// free-account fallback has to degrade gracefully when it is null.
+  previewUrl    String?
+  addedByUserId String
+  /// Denormalised so a queue row still renders if the profile read fails.
+  addedByName   String
+  createdAt     DateTime  @default(now())
+  playedAt      DateTime?
+  league        League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Commissioner OS — multi-tenant additions
+//
+// MERGED FROM `prisma/tenancy.prisma` at T-101. That file stays in the repo as
+// the source-of-truth copy of the design; this is the applied half. The League
+// half it requires is applied in the League model above (`tenantId`, `tenant`,
+// and the tenant-leading indexes) — the two must move together.
+//
+// ⚠ SCHEMA ONLY. The T-101 migration exists at
+// `prisma/migrations-pending/20260831120000_commissioner_os_t101/` but has NOT been
+// applied to any database, and MUST NOT be until T-001 (four database roles)
+// lands. RLS without the role split is decorative — table owners bypass it.
+//
+// ⚠ AND T-101 IS ONLY PARTIALLY SATISFIED HERE. The identity split (§4), the
+// `RosterSlot` open-interval unique, and `(tenantId, slug)` have no target in
+// this repo. See `docs/commissioner-os/SURVEY.md` for what is missing and why.
+//
+// Every model here is tenant-scoped and gets an RLS policy in the
+// accompanying migration. `Tenant` is the exception: it has no tenantId, so
+// its policy keys on its own id. See docs/commissioner-os/TENANCY.md §3.2.
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED       // read-only; operator can export, cannot write
+  CLOSED
+}
+
+enum TenantRole {
+  TENANT_OWNER    // billing + can delete the tenant
+  TENANT_ADMIN    // full operational control of their leagues
+  TENANT_SUPPORT  // read-only, for their support staff
+}
+
+enum PlatformRoleKind {
+  PLATFORM_ADMIN
+  PLATFORM_SUPPORT
+}
+
+enum LeagueRole {
+  COMMISSIONER
+  CO_COMMISSIONER
+  MANAGER
+}
+
+// ---------------------------------------------------------------------------
+// Identity — see TENANCY.md §4
+//
+// User is GLOBAL and holds NO PII. One person may work for two operators, so
+// User cannot be RLS-scoped by a column. If a name or email lived here, every
+// `include: { user: true }` would leak PII across tenants.
+//
+// model User {
+//   id            String   @id @default(cuid())
+//   authSubject   String   @unique   // IdP subject / credential handle
+//   createdAt     DateTime @default(now())
+//   // NOTHING ELSE. No name, no email, no avatar.
+//   tenantUsers   TenantUser[]
+// }
+// ---------------------------------------------------------------------------
+
+// All PII lives here, tenant-scoped and RLS-protected.
+model TenantUser {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  userId       String
+  // user      User      @relation(fields: [userId], references: [id])
+
+  displayName  String
+  email        String
+  avatarUrl    String?
+  locale       String    @default("en-US")
+  timeZone     String    @default("America/New_York")
+
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+  purgeAfter   DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Partial uniques in raw SQL (T-101): (tenantId, userId) and
+  // (tenantId, lower(email)), both WHERE "deletedAt" IS NULL.
+  @@index([tenantId, userId])
+  @@index([tenantId, email])
+}
+
+// Platform staff. Its own table, never a column on User — a column on a
+// broadly-writable table is a privilege-escalation path. Not tenant-scoped;
+// readable only by commish_platform and the auth bootstrap function.
+model PlatformGrant {
+  id        String           @id @default(cuid())
+  userId    String
+  role      PlatformRoleKind
+  grantedBy String
+  grantedAt DateTime         @default(now())
+  revokedAt DateTime?
+  revokedBy String?
+
+  @@index([userId, revokedAt])
+}
+
+// ---------------------------------------------------------------------------
+// The operator
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id           String       @id @default(cuid())
+  // Used in API paths and webhook payloads; immutable once issued because
+  // operators will hardcode it. Deliberately globally @unique rather than a
+  // partial index: a slug is burned forever, even after soft-delete, so a
+  // closed tenant's identifier can never be silently reused by another.
+  slug         String       @unique
+  name         String
+  status       TenantStatus @default(TRIAL)
+
+  // Plan and limits. Changing a plan must never require a deploy.
+  planKey      String       @default("trial")
+  maxLeagues   Int?
+  maxSeats     Int?
+  apiRateLimit Int          @default(60)   // requests/minute
+
+  // Untrusted operator input rendered into emails and pages. Zod-parse it,
+  // escape everything, verify the sender domain (DKIM/SPF) before use.
+  brandConfig  Json?
+  brandVersion Int          @default(1)
+
+  // INTENT ONLY — not enforced. Under shared-schema-single-database every
+  // row is in one region regardless of this value. Never surface it as a
+  // residency guarantee. See TENANCY.md §7.
+  region       String       @default("us-east-1")
+  lastExportAt DateTime?
+
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+  purgeAfter   DateTime?
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // onDelete: Cascade so tenant purge doesn't hit Restrict (Prisma's default
+  // on required relations). T-008 owns the ordering.
+  members      TenantMember[]
+  tenantUsers  TenantUser[]
+  apiKeys      TenantApiKey[]
+  webhooks     TenantWebhook[]
+  leagues      League[]
+
+  @@index([status, deletedAt])
+}
+
+model TenantMember {
+  id           String     @id @default(cuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUserId String
+  role         TenantRole @default(TENANT_SUPPORT)
+
+  // Present from day one so SCIM provisioning doesn't need a migration.
+  externalId   String?
+
+  invitedBy    String?
+  joinedAt     DateTime?
+
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+  purgeAfter   DateTime?
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // NOT @@unique([tenantId, tenantUserId]) — a removed member could never be
+  // re-added. Partial unique index in raw SQL instead.
+  @@index([tenantId, tenantUserId])
+  @@index([tenantId, externalId])
+}
+
+// ---------------------------------------------------------------------------
+// Operator API access
+// ---------------------------------------------------------------------------
+
+model TenantApiKey {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Show plaintext exactly once, at creation. Store only the hash.
+  //
+  // `prefix` is the environment tag PLUS a random segment — e.g.
+  // "cos_live_a1b2c3d4", ~17 chars. It must NOT be "the first 8 characters",
+  // which for every live key is the literal string "cos_live" and would make
+  // this @unique permit exactly one key in the entire system.
+  prefix     String    @unique
+  // SHA-256 over the full key. NOT bcrypt/argon2: an API key is a
+  // high-entropy random value, so a slow KDF buys nothing, adds ~100ms to
+  // every API call, opens a CPU-exhaustion vector, and bcrypt silently
+  // truncates at 72 bytes. Compare with timingSafeEqual.
+  hash       String
+  label      String
+
+  // Enforced by the authorize() matrix, not by convention — see T-112.
+  scopes     String[]  @default([])
+
+  // T-112. An API request has no user, so it has no role from a session — but
+  // the T-104 matrix grants on roles, so a key with no role can do nothing at
+  // all. The key carries its own.
+  //
+  // ⚠ DEFAULTS TO TENANT_SUPPORT, WHICH HOLDS NO WRITE ACTION IN THE MATRIX.
+  // A key issued before anyone thought about its authority is read-only. The
+  // alternative default — inheriting `createdBy`'s role at issuance — goes
+  // stale the moment that person is demoted, and the key silently keeps an
+  // authority its owner has lost.
+  role       TenantRole @default(TENANT_SUPPORT)
+
+  lastUsedAt DateTime?   // throttle writes to hourly; don't write per request
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  revokedBy  String?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId, revokedAt])
+}
+
+// ---------------------------------------------------------------------------
+// T-007 · append-only audit
+//
+// Invariant 3: every mutation is audited, in the SAME transaction it describes.
+// The mutation wrapper writes one of these at step 8, before commit.
+//
+// ⚠ `id` IS `Int`, NOT `BigInt`. A BigInt does not survive JSON serialization
+// from a Next.js server component to a client one — it throws rather than
+// degrading, and it throws in the UI rather than here.
+//
+// ⚠ `actorLabel` IS DENORMALISED, NOT A JOIN. The trail must stay readable
+// after the person is deleted; a join renders years of history as "unknown" the
+// day someone leaves. It also keeps audit reads off `TenantUser`, which is
+// where the PII lives.
+//
+// 🛑 `leagueId` HAS NO RELATION, DELIBERATELY. T-009 requires audit rows to
+// SURVIVE a league purge, and the two existing audit tables in this repo
+// (`LeagueAuditLog`, `FinanceAuditEvent`) both carry
+// `onDelete: Cascade` to League — which is exactly why neither could be reused
+// here. A bare column cannot be cascaded away by anything.
+//
+// Append-only is enforced in the migration by BOTH a REVOKE and a
+// BEFORE UPDATE OR DELETE trigger. The REVOKE alone does not bind a table
+// owner, and `commish_migrate` owns this table.
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id                 Int               @id @default(autoincrement())
+  tenantId           String
+  at                 DateTime          @default(now())
+
+  // Who. All three axes, because recording one of three would be an arbitrary
+  // choice that cannot be reconstructed later.
+  actorUserId        String
+  actorLabel         String
+  platformRole       PlatformRoleKind?
+  tenantRole         TenantRole?
+  leagueRole         LeagueRole?
+
+  // Platform support read this tenant's data. Shown to the operator in REDACTED
+  // form, not hidden — we are a sub-processor and DPAs generally require
+  // transparency about sub-processor access. See TENANCY.md §7.
+  isPlatformRead     Boolean           @default(false)
+
+  // What.
+  action             String
+  resourceType       String
+  resourceId         String
+  leagueId           String?
+  onBehalfOfLeagueId String?
+
+  // ⚠ NEVER provider credentials. `CLAUDE.md` names this explicitly, and audit
+  // payloads are the least-inspected data in any system — a token written here
+  // is a token nobody notices for a year. `lib/domain/audit.ts` redacts on the
+  // way in rather than trusting every caller.
+  before             Json?
+  after              Json?
+  metadata           Json?
+
+  reason             String?
+  requestId          String
+
+  @@index([tenantId, at])
+  @@index([tenantId, resourceType, resourceId])
+  @@index([tenantId, actorUserId, at])
+  @@index([requestId])
+}
+
+model TenantWebhook {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Operator-controlled, and we make outbound requests to it. SSRF guard is
+  // mandatory: https only, reject private/link-local/loopback ranges AFTER
+  // DNS resolution (rebinding), never follow redirects. See T-113.
+  url           String
+  events        String[]  @default([])
+
+  // HMAC signing secret. Encrypted at rest; never in audit before/after,
+  // never in logs, never returned by the API after creation. Sign a
+  // timestamp + body with a tolerance window so signatures can't be replayed.
+  secretRef     String
+
+  isActive      Boolean   @default(true)
+  failureCount  Int       @default(0)   // disable at a threshold
+  lastFailureAt DateTime?
+  lastSuccessAt DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([tenantId, isActive])
+  // GIN index — fan-out queries `events has 'draft.completed'` on every
+  // dispatch. Raw SQL in the T-101 migration.
+}
+

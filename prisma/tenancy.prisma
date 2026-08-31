@@ -1,0 +1,279 @@
+// ---------------------------------------------------------------------------
+// Commissioner OS — multi-tenant additions
+//
+// MERGE NOTE: this file does not validate standalone. `Tenant.leagues`
+// references League, whose changes are commented at the bottom of this file
+// and MUST be applied in the same edit. T-101's acceptance is
+// `prisma validate` passing, so apply both halves or neither.
+//
+// Do NOT apply before T-000 (repo survey) and T-001 (database roles) — RLS
+// without the role split is decorative, because table owners bypass it.
+//
+// Every model here is tenant-scoped and gets an RLS policy in the
+// accompanying migration. `Tenant` is the exception: it has no tenantId, so
+// its policy keys on its own id. See docs/commissioner-os/TENANCY.md §3.2.
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED       // read-only; operator can export, cannot write
+  CLOSED
+}
+
+enum TenantRole {
+  TENANT_OWNER    // billing + can delete the tenant
+  TENANT_ADMIN    // full operational control of their leagues
+  TENANT_SUPPORT  // read-only, for their support staff
+}
+
+enum PlatformRoleKind {
+  PLATFORM_ADMIN
+  PLATFORM_SUPPORT
+}
+
+enum LeagueRole {
+  COMMISSIONER
+  CO_COMMISSIONER
+  MANAGER
+}
+
+// ---------------------------------------------------------------------------
+// Identity — see TENANCY.md §4
+//
+// User is GLOBAL and holds NO PII. One person may work for two operators, so
+// User cannot be RLS-scoped by a column. If a name or email lived here, every
+// `include: { user: true }` would leak PII across tenants.
+//
+// model User {
+//   id            String   @id @default(cuid())
+//   authSubject   String   @unique   // IdP subject / credential handle
+//   createdAt     DateTime @default(now())
+//   // NOTHING ELSE. No name, no email, no avatar.
+//   tenantUsers   TenantUser[]
+// }
+// ---------------------------------------------------------------------------
+
+// All PII lives here, tenant-scoped and RLS-protected.
+model TenantUser {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  userId       String
+  // user      User      @relation(fields: [userId], references: [id])
+
+  displayName  String
+  email        String
+  avatarUrl    String?
+  locale       String    @default("en-US")
+  timeZone     String    @default("America/New_York")
+
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+  purgeAfter   DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Partial uniques in raw SQL (T-101): (tenantId, userId) and
+  // (tenantId, lower(email)), both WHERE "deletedAt" IS NULL.
+  @@index([tenantId, userId])
+  @@index([tenantId, email])
+}
+
+// Platform staff. Its own table, never a column on User — a column on a
+// broadly-writable table is a privilege-escalation path. Not tenant-scoped;
+// readable only by commish_platform and the auth bootstrap function.
+model PlatformGrant {
+  id        String           @id @default(cuid())
+  userId    String
+  role      PlatformRoleKind
+  grantedBy String
+  grantedAt DateTime         @default(now())
+  revokedAt DateTime?
+  revokedBy String?
+
+  @@index([userId, revokedAt])
+}
+
+// ---------------------------------------------------------------------------
+// The operator
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id           String       @id @default(cuid())
+  // Used in API paths and webhook payloads; immutable once issued because
+  // operators will hardcode it. Deliberately globally @unique rather than a
+  // partial index: a slug is burned forever, even after soft-delete, so a
+  // closed tenant's identifier can never be silently reused by another.
+  slug         String       @unique
+  name         String
+  status       TenantStatus @default(TRIAL)
+
+  // Plan and limits. Changing a plan must never require a deploy.
+  planKey      String       @default("trial")
+  maxLeagues   Int?
+  maxSeats     Int?
+  apiRateLimit Int          @default(60)   // requests/minute
+
+  // Untrusted operator input rendered into emails and pages. Zod-parse it,
+  // escape everything, verify the sender domain (DKIM/SPF) before use.
+  brandConfig  Json?
+  brandVersion Int          @default(1)
+
+  // INTENT ONLY — not enforced. Under shared-schema-single-database every
+  // row is in one region regardless of this value. Never surface it as a
+  // residency guarantee. See TENANCY.md §7.
+  region       String       @default("us-east-1")
+  lastExportAt DateTime?
+
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+  purgeAfter   DateTime?
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // onDelete: Cascade so tenant purge doesn't hit Restrict (Prisma's default
+  // on required relations). T-008 owns the ordering.
+  members      TenantMember[]
+  tenantUsers  TenantUser[]
+  apiKeys      TenantApiKey[]
+  webhooks     TenantWebhook[]
+  leagues      League[]
+
+  @@index([status, deletedAt])
+}
+
+model TenantMember {
+  id           String     @id @default(cuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUserId String
+  role         TenantRole @default(TENANT_SUPPORT)
+
+  // Present from day one so SCIM provisioning doesn't need a migration.
+  externalId   String?
+
+  invitedBy    String?
+  joinedAt     DateTime?
+
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+  purgeAfter   DateTime?
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // NOT @@unique([tenantId, tenantUserId]) — a removed member could never be
+  // re-added. Partial unique index in raw SQL instead.
+  @@index([tenantId, tenantUserId])
+  @@index([tenantId, externalId])
+}
+
+// ---------------------------------------------------------------------------
+// Operator API access
+// ---------------------------------------------------------------------------
+
+model TenantApiKey {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Show plaintext exactly once, at creation. Store only the hash.
+  //
+  // `prefix` is the environment tag PLUS a random segment — e.g.
+  // "cos_live_a1b2c3d4", ~17 chars. It must NOT be "the first 8 characters",
+  // which for every live key is the literal string "cos_live" and would make
+  // this @unique permit exactly one key in the entire system.
+  prefix     String    @unique
+  // SHA-256 over the full key. NOT bcrypt/argon2: an API key is a
+  // high-entropy random value, so a slow KDF buys nothing, adds ~100ms to
+  // every API call, opens a CPU-exhaustion vector, and bcrypt silently
+  // truncates at 72 bytes. Compare with timingSafeEqual.
+  hash       String
+  label      String
+
+  // Enforced by the authorize() matrix, not by convention — see T-112.
+  scopes     String[]  @default([])
+
+  lastUsedAt DateTime?   // throttle writes to hourly; don't write per request
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  revokedBy  String?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId, revokedAt])
+}
+
+model TenantWebhook {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Operator-controlled, and we make outbound requests to it. SSRF guard is
+  // mandatory: https only, reject private/link-local/loopback ranges AFTER
+  // DNS resolution (rebinding), never follow redirects. See T-113.
+  url           String
+  events        String[]  @default([])
+
+  // HMAC signing secret. Encrypted at rest; never in audit before/after,
+  // never in logs, never returned by the API after creation. Sign a
+  // timestamp + body with a tolerance window so signatures can't be replayed.
+  secretRef     String
+
+  isActive      Boolean   @default(true)
+  failureCount  Int       @default(0)   // disable at a threshold
+  lastFailureAt DateTime?
+  lastSuccessAt DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([tenantId, isActive])
+  // GIN index — fan-out queries `events has 'draft.completed'` on every
+  // dispatch. Raw SQL in the T-101 migration.
+}
+
+// ---------------------------------------------------------------------------
+// REQUIRED changes to existing models — apply with this file, not after
+// ---------------------------------------------------------------------------
+
+// model League {
+//   tenantId String
+//   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+//   ...
+//   // tenantId leads EVERY composite index — RLS filters on it first.
+//   @@index([tenantId, phase, deletedAt])
+//   @@index([tenantId, visibility, deletedAt])
+//   @@index([tenantId, seasonYear])
+//   // slug is unique PER TENANT: two operators may both have "the-league".
+//   // Partial unique in raw SQL: (tenantId, slug) WHERE "deletedAt" IS NULL.
+// }
+
+// Every model below gains `tenantId` even where reachable by join.
+// Denormalising is deliberate: an RLS policy must be evaluable on its own
+// table without a subquery.
+//
+//   Team, Membership, Draft, DraftPick, RosterSlot,
+//   LeagueFeature, PhaseTransition, AuditEvent
+//
+// NOT LeagueBinding — that model is created in T-201 (Phase 2). It gains
+// tenantId and a policy there, caught by the §3.5 policy-coverage test.
+
+// AuditEvent additionally gains:
+//
+// model AuditEvent {
+//   tenantId       String       // RLS-scoped: operators see only their own
+//   tenantRole     TenantRole?
+//   // Platform support read this tenant's data. Shown to the operator in
+//   // REDACTED form, not hidden — we are a sub-processor and DPAs generally
+//   // require transparency about sub-processor access. See TENANCY.md §7.
+//   isPlatformRead Boolean @default(false)
+//   @@index([tenantId, at])
+// }
