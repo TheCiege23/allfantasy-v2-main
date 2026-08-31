@@ -6171,6 +6171,7 @@ model League {
   aiOpponentActionLogs                  AiOpponentActionLog[]
   aiBotMessageHistory                   AiBotMessageHistory[]
   draftRoomQueueItems                   DraftRoomQueueItem[]
+  leagueBindings                        LeagueBinding[]
 
   @@unique([userId, platform, platformLeagueId, season])
   // ── Commissioner OS tenancy (T-101) ────────────────────────────────────────
@@ -17662,6 +17663,96 @@ model TenantApiKey {
   createdAt  DateTime  @default(now())
 
   @@index([tenantId, revokedAt])
+}
+
+// ---------------------------------------------------------------------------
+// T-201 · provider integration
+//
+// One binding model, one sync-job table. Both are tenant-scoped and both get
+// RLS policies in the T-201 migration — T-103's coverage test fails until they
+// do, which is the mechanism working rather than an obstacle.
+//
+// ⚠ THE DATABASE HOLDS A CREDENTIAL REFERENCE, NEVER A CREDENTIAL. `secretRef`
+// is a handle into a secret store. A provider token in this table would be
+// readable by every path that can read a binding, would land in `before`/
+// `after` on any audit of a binding change, and would survive in an export.
+// ---------------------------------------------------------------------------
+
+enum SyncStatus {
+  IDLE
+  RUNNING
+  OK
+  // T-204: a broken league goes read-only and clearly flagged, never
+  // stale-as-live. Distinct from FAILED because DEGRADED is a state a league
+  // sits in, while FAILED describes one job that did not finish.
+  DEGRADED
+  FAILED
+}
+
+model LeagueBinding {
+  id                String    @id @default(cuid())
+  tenantId          String
+  leagueId          String
+
+  /// Namespaced provider key — `sleeper`, `yahoo`, `espn`.
+  provider          String    @db.VarChar(32)
+  /// The provider's own id for this league. Untrusted input.
+  externalLeagueId  String    @db.VarChar(128)
+  externalSeason    String?   @db.VarChar(16)
+
+  /// ⚠ A HANDLE, NOT A SECRET. Resolved through the secret store at use time.
+  /// Never logged, never in audit before/after, never exported.
+  secretRef         String?
+
+  status            SyncStatus @default(IDLE)
+  /// Opaque provider cursor for incremental sync. Provider-defined; never parsed.
+  cursor            String?
+  lastSyncedAt      DateTime?
+  lastErrorAt       DateTime?
+  /// Operator-facing, and deliberately NOT the raw provider error — that can
+  /// carry a request URL with a token in the query string.
+  lastErrorSummary  String?   @db.VarChar(512)
+
+  deletedAt         DateTime?
+  deletedBy         String?
+  deleteReason      String?
+  purgeAfter        DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  league            League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  syncJobs          SyncJob[]
+
+  // Partial unique in raw SQL (T-201): (tenantId, provider, externalLeagueId)
+  // WHERE "deletedAt" IS NULL — a disconnected binding must be re-connectable.
+  @@index([tenantId, status])
+  @@index([tenantId, leagueId])
+  @@index([tenantId, provider, externalLeagueId])
+}
+
+model SyncJob {
+  id           String     @id @default(cuid())
+  tenantId     String
+  bindingId    String
+
+  status       SyncStatus @default(IDLE)
+  /// Where this run got to. Copied onto the binding only on success.
+  cursor       String?
+  attempts     Int        @default(0)
+
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  /// Summary only. See LeagueBinding.lastErrorSummary.
+  errorSummary String?    @db.VarChar(512)
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  binding      LeagueBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([bindingId, createdAt])
 }
 
 // ---------------------------------------------------------------------------

@@ -46,6 +46,18 @@ export const TENANT_SCOPED_TABLES: readonly TenantScopedTable[] = [
   { model: 'TenantWebhook', table: 'TenantWebhook', keyColumn: 'tenantId', rlsEnabled: true },
   { model: 'AuditEvent', table: 'AuditEvent', keyColumn: 'tenantId', rlsEnabled: true },
 
+  // T-201. Registered in the SAME change that adds the models, because T-103
+  // fails on an unregistered tenantId model — and it did, by name, before this
+  // entry existed:
+  //
+  //   Models carry tenantId but are neither RLS-protected nor registered as
+  //   deferred: LeagueBinding, SyncJob
+  //
+  // That failure is the §3.5 coverage mechanism catching a table on the day it
+  // is added rather than in month nine. It is not an obstacle to route around.
+  { model: 'LeagueBinding', table: 'LeagueBinding', keyColumn: 'tenantId', rlsEnabled: true },
+  { model: 'SyncJob', table: 'SyncJob', keyColumn: 'tenantId', rlsEnabled: true },
+
   // ── NOT enabled, and each one is a decision.
   {
     model: 'League',

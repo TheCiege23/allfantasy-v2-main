@@ -47,7 +47,9 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_migrate') THEN
-    EXECUTE format('CREATE ROLE commish_migrate LOGIN PASSWORD %L', :'migrate_password');
+    EXECUTE format(
+      'CREATE ROLE commish_migrate LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+      :'migrate_password');
   END IF;
 END
 $$;
@@ -61,15 +63,27 @@ $$;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_app') THEN
-    EXECUTE format('CREATE ROLE commish_app LOGIN PASSWORD %L', :'app_password');
+    EXECUTE format(
+      'CREATE ROLE commish_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+      :'app_password');
   END IF;
 END
 $$;
 
--- Explicit, even though these are the CREATE ROLE defaults. Stated so that a
--- later `ALTER ROLE` that quietly grants one shows up as a diff against an
--- intent that was written down, rather than as a silent drift from a default.
-ALTER ROLE commish_app NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT;
+-- ⚠ THE ATTRIBUTES ARE INLINE ON `CREATE ROLE` ABOVE, NOT A SEPARATE
+-- `ALTER ROLE`. The first version of this script hardened each role with a
+-- standalone ALTER, and that FAILED when it was finally run against a copy of
+-- the real database — a non-superuser cannot ALTER these attributes, but it can
+-- set them at creation time as the creating role. Measured on that copy:
+--
+--   CREATE ROLE commish_probe LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE
+--                             NOCREATEDB NOINHERIT PASSWORD …
+--   → rolsuper f, rolbypassrls f, rolcreaterole f, rolcreatedb f, rolinherit f
+--
+-- Worth knowing: four of the five are already the CREATE ROLE DEFAULTS. Only
+-- NOINHERIT differs, and it is the one that matters most here — an inheriting
+-- role picks up the privileges of anything it is later granted membership in,
+-- without anyone running SET ROLE.
 
 -- ---------------------------------------------------------------------------
 -- 3 · commish_platform — cross-tenant READ, platform support path only.
@@ -82,12 +96,13 @@ ALTER ROLE commish_app NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_platform') THEN
-    EXECUTE format('CREATE ROLE commish_platform LOGIN PASSWORD %L', :'platform_password');
+    EXECUTE format(
+      'CREATE ROLE commish_platform LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+      :'platform_password');
   END IF;
 END
 $$;
 
-ALTER ROLE commish_platform NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT;
 
 -- ---------------------------------------------------------------------------
 -- 4 · commish_purge — the only role that deletes.
@@ -100,12 +115,13 @@ ALTER ROLE commish_platform NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOIN
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'commish_purge') THEN
-    EXECUTE format('CREATE ROLE commish_purge LOGIN PASSWORD %L', :'purge_password');
+    EXECUTE format(
+      'CREATE ROLE commish_purge LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT PASSWORD %L',
+      :'purge_password');
   END IF;
 END
 $$;
 
-ALTER ROLE commish_purge NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT;
 
 -- ---------------------------------------------------------------------------
 -- 5 · Privileges
@@ -120,6 +136,20 @@ ALTER ROLE commish_purge NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHER
 -- new tables are invisible to the app and old ones are fine — which reads as a
 -- migration bug for as long as it takes to look here.
 -- ---------------------------------------------------------------------------
+
+-- 🛑 REQUIRED BEFORE `ALTER DEFAULT PRIVILEGES FOR ROLE commish_migrate`.
+-- Postgres only lets you set default privileges for a role you are a MEMBER of.
+-- Without this the four statements below fail — which is what happened the first
+-- time this script met the real database.
+--
+-- ⚠ NOT AN ESCALATION, and worth being explicit about since it is a GRANT of one
+-- role into another in a file whose whole point is that roles stay separate.
+-- CURRENT_USER here is the Neon project owner, which already owns every table
+-- and can already do anything commish_migrate can. The direction matters:
+-- OWNER gains membership in commish_migrate, never the reverse, and
+-- `commish_app` gains nothing. T-001's test still asserts commish_app is a
+-- member of nothing, and that assertion is untouched by this.
+GRANT commish_migrate TO CURRENT_USER;
 
 GRANT USAGE ON SCHEMA public TO commish_app, commish_platform, commish_purge;
 
@@ -149,4 +179,25 @@ ALTER DEFAULT PRIVILEGES FOR ROLE commish_migrate IN SCHEMA public
 --
 -- No ownership transfer of EXISTING tables — see 002_transfer_ownership.sql.
 -- That is a separate, heavier decision on a populated production database.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 7 · Verify by EFFECT. An empty result here is a FAILURE, not a pass.
+--
+-- ⚠ `ALTER DEFAULT PRIVILEGES` reports success whether or not it had any effect
+-- to record, so the only honest check is to read pg_default_acl back. These are
+-- the values measured on a copy of the real database after a successful run:
+--
+--   tables:    commish_app=arw   commish_platform=r   commish_purge=rd
+--   sequences: commish_app=rU
+--
+--   SELECT defaclobjtype, defaclacl FROM pg_default_acl d
+--     JOIN pg_roles r ON r.oid = d.defaclrole
+--    WHERE r.rolname = 'commish_migrate';
+--
+--   SELECT rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolinherit
+--     FROM pg_roles WHERE rolname LIKE 'commish\_%';
+--
+-- `npm run test:commissioner-os` asserts both, so this block is for the person
+-- running the script by hand rather than a substitute for the test.
 -- ---------------------------------------------------------------------------

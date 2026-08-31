@@ -24,6 +24,10 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['__tests__/commissioner-os/**/*.spec.ts'],
+    // 🛑 GATE. These suites write to a database, and @prisma/client loads .env
+    // on import — so without this they point at production by default. See
+    // dbSpecGuard.ts for the near miss that prompted it.
+    setupFiles: [path.resolve(repoRoot, '__tests__/commissioner-os/dbSpecGuard.ts')],
     // Role and policy state is global to the database. Parallel files would
     // race each other's assumptions once T-102's isolation suite lands here.
     fileParallelism: false,

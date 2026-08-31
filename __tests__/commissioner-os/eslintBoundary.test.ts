@@ -18,7 +18,18 @@
  * WHICH errors.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+
+// ⚠ THIS SUITE IS LEGITIMATELY SLOW AND MUST NOT INHERIT THE 30s DEFAULT.
+// It constructs a real ESLint instance against the repo's own config and lints
+// real files — across ~700 models' worth of project, that is tens of seconds on
+// an idle machine and more when other sessions are building. Measured at 34.7s
+// under load, which timed out and reported as a FAILED positive control: the
+// most misleading possible red, because it names the check that exists to prove
+// the others are meaningful.
+//
+// Raising the ceiling rather than trimming the work: the work is the test.
+vi.setConfig({ testTimeout: 180_000, hookTimeout: 180_000 })
 import { ESLint } from 'eslint'
 import path from 'node:path'
 

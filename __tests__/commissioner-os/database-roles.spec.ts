@@ -157,6 +157,67 @@ describe('T-001 · database roles', () => {
     }
   })
 
+  it('every role is NOINHERIT', async () => {
+    // ⚠ THE ONE ATTRIBUTE THAT IS NOT A `CREATE ROLE` DEFAULT, and the one that
+    // matters most. NOSUPERUSER/NOBYPASSRLS/NOCREATEROLE/NOCREATEDB are already
+    // the defaults; NOINHERIT is not. An INHERITING role picks up the privileges
+    // of anything it is later granted membership in — without anyone running
+    // SET ROLE, and therefore without the "cannot SET ROLE" assertion above
+    // noticing.
+    //
+    // Established against a copy of the real database: the attributes must be
+    // inline on CREATE ROLE, because a non-superuser cannot ALTER them
+    // afterwards. An earlier version of the provisioning script used a
+    // standalone ALTER ROLE and failed on contact.
+    const rows = await db.$queryRawUnsafe<{ rolname: string; rolinherit: boolean }[]>(
+      `SELECT rolname, rolinherit FROM pg_roles WHERE rolname = ANY($1::text[]) ORDER BY rolname`,
+      ROLES as unknown as string[],
+    )
+    expect(rows).toHaveLength(ROLES.length)
+    for (const r of rows) {
+      expect(r.rolinherit, `${r.rolname} inherits privileges from roles it joins`).toBe(false)
+    }
+  })
+
+  it('🛑 the DEFAULT PRIVILEGES actually landed', async () => {
+    // `ALTER DEFAULT PRIVILEGES` REPORTS SUCCESS WHETHER OR NOT IT RECORDED
+    // ANYTHING, so the only honest check is reading pg_default_acl back. It also
+    // silently does nothing unless the running role is a MEMBER of the role named
+    // in `FOR ROLE` — which is why the script grants commish_migrate to
+    // CURRENT_USER first, and why that omission was invisible until someone
+    // looked at this table.
+    //
+    // Expected values, measured on a copy of the real database after a good run:
+    //   tables:    commish_app=arw   commish_platform=r   commish_purge=rd
+    //   sequences: commish_app=rU
+    const rows = await db.$queryRawUnsafe<{ defaclobjtype: string; acl: string }[]>(
+      `SELECT d.defaclobjtype::text AS defaclobjtype, d.defaclacl::text AS acl
+         FROM pg_default_acl d
+         JOIN pg_roles r ON r.oid = d.defaclrole
+        WHERE r.rolname = 'commish_migrate'`,
+    )
+
+    expect(
+      rows.length,
+      'No default privileges recorded for commish_migrate. The ALTER DEFAULT PRIVILEGES statements ran but had no effect — check that GRANT commish_migrate TO CURRENT_USER ran first.',
+    ).toBeGreaterThan(0)
+
+    const tableAcl = rows.find((r) => r.defaclobjtype === 'r')?.acl ?? ''
+    const seqAcl = rows.find((r) => r.defaclobjtype === 'S')?.acl ?? ''
+
+    // Read + write, and NO delete: invariant 4 says only commish_purge deletes.
+    expect(tableAcl, `table default ACL: ${tableAcl}`).toContain('commish_app=arw')
+    expect(tableAcl).toContain('commish_platform=r')
+    expect(tableAcl).toContain('commish_purge=rd')
+    expect(seqAcl, `sequence default ACL: ${seqAcl}`).toContain('commish_app=rU')
+
+    // 🛑 The app must NOT hold `d` (DELETE) on future tables. If it does, the
+    // T-005 lint ban is the only thing standing between a stray deleteMany and
+    // a hard delete — and a lint rule is not a boundary.
+    const appTableGrant = /commish_app=([a-zA-Z*]+)/.exec(tableAcl)?.[1] ?? ''
+    expect(appTableGrant, `commish_app holds DELETE on future tables: ${appTableGrant}`).not.toContain('d')
+  })
+
   it('commish_migrate is not a superuser either', async () => {
     // It owns the tables, which is enough. Superuser would additionally exempt
     // it from the FORCE'd policies T-102 adds — so the `maintenance` policy
