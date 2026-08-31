@@ -214,7 +214,6 @@ export type AfCoreShellProps = {
  * fits above the fold at the shortest viewport the shell targets; beyond that
  * the rail stops being scannable anyway.
  */
-const RAIL_TILE_LIMIT = 8
 
 /**
  * The rail groups, and why it has them: twenty flat entries ran the column past
@@ -834,42 +833,45 @@ export function AfCoreShell(props: AfCoreShellProps) {
         <div className="af-rail-divider" />
 
         {/*
-          ⚠ CAPPED. The rail is a switcher, not an inventory. Seen on production:
-          an account with 604 leagues rendered 604 tiles down a fixed-width column,
-          running many screens past the fold and pushing the add button and the
-          profile link somewhere nobody would ever scroll to. Portfolio is the
-          screen that lists everything; this shows the first few and hands off.
+          ⚠ EVERY LEAGUE, NOT THE FIRST EIGHT.
+          This was capped at 8 with a "+N more → Portfolio" tile, and the cap was
+          there for a real reason: an account with 604 leagues rendered 604 tiles
+          down a fixed-width column and pushed the add button and the profile link
+          somewhere nobody would ever scroll to. The cap treated the symptom.
+          The cause was that the rail grew the PAGE instead of scrolling itself.
+
+          It now scrolls internally against a viewport-height rail, and the
+          controls that used to get pushed away live in `.af-rail-foot`, which is
+          outside this scroller and therefore always reachable. That removes the
+          reason for the cap rather than merely raising it — 604 leagues is a long
+          scroll, but nothing is out of reach and no count is hidden behind a
+          second screen.
         */}
-        {leagues.slice(0, RAIL_TILE_LIMIT).map((l) => (
-          <Link
-            key={l.id}
-            href={`/core?league=${encodeURIComponent(l.id)}`}
-            className="af-rail-tile af-platform"
-            data-platform={l.platform}
-            title={`${l.name} · ${l.platform}`}
-            aria-label={`${l.name} on ${l.platform}`}
-          >
-            <RailMark src={l.imageUrl} letter={l.mark} />
-            {l.hasAlert ? <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} /> : null}
-          </Link>
-        ))}
+        <div className="af-rail-scroll">
+          {leagues.map((l) => (
+            <Link
+              key={l.id}
+              href={`/core?league=${encodeURIComponent(l.id)}`}
+              className="af-rail-tile af-platform"
+              data-platform={l.platform}
+              title={`${l.name} · ${l.platform}`}
+              aria-label={`${l.name} on ${l.platform}`}
+            >
+              <RailMark src={l.imageUrl} letter={l.mark} />
+              {l.hasAlert ? <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} /> : null}
+            </Link>
+          ))}
+        </div>
 
-        {leagues.length > RAIL_TILE_LIMIT ? (
-          <Link
-            href="/core/portfolio"
-            className="af-rail-tile af-rail-more"
-            title={`${leagues.length - RAIL_TILE_LIMIT} more leagues — open Portfolio`}
-            aria-label={`${leagues.length - RAIL_TILE_LIMIT} more leagues. Open Portfolio to see all of them.`}
-          >
-            +{leagues.length - RAIL_TILE_LIMIT > 99 ? '99' : leagues.length - RAIL_TILE_LIMIT}
-          </Link>
-        ) : null}
-
+        {/*
+          ⚠ THE STICKY FOOT. Add-a-league and the profile link sit OUTSIDE the
+          scroller, so they hold their place no matter how many leagues are above
+          them. This is the half that makes removing the cap safe.
+        */}
+        <div className="af-rail-foot">
         <Link href="/import" className="af-rail-tile af-rail-add" aria-label="Add a league">
           +
         </Link>
-
-        <div className="af-rail-spacer" />
 
         <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
           {/*
@@ -886,10 +888,18 @@ export function AfCoreShell(props: AfCoreShellProps) {
             letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
           />
         </Link>
+        </div>
       </nav>
 
       {/* ── Primary nav ─────────────────────────────────────────────── */}
       <aside className="af-nav" id="af-nav" aria-label="Sections">
+        {/*
+          The section list scrolls; the CTA and support button below it do not.
+          Same split as the rail, for the same reason — with a long nav the two
+          things a stuck user most needs ("connect a platform", "contact
+          support") were the two furthest from the fold.
+        */}
+        <div className="af-nav-scroll">
         {sections.map((section) => (
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
@@ -928,11 +938,17 @@ export function AfCoreShell(props: AfCoreShellProps) {
           </div>
         ))}
 
+        </div>
+
         {/*
+          ⚠ THE STICKY FOOT — outside the scroller above, so it is reachable
+          without scrolling to the end of the nav.
+
           The import CTA states read-only and the time cost up front. Both are
           load-bearing: the first is the product's central promise, the second is
           what stops "connect a platform" reading as a commitment.
         */}
+        <div className="af-nav-foot">
         <div className="af-import-cta">
           <div className="af-import-title">Import a league</div>
           <p className="af-import-body">Sleeper, ESPN or Yahoo. Read-only, takes about a minute.</p>
@@ -954,6 +970,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
         >
           Contact support
         </button>
+        </div>
       </aside>
 
       {/* ── Main column ─────────────────────────────────────────────── */}

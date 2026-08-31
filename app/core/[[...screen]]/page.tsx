@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
+import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -507,7 +508,36 @@ export default async function AfCorePage({
      * → sleepercdn thumbs URL, anything unresolvable → null so the letter mark
      * is the genuine fallback rather than a broken <img>.
      */
-    imageUrl: imageOf(l as unknown as Dash34LeagueRow),
+    /*
+     * ⚠ AND WHEN THERE IS NO CUSTOM IMAGE, THE LEAGUE TYPE'S OWN ARTWORK —
+     * dynasty gets the dynasty cover, keeper the keeper cover, and so on.
+     * `getLeagueTypeMedia().defaultLeagueImageUrl` is documented as exactly this
+     * ("card / My Leagues fallback when the league has no custom logo") and is
+     * already what app/dashboard/components/LeagueTypeIcon.tsx renders, so the
+     * rail now matches the tiles elsewhere in the app instead of inventing a
+     * second mapping that would drift from it.
+     *
+     * ⚠ RESOLVED, NOT READ OFF `leagueType`. resolveLeagueCardTypeKey is the
+     * canonical resolver: it reads the column, then the variant, then the
+     * guillotine/best-ball flags in settings, and only then falls back to
+     * dynasty-vs-redraft. A league whose type lives in `settings` rather than
+     * the column — which is most of the older ones — would otherwise silently
+     * take the redraft cover.
+     *
+     * The letter mark stays as the last resort: `RailMark` falls back to it if
+     * the artwork itself 404s, so a missing file degrades to a letter and never
+     * to a broken-image glyph.
+     */
+    imageUrl:
+      imageOf(l as unknown as Dash34LeagueRow) ??
+      getLeagueTypeMedia(
+        resolveLeagueCardTypeKey({
+          leagueType: l.leagueType,
+          leagueVariant: l.leagueVariant,
+          settings: l.settings ?? undefined,
+          isDynasty: l.isDynasty,
+        }),
+      ).defaultLeagueImageUrl,
   }))
 
   /*

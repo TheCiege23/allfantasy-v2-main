@@ -18,6 +18,13 @@
 
 /* ── League rail ─────────────────────────────────────────────────────── */
 
+/*
+ * ⚠ THE RAIL SCROLLS ITSELF; IT DOES NOT GROW THE PAGE.
+ * It used to be a plain column that got as tall as its contents, so a long
+ * league list pushed the add button and the profile link below the fold — which
+ * is why the list was capped at 8 with a "+N more" tile. Pinning the rail to the
+ * viewport and scrolling the LIST inside it removes the reason for that cap.
+ */
 .af-rail {
   display: flex;
   flex-direction: column;
@@ -26,6 +33,61 @@
   padding: 14px 0;
   background: var(--rail);
   border-right: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  /* Grid items stretch by default; without this the sticky box is the full
+     column height and never has anywhere to stick to. */
+  align-self: start;
+  height: 100vh;
+  /* Fall back to the fixed unit above wherever dvh is unsupported. */
+  height: 100dvh;
+  /*
+   * ⚠ EXPLICIT, NOT INHERITED FROM TAILWIND PREFLIGHT. Measured at 1280x860
+   * without a global reset: content-box makes the rail 100vh PLUS its 28px of
+   * vertical padding = 888px against an 860px viewport, and the foot lands 14px
+   * below the fold — the exact bug this block exists to prevent, reintroduced
+   * silently. The app does load Preflight, so this is belt-and-braces; a
+   * viewport-height guarantee should not rest on a reset defined elsewhere.
+   */
+  box-sizing: border-box;
+}
+
+.af-rail-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex: 1 1 auto;
+  /*
+   * ⚠ LOAD-BEARING. A flex child defaults to min-height:auto and refuses to
+   * shrink below its content, so without this the list does not scroll — it
+   * grows the rail and pushes the foot off-screen, which is the exact bug this
+   * whole block exists to fix.
+   */
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.af-rail-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * The foot sits OUTSIDE the scroller, so add-a-league and the profile hold
+ * their place however many leagues are above them. Opaque on purpose: tiles
+ * scrolling underneath a transparent foot read as a rendering fault.
+ */
+.af-rail-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex: 0 0 auto;
+  padding-top: 10px;
+  background: var(--rail);
+  border-top: 1px solid var(--line);
 }
 
 .af-rail-logo {
@@ -93,29 +155,16 @@
 }
 
 .af-rail-add,
-.af-rail-profile,
-.af-rail-more {
+.af-rail-profile {
   background: var(--chip);
   border-color: var(--chip-line);
   color: var(--muted);
 }
 
-/* Overflow counter — reads as a count, not another league. */
-.af-rail-more {
-  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
-  letter-spacing: -0.02em;
-}
-.af-rail-more:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.af-rail-spacer {
-  flex: 1 1 auto;
-}
 
 /* ── Primary nav ─────────────────────────────────────────────────────── */
 
+/* Same arrangement as the rail, for the same reason — see its note above. */
 .af-nav {
   display: flex;
   flex-direction: column;
@@ -123,6 +172,38 @@
   padding: 14px 12px;
   background: var(--surface2);
   border-right: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
+  /* Same reason as the rail — see its note. */
+  box-sizing: border-box;
+}
+
+.af-nav-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.af-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * ⚠ THE TWO THINGS A STUCK USER NEEDS ARE THE TWO THAT WERE FURTHEST AWAY.
+ * "Connect a platform" and "Contact support" sat at the end of a scrolling nav.
+ * They are now pinned below it.
+ */
+.af-nav-foot {
+  flex: 0 0 auto;
+  padding-top: 12px;
+  background: var(--surface2);
+  border-top: 1px solid var(--line);
 }
 
 .af-nav-items {
@@ -610,9 +691,6 @@
     border-bottom: 1px solid var(--line);
     padding: 10px 12px;
   }
-  .af-rail-spacer {
-    display: none;
-  }
   .af-rail-divider {
     width: 1px;
     height: 26px;
@@ -959,5 +1037,55 @@
 @media (prefers-reduced-motion: reduce) {
   .af-core .af-skip {
     transition: none;
+  }
+}
+
+
+/*
+ * ── Rail / nav on a phone ────────────────────────────────────────────────
+ *
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL @media RATHER THAN EDITED INTO THE EXISTING
+ * 720px BLOCK. Inserting rules into the middle of a media query closes it early
+ * and silently moves everything below into the narrower band — brace balance
+ * stays 0 and nothing throws. A second block with the same condition is
+ * equivalent, later-wins, and cannot make that mistake. See CLAUDE.md.
+ *
+ * Both columns become horizontal scrollers here, so the desktop arrangement —
+ * viewport-height, sticky, inner scroll, pinned foot — has to be unwound: a
+ * 100dvh rail above the content would leave no room for the content.
+ */
+@media (max-width: 720px) {
+  .af-rail,
+  .af-nav {
+    position: static;
+    height: auto;
+    align-self: auto;
+  }
+  .af-rail-scroll,
+  .af-nav-scroll {
+    flex: 0 1 auto;
+    flex-direction: row;
+    align-items: center;
+    width: auto;
+    min-height: 0;
+    overflow-y: visible;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-rail-scroll > *,
+  .af-nav-scroll > * {
+    flex: 0 0 auto;
+  }
+  /* Inline with the row it used to sit under; the border and top padding were
+     separating a COLUMN and read as a stray line lying on its side here. */
+  .af-rail-foot,
+  .af-nav-foot {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    padding-top: 0;
+    border-top: 0;
+    background: transparent;
   }
 }
