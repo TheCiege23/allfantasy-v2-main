@@ -43,8 +43,13 @@ describe('EmptyState (Phase 3.7)', () => {
     expect(container.textContent).toContain('No urgent decisions right now.')
     expect(container.textContent).toContain("We'll surface anything urgent here")
     expect(container.querySelector('svg')).toBeTruthy()
-    // Positive tone tints the title emerald.
-    expect(container.innerHTML).toContain('text-emerald-300')
+    /*
+     * Positive tone tints the title green — but with the brand hex, not
+     * Tailwind's named scale. EmptyState's TONE table uses `text-[#3ddc97]` for
+     * `positive` (and #7fb3ff for info), so `text-emerald-300` has not appeared
+     * in this component since the palette moved to explicit values.
+     */
+    expect(container.innerHTML).toContain('text-[#3ddc97]')
   })
 
   it('omits description and hint when not provided', () => {

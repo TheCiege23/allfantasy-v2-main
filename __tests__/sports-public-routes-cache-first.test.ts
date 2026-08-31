@@ -257,7 +257,16 @@ describe('public sports data routes are cache-first', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           sport: 'NHL',
-          source: { in: ['rolling_insights', 'espn_live', 'api_sports'] },
+          /*
+           * ⚠ `thesportsdb` WAS ADDED ON PURPOSE AND THIS LIST HAD TO FOLLOW.
+           * It is the ONLY NCAAF score source — the other three are empty or
+           * dead for college — so excluding it returned nothing for that sport
+           * while a complete, minutes-old feed sat in the same table. The
+           * exclusion's original "null scores" reasoning had been measured
+           * against NFL only. Source SELECTION moved to pickFreshestSourceRows,
+           * so widening this filter cannot let a stale feed outrank a live one.
+           */
+          source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
         }),
       })
     )

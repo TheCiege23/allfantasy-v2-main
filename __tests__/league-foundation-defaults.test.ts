@@ -39,7 +39,14 @@ describe('getLeagueDefaults', () => {
 
     expect(devy.conceptPreset.readiness).toMatch(/beta|launch_ready/)
     expect(devy.draftSettings.devyConfig).toEqual(expect.objectContaining({ enabled: true }))
-    expect(c2c.conceptPreset.requiredDataFeeds.some((feed) => feed.includes('college'))).toBe(true)
+    /*
+     * ⚠ THE FEED NAMING CHANGED, NOT THE DEPENDENCY. Feeds are `af_ncaaf_*` now
+     * — af_ncaaf_players, af_ncaaf_schedule, af_ncaaf_stats, af_ncaaf_projections
+     * — and no feed id contains the word "college" anywhere in the catalog. The
+     * thing this asserts (a C2C league depends on college-football data) is as
+     * true as it ever was; only the prefix moved.
+     */
+    expect(c2c.conceptPreset.requiredDataFeeds.some((feed) => feed.includes('ncaaf'))).toBe(true)
     expect(c2c.draftSettings.c2cConfig).toEqual(expect.objectContaining({ enabled: true }))
   })
 })

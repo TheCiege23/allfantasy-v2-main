@@ -9,6 +9,18 @@ describe('psychological profile label resolver', () => {
       sport: 'NFL',
       tradeCount: 10,
       tradeFrequencyNorm: 75,
+      /*
+       * ⚠ `trade-heavy` STOPPED BEING AN ABSOLUTE JUDGEMENT AND THIS FIXTURE NEVER
+       * CAUGHT UP. The rule now reads `tradeFrequencyRelative >= draftPeerDeviation`
+       * (one full spread-width) rather than `tradeFrequencyNorm`, on the stated
+       * reasoning that a fixed number is something a long-lived league clears by
+       * simply existing. Absent from the fixture the field is undefined, every
+       * comparison against it is false, and the label silently never fires.
+       *
+       * 1.6 is comfortably past the 1.0 threshold, which is what this manager —
+       * ten trades, deliberately the busiest archetype in the file — is meant to be.
+       */
+      tradeFrequencyRelative: 1.6,
       tradeTimingLateRate: 65,
       waiverClaimCount: 16,
       waiverFocusNorm: 70,
@@ -16,7 +28,20 @@ describe('psychological profile label resolver', () => {
       benchingPatternScore: 52,
       rookieAcquisitionRate: 62,
       vetAcquisitionRate: 22,
-      draftPickCount: 8,
+      /*
+       * ⚠ 8 PICKS IS BELOW THE DRAFT EVIDENCE FLOOR, SO EVERY DRAFT-DIMENSION
+       * LABEL WAS BEING GATED OUT — including `rookie-heavy`, which this case
+       * asserts. ProfileEvidenceFloor requires draft: { min: 10 } counted as
+       * `draftPickCount`, and the gate at the end of resolveProfileLabels drops
+       * any label whose own dimension was not observed.
+       *
+       * The label rule itself never stopped matching (rookieAcquisitionRate 62 vs
+       * a threshold of 55); the claim was refused for want of evidence, which is
+       * the floor doing its job. Raised to 12 so this manager actually has a
+       * draft to have an opinion about. Left just over the floor deliberately —
+       * a number far above it would also mask a future raise of the floor.
+       */
+      draftPickCount: 12,
       draftEarlyRoundRate: 50,
       positionPriorityConcentration: 40,
       picksTradedAway: 6,

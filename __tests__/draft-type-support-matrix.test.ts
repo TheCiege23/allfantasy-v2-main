@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DRAFT_TYPES_BY_LEAGUE_FORMAT,
+  SUPPORTED_SPORTS_BY_LEAGUE_FORMAT,
   getDraftTypesForConceptAndSport,
   isDraftTypeAllowedForConceptAndSport,
   listCreateLeagueWireDraftTypeIds,
@@ -109,8 +110,45 @@ describe('draft type support matrix', () => {
     }
   })
 
+  /*
+   * ⚠ THIS TEST'S NAME SAYS "MIRRORS" AND IT WAS CHECKING TWO FROZEN ANSWERS.
+   * It asserted `('NFL','redraft','slow_draft') === false`; slow_draft is allowed
+   * for NFL redraft now, so it went red for a matrix change while the mirroring
+   * it claims to guard was never at risk.
+   *
+   * The two functions mirror BY CONSTRUCTION — isDraftTypeAllowedForConceptAndSport
+   * calls getDraftTypesForConceptAndSport and does an includes() on the result.
+   * So the property is what is worth asserting, and unlike a hardcoded pair it
+   * cannot rot when a draft type is added to or removed from the matrix.
+   */
   it('isDraftTypeAllowedForConceptAndSport mirrors getDraftTypesForConceptAndSport', () => {
-    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'slow_draft')).toBe(false)
-    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'salary_cap', 'snake')).toBe(false)
+    const everyDraftType = [
+      ...new Set(Object.values(DRAFT_TYPES_BY_LEAGUE_FORMAT).flatMap((ids) => [...ids])),
+    ]
+    let checks = 0
+    for (const format of Object.keys(DRAFT_TYPES_BY_LEAGUE_FORMAT)) {
+      const sports = SUPPORTED_SPORTS_BY_LEAGUE_FORMAT[
+        format as keyof typeof SUPPORTED_SPORTS_BY_LEAGUE_FORMAT
+      ] ?? []
+      for (const sport of sports) {
+        const allowed = getDraftTypesForConceptAndSport(sport, format)
+        for (const draftType of everyDraftType) {
+          expect(
+            isDraftTypeAllowedForConceptAndSport(sport, format, draftType),
+            `${sport}/${format}/${draftType}`,
+          ).toBe(allowed.includes(draftType))
+          checks += 1
+        }
+      }
+    }
+    /*
+     * ⚠ A LOOP THAT ITERATES ZERO TIMES PASSES. If the registry ever stopped
+     * exporting these tables, or the sport lists came back empty, every assertion
+     * above would simply not run and this test would go green having measured
+     * nothing — the exact shape of check-that-cannot-fail this repo keeps hitting.
+     */
+    expect(checks).toBeGreaterThan(50)
+    // And an id that is in no format's list is refused everywhere.
+    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'not_a_draft_type')).toBe(false)
   })
 })

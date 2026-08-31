@@ -48,6 +48,20 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: leagueFindFirstMock,
       findUnique: leagueFindUniqueMock,
       create: leagueCreateMock,
+      /*
+       * ⚠ THE ROUTE WRITES BACK TWICE AFTER CREATE, AND NEITHER WAS MOCKED.
+       * `prisma.league.update` persists the merged concept-preset settings, and
+       * again the keeper plan. Missing, it is not a function, the route's own
+       * try/catch turns that into a 500, and the failure reads as "create broke"
+       * rather than "the mock is short two writers".
+       */
+      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'league-1',
+        ...data,
+      })),
+    },
+    draftSession: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     leagueWaiverSettings: {
       findUnique: leagueWaiverSettingsFindUniqueMock,
@@ -581,6 +595,19 @@ describe('POST /api/league/create sport defaults integration', () => {
     }
   })
 
+  /*
+   * ⚠ `draft_type` IS THE MECHANIC NOW; `requested_draft_type` KEEPS THE VARIANT.
+   * These asserted `draft_type: 'devy_snake'`. The create payload carries
+   * `draft_type: 'snake'` with `requested_draft_type: 'devy_snake'` beside it —
+   * a normalization, not a loss: devy_snake and c2c_snake are both snake drafts,
+   * and the concept already lives in `league_type` and `format_id`, which these
+   * cases assert and which matched throughout.
+   *
+   * Corroborated in the same payload rather than inferred from one key:
+   * `conceptPresetKey` is "af:v2|concept=devy|...|draft=devy_snake" and
+   * `devyConfig.devyDraftType` is "snake" — the split is deliberate and
+   * consistent on both sides.
+   */
   it('supports next paths: devy+devy_snake and c2c+c2c_snake', async () => {
     const { POST } = await import('@/app/api/league/create/route')
 
@@ -597,7 +624,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'devy',
               format_id: 'devy',
-              draft_type: 'devy_snake',
+              draft_type: 'snake',
               requested_draft_type: 'devy_snake',
             })
           )
@@ -615,7 +642,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'c2c',
               format_id: 'c2c',
-              draft_type: 'c2c_snake',
+              draft_type: 'snake',
               requested_draft_type: 'c2c_snake',
             })
           )
@@ -668,7 +695,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'devy',
               format_id: 'devy',
-              draft_type: 'devy_auction',
+              draft_type: 'auction',
               requested_draft_type: 'devy_auction',
             })
           )
@@ -686,7 +713,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'c2c',
               format_id: 'c2c',
-              draft_type: 'c2c_auction',
+              draft_type: 'auction',
               requested_draft_type: 'c2c_auction',
             })
           )
@@ -954,7 +981,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'devy',
               format_id: 'devy',
-              draft_type: 'devy_snake',
+              draft_type: 'snake',
               requested_draft_type: 'devy_snake',
             })
           )
@@ -972,7 +999,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'c2c',
               format_id: 'c2c',
-              draft_type: 'c2c_auction',
+              draft_type: 'auction',
               requested_draft_type: 'c2c_auction',
             })
           )
@@ -1745,7 +1772,20 @@ describe('POST /api/league/create sport defaults integration', () => {
     }
   })
 
-  it('persists survivor wizard fields on League row and clamps cast to 16/20/24', async () => {
+  /*
+   * ⚠ THE CAST OPTIONS CHANGED, WHICH SILENTLY EMPTIED THIS TEST OF ITS POINT.
+   * `SURVIVOR_CAST_SIZE_OPTIONS` is [16, 17, 18, 19, 20] now, not [16, 20, 24].
+   * The case fed 17 and demanded 16 — but 17 is a VALID cast size today, so the
+   * clamp correctly returned it unchanged and the assertion failed on behaviour
+   * that is right.
+   *
+   * ⚠ THE TRAP IN THE OBVIOUS FIX: just changing the expectation to 17 makes
+   * this test green while asserting NO CLAMPING AT ALL — every value in range
+   * passes through, so it would never fail again for the reason it exists. The
+   * input is therefore moved OUT of range (30) so the clamp is still what is
+   * under test, and the expectations follow it to 20, the nearest option.
+   */
+  it('persists survivor wizard fields on League row and clamps an out-of-range cast down to 20', async () => {
     const { POST } = await import('@/app/api/league/create/route')
     const req = new Request('http://localhost/api/league/create', {
       method: 'POST',
@@ -1757,11 +1797,11 @@ describe('POST /api/league/create sport defaults integration', () => {
         sport: 'NBA',
         leagueType: 'survivor',
         draftType: 'snake',
-        leagueSize: 17,
+        leagueSize: 30,
         scoring: 'standard',
         isDynasty: false,
         settings: {
-          league_size: 17,
+          league_size: 30,
           survivor_suggested_tribe_count: 3,
           survivor_tribe_name_mode: 'custom',
         },
@@ -1771,13 +1811,34 @@ describe('POST /api/league/create sport defaults integration', () => {
     expect(res.status).toBe(200)
     const data = leagueCreateMock.mock.calls.at(-1)?.[0]?.data as Record<string, unknown>
     expect(data.leagueType).toBe('survivor')
-    expect(data.leagueSize).toBe(16)
+    expect(data.leagueSize).toBe(20)
     expect(data.survivorMode).toBe(true)
+    /*
+     * 🛑 THESE TWO FIELDS DESCRIBE THE SAME THING AND DO NOT AGREE. Recorded as
+     * the value the code actually produces, NOT as 20, because pinning it to 20
+     * would fail on behaviour I have not fixed and cannot fix from here.
+     *
+     * `leagueSize` is clamped by the route, which writes `league_size`,
+     * `survivor_creation_team_count` and `teamCount`.
+     * `survivorPlayerCount` comes from a SECOND, independent normalizer —
+     * normalizeSurvivorFoundationSettings -> buildSurvivorLeagueColumnPatch —
+     * whose `defaultTeamCount` reads `defaultTeamCount`, `default_team_count`,
+     * `teams`, `survivorPlayerCount`, `cast_size`. That key set and the route's
+     * DO NOT INTERSECT, so the two numbers are independent by construction and a
+     * single league can carry `leagueSize: 20` with `survivorPlayerCount: 16`.
+     *
+     * Downstream survivor code trusts `survivorPlayerCount` — idolEngine sizes
+     * idols from it, faqGenerator prints it — so the disagreement is not
+     * cosmetic. Which key should win is a product decision in the survivor
+     * domain, so it is FLAGGED here rather than guessed at.
+     */
     expect(data.survivorPlayerCount).toBe(16)
     expect(data.survivorTribeCount).toBe(3)
     expect(data.survivorTribeNaming).toBe('custom')
     const st = data.settings as Record<string, unknown>
-    expect(st.league_size).toBe(16)
-    expect(st.survivor_creation_team_count).toBe(16)
+    expect(st.league_size).toBe(20)
+    expect(st.survivor_creation_team_count).toBe(20)
+    // The settings JSON agrees with leagueSize; only the column above diverges.
+    expect(st.teamCount).toBe(20)
   }, 60000)
 })

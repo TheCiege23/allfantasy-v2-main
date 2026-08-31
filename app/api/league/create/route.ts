@@ -1023,7 +1023,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Survivor: cast size 16/20/24 only — align Prisma `leagueSize` + settings JSON (wizard may send size only under settings).
+    // Survivor: cast size is clamped to SURVIVOR_CAST_SIZE_OPTIONS (16-20 today; this
+    // comment said 16/20/24 long after the constant stopped saying so) — align Prisma
+    // `leagueSize` + settings JSON (wizard may send size only under settings).
     if (String(requestedLeagueType ?? '').toLowerCase() === 'survivor') {
       const { clampSurvivorCastSize } = await import('@/lib/league-creation-wizard/sport-team-limits');
       const raw =
