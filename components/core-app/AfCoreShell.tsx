@@ -6,6 +6,7 @@ import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
+import SyncNowButton from '@/components/core-app/SyncNowButton'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -138,6 +139,16 @@ export type AfCoreShellProps = {
   leagues: RailLeague[]
   /** Rendered from sportsReadPort freshness — label plus whether to warn. */
   syncAge: { label: string; stale: boolean }
+  /**
+   * How many leagues "Sync now" could actually re-read, from
+   * `selectResyncCandidates`. 0 greys the button out — there is nothing to
+   * ingest until an import has landed.
+   *
+   * ⚠ `null` IS "COULD NOT COUNT", NOT ZERO, and must stay distinguishable: a
+   * failed league read greying the button out tells the user they have no
+   * leagues when we simply failed to look.
+   */
+  syncEligibleCount: number | null
   /** Null when the user has no plan context loaded; the chip is then omitted
    *  rather than showing a made-up tier. */
   plan?: { name: string; tokensLeft: number | null } | null
@@ -793,7 +804,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
       return item ? [item] : []
     })
   }, [props])
-  const { leagues, syncAge, plan, weekLabel, active, children, comms } = props
+  const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
   // "More" is current whenever the screen you are on is not one of the five
   // pinned ones — otherwise the bar shows nothing as active and reads broken.
   const activeInBar = mobileItems.some((i) => i.key === active)
@@ -966,6 +977,14 @@ export function AfCoreShell(props: AfCoreShellProps) {
               synced {syncAge.label}
             </span>
 
+            {/*
+              The COMPACT form, and only where the visible panel is not already
+              on screen. Home renders the full-width panel below, and two live
+              "Sync now" controls on one screen is the kind of duplication that
+              makes people wonder whether they do different things.
+            */}
+            {active === 'home' ? null : <SyncNowButton eligibleCount={syncEligibleCount} />}
+
             {plan ? (
               <span className="af-plan">
                 <span className="af-plan-name af-label">{plan.name}</span>
@@ -994,6 +1013,15 @@ export function AfCoreShell(props: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
+          {/*
+            The VISIBLE button, on the /core home screen: a real action row
+            above the dashboard rather than a chip in the chrome. This is the
+            surface a manager reaches for after importing a league, so it sits
+            where they land, not where they have to go looking.
+          */}
+          {active === 'home' ? (
+            <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} />
+          ) : null}
           {children}
         </main>
       </div>

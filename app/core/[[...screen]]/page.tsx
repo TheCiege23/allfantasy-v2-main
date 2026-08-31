@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
@@ -466,6 +467,22 @@ export default async function AfCorePage({
   // mapping the payload itself. The dashboard page casts the same way.
   const leagueListPayload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
+
+  /*
+   * How many leagues "Sync now" can actually re-read. Computed from the payload
+   * ALREADY fetched above rather than by a second read, and by the same
+   * `selectResyncCandidates` the sync endpoint uses to build its work list —
+   * a count and a work-list from different code are not the same answer, and
+   * the disagreement would show up as a button that is enabled and syncs
+   * nothing, or greyed out over leagues the endpoint would have refreshed.
+   *
+   * ⚠ NULL, NOT 0, WHEN THE LEAGUE READ ITSELF FAILED. Zero greys the button
+   * out, which would tell the user they have no leagues when we only failed to
+   * look at them.
+   */
+  const syncEligibleCount = leagueListPayload
+    ? selectResyncCandidates(leagueListPayload.leagues).length
+    : null
 
   /*
    * ⚠ THE RAIL IS LEAGUES YOU PLAY, NOT YOUR IMPORT HISTORY. `hasUnifiedRecord:
@@ -1376,6 +1393,7 @@ export default async function AfCorePage({
       active={activeKey}
       leagues={rail}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
+      syncEligibleCount={syncEligibleCount}
       selectedLeagueId={selectedLeagueId}
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}
