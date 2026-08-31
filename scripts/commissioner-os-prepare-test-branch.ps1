@@ -38,7 +38,12 @@ param(
   [Parameter(Mandatory = $true)]
   [string] $BranchUrl,
 
-  [string] $OutFile = '.env.commish-test'
+  [string] $OutFile = '.env.commish-test',
+
+  # Skip the interactive confirmation. The production-endpoint guard above is
+  # NOT skippable and still runs - this only silences the "look at the target"
+  # prompt, which is useless in a non-interactive shell.
+  [switch] $Yes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -97,8 +102,26 @@ if ($prodLine) {
 }
 
 Write-Output "Target branch host: $BranchHost"
-$confirm = Read-Host 'Type the host again to confirm'
-if ($confirm -ne $BranchHost) { Write-Error 'Mismatch. Nothing was changed.' }
+
+# ⚠ ACCEPT EITHER THE HOST OR THE WHOLE URL, and normalise before comparing.
+# The first version demanded an exact match on the host and rejected the obvious
+# thing to paste - the connection string that is already on the clipboard. It
+# then reported only "Mismatch. Nothing was changed.", printing neither value, so
+# there was nothing to see. A confirmation step that is hard to satisfy correctly
+# does not add safety; it trains people to bypass it.
+#
+# The real protection here is the production-endpoint guard above, which is
+# mechanical. This prompt only exists to make the operator LOOK at the target.
+if ($Yes) {
+  Write-Output 'Confirmation skipped (-Yes).'
+} else {
+  $confirm = Read-Host 'Paste the host (or the whole connection string) again to confirm'
+  $confirmHost = $confirm.Trim().Trim('"').Trim("'")
+  if ($confirmHost -match '@') { $confirmHost = Get-HostFrom $confirmHost }
+  if ($confirmHost -ne $BranchHost) {
+    Write-Error "Mismatch. Nothing was changed.`n  expected: $BranchHost`n  got:      $confirmHost`n(Hosts are not secret - compare them and re-run, or pass -Yes to skip this prompt.)"
+  }
+}
 
 if (-not (Get-Command psql -ErrorAction SilentlyContinue)) { Write-Error 'psql not found on PATH.' }
 
