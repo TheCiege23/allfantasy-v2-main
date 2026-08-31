@@ -54,6 +54,17 @@
     "lib/domain/sleeper.ts",
     "lib/domain/reconcile.ts",
     "lib/domain/syncHealth.ts",
-    "lib/domain/tenantScopedTables.ts"
+    "lib/domain/tenantScopedTables.ts",
+    // The first request path through withTenant. Listed so a green run here
+    // actually covers it — a scoped typecheck that omits the file you changed
+    // is the filtered-check trap wearing a different hat.
+    "app/api/commissioner-os/sync-health/route.ts",
+    // ⚠ REQUIRED BY THE LINE ABOVE, NOT OPTIONAL. The route imports authOptions
+    // from lib/auth.ts, which relies on next-auth module augmentation to put
+    // `id` on Session["user"]. `files` compiles only what is listed plus what it
+    // imports, and a global .d.ts is neither — so without this the route
+    // typechecks against un-augmented next-auth types and reports three errors
+    // in lib/auth.ts that do not exist in a normal build.
+    "types/next-auth.d.ts"
   ]
 }
