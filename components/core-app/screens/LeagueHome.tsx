@@ -167,8 +167,7 @@ function PairedBand({
     )
   }
 
-  const { other, viewingRole, franchiseName } = pairing
-  const otherLabel = viewingRole === 'pro' ? 'College half' : 'Pro half'
+  const { self, other, viewingRole, franchiseName } = pairing
 
   /*
    * ⚠ A FRANCHISE WITH ONE HALF IS A REAL STATE AND SAYS SO. `pair-leagues`
@@ -193,41 +192,76 @@ function PairedBand({
     )
   }
 
+  /*
+   * 🛑 THE LEAGUE YOU ARE ON COMES FIRST. On the pro league the pro side leads
+   * and the college side sits under it; on the college league the order flips.
+   * Neither half is "the" league and the other an afterthought — that is the
+   * whole point of calling them one franchise. `self` may be null only if the
+   * membership row vanished between reads, in which case we show what we have
+   * rather than nothing.
+   */
+  const sides = [self, other].filter((sd): sd is NonNullable<typeof sd> => sd != null)
+  const totalPlayers = sides.reduce((n, sd) => n + (sd.playerCount ?? 0), 0)
+  const anyUnavailable = sides.some((sd) => sd.unavailableReason != null)
+
   return (
     <section className="af-card af-lh-paired">
       <div className="af-lh-paired-head">
         <span className="af-label af-lh-paired-kicker">{franchiseName}</span>
-        <span className="af-lh-paired-role">{otherLabel}</span>
-      </div>
-      <div className="af-lh-paired-body">
-        <h2 className="af-lh-paired-title">
-          {other.leagueId ? (
-            <Link href={`/core?league=${encodeURIComponent(other.leagueId)}`} className="af-lh-paired-link">
-              {other.name}
-            </Link>
-          ) : (
-            other.name
-          )}
-        </h2>
-        <p className="af-lh-paired-meta">
-          <span className="af-platform af-lh-paired-platform" data-platform={other.platform}>
-            {other.platform}
-          </span>
-          {other.season != null ? <span> · {other.season}</span> : null}
-          {other.teamLabel ? <span> · {other.teamLabel}</span> : null}
-        </p>
         {/*
-          ⚠ A COUNT AND A REASON ARE MUTUALLY EXCLUSIVE. `playerCount` is null
-          exactly when the roster could not be read, and printing "0 players"
-          there would report an empty squad for a team we simply could not see.
+          ⚠ THE COMBINED COUNT IS SUPPRESSED WHEN EITHER HALF IS UNREADABLE.
+          Adding up one real roster and one we could not read reports a franchise
+          smaller than it is, and looks like a fact rather than a gap.
         */}
-        {other.unavailableReason ? (
-          <p className="af-lh-paired-text">_ {other.unavailableReason}</p>
-        ) : (
-          <p className="af-lh-paired-text">
-            {other.playerCount} {other.playerCount === 1 ? 'player' : 'players'} on your roster there
-          </p>
-        )}
+        {!anyUnavailable ? (
+          <span className="af-lh-paired-role">{totalPlayers} players across both</span>
+        ) : null}
+      </div>
+      <div className="af-lh-paired-sides">
+        {sides.map((sd, i) => (
+          <div
+            key={`${sd.platform}:${sd.leagueId ?? sd.name}`}
+            className="af-lh-paired-side"
+            /* The first row is the league being viewed — styled as current. */
+            data-current={i === 0 ? 'true' : 'false'}
+          >
+            <span className="af-label af-lh-paired-sidelabel">
+              {sd.role === 'pro' ? 'Pro half' : 'College half'}
+              {i === 0 ? ' · you are here' : ''}
+            </span>
+            <h3 className="af-lh-paired-title">
+              {sd.leagueId && i !== 0 ? (
+                <Link
+                  href={`/core?league=${encodeURIComponent(sd.leagueId)}`}
+                  className="af-lh-paired-link"
+                >
+                  {sd.name}
+                </Link>
+              ) : (
+                sd.name
+              )}
+            </h3>
+            <p className="af-lh-paired-meta">
+              <span className="af-platform af-lh-paired-platform" data-platform={sd.platform}>
+                {sd.platform}
+              </span>
+              {sd.season != null ? <span> · {sd.season}</span> : null}
+              {sd.teamLabel ? <span> · {sd.teamLabel}</span> : null}
+            </p>
+            {/*
+              ⚠ A COUNT AND A REASON ARE MUTUALLY EXCLUSIVE. `playerCount` is null
+              exactly when the roster could not be read, and printing "0 players"
+              there would report an empty squad for a team we simply could not see.
+            */}
+            {sd.unavailableReason ? (
+              <p className="af-lh-paired-text">_ {sd.unavailableReason}</p>
+            ) : (
+              <p className="af-lh-paired-text">
+                {sd.playerCount} {sd.playerCount === 1 ? 'player' : 'players'} on your roster
+              </p>
+            )}
+          </div>
+        ))}
       </div>
     </section>
   )
