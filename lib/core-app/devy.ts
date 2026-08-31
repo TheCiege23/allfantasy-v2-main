@@ -30,14 +30,36 @@ import type {
  *   rankingsByPosition   the same rows, grouped                        ✔
  *   colleges             DevyPlayer grouped by school                  ✔
  *   exposure             getCrossLeagueExposure                        ✔ the Dash3A panel, reused
- *   news                 SportsNews where sport = NCAAF                ⚠ no writer fills this yet
+ *   news                 SportsNews where sport = NCAAF                ✔ wired; see the correction below
  *   watchlist            —                                             ⚠ no follow model exists
  *
- * ⚠ THE LAST TWO ARE EMPTY BY CONSTRUCTION, NOT BY ACCIDENT, and that is recorded here
- * so nobody spends an afternoon debugging a query that is working correctly. There is no
- * college news ingest — `grep` for a writer of `SportsNews` with a college sport finds
- * none — and no table anywhere records a followed prospect. Both sections degrade to
- * their empty copy rather than to fabricated rows.
+ * ⚠ CORRECTION — AN EARLIER VERSION OF THIS COMMENT SAID "no writer fills this yet" FOR
+ * NEWS, AND THAT WAS FALSE. The writer exists and has always covered college:
+ *
+ *     cron/import-news  →  syncEspnNewsOnly  →  fetchESPNNews
+ *       →  SUPPORTED_SPORTS.map(...)                        iterates every sport
+ *       →  fetchESPNNewsForSport('NCAAF')
+ *       →  ESPN_NEWS_SPORTS_PATH.NCAAF = 'football/college-football'
+ *       →  {ESPN_SITE_API_BASE}/football/college-football/news
+ *       →  upsertArticles, which writes `article.sport ?? 'NFL'`
+ *
+ * The same ESPN host already serves college INJURIES. The claim was wrong because the
+ * grep behind it could not have found the writer: it looked for `sportsNews` and
+ * `ncaaf|college` co-occurring in one file, but the sport lives in a lookup constant and
+ * the write is generic. "No matches" and "my pattern cannot match" are the same output —
+ * the exact failure this repo keeps cataloguing, committed here in a comment.
+ *
+ * ⚠ THE ROWS ARE STILL ABSENT, FOR AN OPERATIONAL REASON RATHER THAN A CODE ONE.
+ * `cron-schedule.json` runs `/api/cron/import-news` every 15 minutes, but
+ * `scripts/cron-fast-tier-loop.mjs` records in its own comment that import-news "has been
+ * stale for days" — it is slow or hangs to the timeout. So this query is correct and will
+ * populate the moment that job recovers. Do not rewrite it looking for a bug.
+ *
+ * ⚠ THE WATCHLIST REALLY HAS NO SOURCE, and it is not an API question — no provider
+ * supplies "players this user follows". The nearest models are `UserFollow` (user-to-user
+ * social graph, not players) and `WaiverWatchlist`, which is the right SHAPE and even
+ * carries `sport`, but is keyed `[leagueId, userId, playerId]` and so cannot express a
+ * cross-league devy watchlist. Closing this needs a schema decision, not a query.
  */
 
 /** Ranked prospects are capped so the hero stays a hero. */

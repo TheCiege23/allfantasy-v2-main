@@ -422,6 +422,31 @@ export type DevyProspect = {
   devyRank: number | null
   /** Board points. Null when unranked. */
   value: number | null
+  /**
+   * Passing profile from the CFBD feed, for passers only. Null everywhere else, and null
+   * for a passer the sweep has not reached — never zero.
+   *
+   * ⚠ `adot` IS USELESS WITHOUT `adotAttempts` AND CHIMMY MUST BE GIVEN BOTH. CFBD's
+   * air-yard coverage is partial: measured 2026-08-30, Gunner Stockton had 385 attempts
+   * and 153 carrying an air-yard value, so his 7.2 ADOT describes 40% of his season. A
+   * model handed "ADOT 7.2" and "ADOT 9.4" with no denominators will compare a
+   * 40-attempt sample against a 400-attempt one and state the difference as fact.
+   * Production already shipped that mistake once, with `adot` populated and
+   * `airYardsAttempts` NULL on every row.
+   */
+  passing: {
+    season: number
+    attempts: number | null
+    /** Average depth of target, over `adotAttempts` — NOT over `attempts`. */
+    adot: number | null
+    /** ADOT's real denominator: throws that carried an air-yard value. */
+    adotAttempts: number | null
+    /** Yards after catch per completion, over `yacCompletions`. */
+    yacPerCompletion: number | null
+    yacCompletions: number | null
+    /** The school's offensive ADOT, so a passer's own reads as scheme or as arm. */
+    schoolAdot: number | null
+  } | null
 }
 
 export type DevyContextSlice = {
