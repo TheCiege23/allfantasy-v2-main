@@ -182,11 +182,36 @@ export async function resolvePairedHalf(
    * the same failure `importFantraxLeague` refuses to make when it will not guess
    * which team is yours.
    */
+  /*
+   * ⚠ `Roster.platformUserId` CARRIES TWO ID SPACES, AND THE VIEWER'S OWN TEAM IS
+   * THE ONE THAT USES THE OTHER ONE.
+   *
+   * For managers we only imported, it holds the PLATFORM user id (Sleeper's
+   * numeric id), which is what `LeagueTeam.platformUserId` also holds — so the
+   * join works for all of them. For the team the viewer has CLAIMED it holds the
+   * AllFantasy `AppUser.id` instead, which is how the rest of the app reads a
+   * viewer's own roster (`leagueSync.ts`, the waiver and Chimmy paths, a dozen
+   * others all query `{ leagueId, platformUserId: userId }`).
+   *
+   * Measured on production: of 12 teams in the paired Sleeper league, 11 keys
+   * matched and exactly one did not — the viewer's. `LeagueTeam` said
+   * 591462610482806784 while the roster row sat under the AppUser id with all 50
+   * players present. Reading only the team's key therefore fails for precisely
+   * the one roster this panel exists to show, and renders as "no roster is on
+   * file" — which reads as broken ingestion rather than a missed join.
+   *
+   * Both keys are tried, viewer id first because that is the row that belongs to
+   * them. Still scoped to a team they actually claimed, so this cannot fall back
+   * to a stranger's squad.
+   */
+  const rosterKeys = [ownerUserId, team?.platformUserId].filter(
+    (k): k is string => typeof k === 'string' && k.length > 0,
+  )
   const roster =
-    other && team?.platformUserId
+    other && team && rosterKeys.length > 0
       ? await prisma.roster
           .findFirst({
-            where: { leagueId: other.id, platformUserId: team.platformUserId },
+            where: { leagueId: other.id, platformUserId: { in: rosterKeys } },
             select: { playerData: true },
           })
           .catch(() => null)
