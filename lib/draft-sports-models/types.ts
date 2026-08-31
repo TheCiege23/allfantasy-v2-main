@@ -123,6 +123,14 @@ export interface NormalizedDraftEntry {
   aiAdp?: number | null
   aiAdpSampleSize?: number
   aiAdpLowSample?: boolean
+  /*
+   * Where the AI ADP number came from. 'cross_size' means it was PROJECTED from drafts at
+   * other league sizes (see lib/adp/crossSizeAdp.ts), not measured at this one - the UI marks it
+   * so an estimate is not read with the authority of an observation.
+   */
+  aiAdpSource?: 'exact' | 'cross_size' | null
+  /** Cross-size only: the league sizes the projection drew on. */
+  aiAdpTeamCounts?: number[] | null
   injuryStatus?: string | null
   collegeOrPipeline?: string | null
   /** Devy: true when player is from devy/college pool */

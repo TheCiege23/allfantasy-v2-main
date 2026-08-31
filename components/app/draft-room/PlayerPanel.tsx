@@ -80,6 +80,14 @@ export type PlayerEntry = {
   aiAdp?: number | null
   aiAdpSampleSize?: number
   aiAdpLowSample?: boolean
+  /*
+   * Where the AI ADP number came from. 'cross_size' means PROJECTED from drafts at other
+   * league sizes (lib/adp/crossSizeAdp.ts), not measured at this one. The pool cell marks it so
+   * an estimate is not read with the authority of an observation.
+   */
+  aiAdpSource?: 'exact' | 'cross_size' | null
+  /** Cross-size only: the league sizes the projection drew on. */
+  aiAdpTeamCounts?: number[] | null
   /** Normalized display model for player image, team logo, stats */
   display?: PlayerDisplayModel | null
   /** Devy: true when from college/devy pool */

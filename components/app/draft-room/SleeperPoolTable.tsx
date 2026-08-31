@@ -377,14 +377,33 @@ function SleeperRow(props: SleeperRowProps) {
             <span
               data-testid={`${testIdBase}-ai-adp`}
               data-low-sample={p.aiAdpLowSample ? 'true' : 'false'}
+              data-adp-source={p.aiAdpSource ?? 'exact'}
               title={aiAdpCellTitle({
                 hasValue: p.aiAdp != null && Number.isFinite(Number(p.aiAdp)),
                 lowSample: Boolean(p.aiAdpLowSample),
                 sampleSize: p.aiAdpSampleSize ?? null,
+                source: p.aiAdpSource ?? null,
+                contributingTeamCounts: p.aiAdpTeamCounts ?? null,
               })}
               className="inline-flex items-center gap-1"
             >
               {aiAdpDisplay}
+              {/*
+                * A cross-size value is projected from other league sizes, not measured at this
+                * one. The tilde is the smallest honest mark that survives a dense table: it reads
+                * as "approximately" without stealing a column, and the title carries the detail.
+                * Rendering it identically to a measured value would present an estimate with the
+                * authority of an observation.
+                */}
+              {p.aiAdpSource === 'cross_size' && p.aiAdp != null ? (
+                <span
+                  data-testid={`${testIdBase}-ai-adp-projected`}
+                  aria-label="projected from other league sizes"
+                  className="text-[10px] leading-none text-sky-300/70"
+                >
+                  ~
+                </span>
+              ) : null}
               {p.aiAdpLowSample && p.aiAdp != null ? (
                 <span
                   aria-hidden

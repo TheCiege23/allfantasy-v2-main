@@ -1337,6 +1337,10 @@ export async function getResolvedDraftPoolForLeague(
       sevenDayTrend: number | null
       thirtyDayTrend: number | null
       standardDeviation: number | null
+      /** 'exact' = measured at this league size; 'cross_size' = projected from other sizes. */
+      source: 'exact' | 'cross_size'
+      /** Cross-size only: the league sizes the projection drew on. */
+      contributingTeamCounts: number[] | null
     }
   >()
   if (rawListFiltered.length > 0) {
@@ -1385,6 +1389,8 @@ export async function getResolvedDraftPoolForLeague(
           sevenDayTrend: row.sevenDayTrend,
           thirtyDayTrend: row.thirtyDayTrend,
           standardDeviation: row.standardDeviation,
+          source: row.source,
+          contributingTeamCounts: row.contributingTeamCounts,
         })
       }
     } catch {
@@ -1770,6 +1776,8 @@ export async function getResolvedDraftPoolForLeague(
             aiAdpSevenDayTrend: aiAdpHit.sevenDayTrend,
             aiAdpThirtyDayTrend: aiAdpHit.thirtyDayTrend,
             aiAdpStandardDeviation: aiAdpHit.standardDeviation,
+            aiAdpSource: aiAdpHit.source,
+            aiAdpTeamCounts: aiAdpHit.contributingTeamCounts,
           }
         : { aiAdp: null }),
       /** D.7 â attach Sleeper years_exp for NFL rows. Devy rows that have not
