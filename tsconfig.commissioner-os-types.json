@@ -1,0 +1,53 @@
+{
+  // Typechecks the Commissioner OS type-level acceptance fixtures.
+  //
+  // `__tests__/commissioner-os/actorContext.types.ts` asserts T-003's criterion
+  // that ActorContext "cannot be constructed without tenantId — enforced at the
+  // type level". Those assertions are `@ts-expect-error` directives, and vitest
+  // does not typecheck — so under `npm test` they are comments, not checks.
+  // This config is what makes a compiler read them.
+  //
+  //     npx tsc -p tsconfig.commissioner-os-types.json
+  //
+  // `files` (not `include`) so it compiles the fixture and only what it imports,
+  // rather than the whole repo and its standing error baseline. A baseline
+  // would drown the one diagnostic this is for.
+  //
+  // 🛑 `"include": []` IS LOAD-BEARING — DO NOT DELETE IT AS REDUNDANT.
+  // `extends` INHERITS `include` from the base config, and `files` does not
+  // replace it: tsc compiles the union. Without the empty override this config
+  // pulls in the whole repo (plus the `.next-dev-*/types` entries `next dev`
+  // appends to the shared tsconfig) and dies with a V8 heap OOM at exit 134 —
+  // a crash dump and ZERO `error TS` lines, which is indistinguishable from a
+  // clean run to anything that greps the output. Measured, not theorised.
+  "extends": "./tsconfig.json",
+  "include": [],
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    // Off deliberately: the fixture binds every declaration to a name so the
+    // `@ts-expect-error` has an expression to attach to, and several are
+    // intentionally unread.
+    "noUnusedLocals": false
+  },
+  "files": [
+    "__tests__/commissioner-os/actorContext.types.ts",
+    "__tests__/commissioner-os/authorize.types.ts",
+    "lib/domain/db.ts",
+    "lib/domain/mutation.ts",
+    "lib/domain/ports.ts",
+    "lib/domain/reason.ts",
+    "lib/domain/softDelete.ts",
+    "lib/domain/audit.ts",
+    "lib/domain/events.ts",
+    "lib/domain/purge.ts",
+    "lib/domain/authorize.ts",
+    "lib/domain/platformRead.ts",
+    "lib/domain/provisioning.ts",
+    "lib/domain/export.ts",
+    "lib/domain/apiKeys.ts",
+    "lib/domain/apiActor.ts",
+    "lib/domain/tenantScopedTables.ts"
+  ]
+}

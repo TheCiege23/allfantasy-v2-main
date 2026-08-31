@@ -5,3 +5,9 @@ coverage
 dist
 build
 *.min.js
+
+# Commissioner OS T-005: deliberate violations, linted only by
+# __tests__/commissioner-os/eslintBoundary.test.ts via the ESLint API.
+# Excluded here so the normal lint run is not permanently red — HANDOFF.md
+# asks for exactly this.
+__tests__/commissioner-os/eslint-fixtures

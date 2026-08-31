@@ -10,5 +10,180 @@
   },
   "rules": {
     "react/no-unescaped-entities": "warn"
-  }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Commissioner OS · T-005 — the Prisma boundary.
+  //
+  // ⚠ SCOPED TO THE COMMISSIONER OS SURFACE, NOT TO `app/**`.
+  // HANDOFF.md writes the rule as "bans @prisma/client from app/**". Applied
+  // literally in THIS repo that fails CI on 647 unrelated AllFantasy files
+  // (2,250 Prisma importers repo-wide) and would be switched off within a day —
+  // and a rule someone disabled is worth less than no rule, because its
+  // presence in the config reads as coverage. See docs/commissioner-os/SCOPE.md.
+  //
+  // Everything below is an `overrides` entry keyed on a `files` glob, so it is
+  // inert for every path outside those globs by construction.
+  // ─────────────────────────────────────────────────────────────────────────
+  "overrides": [
+    {
+      // Invariant 2 — one write path. Prisma is reached through lib/domain/,
+      // never imported directly by a Commissioner OS module or route.
+      "files": [
+        "app/commissioner-os/**/*.ts",
+        "app/commissioner-os/**/*.tsx",
+        "lib/commissioner-os/**/*.ts",
+        "lib/commissioner-os/**/*.tsx",
+        "__tests__/commissioner-os/eslint-fixtures/**/*.ts"
+      ],
+      "rules": {
+        // The @typescript-eslint variant rather than the base rule, for
+        // `allowTypeImports`. `import type { League } from '@prisma/client'`
+        // creates no runtime dependency and erases at compile time — banning it
+        // buys nothing and forces a pointless hand-written duplicate of a
+        // generated type.
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@prisma/client",
+                "allowTypeImports": true,
+                "message": "Commissioner OS reaches the database through lib/domain/ only (invariant 2). Use withTenant from @/lib/domain/db. `import type` is allowed."
+              }
+            ],
+            "patterns": [
+              {
+                // ⚠ COVERS `@/lib/prisma` AND `../../lib/prisma` IN ONE ENTRY.
+                // There was also a `paths` entry for the `@/` form; it was
+                // removed because this pattern matches it too, and the fixture
+                // proved it — the file reported THREE violations for two
+                // imports. Harmless in itself, but a rule that double-reports
+                // is a rule with a redundant clause, and the next person to
+                // read it cannot tell which clause is load-bearing.
+                //
+                // A `from '@/lib/prisma'`-only ban would miss the relative
+                // form. The root CLAUDE.md records four separate occasions in
+                // this repo where exactly that census gave the wrong answer.
+                "group": ["**/lib/prisma", "**/lib/prisma.*"],
+                "allowTypeImports": true,
+                "message": "Commissioner OS reaches the database through lib/domain/ only (invariant 2). Use withTenant from @/lib/domain/db. `import type` is allowed."
+              }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      // ⚠ TEMPORARY, AND COUNTABLE ON PURPOSE.
+      //
+      // These three predate the boundary and are the entire migration debt for
+      // invariant 2 on this surface — three files, not the 2,250 the repo-wide
+      // reading implies. They cannot move yet: a Commissioner OS read needs a
+      // tenant id, and nothing resolves one until T-101 lands the Tenant table
+      // and T-102 the bootstrap functions.
+      //
+      // Listed individually rather than allowlisting a directory, so a FOURTH
+      // one cannot be added without editing this file and explaining itself.
+      // Delete each entry as it migrates; when the list is empty, delete the
+      // override.
+      "files": [
+        "lib/commissioner-os/decision-os-client/live.ts",
+        "lib/commissioner-os/managers/decision-os-client/live.ts",
+        "lib/commissioner-os/resolveActiveLeagueId.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-restricted-imports": "off"
+      }
+    },
+
+    {
+      // Invariant 1 — raw SQL, and invariant 4 — no application DELETE.
+      //
+      // The raw ban covers all four methods: the `Unsafe` pair is the dangerous
+      // half and is the easy one to forget. lib/domain/db.ts is exempt because
+      // withTenant's set_config() is necessarily raw; lib/domain/mutation.ts is
+      // NOT exempt, and a definition's `load()` needing SELECT … FOR UPDATE
+      // lives in the domain layer for exactly that reason.
+      //
+      // Measured before adding: the Commissioner OS surface has ZERO raw-SQL
+      // call sites today, so this rule is inert on arrival and exists to catch
+      // the first one. The repo's other 180 sites are outside these globs.
+      "files": [
+        "app/commissioner-os/**/*.ts",
+        "app/commissioner-os/**/*.tsx",
+        "lib/commissioner-os/**/*.ts",
+        "lib/commissioner-os/**/*.tsx",
+        "lib/domain/**/*.ts",
+        "__tests__/commissioner-os/eslint-fixtures/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "MemberExpression[property.name=/^\\$(queryRaw|queryRawUnsafe|executeRaw|executeRawUnsafe)$/]",
+            "message": "Raw SQL is confined to lib/domain/db.ts and lib/db/admin/ (invariant 1). Raw queries bypass the Prisma extensions entirely, so tenancy and soft-delete scoping simply do not apply to them."
+          },
+          {
+            // deleteMany has no JavaScript builtin of that name, so matching on
+            // the property alone is safe and needs no object check.
+            "selector": "CallExpression[callee.property.name='deleteMany']",
+            "message": "deleteMany is banned outside the purge path (invariant 4). Filtering it in the soft-delete extension is NOT enough — injecting deletedAt:null into a deleteMany still hard-deletes every row it matches."
+          },
+          {
+            // ⚠ `delete` IS narrowed to prisma/db/tx receivers on purpose.
+            // Map.delete and Set.delete are ordinary JavaScript and already
+            // appear on this surface (lib/commissioner-os/platform/eventBus.ts
+            // calls set.delete(listener)). A property-only selector would flag
+            // it, the rule would be called noisy, and a noisy rule gets removed.
+            "selector": "CallExpression[callee.object.name=/^(prisma|db|tx)$/][callee.property.name='delete']",
+            "message": "Hard delete is banned outside the purge path (invariant 4). Deletable models carry deletedAt/deletedBy/deleteReason/purgeAfter; only commish_purge deletes."
+          },
+          {
+            // T-006. findUnique's `where` accepts only unique fields, so
+            // `deletedAt` is not a legal filter on it — it is STRUCTURALLY
+            // unfilterable, and the soft-delete extension therefore cannot
+            // cover it. A ban is the only available answer.
+            //
+            // ⚠ HANDOFF.md scopes this to "soft-deletable models". ESLint
+            // cannot know which model a call refers to, so this bans the
+            // operation across the surface instead. That is broader than
+            // specified and deliberately so: the alternative is a rule that
+            // silently misses the calls that matter. findFirst takes the same
+            // arguments and IS filtered.
+            "selector": "CallExpression[callee.property.name=/^findUnique(OrThrow)?$/]",
+            "message": "findUnique cannot be soft-delete filtered — its `where` accepts only unique fields, so it returns rows that have been deleted (T-006). Use findFirst."
+          }
+        ]
+      }
+    },
+
+    {
+      // T-009. The purge job is THE purge path — the one place invariant 4
+      // permits a delete. Scoped to the single file, so a delete anywhere else
+      // in lib/domain/ is still reported.
+      //
+      // ⚠ THE LINT EXEMPTION IS NOT WHAT MAKES THIS SAFE. The real control is
+      // the GRANT: only `commish_purge` holds DELETE (T-001), and the app role
+      // does not. If this exemption were pasted onto another file, the code
+      // would lint and then fail at the database — which is the correct order
+      // for those two to fail in.
+      "files": ["lib/domain/purge.ts"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    },
+
+    {
+      // db.ts is where the raw call is SUPPOSED to be — set_config() cannot be
+      // expressed through the query builder, and `SET LOCAL` cannot take a bind
+      // parameter. Scoped to the one file rather than to lib/domain/, so a raw
+      // call appearing in any other domain module is still reported.
+      "files": ["lib/domain/db.ts"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }
