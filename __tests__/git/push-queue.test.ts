@@ -473,8 +473,30 @@ describe('push-queue — a ticket survives a REBASE renaming its commit', () => 
 describe('push-queue — a ticket survives its sha being rewritten', () => {
   // Real commits, because `merge-base --is-ancestor` needs a real graph.
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-  const parent = execFileSync('git', ['rev-parse', 'HEAD~1'], { encoding: 'utf8' }).trim()
+  /*
+   * 🛑 `HEAD~1` DOES NOT EXIST IN A SHALLOW CLONE, AND THIS THREW AT DESCRIBE
+   * SCOPE. `actions/checkout` fetches depth 1 by default, so `git rev-parse
+   * HEAD~1` exits non-zero, `execFileSync` throws while the suite is being
+   * COLLECTED, and the whole file dies before any `it` registers -- reported as
+   * a file-level failure, not a test failure, which is why it read as a
+   * regression in something unrelated to the queue.
+   *
+   * The workflow now checks out with `fetch-depth: 2` so the parent is really
+   * there and these assertions really run. This guard is the belt to that
+   * braces: it must never SILENTLY skip on the runner, so the two `it`s below
+   * stay unconditional and fail loudly if the parent is missing -- a check that
+   * quietly disappears is indistinguishable from one that passes.
+   */
+  const parentOf = (rev: string): string | null => {
+    const r = spawnSync('git', ['rev-parse', '--verify', `${rev}^{commit}`], { encoding: 'utf8' })
+    return r.status === 0 ? r.stdout.trim() : null
+  }
+  const parent = parentOf('HEAD~1') ?? ''
   const worktree = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+
+  it('has a parent commit to rewrite onto -- a shallow checkout must go red, not silently skip', () => {
+    expect(parent).not.toBe('')
+  })
 
   it('carries a place in line onto a descendant sha instead of going to the back', () => {
     seed(1, SHA_A) // someone genuinely ahead

@@ -11,7 +11,23 @@
  * in which nobody played. That is why a 240-manager tournament is recomputed by
  * hand every week beside an engine that would do it.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+/*
+ * 🛑 THE MODULE UNDER TEST IS `server-only` AND IMPORTS PRISMA AT MODULE SCOPE,
+ * SO IMPORTING IT BUILDS A CLIENT BEFORE A SINGLE ASSERTION RUNS. That needs a
+ * DATABASE_URL, and CI has none -- the whole file died on "DATABASE_URL is not
+ * set" while passing locally, because importing `@prisma/client` in a dev
+ * checkout loads `.env` as a side effect and a runner with no `.env` gets
+ * nothing. A green local run is not evidence about CI here.
+ *
+ * Only the PURE helpers are exercised below -- none of them touches the
+ * database -- so the client is stubbed rather than built. Anything that did
+ * reach prisma would fail loudly on the empty stub, which is deliberate: this
+ * must not become a way to test a query without a database.
+ */
+vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+
 import {
   matchParticipantsToRecords,
   parseTeamIdentity,

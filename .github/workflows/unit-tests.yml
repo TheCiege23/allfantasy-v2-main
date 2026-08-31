@@ -170,6 +170,14 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 🛑 NOT THE DEFAULT DEPTH OF 1. `__tests__/git/push-queue.test.ts` resolves
+          # `HEAD~1` to build a real amend/rebase graph, and in a depth-1 clone that
+          # `rev-parse` throws while the suite is being COLLECTED -- the whole file dies
+          # before a single `it` registers, and the ratchet reports it as a fresh
+          # regression in the queue rather than as a checkout setting. 2 is the smallest
+          # depth that makes the parent real; do not lower it.
+          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:
