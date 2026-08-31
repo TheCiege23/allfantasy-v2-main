@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   isIdpLeague: vi.fn(),
   findUnique: vi.fn(),
   upsert: vi.fn(),
+  leagueFind: vi.fn(),
   writeAudit: vi.fn(),
 }))
 
@@ -30,7 +31,10 @@ vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: mocks.ass
 vi.mock('@/lib/idp', () => ({ isIdpLeague: mocks.isIdpLeague }))
 vi.mock('@/lib/idp/IdpSettingsAudit', () => ({ writeIdpSettingsAudit: mocks.writeAudit }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { iDPCapConfig: { findUnique: mocks.findUnique, upsert: mocks.upsert } },
+  prisma: {
+    iDPCapConfig: { findUnique: mocks.findUnique, upsert: mocks.upsert },
+    league: { findUnique: mocks.leagueFind },
+  },
 }))
 
 const PARAMS = { params: Promise.resolve({ leagueId: 'lg1' }) }
@@ -52,6 +56,7 @@ describe('the IDP cap config writer', () => {
     mocks.isIdpLeague.mockResolvedValue(true)
     mocks.findUnique.mockResolvedValue(null)
     mocks.upsert.mockImplementation(async (a: { create?: object }) => ({ id: 'cfg1', leagueId: 'lg1', ...(a.create ?? {}) }))
+    mocks.leagueFind.mockResolvedValue({ season: 2026 })
     mocks.writeAudit.mockResolvedValue(undefined)
   })
 
@@ -114,6 +119,32 @@ describe('the IDP cap config writer', () => {
    */
   it('ignores season even when supplied', async () => {
     await put({ totalCap: 200, season: 1999 } as never)
+    expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty('season')
+  })
+
+  /**
+   * 🛑 THE SCHEMA DEFAULT IS 2025 AND IT IS WRONG FOR EVERY LIVE LEAGUE. Because
+   * app/api/idp/cap/route.ts reads `cfg?.season ?? currentYear`, a stored 2025 makes the WHOLE
+   * cap API operate a year behind, and `isSalaryActiveInSeason` then hides every 2026 contract
+   * — a fully-priced roster reporting zero cap used.
+   */
+  it('takes season from the league on create, not the stale schema default', async () => {
+    mocks.leagueFind.mockResolvedValue({ season: 2026 })
+    await put({ totalCap: 200 })
+    expect(mocks.upsert.mock.calls[0][0].create).toMatchObject({ season: 2026 })
+    expect(mocks.upsert.mock.calls[0][0].create.season).not.toBe(2025)
+  })
+
+  it('falls back to the current year when the league has no season', async () => {
+    mocks.leagueFind.mockResolvedValue({ season: null })
+    await put({ totalCap: 200 })
+    expect(mocks.upsert.mock.calls[0][0].create.season).toBe(new Date().getUTCFullYear())
+  })
+
+  /** Update must NOT re-date an existing config — that would move every contract window. */
+  it('never writes season on update', async () => {
+    mocks.findUnique.mockResolvedValue({ id: 'cfg1', leagueId: 'lg1', season: 2026 })
+    await put({ totalCap: 250 })
     expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty('season')
   })
 

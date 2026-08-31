@@ -19,6 +19,19 @@
  * ⚠ SEASON IS DELIBERATELY NOT SETTABLE HERE. `expireContractsForNewSeason` rolls it, and a
  * commissioner editing it by hand mid-season would silently re-date every active contract's
  * eligibility window. It is returned so the UI can display it, and ignored on write.
+ *
+ * 🛑 BUT IT IS SET ON CREATE, FROM THE LEAGUE, BECAUSE THE SCHEMA DEFAULT IS STALE AND WRONG.
+ * `IDPCapConfig.season` defaults to 2025. Both KBFL leagues are season 2026, so a config
+ * created today started a year behind — and that is not cosmetic:
+ *
+ *   app/api/idp/cap/route.ts   `const defaultSeason = cfg?.season ?? new Date().getFullYear()`
+ *
+ * The `?? currentYear` fallback only fires when there is NO config, so the moment one exists the
+ * whole cap API adopts its season. `isSalaryActiveInSeason` then gates on
+ * `contractStartYear <= season <= contractEndYear`, so EVERY 2026 CONTRACT WOULD BE INVISIBLE
+ * and a team carrying a full roster of salaries would report zero cap used. Taking the season
+ * from the league at create time is the difference between a cap that works and one that
+ * silently reports nothing.
  */
 
 import { NextResponse } from 'next/server'
@@ -187,9 +200,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ leagueId
   // Disabling the floor clears the value, so a re-enable cannot silently reuse an old number.
   if (body.capFloorEnabled === false) data.capFloor = null
 
+  /*
+   * Season comes from the league on CREATE only — never on update, per the rule above. A league
+   * with no season falls back to the current year rather than the schema's 2025.
+   */
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true } })
+  const seasonOnCreate = Number(league?.season) || new Date().getUTCFullYear()
+
   const config = await prisma.iDPCapConfig.upsert({
     where: { leagueId },
-    create: { leagueId, ...data },
+    create: { leagueId, season: seasonOnCreate, ...data },
     update: data,
   })
 
