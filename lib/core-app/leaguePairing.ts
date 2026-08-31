@@ -32,6 +32,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getDraftHqAll } from './draftHqAll'
+import { getLeagueActivity } from './leagueActivity'
 import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
 
 /** One half of a franchise, described identically whichever half it is. */
@@ -56,6 +57,21 @@ export type FranchiseSide = {
    * case, since the snapshot import captures no draft at all.
    */
   draft: { phase: string; headline: string; detail: string | null; href: string | null } | null
+  /**
+   * Trades, waivers and roster moves for that half.
+   *
+   * ⚠ `available: false` CARRIES A REASON, BECAUSE "NO TRADES" AND "WE CANNOT
+   * READ TRADES" ARE DIFFERENT CLAIMS ABOUT A LEAGUE. Fantrax publishes no
+   * transactions endpoint at all — the word does not appear in its
+   * documentation, as `fantraxApi.ts` records — so a Fantrax half has zero rows
+   * for a reason that has nothing to do with how active the league is. Rendering
+   * that as "0 trades" would be a statement about the manager rather than about
+   * our data.
+   */
+  activity:
+    | { available: true; trades: number; waivers: number; rosterMoves: number; newest: Date | null }
+    | { available: false; reason: string }
+    | null
 }
 
 export type PairedHalf = {
@@ -225,6 +241,15 @@ export async function resolvePairedHalf(
         teamLabel: snap?.userTeam ?? member.teamExternalId,
         playerCount: mine && mine.length > 0 ? mine.length : null,
         draft: null,
+        /*
+         * Stated as a PLATFORM limit, not as an empty league. Measured on
+         * production: this half has 0 activity rows while its paired Sleeper
+         * half has 181 — the gap is the vendor's API, not the manager.
+         */
+        activity: {
+          available: false,
+          reason: 'Fantrax publishes no transactions endpoint, so trades and waivers cannot be read',
+        },
         unavailableReason:
           snap == null
             ? 'the linked Fantrax league no longer exists'
@@ -240,7 +265,9 @@ export async function resolvePairedHalf(
 
     const lg = await prisma.league.findUnique({
       where: { id: member.leagueId },
-      select: { id: true, name: true, season: true },
+      /* platformLeagueId is required by getLeagueActivity — imported rows are
+         keyed on the PROVIDER league id, not ours. */
+      select: { id: true, name: true, season: true, platformLeagueId: true },
     })
     /*
      * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
@@ -298,6 +325,25 @@ export async function resolvePairedHalf(
       teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || member.teamExternalId,
       playerCount: players,
       draft: null,
+      activity: lg
+        ? await getLeagueActivity({
+            leagueId: lg.id,
+            platformLeagueId: lg.platformLeagueId ?? null,
+            limit: 1,
+          })
+            .then((a) =>
+              a
+                ? ({
+                    available: true as const,
+                    trades: a.counts.trade,
+                    waivers: a.counts.waiver,
+                    rosterMoves: a.counts.rosterMove,
+                    newest: a.newest,
+                  })
+                : ({ available: false as const, reason: 'no transactions are on file for this league' }),
+            )
+            .catch(() => ({ available: false as const, reason: 'we could not read the transactions for this league' }))
+        : null,
       unavailableReason:
         lg == null
           ? 'the linked league no longer exists'

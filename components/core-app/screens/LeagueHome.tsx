@@ -266,6 +266,26 @@ function PairedBand({
               — renders nothing here rather than claiming the league has not
               drafted. The league home makes the same distinction one panel down.
             */}
+            {/*
+              ⚠ A PLATFORM THAT CANNOT REPORT TRADES IS NOT A QUIET LEAGUE.
+              Fantrax publishes no transactions endpoint, so its half reports the
+              REASON rather than "0 trades" — which would read as a statement
+              about the manager instead of about our data. Measured: this
+              franchise's Sleeper half has 181 activity rows, its Fantrax half 0.
+            */}
+            {sd.activity ? (
+              sd.activity.available ? (
+                <p className="af-lh-paired-activity">
+                  {sd.activity.trades} {sd.activity.trades === 1 ? 'trade' : 'trades'} ·{' '}
+                  {sd.activity.waivers} {sd.activity.waivers === 1 ? 'waiver' : 'waivers'}
+                  {sd.activity.rosterMoves > 0 ? <span> · {sd.activity.rosterMoves} moves</span> : null}
+                </p>
+              ) : (
+                <p className="af-lh-paired-activity" data-unavailable="true">
+                  _ {sd.activity.reason}
+                </p>
+              )
+            ) : null}
             {sd.draft ? (
               <p className="af-lh-paired-draft" data-phase={sd.draft.phase}>
                 <span className="af-lh-paired-draft-head">{sd.draft.headline}</span>

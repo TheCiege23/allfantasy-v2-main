@@ -1258,3 +1258,18 @@
 .af-lh-paired-draft[data-phase='live'] .af-lh-paired-draft-head {
   color: var(--accent);
 }
+
+
+/* Transactions line inside a franchise half. Top level — see the note on
+   .af-lh-paired-sides for why this file is never edited mid-@media. */
+.af-lh-paired-activity {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+/* An unavailable reason reads as prose, not as a stat. */
+.af-lh-paired-activity[data-unavailable='true'] {
+  color: var(--faint);
+  font-style: italic;
+}
