@@ -68,6 +68,18 @@ export interface ProjectionFact {
   computedAt: string
   /** Null when the row carries no expiry; never invented. */
   validUntil: string | null
+
+  /**
+   * The stored component amounts, carried so a CACHED fact can still be rescored.
+   *
+   * 🛑 WITHOUT THIS FIELD THE FEED WOULD CACHE A LIE. `loadProjectionFacts` rescores inside
+   * itself, so caching its output at app level would store ONE league's rescored points for
+   * everybody — the exact defect 1.1b had to unpick in Waiver OS and Trade OS, where a source
+   * declared `level: 'league'` and derived user-specific facts. Keeping the raw amounts on the
+   * fact means the cached object is genuinely league-agnostic and the rescore happens at READ,
+   * which is what D4 asks for.
+   */
+  factors: StoredProjectionFactors | null
 }
 
 export interface ProjectionFactsArgs {
@@ -134,6 +146,44 @@ export async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<Pr
       confidenceLevel: row.confidenceLevel,
       computedAt: row.computedAt.toISOString(),
       validUntil: row.validUntil ? row.validUntil.toISOString() : null,
+      factors: (row.adjustmentFactors ?? null) as StoredProjectionFactors | null,
+    }
+  })
+}
+
+/**
+ * Load the CANONICAL projections — no league rules, nothing league-specific.
+ *
+ * This is what a feed may cache at app level. `loadProjectionFacts` with rules is the read-time
+ * path; this is the storable one, and the split is deliberate rather than a convenience wrapper.
+ */
+export function loadCanonicalProjectionFacts(
+  args: Omit<ProjectionFactsArgs, 'leagueIdpRules'>,
+): Promise<ProjectionFact[]> {
+  return loadProjectionFacts({ ...args, leagueIdpRules: null })
+}
+
+/**
+ * Rescore already-loaded facts for one league. PURE — no IO, so it can run on a cached object.
+ *
+ * ⚠ FACTS WITH NO STORED COMPONENTS COME BACK UNCHANGED, NOT ZEROED. That is the same refusal
+ * `rescoreIdpForLeague` makes: a null rescore means the stored value stands, which is the honest
+ * outcome when there is nothing better to say.
+ */
+export function rescoreProjectionFacts(
+  facts: readonly ProjectionFact[],
+  leagueIdpRules: Record<string, number> | null | undefined,
+): ProjectionFact[] {
+  if (!leagueIdpRules) return [...facts]
+  return facts.map((f) => {
+    const r = rescoreIdpForLeague(f.factors, leagueIdpRules)
+    if (!r) return f
+    return {
+      ...f,
+      points: r.points,
+      rescored: true,
+      storedPreset: r.storedPreset,
+      unscoredComponents: r.unscoredComponents,
     }
   })
 }
