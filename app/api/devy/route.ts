@@ -37,10 +37,26 @@ export async function POST(req: NextRequest) {
   const existing = await prisma.devyLeague.findUnique({ where: { leagueId } })
   if (existing) return NextResponse.json({ config: existing })
 
+  /*
+   * 🛑 SEASON MUST COME FROM THE LEAGUE. `DevyLeague.season` carries `@default(2025)`, and a
+   * config created today would take it — but it is not inert:
+   *
+   *   app/api/devy/picks/route.ts:28   `const season = seasonParam ? Number(seasonParam) : cfg.season`
+   *   app/api/devy/draft/route.ts:156  same
+   *
+   * and picks/route then calls `generatePickInventory(leagueId, season, 3)`. So a devy league
+   * configured now would generate its pick inventory for a season that has already passed, and
+   * the draft pool cache would key on it too. Nothing throws; the wrong year is simply used.
+   *
+   * Same defect and same fix as IDPCapConfig — see the commissioner cap-config route, where the
+   * identical stale default hid every current-season contract.
+   */
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { season: true } })
   const config = await prisma.devyLeague.create({
     data: {
       leagueId,
       isDynastyOnly: true,
+      season: Number(league?.season) || new Date().getUTCFullYear(),
     },
   })
   return NextResponse.json({ config })
