@@ -1,9 +1,9 @@
 import 'server-only'
 
-import { loadTradeWorldFacts } from '../trade/loader'
+import { loadTradeWorldFacts, loadTradeLeagueFacts } from '../trade/loader'
 import { createOsFeed, type OsFactSource, type OsFeed } from '../domain-os/feed'
 import { HOURS, MINUTES } from '../domain-os/types'
-import type { TradeWorldFacts } from '../trade/loader'
+import type { TradeWorldFacts, TradeLeagueFacts } from '../trade/loader'
 
 /**
  * Trade OS — maintained fact state for `manager.trade.evaluate`.
@@ -37,14 +37,34 @@ async function deriveWorldFacts(args: TradeOsArgs): Promise<TradeWorldFacts | nu
   return loadTradeWorldFacts(args).catch(() => null)
 }
 
-/** League rules + deadline: shared, slow, and the reason this feed is worth having. */
-export const tradeSettingsSource: OsFactSource<TradeOsArgs, TradeWorldFacts> = {
+/** Args for the league+season source. No roster pair, deliberately — see below. */
+export type TradeLeagueOsArgs = { leagueId: string; seasonId: string }
+
+/**
+ * League rules + deadline: shared, slow, and the reason this feed is worth having.
+ *
+ * 🛑 THIS USED TO SHARE `deriveWorldFacts` WITH THE ROSTER SOURCE, WHICH MADE ITS `level:
+ * 'league'` UNDELIVERABLE. That derive needs an ordered pair of roster ids and returns BOTH
+ * sides' record, points and FAAB, so warming this entry from a scheduler meant storing two
+ * specific managers' standings under a key scoped to the whole league. In the domain this file
+ * itself calls "the highest-stakes", that is precisely the confidently-wrong input the short TTLs
+ * here exist to prevent.
+ *
+ * `loadTradeLeagueFacts` derives the league+season half from two deps and no rosters.
+ *
+ * ⚠ SCHEDULABLE IN PRINCIPLE, NOT YET SCHEDULED, AND THE GAP IS THE SCOPE KEY. This fact is keyed
+ * `${leagueId}:${seasonId}` while `/api/cron/domain-os-refresh` walks LEAGUES. Bridging that means
+ * deciding which season is "current" for a league and what to do when more than one qualifies —
+ * a wrong answer warms the wrong season's entry, which is worse than warming nothing. That
+ * belongs in its own change with its own reasoning, not smuggled into this split.
+ */
+export const tradeSettingsSource: OsFactSource<TradeLeagueOsArgs, TradeLeagueFacts> = {
   kind: 'settings',
   level: 'league',
   ttlMs: 2 * HOURS,
   scopeKey: (a) => `${a.leagueId}:${a.seasonId}`,
   sport: () => 'NFL',
-  derive: deriveWorldFacts,
+  derive: (a) => loadTradeLeagueFacts({ leagueId: a.leagueId, seasonId: a.seasonId }).catch(() => null),
 }
 
 /**

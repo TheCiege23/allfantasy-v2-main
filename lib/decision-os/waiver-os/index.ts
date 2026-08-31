@@ -1,9 +1,9 @@
 import 'server-only'
 
-import { loadWaiverWorldFacts } from '../waiver/loader'
+import { loadWaiverWorldFacts, loadWaiverLeagueFacts } from '../waiver/loader'
 import { createOsFeed, type OsFactSource, type OsFeed } from '../domain-os/feed'
 import { HOURS, MINUTES } from '../domain-os/types'
-import type { WaiverWorldFacts } from '../waiver/loader'
+import type { WaiverWorldFacts, WaiverLeagueFacts } from '../waiver/loader'
 
 /**
  * Waiver OS — maintained fact state for `manager.waiver.claim`.
@@ -34,14 +34,30 @@ async function deriveWorldFacts(args: WaiverOsArgs): Promise<WaiverWorldFacts | 
   return loadWaiverWorldFacts(args.userId, args.leagueId).catch(() => null)
 }
 
-/** League RULES: slow-moving, shared by every manager in the league. */
-export const waiverSettingsSource: OsFactSource<WaiverOsArgs, WaiverWorldFacts> = {
+/** Args for the league-level source. No user, deliberately — see below. */
+export type WaiverLeagueOsArgs = { leagueId: string }
+
+/**
+ * League RULES: slow-moving, shared by every manager in the league.
+ *
+ * 🛑 THIS USED TO SHARE `deriveWorldFacts` WITH THE USER SOURCE, WHICH MADE ITS OWN `level:
+ * 'league'` UNDELIVERABLE. That derive takes a `userId` and returns that manager's FAAB and
+ * priority alongside the settings, so warming this entry from a scheduler meant inventing a user
+ * and storing one manager's private resources under a league-scoped key. Nothing read the league
+ * entry, so it never lied — it just could not be populated, which is why `/api/cron/
+ * domain-os-refresh` shipped able to refresh exactly one source across four domains.
+ *
+ * `loadWaiverLeagueFacts` derives the league half from three deps and no user, so this source is
+ * now genuinely league-shaped and genuinely schedulable. It also stopped being underivable for a
+ * non-member: the old path returned null when the caller had no roster in the league.
+ */
+export const waiverSettingsSource: OsFactSource<WaiverLeagueOsArgs, WaiverLeagueFacts> = {
   kind: 'settings',
   level: 'league',
   ttlMs: 6 * HOURS,
   scopeKey: (a) => a.leagueId,
   sport: () => 'NFL',
-  derive: deriveWorldFacts,
+  derive: (a) => loadWaiverLeagueFacts(a.leagueId).catch(() => null),
 }
 
 /**
