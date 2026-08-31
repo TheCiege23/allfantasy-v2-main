@@ -11,7 +11,7 @@ import {
 } from '@/lib/franchise/franchiseService'
 import { describeCrossPlatformTrade } from '@/lib/franchise/franchiseLink'
 import { loadCollegeBoardForFranchise } from '@/lib/franchise/franchiseBoard'
-import { listPairableLeagues, collapseFantraxDuplicates } from '@/lib/franchise/pairableLeagues'
+import { listPairableLeagues, maskEmail, collapseFantraxDuplicates } from '@/lib/franchise/pairableLeagues'
 import { getFantraxLeagues } from '@/lib/league-import/fantrax/fantraxApi'
 import {
   attachToFranchise,
@@ -114,6 +114,12 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
     let body: {
       action?: string
       linkId?: string
+      /**
+       * Explicit confirmation that the caller has SEEN whose franchise a league
+       * is leaving. Never defaulted true: the first attempt must 409 so the UI
+       * can name the other franchise, because moving the membership empties it.
+       */
+      reclaim?: boolean
       tradeId?: string
       summary?: string
       legs?: Array<{ role: 'pro' | 'college'; platform: string; sends: string[]; receives: string[] }>
@@ -267,6 +273,84 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         select: { id: true, linkId: true },
       })
       const targetLinkId = body.linkId ?? ownMemberships[0]?.linkId ?? null
+
+      /*
+       * 🛑 A CLAIM BY ANOTHER ACCOUNT — REFUSED ONCE, THEN RECLAIMABLE ON A
+       * DELIBERATE CONFIRM.
+       *
+       * `ownsLeague` above already proved the caller owns BOTH League rows, so a
+       * franchise on another account holding one of them is a stale or
+       * cross-account claim over the caller's own property. Refusing forever left
+       * the league permanently unpairable with no way out — that is the bug this
+       * replaces. Reclaiming silently is the opposite mistake: the other
+       * franchise loses a half without its owner ever being told.
+       *
+       * So: the first attempt returns 409 naming the franchise and a MASKED
+       * owner, the UI shows it, and only a second request carrying
+       * `reclaim: true` moves the membership. Destructive, therefore confirmed.
+       *
+       * ⚠ THE MASK IS NOT DECORATION. The caller is entitled to know the league
+       * is spoken for; they are not entitled to another account's address.
+       */
+      const foreignClaims = await prisma.franchiseLeagueMember.findMany({
+        where: {
+          OR: [
+            { platform: proPlatform, leagueId: pro.leagueId },
+            { platform: collegePlatform, leagueId: college.leagueId },
+          ],
+          NOT: { link: { ownerUserId: auth.userId } },
+        },
+        select: {
+          id: true,
+          platform: true,
+          leagueId: true,
+          linkId: true,
+          link: { select: { id: true, name: true, ownerUserId: true } },
+        },
+      })
+
+      if (foreignClaims.length > 0) {
+        if (body.reclaim !== true) {
+          const ownerIds = Array.from(
+            new Set(foreignClaims.map((c) => c.link?.ownerUserId).filter((x): x is string => !!x)),
+          )
+          const owners = ownerIds.length
+            ? await prisma.appUser.findMany({
+                where: { id: { in: ownerIds } },
+                select: { id: true, email: true },
+              })
+            : []
+          const labelById = new Map(owners.map((o) => [o.id, maskEmail(o.email)]))
+          return NextResponse.json(
+            {
+              error: 'That league is already part of a franchise on another account.',
+              /* Structured so the UI can offer "connect anyway" instead of a dead end. */
+              claims: foreignClaims.map((c) => ({
+                platform: c.platform,
+                leagueId: c.leagueId,
+                franchiseName: c.link?.name ?? 'a franchise',
+                ownerLabel:
+                  (c.link?.ownerUserId ? labelById.get(c.link.ownerUserId) : null) ?? 'another account',
+              })),
+              canReclaim: true,
+            },
+            { status: 409 },
+          )
+        }
+
+        /*
+         * Confirmed. Release the foreign memberships, and delete a link only if
+         * this emptied it — an otherwise-populated franchise must survive losing
+         * one half, and nothing should be left named after a franchise with no
+         * leagues in it.
+         */
+        for (const c of foreignClaims) {
+          await prisma.franchiseLeagueMember.delete({ where: { id: c.id } }).catch(() => {})
+          await prisma.franchiseLink
+            .deleteMany({ where: { id: c.linkId, members: { none: {} } } })
+            .catch(() => {})
+        }
+      }
 
       /*
        * 🛑 AND THE OTHER HALF MAY BE IN A DIFFERENT FRANCHISE OF THEIRS AGAIN.

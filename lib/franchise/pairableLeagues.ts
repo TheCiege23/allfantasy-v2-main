@@ -56,6 +56,27 @@ export type PairableLeague = {
    * league would empty the first and leave an orphan named after it.
    */
   linkId: string | null
+  /**
+   * Set when the league is claimed by a franchise belonging to a DIFFERENT
+   * account.
+   *
+   * 🛑 THIS IS THE CASE THE SCREEN USED TO HIDE, AND HIDING IT IS WHY PAIRING
+   * FAILED AT SUBMIT. The claim lookup in `attachToFranchise` is GLOBAL, but the
+   * claim lookup here was scoped to `link: { ownerUserId }` — so a league held by
+   * someone else's franchise looked completely unclaimed, was offered as a
+   * candidate, and then died on "that league is already part of another
+   * franchise". Two different scopes over the same fact, and the user only met
+   * the second one. Measured on production 2026-08-31: Peach Bowl (C2C) was
+   * offered as a pro half while sitting in a complete franchise owned by the
+   * account's other login.
+   *
+   * It stays PICKABLE on purpose — the caller is proven to own the League row
+   * before pairing, so reclaiming it is legitimate — but the UI must say whose
+   * franchise it is leaving, because that franchise loses a half.
+   */
+  claimedBy: { franchiseName: string; ownerLabel: string; complete: boolean } | null
+  /** Your own franchise already has both halves — the `alreadyLinked` test. */
+  completeForOwner: boolean
 }
 
 export type PairableLeagues = {
@@ -63,6 +84,21 @@ export type PairableLeagues = {
   college: PairableLeague[]
   /** Leagues in a COMPLETE franchise, so the UI can say so instead of hiding them. */
   alreadyLinked: PairableLeague[]
+}
+
+/**
+ * `cjabar.henson@gmail.com` -> `c…n@gmail.com`. Recognisable to its owner,
+ * useless to anyone else. Null/blank becomes "another account" rather than an
+ * empty string, which would render as a claim by nobody.
+ */
+export function maskEmail(email: string | null | undefined): string {
+  const raw = String(email ?? '').trim()
+  const at = raw.indexOf('@')
+  if (at < 1) return 'another account'
+  const local = raw.slice(0, at)
+  const domain = raw.slice(at)
+  if (local.length <= 2) return `${local[0]}…${domain}`
+  return `${local[0]}…${local[local.length - 1]}${domain}`
 }
 
 const COLLEGE_SPORTS = new Set(['cfb', 'ncaaf', 'ncaafb', 'ncaab', 'ncaabb', 'college'])
@@ -101,17 +137,59 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
       select: { id: true, leagueName: true, season: true, sport: true, isDevy: true },
       orderBy: { updatedAt: 'desc' },
     }),
+    /*
+     * ⚠ NOT SCOPED TO THIS OWNER — DELIBERATELY, AND THIS IS THE FIX.
+     * `attachToFranchise` checks the claim GLOBALLY. Scoping the same question
+     * to `link: { ownerUserId }` here made another account's claim invisible, so
+     * the league was offered and then refused at submit. The two lookups have to
+     * ask the same question or the screen lies. Ownership is still what decides
+     * MERGE vs RECLAIM below; it just no longer decides whether we can SEE it.
+     */
     prisma.franchiseLeagueMember.findMany({
-      where: { link: { ownerUserId } },
-      select: { platform: true, leagueId: true, linkId: true, link: { select: { name: true } } },
+      select: {
+        platform: true,
+        leagueId: true,
+        linkId: true,
+        link: { select: { name: true, ownerUserId: true, members: { select: { id: true } } } },
+      },
     }),
   ])
+
+  /*
+   * The claiming account, named well enough for a person to recognise their own
+   * other login without publishing an address.
+   *
+   * ⚠ MASKED ON PURPOSE. Whoever sees this owns the league in question, so they
+   * are entitled to know it is spoken for — but a full email would hand one
+   * account holder another's address, which is a disclosure the product never
+   * promised. First and last character plus the domain is enough to recognise
+   * yourself and not enough to contact a stranger.
+   */
+  const foreignOwnerIds = Array.from(
+    new Set(
+      members
+        .map((m) => m.link?.ownerUserId)
+        .filter((id): id is string => typeof id === 'string' && id !== ownerUserId),
+    ),
+  )
+  const owners = foreignOwnerIds.length
+    ? await prisma.appUser.findMany({
+        where: { id: { in: foreignOwnerIds } },
+        select: { id: true, email: true },
+      })
+    : []
+  const ownerLabelById = new Map<string, string>(owners.map((o) => [o.id, maskEmail(o.email)]))
 
   /* Keyed on (platform, leagueId) — the same pair the schema makes unique. */
   const linked = new Map(
     members.map((m) => [
       `${m.platform}:${m.leagueId}`,
-      { name: m.link?.name ?? 'a franchise', linkId: m.linkId },
+      {
+        name: m.link?.name ?? 'a franchise',
+        linkId: m.linkId,
+        ownerUserId: m.link?.ownerUserId ?? null,
+        memberCount: m.link?.members?.length ?? 0,
+      },
     ]),
   )
 
@@ -128,14 +206,59 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
    * reported as context, because re-pairing it would empty the franchise it is
    * in — the thing the uniqueness rule is protecting.
    */
-  const memberCountByLink = new Map<string, number>()
-  for (const m of members) memberCountByLink.set(m.linkId, (memberCountByLink.get(m.linkId) ?? 0) + 1)
+  type Claim = { name: string; linkId: string; ownerUserId: string | null; memberCount: number }
+
+  /*
+   * One place that turns a claim row into a candidate, so the pro and Fantrax
+   * loops cannot drift apart on which claims count as "mine".
+   */
+  const buildRow = (input: {
+    id: string
+    platform: string
+    name: string
+    season: number | null
+    role: FranchiseRole
+    roleReason: string
+    member: Claim | null
+  }): PairableLeague => {
+    const m = input.member
+    const mine = m != null && m.ownerUserId === ownerUserId
+    return {
+      id: input.id,
+      platform: input.platform,
+      name: input.name,
+      season: input.season,
+      role: input.role,
+      roleReason: input.roleReason,
+      /* Only YOUR franchise is offered for merging; a foreign linkId must never
+         be sent back as a merge target or pairing would try to write into it. */
+      linkedTo: mine ? (m?.name ?? null) : null,
+      linkId: mine ? (m?.linkId ?? null) : null,
+      completeForOwner: mine && (m?.memberCount ?? 0) >= 2,
+      claimedBy:
+        m != null && !mine
+          ? {
+              franchiseName: m.name,
+              ownerLabel: (m.ownerUserId ? ownerLabelById.get(m.ownerUserId) : null) ?? 'another account',
+              complete: m.memberCount >= 2,
+            }
+          : null,
+    }
+  }
 
   const out: PairableLeagues = { pro: [], college: [], alreadyLinked: [] }
 
+  /*
+   * ⚠ `alreadyLinked` MEANS "YOURS AND FINISHED", NOT MERELY "CLAIMED".
+   * A league in someone ELSE'S complete franchise stays pickable — you own it,
+   * so you are entitled to take it back — and carries `claimedBy` so the UI can
+   * say whose franchise it is about to leave. Filing it under alreadyLinked
+   * instead would reproduce the original dead end from the other direction:
+   * the league would vanish from the list with no way to act on it.
+   */
   const push = (row: PairableLeague) => {
-    const complete = row.linkId != null && (memberCountByLink.get(row.linkId) ?? 0) >= 2
-    if (row.linkedTo && complete) out.alreadyLinked.push(row)
+    const mineAndComplete = row.linkedTo != null && row.claimedBy == null && row.linkId != null
+    if (mineAndComplete && row.completeForOwner) out.alreadyLinked.push(row)
     else if (row.role === 'college') out.college.push(row)
     else out.pro.push(row)
   }
@@ -144,31 +267,29 @@ export async function listPairableLeagues(ownerUserId: string): Promise<Pairable
     const platform = String(l.platform ?? '').toLowerCase()
     const { role, reason } = roleForSport(String(l.sport ?? ''), false)
     const member = linked.get(`${platform}:${l.id}`) ?? null
-    push({
+    push(buildRow({
       id: l.id,
       platform,
       name: l.name?.trim() || 'Untitled league',
       season: l.season ?? null,
       role,
       roleReason: reason,
-      linkedTo: member?.name ?? null,
-      linkId: member?.linkId ?? null,
-    })
+      member,
+    }))
   }
 
   for (const f of fantrax) {
     const { role, reason } = roleForSport(String(f.sport ?? ''), Boolean(f.isDevy))
     const member = linked.get(`fantrax:${f.id}`) ?? null
-    push({
+    push(buildRow({
       id: f.id,
       platform: 'fantrax',
       name: f.leagueName?.trim() || 'Untitled Fantrax league',
       season: f.season ?? null,
       role,
       roleReason: reason,
-      linkedTo: member?.name ?? null,
-      linkId: member?.linkId ?? null,
-    })
+      member,
+    }))
   }
 
   return out

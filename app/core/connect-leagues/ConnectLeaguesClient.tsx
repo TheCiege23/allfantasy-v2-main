@@ -29,6 +29,16 @@ type Pairable = {
   roleReason: string
   linkedTo: string | null
   linkId: string | null
+  /** Held by a franchise on ANOTHER account — pickable, but it must say so. */
+  claimedBy: { franchiseName: string; ownerLabel: string; complete: boolean } | null
+}
+
+type Claim = {
+  platform: string
+  leagueId: string
+  franchiseName: string
+  /** Masked by the server — enough to recognise your own other login, no more. */
+  ownerLabel: string
 }
 
 type Discovery = {
@@ -83,6 +93,19 @@ function LeagueOption({
           {league.season != null ? ` · ${league.season}` : ''} · {league.roleReason}
           {league.linkedTo ? ` · part of ${league.linkedTo}, still missing its other half` : ''}
         </span>
+        {/*
+          ⚠ SAID AT THE POINT OF CHOOSING, NOT AT SUBMIT. This league can be
+          connected — you own it — but doing so takes it out of someone else's
+          franchise. Learning that only after pressing Connect is the dead end
+          this screen used to have.
+        */}
+        {league.claimedBy ? (
+          <span className="af-cl-option-claim">
+            In “{league.claimedBy.franchiseName}” on {league.claimedBy.ownerLabel}
+            {league.claimedBy.complete ? ' (a complete franchise)' : ''}. Connecting here removes it
+            from there.
+          </span>
+        ) : null}
       </span>
     </label>
   )
@@ -100,6 +123,8 @@ export function ConnectLeaguesClient() {
   const [college, setCollege] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  /* Set only by a 409; drives the confirm below and nothing else. */
+  const [pendingClaims, setPendingClaims] = useState<Claim[] | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -131,10 +156,11 @@ export function ConnectLeaguesClient() {
     void load()
   }, [load])
 
-  async function submit() {
+  async function submit(reclaim = false) {
     if (!pro || !college || !data) return
     setSaving(true)
     setError(null)
+    if (!reclaim) setPendingClaims(null)
     try {
       const proLeague = data.pro.find((l) => l.id === pro)
       const collegeLeague = data.college.find((l) => l.id === college)
@@ -146,11 +172,30 @@ export function ConnectLeaguesClient() {
           franchiseName: name.trim() || undefined,
           /* Merge into the half-built franchise either side is already in. */
           linkId: proLeague?.linkId ?? collegeLeague?.linkId ?? undefined,
+          /* Only ever true on a second press, after the 409 named the franchise
+             this would empty. Never defaulted — see the route. */
+          reclaim: reclaim || undefined,
           pro: { platform: proLeague?.platform, leagueId: pro },
           college: { platform: collegeLeague?.platform, leagueId: college },
         }),
       })
-      const body = (await res.json()) as { error?: string; linkId?: string }
+      const body = (await res.json()) as {
+        error?: string
+        linkId?: string
+        claims?: Claim[]
+        canReclaim?: boolean
+      }
+      /*
+       * ⚠ 409 IS NOT A FAILURE, IT IS A QUESTION. The league is claimed by a
+       * franchise on another account; the server refuses once so we can name it
+       * and let the user decide. Anything else stays a plain error.
+       */
+      if (res.status === 409 && body.canReclaim && body.claims?.length) {
+        setPendingClaims(body.claims)
+        setError(body.error ?? 'That league is already part of a franchise on another account.')
+        setSaving(false)
+        return
+      }
       if (!res.ok) throw new Error(body.error ?? 'Could not connect those leagues')
       /*
        * Back to the league they came from, which now renders its other half.
@@ -190,6 +235,50 @@ export function ConnectLeaguesClient() {
         <p className="af-cl-error" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {/*
+        ⚠ THE WAY OUT OF THE DEAD END. Before this, a league held by another
+        account's franchise was offered and then refused forever, with nothing
+        the user could do about it. They own the league, so they may take it
+        back — but only after being shown exactly whose franchise loses a half,
+        and only by pressing a second, differently-labelled button.
+      */}
+      {pendingClaims?.length ? (
+        <section className="af-card af-cl-claim" role="group" aria-label="Already connected elsewhere">
+          <ul className="af-cl-claim-list">
+            {pendingClaims.map((c) => (
+              <li key={`${c.platform}:${c.leagueId}`}>
+                <b>{c.franchiseName}</b> on {c.ownerLabel}
+              </li>
+            ))}
+          </ul>
+          <p className="af-cl-claim-note">
+            You own {pendingClaims.length === 1 ? 'this league' : 'these leagues'}, so you can move{' '}
+            {pendingClaims.length === 1 ? 'it' : 'them'} here. The franchise above loses that half.
+          </p>
+          <div className="af-cl-claim-actions">
+            <button
+              type="button"
+              className="af-btn af-cl-claim-go"
+              disabled={saving}
+              onClick={() => void submit(true)}
+            >
+              {saving ? 'Connecting…' : 'Connect anyway'}
+            </button>
+            <button
+              type="button"
+              className="af-btn af-btn--ghost"
+              disabled={saving}
+              onClick={() => {
+                setPendingClaims(null)
+                setError(null)
+              }}
+            >
+              Leave it alone
+            </button>
+          </div>
+        </section>
       ) : null}
 
       {data && !loading ? (
@@ -254,7 +343,7 @@ export function ConnectLeaguesClient() {
                 </label>
               </section>
 
-              <button type="button" className="af-btn af-cl-submit" disabled={!canSubmit} onClick={submit}>
+              <button type="button" className="af-btn af-cl-submit" disabled={!canSubmit} onClick={() => void submit(false)}>
                 {saving ? 'Connecting…' : 'Connect these leagues'}
               </button>
             </>

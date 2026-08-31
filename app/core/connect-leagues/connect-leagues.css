@@ -194,3 +194,49 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+
+/* ── A league held by another account's franchise ──────────────────────────
+ *
+ * ⚠ APPENDED AT TOP LEVEL, BELOW THE FILE'S ONE @media. Inserting into the
+ * middle of a media query closes it early and silently narrows every rule after
+ * it, with brace balance unchanged and nothing thrown. See CLAUDE.md.
+ */
+.af-cl-option-claim {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  /* Warning, not error: the league is still selectable and this is a
+     consequence to read, not a failure to recover from. */
+  color: var(--warn, #fbbf24);
+}
+
+.af-cl-claim {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--warn, #fbbf24);
+}
+.af-cl-claim-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+.af-cl-claim-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-cl-claim-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* The destructive choice is the one that has to look deliberate. */
+.af-cl-claim-go {
+  border-color: var(--warn, #fbbf24);
+  color: var(--warn, #fbbf24);
+}
