@@ -48,9 +48,31 @@ function Get-HostFrom([string] $url) {
   return (($url -replace '.*@', '') -replace '/.*', '') -replace ':.*', ''
 }
 
+# -- Reject a placeholder before anything else -------------------------------
+# 🛑 THIS IS THE THIRD TIME A PLACEHOLDER HAS BEEN RUN AS IF IT WERE A VALUE in
+# this project: 'paste-a-generated-value-here' and 'a-different-one' became real
+# production role passwords, and then '<paste the string here>' was passed here
+# as a connection string. In every case the tool accepted it happily, because a
+# placeholder that is syntactically valid input is indistinguishable from input.
+#
+# The lesson is not "read the instructions more carefully". It is that any
+# argument a human is told to substitute MUST be validated for the shape it is
+# supposed to have, or the substitution step is optional in practice.
+if ($BranchUrl -match '[<>]' -or $BranchUrl -match '^\s*$') {
+  Write-Error "REFUSING: -BranchUrl looks like an unsubstituted placeholder ('$BranchUrl'). Paste the real connection string from the Neon console."
+}
+if ($BranchUrl -notmatch '^postgres(ql)?://[^:/@\s]+:[^@\s]+@[^/@\s]+/[^?\s]+') {
+  Write-Error "REFUSING: -BranchUrl is not a Postgres connection string. Expected postgresql://USER:PASSWORD@HOST/DATABASE - copy it whole from the Neon console's Connect dialog."
+}
+
 $BranchHost = Get-HostFrom $BranchUrl
 if ([string]::IsNullOrWhiteSpace($BranchHost)) {
   Write-Error "REFUSING: could not parse a host out of -BranchUrl."
+}
+# A Neon endpoint host, not something that merely parsed. Catches a URL that is
+# well-formed but points somewhere unexpected.
+if ($BranchHost -notmatch '\.neon\.tech$') {
+  Write-Error "REFUSING: host '$BranchHost' is not a *.neon.tech endpoint."
 }
 
 # -- The production-host guard ------------------------------------------------
