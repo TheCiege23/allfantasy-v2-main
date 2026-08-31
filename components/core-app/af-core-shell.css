@@ -309,6 +309,156 @@
   letter-spacing: 0.06em;
 }
 
+/*
+ * "Sync now", beside the age chip that raises the question.
+ *
+ * ⚠ INSERTED AT TOP LEVEL, DELIBERATELY ABOVE THE FIRST @media IN THIS FILE.
+ * Dropping a rule into the middle of an existing media block closes that query
+ * early and silently moves everything below it into a narrower band — brace
+ * balance stays 0 and nothing throws. See CLAUDE.md.
+ */
+.af-syncnow-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.af-syncnow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.af-syncnow:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.af-syncnow-glyph {
+  font-size: 12px;
+  line-height: 1;
+}
+/* The spinner is the only motion in the topbar, so it yields to the OS setting. */
+.af-syncnow[data-phase='busy'] .af-syncnow-glyph {
+  animation: af-syncnow-spin 1.1s linear infinite;
+}
+@keyframes af-syncnow-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-syncnow[data-phase='busy'] .af-syncnow-glyph {
+    animation: none;
+  }
+}
+
+.af-syncnow-msg {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.af-syncnow-msg[data-phase='done'] {
+  color: var(--good);
+}
+/*
+ * `error` also covers a completed run that left leagues locked, failed or
+ * skipped — a partial result must not read as a clean success.
+ */
+.af-syncnow-msg[data-phase='error'] {
+  color: var(--warn);
+}
+.af-syncnow-msg:empty {
+  display: none;
+}
+
+/*
+ * The VISIBLE panel form, on the /core home screen.
+ *
+ * ⚠ STILL ABOVE THE FIRST LAYOUT @media IN THIS FILE, for the reason given on
+ * the chip rules above: a block dropped inside an existing media query closes it
+ * early and silently narrows every rule below it. Brace balance stays 0.
+ */
+.af-syncnow-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--chip);
+}
+.af-syncnow-panel-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-syncnow-panel-title {
+  color: var(--text);
+}
+.af-syncnow-panel-sub {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-syncnow-panel-sub a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.af-syncnow-panel-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* The panel's button is a real button, not a chip: bigger tap target. */
+.af-syncnow-lg {
+  padding: 9px 18px;
+  font-size: 11px;
+}
+
+/*
+ * ⚠ THE DISABLED STATE MUST READ AS "NOT YET", NOT AS "BROKEN". Dimmed and
+ * not-allowed, but it keeps its border and shape — a control that vanishes into
+ * the background gets pressed repeatedly by someone who thinks it failed to
+ * render. The reason is spelled out in the panel's sub-line beside it.
+ */
+.af-syncnow:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.af-syncnow[data-phase='busy']:disabled {
+  /* Busy is a different disabled: it IS doing something. */
+  cursor: progress;
+  opacity: 0.7;
+}
+
+@media (max-width: 720px) {
+  .af-syncnow-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .af-syncnow-panel-action {
+    justify-content: space-between;
+  }
+}
+
 .af-plan {
   display: inline-flex;
   align-items: center;
