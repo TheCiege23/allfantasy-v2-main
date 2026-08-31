@@ -13,6 +13,7 @@ import {
 import { BroadcastPanel } from './BroadcastPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { AdvancementPanel } from './AdvancementPanel'
+import { RedraftPanel } from './RedraftPanel'
 import { CompliancePanel } from './CompliancePanel'
 import { TopPerformersPanel } from './TopPerformersPanel'
 import './tournament-hub.css'
@@ -222,16 +223,6 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
         </p>
       ) : null}
 
-      <TopPerformersPanel tournamentId={board.tournamentId} />
-
-      <CompliancePanel tournamentId={board.tournamentId} />
-
-      <AdvancementPanel tournamentId={board.tournamentId} />
-
-      <SettingsPanel board={board} />
-
-      <BroadcastPanel board={board} />
-
       {board.conferences.length > 1 ? (
         <div className="af-th-tabs" role="tablist">
           {board.conferences.map((c) => (
@@ -253,6 +244,17 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
       <p className="af-th-note">
         {conference.name} combined points: <strong>{formatPoints(conference.conferencePoints)}</strong>
       </p>
+
+      {/*
+        ⚠ A CONFERENCE WITH NO LEAGUES IS A SETUP STATE, NOT A BUG, and it must
+        say which. Rendering the heading and combined-points line above an empty
+        space reads as a table that failed to load.
+      */}
+      {conference.leagues.length === 0 ? (
+        <p className="af-th-note">
+          No leagues in {conference.name} yet — add them and its standings appear here.
+        </p>
+      ) : null}
 
       {conference.leagues.map((league) => (
         <section key={league.tournamentLeagueId} className="af-th-league">
@@ -324,15 +326,38 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
       ))}
 
       {/*
-        ⚠ NOTHING ON THIS SCREEN ADVANCES ANYBODY. `identifyQualifiers` writes
-        `advancementStatus`; this recomputes the same ranking with the same
-        comparator and persists none of it. Opening a dashboard must not end
-        someone's season.
+        ⚠ THE NOTE BELONGS TO THE TABLE, NOT TO THE SCREEN — AND IT USED TO SAY
+        THE SCREEN. "This view is read-only" was true when the board was all
+        there was; it now sits on a page carrying a button that ends 176 seasons,
+        so as written it was a false reassurance. Reordering the page is what
+        made that visible.
       */}
-      <p className="af-th-foot">
-        This view is read-only — it shows where everyone stands right now. Advancing and eliminating
-        managers stays a separate, deliberate step.
-      </p>
+      {conference.leagues.length > 0 ? (
+        <p className="af-th-foot">
+          The table above is a live read — it shows where everyone stands right now, and nothing
+          here has been recorded. Advancing and eliminating managers is a separate, deliberate step
+          below.
+        </p>
+      ) : null}
+
+      {/*
+        🛑 THE STANDINGS COME FIRST, AND THAT ORDER WAS WRONG UNTIL SOMEBODY
+        LOOKED AT THE PAGE. The panels below are things a commissioner does
+        occasionally — cut the field, plan a redraft, change a setting. The table
+        is what they open this screen for every week, and it was sitting under
+        five cards, off the bottom of the first screen.
+      */}
+      <BroadcastPanel board={board} />
+
+      <AdvancementPanel tournamentId={board.tournamentId} />
+
+      <RedraftPanel tournamentId={board.tournamentId} />
+
+      <CompliancePanel tournamentId={board.tournamentId} />
+
+      <TopPerformersPanel tournamentId={board.tournamentId} />
+
+      <SettingsPanel board={board} />
     </main>
   )
 }

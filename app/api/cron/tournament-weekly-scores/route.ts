@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { sweepTournamentWeeklyScores } from '@/lib/tournament/sweepTournamentWeeklyScores'
+import { resolveCurrentNflWeek, weeksToSweep } from '@/lib/tournament/resolveNflWeek'
 
 /**
  * Collect each tournament league's per-player scores for a week.
@@ -22,16 +23,43 @@ async function handle(req: NextRequest) {
   }
 
   const url = new URL(req.url)
+  const dryRun = url.searchParams.get('dryRun') === 'true'
+  const tournamentId = url.searchParams.get('tournamentId')?.trim() || undefined
+
+  /*
+   * ⚠ `auto=1` IS FOR THE SCHEDULER, EXPLICIT PARAMS ARE FOR A HUMAN.
+   * `cron-schedule.json` holds a literal path, so a scheduled entry cannot carry
+   * a week that moves. Auto asks Sleeper what week it is — the same definition
+   * `matchups/{week}` is keyed on — and does NOTHING if it cannot find out,
+   * rather than ingesting a real week's scores under a guessed number.
+   */
+  if (url.searchParams.get('auto') === '1') {
+    const current = await resolveCurrentNflWeek()
+    if (!current) {
+      return NextResponse.json(
+        { error: 'Could not establish the current NFL week; nothing was ingested.' },
+        { status: 503 },
+      )
+    }
+    const results = []
+    for (const target of weeksToSweep(current)) {
+      results.push(
+        await sweepTournamentWeeklyScores({ ...target, dryRun, tournamentId }),
+      )
+    }
+    return NextResponse.json({ auto: true, resolved: current, results })
+  }
+
   const season = Number(url.searchParams.get('season'))
   const week = Number(url.searchParams.get('week'))
   /*
-   * ⚠ BOTH REQUIRED, NO DEFAULTING TO "NOW". Guessing the current week here and
-   * guessing it wrong writes a real week's scores under the wrong number, and
-   * nothing downstream could tell. The caller states which week it means.
+   * ⚠ BOTH REQUIRED WHEN CALLED BY HAND, NO DEFAULTING TO "NOW". Guessing the
+   * week and guessing it wrong writes a real week's scores under the wrong
+   * number, and nothing downstream could tell.
    */
   if (!Number.isFinite(season) || !Number.isFinite(week)) {
     return NextResponse.json(
-      { error: 'season and week are both required, as numbers.' },
+      { error: 'season and week are both required, as numbers — or pass auto=1.' },
       { status: 400 },
     )
   }
@@ -39,8 +67,8 @@ async function handle(req: NextRequest) {
   const result = await sweepTournamentWeeklyScores({
     season: Math.trunc(season),
     week: Math.trunc(week),
-    dryRun: url.searchParams.get('dryRun') === 'true',
-    tournamentId: url.searchParams.get('tournamentId')?.trim() || undefined,
+    dryRun,
+    tournamentId,
   })
   return NextResponse.json(result)
 }

@@ -151,3 +151,80 @@ export function buildTopScorersExport(scorers: TopScorer[]): string {
   }
   return lines.join('\n')
 }
+
+export type RedraftExportLeague = {
+  name: string
+  managers: Array<{
+    seed: number
+    displayName: string
+    fromLeague: string
+    wins: number
+    losses: number
+    pointsFor: number
+  }>
+}
+
+/**
+ * The redraft assignment, as something a commissioner can act on.
+ *
+ * 🛑 THIS IS THE DELIVERABLE FOR AN IMPORTED TOURNAMENT. AllFantasy cannot
+ * create a league on the host platform, so the redraft "happening" means the
+ * commissioner building eight new leagues by hand and inviting the right sixteen
+ * people to each. The useful output is therefore not a button — it is an
+ * accurate, ordered list they can work down without cross-referencing anything.
+ *
+ * ⚠ ONE BLOCK PER NEW LEAGUE, because that is the unit of work. A single flat
+ * table of 128 names sorted by seed cannot be worked through one league at a
+ * time, which is the only way anybody would actually do this.
+ */
+export function buildRedraftExport(
+  conferenceName: string,
+  leagues: RedraftExportLeague[],
+): string {
+  const lines: string[] = []
+  leagues.forEach((league, index) => {
+    if (index > 0) lines.push('')
+    lines.push(`${league.name}  (${league.managers.length} teams)`)
+    lines.push(['SEED', 'Manager', 'From', 'W/L', 'Total Pts'].join('\t'))
+    for (const m of league.managers) {
+      lines.push(
+        [
+          String(m.seed),
+          m.displayName,
+          m.fromLeague,
+          formatRecord(m.wins, m.losses, 0),
+          formatPoints(m.pointsFor),
+        ].join('\t'),
+      )
+    }
+  })
+  return `${conferenceName} — REDRAFT\n\n${lines.join('\n')}`
+}
+
+/**
+ * Every advancing manager, one flat list.
+ *
+ * ⚠ A SECOND SHAPE ON PURPOSE, not a duplicate of the blocks above. Inviting
+ * people is per-league; ANNOUNCING who advanced is one list, and pasting the
+ * per-league blocks into a chat to answer "did I make it?" makes 128 people read
+ * eight tables to find themselves.
+ */
+export function buildAdvancerList(
+  leagues: RedraftExportLeague[],
+): string {
+  const all = leagues.flatMap((l) => l.managers.map((m) => ({ ...m, league: l.name })))
+  all.sort((a, b) => a.seed - b.seed)
+  const lines = [['SEED', 'Manager', 'Goes to', 'W/L', 'Total Pts'].join('\t')]
+  for (const m of all) {
+    lines.push(
+      [
+        String(m.seed),
+        m.displayName,
+        m.league,
+        formatRecord(m.wins, m.losses, 0),
+        formatPoints(m.pointsFor),
+      ].join('\t'),
+    )
+  }
+  return lines.join('\n')
+}

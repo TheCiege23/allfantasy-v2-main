@@ -16,6 +16,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { teamIdentity } from '@/lib/tournament/importedStandingsSource'
+import { buildRoundScaffold } from '@/lib/tournament/roundScaffold'
 
 export type ConferenceInput = {
   name: string
@@ -37,6 +38,19 @@ export type ImportTournamentInput = {
   wildcardCount?: number
   bubbleEnabled?: boolean
   bubbleSize?: number
+  /**
+   * The rest of the calendar.
+   *
+   * 🛑 WITHOUT THESE THE TOURNAMENT HAS ONE ROUND AND DECLARES ITSELF COMPLETE
+   * the moment the regular season advances — `executeAdvancement` marks a shell
+   * `complete` when it finds no next play round. Optional because a commissioner
+   * may not have decided the later weeks yet, but a tournament with none of them
+   * cannot progress past its opening round.
+   */
+  bubbleWeek?: number | null
+  redraftWeek?: number | null
+  eliteRedraftWeek?: number | null
+  championshipWeek?: number | null
 }
 
 export type ImportTournamentResult =
@@ -53,6 +67,8 @@ export type ImportTournamentResult =
        * than left to wonder whether they mis-typed it.
        */
       renamedLeagues: Array<{ leagueId: string; from: string; to: string }>
+      /** The calendar it laid out, so the caller can show what will happen. */
+      rounds: Array<{ roundNumber: number; roundLabel: string; weekStart: number; weekEnd: number }>
       /** Teams with no manager on file — imported, but nobody to advance. */
       orphanTeamCount: number
     }
@@ -174,8 +190,26 @@ export async function importTournamentFromLeagues(
     }
   }
 
+  /*
+   * ⚠ THE WHOLE CALENDAR, BUILT BEFORE ANYTHING IS WRITTEN. A scaffold that
+   * cannot be laid out is a setup mistake — overlapping stages, a final before
+   * the semis — and it is far cheaper to refuse here than to create a tournament
+   * whose rounds run in an order nobody intended.
+   */
+  const scaffold = buildRoundScaffold({
+    openingWeekStart: input.openingWeekStart,
+    openingWeekEnd: input.openingWeekEnd,
+    bubbleWeek: input.bubbleWeek ?? null,
+    redraftWeek: input.redraftWeek ?? null,
+    eliteRedraftWeek: input.eliteRedraftWeek ?? null,
+    championshipWeek: input.championshipWeek ?? null,
+  })
+  if (!scaffold.ok) return { ok: false, error: scaffold.error, status: 400 }
+
   const tournamentId = randomUUID()
-  const roundId = randomUUID()
+  const roundIdByNumber = new Map(scaffold.rounds.map((r) => [r.roundNumber, randomUUID()]))
+  /* Round 1 is where the leagues being imported actually play. */
+  const roundId = roundIdByNumber.get(1)!
   const sport = input.sport?.trim() || leagues[0]?.sport || 'NFL'
 
   /*
@@ -312,24 +346,34 @@ export async function importTournamentFromLeagues(
         maxParticipants: participantRows.length,
         currentParticipantCount: participantRows.length,
         currentRoundNumber: 1,
+        totalRounds: scaffold.rounds.length,
         openingWeekStart: input.openingWeekStart,
+        /* Stored on the shell too, because the engines read them from there
+           rather than re-deriving the calendar from the rounds. */
+        bubbleWeek: input.bubbleWeek ?? null,
+        redraftWeek: input.redraftWeek ?? null,
+        eliteRedraftWeek: input.eliteRedraftWeek ?? null,
+        championshipWeek: input.championshipWeek ?? null,
         advancersPerLeague: input.advancersPerLeague ?? 0,
         wildcardCount: input.wildcardCount ?? 0,
         bubbleEnabled: input.bubbleEnabled ?? false,
         bubbleSize: input.bubbleSize ?? 0,
       },
     }),
-    prisma.tournamentRound.create({
-      data: {
-        id: roundId,
+    prisma.tournamentRound.createMany({
+      data: scaffold.rounds.map((r) => ({
+        id: roundIdByNumber.get(r.roundNumber)!,
         tournamentId,
-        roundNumber: 1,
-        roundType: 'opening',
-        roundLabel: 'Regular season',
-        weekStart: input.openingWeekStart,
-        weekEnd: input.openingWeekEnd,
-        status: 'active',
-      },
+        roundNumber: r.roundNumber,
+        roundType: r.roundType,
+        roundLabel: r.roundLabel,
+        weekStart: r.weekStart,
+        weekEnd: r.weekEnd,
+        /* Only the opening round is under way; the rest are waiting their turn,
+           and a round that claims to be active before it starts would be picked
+           up as the current one. */
+        status: r.roundNumber === 1 ? 'active' : 'pending',
+      })),
     }),
     prisma.tournamentConference.createMany({
       data: conferenceRows.map((c) => ({ ...c, tournamentId })),
@@ -362,6 +406,12 @@ export async function importTournamentFromLeagues(
     leagueCount: leagueRows.length,
     participantCount: participantRows.length,
     renamedLeagues,
+    rounds: scaffold.rounds.map((r) => ({
+      roundNumber: r.roundNumber,
+      roundLabel: r.roundLabel,
+      weekStart: r.weekStart,
+      weekEnd: r.weekEnd,
+    })),
     orphanTeamCount,
   }
 }

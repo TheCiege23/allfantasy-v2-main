@@ -91,8 +91,15 @@ export async function checkTournamentRosterCompliance(
     round ?? { roundNumber, roundType: 'opening', rosterSizeOverride: null },
   )
 
+  /*
+   * 🛑 SCOPED TO THE CURRENT ROUND, AND IT WAS NOT UNTIL THE REDRAFT EXISTED.
+   * Reading every `TournamentLeague` in the tournament was harmless while there
+   * was only ever one round of them. The moment a redraft commits round-2 slots,
+   * an unscoped read returns the old leagues AND the new ones — the same manager
+   * twice, ranked against himself, in a table that decides who goes home.
+   */
   const leagues = await prisma.tournamentLeague.findMany({
-    where: { tournamentId, leagueId: { not: null } },
+    where: { tournamentId, leagueId: { not: null }, round: { roundNumber } },
     select: { leagueId: true, name: true },
   })
   const leagueIds = leagues.map((l) => l.leagueId!).filter(Boolean)

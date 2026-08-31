@@ -32,6 +32,9 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
   const [weekEnd, setWeekEnd] = useState('9')
   const [advancePerConference, setAdvancePerConference] = useState('64')
   const [bubbleSize, setBubbleSize] = useState('6')
+  const [redraftWeek, setRedraftWeek] = useState('10')
+  const [eliteWeek, setEliteWeek] = useState('15')
+  const [championshipWeek, setChampionshipWeek] = useState('17')
   const [conferences, setConferences] = useState<ConferenceDraft[]>([
     { name: '', leagueIds: [] },
     { name: '', leagueIds: [] },
@@ -85,6 +88,15 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
           wildcardCount: Number(advancePerConference),
           bubbleEnabled: Number(bubbleSize) > 0,
           bubbleSize: Number(bubbleSize),
+          /*
+           * ⚠ THE REST OF THE CALENDAR, OR THE TOURNAMENT ENDS AT WEEK 9.
+           * A shell with only an opening round is marked complete the first time
+           * the cut runs, because the engine finds no next round to move into.
+           */
+          bubbleWeek: Number(bubbleSize) > 0 ? Number(weekEnd) : undefined,
+          redraftWeek: redraftWeek ? Number(redraftWeek) : undefined,
+          eliteRedraftWeek: eliteWeek ? Number(eliteWeek) : undefined,
+          championshipWeek: championshipWeek ? Number(championshipWeek) : undefined,
         }),
       })
       const body = (await res.json()) as { error?: string; tournamentId?: string }
@@ -162,6 +174,33 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
               inputMode="numeric"
               value={advancePerConference}
               onChange={(e) => setAdvancePerConference(e.target.value)}
+            />
+          </label>
+          <label className="af-th-field">
+            <span>Redraft week</span>
+            <input
+              className="af-th-input af-th-input--num"
+              inputMode="numeric"
+              value={redraftWeek}
+              onChange={(e) => setRedraftWeek(e.target.value)}
+            />
+          </label>
+          <label className="af-th-field">
+            <span>Elite redraft week</span>
+            <input
+              className="af-th-input af-th-input--num"
+              inputMode="numeric"
+              value={eliteWeek}
+              onChange={(e) => setEliteWeek(e.target.value)}
+            />
+          </label>
+          <label className="af-th-field">
+            <span>Championship week</span>
+            <input
+              className="af-th-input af-th-input--num"
+              inputMode="numeric"
+              value={championshipWeek}
+              onChange={(e) => setChampionshipWeek(e.target.value)}
             />
           </label>
           <label className="af-th-field">

@@ -14,7 +14,7 @@ const tournamentLeagueFindMany = vi.fn()
 const leagueTeamFindMany = vi.fn()
 const transaction = vi.fn()
 const shellCreate = vi.fn()
-const roundCreate = vi.fn()
+const roundCreateMany = vi.fn()
 const conferenceCreateMany = vi.fn()
 const tlCreateMany = vi.fn()
 const participantCreateMany = vi.fn()
@@ -30,7 +30,7 @@ vi.mock('@/lib/prisma', () => ({
       createMany: (...a: unknown[]) => tlCreateMany(...a),
     },
     tournamentShell: { create: (...a: unknown[]) => shellCreate(...a) },
-    tournamentRound: { create: (...a: unknown[]) => roundCreate(...a) },
+    tournamentRound: { createMany: (...a: unknown[]) => roundCreateMany(...a) },
     tournamentConference: { createMany: (...a: unknown[]) => conferenceCreateMany(...a) },
     tournamentParticipant: { createMany: (...a: unknown[]) => participantCreateMany(...a) },
     tournamentLeagueParticipant: { createMany: (...a: unknown[]) => lpCreateMany(...a) },
@@ -69,6 +69,60 @@ beforeEach(() => {
   tournamentLeagueFindMany.mockResolvedValue([])
   leagueTeamFindMany.mockResolvedValue([team('lgA', '1'), team('lgB', '2')])
   transaction.mockResolvedValue([])
+})
+
+/**
+ * 🛑 ONE ROUND IS NOT A TOURNAMENT. `executeAdvancement` marks a shell COMPLETE
+ * the moment it finds no next play round, so a tournament imported with only its
+ * regular season would declare itself finished the first time the cut ran.
+ */
+describe('the round calendar', () => {
+  it('creates every configured round, not just the opening one', async () => {
+    await importTournamentFromLeagues({
+      ...TWO_CONFERENCES,
+      bubbleWeek: 9,
+      redraftWeek: 10,
+      eliteRedraftWeek: 15,
+      championshipWeek: 17,
+    })
+    const rounds = roundCreateMany.mock.calls[0][0].data
+    expect(rounds.map((r: { roundType: string }) => r.roundType)).toEqual([
+      'opening',
+      'bubble',
+      'tournament',
+      'elite',
+      'final',
+    ])
+  })
+
+  /** ⚠ Only the opening round is under way — a later round claiming to be
+      active would be picked up as the current one. */
+  it('marks only the opening round active', async () => {
+    await importTournamentFromLeagues({ ...TWO_CONFERENCES, redraftWeek: 10 })
+    const rounds = roundCreateMany.mock.calls[0][0].data
+    expect(rounds.map((r: { status: string }) => r.status)).toEqual(['active', 'pending'])
+  })
+
+  it('records the calendar it laid out, and the round count on the shell', async () => {
+    const out = await importTournamentFromLeagues({
+      ...TWO_CONFERENCES,
+      redraftWeek: 10,
+      championshipWeek: 17,
+    })
+    expect((out as { rounds: unknown[] }).rounds).toHaveLength(3)
+    expect(shellCreate.mock.calls[0][0].data.totalRounds).toBe(3)
+  })
+
+  /** A calendar that cannot be laid out is refused before anything is written. */
+  it('refuses an impossible calendar rather than creating half a tournament', async () => {
+    const out = await importTournamentFromLeagues({
+      ...TWO_CONFERENCES,
+      redraftWeek: 10,
+      eliteRedraftWeek: 4,
+    })
+    expect(out).toMatchObject({ ok: false, status: 400 })
+    expect(transaction).not.toHaveBeenCalled()
+  })
 })
 
 const TWO_CONFERENCES = {

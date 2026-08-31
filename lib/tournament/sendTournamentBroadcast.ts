@@ -79,9 +79,10 @@ export async function sendTournamentBroadcast(args: {
   /*
    * ⚠ SCHEDULING IS A STORED ROW, NOT A TIMER. Nothing here holds a message in
    * memory until Tuesday — a scheduled announcement is written unposted with its
-   * time, for a sweeper to pick up. Until that sweeper exists a scheduled
-   * message will sit there, so the caller is told `scheduledFor` and can say so
-   * rather than implying it will fire.
+   * time, and `/api/cron/tournament-announcements` sweeps due rows hourly
+   * (declared in `cron-schedule.json`, fired from the slow-tier workflow).
+   * The caller is still told `scheduledFor` so a screen can state the cadence
+   * rather than implying the message goes out on the minute.
    */
   const scheduled = args.scheduledFor && args.scheduledFor.getTime() > Date.now()
     ? args.scheduledFor

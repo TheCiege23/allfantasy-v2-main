@@ -230,9 +230,15 @@ export function BroadcastPanel({ board }: { board: StandingsBoard }) {
               <>
                 Scheduled for {new Date(result.scheduledFor).toLocaleString()} to{' '}
                 {result.audienceLabel} — {result.selectedCount} managers.{' '}
-                {/* ⚠ Said plainly: the row is stored, and nothing posts it yet. */}
-                <strong>Nothing sends automatically yet</strong> — the scheduled message is saved,
-                but it needs posting by hand until the scheduler is wired up.
+                {/*
+                  ⚠ THE CADENCE IS STATED, NOT ROUNDED AWAY. The sweep runs hourly,
+                  so a message set for 8:30 goes out at 9:00 — a commissioner who
+                  reads "scheduled for 8:30" and watches at 8:31 should know that
+                  before they conclude it is broken.
+                */}
+                It is checked hourly, so it goes out at the top of the next hour after that time.
+                The audience is worked out when it sends, not now — so &ldquo;everyone
+                advancing&rdquo; means whoever is advancing then.
               </>
             ) : (
               <>

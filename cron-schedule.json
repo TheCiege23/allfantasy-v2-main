@@ -199,6 +199,14 @@
     {
       "path": "/api/cron/morning-briefing",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/tournament-announcements",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/tournament-weekly-scores?auto=1",
+      "schedule": "0 10 * * *"
     }
   ]
 }

@@ -153,8 +153,15 @@ export async function getTournamentStandingsBoard(
     select: { id: true, name: true, colorHex: true },
   })
 
+  /*
+   * 🛑 SCOPED TO THE CURRENT ROUND, AND IT WAS NOT UNTIL THE REDRAFT EXISTED.
+   * Reading every `TournamentLeague` in the tournament was harmless while there
+   * was only ever one round of them. The moment a redraft commits round-2 slots,
+   * an unscoped read returns the old leagues AND the new ones — the same manager
+   * twice, ranked against himself, in a table that decides who goes home.
+   */
   const tournamentLeagues = await prisma.tournamentLeague.findMany({
-    where: { tournamentId },
+    where: { tournamentId, round: { roundNumber: shell.currentRoundNumber || 1 } },
     select: { id: true, leagueId: true, name: true, conferenceId: true },
   })
 

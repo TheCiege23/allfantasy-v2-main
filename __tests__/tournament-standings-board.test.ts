@@ -217,3 +217,29 @@ it('returns an empty conference list rather than throwing during setup', async (
   const board = await getTournamentStandingsBoard('t1', 'commish')
   expect(board?.conferences).toEqual([])
 })
+
+/**
+ * 🛑 THE BOARD MUST SHOW ONE ROUND, AND IT DID NOT UNTIL THE REDRAFT EXISTED.
+ * Reading every `TournamentLeague` in the tournament was harmless while there
+ * was only ever one round of them. The moment a redraft commits round-2 slots,
+ * an unscoped read returns the old leagues AND the new ones — the same manager
+ * appearing twice and ranked against himself, in the table that decides who
+ * goes home.
+ */
+describe('which round the board shows', () => {
+  it('asks only for leagues in the tournament’s current round', async () => {
+    shellFindFirst.mockResolvedValue({ ...SHELL, currentRoundNumber: 3 })
+    await getTournamentStandingsBoard('t1', 'commish')
+    expect(tournamentLeagueFindMany.mock.calls[0][0].where).toEqual({
+      tournamentId: 't1',
+      round: { roundNumber: 3 },
+    })
+  })
+
+  /** ⚠ A tournament that has not stamped a round yet is round 1, not round 0. */
+  it('treats an unset round as the first one', async () => {
+    shellFindFirst.mockResolvedValue({ ...SHELL, currentRoundNumber: 0 })
+    await getTournamentStandingsBoard('t1', 'commish')
+    expect(tournamentLeagueFindMany.mock.calls[0][0].where.round).toEqual({ roundNumber: 1 })
+  })
+})

@@ -53,13 +53,24 @@ export async function getTournamentTopPerformers(args: {
 }): Promise<TopPerformers | null> {
   const shell = await prisma.tournamentShell.findFirst({
     where: { id: args.tournamentId, commissionerId: args.commissionerUserId },
-    select: { id: true },
+    select: { id: true, currentRoundNumber: true },
   })
   /* Same answer for "not found" and "not yours". */
   if (!shell) return null
 
+  /*
+   * 🛑 SCOPED TO THE CURRENT ROUND, AND IT WAS NOT UNTIL THE REDRAFT EXISTED.
+   * Reading every `TournamentLeague` in the tournament was harmless while there
+   * was only ever one round of them. The moment a redraft commits round-2 slots,
+   * an unscoped read returns the old leagues AND the new ones — the same manager
+   * twice, ranked against himself, in a table that decides who goes home.
+   */
   const tournamentLeagues = await prisma.tournamentLeague.findMany({
-    where: { tournamentId: args.tournamentId, leagueId: { not: null } },
+    where: {
+      tournamentId: args.tournamentId,
+      leagueId: { not: null },
+      round: { roundNumber: shell.currentRoundNumber || 1 },
+    },
     select: { leagueId: true, name: true },
   })
   const leagueIds = tournamentLeagues.map((t) => t.leagueId!).filter(Boolean)
