@@ -6,16 +6,50 @@ import { NextRequest } from "next/server"
 const mocks = vi.hoisted(() => ({
   fetchWithChain: vi.fn(),
   fantasyProjectionUpsert: vi.fn(),
+  getWeekBoard: vi.fn(),
 }))
 
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/workers/api-chain", () => ({
   fetchWithChain: mocks.fetchWithChain,
 }))
+/*
+ * ⚠ THE ROUTE GREW A SECOND SOURCE, SO "THE CHAIN FAILED" NO LONGER MEANS "NO
+ * DATA". When the chain yields zero rows for NFL the handler falls back to
+ * `fetchSleeperNflProjections` -> `getWeekBoard`, and if that returns players the
+ * run legitimately succeeds. Unmocked, the fallback was left free to answer
+ * however it liked — which is why "fails loudly (500)" was getting a 200 even
+ * though the chain had been told to fail.
+ *
+ * Mocked to null so BOTH sources are governed by the test. The cases below are
+ * about what happens when there is genuinely nothing to ingest; a test for the
+ * fallback SUCCEEDING is a different test and would set a board here.
+ */
+vi.mock("@/lib/sports-data/sleeperMarketService", () => ({
+  getWeekBoard: mocks.getWeekBoard,
+}))
+/*
+ * ⚠ `sportsDataCache` IS NOT OPTIONAL HERE, AND ITS ABSENCE DID NOT LOOK LIKE A
+ * MOCK GAP. Both `getWeekBoard` and `fetchWithChain` read it before any provider
+ * call. Missing, `prisma.sportsDataCache` is undefined and `.findUnique` throws
+ * SYNCHRONOUSLY — so the `.catch(() => null)` guarding that read never runs (it
+ * only ever sees a rejected promise), the throw escapes to the route's outer
+ * catch, and every case answered the generic 500 shape
+ * `{ ok: false, error, durationMs }`.
+ *
+ * That is why all three failures looked like a changed response contract:
+ * `failedSports` and `results` were undefined because the success path was never
+ * reached, and the offseason case 500'd for the same reason rather than because
+ * the route stopped tolerating empty payloads.
+ */
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     fantasyProjection: {
       upsert: mocks.fantasyProjectionUpsert,
+    },
+    sportsDataCache: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
     },
   },
 }))
@@ -31,6 +65,8 @@ describe("import-projections cron route", () => {
     vi.clearAllMocks()
     vi.stubEnv("CRON_SECRET", "cron-secret")
     mocks.fantasyProjectionUpsert.mockResolvedValue({})
+    // No Sleeper board unless a test asks for one — see the mock note above.
+    mocks.getWeekBoard.mockResolvedValue(null)
   })
 
   afterEach(() => {

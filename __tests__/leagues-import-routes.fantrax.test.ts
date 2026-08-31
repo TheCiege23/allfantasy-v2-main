@@ -11,6 +11,28 @@ vi.mock('@/lib/auth-guard', () => ({
   requireVerifiedUser: requireVerifiedUserMock,
 }))
 
+/*
+ * ⚠ THE COMMIT ROUTE GREW A COMMISSIONER GATE AND THIS FILE NEVER SAW IT. Phase
+ * 2.2 made a full-league commit commissioner-only via `assertImportCommissioner`
+ * with `requireCommissioner: true`. For a provider that CANNOT determine
+ * commissioner status — which is Fantrax and MFL — the documented outcome is
+ * `isCommissioner === undefined` plus proven membership, so the gate demands a
+ * recorded attestation. Unmocked, it ran for real here and answered 403
+ * ATTESTATION_REQUIRED to all four commit cases, which is the gate working.
+ *
+ * These four tests are about the commit route's ERROR MAPPING — which
+ * normalization failure becomes 404, 401, 409 or 200. The gate is a separate
+ * concern with its own coverage; leaving it live only means every case 403s
+ * before reaching the mapping under test.
+ *
+ * Spread from importOriginal so the module's other exports stay real and this
+ * mock cannot rot the way the world-cup one did when its module gained an export.
+ */
+vi.mock('@/lib/league-import/commissionerGate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/league-import/commissionerGate')>()),
+  assertImportCommissioner: vi.fn(async () => ({ ok: true as const })),
+}))
+
 vi.mock('@/lib/league-import/ImportedLeagueNormalizationPipeline', () => ({
   runImportedLeagueNormalizationPipeline: runImportedLeagueNormalizationPipelineMock,
 }))
@@ -225,6 +247,17 @@ describe('Fantrax import API routes', () => {
         },
         historicalBackfill: { status: 'queued' },
         importRunId: 'import-run-1',
+        /*
+         * ⚠ ADDED DELIBERATELY, AND FOR A MEASURED REASON — a `toEqual` here is
+         * exact, so a new field fails the test rather than being ignored.
+         * `persistImportWithCanonicalAudit` short-circuits on the idempotency
+         * key, so a previously-completed run returned 200 with no way to tell it
+         * from a fresh import; a bulk run over 55 discovered leagues reported
+         * every one as "Imported". `existed` and `skipped` are what let a caller
+         * tell those apart, so they belong in the asserted contract.
+         */
+        existed: false,
+        skipped: false,
       })
       expect(persistImportWithCanonicalAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({

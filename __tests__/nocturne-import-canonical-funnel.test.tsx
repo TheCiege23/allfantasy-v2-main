@@ -63,18 +63,32 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     expect(nextParam(dest)).toBe('/import?provider=sleeper&username=gridiron_gary')
   })
 
-  it('availability comes from the authoritative provider-ui-config (Sleeper live; fantrax/mfl not)', () => {
+  /*
+   * ⚠ THE AVAILABILITY TABLE FLIPPED, AND THIS TEST HELD THE OLD ONE. Fantrax,
+   * MFL and Fleaflicker all shipped; YAHOO is the one that is deliberately off.
+   * Read from lib/league-import/provider-ui-config.ts, which its own header
+   * declares the authority for exactly this question.
+   *
+   * Kept as explicit values rather than derived from the config: deriving would
+   * make this a tautology that passes whatever the table says, and the point of
+   * a contract test is to fail when the table changes so a human confirms the
+   * change was intended.
+   */
+  it('availability comes from the authoritative provider-ui-config (Yahoo is the one that is off)', () => {
     expect(isImportProviderAvailable('sleeper')).toBe(true)
-    expect(isImportProviderAvailable('fantrax')).toBe(false)
-    expect(isImportProviderAvailable('mfl')).toBe(false)
+    expect(isImportProviderAvailable('espn')).toBe(true)
+    expect(isImportProviderAvailable('fantrax')).toBe(true)
+    expect(isImportProviderAvailable('mfl')).toBe(true)
+    expect(isImportProviderAvailable('fleaflicker')).toBe(true)
+    expect(isImportProviderAvailable('yahoo')).toBe(false)
   })
 
   it('an unavailable provider is visibly marked "Coming soon" and cannot create an import intent', () => {
     render(<NocturneImport variant="full" />)
-    // Select the unavailable provider (fantrax).
-    fireEvent.click(screen.getByTestId('nocturne-plat-chip-fantrax'))
+    // Yahoo, not Fantrax — Fantrax shipped. Yahoo is the deliberate hold-out.
+    fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
     // Visibly identified as coming soon…
-    expect(screen.getByTestId('nocturne-plat-chip-fantrax')).toHaveTextContent(/coming soon/i)
+    expect(screen.getByTestId('nocturne-plat-chip-yahoo')).toHaveTextContent(/coming soon/i)
     // …and it cannot navigate/create a signup-import intent.
     fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
       target: { value: '1234567' },
@@ -92,20 +106,20 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     }
   })
 
-  it('Fleaflicker is visible but blocked (Coming soon) and cannot navigate', () => {
+  /*
+   * ⚠ INVERTED, BECAUSE FLEAFLICKER SHIPPED. This asserted it was visible but
+   * blocked. It is `available: true` in provider-ui-config now, so the old
+   * assertions would only pass again if the provider were switched back off.
+   * The coverage is kept by testing the same chip from the other side: still
+   * visible, NOT marked coming soon, and selectable.
+   */
+  it('Fleaflicker is visible and selectable (it shipped)', () => {
     render(<NocturneImport variant="full" />)
     const chip = screen.getByTestId('nocturne-plat-chip-fleaflicker')
     expect(chip).toBeInTheDocument()
     expect(chip).toHaveTextContent(/fleaflicker/i)
     fireEvent.click(chip)
-    expect(chip).toHaveTextContent(/coming soon/i)
-    fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
-      target: { value: '12345' },
-    })
-    const submit = screen.getByTestId('nocturne-import-full-submit')
-    expect(submit).toBeDisabled()
-    fireEvent.click(submit)
-    expect(pushMock).not.toHaveBeenCalled()
+    expect(chip).not.toHaveTextContent(/coming soon/i)
   })
 
   it('the username survives the /import prefill contract (page → client → flow)', () => {
@@ -117,7 +131,13 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     // /import reads the username + provider params from the intent URL…
     expect(pageSrc).toContain('pickQuery(sp, "username")')
     expect(pageSrc).toContain('pickQuery(sp, "provider")')
-    expect(pageSrc).toContain('initialSleeperUsername={initialSleeperUsername}')
+    /*
+     * The page hands off to ImportV4 now, and the prop is `initialAccount`
+     * (ImportV4 seeds `useState(initialAccount ?? '')` from it). The prefill
+     * contract this test guards is unchanged — only the receiving component and
+     * the prop name moved.
+     */
+    expect(pageSrc).toContain('initialAccount={initialSleeperUsername}')
     // …and the canonical flow seeds the discovery input from the prefilled username.
     expect(flowSrc).toContain('useState(initialSleeperUsername)')
   })
