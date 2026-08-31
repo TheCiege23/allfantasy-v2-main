@@ -26,6 +26,13 @@ const draftHqAll = vi.fn()
    the two cannot disagree about one league. Mocked here to return no rows —
    which is the production case for both halves and the one the inference below
    exists for. */
+const leagueActivity = vi.fn()
+/* Transactions come from the same aggregator the league home uses. Mocked so the
+   resolver runs without a DecisionOS activity table. */
+vi.mock('@/lib/core-app/leagueActivity', () => ({
+  getLeagueActivity: (...a: unknown[]) => leagueActivity(...a),
+}))
+
 vi.mock('@/lib/core-app/draftHqAll', () => ({
   getDraftHqAll: (...a: unknown[]) => draftHqAll(...a),
 }))
@@ -61,6 +68,7 @@ beforeEach(() => {
   fantraxFindMany.mockResolvedValue([])
   memberFindMany.mockResolvedValue([])
   draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 0 })
+  leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
   memberFindFirst.mockResolvedValue(null)
   teamFindFirst.mockResolvedValue(null)
   rosterFindFirst.mockResolvedValue(null)
@@ -430,5 +438,43 @@ describe('resolving the other half from a league', () => {
 
     expect(out?.other?.playerCount).toBeNull()
     expect(out?.other?.draft).toBeNull()
+  })
+
+  /**
+   * 🛑 "NO TRADES" AND "WE CANNOT READ TRADES" ARE DIFFERENT CLAIMS ABOUT A
+   * LEAGUE. Fantrax publishes no transactions endpoint — the word does not
+   * appear in its documentation, as fantraxApi.ts records — so its half must
+   * report the REASON rather than a zero. Measured on production: this
+   * franchise's Sleeper half has 181 activity rows and its Fantrax half 0, and
+   * the difference is the vendor's API rather than how active the manager is.
+   */
+  it('reports a Fantrax half as unable to read transactions, never as zero trades', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'link-1',
+        name: 'F',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: '4' },
+          { platform: 'fantrax', leagueId: 'fx-1', role: 'college', teamExternalId: 'Ciege82' },
+        ],
+      },
+    })
+    fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
+    leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
+    teamFindFirst.mockResolvedValue({ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77' })
+    rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
+    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 2, waiver: 44, rosterMove: 14 }, newest: new Date('2026-08-19'), unattributed: 0 })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    /* The Sleeper half carries real counts. */
+    expect(out?.self?.activity).toMatchObject({ available: true, trades: 2, waivers: 44 })
+    /* The Fantrax half carries a reason, and never a zero that reads as a fact
+       about the manager. */
+    expect(out?.other?.activity?.available).toBe(false)
+    expect((out?.other?.activity as { reason: string }).reason).toContain('no transactions endpoint')
+    expect(out?.other?.activity).not.toHaveProperty('trades')
   })
 })
