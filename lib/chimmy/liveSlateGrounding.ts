@@ -2,7 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { describeGameStatus, normalizeGameStatus } from '@/lib/sports/gameStatus'
-import { nflFixtureKey, resolveNflTeamRef } from '@/lib/sports/teamRef'
+import { dedupeGamesByFixture } from '@/lib/sports/dedupeGames'
+import { resolveNflTeamRef } from '@/lib/sports/teamRef'
 import type { LeagueGroundingRoster } from '@/lib/ai/leagueSportsGroundingPacket'
 
 /**
@@ -33,8 +34,6 @@ import type { LeagueGroundingRoster } from '@/lib/ai/leagueSportsGroundingPacket
 
 /** A starting lineup; beyond this the caller is not asking a lineup question. */
 const MAX_STARTERS = 20
-/** Sources agree more often than not; when they do not, prefer the live feed. */
-const SOURCE_PRIORITY = ['espn_live', 'espn', 'rolling_insights', 'thesportsdb']
 
 type GameRow = {
   homeTeam: string
@@ -48,22 +47,19 @@ type GameRow = {
   awayScore: number | null
 }
 
+/*
+ * ⚠ MOVED TO lib/sports/dedupeGames.ts, UNCHANGED IN BEHAVIOUR. This logic was correct and was
+ * the ONLY copy of it, while 44 other modules read SportsGame raw and counted each fixture once
+ * per provider. Sharing it is the fix; this file keeps the same guarantees it always had.
+ *
+ * ⚠ ONE DELIBERATE DIFFERENCE. The local version DROPPED rows it could not key (`if (!key)
+ * continue`), which is safe here because this path is NFL-only. The shared version PASSES THEM
+ * THROUGH, so a non-NFL caller does not silently lose its whole slate. `bestPerFixture` keeps the
+ * old drop-on-unkeyed behaviour explicitly rather than inheriting a change nobody asked for.
+ */
 function bestPerFixture(rows: GameRow[]): GameRow[] {
-  const byKey = new Map<string, GameRow>()
-  for (const row of rows) {
-    const key = nflFixtureKey(row)
-    if (!key) continue
-    const existing = byKey.get(key)
-    if (!existing) {
-      byKey.set(key, row)
-      continue
-    }
-    const a = SOURCE_PRIORITY.indexOf(row.source)
-    const b = SOURCE_PRIORITY.indexOf(existing.source)
-    // Unknown sources sort last rather than winning by accident.
-    if ((a === -1 ? 99 : a) < (b === -1 ? 99 : b)) byKey.set(key, row)
-  }
-  return [...byKey.values()]
+  const { games, unkeyed } = dedupeGamesByFixture(rows)
+  return unkeyed === 0 ? games : games.slice(0, games.length - unkeyed)
 }
 
 /**

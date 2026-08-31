@@ -19,6 +19,7 @@ import {
   clearAPISportsDiagnostics,
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
+import { syncEspnStandingsToDb } from "@/lib/standings/espnStandings"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -45,18 +46,59 @@ async function handle(req: NextRequest) {
 
   try {
     clearAPISportsDiagnostics()
-    const count = await syncAPISportsStandingsToDb({ season, sport })
+
+    /*
+     * ⚠ ESPN FIRST. API-Sports CANNOT ANSWER FOR THE CURRENT SEASON AND HAS NOT SINCE APRIL.
+     *
+     * This job ran every four hours and reported `ok: true` every time while writing nothing.
+     * Measured 2026-08-30: every `*:standings:*` row in SportsDataCache was 2025-season, written
+     * 2026-04-25, and all of them expired 2026-07-24. The account is on API-Sports' Free plan,
+     * which answers every current-season request with "Free plans do not have access to this
+     * season, try from 2022 to 2024" — a billing limit that `lib/scores/gameScoreProviders.ts`
+     * and `/api/cron/import-injuries` had already hit and migrated away from. Standings was the
+     * one feed that never did.
+     *
+     * ESPN needs no key, publishes both football codes, and was verified live returning season
+     * 2026 with 32 NFL team entries. API-Sports is kept as a SECOND attempt rather than deleted:
+     * it is the only source here for a historical `?season=` backfill, which is the one request
+     * the Free plan can still serve.
+     */
+    const espn = await syncEspnStandingsToDb({ sport, season })
+
+    let count = espn.written
+    let provider = "espn"
+    if (count === 0) {
+      const apiSports = await syncAPISportsStandingsToDb({ season, sport })
+      if (apiSports > 0) {
+        count = apiSports
+        provider = "api_sports"
+      }
+    }
+
     const diagnostics = getAPISportsDiagnostics()
 
-    return NextResponse.json({
-      ok: true,
-      sport,
-      season: season ?? "current",
-      synced: count,
-      diagnostics,
-      durationMs: Date.now() - startedAt,
-      timestamp: new Date().toISOString(),
-    })
+    /*
+     * ZERO ROWS IS A FAILURE, and saying so is the point. The previous handler returned
+     * `ok: true` unconditionally, which is exactly how four months of silence went unnoticed.
+     * Non-2xx too: the cron dashboard keys off HTTP status, so a 200 carrying `ok:false` still
+     * reads as healthy.
+     */
+    const failed = count === 0
+
+    return NextResponse.json(
+      {
+        ok: !failed,
+        sport,
+        season: season ?? "current",
+        synced: count,
+        provider: failed ? null : provider,
+        espn: { fetched: espn.fetched, written: espn.written, skipped: espn.skipped, errors: espn.errors.slice(0, 3) },
+        diagnostics,
+        durationMs: Date.now() - startedAt,
+        timestamp: new Date().toISOString(),
+      },
+      { status: failed ? 500 : 200 },
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[cron/import-standings] failed:", message)
