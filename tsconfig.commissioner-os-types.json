@@ -55,6 +55,7 @@
     "lib/domain/reconcile.ts",
     "lib/domain/syncHealth.ts",
     "lib/domain/tenantScopedTables.ts",
+    "lib/domain/deploymentTenant.ts",
     // The first request path through withTenant. Listed so a green run here
     // actually covers it — a scoped typecheck that omits the file you changed
     // is the filtered-check trap wearing a different hat.
