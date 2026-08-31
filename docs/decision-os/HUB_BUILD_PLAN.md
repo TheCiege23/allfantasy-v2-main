@@ -33,7 +33,8 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **2.2** One adapter per producer | **THREE, not four** — IDP+kicker already composed. market · devy · idpKicker, each with a trap pinned by a red-proven test |
 | ✅ | **2.3** Register `'value'` as an `OsDomain` | Union widened; no migration (`VarChar(16)`). Level split documented on the type |
 | ✅ | **2.4** Rescore-at-read for IDP + kicker | **Not needed** — `buildIdpKickerValueMap` takes league rules as an argument, so there is no canonical row to rescore |
-| ⬜ | **3.1** `'projection'` domain | |
+| ✅ | **3.1** `'projection'` domain | `lib/decision-os/projection/facts.ts`. Rescore-at-read wired; writer verified scheduled |
+| ⬜ | **2.5** `OsFactSource` for value + projection | ⚠ Gap I created: both domains are registered and have loaders, but nothing wires them into a FEED yet |
 | ⬜ | **3.2** `'import'` domain + four assertions | |
 | ⬜ | **3.3** `isConclusive(fact)` | |
 | ⬜ | **4.1** `buildDecisionOsGroundingPacket()` | |
