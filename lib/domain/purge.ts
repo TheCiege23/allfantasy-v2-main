@@ -74,7 +74,27 @@ function readDays(name: string, fallback: number): number {
  *
  * Delete these first, then let the 144 cascades do the rest.
  */
-export const LEAGUE_PURGE_BLOCKERS = ['TournamentLeague', 'LeagueManagerClaim'] as const
+/**
+ * ⚠ `TournamentLeague` WAS ON THIS LIST AND SHOULD NOT HAVE BEEN. Removed
+ * 2026-08-31, the first time T-009's drift check was ever executed against a
+ * database — it failed immediately, and it was right:
+ *
+ *   tournament_leagues.leagueId  → confdeltype 'c'  = CASCADE
+ *   LeagueManagerClaim.leagueId  → confdeltype 'r'  = RESTRICT   ← the only blocker
+ *
+ * The list was written from the claim that these were "the 2 of 148 League
+ * relations that default to Restrict". That was asserted from reading the Prisma
+ * schema, not measured against pg_constraint, and it was wrong: the tournament
+ * relation carries an explicit onDelete.
+ *
+ * ⚠ AN OVER-INCLUSIVE ENTRY HERE IS NOT HARMLESS, WHICH IS WHY IT IS WORTH
+ * DELETING RATHER THAN LEAVING. `describeLeaguePurge` renders each entry with the
+ * reason "Relation to League has no onDelete, so Prisma defaults it to Restrict".
+ * For a CASCADE relation that sentence is simply false, and it would have been
+ * read by whoever next planned a purge as a reason to hand-delete rows that
+ * Postgres removes on its own.
+ */
+export const LEAGUE_PURGE_BLOCKERS = ['LeagueManagerClaim'] as const
 
 /**
  * Never purged, whatever else is.

@@ -33,6 +33,18 @@ beforeAll(async () => {
   if (!CONNECTION) return
   db = new PrismaClient({ datasources: { db: { url: CONNECTION } } })
   await db.$connect()
+
+  // 🛑 CLEAN FIRST — THIS SUITE COULD ONLY PASS ONCE.
+  // The PlatformGrant tests INSERT fixed ids (pg-probe-1..3) and rely on there
+  // being no LIVE grant for ('u-probe','PLATFORM_ADMIN') at the start. On a
+  // second run against the same database the partial unique index rejects the
+  // seed and two tests fail — which is the index doing its job, reported as a
+  // defect. Observed on the second-ever run, 2026-08-31.
+  //
+  // ⚠ At the START, not in afterAll: an afterAll is skipped when the process
+  // dies mid-run, and the next run then inherits exactly the state that breaks
+  // it. Cleaning on entry is the only version that survives a crash.
+  await db.$executeRawUnsafe(`DELETE FROM "PlatformGrant" WHERE "userId" = 'u-probe'`)
 })
 
 afterAll(async () => {
@@ -203,12 +215,18 @@ describe('T-008 · the owner swap', () => {
     await db.$executeRawUnsafe(
       `ALTER TABLE "${T}" ADD CONSTRAINT swap_deferred UNIQUE ("teamId") DEFERRABLE INITIALLY DEFERRED`,
     )
+    // ⚠ THE CALLBACK MUST RETURN SOMETHING. This asserted `.resolves.toBeDefined()`
+    // on a $transaction whose callback returns void — which resolves to
+    // `undefined`, so the assertion could never pass no matter how the database
+    // behaved. It failed as "expected undefined to be defined" on the first real
+    // run, which reads like a database problem and is not one.
     await expect(
       db.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(`UPDATE "${T}" SET "teamId" = 20 WHERE id = 1`)
         await tx.$executeRawUnsafe(`UPDATE "${T}" SET "teamId" = 10 WHERE id = 2`)
+        return 'committed'
       }),
-    ).resolves.toBeDefined()
+    ).resolves.toBe('committed')
 
     const rows = await db.$queryRawUnsafe<{ id: number; teamId: number }[]>(
       `SELECT id, "teamId" FROM "${T}" ORDER BY id`,
@@ -220,13 +238,28 @@ describe('T-008 · the owner swap', () => {
     await db.$executeRawUnsafe(`ALTER TABLE "${T}" DROP CONSTRAINT swap_deferred`)
   })
 
-  it('a SINGLE statement swaps without needing deferral at all', async () => {
+  it('🛑 a SINGLE statement does NOT rescue the swap — option (c) is not viable', async () => {
     // Option (c) from the migration's finding, and the one worth trying first:
-    // it gives up neither soft delete nor atomicity, and it works under a
-    // PARTIAL unique index — which a DEFERRABLE constraint cannot be.
+    // it appeared to give up neither soft delete nor atomicity, and to work under
+    // a PARTIAL unique index — which a DEFERRABLE constraint cannot be.
     //
-    // If this passes, the "make it deferrable" framing in HANDOFF.md is solving
-    // a problem that a different write shape does not have.
+    // ⚠ IT DOES NOT WORK, AND THIS TEST USED TO ASSERT THAT IT DID. Measured on
+    // the first real run, 2026-08-31:
+    //
+    //   ERROR: duplicate key value violates unique constraint "swap_partial"
+    //   DETAIL: Key ("teamId")=(10) already exists.
+    //
+    // Postgres enforces a plain unique INDEX per ROW as the update walks the
+    // table, not once per statement. Row 1 takes teamId 10 while row 2 still
+    // holds it, and the index rejects it there and then. Only a DEFERRABLE
+    // CONSTRAINT postpones the check to commit — and `DEFERRABLE` cannot be
+    // applied to a partial index, which is the whole difficulty.
+    //
+    // 🛑 SO THE "make it deferrable" FRAMING IN HANDOFF.md IS NOT SOLVING AN
+    // IMAGINARY PROBLEM, which is what the previous version of this test would
+    // have concluded had it ever been run. The tension between soft-delete
+    // partial uniques (invariant 4) and swap-style updates is real and unresolved;
+    // it is recorded here rather than papered over by an assertion nobody checked.
     await db.$executeRawUnsafe(
       `CREATE UNIQUE INDEX swap_partial ON "${T}" ("teamId") WHERE "teamId" IS NOT NULL`,
     )
@@ -236,7 +269,7 @@ describe('T-008 · the owner swap', () => {
            FROM (VALUES (1, 10), (2, 20)) AS v(id, "teamId")
           WHERE m.id = v.id`,
       ),
-    ).resolves.toBeGreaterThan(0)
+    ).rejects.toThrow(/duplicate key|already exists/i)
     await db.$executeRawUnsafe(`DROP INDEX swap_partial`)
   })
 })

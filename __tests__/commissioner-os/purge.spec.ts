@@ -29,7 +29,32 @@ const MIGRATE_URL = process.env.COMMISH_MIGRATE_URL ?? process.env.DIRECT_URL
 
 let purge: PrismaClient
 let seed: PrismaClient
-const LEAGUE_ID = 'l-purge-probe'
+/**
+ * 🛑 UNIQUE PER RUN, AND NOT BY PREFERENCE — AuditEvent CANNOT BE CLEANED UP.
+ *
+ * Every other suite here made itself re-runnable by deleting its fixtures on
+ * entry. This one cannot: it asserts that an audit row SURVIVES the purge, and
+ * T-007's `audit_event_append_only` trigger refuses UPDATE and DELETE for every
+ * role including commish_migrate. There is deliberately no way to remove an
+ * audit row, which is the entire point of the ticket.
+ *
+ * So a fixed LEAGUE_ID accumulates one audit row per run and the assertions
+ * (`toBe(1)`, `toHaveLength(1)`) fail from the second run onward:
+ *
+ *     AssertionError: expected 2 to be 1
+ *
+ * Caught by running the suite twice in a row after it first went green - the
+ * first pass was on a database no previous run had touched, which is not the
+ * same thing as passing.
+ *
+ * ⚠ Date.now() is fine HERE. It is banned in workflow scripts because it breaks
+ * resume; a test fixture wants a fresh identity on every run, which is the same
+ * property viewed from the other side.
+ */
+const RUN = Date.now().toString(36)
+const LEAGUE_ID = `l-purge-probe-${RUN}`
+/** Owner of the probe league. Created by this suite, never a real account. */
+const USER_ID = `u-purge-probe-${RUN}`
 
 beforeAll(async () => {
   if (!PURGE_URL || !MIGRATE_URL) return
@@ -99,9 +124,27 @@ describe('T-009 · purging a populated league', () => {
     // Seed as commish_migrate — the purge role owns nothing and is granted
     // DELETE, not INSERT. Using it to seed would test a grant the purge is not
     // supposed to have.
+    // ⚠ leagues."userId" HAS A FOREIGN KEY TO app_users. Seeding with a made-up
+    // 'u-probe' failed with 23503 on leagues_userId_fkey. A probe user is
+    // created rather than borrowing a real one: this suite DELETES a league, and
+    // pointing a delete test at a real person's row is how a test becomes an
+    // incident. app_users requires id, email, username, updatedAt.
     await seed.$executeRawUnsafe(
-      `INSERT INTO "leagues" (id, "userId", platform, "platformLeagueId", season, "tenantId")
-       VALUES ('${LEAGUE_ID}', 'u-probe', 'probe', 'probe-1', 2026, 'allfantasy')
+      `INSERT INTO "app_users" (id, email, username, "updatedAt")
+       -- email and username are UNIQUE on app_users, so they carry the run
+       -- suffix too. A per-run id with a fixed email just moves the collision.
+       VALUES ('${USER_ID}', '${USER_ID}@example.invalid', '${USER_ID}', now())
+       ON CONFLICT (id) DO NOTHING`,
+    )
+
+    await seed.$executeRawUnsafe(
+      // ⚠ "updatedAt" IS REQUIRED AND HAS NO DEFAULT. Omitting it failed with a
+      // not-null violation whose message is a 150-column row dump - the offending
+      // column is not named, and the eye goes to "tenantId" at the end of it
+      // because that is the column this work added. It is not tenantId.
+      // The required set, measured: id, userId, platform, platformLeagueId, updatedAt.
+      `INSERT INTO "leagues" (id, "userId", platform, "platformLeagueId", season, "tenantId", "updatedAt")
+       VALUES ('${LEAGUE_ID}', '${USER_ID}', 'probe', 'probe-1', 2026, 'allfantasy', now())
        ON CONFLICT (id) DO NOTHING`,
     )
 

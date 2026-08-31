@@ -34,7 +34,22 @@ import { createMutationRunner } from '@/lib/domain/mutation'
 import { createActorContext } from '@/lib/domain/actorContext'
 import { ok } from '@/lib/domain/result'
 
-const CONNECTION = process.env.COMMISH_APP_URL ?? process.env.DIRECT_URL ?? process.env.DATABASE_URL
+// 🛑 MIGRATE, NOT APP — AND THE ORIGINAL CHOICE WAS SELF-CONTRADICTORY.
+// This suite creates a scratch table in beforeAll. It used to connect as
+// commish_app, which fails on the first statement:
+//
+//   ERROR: permission denied for schema public
+//
+// and that refusal is the architecture working, not a misconfiguration:
+// commish_app is granted SELECT/INSERT/UPDATE and deliberately never CREATE,
+// so a suite that needs DDL cannot be the app role by definition. Asking for
+// COMMISH_APP_URL here was asking for a role that must not be able to do this.
+//
+// Nothing under test needs it. The probe table carries no tenantId and no RLS
+// policy; the subject is SELECT … FOR UPDATE blocking and CONFLICT detection,
+// which are row-locking behaviours identical under any role. The tenant GUC is
+// still set on each transaction so the mutation wrapper behaves normally.
+const CONNECTION = process.env.COMMISH_MIGRATE_URL ?? process.env.DIRECT_URL ?? process.env.DATABASE_URL
 
 const TABLE = '_commish_t004_phase_probe'
 
@@ -83,7 +98,7 @@ afterAll(async () => {
 
 describe('T-004 · concurrency against Postgres', () => {
   it('has a connection string configured', () => {
-    expect(CONNECTION, 'Set COMMISH_APP_URL. Without it nothing below runs.').toBeTruthy()
+    expect(CONNECTION, 'Set COMMISH_MIGRATE_URL or DIRECT_URL. Without one nothing below runs.').toBeTruthy()
   })
 
   it('SELECT … FOR UPDATE actually blocks a competing transaction (positive control)', async () => {

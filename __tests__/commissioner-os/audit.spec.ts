@@ -90,13 +90,50 @@ describe('T-007 · AuditEvent is append-only', () => {
     // The app must still be able to write audit, or the mutation wrapper's
     // step 8 fails every mutation. A table nobody can write to is not
     // append-only, it is read-only.
-    await expect(
-      app.$executeRawUnsafe(
+    //
+    // ⚠ THE INSERT MUST RUN INSIDE A TENANT SCOPE, and originally it did not.
+    // AuditEvent's tenant_isolation_write policy is
+    // WITH CHECK ("tenantId" = nullif(current_setting('app.tenant_id', true), ''))
+    // so with no GUC set the check compares against NULL, fails, and the write
+    // is refused:
+    //
+    //   ERROR: new row violates row-level security policy for table "AuditEvent"
+    //
+    // The first run of this suite (2026-08-31) reported that as a FAILURE of
+    // "commish_app can INSERT", when it was actually RLS working exactly as
+    // designed. The bug was the test connecting as commish_app without ever
+    // saying which tenant it was acting for - something no real caller can do,
+    // because withTenant sets the GUC as its first statement.
+    //
+    // set_config(..., true) is transaction-local, so it must share the
+    // transaction with the INSERT - two separate $executeRawUnsafe calls can
+    // land on different pooled connections and the scope would be silently lost.
+    const inserted = await app.$transaction(async (tx: any) => {
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', 't-probe', true)`)
+      return tx.$executeRawUnsafe(
         `INSERT INTO "AuditEvent"
            ("tenantId","actorUserId","actorLabel","action","resourceType","resourceId","requestId")
          VALUES ('t-probe','u-probe','Probe','probe.insert','Probe','p2','req-probe')`,
-      ),
-    ).resolves.toBeGreaterThan(0)
+      )
+    })
+    expect(Number(inserted)).toBeGreaterThan(0)
+  })
+
+  it('🛑 and CANNOT insert into a tenant it is not scoped to', async () => {
+    // The control for the test above. Without this, "commish_app can INSERT"
+    // would pass just as happily against a table with no policy at all - it
+    // asserts a capability, and a capability test cannot detect a MISSING
+    // restriction. Same statement, same role, different tenant in the row.
+    await expect(
+      app.$transaction(async (tx: any) => {
+        await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', 't-probe', true)`)
+        return tx.$executeRawUnsafe(
+          `INSERT INTO "AuditEvent"
+             ("tenantId","actorUserId","actorLabel","action","resourceType","resourceId","requestId")
+           VALUES ('t-other','u-probe','Probe','probe.insert','Probe','p3','req-probe-2')`,
+        )
+      }),
+    ).rejects.toThrow()
   })
 
   it('commish_app cannot UPDATE', async () => {
