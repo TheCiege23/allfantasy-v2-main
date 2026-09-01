@@ -246,7 +246,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">12. Dispute Handling</h2>
         <p>
           Disputes between users (e.g., league or trade disputes) are between those users; we are not obligated to resolve them.
-          For disputes with us, you agree to seek resolution in good faith (e.g., by contacting legal@allfantasy.ai) before
+          For disputes with us, you agree to seek resolution in good faith (e.g., by contacting support@allfantasy.ai) before
           pursuing formal legal action. These Terms and any dispute are governed by the laws of the United States; you consent to
           the jurisdiction of courts of competent jurisdiction.
         </p>
@@ -358,7 +358,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
         <div className="mt-3 p-4 bg-white/5 rounded-xl border border-white/10">
           <p className="font-semibold text-white">AllFantasy</p>
-          <p className="text-white/60">Email: legal@allfantasy.ai</p>
+          <p className="text-white/60">Email: support@allfantasy.ai</p>
         </div>
       </section>
 

@@ -260,7 +260,7 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
           <p>
             We may update this policy; the &quot;last updated&quot; date changes with it, and
             continued use is acceptance. Contact{" "}
-            <a href="mailto:privacy@allfantasy.ai">privacy@allfantasy.ai</a>.
+            <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a>.
           </p>
         </section>
       </LegalGrid>

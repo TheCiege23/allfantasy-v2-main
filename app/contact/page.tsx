@@ -52,7 +52,7 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
         </p>
         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-white">AllFantasy Privacy Requests</p>
-          <p className="text-white/70">Email: privacy@allfantasy.ai</p>
+          <p className="text-white/70">Email: support@allfantasy.ai</p>
         </div>
       </section>
 
@@ -67,7 +67,7 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
         </p>
         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-white">AllFantasy Legal</p>
-          <p className="text-white/70">Email: legal@allfantasy.ai</p>
+          <p className="text-white/70">Email: support@allfantasy.ai</p>
         </div>
       </section>
 

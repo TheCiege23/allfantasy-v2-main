@@ -60,7 +60,7 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
         <ol className="af-legal-steps">
           <li className="af-legal-step">
             <span>
-              Email <a href="mailto:privacy@allfantasy.ai">privacy@allfantasy.ai</a> with the subject{" "}
+              Email <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a> with the subject{" "}
               <strong>Data Deletion Request</strong>. Include your email, username and any connected
               platform IDs so we can find your records.
             </span>
@@ -80,8 +80,8 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
         </ol>
 
         <p style={{ marginTop: 22 }}>
-          <a href="mailto:privacy@allfantasy.ai?subject=Data%20Deletion%20Request" className="af-legal-cta">
-            Email privacy@allfantasy.ai
+          <a href="mailto:support@allfantasy.ai?subject=Data%20Deletion%20Request" className="af-legal-cta">
+            Email support@allfantasy.ai
           </a>
         </p>
       </section>
@@ -134,7 +134,7 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
             <strong>AllFantasy Privacy Requests</strong>
           </p>
           <p style={{ margin: 0 }}>
-            Email: <a href="mailto:privacy@allfantasy.ai">privacy@allfantasy.ai</a>
+            Email: <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a>
           </p>
         </LegalBox>
       </section>
