@@ -206,11 +206,7 @@
     },
     {
       "path": "/api/cron/sleeper-historical-refresh",
-      "schedule": "20 3 * * *"
-    },
-    {
-      "path": "/api/cron/sleeper-historical-refresh",
-      "schedule": "20 15 * * *"
+      "schedule": "20 */4 * * *"
     }
   ]
 }
