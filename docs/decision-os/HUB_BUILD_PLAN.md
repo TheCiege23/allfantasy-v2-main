@@ -40,7 +40,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **4.1** `buildDecisionOsGroundingPacket()` | `lib/decision-os/grounding/packet.ts`. Shape read off the 15, not invented. Per-slice conclusiveness + remedy |
 | ✅ | **4.2** Wire into `/api/chat/chimmy` | Beside the existing packet, behind `DECISION_OS_GROUNDING_ENABLED`. Delta vs origin/main baseline: **0** |
 | ✅ | **4.3** Move orphaned grounding behind Decision OS | 8 graded + 3 ungraded, providers reused not rewritten. §2.16. Caught a bug in my own devy adapter |
-| ⬜ | **4.4** No-fact rule | |
+| ✅ | **4.4** No-fact rule | `not_entitled` had NO producer — the resolver collapsed 5 reasons to null. Fixed additively; composes with the prompt's existing confidence scheme |
 | ⬜ | **4.5** Retire duplicate routes | |
 | ⬜ | **5.1** Internal proof surface | |
 | ⬜ | **5.2** Entitlement + degradation pass | |

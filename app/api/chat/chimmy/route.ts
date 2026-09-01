@@ -1612,6 +1612,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           userId,
           sport: normalizeToSupportedSport(sport),
           season: season ?? new Date().getFullYear(),
+          question: message,
           want: { projections: true, leagueRules: true },
         })
           .then((packet) => {

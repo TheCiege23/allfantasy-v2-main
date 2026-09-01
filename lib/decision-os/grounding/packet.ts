@@ -5,6 +5,10 @@ import { createValueOsLoaders } from '../value-os'
 import { createProjectionOsLoaders } from '../projection-os'
 import { createLeagueOsLoaders } from '../league-os'
 import { ChimmyContextEngine } from '@/lib/chimmy-context/ChimmyContextEngine'
+import {
+  resolveCommissionerGroundingOutcome,
+  type CommissionerGroundingOutcome,
+} from '@/lib/intelligence/chimmy/resolveChimmyGrounding'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
@@ -141,6 +145,18 @@ export interface DecisionOsGroundingPacket {
   contextLookups: ContextLookups | null
 
   /**
+   * Commissioner intelligence (4.4) — the only slice with its OWN access rule, and therefore the
+   * only real producer of `not_entitled`.
+   *
+   * ⚠ AI ENTITLEMENT IS NOT THIS. `SubscriptionContextSlice.hasAccess` gates the whole chat turn
+   * upstream via `requireFeatureEntitlement`, so by the time a packet is built the user is already
+   * entitled to talk to Chimmy at all. A per-slice `not_entitled` for that would never fire.
+   * Commissioner intelligence is different: an entitled user may simply not be THIS league's
+   * commissioner, which is a permission gap inside a permitted conversation.
+   */
+  commissionerIntelligence: GroundedSlice<string>
+
+  /**
    * Every gap on the packet, flattened.
    *
    * ⚠ SO A PROMPT DOES NOT HAVE TO WALK THE TREE TO FIND THEM. A gap that is technically present
@@ -218,6 +234,8 @@ export interface GroundingPacketArgs {
   week?: number | null
   /** Market value format, when the question touches player prices. */
   valueFormat?: { format: string; qbFormat: string } | null
+  /** The user's question, so the commissioner-intelligence intent gate can run. */
+  question?: string | null
   /** This league's IDP rules, so projections arrive rescored. Null = canonical. */
   leagueIdpRules?: Record<string, number> | null
   /** Which slices the question actually needs. Omitted slices report `not_requested`. */
@@ -406,8 +424,41 @@ export async function buildDecisionOsGroundingPacket(
     }
   }
 
+  // ── Commissioner intelligence (4.4): the one slice with its own access rule ────────────────
+  let commissionerIntelligence: GroundedSlice<string> = absent(NOT_REQUESTED)
+  if (leagueId && args.userId) {
+    const outcome = await resolveCommissionerGroundingOutcome({
+      leagueId,
+      userId: args.userId,
+      question: args.question ?? null,
+    }).catch((): CommissionerGroundingOutcome => ({ status: 'unavailable' }))
+
+    if (outcome.status === 'ok') {
+      commissionerIntelligence = present(outcome.text, {
+        servedFrom: 'live',
+        conclusive: verdictFor('managerBehaviour'),
+      })
+    } else if (outcome.status === 'not_entitled') {
+      commissionerIntelligence = absent({
+        reason: 'not_entitled',
+        detail: 'Commissioner intelligence for this league is only available to its commissioner.',
+        // ⚠ A remedy that is honest about there being nothing the user can do themselves. An
+        // invented "try again" here would be worse than saying so.
+        remedy: 'Ask the league commissioner, who can see it.',
+      })
+    } else if (outcome.status === 'unavailable') {
+      commissionerIntelligence = absent({
+        reason: 'not_computed',
+        detail: 'Commissioner intelligence was requested and could not be produced.',
+        remedy: 'It is retried on the next question; recorded league activity also has to exist for it.',
+      })
+    }
+    // `not_asked` leaves NOT_REQUESTED, which collectGaps excludes — the question was not about it.
+  }
+
   const slices: Array<[string, GroundedSlice<unknown>]> = [
     ['importAssertions', importSlice as GroundedSlice<unknown>],
+    ['commissionerIntelligence', commissionerIntelligence as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -428,6 +479,7 @@ export async function buildDecisionOsGroundingPacket(
     projections,
     contextFacts,
     contextLookups,
+    commissionerIntelligence,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,
