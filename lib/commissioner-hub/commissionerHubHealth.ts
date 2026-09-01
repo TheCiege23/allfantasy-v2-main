@@ -8,6 +8,9 @@ import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
 import { attachSavedAnalysis, leaguesWithSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
+// From the module rather than the behavioral barrel: the barrel re-exports the whole
+// subsystem and this file needs exactly one provider from it.
+import { realDataProvider } from '@/lib/decision-os/behavioral/api/real-data-provider'
 import type { CanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/types'
 
 export type CommissionerHealthDataConfidence = 'high' | 'medium' | 'low'
@@ -96,6 +99,37 @@ export type CommissionerLeagueHealthSnapshot = {
    * it would repoint every one of those dashboards at a different question.
    */
   engagementScore: number
+  /**
+   * PARTICIPATION — how many managers are still playing, and how deeply (6.1 step A).
+   *
+   * The other question. `engagementScore` above measures throughput; this measures people, from
+   * `deriveLeagueBehavioralIntelligence`. D10 chose this one as the answer to "is my league
+   * healthy", and this field is how a surface can adopt it.
+   *
+   * 🛑 NULL MEANS UNKNOWN AND NEVER ZERO, WHICH IS THE WHOLE REASON IT IS NULLABLE.
+   * Measured: given no events at all, the derivation returns `leagueEngagementScore: 0`,
+   * `tier: 'dormant'`, `retentionRisk: 'critical'` — an absence of data rendered as a confident
+   * death sentence. That is the `devyValueBoard` failure this plan opens with (zero-not-null for
+   * 1,455 of 1,718 players, so 85% of a board read as "worthless"). So the loader refuses unless
+   * `completeness > 0` and at least one manager is known, and a surface that renders this must
+   * treat null as "we do not know" rather than substituting the activity score silently.
+   *
+   * ⚠ IT IS OFF BY DEFAULT. `getLeagueIntelligence` costs FOUR prisma queries per league, and the
+   * `isLive` block below records that this repo has already taken a production Postgres OOM
+   * (53200) from an unbounded per-league fan-out. So it is gated on
+   * `COMMISSIONER_PARTICIPATION_ENABLED` and runs with bounded concurrency — never one promise
+   * per league.
+   */
+  participation: {
+    /** 0–100. Participation breadth 50 % + average manager depth 50 %. */
+    score: number
+    /** elite | active | moderate | passive | dormant, derived from the same inputs. */
+    tier: string
+    activeManagers: number
+    totalManagers: number
+    /** 0–100 honest coverage of the events behind it. Carried so a surface can caveat. */
+    completeness: number
+  } | null
   fairnessScore: number
   sustainabilityScore: number
   overallStatus: OverallStatus
@@ -718,6 +752,13 @@ export function buildCommissionerHealthSnapshot(
     dataConfidence,
     healthScore: health.leagueHealthScore,
     engagementScore: health.engagementScore,
+    /*
+     * Null here always. This builder is SYNCHRONOUS and takes its league as an argument — it has
+     * no database access, so it cannot know participation. `getCommissionerHubHealthForUser`
+     * attaches it afterwards when the gate is on. Defaulting to anything but null would be this
+     * file inventing a number it has no source for.
+     */
+    participation: null,
     fairnessScore: health.fairnessScore,
     sustainabilityScore: health.sustainabilityScore,
     overallStatus: health.overallStatus,
@@ -772,6 +813,56 @@ function buildDashboardFallbackLeague(league: UserLeague): LeagueHealthRow {
     settings: league.settings ?? {},
     rosters: [],
   }
+}
+
+/**
+ * Participation, for the leagues that can actually answer (6.1 step A).
+ *
+ * ⚠ OFF BY DEFAULT AND BOUNDED, FOR A REASON THIS FILE ALREADY RECORDS. `getLeagueIntelligence`
+ * issues FOUR prisma queries per league, and the `isLive` block below documents a production
+ * Postgres OOM (53200) taken from an unbounded per-league fan-out. An unguarded
+ * `Promise.all(leagueIds.map(...))` here would be 4N concurrent queries on a dashboard path —
+ * the same mistake with a bigger multiplier.
+ *
+ * 🛑 AND IT REFUSES RATHER THAN REPORTING ZERO. Measured: with no events at all the derivation
+ * returns score 0, tier 'dormant', retentionRisk 'critical'. A league nobody has synced would be
+ * told it is dying. `completeness` is the signal that separates "nobody is playing" from "we have
+ * not looked", and it is the only reason this can be surfaced at all.
+ */
+// Exported for its tests. The refusal below is the whole contract and a rule nothing
+// exercises is a comment.
+export async function loadParticipationByLeague(
+  leagueIds: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Map<string, CommissionerLeagueHealthSnapshot['participation']>> {
+  const out = new Map<string, CommissionerLeagueHealthSnapshot['participation']>()
+  if (String(env['COMMISSIONER_PARTICIPATION_ENABLED'] ?? '').trim().toLowerCase() !== 'true') {
+    return out
+  }
+
+  // Serial in chunks rather than one promise per league. Two at a time keeps the worst case at
+  // eight concurrent queries regardless of how many leagues a commissioner runs.
+  const CONCURRENCY = 2
+  for (let i = 0; i < leagueIds.length; i += CONCURRENCY) {
+    const chunk = leagueIds.slice(i, i + CONCURRENCY)
+    await Promise.all(
+      chunk.map(async (leagueId) => {
+        const intel = await realDataProvider.getLeagueIntelligence(leagueId).catch(() => null)
+        if (!intel) return
+        const dist = intel.participationDistribution
+        // The refusal. Both conditions mean "we have nothing", not "there is nothing".
+        if (intel.completeness <= 0 || dist.totalManagers === 0) return
+        out.set(leagueId, {
+          score: intel.leagueEngagementScore,
+          tier: intel.leagueEngagementTier,
+          activeManagers: dist.activeManagers,
+          totalManagers: dist.totalManagers,
+          completeness: intel.completeness,
+        })
+      }),
+    )
+  }
+  return out
 }
 
 export async function getCommissionerHubHealthForUser(
@@ -896,6 +987,10 @@ export async function getCommissionerHubHealthForUser(
       }),
     )
 
+    // Gated and bounded — see loadParticipationByLeague. Empty map when the gate is off, so
+    // this costs nothing and every snapshot keeps `participation: null`.
+    const participationByLeague = await loadParticipationByLeague(leagueIds)
+
     const snapshots = leagueIds.map((leagueId) => {
       const dbLeague = dbById.get(leagueId)
       if (!dbLeague) return fallbackById.get(leagueId)!
@@ -917,6 +1012,11 @@ export async function getCommissionerHubHealthForUser(
           openAiAlerts: countMapValue(openAiAlerts, leagueId),
         },
       })
+    }).map((snap) => {
+      // `?? null` rather than leaving the key off: a surface reading this must see an explicit
+      // "we do not know" rather than a missing field it might coerce to zero.
+      const participation = participationByLeague.get(snap.leagueId) ?? null
+      return participation ? { ...snap, participation } : snap
     })
 
     // Decision OS Slice 4 — commissioner.league.health shadow/live runner. Assessment only;

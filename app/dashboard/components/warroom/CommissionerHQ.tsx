@@ -66,6 +66,16 @@ export function CommissionerHQ({
   const alerts = snapshot?.alerts ?? []
   const recommendations = snapshot?.recommendations ?? []
   const healthStatus = snapshot?.overallStatus ?? 'unknown'
+  /*
+   * 6.1 step A — PARTICIPATION when we know it, activity when we do not.
+   *
+   * ⚠ One value, read by both the ring and the chip below. They already shared a source; this
+   * keeps that true rather than letting one encoding drift onto the other question.
+   *
+   * ⚠ `participation` is null and never 0 when event coverage cannot support the claim, so a
+   * league nobody has synced keeps showing activity instead of being told it is dormant.
+   */
+  const engagementDisplay = snapshot?.participation?.score ?? snapshot?.engagementScore ?? 0
 
   const actionItems: { key: string; label: string; href: string }[] = []
   if (pendingTrades > 0) {
@@ -162,15 +172,28 @@ export function CommissionerHQ({
               scores into the section's headline visualization. */}
           <div className="mb-3 flex flex-wrap items-center justify-around gap-2 rounded-xl border border-white/[0.05] bg-black/20 px-2 py-3">
             <ChampionshipGauge percent={snapshot.healthScore} label={t('dashboard.warroom.commissionerHQ.health.overallScore')} accent={scoreAccent(snapshot.healthScore)} size={62} />
-            {/* Engagement's ring and the "Engagement" StatChip below both read snapshot.engagementScore
-                directly (one canonical source) — previously the StatChip read a separate, merely-copied
-                metrics.leagueEngagement field with no visual link between the two encodings. */}
+            {/* The ring and the "Engagement" StatChip below read ONE canonical value — previously
+                the StatChip read a separate, merely-copied metrics.leagueEngagement field with no
+                visual link between the two encodings. That value is now `engagementDisplay`:
+                participation when known, activity otherwise. See its declaration above.
+
+                ⚠ THE LABEL ALREADY PROMISED PARTICIPATION. `…health.engagementScore` renders as
+                "Participación" and "参与度" in the Spanish and Chinese translations, so the word
+                has meant participation for three of five locales all along while the number
+                underneath was transaction throughput. This makes them agree.
+
+                ⚠ AND THE FALLBACK IS A DIFFERENT QUESTION, so the title says which one answered
+                rather than substituting in silence. */}
             <Link
               href="/commissioner-hub"
-              title={t('dashboard.warroom.commissionerHQ.health.engagementWhy')}
+              title={
+                snapshot.participation
+                  ? `${t('dashboard.warroom.commissionerHQ.health.engagementWhy')} — ${snapshot.participation.activeManagers}/${snapshot.participation.totalManagers} · ${snapshot.participation.completeness}%`
+                  : t('dashboard.warroom.commissionerHQ.health.engagementWhy')
+              }
               className="rounded-xl transition hover:bg-white/[0.04]"
             >
-              <ChampionshipGauge percent={snapshot.engagementScore} label={t('dashboard.warroom.commissionerHQ.health.engagementScore')} accent={scoreAccent(snapshot.engagementScore)} size={62} />
+              <ChampionshipGauge percent={engagementDisplay} label={t('dashboard.warroom.commissionerHQ.health.engagementScore')} accent={scoreAccent(engagementDisplay)} size={62} />
             </Link>
             <ChampionshipGauge percent={snapshot.fairnessScore} label={t('dashboard.warroom.commissionerHQ.health.fairnessScore')} accent={scoreAccent(snapshot.fairnessScore)} size={62} />
             <ChampionshipGauge percent={snapshot.sustainabilityScore} label={t('dashboard.warroom.commissionerHQ.health.sustainabilityScore')} accent={scoreAccent(snapshot.sustainabilityScore)} size={62} />
@@ -188,7 +211,7 @@ export function CommissionerHQ({
             />
             <StatChip label={t('dashboard.warroom.commissionerHQ.health.tradeActivity')} value={snapshot.metrics.tradeActivity} />
             <StatChip label={t('dashboard.warroom.commissionerHQ.health.waiverActivity')} value={snapshot.metrics.waiverActivity} />
-            <StatChip label={t('dashboard.warroom.commissionerHQ.health.engagement')} value={snapshot.engagementScore} />
+            <StatChip label={t('dashboard.warroom.commissionerHQ.health.engagement')} value={engagementDisplay} />
           </div>
         </div>
       ) : null}
