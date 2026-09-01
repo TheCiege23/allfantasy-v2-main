@@ -159,6 +159,22 @@ export async function GET(request: NextRequest) {
       slicesTotal: packet.meta.sources.length,
       gaps: packet.gaps.length,
       gapReasons: [...new Set(packet.gaps.map((g) => g.reason))],
+      /**
+       * Where the time went, worst first.
+       *
+       * ⚠ THE PACKET JSON IS THOUSANDS OF LINES AND `buildMs` IS ONE NUMBER AT THE TOP OF IT.
+       * Measured on two live leagues 2026-09-01: 5354ms and 6178ms against the chat route's
+       * 3000ms ceiling — so Chimmy builds this packet and throws it away on every turn, which
+       * from outside is indistinguishable from the feature being off. Knowing THAT is useless
+       * without knowing which provider to cut, and the engine had already measured every one of
+       * them. This is that measurement, surfaced where a person will actually read it.
+       */
+      engineMs: packet.meta.engineMs,
+      slowestSlices: [...packet.meta.sources]
+        .filter((x): x is typeof x & { ms: number } => typeof x.ms === 'number')
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 5)
+        .map((x) => `${x.slice}: ${x.ms}ms`),
     },
   })
 }

@@ -209,8 +209,10 @@ export interface DecisionOsGroundingPacket {
 
   meta: {
     durationMs: number
+    /** Time inside the single `ChimmyContextEngine.loadContext` call; null when no league is in scope. */
+    engineMs: number | null
     /** Per-slice feed outcomes, mirroring `ChimmyContextBundle.meta.providers`. */
-    sources: Array<{ slice: string; servedFrom: string | null; ok: boolean }>
+    sources: Array<{ slice: string; servedFrom: string | null; ok: boolean; ms: number | null }>
     /**
      * Feeds an operator has switched off (5.3).
      *
@@ -249,6 +251,100 @@ const NOT_REQUESTED: GroundingGap = {
  * `{}` as absent risks declaring a REAL fact missing, which is a lie in the more damaging
  * direction. Under-refusing is recoverable; fabricating an absence is not.
  */
+/**
+ * The `ChimmyContextEngine` provider names, spelled as the engine registers them.
+ *
+ * ── 🛑 THIS EXISTS BECAUSE TWO OF THEM WERE WRONG AND NOTHING SAID SO ───────────────────────
+ * `grade()` looked its provider up by a plain `string`. Two calls missed — `'rankings'` for
+ * `ranking`, `'importHistory'` for `importedHistory` — so `servedBy.get()` returned `undefined`
+ * for both, every time, since the slices were written.
+ *
+ * A miss is indistinguishable from a healthy provider, which is why it survived:
+ *   - `p?.cached` undefined  → `servedFrom` reported `'live'` for what may have been a cache hit
+ *   - `p?.error` undefined   → a provider that THREW was reported as "no data is available for
+ *                              this league", with the remedy for an empty league rather than the
+ *                              remedy for a broken provider
+ *
+ * Both wrong in the reassuring direction. Same family as the `pgrep`-127 and the `\s+`→`s+`
+ * regex already recorded in CLAUDE.md: a lookup that fails returns a plausible value.
+ *
+ * ⚠ The union is duplicated here rather than imported because `ChimmyContextEngine.providers` is
+ * `private`, so `keyof …["providers"]` is not reachable from this module, and the exported
+ * `ProviderName` in `intent/ProviderSelector.ts` is a DIFFERENT, SHORTER list (no `replayInsights`,
+ * no `devy`) — using it would have type-errored the two slices that were spelled correctly.
+ * `__tests__/decision-os/grounding-provider-names.test.ts` pins this against the engine's own
+ * registry so the duplication cannot drift silently, which is the whole failure above.
+ */
+type EngineProviderName =
+  | 'matchup'
+  | 'roster'
+  | 'standings'
+  | 'ranking'
+  | 'leagueDifficulty'
+  | 'importedHistory'
+  | 'replayInsights'
+  | 'devy'
+
+/**
+ * The ONE place a packet slice key and its engine provider name differ, so `meta.sources[].ms` can
+ * find its timing. Kept to genuine differences only — an entry per slice would be a second copy of
+ * the registry, which is the duplication that produced the typos above in the first place.
+ */
+const SLICE_TO_PROVIDER: Record<string, EngineProviderName> = { rankings: 'ranking' }
+
+/**
+ * ⚠ A ROSTER WHOSE EVERY NAME IS ITS OWN PLAYER ID IS NOT A ROSTER — AND IT GRADED ITSELF FINE.
+ *
+ * `RosterContextProvider.toRosterPlayerLite` falls back to `?? playerId` when the upstream row
+ * carries no name. Measured against a live dynasty league on 2026-09-01, all 27 players came back
+ * as `{ playerId: '6804', name: '6804', position: 'UTIL', team: null }` — and the slice still
+ * reported `present: true, conclusive: { ok: true }, gap: null`.
+ *
+ * That is precisely the P2 violation this packet exists to prevent: an unsourced value (a name we
+ * do not have) rendered as a fact (a name). A model asked "should I start my flex" and handed that
+ * has nothing to reason over and no way to tell.
+ *
+ * 🛑 IT IS GRADED PRESENT-BUT-INCONCLUSIVE, NOT ABSENT, AND THE DISTINCTION IS THE POINT. The
+ * roster IS there — the counts, the depth, the starter/bench split are all real and worth having.
+ * Dropping the slice would destroy true information to punish a false field. Present-but-
+ * inconclusive is the shape `toEvidencePacket` already turns into a `not_safe_to_act_on` signal,
+ * so this reaches three-brain as "you have a roster, you do not have who is on it".
+ */
+function withResolvedIdentity(slice: GroundedSlice<unknown>): GroundedSlice<unknown> {
+  if (!slice.present) return slice
+  const v = slice.value as { starters?: unknown; bench?: unknown } | null
+  const players = [
+    ...(Array.isArray(v?.starters) ? v!.starters : []),
+    ...(Array.isArray(v?.bench) ? v!.bench : []),
+  ] as Array<{ playerId?: unknown; name?: unknown }>
+
+  // No players at all is a different complaint, and `hasSubstance` already owns it.
+  if (players.length === 0) return slice
+  const named = players.filter((pl) => typeof pl?.name === 'string' && pl.name !== pl.playerId)
+  if (named.length > 0) return slice
+
+  const gap: GroundingGap = {
+    reason: 'unresolved_identity',
+    detail: `The roster holds ${players.length} players but none resolved to a name — every entry is its own player id.`,
+    remedy: 'The league needs a player-identity re-sync; until then the roster can be counted but not read.',
+  }
+  /*
+   * The blocker's assertion is `identity` — already a member of `ConclusivenessAssertion`, which
+   * means this failure was anticipated by the conclusiveness model and simply never wired to a
+   * producer. The gap and the blocker carry the same detail and remedy on purpose: a reader who
+   * reaches this through `conclusive.blockedBy` and one who reaches it through `gap` must not be
+   * told two different stories about the same fact.
+   */
+  return {
+    ...slice,
+    conclusive: {
+      ok: false,
+      blockedBy: [{ assertion: 'identity', detail: gap.detail, remedy: gap.remedy }],
+    },
+    gap,
+  }
+}
+
 function hasSubstance<T>(v: T | null | undefined): v is T {
   if (v == null) return false
   if (Array.isArray(v)) return v.length > 0
@@ -468,6 +564,21 @@ export async function buildDecisionOsGroundingPacket(
   // ── The eight graded context slices, and the three ungraded lookups (4.3) ─────────────────
   let contextFacts: ContextFacts | null = null
   let contextLookups: ContextLookups | null = null
+  /*
+   * ⚠ `meta.durationMs` ALONE CANNOT BE ACTED ON, WHICH IS WHY THESE EXIST.
+   *
+   * The proof surface measured 5354ms and 6178ms against the chat route's 3000ms ceiling on two
+   * live leagues (2026-09-01) — so Chimmy pays to build this packet and then discards it on every
+   * turn, which from outside is indistinguishable from the feature being switched off. A single
+   * total says that is happening and nothing about where to cut.
+   *
+   * `engineMs` splits the one `loadContext` call from everything else, and `sliceMs` carries the
+   * engine's OWN per-provider `durationMs` — already measured, previously thrown away. Together
+   * they turn "it is too slow" into a named provider, which is the difference between fixing this
+   * and guessing at it.
+   */
+  const sliceMs = new Map<string, number | null>()
+  let engineMs: number | null = null
 
   const contextKill = killed('contextFacts')
   if (args.userId && leagueId && contextKill) {
@@ -489,19 +600,22 @@ export async function buildDecisionOsGroundingPacket(
      * is what "moving the providers behind Decision OS" means; calling each provider separately
      * would discard the caching and the isolation it already does correctly.
      */
+    const engineStartedAt = Date.now()
     const bundle = await new ChimmyContextEngine()
       .loadContext({ userId: args.userId, leagueId, week: args.week ?? null })
       .catch(() => null)
+    engineMs = Date.now() - engineStartedAt
 
     if (bundle) {
       // `meta.providers[].cached` is the engine's own answer to "was this served warm".
       const servedBy = new Map(bundle.meta.providers.map((p) => [p.name, p]))
       const grade = (
-        name: string,
+        name: EngineProviderName,
         value: unknown,
         profile: FactProfileName,
       ): GroundedSlice<unknown> => {
         const p = servedBy.get(name)
+        sliceMs.set(name, p?.durationMs ?? null)
         if (!hasSubstance(value)) {
           /*
            * ⚠ THE REASON IS `not_computed` EITHER WAY, AND THAT IS CORRECT RATHER THAN LAZY: a
@@ -538,11 +652,11 @@ export async function buildDecisionOsGroundingPacket(
        */
       contextFacts = {
         matchup: grade('matchup', bundle.matchup, 'lineupDecision'),
-        roster: grade('roster', bundle.roster, 'lineupDecision'),
+        roster: withResolvedIdentity(grade('roster', bundle.roster, 'lineupDecision')),
         standings: grade('standings', bundle.standings, 'standings'),
-        rankings: grade('rankings', bundle.rankings, 'standings'),
+        rankings: grade('ranking', bundle.rankings, 'standings'),
         leagueDifficulty: grade('leagueDifficulty', bundle.leagueDifficulty, 'standings'),
-        importedHistory: grade('importHistory', bundle.importedHistory, 'managerBehaviour'),
+        importedHistory: grade('importedHistory', bundle.importedHistory, 'managerBehaviour'),
         replayInsights: grade('replayInsights', bundle.replayInsights, 'managerBehaviour'),
         devy: grade('devy', bundle.devy, 'globalPlayerValue'),
       }
@@ -724,7 +838,14 @@ export async function buildDecisionOsGroundingPacket(
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,
-      sources: slices.map(([slice, s]) => ({ slice, servedFrom: s.servedFrom, ok: s.present })),
+      engineMs,
+      sources: slices.map(([slice, s]) => ({
+        slice,
+        servedFrom: s.servedFrom,
+        ok: s.present,
+        // Null where nothing timed it: the engine keys on ITS provider name, not the packet's.
+        ms: sliceMs.get(slice) ?? sliceMs.get(SLICE_TO_PROVIDER[slice] ?? slice) ?? null,
+      })),
       killedFeeds: flags.killed,
     },
   }
