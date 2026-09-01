@@ -1,0 +1,27 @@
+{
+  "type": "AdaptiveCard",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "${title}",
+      "size": "Medium",
+      "weight": "Bolder",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "${subtitle}",
+      "isSubtle": true,
+      "wrap": true,
+      "spacing": "None"
+    }
+  ],
+  "actions": [
+    { "type": "Action.OpenUrl", "title": "${leagues.label}", "url": "${leagues.url}" },
+    { "type": "Action.OpenUrl", "title": "${week.label}", "url": "${week.url}" },
+    { "type": "Action.OpenUrl", "title": "${live.label}", "url": "${live.url}" },
+    { "type": "Action.OpenUrl", "title": "${waivers.label}", "url": "${waivers.url}" }
+  ]
+}

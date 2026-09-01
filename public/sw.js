@@ -409,3 +409,90 @@ async function refreshSportsFeed() {
 }
 
 console.log(`[${APP_NAME} SW] Script loaded - ${CACHE_VER}`);
+
+/*
+ * ---------------------------------------------------------------------------
+ * Windows Widgets (the `widgets` entry in manifest.webmanifest)
+ * ---------------------------------------------------------------------------
+ *
+ * ⚠ THE MANIFEST ENTRY IS ONE THIRD OF A WIDGET. Declaring `widgets` without
+ * these handlers gets the widget INSTALLED and then left permanently blank —
+ * the OS has a template and a data URL but nothing ever calls
+ * `widgets.updateByInstanceId`, so nothing renders. That fails silently and
+ * looks like a broken app rather than a missing feature. The three pieces are:
+ *
+ *   manifest.webmanifest        declares tag / template / data
+ *   public/widgets/<tag>.ac.json     the Adaptive Card
+ *   app/api/widgets/<tag>/route.ts   the data the card binds to
+ *
+ * Ship them together or not at all.
+ *
+ * `self.widgets` exists only on user agents that implement the Widgets API
+ * (Windows 11 via Edge today). Every handler below is registered behind a
+ * feature check so this file stays valid on every other browser, where these
+ * events simply never fire.
+ */
+
+async function renderWidget(widget) {
+  if (!widget?.definition) return;
+
+  try {
+    const [templateRes, dataRes] = await Promise.all([
+      fetch(widget.definition.msAcTemplate),
+      fetch(widget.definition.data),
+    ]);
+
+    /*
+     * Read the status rather than trusting the promise resolving. `fetch` only
+     * rejects on a network error — a 404 on the template resolves happily and
+     * would hand the host the string "<!DOCTYPE html>..." to parse as an
+     * Adaptive Card. This repo has the same lesson written down twice already:
+     * a check that cannot fail reads as a pass.
+     */
+    if (!templateRes.ok || !dataRes.ok) {
+      console.warn(
+        `[${APP_NAME} SW] Widget assets unavailable:`,
+        `template=${templateRes.status}`,
+        `data=${dataRes.status}`
+      );
+      return;
+    }
+
+    const [template, data] = await Promise.all([templateRes.text(), dataRes.text()]);
+    await self.widgets.updateByInstanceId(widget.instanceId, { template, data });
+  } catch (err) {
+    console.warn(`[${APP_NAME} SW] Widget render failed:`, err?.message ?? err);
+  }
+}
+
+if ('widgets' in self) {
+  self.addEventListener('widgetinstall', (event) => {
+    event.waitUntil(renderWidget(event.widget));
+  });
+
+  // Fires when the host wakes a widget that was already installed.
+  self.addEventListener('widgetresume', (event) => {
+    event.waitUntil(renderWidget(event.widget));
+  });
+
+  /*
+   * Nothing is persisted per widget instance — the card is rebuilt from the
+   * template and the endpoint every time — so there is nothing to tear down.
+   * The handler is still registered: without it the host has no acknowledgement
+   * that the uninstall was received.
+   */
+  self.addEventListener('widgetuninstall', (event) => {
+    console.log(`[${APP_NAME} SW] Widget uninstalled: ${event.widget?.definition?.tag}`);
+  });
+
+  /*
+   * Only CUSTOM verbs reach here. Every action on this card is an
+   * Action.OpenUrl, which the host opens itself — so this fires for nothing
+   * today and exists so a future verb cannot be added without a handler.
+   */
+  self.addEventListener('widgetclick', (event) => {
+    if (event.action) {
+      console.log(`[${APP_NAME} SW] Widget action: ${event.action}`);
+    }
+  });
+}
