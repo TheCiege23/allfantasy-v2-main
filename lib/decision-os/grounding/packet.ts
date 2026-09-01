@@ -9,6 +9,8 @@ import {
   resolveCommissionerGroundingOutcome,
   type CommissionerGroundingOutcome,
 } from '@/lib/intelligence/chimmy/resolveChimmyGrounding'
+import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/leagueIntelligenceGrounding'
+import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
@@ -155,6 +157,20 @@ export interface DecisionOsGroundingPacket {
    * commissioner, which is a permission gap inside a permitted conversation.
    */
   commissionerIntelligence: GroundedSlice<string>
+
+  /**
+   * The other two `lib/intelligence/chimmy/*` resolvers (4.5), completing the fifteen.
+   *
+   * ⚠ BOTH COLLAPSE TO `string | null` AND ARE ABSORBED AS-IS, WHICH IS A DELIBERATE STOP.
+   * `leagueIntelligenceGrounding` returns null for "not your league" AND for "no data";
+   * `portfolioGrounding` for "no user" AND "no imported leagues". The commissioner resolver got a
+   * reason-preserving variant in 4.4 because its permission case is one a user would recognise and
+   * act on — "you are not this league's commissioner". These two are not: the route already runs
+   * `assertLeagueMember` upstream, so their access branches are defensive rather than reachable in
+   * normal use. Splitting them would add two unions to satisfy a symmetry nobody benefits from.
+   */
+  leagueIntelligence: GroundedSlice<string>
+  portfolio: GroundedSlice<string>
 
   /**
    * Every gap on the packet, flattened.
@@ -456,9 +472,36 @@ export async function buildDecisionOsGroundingPacket(
     // `not_asked` leaves NOT_REQUESTED, which collectGaps excludes — the question was not about it.
   }
 
+  // ── The other two resolvers (4.5) ─────────────────────────────────────────────────────────
+  const [leagueIntelText, portfolioText] = await Promise.all([
+    leagueId && args.userId
+      ? resolveLeagueIntelligenceGrounding({ leagueId, userId: args.userId }).catch(() => null)
+      : Promise.resolve(null),
+    args.userId ? resolvePortfolioGrounding({ userId: args.userId }).catch(() => null) : Promise.resolve(null),
+  ])
+
+  const leagueIntelligence: GroundedSlice<string> = leagueIntelText
+    ? present(leagueIntelText, { servedFrom: 'live', conclusive: verdictFor('standings') })
+    : absent({
+        reason: 'not_computed',
+        detail: 'No league intelligence brief could be built for this league.',
+        remedy: 'It needs recorded league activity — trades, matchups, valuations — to summarise.',
+      })
+
+  const portfolio: GroundedSlice<string> = portfolioText
+    ? // Cross-league by nature: one league's import cannot bear on it, so no verdict applies.
+      present(portfolioText, { servedFrom: 'live', conclusive: { ok: true } })
+    : absent({
+        reason: 'not_computed',
+        detail: 'No cross-league snapshot is available.',
+        remedy: 'Import at least one league and it appears.',
+      })
+
   const slices: Array<[string, GroundedSlice<unknown>]> = [
     ['importAssertions', importSlice as GroundedSlice<unknown>],
     ['commissionerIntelligence', commissionerIntelligence as GroundedSlice<unknown>],
+    ['leagueIntelligence', leagueIntelligence as GroundedSlice<unknown>],
+    ['portfolio', portfolio as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -480,6 +523,8 @@ export async function buildDecisionOsGroundingPacket(
     contextFacts,
     contextLookups,
     commissionerIntelligence,
+    leagueIntelligence,
+    portfolio,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

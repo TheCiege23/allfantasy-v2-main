@@ -41,7 +41,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **4.2** Wire into `/api/chat/chimmy` | Beside the existing packet, behind `DECISION_OS_GROUNDING_ENABLED`. Delta vs origin/main baseline: **0** |
 | ✅ | **4.3** Move orphaned grounding behind Decision OS | 8 graded + 3 ungraded, providers reused not rewritten. §2.16. Caught a bug in my own devy adapter |
 | ✅ | **4.4** No-fact rule | `not_entitled` had NO producer — the resolver collapsed 5 reasons to null. Fixed additively; composes with the prompt's existing confidence scheme |
-| ⬜ | **4.5** Retire duplicate routes | |
+| ⏸ | **4.5** Retire duplicate routes | **Blocked by design, and half its premise was wrong** — see §2.18. All 15 now absorbed |
 | ⬜ | **5.1** Internal proof surface | |
 | ⬜ | **5.2** Entitlement + degradation pass | |
 | ⬜ | **5.3** Flags and kill switches | |
@@ -732,6 +732,54 @@ the gate working as designed, not an override.
 a claim carrying the current token rebind the name — the same "same work under
 another name" problem the push QUEUE already solves with `sameWork`/rebind, and
 which the pusher lock does not.
+
+### 2.18 4.5 is blocked by its own precondition, and half its premise was wrong
+
+**All fifteen are now absorbed.** The twelve providers landed in 4.3, the
+commissioner resolver in 4.4, and league-intelligence and portfolio here. The
+packet is complete.
+
+**Retiring the routes is not.** Two separate reasons, and only one was expected.
+
+**1. `/api/chimmy` — blocked by the plan's own precondition, correctly.**
+
+4.5 says *"only after 4.2 is proven"*. 4.2 shipped behind
+`DECISION_OS_GROUNDING_ENABLED`, which is **off**, so the packet has never run in
+production. `/api/chimmy` has zero UI callers and is already a shim in effect —
+it adds its three grounding resolvers and forwards to `postChatChimmy` — but
+retiring it today would remove grounding whose replacement has never executed.
+That is the failure 4.2's own commit message warned about, reached from the
+other side.
+
+**The order is: turn the flag on → compare answers → then retire.** Not before.
+
+**2. 🛑 `/api/ai/chimmy` IS NOT A DUPLICATE CHAT ROUTE, AND §2.1 SAID IT WAS.**
+
+§2.1 listed it as one of "three competing Chimmy chat backends" on the strength
+of a caller count — 1, versus `/api/chat/chimmy`'s 4. Reading that caller shows
+something else entirely:
+
+```ts
+switch (panelId) {
+  case 'ai-chimmy-setup':   endpoint = '/api/ai/chimmy-setup'
+  case 'ai-power-rankings': endpoint = '/api/ai/power-rankings'
+  case 'ai-trade':          …
+}
+```
+
+It is one branch of a settings-panel family with a `{ leagueId }` payload — a
+different product surface that happens to share a name. It is not a chat entry
+point, it is not competing with anything, and "retiring" it would break a panel
+rather than remove a duplicate.
+
+⚠ **The mistake was classifying by NAME plus caller count instead of by what the
+caller sends.** Same shape as §2.14 (two waiver resolvers that turned out to be
+layered) and §2.16 (two devy paths that turned out to be one producer, two
+consumers) — three times now, a census that stopped at "how many import it"
+rather than "what do they use it for" gave the wrong answer.
+
+**So 4.5 reduces to one route, gated on one flag.** `/api/ai/chimmy` leaves the
+scope entirely.
 
 ## 3. Target architecture
 
