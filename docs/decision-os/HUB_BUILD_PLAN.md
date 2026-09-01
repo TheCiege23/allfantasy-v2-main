@@ -44,7 +44,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **4.5** Retire duplicate routes | Goal state already reached: `/api/chimmy` IS a shim with 0 callers (docs say otherwise, docs are stale). `/api/ai/chimmy` out of scope. §2.18 |
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
-| ⬜ | **5.3** Flags and kill switches | |
+| ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
 | ⬜ | **6.1** Collapse the three health scorers | Deferred by D10 |
 | ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
@@ -732,6 +732,59 @@ the gate working as designed, not an override.
 a claim carrying the current token rebind the name — the same "same work under
 another name" problem the push QUEUE already solves with `sameWork`/rebind, and
 which the pusher lock does not.
+
+### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
+
+5.3 says to reuse `liveReadiness.ts`'s per-namespace pattern. Read before copying, and two things
+came out of it that changed the design.
+
+**a) 🛑 THE POLARITY IS BACKWARDS FOR A KILL SWITCH.** `liveReadiness` flags default to `false`,
+correctly — they answer "has anyone written this integration yet", where absence genuinely means
+no. But they read through `getBoolean`, and `getValue` **swallows a database read error and
+returns null**, so the default is also what you get when the store is unreachable.
+
+Copied as-is, one transient blip would have read as a kill order for **all nine feeds at once**:
+every fact silently stripped out of every answer, nothing saying why. That is §2.20's silence
+failure rebuilt one layer up, in the control plane, and it would have been invisible — a packet
+with nothing in it looks exactly like a quiet day.
+
+So these are **kill switches, not enable switches**: only an explicit `off` kills; unset is on;
+unreadable is on. **Absence of a kill order is not a kill order.** The cost, stated rather than
+discovered later: a kill does not survive a database outage. That is what the env layer is for —
+it is the only switch that works when nothing else does.
+
+**Either layer kills; neither revives.** `off` in the environment OR `false` in `platformConfig`.
+An OR rather than a precedence rule, because with precedence an emergency kill in one layer is
+silently undone by a stale value in the other and you cannot tell which layer you are fighting.
+
+**b) ⚠ THE PATTERN HAS NEVER RUN ON A HOT PATH, AND ITS OWN HEADER SAYS SO** — "no code calls
+`isLiveReady()` yet". It is one uncached `findUnique` per key. Nine of those inside
+`/api/chat/chimmy`'s 3-second packet ceiling, on the highest-traffic route, is nine round-trips per
+chat turn to read nine booleans that change perhaps monthly. The shape is kept — one key per
+namespace, `platformConfig` as the store — and the read is batched into a single prefix query
+behind a 30s cache mirroring `PlatformConfigResolver`'s own `CACHE_MS`. Steady state is zero
+queries per turn. **A failed read is cached too**, so a database that is already down does not also
+get one query per chat turn.
+
+⚠ Worth noting that `PlatformConfigResolver`'s 30s cache covers `getFeatureTogglesSnapshot` only.
+`isAIAssistantEnabled` and its siblings call `getBoolean` directly and bypass it — so "there is a
+cache in feature-toggle" is true and does not mean what it sounds like.
+
+**c) A KILL MUST BE SAID, NOT MERELY DONE.** A stopped feed that simply vanishes is the same
+silence §2.20 fixed, so a killed feed leaves a gap with a **seventh** `GroundingGapReason`,
+`disabled`. Not `not_computed`: the remedy for a cold cache is "it fills on the next run", which
+is a lie about a killed feed — nothing fills it until somebody flips the switch back. Whoever is
+reading a support ticket has to be able to tell those apart, and so does the operator who did the
+killing and then forgot.
+
+⚠ And `meta.killedFeeds` carries the kill even when the question never **wanted** that feed — in
+which case there is deliberately no gap, because a gap there would be noise on every answer. The
+proof surface from 5.1 lists it first, above the counts: a killed feed and a cold one both produce
+a thin answer, and the switch is the one cause a reader can fix in seconds.
+
+**Controls.** 16 tests. The five packet-integration ones were run against the 5.2 `packet.ts`
+restored from `HEAD` and byte-compared both ways: **5 failed | 10 passed** — the five new, the ten
+existing untouched, which is what says the wiring did not change behaviour it was not meant to.
 
 ### 2.20 The packet violated its own stated invariant, in two places, and one was silence
 

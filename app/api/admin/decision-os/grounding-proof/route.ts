@@ -99,6 +99,15 @@ export async function GET(request: NextRequest) {
     serializedLength: serialized.length,
     /** The one-line verdict a reader actually wants first. */
     summary: {
+      /**
+       * Feeds an operator has switched off (5.3).
+       *
+       * ⚠ FIRST IN THE SUMMARY ON PURPOSE. A killed feed and a cold one look identical from the
+       * outside — both produce a thin answer — and the switch is the one cause a reader can fix
+       * in seconds. Burying it under the counts is how someone spends an hour debugging a
+       * producer that was never asked to run.
+       */
+      killedFeeds: packet.meta.killedFeeds,
       slicesPresent: packet.meta.sources.filter((s) => s.ok).length,
       slicesTotal: packet.meta.sources.length,
       gaps: packet.gaps.length,
