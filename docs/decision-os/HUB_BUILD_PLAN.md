@@ -38,7 +38,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **3.2** `'import'` domain + four assertions | `lib/decision-os/import/assertions.ts`. Reads what the collectors already recorded and nothing could read |
 | ✅ | **3.3** `isConclusive(fact)` | `lib/decision-os/conclusive.ts`. Per-fact profiles + remedy on every blocker. Two controls proven red |
 | ✅ | **4.1** `buildDecisionOsGroundingPacket()` | `lib/decision-os/grounding/packet.ts`. Shape read off the 15, not invented. Per-slice conclusiveness + remedy |
-| ⬜ | **4.2** Wire into `/api/chat/chimmy` | |
+| ✅ | **4.2** Wire into `/api/chat/chimmy` | Beside the existing packet, behind `DECISION_OS_GROUNDING_ENABLED`. Delta vs origin/main baseline: **0** |
 | ⬜ | **4.3** Move orphaned grounding behind Decision OS | Read all 15 first |
 | ⬜ | **4.4** No-fact rule | |
 | ⬜ | **4.5** Retire duplicate routes | |

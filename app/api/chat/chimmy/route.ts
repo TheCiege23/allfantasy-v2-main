@@ -109,6 +109,8 @@ import {
   buildLeagueSportsGroundingPacket,
   serializeLeagueGroundingForPrompt,
 } from '@/lib/ai/leagueSportsGroundingPacket'
+import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
+import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import {
   TokenInsufficientBalanceError,
@@ -1589,6 +1591,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .catch(() => undefined)
       : Promise.resolve(undefined)
 
+  /**
+   * Decision OS grounding (4.2), BESIDE the existing packet rather than instead of it.
+   *
+   * 🛑 OFF UNLESS `DECISION_OS_GROUNDING_ENABLED === 'true'`. This is the highest-traffic route in
+   * the product — `app/core`, both CommsDrawer entry points and the mock-draft room all reach it —
+   * and adding a section to a live prompt changes what the model says. The flag makes landing this
+   * a genuine no-op, so the wiring can be reviewed and the content compared before anything moves.
+   *
+   * ⚠ IT ADDS A PROMPT SECTION AND REMOVES NOTHING. D1's end state is that Decision OS becomes the
+   * SOLE grounding source, but getting there means moving the twelve providers and three resolvers
+   * behind it first (4.3). Cutting the existing packet now would delete grounding that has no
+   * replacement yet — the "surface pointed at a table nothing writes" failure, reached from the
+   * prompt side.
+   */
+  const decisionOsGroundingTask: Promise<string | null> =
+    process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId
+      ? buildDecisionOsGroundingPacket({
+          leagueId,
+          userId,
+          sport: normalizeToSupportedSport(sport),
+          season: season ?? new Date().getFullYear(),
+          want: { projections: true, leagueRules: true },
+        })
+          .then((packet) => {
+            const text = serializeDecisionOsGroundingForPrompt(packet)
+            return text.length > 0 ? text : null
+          })
+          // Never fail the chat turn for grounding. An unavailable packet is one missing section,
+          // and every other source in this handler degrades the same way.
+          .catch(() => null)
+      : Promise.resolve(null)
+
   const leagueSportsGroundingTask: Promise<{ serialized: string; packet: Awaited<ReturnType<typeof buildLeagueSportsGroundingPacket>> } | null> =
     leagueId && userId
       ? buildLeagueSportsGroundingPacket({
@@ -1604,12 +1638,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .catch(() => null)
       : Promise.resolve(null)
 
-  const [screenshotResult, insightResult, memoryResult, leagueSportsGroundingResult] = await Promise.allSettled([
-    screenshotTask,
-    insightTask,
-    memoryTask,
-    leagueSportsGroundingTask,
-  ])
+  const [screenshotResult, insightResult, memoryResult, leagueSportsGroundingResult, decisionOsGroundingResult] =
+    await Promise.allSettled([
+      screenshotTask,
+      insightTask,
+      memoryTask,
+      leagueSportsGroundingTask,
+      decisionOsGroundingTask,
+    ])
   const [personalizationResult, profileClock] = await Promise.all([
     resolveChimmyPersonalizationProfile(userId).catch(() => null),
     prisma.userProfile.findUnique({
@@ -1645,6 +1681,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const memorySection = memoryResult.status === 'fulfilled' ? memoryResult.value : undefined
   const leagueSportsGrounding =
     leagueSportsGroundingResult.status === 'fulfilled' ? leagueSportsGroundingResult.value : null
+  const decisionOsGrounding =
+    decisionOsGroundingResult.status === 'fulfilled' ? decisionOsGroundingResult.value : null
 
   const recentUserSnippet = conversation
     .filter((t) => t.role === 'user')
@@ -1709,6 +1747,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     leagueSportsGrounding
       ? `## NFL/NCAAF LEAGUE SPORTS GROUNDING\n${leagueSportsGrounding.serialized}`
       : undefined,
+    // Placed AFTER the existing grounding deliberately: while both are live the older packet is
+    // still the authority on league facts, and this section's job is to add what it cannot say —
+    // how fresh each fact is, and what is missing and why.
+    decisionOsGrounding ? `## DECISION OS GROUNDING\n${decisionOsGrounding}` : undefined,
     personalizationDirectives,
     chimmyOrchestrationPrompt,
   ]
@@ -1736,6 +1778,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (memPrompt.contextBlock) dataSources.push('working_memory')
   if (homeSignalsBlock) dataSources.push('core_home_signals')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
+  // Declared so a response can be attributed. A grounding source the answer used but does not
+  // name is untraceable afterwards, which is the whole reason dataSources exists.
+  if (decisionOsGrounding) dataSources.push('decision_os_grounding_packet')
   if (personalizationDirectives) dataSources.push('chimmy_personalization')
   if (sourceReferences.length > 0) dataSources.push('league_source_references')
   if (staleness.warning) dataSources.push('stale_data_warning')
