@@ -129,7 +129,10 @@ export function DashboardHero({
       return (
         <>
           <HeroKpi label={t('dashboard.pulse.metric.health')} value={`${Math.round(h.healthScore)}`} tone={scoreTone(h.healthScore)} />
-          <HeroKpi label={t('dashboard.pulse.metric.engagement')} value={`${Math.round(h.engagementScore)}`} tone={scoreTone(h.engagementScore)} />
+          {/* 6.1: the ACTIVITY term of the health composite. The KEY was renamed rather than
+              re-valued, because this is its only consumer — leaving `…metric.engagement`
+              pointing at "Activity" would have made the key itself lie. */}
+          <HeroKpi label={t('dashboard.pulse.metric.activity')} value={`${Math.round(h.engagementScore)}`} tone={scoreTone(h.engagementScore)} />
           <HeroKpi label={t('dashboard.pulse.metric.fairness')} value={`${Math.round(h.fairnessScore)}`} tone={scoreTone(h.fairnessScore)} />
           <HeroKpi label={t('dashboard.pulse.metric.sustainability')} value={`${Math.round(h.sustainabilityScore)}`} tone={scoreTone(h.sustainabilityScore)} />
           <HeroKpi label={t('dashboard.warroom.hero.kpi.pendingActions')} value={h.actions?.length ?? 0} tone={(h.actions?.length ?? 0) > 0 ? 'warn' : 'default'} />

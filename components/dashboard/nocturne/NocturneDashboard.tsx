@@ -1831,7 +1831,8 @@ function CommissionerHQ({
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, textAlign: 'center' }}>
             <SubScore value={active.fairnessScore} label="Fairness" />
-            <SubScore value={active.engagementScore} label="Engagement" />
+            {/* 6.1: the ACTIVITY term of the health composite, beside its two siblings. */}
+                <SubScore value={active.engagementScore} label="Activity" />
             <SubScore value={active.sustainabilityScore} label="Sustain." />
           </div>
         </div>
