@@ -5920,6 +5920,21 @@ model League {
   lastSyncedAt                          DateTime?
   syncStatus                            String?
   syncError                             String?
+  /// When a human last opened this league. The DEMAND signal for the historical-refresh
+  /// rotation — a league someone looked at yesterday earns fresher history than one nobody
+  /// has opened since June.
+  ///
+  /// 🛑 NOT `lastSyncedAt`, WHICH IS THE OPPOSITE. That records when WE last wrote; this
+  /// records when a PERSON last asked. Ordering the rotation by `lastSyncedAt` would rank
+  /// leagues by how recently we already refreshed them, which is the staleness ordering it
+  /// is meant to supplement, not the demand it is meant to add.
+  ///
+  /// ⚠ NULL IS THE HONEST DEFAULT AND MUST STAY NULLABLE. Backfilling it to `now()` would
+  /// tell the rotation that all 199 leagues were viewed at import, which is the one lie that
+  /// makes the whole ordering meaningless. Null means "nobody has opened this since the
+  /// column existed", and the starvation floor — not a fabricated timestamp — is what stops
+  /// those leagues waiting forever.
+  lastViewedAt                          DateTime?
   legacyLeagueId                        String?                                @unique
   createdAt                             DateTime                               @default(now())
   updatedAt                             DateTime                               @updatedAt
