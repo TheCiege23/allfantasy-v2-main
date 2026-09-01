@@ -158,6 +158,7 @@
     "sync:fantasycalc-valuations": "tsx scripts/sync-fantasycalc-valuations.ts",
     "sync:player-valuations": "tsx scripts/sync-player-valuations.ts",
     "sync:player-images": "tsx scripts/sync-player-images.ts",
+    "capture:pwa-screenshots": "node scripts/capture-pwa-screenshots.mjs",
     "sync:sports-foundation": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sync-sports-foundation.ts",
     "guard:db-first-api": "node scripts/check-db-first-api-boundary.mjs",
     "guard:external-id-namespace": "node scripts/check-external-id-namespace.mjs",

@@ -6,6 +6,11 @@
   "start_url": "/core",
   "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "dir": "ltr",
   "orientation": "portrait",
   "background_color": "#020617",
@@ -16,6 +21,11 @@
     "productivity"
   ],
   "lang": "en",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "edge_side_panel": {
+    "preferred_width": 420
+  },
   "icons": [
     {
       "src": "/icons/icon-72.png",
@@ -70,6 +80,64 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home-wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Every league you play on one screen, with what needs you first"
+    },
+    {
+      "src": "/screenshots/tools-wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Trade analyzer, mock drafts, waiver advisor and power rankings in one hub"
+    },
+    {
+      "src": "/screenshots/pricing-wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Free forever for players, with paid tiers for deeper tools"
+    },
+    {
+      "src": "/screenshots/bracket-wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Bracket challenge pools with AI analysis on every matchup"
+    },
+    {
+      "src": "/screenshots/home-narrow.png",
+      "sizes": "412x824",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Every league you play on one screen, with what needs you first"
+    },
+    {
+      "src": "/screenshots/tools-narrow.png",
+      "sizes": "412x824",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Trade analyzer, mock drafts, waiver advisor and power rankings in one hub"
+    },
+    {
+      "src": "/screenshots/pricing-narrow.png",
+      "sizes": "412x824",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Free forever for players, with paid tiers for deeper tools"
+    },
+    {
+      "src": "/screenshots/bracket-narrow.png",
+      "sizes": "412x824",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Bracket challenge pools with AI analysis on every matchup"
     }
   ],
   "shortcuts": [

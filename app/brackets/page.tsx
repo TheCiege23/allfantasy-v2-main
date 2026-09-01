@@ -144,7 +144,22 @@ const QUICK_ACTIONS: QuickAction[] = [
 const FAN_COUNTRY_CODES = ["BR", "FR", "DE", "AR"] as const
 
 const WC_LOGO_SRC = "/images/brackets/world-cup/af-world-cup-logo.png"
-const AF_WORDMARK_SRC = "/branding/allfantasy-wordmark-logo.png"
+/*
+ * ⚠ `/branding/allfantasy-wordmark-logo.png` HAS NO ALPHA CHANNEL — 1024x682,
+ * three channels, fully opaque — so on this page's `bg-[#05070b]` canvas it
+ * painted its own dark background as a ~36x24 black box rather than a wordmark.
+ * Nothing failed: the image loads (`complete=true`, naturalWidth 128 at the
+ * served size), it is simply opaque artwork on a dark surface, which is why it
+ * survived here while every other dark surface in the app had already moved.
+ *
+ * `/brand/allfantasy-wordmark-transparent.png` is what the rest of the app
+ * uses on dark — including this page's own sibling, BracketsPageHeader — so
+ * this was the one straggler, not a new convention.
+ *
+ * Found in a PWA store screenshot of this page, where the black box is exactly
+ * the sort of thing a store reviewer notices.
+ */
+const AF_WORDMARK_SRC = "/brand/allfantasy-wordmark-transparent.png"
 
 export default async function BracketsHomePage() {
   const { language } = await resolveServerRenderPreferences()
@@ -170,8 +185,8 @@ export default async function BracketsHomePage() {
         <Image
           src={AF_WORDMARK_SRC}
           alt={t("brk.hub.logoAlt")}
-          width={120}
-          height={24}
+          width={1198}
+          height={306}
           className="h-6 w-auto object-contain opacity-80"
           priority
         />
