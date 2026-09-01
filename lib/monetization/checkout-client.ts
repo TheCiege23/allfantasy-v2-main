@@ -1,4 +1,5 @@
 import type { MetaEventPayload } from "@/lib/meta-events"
+import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 
 export type MonetizationCheckoutProductType = "subscription" | "token_pack"
 
@@ -37,6 +38,34 @@ export async function resolveCheckoutUrl(
   const sku = String(request.sku ?? "").trim()
   if (!sku) {
     return { ok: false, error: "Missing checkout sku." }
+  }
+
+  /*
+   * ⚠ ONE GATE FOR EVERY PURCHASE, AND THIS IS THE ONLY PLACE IT CAN LIVE.
+   * Google Play's payments policy requires digital goods sold to app users to
+   * go through Play Billing, and the Android TWA puts this entire site inside a
+   * Play-distributed app. A reachable Stripe checkout there is what gets a
+   * production submission rejected.
+   *
+   * Every purchase surface — MonetizationPurchaseSurface, PricingV4,
+   * TokenCentreV4 — reaches Stripe through this one function, so gating here
+   * covers subscriptions and token packs together and cannot be bypassed by a
+   * surface that forgets to check. A per-component `isTrustedWebActivity()`
+   * guard would be four copies of one rule, and the fourth is the one that gets
+   * added later without it.
+   *
+   * ⚠ THE OPEN WEB IS UNTOUCHED. This fires only for our own package's TWA;
+   * desktop, mobile browsers and the installed iOS PWA all still check out
+   * through Stripe, because none of them is distributed through Play.
+   *
+   * Remove this when Play Billing is wired (Digital Goods API + Payment Request
+   * API) or the US external-billing allowance is deliberately adopted.
+   */
+  if (isTrustedWebActivity()) {
+    return {
+      ok: false,
+      error: "Purchases aren't available in the Android app yet. Open allfantasy.ai in your browser to subscribe or buy tokens.",
+    }
   }
 
   const normalizedCoupon = String(request.couponCode ?? "").trim() || null

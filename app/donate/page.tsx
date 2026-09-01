@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { isTrustedWebActivity } from "@/lib/platform/isTrustedWebActivity"
 
 type Mode = "donate" | "lab"
 const DONATION_PRESETS = [3, 5, 10, 25]
@@ -17,6 +18,24 @@ export default function DonatePage() {
   const [loading, setLoading] = useState(false)
 
   async function startCheckout(finalAmount: number) {
+    /*
+     * ⚠ THE SAME PLAY BILLING GATE AS lib/monetization/checkout-client.ts, and
+     * it has to be repeated here because this is the ONE purchase path that does
+     * not go through resolveCheckoutUrl — it POSTs /api/stripe/create-checkout-session
+     * directly. A census of client checkout call sites found exactly this one.
+     *
+     * Play exempts donations to a REGISTERED CHARITY. This is a voluntary
+     * contribution to a commercial product ("Support FanCred Brackets"), which
+     * is much closer to a tip for digital content, so the exemption should not
+     * be assumed. Closed inside the TWA for the same reason as everything else.
+     */
+    if (isTrustedWebActivity()) {
+      alert(
+        "Donations aren't available in the Android app yet. Open allfantasy.ai in your browser to contribute."
+      )
+      return
+    }
+
     setLoading(true)
     try {
       const res = await fetch("/api/stripe/create-checkout-session", {
