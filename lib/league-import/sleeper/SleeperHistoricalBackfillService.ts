@@ -13,6 +13,10 @@ import {
   syncSleeperHistoricalMatchupsAfterImport,
   type SleeperHistoricalMatchupSyncSummary,
 } from './SleeperHistoricalMatchupSyncService'
+import {
+  syncSleeperHistoricalTransactionsAfterImport,
+  type SleeperHistoricalTransactionSyncSummary,
+} from './SleeperHistoricalTransactionSyncService'
 
 export interface SleeperHistoricalBackfillSummary {
   attempted: boolean
@@ -21,6 +25,7 @@ export interface SleeperHistoricalBackfillSummary {
   drafts?: SleeperHistoricalDraftSyncSummary
   seasonState?: SleeperHistoricalSeasonStateSyncSummary
   matchups?: SleeperHistoricalMatchupSyncSummary
+  transactions?: SleeperHistoricalTransactionSyncSummary
   backfill?: {
     success: boolean
     status: string
@@ -75,6 +80,19 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
   const matchups = await syncSleeperHistoricalMatchupsAfterImport({
     leagueId: args.leagueId,
   })
+  /*
+   * The fourth sibling, added 2026-09-01. Draft, season state and matchups were built and this
+   * one never was — so the import fetched 18 weeks of `/transactions/{week}` per league and threw
+   * the result away. Waivers and free agents reached NO table at all; trades reached
+   * `TransactionFact` only via the psych-profile rotation, which laps 543 leagues in ~45 days.
+   *
+   * Carries `force` like the draft and season-state siblings so the completion gate can be
+   * overridden deliberately rather than by accident.
+   */
+  const transactions = await syncSleeperHistoricalTransactionsAfterImport({
+    leagueId: args.leagueId,
+    force: args.force,
+  })
 
   try {
     const backfill = await runDynastyBackfill({
@@ -89,6 +107,7 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
       drafts,
       seasonState,
       matchups,
+      transactions,
       backfill: {
         success: backfill.success,
         status: backfill.status,
@@ -165,6 +184,7 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
       drafts,
       seasonState,
       matchups,
+      transactions,
       graph: {
         refreshed: false,
       },

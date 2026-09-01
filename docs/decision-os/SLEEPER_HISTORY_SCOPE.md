@@ -122,11 +122,32 @@ Kept apart at the user's insistence, and they are broken differently.
 the *native* engine for trades made inside AllFantasy — and by
 `scripts/backfill-decision-os-sleeper-history.ts`, which is **not in
 `cron-schedule.json`**. The league brief's "11 completed trades since 2022" came from
-someone running that script by hand. A trade made in Sleeper today never arrives.
+someone running that script by hand.
+
+> 🛑 **CORRECTION, 2026-09-01: "A trade made in Sleeper today never arrives" was WRONG,
+> and it was the fourth time in this document that a census stopping at
+> `lib/league-import/` gave the wrong answer.** Sleeper trades DO land, in
+> `TransactionFact`, on a schedule — just not through any file this document was reading:
+>
+> ```
+> /api/cron/import-players            (every six hours)
+>   -> refreshStaleLeagueProfiles({ maxLeagues: 3 })
+>     -> ingestSleeperTradeFacts()     lib/psychological-profiles/SleeperTradeFactIngest.ts
+>       -> prisma.transactionFact.upsert()
+> ```
+>
+> ⚠ **What IS true is worse-sounding and more precise: the rotation is three leagues every
+> six hours.** Twelve a day against 543 imported leagues is a **~45-day lap**. So the
+> product complaint holds — a user can be reading month-old trade history — but the fix is
+> coverage and cadence, not a missing writer. Building "the missing trade writer" would have
+> produced a second writer racing the first.
 
 **Waivers.** `WaiverTransaction`'s only writer is our own free-agent engine.
 `WaiverClaim`'s only writers are a backfill and a seed script. There is **no writer
-for Sleeper-originated waiver claims at all** — absent, not stale.
+for Sleeper-originated waiver claims at all** — absent, not stale. Confirmed again on
+2026-09-01: `SleeperTradeFactIngest` opens with `if (tx.type !== 'trade' …) continue`, so
+the one scheduled Sleeper transaction path drops every waiver and free agent on the floor.
+**This half of the original finding was correct.**
 
 ### ⚠ The data is already bought and thrown away
 
@@ -193,7 +214,7 @@ found this:
 | 1b | ~~Give the matchup service the same gate~~ | DONE. It had none, so every run re-fetched FOUR Sleeper endpoints per season — rosters, both playoff brackets, and multi-week `fetchWeekMatchups` — re-learning settled history. Now gated on the same shared predicate. |
 | 1d | **The predicate is provider-agnostic, at the user's instruction** | It was first written under `sleeper/` and typed on `SleeperLeague`. Past-versus-present is a PRODUCT rule and every import has both kinds of season, so it now lives at `lib/league-import/seasonCompletion.ts`. `'complete'` is already the shared vocabulary: espn/fantrax/mfl/yahoo all map `isFinished ? 'complete' : 'in_season'`, sleeper passes its own through, fleaflicker maps none — correctly not-complete. |
 | 1c | **Then schedule the orchestrator** | Only meaningful once the gates refresh the live season and skip finished ones. |
-| 2 | **`SleeperHistoricalTransactionSyncService`** | The missing fourth sibling. Splits on the discriminator that already exists; trades and waivers to their own tables. |
+| 2 | ~~**`SleeperHistoricalTransactionSyncService`**~~ | **DONE, 2026-09-01** — and it needed **no migration**, which is the part this plan had wrong. See below. |
 | 3 | **Repoint `getLeagueContext` + `/rosters`** | Free today — that data is already in the DB via the 30-min sync. Deletes 24 of 60 calls per render with no new writer. |
 | 4 | **Repoint drafts, matchups, H2H** | Only safe once 1 and 2 hold. `getLeagueH2H` is completed head-to-head history, immutable, re-fetched live on every render — the clearest case. |
 
@@ -225,6 +246,49 @@ different questions.
 ⚠ This applies to waivers identically. `WaiverTransaction` is written by our own
 free-agent engine, which processes claims. Imported Sleeper claims are history and
 must not land there.
+
+### ✅ Built 2026-09-01 — and the table the decision asked for already existed
+
+`lib/league-import/sleeper/SleeperHistoricalTransactionSyncService.ts`, wired into
+`SleeperHistoricalBackfillService` beside the other three siblings.
+
+**No migration, and this plan expected one.** `TransactionFact` (`dw_transaction_facts`)
+is already the imported-history table for **ESPN, Fantrax, MFL and Yahoo** — four
+providers writing it from their own historical backfills. Sleeper was the only one that
+did not. So the user's "imports get their own table" decision was already satisfied by
+the existing schema; what was missing was Sleeper's writer, not the boundary.
+
+That matters beyond convenience: a migration is not pushable work, so had this needed one
+the code could not have shipped ahead of the user's decision to apply it.
+
+⚠ **The id had to collide with the existing writer, not avoid it.**
+`SleeperTradeFactIngest` keys `TransactionFact.transactionId` as
+`${sleeperTransactionId}:${rosterId}`. The new service uses the **same composition**, so
+when both paths see one trade they upsert the **same row**. A fresh key would have
+duplicated every trade into a table `MetaAnalysisService` counts — nothing would have
+thrown, the numbers would just have been wrong.
+
+For the same reason it **upserts rather than `deleteMany` + `createMany`**, which is where
+it deliberately breaks from the draft sibling's shape: the draft sync owns every
+`DraftFact` row for its league, but this table is *shared*, and a season-scoped delete
+would silently drop the other writer's rows on every run.
+
+Two smaller things found by writing the tests rather than by reading the code:
+
+- a roster that only **gave or received FAAB** got no row at all, because the participant
+  scan read `roster_ids`/`adds`/`drops` and not `waiver_budget`. Usually both sides are in
+  `roster_ids` too, which is exactly why it would have sat undetected — a missing row is
+  not something a consumer can notice.
+- **the waiver bid was not being captured at all.** It lives in `settings.waiver_bid` and
+  `SleeperTransaction` had no `settings` field, so it was invisible to anything reading
+  that type. A waiver stored without its bid is a half-fact — what someone was willing to
+  pay *is* the FAAB history. It is now its own `waiverBid`, kept strictly apart from
+  `faabNet`: one is a purchase from the league, the other a transfer between managers, and
+  folding them together would misreport both.
+
+Still open, and deliberately not done here: **step 1c**, scheduling the orchestrator. The
+service runs at import today. Until 1c lands, the ~45-day trade rotation above is still the
+only thing refreshing an already-imported league.
 
 ---
 
