@@ -4,6 +4,7 @@ import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRosters, getLeagueUsers, type SleeperLeague, type SleeperRoster } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
+import { shouldSkipImportedSeason } from './seasonCompletion'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
 
@@ -178,10 +179,16 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
     let providerCallsAvoided = 0
 
     for (const seasonState of historyChain) {
-      // Completion gate (P0-D): a completed historical season's roster snapshot is stable —
-      // don't re-hit Sleeper's users/rosters endpoints for a season we already imported. Mirrors
-      // the `skipExistingSeasons` pattern in `lib/dynasty-import/backfill-orchestrator.ts`.
-      if (!args.force) {
+      /*
+       * Completion gate (P0-D): a completed historical season's roster snapshot is stable —
+       * don't re-hit Sleeper's users/rosters endpoints for a season we already imported.
+       *
+       * 🛑 SAME BUG AS THE DRAFT SERVICE, AND WORSE HERE. `SEASON_END_ROSTER_SNAPSHOT_PERIOD`
+       * is written with no completed-season guard, so a mid-season import stamps a "season end"
+       * snapshot for a season that has not ended — and this gate then froze the user's CURRENT
+       * roster forever. See `seasonCompletion.ts`.
+       */
+      if (shouldSkipImportedSeason({ force: args.force, league: seasonState.league })) {
         const existingSnapshot = await prisma.rosterSnapshot.findFirst({
           where: {
             leagueId: league.id,
