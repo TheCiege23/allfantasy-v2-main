@@ -34,13 +34,17 @@
 -- ── COST ────────────────────────────────────────────────────────────────────────────────────
 --
 -- `ADD COLUMN` with no default and no NOT NULL is a catalog-only change in Postgres 11+ — no
--- table rewrite, no long lock, safe on a live table. The index is created CONCURRENTLY for the
--- same reason.
+-- table rewrite, no long lock, safe on a live table.
 --
--- ⚠ `CREATE INDEX CONCURRENTLY` CANNOT RUN INSIDE A TRANSACTION. Prisma Migrate wraps a
--- migration in one by default, so this file is split: the column here, the index in its own
--- statement that must be run separately if the wrapper complains. If `migrate deploy` refuses,
--- run the ADD COLUMN through it and the index by hand.
+-- ⚠ THE INDEX IS DELIBERATELY *NOT* `CONCURRENTLY`, AND AN EARLIER DRAFT OF THIS COMMENT SAID
+-- IT WAS — a comment asserting something the SQL below does not do. Measured before deciding:
+-- `leagues` holds 245 rows at 4.3 MB, so a plain `CREATE INDEX` is effectively instantaneous
+-- and the brief ACCESS EXCLUSIVE lock is not worth engineering around. `CONCURRENTLY` cannot
+-- run inside a transaction, and Prisma Migrate wraps a migration in one — so choosing it here
+-- would buy nothing and add a failure mode where `migrate deploy` refuses the file outright.
+--
+-- If this table is ever large enough for that lock to matter, the index becomes its own
+-- migration with `CONCURRENTLY` and no wrapping transaction. It is not that table today.
 
 ALTER TABLE "leagues" ADD COLUMN IF NOT EXISTS "lastViewedAt" TIMESTAMP(3);
 
