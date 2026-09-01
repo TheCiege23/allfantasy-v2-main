@@ -903,6 +903,38 @@ async function cmdWait(argv) {
  * take → wait → push → verify by sha → release. The whole convention in one
  * command, so following it is easier than not.
  */
+/**
+ * The sha a push actually SENDS, which is not always `HEAD`.
+ *
+ * 🛑 THE VERIFIER WAS READING THE WRONG SHA ON THE PASSTHROUGH PATH. `cmdPush` pins
+ * `HEAD` into its own refspec — correct, and the reason is three comments up. But when a caller
+ * supplies the refspec themselves, which the stale-base message above explicitly tells them to do
+ * and which the landing convention REQUIRES (you cherry-pick onto origin/main, so the tip you push
+ * is by construction not your HEAD), the push sends one sha and the verifier compared another.
+ *
+ * Observed 2026-08-31 landing a five-commit batch: the push succeeded, `origin/main` moved to the
+ * intended tip, and the wrapper reported
+ *
+ *     ⚠ push did NOT land — origin/main is 2eaab62b8, not cc7dcd142
+ *
+ * which is the wrapper stating that origin/main IS the commit that was asked for, and calling that
+ * a failure. ⚠ THE COST IS A DUPLICATE PRODUCTION BUILD: told the push failed, the next thing
+ * anyone does is push again — the exact spend this whole queue exists to remove.
+ *
+ * Falls back to `HEAD` when no refspec names main, so the default path is unchanged.
+ */
+function pushedSha(passthrough, fallback) {
+  for (const arg of passthrough) {
+    // `+src:refs/heads/main` and `src:main` both count; a delete (`:main`) has no source and
+    // correctly does not match.
+    const m = /^\+?([^:]+):(?:refs\/heads\/)?main$/.exec(arg)
+    if (!m) continue
+    const resolved = git(['rev-parse', `${m[1]}^{commit}`])
+    if (resolved) return resolved
+  }
+  return fallback
+}
+
 async function cmdPush(argv) {
   const ctx = describeContext()
   if (!ctx.sha) {
@@ -986,7 +1018,9 @@ async function cmdPush(argv) {
     }
   }
 
-  process.stdout.write(`push-queue: pushing ${ctx.sha.slice(0, 9)} → git push ${passthrough.join(' ')}\n`)
+  // What is actually being sent — see pushedSha. On the default path this IS ctx.sha.
+  const target = pushedSha(passthrough, ctx.sha)
+  process.stdout.write(`push-queue: pushing ${target.slice(0, 9)} → git push ${passthrough.join(' ')}\n`)
   let pushStatus = 0
   try {
     execFileSync('git', ['push', ...passthrough], { stdio: 'inherit', windowsHide: true })
@@ -999,13 +1033,16 @@ async function cmdPush(argv) {
   remoteMainSha = undefined
   const landed = remoteMain()
 
-  if (landed && landed === ctx.sha) {
+  if (landed && landed === target) {
+    // ⚠ The TICKET is still keyed on ctx.sha — it was taken for HEAD, so that is what releases
+    // it. Only the landed/not-landed VERDICT is about the pushed sha. Conflating the two would
+    // strand the ticket on every passthrough push.
     cmdDone([`--sha=${ctx.sha}`])
     process.stdout.write(`push-queue: ✅ origin/main is now ${landed.slice(0, 9)}.\n`)
     return 0
   }
   process.stderr.write(
-    `push-queue: ⚠ push did NOT land — origin/main is ${landed ? landed.slice(0, 9) : '(unreadable)'}, not ${ctx.sha.slice(0, 9)}.\n` +
+    `push-queue: ⚠ push did NOT land — origin/main is ${landed ? landed.slice(0, 9) : '(unreadable)'}, not ${target.slice(0, 9)}.\n` +
       `  Your ticket is kept so you do not lose your place. Fix and re-run, or release it with:\n` +
       `     npm run push:done\n`,
   )

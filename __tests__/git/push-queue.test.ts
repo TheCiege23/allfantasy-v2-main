@@ -535,3 +535,96 @@ describe('push-queue — it fails open', () => {
     expect(res.stderr).toContain('failing open')
   })
 })
+
+/**
+ * 🛑 THE VERDICT MUST BE ABOUT THE SHA THAT WAS PUSHED, NOT ABOUT `HEAD`.
+ *
+ * `cmdPush` pins HEAD into its own refspec, which is right — HEAD moves under a session here and
+ * one session pushed three peers' commits that way. But the LANDING convention requires the
+ * opposite shape: you cherry-pick onto `origin/main` in a detached worktree, so the tip you push
+ * is by construction NOT your HEAD, and you pass the refspec yourself. On that path the wrapper
+ * sent one sha and verified another.
+ *
+ * Observed 2026-08-31 landing a five-commit batch. The push succeeded and the wrapper said:
+ *
+ *     ⚠ push did NOT land — origin/main is 2eaab62b8, not cc7dcd142
+ *
+ * — which is the wrapper stating that origin/main IS the requested commit, and calling it a
+ * failure. ⚠ THE COST IS A DUPLICATE PRODUCTION BUILD: told a push failed, the next thing anyone
+ * does is push again, which is the exact spend this queue exists to remove.
+ *
+ * This runs a REAL push against a REAL bare remote, because the bug is in the agreement between
+ * what git did and what the wrapper reported — mocking either side would assume the thing under
+ * test.
+ */
+describe('push — a supplied refspec is verified against the sha it names', () => {
+  let repoRoot: string
+
+  function git(args: string[], cwd: string) {
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8' })
+    return (r.stdout ?? '').trim()
+  }
+
+  beforeEach(() => {
+    repoRoot = mkdtempSync(join(tmpdir(), 'af-pq-repo-'))
+    const remote = join(repoRoot, 'remote.git')
+    const work = join(repoRoot, 'work')
+    execFileSync('git', ['init', '--quiet', '--bare', remote])
+    execFileSync('git', ['init', '--quiet', '-b', 'main', work])
+    for (const [k, v] of [
+      ['user.name', 't'],
+      ['user.email', 't@t'],
+      ['commit.gpgsign', 'false'],
+    ]) {
+      execFileSync('git', ['config', k, v], { cwd: work })
+    }
+    execFileSync('git', ['remote', 'add', 'origin', remote], { cwd: work })
+  })
+
+  afterEach(() => {
+    rmSync(repoRoot, { recursive: true, force: true })
+  })
+
+  it('reports a landed push as success when the refspec names a commit that is not HEAD', () => {
+    const work = join(repoRoot, 'work')
+    const commit = (name: string, msg: string) => {
+      writeFileSync(join(work, name), msg)
+      execFileSync('git', ['add', name], { cwd: work })
+      execFileSync('git', ['commit', '--quiet', '-m', msg], { cwd: work })
+      return git(['rev-parse', 'HEAD'], work)
+    }
+
+    commit('a.txt', 'base')
+    execFileSync('git', ['push', '--quiet', 'origin', 'main'], { cwd: work })
+
+    // The commit we intend to land — reachable, but not HEAD.
+    execFileSync('git', ['checkout', '--quiet', '-b', 'side'], { cwd: work })
+    const target = commit('b.txt', 'the commit to land')
+
+    // HEAD then moves somewhere else, exactly as it does in the shared checkout.
+    execFileSync('git', ['checkout', '--quiet', 'main'], { cwd: work })
+    const head = commit('c.txt', "somebody else's work")
+
+    // If these ever coincide the case proves nothing — assert the setup before the behaviour.
+    expect(target).not.toBe(head)
+
+    const res = spawnSync('node', [SCRIPT, 'push', 'origin', `${target}:refs/heads/main`], {
+      cwd: work,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        AF_PUSH_QUEUE_DIR: queueDir,
+        AF_SKIP_PREPUSH_HOOK: '1',
+        AF_ALLOW_CONCURRENT_PUSH: '1',
+      },
+    })
+
+    // Ground truth first: if the push did not actually land, the wrapper being wrong is not the
+    // finding and this assertion says so before the interesting one runs.
+    expect(git(['ls-remote', 'origin', 'refs/heads/main'], work).split(/\s/)[0]).toBe(target)
+
+    expect(res.stdout).toContain(`origin/main is now ${target.slice(0, 9)}`)
+    expect(res.stderr).not.toContain('did NOT land')
+    expect(res.status).toBe(0)
+  })
+})
