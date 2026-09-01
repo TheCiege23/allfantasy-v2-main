@@ -41,7 +41,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **4.2** Wire into `/api/chat/chimmy` | Beside the existing packet, behind `DECISION_OS_GROUNDING_ENABLED`. Delta vs origin/main baseline: **0** |
 | ✅ | **4.3** Move orphaned grounding behind Decision OS | 8 graded + 3 ungraded, providers reused not rewritten. §2.16. Caught a bug in my own devy adapter |
 | ✅ | **4.4** No-fact rule | `not_entitled` had NO producer — the resolver collapsed 5 reasons to null. Fixed additively; composes with the prompt's existing confidence scheme |
-| ⏸ | **4.5** Retire duplicate routes | **Blocked by design, and half its premise was wrong** — see §2.18. All 15 now absorbed |
+| ✅ | **4.5** Retire duplicate routes | Goal state already reached: `/api/chimmy` IS a shim with 0 callers (docs say otherwise, docs are stale). `/api/ai/chimmy` out of scope. §2.18 |
 | ⬜ | **5.1** Internal proof surface | |
 | ⬜ | **5.2** Entitlement + degradation pass | |
 | ⬜ | **5.3** Flags and kill switches | |
@@ -778,8 +778,23 @@ layered) and §2.16 (two devy paths that turned out to be one producer, two
 consumers) — three times now, a census that stopped at "how many import it"
 rather than "what do they use it for" gave the wrong answer.
 
-**So 4.5 reduces to one route, gated on one flag.** `/api/ai/chimmy` leaves the
-scope entirely.
+**So 4.5 reduces to one route — and that route is ALREADY in the state 4.5 wanted.**
+`/api/chimmy` forwards to `postChatChimmy` today; it IS the shim. Measured across
+every call form — literals, template paths, hooks, tests, e2e, agent-tester —
+**nothing calls it.**
+
+⚠ **AND THREE DOCS SAY IT IS THE PREFERRED CLIENT ENTRY POINT.**
+`AI_CHIMMY_QA_DELIVERABLE.md` claims the League chat AI tab reaches it via
+`useAIChat`; `CHIMMY_UNIFIED_ASSISTANT_DELIVERABLE.md` calls it preferred. Traced:
+`useAIChat` posts to `/api/ai/chat?stream=1`, `ChimmyChatShell` to
+`/api/shared/chat/threads`. Neither touches it. Those are dated deliverables and
+are left as the historical record; the correction lives in the route header,
+where a reader will actually be.
+
+🛑 **NOT DELETED, DELIBERATELY.** "Nothing calls it" is a reason to stop
+maintaining a route, not a reason to delete one while its replacement sits behind
+a flag that has been on for minutes. Deletion is the owner's call once answers
+have been compared.
 
 ## 3. Target architecture
 

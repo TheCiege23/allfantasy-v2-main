@@ -1,6 +1,27 @@
 /**
- * Canonical Chimmy route alias.
- * Accepts the legacy JSON contract and maps it into the dedicated Chimmy handler.
+ * Chimmy route alias. Accepts the legacy JSON contract and maps it into the dedicated handler.
+ *
+ * 🛑 DEPRECATED, AND NOT "CANONICAL" — THIS HEADER SAID IT WAS, AND THREE DOCS STILL DO.
+ *
+ * Measured 2026-08-31 across every call form — string literals, template paths, hooks, tests,
+ * e2e and agent-tester: **nothing calls this route.** The traffic is on `/api/chat/chimmy`
+ * (`app/core`, both CommsDrawer entry points, the mock-draft room).
+ *
+ * ⚠ THE DOCS DISAGREE AND THE DOCS ARE WRONG. `docs/AI_CHIMMY_QA_DELIVERABLE.md` states "League
+ * chat AI tab: uses `useAIChat({ leagueId })` → POST /api/chimmy", and
+ * `docs/CHIMMY_UNIFIED_ASSISTANT_DELIVERABLE.md` calls it "the preferred client entry point".
+ * Traced: `useAIChat` posts to `/api/ai/chat?stream=1` and `ChimmyChatShell` to
+ * `/api/shared/chat/threads`. Neither touches this file. Those are dated deliverables and are
+ * left as the historical record they are — this note is where a reader will actually be.
+ *
+ * WHAT IT STILL DOES, AND WHY IT IS NOT DELETED: it adds commissioner, league-intelligence and
+ * portfolio grounding, then forwards to `postChatChimmy`. All three resolvers are now also read by
+ * `buildDecisionOsGroundingPacket`, so nothing here is unique any more — but that packet is behind
+ * `DECISION_OS_GROUNDING_ENABLED`, and "nothing calls it" is a reason to stop maintaining a route,
+ * not a reason to delete one while its replacement is still unproven.
+ *
+ * Retire it when the flag has been on long enough to compare answers. Until then: send nothing new
+ * here, and if you are about to add a caller, use `/api/chat/chimmy` instead.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
