@@ -57,6 +57,8 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
+    ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
+    ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
     // The eight graded context slices (4.3). Rendered alongside the rest because a reader should
     // not have to know which subsystem produced a fact to know whether it is safe to use.
     ...(packet.contextFacts
@@ -89,10 +91,8 @@ export function serializeDecisionOsGroundingForPrompt(
     lines.push('')
     /*
      * ⚠ PHRASED AS AN INSTRUCTION BECAUSE A DESCRIPTION GETS DROPPED. The route's own freshness
-     * block says "Always include this warning when answering" for the same reason. Telling the
-     * model a fact is missing invites it to fill the hole; telling it what to SAY does not.
-     */
-    /*
+     * block says "Always include this warning when answering" for the same reason.
+     *
      * ⚠ THIS COMPOSES WITH THE SYSTEM PROMPT'S EXISTING CONVENTION RATHER THAN REPLACING IT.
      * `chimmy_system_prompt.md` already carries a missing-data scheme — "Honest about uncertainty
      * — when data is missing or confidence is low, say so clearly and give a confidence score",
