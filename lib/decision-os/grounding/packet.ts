@@ -10,7 +10,10 @@ import {
   type CommissionerGroundingOutcome,
 } from '@/lib/intelligence/chimmy/resolveChimmyGrounding'
 import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/leagueIntelligenceGrounding'
-import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
+import {
+  resolvePortfolioGrounding,
+  type PortfolioGroundingOutcome,
+} from '@/lib/intelligence/chimmy/portfolioGrounding'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -580,6 +583,28 @@ export async function buildDecisionOsGroundingPacket(
         )
       : null
 
+  const pLeagueIntel =
+    leagueId && args.userId && !leagueIntelKill
+      ? kick(
+          'leagueIntelligence',
+          resolveLeagueIntelligenceGrounding({ leagueId, userId: args.userId }).catch(() => null),
+        )
+      : Promise.resolve(null)
+
+  /*
+   * ⚠ THE SLOWEST SLICE, SO THE ONE THAT MOST NEEDED HOISTING — AND THE ONE I MISSED FIRST TIME.
+   * It sat in a trailing `Promise.all`, starting only once the other nine had finished.
+   */
+  const pPortfolio =
+    args.userId && !portfolioKill
+      ? kick(
+          'portfolio',
+          resolvePortfolioGrounding({ userId: args.userId }).catch(
+            () => ({ status: 'empty' }) as PortfolioGroundingOutcome,
+          ),
+        )
+      : Promise.resolve(null)
+
   // ── The assertions first: everything else is judged against them. ─────────────────────────
   const assertions = await pAssertions
 
@@ -838,17 +863,18 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   // ── The other two resolvers (4.5) ─────────────────────────────────────────────────────────
-  const [leagueIntelText, portfolioText] = await Promise.all([
-    leagueId && args.userId && !leagueIntelKill
-      ? kick(
-          'leagueIntelligence',
-          resolveLeagueIntelligenceGrounding({ leagueId, userId: args.userId }).catch(() => null),
-        )
-      : Promise.resolve(null),
-    args.userId && !portfolioKill
-      ? kick('portfolio', resolvePortfolioGrounding({ userId: args.userId }).catch(() => null))
-      : Promise.resolve(null),
-  ])
+  /*
+   * ⚠ THESE TWO WERE NOT ACTUALLY HOISTED, AND THE MEASUREMENT CAUGHT THE CLAIM.
+   *
+   * The parallelisation commit said "all ten reads start together". Eight did. These two kept
+   * their `Promise.all` HERE, at the end of the builder, and only gained `kick()` timing — so
+   * they still began after everything else had finished. The proof surface showed it plainly:
+   * ~1700ms of everything else, then portfolio's 4500ms starting from cold, total 6203ms.
+   *
+   * A `Promise.all` looks like parallelism and is, between its own members — but it starts when
+   * control reaches it, which is the thing that mattered here.
+   */
+  const [leagueIntelText, portfolioOutcome] = await Promise.all([pLeagueIntel, pPortfolio])
 
   const leagueIntelligence: GroundedSlice<string> = leagueIntelKill
     ? absent<string>(leagueIntelKill)
@@ -862,9 +888,33 @@ export async function buildDecisionOsGroundingPacket(
 
   const portfolio: GroundedSlice<string> = portfolioKill
     ? absent<string>(portfolioKill)
-    : hasSubstance(portfolioText)
-    ? // Cross-league by nature: one league's import cannot bear on it, so no verdict applies.
-      present(portfolioText, { servedFrom: 'live', conclusive: { ok: true } })
+    : portfolioOutcome?.status === 'ok' && hasSubstance(portfolioOutcome.text)
+    ? /*
+       * ⚠ `status === 'ok'` IS NOT ENOUGH, AND SWAPPING `hasSubstance` FOR IT WAS A REGRESSION.
+       * The status says the resolver finished; it says nothing about whether it produced text. An
+       * `ok` carrying `''` graded PRESENT for one commit, which is the "[] presented as available"
+       * failure §5.2 exists to prevent. Both checks, or neither is worth having.
+       *
+       * Cross-league by nature: one league's import cannot bear on it, so no verdict applies.
+       */
+      present(portfolioOutcome.text, { servedFrom: 'live', conclusive: { ok: true } })
+    : portfolioOutcome?.status === 'timeout'
+    ? /*
+       * 🛑 A TIMEOUT IS NOT AN ABSENCE, AND SAYING SO COST A USER WITH 543 LEAGUES THE TRUTH.
+       *
+       * This branch did not exist: both paths collapsed to `null` and were graded
+       * `not_computed` — "No cross-league snapshot is available. Fix: Import at least one league
+       * and it appears." Told to an account with 543 imported leagues, that remedy is not merely
+       * unhelpful, it is false, and it sends someone to fix a thing that is not broken.
+       *
+       * `not_synced` is the honest reason: the data exists and was not gathered in time.
+       */
+      absent({
+        reason: 'not_synced',
+        detail: `The cross-league snapshot did not finish within its ${portfolioOutcome.budgetMs}ms budget.`,
+        remedy:
+          'Nothing for you to fix — it is retried next turn, and a warm dashboard cache usually returns it.',
+      })
     : absent({
         reason: 'not_computed',
         detail: 'No cross-league snapshot is available.',

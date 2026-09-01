@@ -15,21 +15,59 @@ import 'server-only'
 import { getCommandCenter } from '@/lib/dashboard-intel/commandCenterService'
 import { getCareerCard } from '@/lib/dashboard-intel/careerCardService'
 
-function withTimeout<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
+/**
+ * ── 🛑 A SLICE MAY NOT EXCEED THE BUDGET IT LIVES INSIDE, AND THIS ONE DID BY 150% ──────────
+ *
+ * These were 4500 and 3000, awaited in sequence — 7500ms worst case, inside a chat route whose
+ * ENTIRE grounding ceiling is 3000ms. One slice could blow the whole budget on its own, and no
+ * amount of parallelising the other nine could prevent it.
+ *
+ * Measured on a live account (2026-09-01) via the 5.1 proof surface: `portfolio` cost 4500ms —
+ * exactly `getCommandCenter`'s old timeout, which is what a timeout firing looks like, not a slow
+ * success — and returned nothing, pushing the packet's total to 6203ms.
+ *
+ * ⚠ AND THE TIMEOUT WAS INDISTINGUISHABLE FROM AN EMPTY RESULT, WHICH IS THE WORSE HALF. Both
+ * paths returned `null`, so the packet graded it `not_computed` — "No cross-league snapshot is
+ * available. Fix: Import at least one league and it appears." The account has 543 imported
+ * leagues. The remedy was wrong because the reason was wrong: it did not find nothing, it never
+ * finished looking. That is the same shape as the roster whose every name was its own player id,
+ * and the provider lookup that reported a cache hit as live — a failure wearing the face of a
+ * benign absence.
+ *
+ * ⚠ These budgets do NOT fix the underlying hang; they bound it and make it say so. Why
+ * `getCommandCenter` does not complete for a large account is a separate, open question, and it
+ * presumably affects the dashboard this shares its payload with.
+ */
+const COMMAND_CENTER_BUDGET_MS = 1500
+const CAREER_CARD_BUDGET_MS = 800
+
+const TIMED_OUT: unique symbol = Symbol('portfolio-grounding-timeout')
+
+function withTimeout<T>(p: Promise<T | null>, ms: number): Promise<T | null | typeof TIMED_OUT> {
   return Promise.race([
     p.catch(() => null),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+    new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), ms)),
   ])
 }
 
+/**
+ * `empty` and `timeout` are separate members on purpose — collapsing them to `null` is precisely
+ * the bug above. A caller that cannot tell them apart cannot give the user a true reason.
+ */
+export type PortfolioGroundingOutcome =
+  | { status: 'ok'; text: string }
+  | { status: 'timeout'; budgetMs: number }
+  | { status: 'empty' }
+
 export async function resolvePortfolioGrounding(args: {
   userId?: string | null
-}): Promise<string | null> {
+}): Promise<PortfolioGroundingOutcome> {
   try {
     const userId = args.userId?.trim()
-    if (!userId) return null
-    const center = await withTimeout(getCommandCenter(userId), 4500)
-    if (!center || center.leaguesScanned === 0) return null
+    if (!userId) return { status: 'empty' }
+    const center = await withTimeout(getCommandCenter(userId), COMMAND_CENTER_BUDGET_MS)
+    if (center === TIMED_OUT) return { status: 'timeout', budgetMs: COMMAND_CENTER_BUDGET_MS }
+    if (!center || center.leaguesScanned === 0) return { status: 'empty' }
 
     const lines: string[] = []
     lines.push(
@@ -73,8 +111,10 @@ export async function resolvePortfolioGrounding(args: {
         )
       }
     }
-    const career = await withTimeout(getCareerCard(userId), 3000)
-    if (career) {
+    // A career-card timeout is NOT fatal to the slice: everything above it is already gathered,
+    // so this degrades to a snapshot without the career line rather than to nothing.
+    const career = await withTimeout(getCareerCard(userId), CAREER_CARD_BUDGET_MS)
+    if (career && career !== TIMED_OUT) {
       lines.push(
         `Career (Legacy engines): all-time ${career.allTime.wins}-${career.allTime.losses}, ${career.allTime.titles} title${career.allTime.titles === 1 ? '' : 's'} across ${career.leaguesIncluded} leagues; trade résumé net ${career.trades.totalNet > 0 ? '+' : ''}${career.trades.totalNet.toFixed(0)} pts over ${career.trades.graded} graded trades; ${career.recordsHeld.length} league record${career.recordsHeld.length === 1 ? '' : 's'} held.`,
       )
@@ -82,8 +122,8 @@ export async function resolvePortfolioGrounding(args: {
     lines.push(
       'These synced facts are the ONLY cross-league truths — cite them when relevant; for deeper answers about one league, that league page carries full grounding. Never invent standings, values, or trades beyond these.',
     )
-    return lines.join('\n')
+    return { status: 'ok', text: lines.join('\n') }
   } catch {
-    return null // never break the chat turn
+    return { status: 'empty' } // never break the chat turn
   }
 }

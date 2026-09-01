@@ -200,7 +200,7 @@ beforeEach(() => {
   loadContext.mockResolvedValue(bundle())
   commissioner.mockResolvedValue({ status: 'ok', text: 'commissioner brief' })
   leagueIntel.mockResolvedValue('league brief')
-  portfolio.mockResolvedValue('portfolio brief')
+  portfolio.mockResolvedValue({ status: 'ok', text: 'portfolio brief' })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ describe('5.2 — the structural invariants, checked on every slice the packet c
     loadContext.mockResolvedValue(bundle({ matchup: null, roster: null, standings: null }))
     commissioner.mockResolvedValue({ status: 'unavailable' })
     leagueIntel.mockResolvedValue(null)
-    portfolio.mockResolvedValue(null)
+    portfolio.mockResolvedValue({ status: 'empty' })
 
     const p = await buildDecisionOsGroundingPacket(ARGS)
 
@@ -233,7 +233,7 @@ describe('5.2 — the structural invariants, checked on every slice the packet c
     loadDevy.mockResolvedValue([])
     loadFor.mockResolvedValue([])
     leagueIntel.mockResolvedValue('   ')
-    portfolio.mockResolvedValue('')
+    portfolio.mockResolvedValue({ status: 'ok', text: '' })
 
     const p = await buildDecisionOsGroundingPacket(ARGS)
 
@@ -502,5 +502,38 @@ describe('meta timing — a total nobody can act on is why this exists', () => {
     // `rankings` is the one slice whose packet key differs from its engine provider name
     // (`ranking`); without the alias its timing silently reads null forever.
     expect(p.meta.sources.find((s) => s.slice === 'rankings')?.ms).toBeTypeOf('number')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('a portfolio that timed out is not a portfolio that is empty', () => {
+  /*
+   * ── 🛑 MEASURED IN PRODUCTION, AND THE REMEDY WAS FALSE ─────────────────────────────────────
+   * `resolvePortfolioGrounding` returned `null` for BOTH "no leagues" and "getCommandCenter did
+   * not finish", so the packet graded every case `not_computed`:
+   *
+   *     "No cross-league snapshot is available. Fix: Import at least one league and it appears."
+   *
+   * The 5.1 proof surface caught it on an account with 543 imported leagues, where that sentence
+   * is not merely unhelpful — it is false, and it sends someone to fix something that is not
+   * broken. The slice had cost 4500ms (exactly its own timeout) to say it.
+   */
+  it('🛑 reports not_synced with the budget, not "import a league"', async () => {
+    portfolio.mockResolvedValue({ status: 'timeout', budgetMs: 1500 })
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.portfolio.gap?.reason).toBe('not_synced')
+    expect(p.portfolio.gap?.detail).toContain('1500ms')
+    // The specific falsehood, pinned: never tell someone with leagues to import a league.
+    expect(p.portfolio.gap?.remedy).not.toMatch(/import/i)
+  })
+
+  it('still says not_computed when the snapshot genuinely is empty', async () => {
+    // The distinction only matters if BOTH sides stay reachable; collapsing them again is the bug.
+    portfolio.mockResolvedValue({ status: 'empty' })
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.portfolio.gap?.reason).toBe('not_computed')
+    expect(p.portfolio.gap?.remedy).toMatch(/import/i)
   })
 })
