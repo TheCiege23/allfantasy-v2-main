@@ -733,6 +733,42 @@ a claim carrying the current token rebind the name — the same "same work under
 another name" problem the push QUEUE already solves with `sameWork`/rebind, and
 which the pusher lock does not.
 
+### 2.19 The guard over the build script had been asserting something false since June
+
+Found while keep-lining 5.1's proof route. `__tests__/vercel-build-admin-routes.test.ts`
+required that `scripts/vercel-next-build.cjs` never contain `path.join('app', 'api', 'admin')`.
+`43f9ae44c` (route-budget cleanup) added that line **on purpose** — Vercel had hit the 2048-route
+cap at 2049 — and the test has been red on `main` ever since. Measured, not inferred: the
+predicate is `true` at `origin/main`, at `HEAD~1` and at `HEAD`, and the test file is
+byte-identical to `origin/main`, so the failure is nothing to do with this work.
+
+⚠ **A permanently-RED guard is the mirror of the permanently-green one this file keeps
+recording.** Nobody reads either, and both feel like coverage. This one was worse than useless:
+it contradicted the deliberate design, so the only way to make it pass was to undo a fix.
+
+Its sibling `__tests__/admin-build-route-preservation.test.ts` was already correct and passing —
+and the difference between them is one character. The good one matches
+`"path.join('app', 'admin'),"` **with the trailing comma**, which can only be an exclusion-list
+entry; the stale one omitted it, so the same string also matches a keep-line prefix.
+
+**Rewritten to guard the mechanism that actually keeps an admin route alive.** Since
+`app/api/admin` is excluded wholesale and individual routes are restored by name in `filesToKeep`,
+the property worth checking is no longer "the directory is not excluded" but **"every keep-line
+still points at a file that exists"**. A keep-line that has drifted from its route restores
+nothing: the route 404s in production and every local check stays green, because the build script
+only ever runs on Vercel.
+
+Both new assertions were proved by mutation, with the mutation itself proved to have applied
+(a no-op mutation is indistinguishable from a test that cannot fail):
+
+| control | result |
+|---|---|
+| point the keep-line at a non-existent dir | 2 failed — and the output **names** the drifted route |
+| delete the 5.1 keep-line | 1 failed |
+
+The failure naming the route rather than reporting "expected 1 to be 0" is why the assertion is
+`expect(missing).toEqual([])` and not a count.
+
 ### 2.18 4.5 is blocked by its own precondition, and half its premise was wrong
 
 **All fifteen are now absorbed.** The twelve providers landed in 4.3, the
