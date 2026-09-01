@@ -366,22 +366,69 @@ route ceiling, so a permanent dev-preview route costs real headroom:
 | `touch-action` on the canvas | `none` — without it the browser scrolls the page instead of panning the crop |
 | console errors from the component | none (only pre-existing local Sentry-DSN and Facebook-SDK noise) |
 
-### Phase 4 — Make push reachable (unblocks everything in notifications)
+### Phase 4 — Make push reachable ✅ CODE DONE (uncommitted at time of writing)
 
-- [ ] Set `NEXT_PUBLIC_ENABLE_PWA_SW=1` on preview so push is testable off
-      production. **Do this first** — without it Phase 4 cannot be verified.
-- [ ] Delete `public/sw-push.js` and `hooks/usePushSubscription.ts` before anyone
-      wires the wrong one. Confirm zero importers immediately before deleting —
-      check `@/`, relative, dynamic `await import()`, and test mocks, all four.
-- [ ] Surface the opt-in in `/core`: render the enable card at the top of
-      `/core/notifications` whenever `Notification.permission === 'default'`,
-      unconditionally — not gated on `suppressedReason`.
-- [ ] Trigger the permission ask on **first meaningful action** (spec item 12).
-      Decide and write down what counts — proposal: first completed league import,
-      or first lineup change.
-- [ ] Add the dismissible game-day banner (spec item 18).
-- [ ] Add the install prompt (spec item 13) for browsers supporting
-      `beforeinstallprompt`, plus the existing iOS home-screen copy.
+- [ ] 🛑 **`NEXT_PUBLIC_ENABLE_PWA_SW=1` ON PREVIEW — USER ACTION, NOT DONE.** This
+      is a Vercel project setting (Preview scope) and the Vercel CLI is not
+      installed in this session. Without it `shouldRegisterServiceWorker()` returns
+      false off production, so there is no service worker, so **push cannot be
+      tested on any preview deploy** — the hook's 10s wait times out and reports
+      "the background service worker did not start", which reads as broken code
+      rather than a missing flag. Everything below is verifiable only in production
+      until this is set.
+- [x] Deleted `public/sw-push.js` and `hooks/usePushSubscription.ts` after a
+      **four-form census** (alias, relative, dynamic `await import()`, test mock)
+      returned zero importers. The three comments that referenced them were
+      rewritten, not left pointing at deleted files.
+- [x] `EnableWebPushCard` now renders at the top of `/core/notifications`,
+      **unconditionally** — not behind `data.push.suppressedReason`, which was the
+      bug: a user with nothing suppressed had no route to enabling alerts at all.
+- [x] **First meaningful action = a completed league import** (spec item 12). The
+      card renders on `ImportDone`. Before an import a permission prompt is asking
+      a stranger for their lock screen on behalf of a league we cannot name; after
+      it we can say which league and why. Same component, not a second ask.
+- [x] Dismissible game-day banner (spec item 18) —
+      `components/notifications/GameDayAlertsBanner.tsx`, mounted in `AfCoreShell`
+      beside `GeoRestrictionNotice` so every `/core` screen inherits it. Renders
+      null off game days, once permission is decided either way, and for the rest
+      of the week after dismissal. **Dismissal is week-scoped, not permanent** —
+      someone waving it away in September has said "not now", not "never".
+- [x] Install prompt (spec item 13): the existing `InstallButton` surfaced beside
+      the alerts ask, with a new `hideWhenInstalled` prop. Installing is a
+      *prerequisite* for notifications on iPhone, not a parallel feature.
+
+**🛑 TWO THINGS THE WORK UNCOVERED THAT WERE NOT ON THIS LIST.**
+
+1. **`initPWA` was mounted only on auth routes.** It attaches the
+   `beforeinstallprompt` listener, and its sole caller — `ServiceWorkerRegistration`
+   — is rendered only by `AuthRouteGlobalChrome` (`/login`, `/signup`). The browser
+   fires that event once, early, so a signed-in user on `/core` never had it
+   captured: `canInstallApp()` was permanently false and every install affordance
+   degraded to a manual instructions `alert()`. Now called from `SafeGlobalChrome`.
+   **Same shape as the push opt-in itself: built, correct, mounted where it could
+   not work.**
+
+2. 🛑 **`LeftChatPanel` fired an unprompted `Notification.requestPermission()` from
+   a bare mount effect** — no user gesture, no explanation — and it is mounted on
+   the **league page**. Two consequences, and the second is severe: browsers
+   penalise gesture-less permission requests (quieter UI or auto-block), and **a
+   denial is sticky and cannot be re-asked from script**, so one reflexive "Block"
+   there permanently disabled web push for that user — including the game-day
+   alerts this entire phase exists to deliver. One panel could poison the feature
+   for the whole app. Deleted; the DM notification below it is gated on
+   `permission === 'granted'` and still works for users who opted in properly.
+
+**Measured — 52 tests pass across the six avatar + push suites.** Positive control:
+a second `Notification.requestPermission()` call was planted as real code in the
+banner, the mutation proved applied with `diff -q`, **both** invariant tests went
+red, and the restore verified identical.
+
+⚠ **The repo-wide "exactly one permission flow" test reported ITSELF as a violation
+three times before it was right**, each time a different comment style: a JSDoc
+block explaining why the banner does not call it, the note recording the removed
+call in `LeftChatPanel`, and a `{/* … */}` JSX comment. Prefix heuristics caught
+two and missed the third. It now strips block comments statefully. **A guard that
+matches documentation of the rule is not a guard.**
 
 ### Phase 5 — Notification preferences (spec items 14, 15, 16)
 

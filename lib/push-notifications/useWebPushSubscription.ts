@@ -14,8 +14,9 @@
  *
  * The service worker itself is registered by SafeGlobalChrome at `/sw.js`; this hook waits
  * for that registration rather than registering a second worker, because only one service
- * worker can control a given scope and registering `/sw-push.js` alongside it would fight for
- * the same scope.
+ * worker can control a given scope. There WAS a rival `/sw-push.js` plus a `usePushSubscription`
+ * hook that registered it at the same scope; both were dead code and are deleted. Do not
+ * reintroduce a second worker — make `/sw.js` handle the case instead.
  */
 
 import { useCallback, useEffect, useState } from 'react'

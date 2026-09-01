@@ -278,12 +278,25 @@ export function LeftChatPanel({
   const [dmSilent, setDmSilent] = useState(false)
   const [dmNotifThrottle, setDmNotifThrottle] = useState<Record<string, number>>({})
   const [activeDm, setActiveDm] = useState<string | null>(null)
-    // Notification permission
-    useEffect(() => {
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-    }, []);
+    /*
+     * 🛑 THE UNPROMPTED PERMISSION REQUEST THAT USED TO LIVE HERE IS DELETED, AND IT WAS
+     * ACTIVELY HARMFUL RATHER THAN MERELY UNTIDY.
+     *
+     * It called `Notification.requestPermission()` from a bare mount effect — no user
+     * gesture, no explanation — and this panel is mounted on the LEAGUE page
+     * (`LeagueShell`), so it fired at people who had asked for nothing. Two consequences:
+     *
+     *   1. Chrome and Firefox penalise permission requests made without a user gesture,
+     *      degrading the prompt to a quieter UI or auto-blocking it outright.
+     *   2. A denial is STICKY in every major browser and cannot be re-asked from script.
+     *      So a reflexive "Block" here permanently disabled web push for that user —
+     *      including the game-day alerts the whole notification pipeline exists to send.
+     *      One panel could poison the feature for the entire app.
+     *
+     * The DM notification below still works: it is gated on `permission === 'granted'` and
+     * simply uses whatever the user has already allowed. Asking is `EnableWebPushCard`'s
+     * job, from a real button, with an explanation of what the alerts are for.
+     */
 
     // Notification sound
     const playNotifSound = useCallback(() => {

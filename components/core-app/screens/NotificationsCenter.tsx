@@ -7,6 +7,8 @@ import type {
   NotificationRow,
   NotificationsCenterData,
 } from '@/lib/core-app/notificationsCenter'
+import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
+import { InstallButton } from '@/components/pwa/PWAActions'
 import '@/components/core-app/af-notifications.css'
 
 /**
@@ -215,6 +217,33 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           {marking ? 'Marking…' : 'Mark all read'}
         </button>
       </header>
+
+      {/*
+        🛑 THE ASK LIVES HERE BECAUSE MOBILE NEVER REACHED THE OTHER ONE.
+        `EnableWebPushCard` is the only thing in the codebase that calls
+        `Notification.requestPermission()`, and until now it was rendered in exactly one
+        place: /settings → Notifications. On a phone that is behind a horizontally
+        scrolling rail, so the entire server-side push pipeline — the crons, the outbox
+        relay, `sendPushToUser`, the handlers in sw.js — ran correctly and delivered into
+        an empty subscription table, because nothing ever asked anyone.
+
+        ⚠ IT IS NOT GATED ON `data.push.suppressedReason`. The footer below is, and that
+        was the bug: a user with nothing suppressed saw no route to enabling alerts at all.
+        The card renders its own states (unsupported, not configured, denied, already on),
+        so the only correct gate here is "none".
+      */}
+      <div className="af-nt-push">
+        <EnableWebPushCard />
+        {/*
+          ⚠ INSTALLING IS A PREREQUISITE FOR ALERTS ON IPHONE, NOT A SEPARATE FEATURE.
+          Safari only permits notifications for a site added to the Home Screen, which
+          `EnableWebPushCard` already says in words — this turns that instruction into a
+          button. Hidden once installed: an installed user has no reason to see it.
+        */}
+        <div className="af-nt-push-install">
+          <InstallButton hideWhenInstalled />
+        </div>
+      </div>
 
       {/* Live counts, straight off the loader. */}
       <div className="af-nt-filters" role="tablist" aria-label="Filter notifications">
