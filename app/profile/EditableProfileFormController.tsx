@@ -7,6 +7,7 @@ import { getPreferredSportsOptions } from "@/lib/user-settings/PreferredSportsRe
 import type { ProfileUpdatePayload, UserProfileForSettings } from "@/lib/user-settings/types"
 import { ProfileImagePreviewController } from "@/components/identity/ProfileImagePreviewController"
 import { uploadProfileImage, setProfileAvatarUrl, AVATAR_PRESET_EMOJI } from "@/lib/avatar"
+import { AvatarCropDialog, shouldCropBeforeUpload } from "@/components/identity/AvatarCropDialog"
 
 interface EditableProfileFormControllerProps {
   profile: UserProfileForSettings
@@ -38,6 +39,8 @@ export default function EditableProfileFormController({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null)
+  /** Non-null while the crop dialog is framing a freshly picked file. */
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -77,10 +80,7 @@ export default function EditableProfileFormController({
     }
   }
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) return
+  const runUpload = async (file: File) => {
     setPreviewObjectUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev)
       return URL.createObjectURL(file)
@@ -95,6 +95,32 @@ export default function EditableProfileFormController({
     })
     if (result.ok) onRefetch()
     else setUploadError(result.error ?? "Upload failed")
+    return result.ok
+  }
+
+  /*
+   * Same crop step as the settings page, from the same component. These two editors doing
+   * the same job differently is what produced the original avatar bug — one posted to
+   * /api/chat/upload and the other did not — so parity here is deliberate, not incidental.
+   */
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    // Cleared before any await so picking the SAME file again still fires a change event.
+    e.target.value = ""
+    if (!file) return
+    setUploadError(null)
+    // GIFs skip the cropper — a canvas crop would flatten the animation.
+    if (shouldCropBeforeUpload(file)) {
+      setCropFile(file)
+      return
+    }
+    await runUpload(file)
+  }
+
+  const handleCropConfirm = async (cropped: File) => {
+    const ok = await runUpload(cropped)
+    // Keep the dialog open on failure so the framing is not lost with the error.
+    if (ok) setCropFile(null)
   }
 
   const handleRemoveImage = async () => {
@@ -188,6 +214,13 @@ export default function EditableProfileFormController({
                   accept="image/jpeg,image/png,image/gif,image/webp"
                   className="hidden"
                   onChange={handleFileChange}
+                />
+                <AvatarCropDialog
+                  file={cropFile}
+                  open={cropFile !== null}
+                  busy={uploading}
+                  onCancel={() => setCropFile(null)}
+                  onConfirm={handleCropConfirm}
                 />
                 <button
                   type="button"

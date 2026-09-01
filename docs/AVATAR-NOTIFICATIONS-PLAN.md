@@ -320,11 +320,51 @@ structural. The league half currently holds by construction, so the value of a
 heavier integration test is lower than it looks — but it is the only thing that
 would catch a NEW league surface built against the wrong field.
 
-### Phase 3 — Mobile crop/rotate (spec item 9)
+### Phase 3 — Mobile crop/rotate ✅ DONE (uncommitted at time of writing)
 
-- [ ] Add a touch-friendly crop/rotate step to the settings avatar flow.
-- [ ] Square output; downscale before upload to keep the payload small.
-- [ ] Verify inside the TWA, not just mobile Chrome — the file picker path differs.
+- [x] `components/identity/AvatarCropDialog.tsx` — square crop, pinch/drag pan, zoom
+      slider, 90° rotate. Built on `AppModal` (Radix: focus trap, Escape, scroll
+      lock) rather than a bespoke overlay, and on the same
+      `createImageBitmap → canvas → toBlob` shape as
+      `lib/chimmy-chat/prepareImageForChimmyUpload.ts`. **No new dependency.**
+- [x] Square 512px output, downscaled client-side.
+- [x] Wired into **both** editors — settings and `/profile` — from one component.
+      Parity is deliberate: those two doing the same job differently is what
+      produced the original bug.
+- [ ] ⚠ **NOT verified inside the TWA.** Requires a Play internal-test install on
+      a physical Android device, which this session had no access to. Verified in
+      mobile-emulated Chrome instead (see below). **The file picker path genuinely
+      differs in a TWA, so this box stays open.**
+
+**Three decisions worth keeping:**
+
+- **`paint()` is shared by the preview and the export**, parameterised only by
+  size (`k = size / VIEWPORT_PX`). The classic cropper bug is a preview drawn by
+  one path and an export by another, so the saved image is subtly not what was
+  framed. Here that is impossible by construction.
+- **GIFs bypass the cropper entirely** (`shouldCropBeforeUpload`). Drawing one to
+  a canvas keeps frame one and silently discards the animation — a worse outcome
+  than an uncropped avatar.
+- **EXIF orientation is requested explicitly** (`imageOrientation: 'from-image'`),
+  with a fallback for engines that reject the option. Without it every portrait
+  photo from a phone loads sideways and the user has to fix our bug by hand.
+
+**Measured — 39 tests pass across the five avatar suites.** Positive control:
+`coverScale` was mutated from `Math.min` to `Math.max` (cover → contain), the
+mutation proved applied with `diff -q`, and **3 tests went red** including the
+no-gutter invariant; restore verified identical.
+
+**Verified in a real browser**, not just unit tests, via a throwaway harness route
+that was **deleted before commit** — this repo is at ~1949 of Vercel's hard 2048
+route ceiling, so a permanent dev-preview route costs real headroom:
+
+| check | result |
+|---|---|
+| painted fraction of the crop square | **1.0** — no gutters, at load, after rotate, after zoom 2.6×, and after a full 360° turn |
+| exported file | **512×512, square, `image/jpeg`, 5,004 bytes** from a 4000×3000 source |
+| mobile 375×812 | canvas 288px fits, dialog 343×494 fits, no horizontal page scroll |
+| `touch-action` on the canvas | `none` — without it the browser scrolls the page instead of panning the crop |
+| console errors from the component | none (only pre-existing local Sentry-DSN and Facebook-SDK noise) |
 
 ### Phase 4 — Make push reachable (unblocks everything in notifications)
 
