@@ -7,9 +7,43 @@
   "scope": "/",
   "display": "standalone",
   "display_override": [
+    "window-controls-overlay",
     "standalone",
     "minimal-ui",
     "browser"
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "share_target": {
+    "action": "/core/players",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "q",
+      "url": "url"
+    }
+  },
+  "widgets": [
+    {
+      "name": "AllFantasy quick actions",
+      "short_name": "AllFantasy",
+      "description": "Jump straight to your leagues, your week, live scores or waivers.",
+      "tag": "af-quick-actions",
+      "template": "af-quick-actions",
+      "ms_ac_template": "/widgets/af-quick-actions.ac.json",
+      "data": "/api/widgets/quick-actions",
+      "type": "application/json",
+      "auth": false,
+      "update": 3600,
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
   ],
   "dir": "ltr",
   "orientation": "portrait",

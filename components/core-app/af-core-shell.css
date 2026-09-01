@@ -1089,3 +1089,60 @@
     background: transparent;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Window Controls Overlay
+ *
+ * `window-controls-overlay` is FIRST in the manifest's display_override, so on
+ * a desktop install the OS stops drawing a title bar and hands that strip to
+ * the page. Without the rules below the topbar renders UNDERNEATH the close /
+ * minimise / maximise buttons — which is why adding the display_override value
+ * alone would have made the desktop app worse, not better.
+ *
+ * ⚠ APPENDED AT END OF FILE ON PURPOSE. Dropping a new `@media` block into the
+ * middle of this stylesheet closes whichever query encloses that point early
+ * and silently re-homes every rule below it into the new, narrower query.
+ * Braces stay balanced, nothing throws, and no linter sees it — this repo has
+ * already lost four rules out of a 780px band exactly that way. End of file is
+ * the one insertion point with no enclosing query.
+ *
+ * Scoped entirely inside the media query, so in every other display mode —
+ * browser tab, standalone, minimal-ui — the topbar is byte-for-byte what it
+ * was.
+ * ------------------------------------------------------------------------- */
+@media (display-mode: window-controls-overlay) {
+  .af-topbar {
+    /*
+     * The overlay sits at one END of the strip, and which end depends on OS and
+     * text direction — so both sides are computed from the env vars rather than
+     * assuming the buttons are on the right. Fallbacks make this a no-op if a
+     * UA reports the display mode without the variables.
+     */
+    padding-left: calc(18px + env(titlebar-area-x, 0px));
+    padding-right: calc(
+      18px + (100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
+    );
+    min-height: env(titlebar-area-height, 40px);
+
+    /* The bar becomes the window's drag handle now that the OS has no title bar. */
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  /*
+   * ⚠ WITHOUT THIS THE WHOLE HEADER STOPS BEING CLICKABLE. `app-region: drag`
+   * is inherited by descendants, so every control in the topbar would become a
+   * drag handle instead of a button — the nav, the search field and the avatar
+   * menu all die at once, and it looks like a hang rather than a style bug.
+   */
+  .af-topbar a,
+  .af-topbar button,
+  .af-topbar input,
+  .af-topbar select,
+  .af-topbar textarea,
+  .af-topbar [role="button"],
+  .af-topbar [tabindex]:not([tabindex="-1"]) {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}
