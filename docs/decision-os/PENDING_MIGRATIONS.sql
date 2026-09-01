@@ -1,3 +1,65 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════
+-- ✅ RESOLVED 2026-08-31 — BOTH WERE ALREADY APPLIED. NOTHING BELOW NEEDS RUNNING.
+--
+-- STEP 0 was run against production (neondb) and returned `t` for all three:
+--
+--     A: FantraxLeague.sourceLeagueId column       t
+--     A: FantraxLeague_sourceLeagueId_idx index    t
+--     B: tournament_shell_grants table             t
+--
+-- The `_prisma_migrations` query returned TWO rows, so both are recorded as applied by Prisma
+-- Migrate rather than pasted in as raw DDL — which means the bookkeeping in STEP 2 is already
+-- correct and must NOT be re-done.
+--
+-- ⚠ THERE WAS NEVER A P2022 EXPOSURE. The reasoning that predicted one was sound about the
+-- REPO and wrong about PRODUCTION, and the difference is the caveat this file already carried:
+--
+--   package.json      `build:vercel` (the only script chaining db:migrate:deploy) is referenced
+--                     nowhere but its own definition. `vercel-build`, which Vercel actually
+--                     resolves, has zero `prisma migrate` references.
+--   .github/          the one `npx prisma migrate deploy` is COMMENTED OUT
+--                     (neon-pr-branches.yml:66).
+--   production        both applied, both recorded.
+--
+-- 🛑 SO A MECHANISM EXISTS THAT THE REPO DOES NOT SHOW. The likeliest is a Build Command
+-- override set in the Vercel dashboard, which beats both npm hooks and which
+-- docs/release-readiness/PHASE_0_RELEASE_BASELINE.md already flags as unconfirmed: "confirm
+-- Vercel build command = vercel-build". A manual run is the other candidate.
+--
+-- ⚠ THE LESSON IS NOT "THE ANALYSIS WAS WRONG" — it is that "no deploy applies migrations"
+-- is a belief about a system nobody has checked, and it is load-bearing in BOTH directions.
+-- Believe it and you hand-apply things that were already applied. Disbelieve it and you park a
+-- migration in prisma/migrations/ expecting it to sit there. Which is exactly what happened:
+--
+--
+-- ═══ THE REAL FINDING: A MIGRATION MARKED "PARKED, NOT APPLIED" IS APPLIED ════════════
+--
+-- 20260831_tournament_grants opens with "🛑 PARKED, NOT APPLIED ... This lives in
+-- migrations-pending/ until the user decides to apply it." It does not live there — it is in
+-- prisma/migrations/ — and production has the table. The parking failed silently and the file
+-- still asserts otherwise.
+--
+-- ⚠ AND IT LEFT DRIFT THAT THIS REPO'S OWN CHECKER CANNOT SEE. `tournament_shell_grants`
+-- exists in the database; `TournamentShellGrant` is in NEITHER origin/main's schema.prisma nor
+-- the working tree's. lib/prisma/schema-drift.ts only detects the opposite direction — P2022,
+-- "the schema has something the database lacks". A table the database has and the schema does
+-- not is invisible to it.
+--
+-- 🛑 THE FOOTGUN: the migration is in the history AND applied, while schema.prisma has no
+-- model for it. `prisma migrate dev` replays the history in the shadow database, diffs against
+-- schema.prisma, and proposes DROP TABLE "tournament_shell_grants" — as a normal, expected
+-- migration. Whoever runs it next has to notice and refuse.
+--
+-- The fix belongs to the tournament author, who knows the intended shape: either add the
+-- TournamentShellGrant model to schema.prisma so the schema matches what production has, or
+-- decide the feature is off and drop the table AND the migration together. Guessing the model
+-- here would be worse than leaving it named.
+-- ══════════════════════════════════════════════════════════════════════════════════════════
+--
+-- Everything below is kept as the record of what was checked and how. STEP 0 remains useful —
+-- it is read-only and re-runnable, and it is what settled this.
+--
+--
 -- ═══════════════════════════════════════════════════════════════════════════════════════════
 -- TWO MIGRATIONS ARE ON `main` AND NOTHING APPLIES THEM. Prepared 2026-08-31.
 --
