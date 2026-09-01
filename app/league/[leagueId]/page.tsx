@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth'
+import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -111,6 +112,20 @@ export default async function LeaguePage({
     }
 
   const { leagueId } = await params
+
+  /*
+   * ⚠ NOT AWAITED, AND NOT IN A `try`. `touchLeagueViewed` swallows every error itself and
+   * returns void, so there is nothing here to handle — awaiting it would put a database write on
+   * the render path of a page that does not need its result. It records DEMAND for the
+   * historical-refresh rotation: a league someone opened yesterday earns fresher history than
+   * one nobody has opened since June.
+   *
+   * It skips Next router prefetches internally rather than relying on this call site to
+   * remember — every league link in a list is prefetched when it scrolls into view, and counting
+   * those would make the signal a restatement of what is on screen.
+   */
+  void touchLeagueViewed(leagueId)
+
   const sp = searchParams ? await searchParams : {}
   const createdFromLeagueCreate = isPostCreateLeagueShellHandoff(sp)
   const defaultShowInvite = isTruthySearchParam(sp.showInvite)

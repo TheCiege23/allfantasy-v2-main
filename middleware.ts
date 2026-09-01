@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isSpeculativeRequestHeaders } from "@/lib/http/speculativeRequest"
 import { SELECTABLE_LANGUAGES } from "@/lib/i18n/constants"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
@@ -415,18 +416,13 @@ export function nextWithRouteHeaders(request: NextRequest, pathname: string): Ne
 /**
  * A request the user did not ask for: a Next router prefetch, or browser speculation.
  *
- * Deliberately narrow. Anything not positively identified as speculative is treated as a real
- * navigation, so the failure mode is "we honoured a switch someone meant" rather than "we
- * ignored one".
+ * ⚠ THE PREDICATE MOVED TO `lib/http/speculativeRequest.ts` AND THIS IS NOW A THIN ADAPTER.
+ * A second caller needs it — a server component, which has `headers()` and no `NextRequest` —
+ * and writing a small copy there is how two implementations of one rule start. The behaviour is
+ * unchanged and `__tests__/middleware-lang-prefetch.test.ts` still pins it from this side.
  */
 function isSpeculativeRequest(request: NextRequest): boolean {
-  const headers = request.headers
-  if (headers.get("next-router-prefetch") === "1") return true
-  // Chrome's Speculation Rules: "prefetch" or "prefetch;prerender".
-  if ((headers.get("sec-purpose") ?? "").includes("prefetch")) return true
-  // Legacy header still sent by some browsers and link-scanning proxies.
-  if ((headers.get("purpose") ?? "").toLowerCase() === "prefetch") return true
-  return false
+  return isSpeculativeRequestHeaders(request.headers)
 }
 
 /**
