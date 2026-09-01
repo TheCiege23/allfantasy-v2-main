@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getDraftPicks, getLeagueDrafts, getLeagueRosters } from '@/lib/sleeper-client'
 import { getSourceTeamIdFromPlayerData } from './SleeperHistoricalMatchupSyncService'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
-import { shouldSkipImportedSeason } from './seasonCompletion'
+import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 interface PendingSleeperDraftFact {
   sourceDraftId: string

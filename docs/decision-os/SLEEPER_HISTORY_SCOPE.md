@@ -190,7 +190,8 @@ found this:
 | | step | why this order |
 |---|---|---|
 | 1 | ~~Schedule the backfill orchestrator~~ **Fix the completion gates** | DONE. Past and present are now distinguishable, which every later step depends on. Scheduling anything before this would have propagated the frozen-season bug on a timer. |
-| 1b | **Give the matchup service the same gate** | It has none, so it re-fetches completed seasons — the opposite failure, same missing concept. Efficiency, not correctness, so it follows. |
+| 1b | ~~Give the matchup service the same gate~~ | DONE. It had none, so every run re-fetched FOUR Sleeper endpoints per season — rosters, both playoff brackets, and multi-week `fetchWeekMatchups` — re-learning settled history. Now gated on the same shared predicate. |
+| 1d | **The predicate is provider-agnostic, at the user's instruction** | It was first written under `sleeper/` and typed on `SleeperLeague`. Past-versus-present is a PRODUCT rule and every import has both kinds of season, so it now lives at `lib/league-import/seasonCompletion.ts`. `'complete'` is already the shared vocabulary: espn/fantrax/mfl/yahoo all map `isFinished ? 'complete' : 'in_season'`, sleeper passes its own through, fleaflicker maps none — correctly not-complete. |
 | 1c | **Then schedule the orchestrator** | Only meaningful once the gates refresh the live season and skip finished ones. |
 | 2 | **`SleeperHistoricalTransactionSyncService`** | The missing fourth sibling. Splits on the discriminator that already exists; trades and waivers to their own tables. |
 | 3 | **Repoint `getLeagueContext` + `/rosters`** | Free today — that data is already in the DB via the 30-min sync. Deletes 24 of 60 calls per render with no new writer. |
