@@ -29,6 +29,30 @@ function clearGuestTrialCookie(request: NextRequest, response: NextResponse): Ne
  * Uses the same host as NEXT_PUBLIC_SITE_URL / NEXTAUTH_URL when set.
  */
 function canonicalProductionHostRedirect(request: NextRequest): NextResponse | null {
+  /*
+   * ⚠ `/.well-known/` MUST NEVER REDIRECT, ON ANY HOST. These files are how a
+   * host proves something about itself, so the answer is host-specific by
+   * definition and a 308 to the canonical host is not an equivalent answer —
+   * it is a refusal to answer.
+   *
+   * Measured against Google's own checker, which rejects the redirect outright
+   * rather than following it:
+   *
+   *   https://www.allfantasy.ai/.well-known/assetlinks.json  ->  308
+   *   "Redirect encountered while fetching statements ...
+   *    redirects are disallowed for security reasons (NOT_FOLLOWED_MAX_FORWARDS)"
+   *
+   * docs/play-store/twa-manifest.json lists `www.allfantasy.ai` in
+   * additionalTrustedOrigins, so Android verifies that origin too and the whole
+   * Trusted Web Activity fails to verify — which shows up as the installed app
+   * opening with a browser address bar rather than full screen.
+   *
+   * This is not specific to Digital Asset Links: apple-app-site-association,
+   * ACME http-01 challenges and security.txt all break the same way. The rule
+   * is the path, not the file.
+   */
+  if (request.nextUrl.pathname.startsWith("/.well-known/")) return null
+
   const host = request.headers.get("host")?.split(":")[0]?.toLowerCase()
   if (!host) return null
   if (host === "localhost" || host.endsWith(".vercel.app")) return null
