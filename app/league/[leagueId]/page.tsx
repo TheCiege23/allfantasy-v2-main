@@ -327,7 +327,14 @@ export default async function LeaguePage({
 
       const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
         const isHeadCommissioner = role === 'commissioner'
-        const userImage = resolveDashboardAvatarUrl(session.user.image, dbUser?.avatarUrl)
+        /*
+         * Account chrome only — the "you" avatar in the top nav, not any manager shown on
+         * the league itself. Those keep the image imported from the source platform.
+         * `dbUser` is read fresh in the Promise.all above; `session.user.image` is NOT used,
+         * because it is frozen into the JWT at sign-in and made this page show a stale
+         * picture after an avatar change while /core showed the new one.
+         */
+        const userImage = resolveDashboardAvatarUrl(dbUser?.avatarUrl)
         const currentSleeperUserId = userProfile?.sleeperUserId ?? null
         const sleeperUsersByPlatformId: Record<string, { display_name: string; avatar: string | null }> =
         {}
