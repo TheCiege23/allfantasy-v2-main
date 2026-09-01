@@ -55,7 +55,7 @@ The **Terms of Service** page (`/terms`) has been expanded to include, at minimu
 20. **Termination**
 21. **Platform Updates and Changes** — We may change/suspend/discontinue features; reasonable notice; continued use = acceptance; no liability for changes.
 22. **Severability and Entire Agreement** (with links to Disclaimer and Privacy)
-23. **Contact** — legal@allfantasy.ai
+23. **Contact** — support@allfantasy.ai
 
 Clear, readable, and product-specific. Last updated: March 2026.
 

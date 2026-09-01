@@ -2,7 +2,7 @@
 
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
 
-const DEMO_MAILTO = 'mailto:enterprise@allfantasy.ai?subject=Schedule%20a%20demo&body=Tell%20us%20about%20your%20platform%2C%20league%20site%2C%20or%20media%20brand%3A'
+const DEMO_MAILTO = 'mailto:support@allfantasy.ai?subject=Schedule%20a%20demo&body=Tell%20us%20about%20your%20platform%2C%20league%20site%2C%20or%20media%20brand%3A'
 
 /**
  * B2B band from the landing mock. No booking backend exists yet, so
