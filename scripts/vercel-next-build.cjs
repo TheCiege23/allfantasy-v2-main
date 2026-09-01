@@ -259,6 +259,11 @@ const filesToKeep = new Set([
   // for the same reason the two tournament crons above do, and it is being added in the SAME change
   // as the schedule entry rather than after it — 263cb59ce is what the other order costs.
   path.join('app', 'api', 'cron', 'domain-os-refresh', 'route.ts').replace(/\\/g, '/'),
+  // Decision OS grounding proof surface (5.1) — shows exactly what Chimmy sees for one league.
+  // `app/api/admin` is excluded wholesale above, so without this line the route ships as a 404 and
+  // the only tool for comparing grounding with the flag on and off silently is not there. Added in
+  // the SAME commit as the route, for the reason 263cb59ce records about cron keep-lines.
+  path.join('app', 'api', 'admin', 'decision-os', 'grounding-proof', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
