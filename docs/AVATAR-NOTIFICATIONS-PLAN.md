@@ -257,16 +257,46 @@ name and wires it up. The reasoning it carried now lives in the route's own head
 which is why the preset clear uses `updateMany` (a no-op on a missing row) rather
 than `update` (a throw). Do not "tidy" that into `update`.
 
-### Phase 2 — Avatar identity scope (spec item 10)
+### Phase 2 — Avatar identity scope ✅ DONE (uncommitted at time of writing)
 
-- [ ] Audit every `IdentityImageRenderer` call site (~17 known) and classify each
-      as **platform identity** or **league identity**.
-- [ ] League surfaces must resolve the league-imported image, never `avatarUrl`.
-      Confirm `resolveDashboardAvatarUrl` is not blurring the two.
-- [ ] Fix stale `session.user.image` readers — they must read `app_users` or the
-      profile hook, never the frozen JWT claim.
-- [ ] Test: change the platform avatar; assert AF surfaces update and league
-      surfaces do not.
+**The headline: the league half of the rule was ALREADY CORRECT, and the bug was
+on the platform half.** The audit expected to find league surfaces leaking the
+AllFantasy avatar. They do not.
+
+- [x] **Audited the data layer rather than the ~17 render sites**, which is where
+      the answer actually lives. Every core-app league module — `leagueScoreboard`,
+      `leagueActivity`, `allPlay`, `leaguePairing`, `matchup` — selects `avatarUrl`
+      off the **`LeagueTeam`** row, the image imported from Sleeper/ESPN. **None of
+      them falls back to `AppUser.avatarUrl`** (grepped for it; zero hits).
+      `lib/core-app/career.ts:150` already documents the split from the other side.
+- [x] Confirmed `resolveDashboardAvatarUrl` is **platform identity only** — the
+      "you" avatar in the top nav. `/league/[leagueId]` feeds it into
+      `LeagueShellClient` → `AdaptiveTopNav` → `<Avatar>`, i.e. account chrome, NOT
+      the league's own manager rows. So that call site is correct in principle.
+- [x] **The real defect, and it was one argument.** That page called
+      `resolveDashboardAvatarUrl(session.user.image, dbUser?.avatarUrl)` — session
+      FIRST. `lib/auth.ts:741` sets `token.picture` once at sign-in, so the JWT
+      value is frozen. `/core` already passed `null`. Net effect: after changing
+      your picture, **the league page showed the old one and `/core` showed the new
+      one — same account, two answers, one app.**
+- [x] Fixed by **deleting the `sessionImage` parameter**, not by passing `null` at
+      the second call site. Both callers now pass the DB value only, and the stale
+      value is unpassable rather than merely discouraged.
+- [x] `__tests__/avatar-identity-scope.test.ts` — 8 tests. Includes an **arity
+      assertion** (`resolveDashboardAvatarUrl.length === 1`) that fails if the
+      parameter is ever re-added, and source-level guards on both call sites,
+      because a unit test of the resolver structurally cannot see which argument a
+      page hands it.
+
+**Measured:** 8 tests pass. Positive control: the league page was mutated back to
+the two-argument stale form, the mutation proved applied with `diff -q`, the suite
+failed on exactly the league-page case, and the restore verified identical.
+
+⚠ **Still open, and deliberately not done here:** a runtime test that changes a
+platform avatar and asserts league surfaces do not move. The guards above are
+structural. The league half currently holds by construction, so the value of a
+heavier integration test is lower than it looks — but it is the only thing that
+would catch a NEW league surface built against the wrong field.
 
 ### Phase 3 — Mobile crop/rotate (spec item 9)
 

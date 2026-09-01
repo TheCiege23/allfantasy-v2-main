@@ -965,7 +965,7 @@ export default async function AfCorePage({
 
   const shellProfile = {
     name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
-    imageUrl: resolveDashboardAvatarUrl(null, shellUser?.avatarUrl) ?? null,
+    imageUrl: resolveDashboardAvatarUrl(shellUser?.avatarUrl) ?? null,
   }
 
   // 26a reads the same career payload the career screen does — no second source
