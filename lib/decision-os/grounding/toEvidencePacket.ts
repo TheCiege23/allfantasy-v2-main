@@ -132,6 +132,7 @@ export function groundingPacketToEvidence(
     ['commissionerIntelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['leagueIntelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['portfolio', packet.portfolio as GroundedSlice<unknown>],
+    ['savedAnalysis', packet.savedAnalysis as GroundedSlice<unknown>],
     ...(packet.contextFacts
       ? (Object.entries(packet.contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),

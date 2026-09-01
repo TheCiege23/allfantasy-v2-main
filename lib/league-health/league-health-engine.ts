@@ -10,6 +10,9 @@
 
 import { z } from 'zod'
 
+// The single activity formula, shared with commissioner-assistant-engine (6.1).
+import { computeActivityScore } from './activityScore'
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -54,10 +57,10 @@ export interface LeagueHealthResult {
   /**
    * 🛑 THIS IS ACTIVITY, NOT PARTICIPATION, AND THREE MODULES DISAGREE ABOUT THE WORD (6.1).
    *
-   * Computed by `computeEngagement` below from transaction volume, chat and lineup submission:
-   *
-   *     base 30 + min(20, trades/team × 6) + min(20, claims/team × 2.5)
-   *             + min(15, chat × 0.3) + 15 (lineup ≥ 0.95) or 8 (≥ 0.8)
+   * Computed by `computeActivityScore` — ONE formula, shared with `commissioner-assistant-engine`
+   * since 6.1, because that module carried a second copy with different constants that disagreed
+   * with this one by 10 points on an empty league. This caller supplies every term, so its numbers
+   * are byte-identical to the private version it replaced.
    *
    * ⚠ ITS FLOOR WAS 30 UNTIL 6.1 AND IS NOW 0. The base used to be granted unconditionally, so a
    * league where nothing had happened and nobody was left still scored 30/100. It is now scaled by
@@ -68,11 +71,12 @@ export interface LeagueHealthResult {
    * inactive manager, so a dormant league has always scored 0 there and fired `sustainability_low`
    * plus `league_health_critical`. The fix was to a number that was false, not to a missing alarm.
    *
-   * ⚠ DO NOT COMPARE IT WITH `leagueEngagementScore` from
-   * `lib/decision-os/behavioral/league-intelligence.ts`. Same name, same 0–100 scale, different
-   * question — that one measures active-manager share and per-manager depth, floors at 0, and on
-   * a dormant league reads 0 where this reads 30. Measured spread of 40 points; 2 points on a
-   * healthy league. `scripts/probe-league-health-scorer-divergence.ts` reproduces it.
+   * ⚠ IT IS STILL A DIFFERENT QUESTION from `leagueEngagementScore` in
+   * `lib/decision-os/behavioral/league-intelligence.ts` — throughput versus people. Since 6.1 all
+   * three scores agree at 0 on a dormant league, which is the gap that mattered, but they still
+   * diverge on a league that is fully staffed and silent, or half-empty and busy. Agreement on the
+   * worst case is not interchangeability.
+   * `scripts/probe-league-health-scorer-divergence.ts` reproduces all three.
    */
   engagementScore: number
   fairnessScore: number
@@ -131,17 +135,21 @@ function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, 
  * `LeagueHealthResult.engagementScore`.
  */
 function computeEngagement(input: LeagueHealthInput): number {
-  // Clamped because bad data (activeManagers > numTeams) must not buy a base above 30.
-  const activeShare = clamp(input.activeManagers / Math.max(input.numTeams, 1), 0, 1)
-  let score = 30 * activeShare
-  const tradesPerTeam = input.totalTradesThisSeason / Math.max(input.numTeams, 1)
-  const claimsPerTeam = input.totalWaiverClaims / Math.max(input.numTeams, 1)
-  score += Math.min(20, tradesPerTeam * 6)
-  score += Math.min(20, claimsPerTeam * 2.5)
-  score += Math.min(15, input.chatMessageCount * 0.3)
-  if (input.lineupSubmissionRate >= 0.95) score += 15
-  else if (input.lineupSubmissionRate >= 0.8) score += 8
-  return clamp(Math.round(score), 0, 100)
+  /*
+   * ⚠ DELEGATES SINCE 6.1. The formula moved to `lib/league-health/activityScore.ts` because
+   * `commissioner-assistant-engine` carried a second copy with different constants that disagreed
+   * with this one on an empty league. This caller supplies EVERY term, so the normalisation there
+   * divides by the full 100 and the numbers are byte-identical to before — which is what keeps
+   * this off the nine dashboards that read it.
+   */
+  return computeActivityScore({
+    activeManagers: input.activeManagers,
+    numTeams: input.numTeams,
+    totalTrades: input.totalTradesThisSeason,
+    totalWaiverClaims: input.totalWaiverClaims,
+    chatMessageCount: input.chatMessageCount,
+    lineupSubmissionRate: input.lineupSubmissionRate,
+  })
 }
 
 function computeFairness(input: LeagueHealthInput): number {

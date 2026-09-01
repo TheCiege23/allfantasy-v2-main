@@ -59,6 +59,8 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     ['League intelligence', packet.leagueIntelligence as GroundedSlice<unknown>],
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
+    // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
+    ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
     // The eight graded context slices (4.3). Rendered alongside the rest because a reader should
     // not have to know which subsystem produced a fact to know whether it is safe to use.
     ...(packet.contextFacts
