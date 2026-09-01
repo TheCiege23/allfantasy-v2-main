@@ -37,7 +37,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **2.5** `OsFactSource` for value + projection + import | Closed. 4 sources across 3 feeds. IDP/kicker deliberately has none — see `value-os` |
 | ✅ | **3.2** `'import'` domain + four assertions | `lib/decision-os/import/assertions.ts`. Reads what the collectors already recorded and nothing could read |
 | ✅ | **3.3** `isConclusive(fact)` | `lib/decision-os/conclusive.ts`. Per-fact profiles + remedy on every blocker. Two controls proven red |
-| ⬜ | **4.1** `buildDecisionOsGroundingPacket()` | |
+| ✅ | **4.1** `buildDecisionOsGroundingPacket()` | `lib/decision-os/grounding/packet.ts`. Shape read off the 15, not invented. Per-slice conclusiveness + remedy |
 | ⬜ | **4.2** Wire into `/api/chat/chimmy` | |
 | ⬜ | **4.3** Move orphaned grounding behind Decision OS | Read all 15 first |
 | ⬜ | **4.4** No-fact rule | |
