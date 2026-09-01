@@ -50,6 +50,20 @@ export type CommissionerInput = z.infer<typeof CommissionerInputSchema>
 
 export interface CommissionerResult {
   leagueHealthScore: number
+  /**
+   * ⚠ A THIRD FORMULA UNDER THE SAME NAME, unrelated to the other two (6.1).
+   *
+   *     base 40 + min(25, trades/team × 8) + min(25, claims/team × 3) + 10 if none inactive
+   *
+   * Floors at 40, so like the league-health engine's it cannot report a dead league — and unlike
+   * it, this one has no chat or lineup input at all. Do not compare either with
+   * `leagueEngagementScore` in `lib/decision-os/behavioral/league-intelligence.ts`, which measures
+   * participation and floors at 0.
+   *
+   * This lineage is ISOLATED — one consumer, `app/api/commissioner-assistant/route.ts` — and,
+   * measured, it never appears in the same file as the commissioner-hub lineage. That is why it
+   * was left out of any rename: nothing here can be confused with anything at a call site.
+   */
   engagementScore: number
   fairnessScore: number
   confidencePct: number

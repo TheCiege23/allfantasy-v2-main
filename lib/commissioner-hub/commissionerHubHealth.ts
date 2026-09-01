@@ -76,6 +76,20 @@ export type CommissionerLeagueHealthSnapshot = {
   source: CommissionerHealthDataSource
   dataConfidence: CommissionerHealthDataConfidence
   healthScore: number
+  /**
+   * Passed through verbatim from `monitorLeagueHealth` — this file computes none of it.
+   *
+   * ⚠ IT MEASURES ACTIVITY (transactions, chat, lineup submission) AND FLOORS AT 30, so it
+   * cannot report a dead league as dead. See the full note on `LeagueHealthResult.engagementScore`
+   * in `lib/league-health/league-health-engine.ts`, and do not compare it with
+   * `leagueEngagementScore` from `lib/decision-os/behavioral/league-intelligence.ts` — same name,
+   * same scale, different question, 40 points apart on a dormant league.
+   *
+   * 🛑 NINE UI SURFACES READ THIS FIELD and label it "Engagement" in five languages
+   * (`dashboard.warroom.commissionerHQ.health.engagementScore`). The behavioural score reaches
+   * ZERO surfaces. So 6.1's "collapse the scorers, keep the behavioural one" is not a swap —
+   * it would repoint every one of those dashboards at a number with a different floor.
+   */
   engagementScore: number
   fairnessScore: number
   sustainabilityScore: number

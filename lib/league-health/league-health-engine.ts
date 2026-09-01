@@ -51,6 +51,28 @@ export type LeagueHealthInput = z.infer<typeof LeagueHealthInputSchema>
 
 export interface LeagueHealthResult {
   leagueHealthScore: number
+  /**
+   * 🛑 THIS IS ACTIVITY, NOT PARTICIPATION, AND THREE MODULES DISAGREE ABOUT THE WORD (6.1).
+   *
+   * Computed by `computeEngagement` below from transaction volume, chat and lineup submission:
+   *
+   *     base 30 + min(20, trades/team × 6) + min(20, claims/team × 2.5)
+   *             + min(15, chat × 0.3) + 15 (lineup ≥ 0.95) or 8 (≥ 0.8)
+   *
+   * ⚠ ITS FLOOR IS 30, NOT 0. Every term is non-negative and the base is unconditional, so this
+   * number CANNOT report that a league is dead. It also never reads `input.activeManagers` —
+   * which the schema declares and, measured, **nothing in this file reads at all**.
+   *
+   * That is not the defect it looks like: `computeSustainability` subtracts 10 per inactive
+   * manager, so a dormant league scores 0 there and fires `sustainability_low` plus
+   * `league_health_critical`. The league IS flagged. This number simply is not the thing doing it.
+   *
+   * ⚠ DO NOT COMPARE IT WITH `leagueEngagementScore` from
+   * `lib/decision-os/behavioral/league-intelligence.ts`. Same name, same 0–100 scale, different
+   * question — that one measures active-manager share and per-manager depth, floors at 0, and on
+   * a dormant league reads 0 where this reads 30. Measured spread of 40 points; 2 points on a
+   * healthy league. `scripts/probe-league-health-scorer-divergence.ts` reproduces it.
+   */
   engagementScore: number
   fairnessScore: number
   sustainabilityScore: number
