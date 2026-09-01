@@ -169,7 +169,19 @@ export type MatchupContextSlice = {
 
 export type RosterPlayerLite = {
   playerId: string
-  name: string
+  /**
+   * 🛑 NULLABLE BECAUSE A NON-NULL `string` IS WHAT FORCED THE FABRICATION.
+   *
+   * This was `string`, and `RosterContextProvider` satisfied it with `?? playerId` — so an
+   * unresolved player was handed to Chimmy as a player literally named "6804". Measured on a
+   * live dynasty league 2026-09-01: 27 of 27 players, every name equal to its own id, and the
+   * slice still graded itself conclusive.
+   *
+   * `null` is the honest answer to "who is this", and it is now reachable: the roster is
+   * enriched from the canonical player registry, and anyone the registry cannot bridge stays
+   * null rather than being renamed after his id.
+   */
+  name: string | null
   position: string | null
   team: string | null
   slot: string | null

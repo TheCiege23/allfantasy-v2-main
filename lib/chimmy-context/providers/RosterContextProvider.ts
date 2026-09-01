@@ -45,8 +45,13 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | null
 function toRosterPlayerLite(item: Record<string, unknown>): RosterPlayerLite | null {
   const playerId = typeof item.id === "string" ? item.id : null
   if (!playerId) return null
-  const name =
-    pickString(item, ["name", "full_name", "fullName", "displayName"]) ?? playerId
+  /*
+   * ⚠ NO `?? playerId` FALLBACK. That one operator is the whole bug: `playerData` holds the
+   * provider's bare ids, so the fallback fired for EVERY player and Chimmy was told the roster
+   * contained someone called "6804". An id is not a name; null is. Real names arrive below,
+   * from the canonical registry.
+   */
+  const name = pickString(item, ["name", "full_name", "fullName", "displayName"])
   const position = pickString(item, ["position", "pos"])
   const team = pickString(item, ["team", "nflTeam", "proTeam", "teamAbbr"])
   const slot = pickString(item, ["slot", "lineupSlot", "starterSlot"])
@@ -186,6 +191,43 @@ export class RosterContextProvider
         ...sections.devy,
       ]
       const bench = mapSection(benchSource)
+
+      /*
+       * ── 🛑 THE ROSTER HAD NO NAMES, AND THE RESOLVER ALREADY EXISTED ────────────────────
+       *
+       * `Roster.playerData` stores the PROVIDER's ids — deliberately, per the schema note on
+       * `WeeklyScore.playerId`: resolving at ingestion would silently discard everyone who
+       * fails to bridge, so the id is kept and resolution happens at read time. This provider
+       * was the read that never resolved.
+       *
+       * `getCanonicalPlayersBySleeperIds` carries name, position AND team, which is why all
+       * three came back wrong together — id-as-name, a flat "UTIL", and a null team. A model
+       * asked "should I start my flex" could not answer any part of that.
+       *
+       * ⚠ PARTIAL RESOLUTION IS EXPECTED AND IS LEFT VISIBLE. `SportsPlayer.sleeperId` covers
+       * roughly 87% of NFL players. Anyone the registry cannot bridge keeps `name: null` — not
+       * a label, not the id back again. A gap the model can see beats a name it will trust.
+       */
+      const rosterIds = [...starters, ...bench].map((p) => p.playerId)
+      if (rosterIds.length > 0) {
+        try {
+          const { getCanonicalPlayersBySleeperIds } = await import(
+            "@/lib/canonical/getCanonicalPlayer"
+          )
+          const canonical = await getCanonicalPlayersBySleeperIds(rosterIds)
+          for (const player of [...starters, ...bench]) {
+            const match = canonical.get(player.playerId)
+            if (!match) continue
+            player.name = match.name || player.name
+            player.position = match.position?.toUpperCase() || player.position
+            player.team = match.team?.toUpperCase() || player.team
+          }
+        } catch {
+          // A registry outage leaves names null, which the grounding packet reports as
+          // `unresolved_identity`. Failing to enrich must never fail the roster itself —
+          // the counts and the starter/bench split are still true.
+        }
+      }
 
       // Optional projection enrichment: only when season+week are known.
       let projectionMap: Map<string, number> | null = null
