@@ -45,7 +45,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
-| 🟨 | **6.1** Collapse the three health scorers | Premise measured and wrong twice (§2.22, §2.23); all three documented at their definition sites. **Step C DONE** — the hub activity base is now earned by participation, so a dead league scores 0 instead of 30 and hub and behavioural agree on the worst case, with fully-staffed leagues byte-identical (§2.24). **Step A next**: repoint the nine surfaces to participation |
+| 🟨 | **6.1** Collapse the three health scorers | Premise measured and wrong twice (§2.22, §2.23); all three documented at their definition sites. **Step C DONE** — the hub activity base is now earned by participation, so a dead league scores 0 instead of 30 and hub and behavioural agree on the worst case, with fully-staffed leagues byte-identical (§2.24). **Step A landed** — participation is on the snapshot, gated + bounded + refusing rather than reporting zero, and the primary commissioner surface reads it (§2.25). Eight surfaces remain, listed there |
 | ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
 
@@ -919,6 +919,62 @@ behaviour is worse than none, because it is trusted.
 ⚠ **The remaining 40-point spread is entirely `commissioner-assistant`**, whose base of 40 is
 still unconditional. Left alone deliberately: one consumer, and measured never to appear in the
 same file as the hub lineage, so nothing at a call site can confuse them.
+
+### 2.25 Participation reaches the commissioner, and it refuses rather than reporting zero
+
+6.1 step A. `CommissionerLeagueHealthSnapshot.participation` now carries the behavioural score —
+score, tier, active/total managers, and coverage — sourced from
+`realDataProvider.getLeagueIntelligence`.
+
+**🛑 IT IS NULLABLE BECAUSE OF A MEASUREMENT, NOT A STYLE PREFERENCE.** Given no events at all,
+`deriveLeagueBehavioralIntelligence` returns:
+
+```
+leagueEngagementScore: 0    leagueEngagementTier: 'dormant'    retentionRisk: 'critical'
+```
+
+A league nobody has ever synced would be told, confidently, that it is dead and about to churn.
+That is the `devyValueBoard` failure this plan opens with — `devyValue` zero-not-null for 1,455 of
+1,718 players, so 85% of a board renders an absence as "worthless". `completeness` is the only
+thing separating "nobody is playing" from "we have not looked", so the loader consults it and
+returns **nothing** rather than a number. Null, never 0.
+
+**⚠ GATED OFF AND BOUNDED, FOR A REASON THE FILE ITSELF RECORDS.**
+`getLeagueIntelligence` is FOUR prisma queries per league, and `commissionerHubHealth`'s own
+`isLive` block documents a **production Postgres OOM (53200) taken from an unbounded per-league
+fan-out**. An unguarded `Promise.all(leagueIds.map(…))` would have been 4N concurrent queries on a
+dashboard path — the same mistake with a bigger multiplier. So it is gated on
+`COMMISSIONER_PARTICIPATION_ENABLED` and runs two leagues at a time, capping the worst case at
+eight concurrent queries however many leagues a commissioner runs.
+
+The first test asserts the provider is **never called** when the gate is off — not merely that the
+result is empty, which would also be true if the queries ran and the answers were discarded.
+
+**⚠ THE LABEL HAD ALREADY BEEN PROMISING PARTICIPATION FOR THREE OF FIVE LOCALES.**
+`dashboard.warroom.commissionerHQ.health.engagementScore` renders as **"Participación"** in Spanish
+and **"参与度"** in Chinese. The word has meant participation all along while the number underneath
+was transaction throughput. Repointing did not require a new i18n key; it made the number agree
+with a label that was already there.
+
+**What was repointed.** `CommissionerHQ` — the gauge and the "Engagement" StatChip now read one
+derived value, participation when known and activity otherwise, with the tooltip stating which
+one answered and at what coverage rather than substituting in silence.
+
+**⚠ EIGHT SURFACES REMAIN**, each reading `snapshot.engagementScore` directly:
+`DashboardHero`, `ToolsAndHealth`, `NocturneDashboard`, `MissionControlView`,
+`commissionerLeagueHealthViewModel`, `league-pulse`, `platform-pulse/engine`,
+`LeaguePulseService`. They keep working unchanged — the field is additive — and the pattern for
+each is the two lines in `CommissionerHQ`.
+
+**Controls.** 9 tests. With the refusal mutated out, **4 failed, 5 passed** — exactly the four
+refusal cases, while the gate and pass-through tests correctly stayed green. Full affected set:
+160 passed, 7 failed, and those 7 are `commissionerOsContext`'s prisma mock missing
+`redraftLeagueMember`, identical at `HEAD` and unrelated.
+
+⚠ **A required field was safe here and that was measured, not assumed.** A typecheck across all
+26 `lib`/`app`/`components` files referencing the snapshot type reported zero complaints about
+`participation` — none of them constructs a literal. Test fixtures do, but `tsconfig` excludes
+`__tests__` and types are erased at runtime, so they neither fail to compile nor break.
 
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 
