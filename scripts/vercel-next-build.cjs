@@ -259,6 +259,19 @@ const filesToKeep = new Set([
   // for the same reason the two tournament crons above do, and it is being added in the SAME change
   // as the schedule entry rather than after it — 263cb59ce is what the other order costs.
   path.join('app', 'api', 'cron', 'domain-os-refresh', 'route.ts').replace(/\\/g, '/'),
+  // Sleeper historical refresh (step 1c, 03:20 and 15:20 UTC) — re-runs the import backfill
+  // orchestrator so an already-imported league stops being frozen at its import date.
+  //
+  // 🛑 ADDED AFTER THE FACT, WHICH IS THE THING 263cb59ce AND THE COMMENT ABOVE BOTH WARN ABOUT.
+  // The schedule entry and the route shipped in e752a86ff WITHOUT this line, and the guard did
+  // exactly its job: it failed the production build rather than shipping two crons that would
+  // 404 on every fire, forever, while `cron-schedule.json` read as if they were live. The guard
+  // is the only reason this cost one red build instead of a silent no-op nobody would have
+  // noticed until someone asked why history was still stale.
+  //
+  // ⚠ The lesson is the ORDER, not the line: run `node scripts/vercel-next-build.cjs`'s guard
+  // before pushing a cron, not after. Two commits before mine had already recorded that.
+  path.join('app', 'api', 'cron', 'sleeper-historical-refresh', 'route.ts').replace(/\\/g, '/'),
   // Decision OS grounding proof surface (5.1) — shows exactly what Chimmy sees for one league.
   // `app/api/admin` is excluded wholesale above, so without this line the route ships as a 404 and
   // the only tool for comparing grounding with the flag on and off silently is not there. Added in
