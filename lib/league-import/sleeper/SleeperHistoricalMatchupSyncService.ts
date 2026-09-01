@@ -12,6 +12,7 @@ import {
   type SleeperRoster,
 } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
+import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 const MAX_SLEEPER_MATCHUP_WEEKS = 18
 
@@ -465,11 +466,39 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
     }
 
     let seasonsProcessed = 0
+    let seasonsSkippedComplete = 0
     let matchupFactsPersisted = 0
     let playoffSeasonsWithBracket = 0
     let weeksWithMatchups = 0
 
     for (const seasonState of historyChain) {
+      /*
+       * Completion gate — 1b, and the OPPOSITE failure from its two siblings.
+       *
+       * 🛑 THIS SERVICE HAD NO GATE AT ALL. The draft and season-state services skipped any season
+       * with rows, freezing the live one; this one skipped nothing, so every run re-fetched FOUR
+       * Sleeper endpoints for every season in the chain — rosters, both playoff brackets, and
+       * `fetchWeekMatchups`, which is itself multi-week. A completed season's matchups cannot
+       * change, so all of that was spent re-learning settled history.
+       *
+       * Three siblings, three different answers to one question nobody had named. That is why the
+       * predicate is shared and provider-agnostic rather than inlined here.
+       *
+       * ⚠ BOTH conditions, as everywhere else: complete AND already persisted. Completion alone
+       * would skip a finished season that was never imported, which is exactly the history this
+       * exists to fetch.
+       */
+      if (shouldSkipImportedSeason({ force: undefined, league: seasonState.league })) {
+        const alreadyPersisted = await prisma.matchupFact.findFirst({
+          where: { leagueId: league.id, season: seasonState.season },
+          select: { matchupId: true },
+        })
+        if (alreadyPersisted) {
+          seasonsSkippedComplete += 1
+          continue
+        }
+      }
+
       const [rosters, winnersBracket, losersBracket, weekMatchups, existingSeason] = await Promise.all([
         getLeagueRosters(seasonState.externalLeagueId),
         getPlayoffBracket(seasonState.externalLeagueId),

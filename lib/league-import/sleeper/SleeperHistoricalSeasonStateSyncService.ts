@@ -4,7 +4,7 @@ import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRosters, getLeagueUsers, type SleeperLeague, type SleeperRoster } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
-import { shouldSkipImportedSeason } from './seasonCompletion'
+import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
 

@@ -1,7 +1,24 @@
-import type { SleeperLeague } from '@/lib/sleeper-client'
+/** Anything carrying a provider's own league status — every adapter's normalized league does. */
+export type SeasonStatusBearing = { status?: string | null } | null | undefined
 
 /**
  * Is this season OVER — genuinely, not merely already imported?
+ *
+ * ⚠ PROVIDER-AGNOSTIC ON PURPOSE, AND IT DID NOT START THAT WAY. This was first written under
+ * `sleeper/` and typed on `SleeperLeague`. Past-versus-present is a PRODUCT rule, not a Sleeper
+ * one — every import has the same two kinds of season — so a per-provider copy would be the
+ * "two implementations of one rule" bug CLAUDE.md already names.
+ *
+ * `'complete'` is already the shared vocabulary, which is why this works unchanged across all of
+ * them. Four adapters normalise to it explicitly:
+ *
+ *     espn / fantrax / mfl / yahoo   status: raw.league.isFinished ? 'complete' : 'in_season'
+ *     sleeper                        passes its own through: pre_draft|drafting|in_season|complete
+ *     fleaflicker                    maps NO status — null, which is correctly not-complete
+ *
+ * `NormalizedLeague.status` is documented as the provider's own real status, `null` when the
+ * provider genuinely doesn't report one and never a fabricated default. So the argument here is a
+ * status-bearing shape, not any one provider's league type.
  *
  * ── 🛑 THE GATE THIS EXISTS TO FIX FROZE THE SEASON PEOPLE ARE ACTUALLY PLAYING ─────────────
  *
@@ -43,7 +60,7 @@ import type { SleeperLeague } from '@/lib/sleeper-client'
  * not symmetric: refreshing a finished season costs one wasted provider call, while skipping a
  * live one shows a user stale data and is the failure this whole change exists to remove.
  */
-export function isSleeperSeasonComplete(league: Pick<SleeperLeague, 'status'> | null | undefined): boolean {
+export function isSeasonComplete(league: SeasonStatusBearing): boolean {
   return league?.status === 'complete'
 }
 
@@ -56,8 +73,8 @@ export function isSleeperSeasonComplete(league: Pick<SleeperLeague, 'status'> | 
  */
 export function shouldSkipImportedSeason(args: {
   force: boolean | undefined
-  league: Pick<SleeperLeague, 'status'> | null | undefined
+  league: SeasonStatusBearing
 }): boolean {
   if (args.force) return false
-  return isSleeperSeasonComplete(args.league)
+  return isSeasonComplete(args.league)
 }

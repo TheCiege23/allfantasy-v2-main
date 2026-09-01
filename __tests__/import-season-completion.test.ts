@@ -21,9 +21,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  isSleeperSeasonComplete,
+  isSeasonComplete,
   shouldSkipImportedSeason,
-} from '@/lib/league-import/sleeper/seasonCompletion'
+} from '@/lib/league-import/seasonCompletion'
 
 /** Sleeper reports exactly these four. */
 const IN_PROGRESS = ['pre_draft', 'drafting', 'in_season'] as const
@@ -58,18 +58,38 @@ describe('a season is skippable only when it is actually over', () => {
 })
 
 describe('the predicate itself', () => {
-  it('recognises only Sleeper’s completed status', () => {
-    expect(isSleeperSeasonComplete({ status: 'complete' })).toBe(true)
+  it('recognises only the shared completed status', () => {
+    expect(isSeasonComplete({ status: 'complete' })).toBe(true)
     for (const status of IN_PROGRESS) {
-      expect(isSleeperSeasonComplete({ status }), status).toBe(false)
+      expect(isSeasonComplete({ status }), status).toBe(false)
     }
   })
 
   it('the control: it can return both answers, so a false above is a real negative', () => {
     // Without this, every `toBe(false)` would pass on a predicate hard-wired to false.
     const answers = new Set(
-      ['complete', 'in_season'].map((status) => isSleeperSeasonComplete({ status })),
+      ['complete', 'in_season'].map((status) => isSeasonComplete({ status })),
     )
     expect(answers).toEqual(new Set([true, false]))
+  })
+})
+
+describe('universal across providers, not a Sleeper rule', () => {
+  it('⚠ the same predicate answers for every adapter, because they share the vocabulary', () => {
+    /*
+     * espn / fantrax / mfl / yahoo all map `raw.league.isFinished ? 'complete' : 'in_season'`;
+     * sleeper passes its own through. Written as a table so a provider that stops normalising
+     * fails HERE rather than by silently freezing or re-fetching a user's season.
+     */
+    const cases: Array<[string, { status?: string | null } | null, boolean]> = [
+      ['sleeper in_season', { status: 'in_season' }, false],
+      ['sleeper pre_draft', { status: 'pre_draft' }, false],
+      ['espn finished', { status: 'complete' }, true],
+      ['yahoo live', { status: 'in_season' }, false],
+      ['fleaflicker (maps no status at all)', null, false],
+    ]
+    for (const [label, league, expected] of cases) {
+      expect(isSeasonComplete(league), label).toBe(expected)
+    }
   })
 })
