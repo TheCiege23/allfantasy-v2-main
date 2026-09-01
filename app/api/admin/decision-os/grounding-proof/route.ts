@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { requireAdminOrBearer } from '@/lib/adminAuth'
+import { prisma } from '@/lib/prisma'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 
@@ -46,18 +47,64 @@ export async function GET(request: NextRequest) {
 
   const url = request.nextUrl
   const leagueId = url.searchParams.get('leagueId')?.trim() || null
-  const userId = url.searchParams.get('userId')?.trim() || null
+  /*
+   * ⚠ DEFAULTS TO THE SIGNED-IN ADMIN, because a tool that demands two opaque ids does not get
+   * used — and this one sat live across six deploys without a single call. `userId` stays a
+   * PARAMETER so an admin can still build the packet AS a beta user, which is the whole reason it
+   * exists; it is now just optional.
+   *
+   * ⚠ The bearer-token path has no identity (`requireAdminOrBearer` returns `{ role: 'admin' }`
+   * with no id), so the fallback is only available to a cookie session. That case is caught below
+   * rather than silently building a packet for `undefined`.
+   */
+  const userId = url.searchParams.get('userId')?.trim() || gate.user?.id || null
   const sport = url.searchParams.get('sport')?.trim() || 'NFL'
   const seasonRaw = Number(url.searchParams.get('season'))
   const weekRaw = Number(url.searchParams.get('week'))
   const question = url.searchParams.get('q')?.trim() || null
 
-  if (!leagueId || !userId) {
+  /*
+   * 🛑 NO leagueId → HAND BACK THE ANSWER, NOT AN ERROR. "leagueId is required" is true and
+   * useless: the id is a uuid nobody has memorised, and hunting for one is exactly the friction
+   * that kept this surface unused. So the no-argument call lists the caller's own leagues with
+   * ready-made links. Same rule the packet's gaps follow — say what would fix it.
+   */
+  if (!leagueId) {
+    const mine = userId
+      ? await prisma.league
+          .findMany({
+            where: { userId },
+            select: { id: true, name: true, sport: true, season: true },
+            orderBy: { updatedAt: 'desc' },
+            take: 25,
+          })
+          .catch(() => [])
+      : []
+
     return NextResponse.json(
       {
-        error: 'leagueId and userId are both required',
-        // Say what to do, not just what is wrong — the same rule the packet's own gaps follow.
-        usage: '/api/admin/decision-os/grounding-proof?leagueId=<id>&userId=<id>&sport=NFL&season=2026&week=3&q=should+I+start+X',
+        error: 'leagueId is required',
+        hint: userId
+          ? 'Pick one of `yourLeagues` below and open its `try` link. No other arguments are needed.'
+          : 'Signed in with a bearer token, which carries no identity — pass ?userId= as well.',
+        yourLeagues: mine.map((l) => ({
+          leagueId: l.id,
+          name: l.name,
+          sport: l.sport,
+          season: l.season,
+          try: `/api/admin/decision-os/grounding-proof?leagueId=${l.id}`,
+        })),
+        usage: '/api/admin/decision-os/grounding-proof?leagueId=<id>[&userId=<id>&sport=NFL&season=2026&week=3&q=...]',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!userId) {
+    return NextResponse.json(
+      {
+        error: 'userId could not be resolved',
+        hint: 'A bearer token carries no identity. Pass ?userId=, or call this from an admin browser session.',
       },
       { status: 400 },
     )
