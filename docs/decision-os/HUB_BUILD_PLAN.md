@@ -45,7 +45,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
-| 🟨 | **6.1** Collapse the three health scorers | **Premise measured and WRONG.** Five modules, three formulas, two of the named three are layered. 40-point divergence on a dormant league, 2 on a healthy one. `scripts/probe-league-health-scorer-divergence.ts`. The collapse itself needs a threshold decision — see §2.22 |
+| 🟨 | **6.1** Collapse the three health scorers | **Premise measured and WRONG**, twice. Five modules, three formulas, two of the named three layered; 40-point divergence on a dormant league. The three are now documented at their definition sites so they cannot be confused. **The collapse itself is a product decision, not a refactor** — the score D10 keeps reaches ZERO UI surfaces and the one it replaces reaches NINE. See §2.22 and §2.23 |
 | ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
 
@@ -806,6 +806,59 @@ inactivity*; the behavioural one scores *manager participation breadth and depth
 questions wearing one name on one scale. Deleting two answers is not obviously better than naming
 what each measures — but a reader today cannot tell which question was answered, and that part is
 indefensible either way.
+
+### 2.23 The rename I picked was wrong, and the census I called step one is what said so
+
+§2.22 measured the divergence and I proposed renaming the two activity-flavoured scores so a
+reader could tell which question was answered. The first step was an exact file census. It
+invalidated the plan, which is what a census is for.
+
+**The blast radius is not six files.** That figure came from scoping by DIRECTORY. Scoping by the
+FIELD — every reader of `LeagueHealthResult.engagementScore` and
+`CommissionerLeagueHealthSnapshot.engagementScore` — gives:
+
+```
+9  UI surfaces        CommissionerHQ, DashboardHero, ToolsAndHealth, NocturneDashboard,
+                      MissionControlView, executive-viz view model, league-pulse, platform-pulse,
+                      LeaguePulseService
+5  i18n keys          dashboard.warroom.commissionerHQ.health.engagementScore, in five languages
+2  invisible to tsc   parity.ts:36 compares by the STRING LABEL 'engagementScore'; the i18n key
+```
+
+⚠ **AND MANY GREP HITS ARE UNRELATED LOCAL VARIABLES OF THE SAME NAME** —
+`IntelligenceQueryService.ts:119` computes its own `engagementScore = round(ratio * 40)`, as do
+`CommissionerIntelligencePreview.tsx` and `CommissionerShowcasePanel.tsx`. A blanket sweep would
+have rewritten all of them. This is the sweep trap CLAUDE.md already records, met head-on.
+
+**🛑 AND THE RENAME WOULD NOT HAVE FIXED THE THING IT WAS FOR.** The user-facing word is
+"Engagement", in nine surfaces and five translations. Renaming the internal field to
+`activityScore` while every label still reads "Engagement" moves the ambiguity to the boundary
+rather than removing it.
+
+**The decisive measurement, which reframes 6.1 entirely:**
+
+```
+hub activity score          9 UI surfaces
+behavioural participation   0 UI surfaces  — grepped across app/ and components/
+```
+
+The score D10 says to KEEP reaches no user. The score it would replace reaches nine dashboards.
+So "collapse the scorers, keep the behavioural one" is **not a swap and not a deletion** — it is
+repointing nine production dashboards at a number with a different floor, which changes what every
+one of them displays. That is a product decision about what "Engagement" should mean to a
+commissioner, and it does not belong inside a refactor.
+
+**Done instead, because it fixes the harm that actually exists.** No user sees both numbers — the
+confusion is developer-only, and four sessions of this plan proved it is real. All four definition
+sites now carry the formula, its floor, what it measures, and an explicit do-not-compare pointing
+at the others and at the probe. Zero behaviour change, zero risk, and it is the prerequisite for
+any later collapse: whoever does it can now see which callers wanted activity and which wanted
+participation, which was unknowable before.
+
+⚠ **Also recorded at the definition site**: `input.activeManagers` is declared by
+`LeagueHealthInputSchema` and read **nowhere in the engine**. It is the one field that would let
+the activity score notice an empty league. Left alone deliberately — consuming it would change
+nine dashboards, which is the same product decision as above.
 
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 
