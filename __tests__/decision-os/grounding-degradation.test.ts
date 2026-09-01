@@ -111,13 +111,26 @@ function assertions(over: Partial<ImportAssertions> = {}): ImportAssertions {
 
 /** The twelve providers, all healthy, with whatever slice values the case wants. */
 function bundle(over: Record<string, unknown> = {}) {
+  /*
+   * 🛑 THESE ARE THE ENGINE'S PROVIDER NAMES, AND THIS LIST USED TO CARRY THE CALLER'S TYPOS.
+   *
+   * It read `'rankings'` and `'importHistory'`. The engine registers `ranking` and
+   * `importedHistory`; `packet.ts` asked for the wrong two, `servedBy.get()` missed on both in
+   * production — and this fixture MADE THE MISS IMPOSSIBLE TO SEE, because it was written to
+   * match the caller rather than the engine. A mock that agrees with the code under test instead
+   * of with reality is not a test, and it is the same mock-rot CLAUDE.md already records for
+   * `@/lib/fantasycalc` during the DB-first migration.
+   *
+   * `grounding-provider-names.test.ts` now pins both against `ChimmyContextEngine`'s own registry,
+   * so neither this list nor the caller can drift again without something going red.
+   */
   const names = [
     'matchup',
     'roster',
     'standings',
-    'rankings',
+    'ranking',
     'leagueDifficulty',
-    'importHistory',
+    'importedHistory',
     'replayInsights',
     'devy',
   ]
@@ -133,7 +146,13 @@ function bundle(over: Record<string, unknown> = {}) {
     user: { id: 'u1' },
     activeLeague: { id: 'lg1' },
     sportsSchedule: { games: [] },
-    meta: { providers: names.map((name) => ({ name, cached: false, error: null })) },
+    /*
+     * ⚠ `durationMs` IS PART OF THE REAL SHAPE AND WAS MISSING HERE. `ChimmyContextEngine` sets it
+     * on every provider result — including the rejected branch, which sets `durationMs: 0` — so a
+     * fixture without it models an engine that does not exist, and any assertion about per-slice
+     * timing reads `null` for a reason that has nothing to do with the code under test.
+     */
+    meta: { providers: names.map((name, i) => ({ name, cached: false, error: null, durationMs: 10 + i })) },
     ...over,
   }
 }
@@ -403,5 +422,85 @@ describe('5.3 — a killed feed is SAID, not merely stopped', () => {
       .map(([n]) => n)
     expect(offenders).toEqual([])
     expect(p.meta.killedFeeds).toHaveLength(9)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('a roster that resolved no player identities (P2)', () => {
+  /*
+   * ── 🛑 FOUND IN PRODUCTION, NOT IN A FIXTURE ────────────────────────────────────────────────
+   * The 5.1 proof surface on a live 8-team dynasty league, 2026-09-01, returned 27 players shaped
+   * exactly like this — `name` equal to `playerId`, `position` a flat 'UTIL', `team` null — while
+   * the slice graded `present: true, conclusive: { ok: true }, gap: null`.
+   *
+   * `RosterContextProvider.toRosterPlayerLite` does `pickString(item, ['name', …]) ?? playerId`,
+   * so a missing name silently becomes the id. That is an unsourced value rendered as a fact,
+   * which is the P2 invariant this packet exists to enforce — and the packet was the thing
+   * reporting it clean.
+   */
+  const nameless = {
+    starters: [
+      { playerId: '6804', name: '6804', position: 'UTIL', team: null },
+      { playerId: '8138', name: '8138', position: 'UTIL', team: null },
+    ],
+    bench: [{ playerId: '11617', name: '11617', position: 'UTIL', team: null }],
+  }
+
+  it('🛑 raises unresolved_identity instead of reporting a usable roster', async () => {
+    loadContext.mockResolvedValue(bundle({ roster: nameless }))
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.contextFacts?.roster.gap?.reason).toBe('unresolved_identity')
+    expect(p.contextFacts?.roster.conclusive.ok).toBe(false)
+    expect(p.gaps.map((g) => g.slice)).toContain('roster')
+  })
+
+  it('⚠ stays PRESENT — the counts are real even when the names are not', async () => {
+    // Dropping the slice would destroy true information (depth, starter/bench split) to punish one
+    // false field. Present-but-inconclusive is what `toEvidencePacket` turns into a
+    // `not_safe_to_act_on` signal, so three-brain is told "you have a roster, not who is on it".
+    loadContext.mockResolvedValue(bundle({ roster: nameless }))
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.contextFacts?.roster.present).toBe(true)
+    expect(p.contextFacts?.roster.value).toBeTruthy()
+    expect(p.contextFacts?.roster.gap?.remedy).toMatch(/re-sync/i)
+  })
+
+  it('leaves a roster alone when even ONE player resolved', async () => {
+    // The check is "did identity resolution produce nothing at all", not "is every row perfect" —
+    // a partially-named roster is degraded data, not fabricated data, and is still worth reading.
+    loadContext.mockResolvedValue(
+      bundle({
+        roster: {
+          starters: [{ playerId: '6804', name: 'Bijan Robinson', position: 'RB', team: 'ATL' }],
+          bench: [{ playerId: '8138', name: '8138', position: 'UTIL', team: null }],
+        },
+      }),
+    )
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.contextFacts?.roster.gap).toBeNull()
+    expect(p.contextFacts?.roster.conclusive.ok).toBe(true)
+  })
+})
+
+describe('meta timing — a total nobody can act on is why this exists', () => {
+  it('splits the engine call out, and carries the engine’s own per-provider ms', async () => {
+    /*
+     * The proof surface measured 5354ms against the chat route's 3000ms ceiling, so the packet is
+     * built and discarded every turn. `meta.durationMs` alone said that was happening and nothing
+     * about where to cut; the engine had already measured each provider and the packet threw it
+     * away. `engineMs` says which HALF, `sources[].ms` says which provider.
+     */
+    loadContext.mockResolvedValue(bundle())
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(typeof p.meta.engineMs).toBe('number')
+    const timed = p.meta.sources.filter((s) => typeof s.ms === 'number')
+    expect(timed.length).toBeGreaterThan(0)
+    // `rankings` is the one slice whose packet key differs from its engine provider name
+    // (`ranking`); without the alias its timing silently reads null forever.
+    expect(p.meta.sources.find((s) => s.slice === 'rankings')?.ms).toBeTypeOf('number')
   })
 })
