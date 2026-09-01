@@ -61,6 +61,22 @@ vi.mock('@/lib/intelligence/chimmy/leagueIntelligenceGrounding', () => ({
 vi.mock('@/lib/intelligence/chimmy/portfolioGrounding', () => ({
   resolvePortfolioGrounding: portfolio,
 }))
+/*
+ * Flags are mocked all-enabled by default so every case above degrades for its OWN reason, and
+ * `killFeeds()` opts one case at a time into 5.3. Left unmocked, these tests would reach the real
+ * `platformConfig` read — which fails open, so they would still pass, but for a reason unrelated
+ * to what each of them is testing.
+ */
+let killedFeeds: string[] = []
+vi.mock('@/lib/decision-os/flags', () => ({
+  resolveDecisionOsFeedFlags: async () => ({
+    enabled: (f: string) => !killedFeeds.includes(f),
+    killed: killedFeeds,
+  }),
+}))
+function killFeeds(...feeds: string[]) {
+  killedFeeds = feeds
+}
 
 const { buildDecisionOsGroundingPacket } = await import('@/lib/decision-os/grounding/packet')
 const { serializeDecisionOsGroundingForPrompt } = await import('@/lib/decision-os/grounding/serialize')
@@ -155,6 +171,7 @@ const ARGS = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  killedFeeds = []
   // The healthy baseline. Each test degrades exactly one thing, so a failure names its own cause.
   loadAssertions.mockResolvedValue(assertions())
   loadRules.mockResolvedValue({ scoring: {} })
@@ -329,5 +346,62 @@ describe('5.2 — unsynced and un-entitled scopes stay distinguishable', () => {
     expect(p.gaps.length).toBeGreaterThan(0)
     expect(everySlice(p).every(([, s]) => s.present === false)).toBe(true)
     expect(everySlice(p).every(([, s]) => s.gap != null)).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+describe('5.3 — a killed feed is SAID, not merely stopped', () => {
+  it('🛑 leaves a named gap with reason `disabled`, not a cold-cache story', async () => {
+    // The remedy for a cold cache — "it fills on the next run" — is a lie about a killed feed.
+    // Nothing fills it until somebody flips the switch back.
+    killFeeds('marketValues')
+
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.marketValues.present).toBe(false)
+    expect(p.marketValues.gap?.reason).toBe('disabled')
+    expect(p.marketValues.gap?.remedy).toMatch(/operator/i)
+    expect(p.marketValues.gap?.remedy).not.toMatch(/next run/i)
+    expect(p.gaps.find((g) => g.slice === 'marketValues')?.reason).toBe('disabled')
+  })
+
+  it('does not call the producer it killed', async () => {
+    // A kill switch that still pays for the work is a label, not a switch.
+    killFeeds('marketValues', 'projections', 'leagueIntelligence')
+    await buildDecisionOsGroundingPacket(ARGS)
+    expect(loadMarket).not.toHaveBeenCalled()
+    expect(loadFor).not.toHaveBeenCalled()
+    expect(leagueIntel).not.toHaveBeenCalled()
+    // ...and leaves the others alone.
+    expect(loadDevy).toHaveBeenCalled()
+  })
+
+  it('killing the context feed names all eight, rather than dropping them', async () => {
+    killFeeds('contextFacts')
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.contextFacts).not.toBeNull()
+    const disabled = p.gaps.filter((g) => g.reason === 'disabled')
+    expect(disabled).toHaveLength(8)
+    expect(loadContext).not.toHaveBeenCalled()
+  })
+
+  it('⚠ records the kill on meta even when the question never wanted that feed', async () => {
+    // A feed killed but not wanted produces NO gap — correctly, it would be noise on every
+    // answer. But an operator asking "why is this thin" still has to be able to see the switch.
+    killFeeds('devyValues')
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { projections: true } })
+    expect(p.gaps.find((g) => g.slice === 'devyValues')).toBeUndefined()
+    expect(p.meta.killedFeeds).toContain('devyValues')
+  })
+
+  it('every slice still satisfies absent-implies-named-gap with feeds killed', async () => {
+    killFeeds(...['importAssertions', 'leagueRules', 'marketValues', 'devyValues', 'projections', 'contextFacts', 'commissionerIntelligence', 'leagueIntelligence', 'portfolio'])
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    const offenders = everySlice(p)
+      .filter(([, s]) => !s.present)
+      .filter(([, s]) => s.gap == null || !s.gap.detail.trim() || !s.gap.remedy.trim())
+      .map(([n]) => n)
+    expect(offenders).toEqual([])
+    expect(p.meta.killedFeeds).toHaveLength(9)
   })
 })

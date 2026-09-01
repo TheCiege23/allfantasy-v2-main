@@ -12,6 +12,7 @@ import {
 import { resolveLeagueIntelligenceGrounding } from '@/lib/intelligence/chimmy/leagueIntelligenceGrounding'
 import { resolvePortfolioGrounding } from '@/lib/intelligence/chimmy/portfolioGrounding'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
+import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
 import type { ValueLookup } from '../value/contract'
@@ -60,6 +61,16 @@ export type GroundingGapReason =
   | 'unresolved_identity'
   /** The caller did not ask for this slice. Not a defect — assembling it would be waste. */
   | 'not_requested'
+  /**
+   * An operator has switched this feed off (5.3).
+   *
+   * 🛑 A SEVENTH REASON RATHER THAN REUSING `not_computed`, BECAUSE A KILL MUST NOT LOOK
+   * LIKE A COLD CACHE. "It fills on the next run" is the remedy for a cold cache and it is a lie
+   * about a killed feed — nothing will fill it until someone flips the switch back. Whoever is
+   * reading a support ticket needs to be able to tell those apart, and so does the operator who
+   * did the killing and then forgot.
+   */
+  | 'disabled'
 
 export interface GroundingGap {
   reason: GroundingGapReason
@@ -185,6 +196,14 @@ export interface DecisionOsGroundingPacket {
     durationMs: number
     /** Per-slice feed outcomes, mirroring `ChimmyContextBundle.meta.providers`. */
     sources: Array<{ slice: string; servedFrom: string | null; ok: boolean }>
+    /**
+     * Feeds an operator has switched off (5.3).
+     *
+     * ⚠ ON THE PACKET AND NOT ONLY IN THE GAPS, because a feed killed while the question never
+     * wanted it produces no gap at all — correctly, it would be noise. But an operator debugging
+     * "why is this answer thin" still has to be able to see that a switch is down.
+     */
+    killedFeeds: string[]
   }
 }
 
@@ -305,15 +324,37 @@ export async function buildDecisionOsGroundingPacket(
   const want = args.want ?? { values: true, projections: true, leagueRules: true }
   const leagueId = args.leagueId ?? null
 
+  /*
+   * ⚠ ONE RESOLUTION PER PACKET, NOT ONE PER SLICE. A flag that changed midway through assembly
+   * would produce a packet gathered under two different policies with nothing recording that it
+   * happened. Steady state is zero queries — see `flags.ts` on why this is batched and cached
+   * rather than nine `getBoolean` calls inside the chat route's 3-second ceiling.
+   */
+  const flags = await resolveDecisionOsFeedFlags()
+  const killed = (feed: DecisionOsFeed): GroundingGap | null =>
+    flags.enabled(feed)
+      ? null
+      : {
+          reason: 'disabled',
+          detail: `The ${feed} feed is switched off.`,
+          // Honest about there being nothing the USER can do. An invented "try again" would be
+          // worse than saying so — the same call the not_entitled remedy makes.
+          remedy: 'An operator disabled it; it returns when they switch it back on.',
+        }
+
   const importOs = createImportOsLoaders()
   const valueOs = createValueOsLoaders()
   const projectionOs = createProjectionOsLoaders()
   const leagueOs = createLeagueOsLoaders()
 
   // ── The assertions first: everything else is judged against them. ─────────────────────────
-  const assertions = leagueId ? await importOs.loadAssertions(leagueId).catch(() => null) : null
+  const importKill = killed('importAssertions')
+  const assertions =
+    leagueId && !importKill ? await importOs.loadAssertions(leagueId).catch(() => null) : null
 
-  const importSlice: GroundedSlice<ImportAssertions> = assertions
+  const importSlice: GroundedSlice<ImportAssertions> = importKill
+    ? absent<ImportAssertions>(importKill)
+    : assertions
     ? present(assertions, {
         asOf: assertions.lastSuccessfulSyncAt,
         servedFrom: 'store',
@@ -332,7 +373,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── League rules ──────────────────────────────────────────────────────────────────────────
   let leagueRules: GroundedSlice<unknown> = absent(NOT_REQUESTED)
-  if (want.leagueRules && leagueId) {
+  const rulesKill = killed('leagueRules')
+  if (want.leagueRules && leagueId && rulesKill) leagueRules = absent(rulesKill)
+  else if (want.leagueRules && leagueId) {
     const rules = await leagueOs.loadRules(leagueId).catch(() => null)
     const v = verdictFor('leagueRules')
     leagueRules = rules
@@ -346,7 +389,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Market values ─────────────────────────────────────────────────────────────────────────
   let marketValues: GroundedSlice<ValueLookup[]> = absent(NOT_REQUESTED)
-  if (want.values && args.valueFormat) {
+  const marketKill = killed('marketValues')
+  if (want.values && args.valueFormat && marketKill) marketValues = absent(marketKill)
+  else if (want.values && args.valueFormat) {
     const v = verdictFor('globalPlayerValue') // global — no league import can block it
     const rows = await valueOs
       .loadMarket({ sport: args.sport, format: args.valueFormat.format, qbFormat: args.valueFormat.qbFormat })
@@ -362,7 +407,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Devy values ───────────────────────────────────────────────────────────────────────────
   let devyValues: GroundedSlice<ValueLookup[]> = absent(NOT_REQUESTED)
-  if (want.devy) {
+  const devyKill = killed('devyValues')
+  if (want.devy && devyKill) devyValues = absent(devyKill)
+  else if (want.devy) {
     const v = verdictFor('globalPlayerValue')
     const rows = await valueOs.loadDevy({ sport: args.sport, currentSeason: args.season }).catch(() => null)
     devyValues = hasSubstance(rows)
@@ -382,7 +429,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Projections ───────────────────────────────────────────────────────────────────────────
   let projections: GroundedSlice<ProjectionFact[]> = absent(NOT_REQUESTED)
-  if (want.projections) {
+  const projectionKill = killed('projections')
+  if (want.projections && projectionKill) projections = absent(projectionKill)
+  else if (want.projections) {
     const v = verdictFor('lineupDecision')
     const facts = await projectionOs
       .loadFor({ sport: args.sport, season: args.season, week: args.week ?? null }, args.leagueIdpRules ?? null)
@@ -405,7 +454,20 @@ export async function buildDecisionOsGroundingPacket(
   let contextFacts: ContextFacts | null = null
   let contextLookups: ContextLookups | null = null
 
-  if (args.userId && leagueId) {
+  const contextKill = killed('contextFacts')
+  if (args.userId && leagueId && contextKill) {
+    // Killed, not missing — all eight say so rather than vanishing, per §2.20.
+    contextFacts = {
+      matchup: absent(contextKill),
+      roster: absent(contextKill),
+      standings: absent(contextKill),
+      rankings: absent(contextKill),
+      leagueDifficulty: absent(contextKill),
+      importedHistory: absent(contextKill),
+      replayInsights: absent(contextKill),
+      devy: absent(contextKill),
+    }
+  } else if (args.userId && leagueId) {
     /*
      * ⚠ ONE ENGINE CALL, NOT TWELVE. `loadContext` already runs its providers concurrently under
      * allSettled with a per-provider TTL cache and timeout. Calling it once and grading the result
@@ -510,7 +572,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Commissioner intelligence (4.4): the one slice with its own access rule ────────────────
   let commissionerIntelligence: GroundedSlice<string> = absent(NOT_REQUESTED)
-  if (leagueId && args.userId) {
+  const commishKill = killed('commissionerIntelligence')
+  if (leagueId && args.userId && commishKill) commissionerIntelligence = absent(commishKill)
+  else if (leagueId && args.userId) {
     const outcome = await resolveCommissionerGroundingOutcome({
       leagueId,
       userId: args.userId,
@@ -541,14 +605,20 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   // ── The other two resolvers (4.5) ─────────────────────────────────────────────────────────
+  const leagueIntelKill = killed('leagueIntelligence')
+  const portfolioKill = killed('portfolio')
   const [leagueIntelText, portfolioText] = await Promise.all([
-    leagueId && args.userId
+    leagueId && args.userId && !leagueIntelKill
       ? resolveLeagueIntelligenceGrounding({ leagueId, userId: args.userId }).catch(() => null)
       : Promise.resolve(null),
-    args.userId ? resolvePortfolioGrounding({ userId: args.userId }).catch(() => null) : Promise.resolve(null),
+    args.userId && !portfolioKill
+      ? resolvePortfolioGrounding({ userId: args.userId }).catch(() => null)
+      : Promise.resolve(null),
   ])
 
-  const leagueIntelligence: GroundedSlice<string> = hasSubstance(leagueIntelText)
+  const leagueIntelligence: GroundedSlice<string> = leagueIntelKill
+    ? absent<string>(leagueIntelKill)
+    : hasSubstance(leagueIntelText)
     ? present(leagueIntelText, { servedFrom: 'live', conclusive: verdictFor('standings') })
     : absent({
         reason: 'not_computed',
@@ -556,7 +626,9 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'It needs recorded league activity — trades, matchups, valuations — to summarise.',
       })
 
-  const portfolio: GroundedSlice<string> = hasSubstance(portfolioText)
+  const portfolio: GroundedSlice<string> = portfolioKill
+    ? absent<string>(portfolioKill)
+    : hasSubstance(portfolioText)
     ? // Cross-league by nature: one league's import cannot bear on it, so no verdict applies.
       present(portfolioText, { servedFrom: 'live', conclusive: { ok: true } })
     : absent({
@@ -597,6 +669,7 @@ export async function buildDecisionOsGroundingPacket(
     meta: {
       durationMs: Date.now() - startedAt,
       sources: slices.map(([slice, s]) => ({ slice, servedFrom: s.servedFrom, ok: s.present })),
+      killedFeeds: flags.killed,
     },
   }
 }
