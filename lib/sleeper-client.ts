@@ -487,11 +487,53 @@ export interface SleeperTransaction {
   settings?: Record<string, unknown>;
 }
 
+/**
+ * ── ⚠ ONE LEAGUE-WEEK IS FETCHED UP TO THREE TIMES, AND TWO OF THEM ARE SECONDS APART ───────
+ *
+ * `syncSleeperHistoricalBackfillAfterImport` calls the transaction sibling AND
+ * `runDynastyBackfill`, and both walk the same 18 weeks of the same league in the same run —
+ * the sibling to write `TransactionFact`, the dynasty backfill to count trades for
+ * `SeasonResult`. Different destinations, identical requests, moments apart.
+ * `decision-os-activity-ingest` makes a third pass daily for its own table, but that is a
+ * separate process on a separate schedule and is NOT what this addresses.
+ *
+ * A short memo collapses the two that overlap without either caller knowing. It is deliberately
+ * NOT a general cache: 60 seconds is long enough to span one orchestrator pass over a league and
+ * short enough that nothing reads a stale week. `sportsDataCache` would be the wrong tool —
+ * this is intra-run deduplication, not a durable read-through.
+ *
+ * ⚠ SUCCESSES ONLY. Caching an empty result from a transport failure would turn one blip into
+ * a minute of "this league has no transactions", which is the shape the weather-geocode note in
+ * the root CLAUDE.md warns about. A failure is simply not recorded and the next caller retries.
+ */
+const TRANSACTIONS_MEMO_TTL_MS = 60_000;
+const TRANSACTIONS_MEMO_MAX = 500;
+const transactionsMemo = new Map<string, { at: number; data: SleeperTransaction[] }>();
+
 export async function getLeagueTransactions(
   leagueId: string,
   week: number,
   opts?: SleeperReadOptions
 ): Promise<SleeperTransaction[]> {
+  const key = `${leagueId}:${week}`;
+  /*
+   * 🛑 A `strict` CALLER IS NEVER SERVED FROM THE MEMO, AND THIS WAS A REAL BUG BEFORE IT WAS A
+   * RULE. `strict` exists so an importer can tell a timed-out league from a genuinely empty one
+   * — `sleeper-client-fetch-timeout.test.ts` says so in those words. The first version read the
+   * memo first, so a strict call whose fetch was failing returned a cached array and never
+   * threw: the caller would have counted a dead feed as a clean import.
+   *
+   * Caught by that existing suite rather than by mine, because my own tests exercised the memo
+   * and the strict path separately and never in that order. Reading from the cache is exactly
+   * what strict must not do; writing to it after a success is still fine.
+   */
+  if (!opts?.strict) {
+    const hit = transactionsMemo.get(key);
+    if (hit && Date.now() - hit.at < TRANSACTIONS_MEMO_TTL_MS) {
+      return hit.data;
+    }
+  }
+
   try {
     const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/transactions/${week}`);
     if (!response.ok) {
@@ -500,13 +542,28 @@ export async function getLeagueTransactions(
       }
       return [];
     }
-    return await response.json();
+    const data = (await response.json()) as SleeperTransaction[];
+    if (Array.isArray(data)) {
+      // Bounded so a long-running process cannot grow this without limit. Oldest-inserted goes
+      // first, which is what Map iteration order gives for free.
+      if (transactionsMemo.size >= TRANSACTIONS_MEMO_MAX) {
+        const oldest = transactionsMemo.keys().next().value;
+        if (oldest !== undefined) transactionsMemo.delete(oldest);
+      }
+      transactionsMemo.set(key, { at: Date.now(), data });
+    }
+    return data;
   } catch (error) {
     if (opts?.strict) {
       throw error instanceof SleeperUnavailableError ? error : new SleeperUnavailableError(`transactions_week_${week}`, error);
     }
     return [];
   }
+}
+
+/** Test seam — the memo is process-global, so a suite that asserts fetch counts must clear it. */
+export function __clearLeagueTransactionsMemo(): void {
+  transactionsMemo.clear();
 }
 
 // ── Trending Players ──
