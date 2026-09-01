@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
+import { getEligibleDevyPlayers } from '@/lib/devy-classification'
 import { buildDevyValueBoard, type DevyBoardInput } from '@/lib/devy/devyValueBoard'
 import { resolvePlayers } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import type { CanonicalValue, ValueLookup } from './contract'
@@ -86,16 +86,24 @@ export async function loadDevyValues(args: DevyAdapterArgs): Promise<ValueLookup
     ]
   }
 
-  const players = await prisma.devyPlayer
-    .findMany({
-      take: args.limit ?? 2000,
-      select: {
-        id: true, name: true, position: true, school: true,
-        draftEligibleYear: true, classYear: true, draftProjectionScore: true,
-        recruitingComposite: true, breakoutAge: true, projectedDraftRound: true, devyAdp: true,
-      },
-    })
-    .catch(() => [])
+  /*
+   * 🛑 ELIGIBILITY IS NOT OPTIONAL, AND THE FIRST VERSION OF THIS ADAPTER OMITTED IT.
+   *
+   * It read `devyPlayer.findMany()` with no filter, so it would price players who had graduated
+   * to the NFL, players marked not devy-eligible, and anyone not in `league: 'NCAA'` — a devy
+   * value for an asset that is no longer a devy asset.
+   *
+   * ⚠ THE BUG WAS MASKED AND WAS ABOUT TO STOP BEING MASKED. `graduatedToNFL` was true for ZERO
+   * of 1,721 rows because `classifyDraftStatus` had no caller. It has one now (`ad514a334`,
+   * scheduled on import-players), so the graduated population starts filling from the next draft
+   * class — and the adapter would have begun pricing NFL players as prospects with nothing
+   * failing. `devyMarketBridge.ts` names this exact hazard: "masked right now only because the
+   * table holds forward-looking cohorts".
+   *
+   * Fixed by calling the EXISTING eligibility rule rather than writing a second one. Two
+   * implementations of "who is on the board" is the defect, not the filter.
+   */
+  const players = await getEligibleDevyPlayers({ limit: args.limit ?? 2000 }).catch(() => [])
 
   if (players.length === 0) {
     return [
@@ -104,8 +112,8 @@ export async function loadDevyValues(args: DevyAdapterArgs): Promise<ValueLookup
         sport,
         basis: 'devy_model',
         detail:
-          'DevyPlayer is empty. The pool is seeded by /api/cron/import-players (devyPool phase); ' +
-          'this is a cold or failed seed, not a missing model.',
+          'No ELIGIBLE devy players. Either the pool is unseeded (/api/cron/import-players, devyPool ' +
+          'phase) or every prospect has graduated or been marked ineligible. Not a missing model.',
       },
     ]
   }

@@ -39,7 +39,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **3.3** `isConclusive(fact)` | `lib/decision-os/conclusive.ts`. Per-fact profiles + remedy on every blocker. Two controls proven red |
 | ✅ | **4.1** `buildDecisionOsGroundingPacket()` | `lib/decision-os/grounding/packet.ts`. Shape read off the 15, not invented. Per-slice conclusiveness + remedy |
 | ✅ | **4.2** Wire into `/api/chat/chimmy` | Beside the existing packet, behind `DECISION_OS_GROUNDING_ENABLED`. Delta vs origin/main baseline: **0** |
-| ⬜ | **4.3** Move orphaned grounding behind Decision OS | Read all 15 first |
+| 🔄 | **4.3** Move orphaned grounding behind Decision OS | 15 censused (§2.16). Found + fixed a real bug in my own devy adapter. Migration itself still to do |
 | ⬜ | **4.4** No-fact rule | |
 | ⬜ | **4.5** Retire duplicate routes | |
 | ⬜ | **5.1** Internal proof surface | |
@@ -616,6 +616,61 @@ user-scoped data (`faabRemaining`, `waiverPriority`, `rosterSize`) that
 `CanonicalLeagueRules` has no notion of, not because the settings disagree. So
 1.1b remains "split the shared derive", and the split is now known to be clean:
 the league half genuinely is league-shaped.
+
+### 2.16 The fifteen, censused — and what reading them caught
+
+4.3's first half. Open question 1 asked which of the twelve `ChimmyContextEngine`
+providers are Decision OS **facts** and which are raw **lookups**. Answered by
+reading their slice types rather than their names.
+
+| slice | class | needs conclusiveness? |
+|---|---|---|
+| `UserContextSlice` | identity | no — who is asking, not what is true |
+| `SubscriptionContextSlice` | **entitlement** | it *is* the `not_entitled` gate |
+| `LeagueSummary` | league identity | no |
+| `MatchupContextSlice` | fact | yes — freshness + parity |
+| `RosterContextSlice` | fact | yes — the most staleness-sensitive of all |
+| `StandingsContextSlice` | fact | yes |
+| `RankingContextSlice` | **judgement** | yes |
+| `LeagueDifficultyContextSlice` | **judgement** | yes |
+| `ImportedHistorySlice` | fact (from import) | yes |
+| `SportsScheduleSlice` | global lookup | no — not league-scoped |
+| `ReplayInsightSlice` | **judgement** | yes; already carries `disabled/empty/ready` |
+| `DevyContextSlice` | **judgement** | yes; already carries `coverage` and `gaps` |
+
+Plus the three resolvers: `commissionerGrounding` (already has
+`ok/empty/restricted` — the source of the `not_entitled` reason),
+`leagueIntelligenceGrounding`, `portfolioGrounding`.
+
+**Seven are judgements or facts needing a verdict; three are identity or global
+lookups that need none; two are entitlement and provenance.** That split is what
+4.3's migration should follow — a lookup routed through conclusiveness gains
+nothing and loses clarity.
+
+🛑 **AND THE CENSUS CAUGHT A BUG IN MY OWN 2.2 WORK, WHICH IS THE ARGUMENT FOR
+DOING IT AT ALL.** `DevyContextProvider` loads its board through
+`getEligibleDevyPlayers`, which filters `devyEligible: true`,
+`graduatedToNFL: false`, `league: 'NCAA'`. My `devyAdapter` read
+`devyPlayer.findMany()` with **no filter**, so it would have priced graduated,
+ineligible and non-NCAA players as devy assets.
+
+⚠ **It was masked, and was days from stopping being masked.** `graduatedToNFL`
+was true for **zero** of 1,721 rows because `classifyDraftStatus` had no caller.
+It has one now (`ad514a334`, §2.15) — so the graduated population fills from the
+next classification run, and the adapter would have begun pricing NFL players as
+prospects with nothing failing. `devyMarketBridge.ts` names precisely this trap:
+*"masked right now only because the table holds forward-looking cohorts"*.
+
+Fixed by calling the existing eligibility rule rather than writing a second one.
+**Two implementations of "who is on the board" is the defect; the filter is not.**
+
+⚠ Note the two devy paths are NOT rivals: `DevyContextProvider` and `devyAdapter`
+both call `buildDevyValueBoard` and translate it for different consumers (a
+prompt slice, a `CanonicalValue`). That is legitimate — checked before assuming,
+per §2.14.
+
+**Still to do:** the migration itself. The census is the specification; nothing
+has moved behind Decision OS yet.
 
 ## 3. Target architecture
 
