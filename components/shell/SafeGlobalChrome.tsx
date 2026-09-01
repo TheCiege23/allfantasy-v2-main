@@ -6,6 +6,7 @@ import Script from "next/script"
 import { AuthRouteGlobalChrome } from "@/components/auth/AuthRouteGlobalChrome"
 import AgeConfirmationPrompt from "@/components/legal/AgeConfirmationPrompt"
 import { shouldRegisterServiceWorker } from "@/lib/pwa/shouldRegisterServiceWorker"
+import { initPWA } from "@/lib/pwa"
 
 const AUTH_ROUTE_PREFIXES = ["/login", "/signup", "/signin", "/auth"]
 
@@ -88,6 +89,23 @@ function ServiceWorkerLifecycle() {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
         /* ignore registration failures — non-critical */
       })
+      /*
+       * 🛑 `beforeinstallprompt` WAS ONLY EVER CAPTURED ON AUTH ROUTES, WHICH IS THE ONE
+       * PLACE IT IS USELESS. `initPWA` attaches the listener that stores the install
+       * prompt, and its only caller was `ServiceWorkerRegistration`, mounted solely by
+       * `AuthRouteGlobalChrome` (/login, /signup). The browser fires the event once, early;
+       * a signed-in user on /core never had it captured, so `canInstallApp()` was
+       * permanently false and every install affordance fell back to a manual alert.
+       *
+       * It only adds listeners — it does NOT register a service worker (see PWAClient) — so
+       * there is no duplicate registration with the line above, and it is idempotent via
+       * its own `initialized` guard. Gated on the same flag because a browser will not fire
+       * the event without a service worker anyway.
+       *
+       * This is the same shape as the push opt-in: built, correct, and mounted where it
+       * could not do its job.
+       */
+      initPWA()
       return
     }
 

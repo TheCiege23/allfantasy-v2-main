@@ -34,6 +34,7 @@
 import Link from 'next/link'
 
 import { ChimmyNote } from '@/components/core-app/import/ChimmyNote'
+import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-progress.css'
 
@@ -125,6 +126,21 @@ export function ImportDone({
       {noteText ? <p className="af-done-note">{noteText}</p> : null}
 
       {note ? <ChimmyNote>{note}</ChimmyNote> : null}
+
+      {/*
+        THE "FIRST MEANINGFUL ACTION" ASK (spec item 12), and this is the moment.
+        A just-finished import is the first point at which there is anything to be alerted
+        ABOUT — before it, a permission prompt is asking a stranger to trust us with their
+        lock screen for a league we cannot name. After it we can say which league and why.
+
+        ⚠ IT IS NOT A SECOND IMPLEMENTATION. Same `EnableWebPushCard` as /settings and
+        /core/notifications, so there is one permission flow, one subscribe call, and one
+        set of iOS/denied/unsupported states. Two components asking the same question
+        differently is how the avatar upload ended up with two doors and one of them locked.
+      */}
+      <div className="af-done-push">
+        <EnableWebPushCard />
+      </div>
 
       <div className="af-done-actions">
         {leagueHref ? (

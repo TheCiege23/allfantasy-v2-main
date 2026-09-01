@@ -332,6 +332,16 @@
   color: var(--muted);
 }
 
+/* The enable-alerts ask, shown once the import has given us something to alert about.
+   Sits above the actions so it is seen before the user taps through to their league. */
+.af-core .af-done-push {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--chip);
+}
+
 .af-core .af-done-actions {
   display: flex;
   align-items: center;

@@ -36,6 +36,31 @@
 .af-nt-markall:hover:not(:disabled) { background: var(--surface2); }
 .af-nt-markall:disabled { opacity: 0.45; cursor: default; }
 
+/* ── Enable-push ask ──────────────────────────────────────────────────
+ * Sits between the header and the filters so it is the first thing under the
+ * title. It is the only route to `Notification.requestPermission()` a phone has;
+ * burying it below the list would recreate the bug it exists to fix.
+ *
+ * ⚠ ADDED AS ITS OWN BLOCK, NOT INSIDE THE FILTERS MEDIA QUERY BELOW. Opening a
+ * new rule inside an existing @media closes that query early and silently moves
+ * every rule after it into the narrower band — this repo lost four rules in
+ * af-matchup.css exactly that way, with balanced braces and no failing test.
+ */
+.af-nt-push {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--chip);
+}
+
+/* Empty when the app is already installed — :empty keeps it from adding a stray gap. */
+.af-nt-push-install:not(:empty) {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line2);
+}
+
 /* ── Filters ──────────────────────────────────────────────────────── */
 
 .af-nt-filters {

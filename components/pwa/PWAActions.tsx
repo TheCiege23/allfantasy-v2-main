@@ -3,7 +3,18 @@
 import { useEffect, useState } from 'react';
 import { canInstallApp, isInstalled, shareApp, triggerInstall } from '@/lib/pwa';
 
-export function InstallButton({ className = '' }: { className?: string }) {
+export function InstallButton({
+  className = '',
+  hideWhenInstalled = false,
+}: {
+  className?: string;
+  /**
+   * Render nothing once the app is installed, instead of an "App Installed" chip.
+   * For surfaces where this is a nudge rather than a status line — the alerts ask on
+   * /core/notifications, where an already-installed user has no reason to see it.
+   */
+  hideWhenInstalled?: boolean;
+}) {
   const [canInstall, setCanInstall] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -26,6 +37,10 @@ export function InstallButton({ className = '' }: { className?: string }) {
       window.removeEventListener('af-installed', onInstalled);
     };
   }, []);
+
+  if (installed && hideWhenInstalled) {
+    return null;
+  }
 
   if (installed) {
     return (

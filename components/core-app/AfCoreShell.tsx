@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
+import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
@@ -1064,6 +1065,15 @@ export function AfCoreShell(props: AfCoreShellProps) {
             one remembering.
           */}
           <GeoRestrictionNotice />
+          {/*
+            Game-day nudge, in the shell for the same reason the notice above is: every
+            /core screen inherits it rather than each one remembering. It renders itself to
+            null off game days, once permission has been decided either way, and for the
+            rest of the week after it is dismissed — so on most loads this costs nothing.
+            It LINKS to /core/notifications rather than asking for permission itself; there
+            is exactly one permission flow and it lives in EnableWebPushCard.
+          */}
+          <GameDayAlertsBanner />
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the

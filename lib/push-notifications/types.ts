@@ -6,13 +6,14 @@
 /**
  * Payload sent to the service worker (shown in browser notification).
  *
- * KEY-NAME WARNING. Two service workers exist and they read DIFFERENT keys for the click
- * target: `public/sw.js` (the one actually registered, by SafeGlobalChrome) reads
- * `payload.url`, while `public/sw-push.js` reads `payload.href` and is never registered.
- * The sender previously emitted only `href`, so every notification clicked through to the
- * `/app` fallback instead of its intended destination. `sendToSubscription` now emits BOTH
- * keys, which also keeps any already-installed service worker on a user's device working
- * after a deploy — a stale SW is the norm, not the exception, and cannot be assumed updated.
+ * ⚠ BOTH `href` AND `url` ARE EMITTED, AND THAT IS STILL LOAD-BEARING AFTER THE SECOND
+ * WORKER WAS DELETED. There used to be two service workers reading different keys for the
+ * click target: `public/sw.js` (the one SafeGlobalChrome actually registers) reads
+ * `payload.url`, while `public/sw-push.js` read `payload.href` and was never registered at
+ * all. `sw-push.js` is now gone — but the dual emission stays, because a service worker
+ * already installed on a user's device is not updated by a deploy. Whatever key the copy on
+ * someone's phone reads, it finds one. Sending only `href` once made every notification
+ * click through to the `/app` fallback instead of its target; do not "simplify" this back.
  */
 export interface PushPayload {
   title: string
