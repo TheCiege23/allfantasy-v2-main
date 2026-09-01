@@ -8,24 +8,48 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { leagueFindUnique, rosterFindFirst, leagueSeasonFindMany, rivalryRecordFindMany, dramaEventFindMany, draftGradeFindMany } =
-  vi.hoisted(() => ({
+const {
+  leagueFindUnique,
+  rosterFindFirst,
+  leagueSeasonFindMany,
+  rivalryRecordFindMany,
+  dramaEventFindMany,
+  draftGradeFindMany,
+  redraftLeagueMemberFindUnique,
+  rosterCount,
+  leagueTeamFindFirst,
+} = vi.hoisted(() => ({
     leagueFindUnique: vi.fn(),
     rosterFindFirst: vi.fn(),
     leagueSeasonFindMany: vi.fn(),
     rivalryRecordFindMany: vi.fn(),
     dramaEventFindMany: vi.fn(),
     draftGradeFindMany: vi.fn(),
+    /*
+     * ── 🛑 THREE MOCKS THE SUITE NEVER HAD, AND WHY IT WENT RED WITHOUT THEM ────────────────
+     *
+     * `resolveLeagueMembership` resolves access as a four-rung ladder: owner -> redraft member
+     * -> roster -> claimed team. This mock stubbed `league` and `roster.findFirst` and nothing
+     * else, so the moment `lib/league-access.ts` grew the other three queries, seven tests died
+     * on `Cannot read properties of undefined (reading 'findUnique')` — the mock rotting because
+     * the module under test changed, which the root CLAUDE.md records for the FantasyCalc
+     * migration in exactly these words.
+     */
+    redraftLeagueMemberFindUnique: vi.fn(),
+    rosterCount: vi.fn(),
+    leagueTeamFindFirst: vi.fn(),
   }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: leagueFindUnique },
-    roster: { findFirst: rosterFindFirst },
+    roster: { findFirst: rosterFindFirst, count: rosterCount },
     leagueSeason: { findMany: leagueSeasonFindMany },
     rivalryRecord: { findMany: rivalryRecordFindMany },
     dramaEvent: { findMany: dramaEventFindMany },
     draftGrade: { findMany: draftGradeFindMany },
+    redraftLeagueMember: { findUnique: redraftLeagueMemberFindUnique },
+    leagueTeam: { findFirst: leagueTeamFindFirst },
   },
 }))
 
@@ -77,6 +101,76 @@ describe('assembleCommissionerOsContext — authorization boundary', () => {
     // the second `league.findUnique` call).
     leagueFindUnique.mockReset()
     rosterFindFirst.mockReset()
+    redraftLeagueMemberFindUnique.mockReset()
+    rosterCount.mockReset()
+    leagueTeamFindFirst.mockReset()
+
+    /*
+     * ── ⚠ THE DEFAULTS READ THE FIXTURE EACH TEST ALREADY SUPPLIED ────────────────────────
+     *
+     * `baseLeague()` carries `redraftMembers: []` and `teams: []`, and a test opts into
+     * membership by overriding one of them. That shape predates `lib/league-access.ts` splitting
+     * those reads into their own queries — it used to get them through an `include` on the league.
+     *
+     * So rather than hardcoding a default (which would silently GRANT access in the rejection
+     * tests, turning a red suite green by breaking what it actually checks), these derive from
+     * the league the test itself mocked. `mock.results[0]` is the first `league.findUnique` call
+     * — the membership lookup — and its `.value` is the promise that call returned.
+     *
+     * Net effect: every test keeps the exact intent it was written with, and none of the seven
+     * needed editing.
+     */
+    async function fixtureLeague(): Promise<Record<string, unknown> | null> {
+      const first = leagueFindUnique.mock.results[0]
+      if (!first || first.type !== 'return') return null
+      try {
+        return (await first.value) as Record<string, unknown> | null
+      } catch {
+        return null
+      }
+    }
+
+    redraftLeagueMemberFindUnique.mockImplementation(async () => {
+      const league = await fixtureLeague()
+      const m = (league?.redraftMembers as Array<{ role?: string }> | undefined)?.[0]
+      return m ? { role: m.role } : null
+    })
+
+    // No fixture field describes roster membership, and no test exercises that rung.
+    rosterCount.mockImplementation(async () => 0)
+
+    /*
+     * ── ⚠ AND THE LADDER ADDED A THIRD `league.findUnique`, WHICH STARVED THE QUEUE ────────
+     *
+     * These tests queue exactly two values, because there used to be exactly two calls:
+     * `resolveActiveLeagueContext`'s own lookup, then `assembleCommissionerOsContext`'s. The
+     * canonical membership predicate now makes its own, in between — so the second queued value
+     * (the platform/sport/season row) was being consumed by the membership check and the real
+     * consumer got `undefined`, which reads downstream as "no access" rather than as a starved
+     * mock.
+     *
+     * A base implementation runs only once the `mockResolvedValueOnce` queue is EXHAUSTED, so
+     * this changes nothing about the values the tests deliberately queued — it only stops an
+     * extra call returning undefined. Falling back to the first fixture is right because that is
+     * the full league row; the queued second value is a projection of the same league.
+     */
+    leagueFindUnique.mockImplementation(async () => {
+      const first = leagueFindUnique.mock.results[0]
+      if (!first || first.type !== 'return') return null
+      try {
+        return await first.value
+      } catch {
+        return null
+      }
+    })
+
+    leagueTeamFindFirst.mockImplementation(async () => {
+      const league = await fixtureLeague()
+      const t = (league?.teams as Array<{ isCommissioner?: boolean; isCoCommissioner?: boolean }> | undefined)?.[0]
+      return t
+        ? { isCommissioner: Boolean(t.isCommissioner), isCoCommissioner: Boolean(t.isCoCommissioner) }
+        : null
+    })
     leagueSeasonFindMany.mockReset()
     rivalryRecordFindMany.mockReset()
     dramaEventFindMany.mockReset()
@@ -131,6 +225,16 @@ describe('assembleCommissionerOsContext — authorization boundary', () => {
           settings: { commissionerVerification: { method: 'attestation', appUserId: 'attested-commissioner' } },
         })
       )
+      // ⚠ QUEUED TWICE. The canonical membership predicate makes its own `league.findUnique`
+      // between the resolver's and the assembler's, and the OWNER rung it grants on reads
+      // `userId` — which the projection below does not carry. Without this the owner check
+      // silently misses and the league reads as "not a member".
+      .mockResolvedValueOnce(
+        baseLeague({
+          userId: 'attested-commissioner',
+          settings: { commissionerVerification: { method: 'attestation', appUserId: 'attested-commissioner' } },
+        })
+      )
       .mockResolvedValueOnce({ platform: 'espn', sport: 'NFL', season: 2026, isDynasty: false })
     const { assembleCommissionerOsContext } = await import('@/lib/shared-services/league-hub/commissionerOsContext')
     const result = await assembleCommissionerOsContext({ appUserId: 'attested-commissioner', canonicalLeagueId: 'league-1' })
@@ -166,6 +270,15 @@ describe('assembleCommissionerOsContext — authorization boundary', () => {
 
   it('flags a Fantrax CSV-imported league as snapshot-only, never claiming it is live', async () => {
     leagueFindUnique
+      .mockResolvedValueOnce(
+        baseLeague({
+          userId: 'commissioner-1',
+          platform: 'fantrax',
+          settings: { commissionerVerification: { method: 'attestation', appUserId: 'commissioner-1' } },
+        })
+      )
+      // ⚠ QUEUED TWICE — same reason as the attestation test above: the membership predicate's
+      // own lookup sits between the other two, and the owner rung needs `userId`.
       .mockResolvedValueOnce(
         baseLeague({
           userId: 'commissioner-1',
