@@ -1112,6 +1112,54 @@ raises P2022, and a missing table raises P2021. Landing the code is a deploy;
 applying the schema change is a separate decision that belongs to the user. The
 pusher does neither on the author's say-so.
 
+## A failure path that publishes a secret
+
+The section above is about checks that go green while measuring nothing. This is
+the inverse and it is worse, because the thing that leaks is the thing a careful
+person does next: **the success path is silent, and the ERROR path prints the
+credential.** The more diligently someone reports a build failure, the more
+completely they expose themselves.
+
+🛑 **A FAILED ANDROID SIGNING STEP ECHOES THE KEYSTORE PASSWORD IN PLAINTEXT.**
+`bubblewrap` shells out to `apksigner`, and on failure it prints the command line
+it tried — which contains `--ks-pass pass:"<the real password>"`. Observed
+2026-09-01: a user pasted a build error into a chat to ask what was wrong, and
+their signing password came with it. It was harmless *only* because the keystore
+did not exist yet, so the password protected nothing and a fresh one was
+generated. Had the build been failing for any other reason, that paste would have
+published the upload key's password.
+
+**Scrub build output before pasting it anywhere** — an issue, a log aggregator, a
+chat, a commit message. And note the general shape, because the tool is
+incidental: any wrapper that builds a command string containing a secret and
+echoes it on error has this defect, and you will not see it in the happy path.
+
+⚠ **THE NEAREST RELATIVE ALREADY IN THIS FILE IS THE `RSC_token` QUERY PARAMETER**
+(see *Credentials* above). Rolling Insights passes a long-lived credential as a
+URL parameter, so ordinary request logging leaks it. Both are secrets escaping
+through *careful, conventional* practice rather than through carelessness, which
+is exactly why neither is caught by "do not log secrets" as a rule — nobody
+thinks they are logging a secret. They think they are logging a URL, or an error.
+
+⚠ **AND THE MITIGATION IS NOT "BE CAREFUL", IT IS TO KEEP THE SECRET OUT OF THE
+ARGUMENT.** Where a tool offers it, pass credentials by file or environment
+rather than on a command line — an argv is visible to `ps`, to crash handlers,
+and to every error printer that decides to be helpful.
+
+Two related corrections from the same session, both measured, both worth keeping
+because the wrong version was the confident one:
+
+- `bubblewrap build` does **not** create the keystore, despite the runbook having
+  said so. It prompts for the password, builds the unsigned APK, then dies at the
+  signing step with `FileNotFoundException`. Create it with `keytool` first.
+- **Losing an upload keystore is RECOVERABLE**, not fatal. Under Play App Signing
+  Google holds the app signing key; a lost upload key is reset through the Play
+  Console. The opposite was asserted first and had to be walked back. Back it up
+  regardless — a reset is a support round-trip mid-release.
+
+Neither belongs in a signing runbook as folklore; both are in
+`docs/play-store/RUNBOOK.md` with the measurement attached.
+
 ## Deploys cost money, and pushes are the meter
 
 🛑 **A PUSH TO `main` IS A DEPLOY. A COMMIT IS NOT.** Commit as often as you like;
