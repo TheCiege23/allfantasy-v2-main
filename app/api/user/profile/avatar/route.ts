@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { requireContactVerifiedUser } from "@/lib/auth-guard"
+import { requireAuth } from "@/lib/auth-guard"
 import {
   isAllowedProfileImageType,
   MAX_PROFILE_IMAGE_BYTES,
@@ -16,16 +16,26 @@ import {
  * Upload a profile image to Vercel Blob; sets AppUser.avatarUrl to the public HTTPS URL and
  * clears any avatar preset. The single avatar upload route for every surface.
  *
- * ⚠ THE GATE IS VERIFICATION WITHOUT THE AGE CHECK, DELIBERATELY. See
- * `requireContactVerifiedUser` — the settings page previously uploaded through
- * `/api/chat/upload`, whose `requireVerifiedUser` also demands `ageConfirmedAt`, which no
- * OAuth sign-in ever sets. That returned 403 `AGE_REQUIRED` for a profile picture.
+ * 🛑 THE GATE IS A SESSION AND NOTHING MORE, DELIBERATELY. A profile picture is not an
+ * age-restricted or deliverability-restricted action, and every stricter gate tried here has
+ * locked out a population nobody intended to lock out:
  *
- * The guard calls `getOrCreateUserProfile`, so the `userProfile` row is guaranteed to exist
- * by the time the preset is cleared below.
+ *   - `requireVerifiedUser` (what `/api/chat/upload` uses, which the settings page used to
+ *     post to) demands `ageConfirmedAt`. No OAuth sign-in ever writes that field, so EVERY
+ *     Google account got 403 `AGE_REQUIRED` for a profile picture. Reported from a Play
+ *     Store test user 2026-09-01.
+ *   - Requiring only contact verification still shut out every account with no verified
+ *     email or phone — a materially large group — who could upload from `/profile` before.
+ *
+ * So: signed in, and that is the whole test. Widen this only with a reason that survives
+ * both of the above.
+ *
+ * ⚠ `requireAuth` does NOT create a `userProfile` row, unlike the stricter guards. The
+ * preset clear below therefore uses `updateMany`, which is a no-op on a missing row rather
+ * than a throw. Do not "tidy" it into `update`.
  */
 export async function POST(req: NextRequest) {
-  const auth = await requireContactVerifiedUser()
+  const auth = await requireAuth()
   if (!auth.ok) return auth.response
   const userId = auth.userId
 
