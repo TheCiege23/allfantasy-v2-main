@@ -458,10 +458,130 @@ export async function buildDecisionOsGroundingPacket(
   const projectionOs = createProjectionOsLoaders()
   const leagueOs = createLeagueOsLoaders()
 
-  // ── The assertions first: everything else is judged against them. ─────────────────────────
+  /*
+   * ⚠ `meta.durationMs` ALONE CANNOT BE ACTED ON, WHICH IS WHY THESE EXIST.
+   *
+   * The proof surface measured 5354ms, 6178ms and 5442ms against the chat route's 3000ms ceiling
+   * on live leagues (2026-09-01) — so Chimmy paid to build this packet and discarded it on every
+   * turn, which from outside is indistinguishable from the feature being switched off. A single
+   * total says that is happening and nothing about where to cut.
+   *
+   * `engineMs` splits the one `loadContext` call from everything else, and `sliceMs` carries a
+   * per-slice figure. Together they turn "it is too slow" into a named cause.
+   */
+  const sliceMs = new Map<string, number | null>()
+  let engineMs: number | null = null
+
+  /*
+   * ── 🛑 THE PACKET WAS A WATERFALL, AND THAT WAS THE WHOLE 5.4 SECONDS ──────────────────
+   *
+   * Measured on a live 8-team dynasty league once `engineMs` existed to split it:
+   *
+   *     buildMs   5441
+   *     engineMs   457   ← twelve context providers, ALREADY concurrent inside the engine
+   *     the rest  4984   ← eight independent reads, each awaited after the last one finished
+   *
+   * ⚠ AND THE OBVIOUS SUSPECT WAS WRONG, WHICH IS WHY IT WAS MEASURED BEFORE ANYTHING WAS CUT.
+   * The `ranking` provider returns difficulty ratings for ~400 leagues and dominates the payload;
+   * it costs 166ms. Removing it would have bought 3% and left the packet over the ceiling. The
+   * engine had the right shape all along — one `allSettled`, twelve providers, 457ms — and the
+   * builder wrapped around it did not.
+   *
+   * None of these reads consumes another's result: every argument is `args`, `leagueId` or
+   * `userId`, all known here. So they START here, together, and each `await` below stays exactly
+   * where it was — the grading is untouched and still reads top to bottom in slice order.
+   *
+   * `flags` is the one true dependency and is already awaited above: it decides which of these may
+   * run at all, and a feed gathered then discarded would be a killed feed that still cost a query.
+   */
+  const kick = <T,>(slice: string, promise: Promise<T>): Promise<T> => {
+    const startedAt = Date.now()
+    return promise.then((value) => {
+      sliceMs.set(slice, Date.now() - startedAt)
+      return value
+    })
+  }
+
   const importKill = killed('importAssertions')
-  const assertions =
-    leagueId && !importKill ? await importOs.loadAssertions(leagueId).catch(() => null) : null
+  const rulesKill = killed('leagueRules')
+  const marketKill = killed('marketValues')
+  const devyKill = killed('devyValues')
+  const projectionKill = killed('projections')
+  const contextKill = killed('contextFacts')
+  const commishKill = killed('commissionerIntelligence')
+  const leagueIntelKill = killed('leagueIntelligence')
+  const portfolioKill = killed('portfolio')
+
+  const pAssertions =
+    leagueId && !importKill
+      ? kick('importAssertions', importOs.loadAssertions(leagueId).catch(() => null))
+      : Promise.resolve(null)
+
+  const pRules =
+    want.leagueRules && leagueId && !rulesKill
+      ? kick('leagueRules', leagueOs.loadRules(leagueId).catch(() => null))
+      : Promise.resolve(null)
+
+  const pMarket =
+    want.values && args.valueFormat && !marketKill
+      ? kick(
+          'marketValues',
+          valueOs
+            .loadMarket({
+              sport: args.sport,
+              format: args.valueFormat.format,
+              qbFormat: args.valueFormat.qbFormat,
+            })
+            .catch(() => null),
+        )
+      : Promise.resolve(null)
+
+  const pDevy = want.devy && !devyKill
+    ? kick(
+        'devyValues',
+        valueOs.loadDevy({ sport: args.sport, currentSeason: args.season }).catch(() => null),
+      )
+    : Promise.resolve(null)
+
+  const pProjections = want.projections && !projectionKill
+    ? kick(
+        'projections',
+        projectionOs
+          .loadFor(
+            { sport: args.sport, season: args.season, week: args.week ?? null },
+            args.leagueIdpRules ?? null,
+          )
+          .catch(() => null),
+      )
+    : Promise.resolve(null)
+
+  const pCommissioner =
+    leagueId && args.userId && !commishKill
+      ? kick(
+          'commissionerIntelligence',
+          resolveCommissionerGroundingOutcome({
+            leagueId,
+            userId: args.userId,
+            question: args.question ?? null,
+          }).catch((): CommissionerGroundingOutcome => ({ status: 'unavailable' })),
+        )
+      : null
+
+  const pSavedAnalysis =
+    leagueId && args.userId && flags.enabled('savedAnalysis')
+      ? kick(
+          'savedAnalysis',
+          loadSavedThreeBrainAnalysis({
+            leagueId,
+            userId: args.userId,
+            tool: 'mission_control',
+            decisionType: 'league_health',
+          }).catch(() => ({ status: 'not_computed', reason: 'loader_threw' }) as const),
+        )
+      : null
+
+  // ── The assertions first: everything else is judged against them. ─────────────────────────
+  const assertions = await pAssertions
 
   const importSlice: GroundedSlice<ImportAssertions> = importKill
     ? absent<ImportAssertions>(importKill)
@@ -484,10 +604,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── League rules ──────────────────────────────────────────────────────────────────────────
   let leagueRules: GroundedSlice<unknown> = absent(NOT_REQUESTED)
-  const rulesKill = killed('leagueRules')
   if (want.leagueRules && leagueId && rulesKill) leagueRules = absent(rulesKill)
   else if (want.leagueRules && leagueId) {
-    const rules = await leagueOs.loadRules(leagueId).catch(() => null)
+    const rules = await pRules
     const v = verdictFor('leagueRules')
     leagueRules = rules
       ? present(rules, { servedFrom: 'store', conclusive: v })
@@ -500,13 +619,10 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Market values ─────────────────────────────────────────────────────────────────────────
   let marketValues: GroundedSlice<ValueLookup[]> = absent(NOT_REQUESTED)
-  const marketKill = killed('marketValues')
   if (want.values && args.valueFormat && marketKill) marketValues = absent(marketKill)
   else if (want.values && args.valueFormat) {
     const v = verdictFor('globalPlayerValue') // global — no league import can block it
-    const rows = await valueOs
-      .loadMarket({ sport: args.sport, format: args.valueFormat.format, qbFormat: args.valueFormat.qbFormat })
-      .catch(() => null)
+    const rows = await pMarket
     marketValues = hasSubstance(rows)
       ? present(rows, { servedFrom: 'store', conclusive: v })
       : absent({
@@ -518,11 +634,10 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Devy values ───────────────────────────────────────────────────────────────────────────
   let devyValues: GroundedSlice<ValueLookup[]> = absent(NOT_REQUESTED)
-  const devyKill = killed('devyValues')
   if (want.devy && devyKill) devyValues = absent(devyKill)
   else if (want.devy) {
     const v = verdictFor('globalPlayerValue')
-    const rows = await valueOs.loadDevy({ sport: args.sport, currentSeason: args.season }).catch(() => null)
+    const rows = await pDevy
     devyValues = hasSubstance(rows)
       ? present(rows, { servedFrom: 'store', conclusive: v })
       : absent({
@@ -540,13 +655,10 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Projections ───────────────────────────────────────────────────────────────────────────
   let projections: GroundedSlice<ProjectionFact[]> = absent(NOT_REQUESTED)
-  const projectionKill = killed('projections')
   if (want.projections && projectionKill) projections = absent(projectionKill)
   else if (want.projections) {
     const v = verdictFor('lineupDecision')
-    const facts = await projectionOs
-      .loadFor({ sport: args.sport, season: args.season, week: args.week ?? null }, args.leagueIdpRules ?? null)
-      .catch(() => null)
+    const facts = await pProjections
     if (!hasSubstance(facts)) {
       projections = absent({
         reason: 'not_computed',
@@ -577,10 +689,7 @@ export async function buildDecisionOsGroundingPacket(
    * they turn "it is too slow" into a named provider, which is the difference between fixing this
    * and guessing at it.
    */
-  const sliceMs = new Map<string, number | null>()
-  let engineMs: number | null = null
 
-  const contextKill = killed('contextFacts')
   if (args.userId && leagueId && contextKill) {
     // Killed, not missing — all eight say so rather than vanishing, per §2.20.
     contextFacts = {
@@ -701,14 +810,9 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Commissioner intelligence (4.4): the one slice with its own access rule ────────────────
   let commissionerIntelligence: GroundedSlice<string> = absent(NOT_REQUESTED)
-  const commishKill = killed('commissionerIntelligence')
   if (leagueId && args.userId && commishKill) commissionerIntelligence = absent(commishKill)
   else if (leagueId && args.userId) {
-    const outcome = await resolveCommissionerGroundingOutcome({
-      leagueId,
-      userId: args.userId,
-      question: args.question ?? null,
-    }).catch((): CommissionerGroundingOutcome => ({ status: 'unavailable' }))
+    const outcome = (await pCommissioner) ?? ({ status: 'unavailable' } as CommissionerGroundingOutcome)
 
     if (outcome.status === 'ok') {
       commissionerIntelligence = present(outcome.text, {
@@ -734,14 +838,15 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   // ── The other two resolvers (4.5) ─────────────────────────────────────────────────────────
-  const leagueIntelKill = killed('leagueIntelligence')
-  const portfolioKill = killed('portfolio')
   const [leagueIntelText, portfolioText] = await Promise.all([
     leagueId && args.userId && !leagueIntelKill
-      ? resolveLeagueIntelligenceGrounding({ leagueId, userId: args.userId }).catch(() => null)
+      ? kick(
+          'leagueIntelligence',
+          resolveLeagueIntelligenceGrounding({ leagueId, userId: args.userId }).catch(() => null),
+        )
       : Promise.resolve(null),
     args.userId && !portfolioKill
-      ? resolvePortfolioGrounding({ userId: args.userId }).catch(() => null)
+      ? kick('portfolio', resolvePortfolioGrounding({ userId: args.userId }).catch(() => null))
       : Promise.resolve(null),
   ])
 
@@ -772,12 +877,8 @@ export async function buildDecisionOsGroundingPacket(
    */
   let savedAnalysis: GroundedSlice<string> = absent(NOT_REQUESTED)
   if (leagueId && args.userId && flags.enabled('savedAnalysis')) {
-    const outcome = await loadSavedThreeBrainAnalysis({
-      leagueId,
-      userId: args.userId,
-      tool: 'mission_control',
-      decisionType: 'league_health',
-    }).catch(() => ({ status: 'not_computed', reason: 'loader_threw' }) as const)
+    const outcome =
+      (await pSavedAnalysis) ?? ({ status: 'not_computed', reason: 'loader_threw' } as const)
 
     if (outcome.status === 'ok') {
       savedAnalysis = present(outcome.text, {

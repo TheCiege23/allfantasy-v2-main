@@ -54,10 +54,19 @@ function gradedNames(): string[] {
   return [...src.matchAll(/\bgrade\('([^']+)'/g)].map((m) => m[1]!)
 }
 
-/** The `EngineProviderName` union members the packet declares. */
+/**
+ * The `EngineProviderName` union members the packet declares.
+ *
+ * ⚠ `\r?\n`, NOT `\n` — THIS TEST CAUGHT ITSELF ON THAT. It was written when `packet.ts` was LF; a
+ * `git stash` round-trip later normalised the file to CRLF and the bare `\n` matched nothing, so
+ * `declaredUnion()` returned empty. The two subset assertions below would then have passed
+ * VACUOUSLY — an empty set is a subset of anything — and this guard would have gone green while
+ * checking nothing at all. The "finds real numbers" control above is the only reason it went red
+ * instead, which is exactly the job that control exists to do.
+ */
 function declaredUnion(): Set<string> {
   const src = readFileSync(PACKET, 'utf8')
-  const block = src.match(/type EngineProviderName =\n([\s\S]*?)\n\n/)
+  const block = src.match(/type EngineProviderName =\r?\n([\s\S]*?)\r?\n\r?\n/)
   expect(block, 'EngineProviderName union not found — did it get renamed?').toBeTruthy()
   return new Set([...block![1]!.matchAll(/\|\s*'([^']+)'/g)].map((m) => m[1]!))
 }
