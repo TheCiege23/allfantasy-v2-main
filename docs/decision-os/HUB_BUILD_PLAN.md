@@ -976,6 +976,45 @@ refusal cases, while the gate and pass-through tests correctly stayed green. Ful
 `participation` — none of them constructs a literal. Test fixtures do, but `tsconfig` excludes
 `__tests__` and types are erased at runtime, so they neither fail to compile nor break.
 
+### 2.26 Participation is on screen — in the chip row, because the gauge row is a sum
+
+Completing 6.1 step A after §2.25's revert. The label is "Participation", the user's call.
+
+**🛑 THE GAUGE ROW IS A COMPOSITE AND THE CHIP ROW IS NOT.** `healthScore =
+0.35×engagement + 0.30×fairness + 0.35×sustainability`, and CommissionerHQ prints all four
+together. Participation is not a term in that sum, so putting it in the Engagement slot would
+leave Overall no longer derivable from the numbers beside it — which a commissioner can check.
+The chip row below is a list of INDEPENDENT metrics (active, inactive, lineup rate, trades,
+waivers) where nothing claims to be part of a total. That is where it went.
+
+It **replaces** the engagement chip rather than joining it: the gauge above already shows
+engagement, so the chip duplicated it, and a seventh entry orphans a cell in a six-column grid.
+The label moves with the value, so a reader is never shown one question under the other's name.
+Null — never 0 — falls back to the engagement chip, so a league nobody has synced is not told it
+is dormant.
+
+**⚠ THE LOCALE IS `fil`, NOT `tl`, AND A GUARD CAUGHT IT ON ITS FIRST RUN.** The key was
+inserted into five locales by a script anchored POSITIONALLY, because the English and Filipino
+blocks render `…health.engagement` as the byte-identical string "Engagement" — matching on the
+value would have inserted into whichever came first and silently skipped the other.
+
+`__tests__/i18n-commissioner-health-key-coverage.test.ts` exists because nothing else checks
+this: `i18n-placeholder-parity.test.ts` compares `{{placeholder}}` names only **for keys present
+in both** locales, and explicitly `continue`s past a key missing from one side. A label added to
+English and forgotten elsewhere passes every existing guard, and fails silently in front of
+someone who reads neither language. With the Chinese key deleted the new guard reports **2
+failed** and names the key.
+
+⚠ It also asserts the five values are not all identical, because the failure mode of a
+positional insert is writing the same English string five times — a check that would pass on
+"present in every locale" alone.
+
+**⚠ FIVE SURFACES STILL SHOW ACTIVITY UNDER THE WORD ENGAGEMENT**: `DashboardHero`,
+`ToolsAndHealth`, `NocturneDashboard`, `commissionerLeagueHealthViewModel`, `league-pulse`,
+`platform-pulse/engine`. They are correct as they stand — they render the composite's component
+— but the same question applies to each, and `LeaguePulseService` is the model answer: it already
+describes its number as "reflects trades, waiver claims, and lineup submission activity".
+
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 
 5.3 says to reuse `liveReadiness.ts`'s per-namespace pattern. Read before copying, and two things

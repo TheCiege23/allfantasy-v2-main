@@ -188,7 +188,30 @@ export function CommissionerHQ({
             />
             <StatChip label={t('dashboard.warroom.commissionerHQ.health.tradeActivity')} value={snapshot.metrics.tradeActivity} />
             <StatChip label={t('dashboard.warroom.commissionerHQ.health.waiverActivity')} value={snapshot.metrics.waiverActivity} />
-            <StatChip label={t('dashboard.warroom.commissionerHQ.health.engagement')} value={snapshot.engagementScore} />
+            {/* 6.1 step A — PARTICIPATION goes in the CHIP row, not the gauge row above.
+                The gauges are a composite breakdown: healthScore = 0.35×engagement +
+                0.30×fairness + 0.35×sustainability, and all four are printed together, so putting
+                a non-term of that sum into the Engagement slot would leave Overall no longer
+                derivable from the numbers beside it. This row is a list of INDEPENDENT metrics
+                — active, inactive, lineup rate, trades, waivers — where nothing claims to be part
+                of a total, so participation fits without lying.
+
+                ⚠ It REPLACES the engagement chip rather than joining it: the gauge above already
+                shows engagement, so the chip was duplicating it, and a seventh entry would orphan
+                one cell in a six-column grid. The label moves with the value, so the reader is
+                never shown one question under the other's name.
+
+                ⚠ Null — never 0 — when event coverage cannot support the claim, so a league
+                nobody has synced falls back to engagement instead of being told it is dormant. */}
+            {snapshot.participation ? (
+              <StatChip
+                label={t('dashboard.warroom.commissionerHQ.health.participation')}
+                value={snapshot.participation.score}
+                warn={snapshot.participation.score < 40}
+              />
+            ) : (
+              <StatChip label={t('dashboard.warroom.commissionerHQ.health.engagement')} value={snapshot.engagementScore} />
+            )}
           </div>
         </div>
       ) : null}
