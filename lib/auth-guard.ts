@@ -203,6 +203,73 @@ export async function requireVerifiedUser(): Promise<
 }
 
 /**
+ * Signed in with a verified email or phone, and NOT required to have confirmed age.
+ *
+ * The mirror image of `requireAgeConfirmedUser` below, and the gate a profile-image upload
+ * actually needs. Age confirmation is a LEGAL gate for the surfaces that genuinely need one
+ * — bracket entry and the settings legal panel — which is exactly why
+ * `components/legal/AgeConfirmationPrompt.tsx` is deliberately dismissible: it exists to
+ * stop later confusion, not to hold the app hostage.
+ *
+ * ⚠ AVATAR UPLOAD WAS AGE-GATED BY ACCIDENT AND IT BLOCKED EVERY GOOGLE SIGN-IN. The
+ * settings page uploaded through `/api/chat/upload`, which uses `requireVerifiedUser` —
+ * age AND verification. `lib/auth.ts` never writes `ageConfirmedAt` on an OAuth sign-in
+ * (only `/api/auth/register`, `/api/auth/confirm-age` and `SharedAccountBootstrapService`
+ * do), so every Google account that had not separately confirmed age got a 403
+ * `AGE_REQUIRED` for a profile picture. Reported by a Play Store test user 2026-09-01.
+ *
+ * ⚠ AND STAMPING `ageConfirmedAt` DURING OAUTH IS NOT THE FIX. It would clear the error by
+ * fabricating a legal attestation the user never made — `/api/auth/confirm-age` says so in
+ * its own header, because the signup tick never reached the server and someone who ticked
+ * it is indistinguishable from someone who did not. Asking once is the only honest repair,
+ * and a profile picture is not the place to ask.
+ *
+ * Same return shape as its siblings — callers do `if (!x.ok) return x.response`.
+ */
+export async function requireContactVerifiedUser(): Promise<
+  | { ok: true; userId: string; profile: VerifiedUserProfile }
+  | { ok: false; response: NextResponse }
+> {
+  const session = await getAuthenticatedSession();
+  const userId = session?.user?.id ?? null;
+
+  if (!userId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 }),
+    };
+  }
+
+  const [emailVerified, profile] = await Promise.all([
+    getUserEmailVerification(userId),
+    getOrCreateUserProfile(userId),
+  ]);
+
+  if (!profile) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 }),
+    };
+  }
+
+  if (!isUserVerified(emailVerified, profile.phoneVerifiedAt)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "VERIFICATION_REQUIRED" },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    userId,
+    profile,
+  };
+}
+
+/**
  * Signed in and age-confirmed, but NOT required to have verified an email or phone.
  *
  * `requireVerifiedUser` above, minus its final check. Chimmy deliberately sits behind the

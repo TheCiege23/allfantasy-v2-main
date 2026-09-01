@@ -1,26 +1,30 @@
 import { randomUUID } from "crypto"
 import { put } from "@vercel/blob"
+import {
+  ALLOWED_PROFILE_IMAGE_TYPES,
+  MAX_PROFILE_IMAGE_BYTES,
+  PROFILE_IMAGE_BAD_TYPE_MESSAGE,
+  PROFILE_IMAGE_TOO_LARGE_MESSAGE,
+  isAllowedProfileImageType,
+  type AllowedProfileImageType,
+} from "./profileImageLimits"
 
-export const MAX_PROFILE_IMAGE_BYTES = 3 * 1024 * 1024
-export const ALLOWED_PROFILE_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-] as const
+/*
+ * Re-exported so every existing server importer keeps working unchanged while the browser
+ * imports the same values from `./profileImageLimits`. This module pulls in `@vercel/blob`
+ * and node's `crypto` and must never reach a client bundle, which is the whole reason the
+ * constants moved out.
+ */
+export { ALLOWED_PROFILE_IMAGE_TYPES, MAX_PROFILE_IMAGE_BYTES, isAllowedProfileImageType }
 
-const MIME_EXTENSION_MAP: Record<(typeof ALLOWED_PROFILE_IMAGE_TYPES)[number], string> = {
+const MIME_EXTENSION_MAP: Record<AllowedProfileImageType, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/gif": "gif",
   "image/webp": "webp",
 }
 
-type AllowedMimeType = (typeof ALLOWED_PROFILE_IMAGE_TYPES)[number]
-
-export function isAllowedProfileImageType(mimeType: string): mimeType is AllowedMimeType {
-  return (ALLOWED_PROFILE_IMAGE_TYPES as readonly string[]).includes(mimeType)
-}
+type AllowedMimeType = AllowedProfileImageType
 
 export function parseAvatarDataUrl(
   dataUrl: string
@@ -51,10 +55,10 @@ export async function persistProfileImageBytes(params: {
   originalFilename?: string | null
 }): Promise<{ url: string }> {
   if (params.bytes.byteLength > MAX_PROFILE_IMAGE_BYTES) {
-    throw new Error("File too large (max 3MB)")
+    throw new Error(PROFILE_IMAGE_TOO_LARGE_MESSAGE)
   }
   if (!isAllowedProfileImageType(params.mimeType)) {
-    throw new Error("Only JPEG, PNG, GIF, WebP allowed")
+    throw new Error(PROFILE_IMAGE_BAD_TYPE_MESSAGE)
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {

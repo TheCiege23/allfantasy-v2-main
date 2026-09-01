@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { requireContactVerifiedUser } from "@/lib/auth-guard"
 import {
   isAllowedProfileImageType,
   MAX_PROFILE_IMAGE_BYTES,
   persistProfileImageBytes,
 } from "@/lib/avatar/ProfileImageUploadStorageService"
+import {
+  PROFILE_IMAGE_BAD_TYPE_MESSAGE,
+  PROFILE_IMAGE_TOO_LARGE_MESSAGE,
+} from "@/lib/avatar/profileImageLimits"
 
 /**
  * POST /api/user/profile/avatar
- * Upload a profile image to Vercel Blob; sets AppUser.avatarUrl to the public HTTPS URL.
- * Returns { url } or error.
+ * Upload a profile image to Vercel Blob; sets AppUser.avatarUrl to the public HTTPS URL and
+ * clears any avatar preset. The single avatar upload route for every surface.
+ *
+ * ⚠ THE GATE IS VERIFICATION WITHOUT THE AGE CHECK, DELIBERATELY. See
+ * `requireContactVerifiedUser` — the settings page previously uploaded through
+ * `/api/chat/upload`, whose `requireVerifiedUser` also demands `ageConfirmedAt`, which no
+ * OAuth sign-in ever sets. That returned 403 `AGE_REQUIRED` for a profile picture.
+ *
+ * The guard calls `getOrCreateUserProfile`, so the `userProfile` row is guaranteed to exist
+ * by the time the preset is cleared below.
  */
 export async function POST(req: NextRequest) {
-  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
-  const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const auth = await requireContactVerifiedUser()
+  if (!auth.ok) return auth.response
+  const userId = auth.userId
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json({ error: "Storage not configured" }, { status: 503 })
@@ -28,10 +39,10 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: "No file" }, { status: 400 })
 
     if (!isAllowedProfileImageType(file.type)) {
-      return NextResponse.json({ error: "Only JPEG, PNG, GIF, WebP allowed" }, { status: 400 })
+      return NextResponse.json({ error: PROFILE_IMAGE_BAD_TYPE_MESSAGE }, { status: 400 })
     }
     if (file.size > MAX_PROFILE_IMAGE_BYTES) {
-      return NextResponse.json({ error: "File too large (max 3MB)" }, { status: 400 })
+      return NextResponse.json({ error: PROFILE_IMAGE_TOO_LARGE_MESSAGE }, { status: 400 })
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer())
@@ -40,10 +51,17 @@ export async function POST(req: NextRequest) {
       mimeType: file.type,
       originalFilename: file.name,
     })
-    await prisma.appUser.update({
-      where: { id: userId },
-      data: { avatarUrl: url },
-    })
+
+    /*
+     * An upload supersedes a preset, and the two live in different tables — `avatarUrl` on
+     * AppUser, `avatarPreset` on UserProfile. Clearing the preset here makes "the upload
+     * wins" true for every caller rather than something each editor has to remember to
+     * PATCH afterwards. `updateMany` so a missing profile row is a no-op, not a throw.
+     */
+    await prisma.$transaction([
+      prisma.appUser.update({ where: { id: userId }, data: { avatarUrl: url } }),
+      (prisma as any).userProfile.updateMany({ where: { userId }, data: { avatarPreset: null } }),
+    ])
 
     return NextResponse.json({ url })
   } catch (err: unknown) {
