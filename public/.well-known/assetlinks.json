@@ -5,7 +5,9 @@
       "namespace": "android_app",
       "package_name": "ai.allfantasy.app",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_FROM_PLAY_CONSOLE"
+        "D7:D4:C4:EB:F3:29:6E:E6:86:94:AF:A4:36:DD:3E:4A:87:27:DF:22:25:8E:67:BD:71:81:F4:30:43:A1:33:49",
+        "AC:F2:B7:82:13:BB:1F:1B:2B:BC:31:CF:32:21:99:DF:83:75:DC:E2:CE:71:47:EF:A5:C7:6C:88:DA:5C:32:78",
+        "13:A5:3E:AD:6A:91:AF:02:75:3E:FC:9D:72:6B:CB:7F:0C:21:E7:88:0E:AE:4D:C9:97:3D:44:88:4F:4C:73:24"
       ]
     }
   }
