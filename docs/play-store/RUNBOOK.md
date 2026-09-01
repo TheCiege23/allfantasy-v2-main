@@ -20,10 +20,39 @@ NEVER be committed (public repo).
 mkdir C:\af-twa && cd C:\af-twa
 copy <repo>\docs\play-store\twa-manifest.json .
 bubblewrap update   # regenerates the Android project from twa-manifest.json
-bubblewrap build    # prompts to create android.keystore on first run — let it
+```
+
+⚠ **`bubblewrap build` does NOT create the keystore.** This runbook used to say it
+prompts to create `android.keystore` on first run. It does not: it prompts for the
+PASSWORD, builds the unsigned APK, then dies at the signing step with
+`FileNotFoundException: .\android.keystore`. Measured 2026-09-01 with @bubblewrap/cli
+on Node 24. Create it first, from `C:\af-twa`:
+
+```bash
+& "C:\Users\<you>\.bubblewrap\jdk\jdk-17.0.11+9\bin\keytool.exe" -genkeypair -v -keystore android.keystore -alias android -keyalg RSA -keysize 2048 -validity 10000
+```
+
+⚠ At *"Enter key password for &lt;android&gt;"* press **Enter** to reuse the keystore
+password. Bubblewrap passes the same value to both `--ks-pass` and `--key-pass`, so a
+distinct key password fails in exactly the same way as having no keystore at all.
+
+Certificate fields: use business details. Nothing verifies them, and under Play App
+Signing this certificate never reaches a user's device — Google re-signs with its own
+app signing key. Then:
+
+```bash
+bubblewrap build
 ```
 
 - The keystore password goes in your password manager, not in any file.
+- ⚠ **A FAILED SIGNING STEP ECHOES THE PASSWORD IN PLAINTEXT.** The apksigner command
+  it prints on failure contains `--ks-pass pass:"..."`. Scrub build output before
+  pasting it anywhere.
+- ⚠ Losing this keystore is **recoverable**, contrary to the usual assumption. It is
+  the UPLOAD key; under Play App Signing Google holds the app signing key, and a lost
+  upload key is reset via Play Console → Protected with Play → Play Store protection →
+  Manage Play app signing. Back it up regardless — a reset is a support round-trip in
+  the middle of a release.
 - Output: `app-release-bundle.aab` (this is what Play wants) and
   `app-release-signed.apk` (sideload this on your phone to smoke-test).
 - Keep `C:\af-twa` out of the repo entirely.
