@@ -1605,9 +1605,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * replacement yet — the "surface pointed at a table nothing writes" failure, reached from the
    * prompt side.
    */
+  /**
+   * 🛑 A HARD CEILING, BECAUSE THE PACKET'S PARTS ARE BOUNDED AND THEIR SUM IS NOT.
+   *
+   * Each contributor limits itself — `ChimmyContextEngine` gives every provider a timeout,
+   * `portfolioGrounding` wraps `getCommandCenter` in 4.5s, `leagueIntelligenceGrounding` bounds
+   * each sub-fetch — but nothing bounds the TOTAL, and this task sits inside the
+   * `Promise.allSettled` the chat turn waits on. A slow league could add several seconds to every
+   * message on the busiest route in the product.
+   *
+   * ⚠ THE FAILURE IT PREVENTS IS NOT AN ERROR, IT IS A SLOW ANSWER, which is why nothing would
+   * have caught it: no exception, no failed test, just a chat that got worse. 3s is generous
+   * against the parts' own limits and still caps the tail.
+   *
+   * Losing the section is the correct outcome when it is late — the packet is ADDITIVE while the
+   * existing grounding still runs, so a timeout costs freshness annotations, not facts.
+   */
+  const withPacketCeiling = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
+    Promise.race([p, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))])
+
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId
-      ? buildDecisionOsGroundingPacket({
+      ? withPacketCeiling(buildDecisionOsGroundingPacket({
           leagueId,
           userId,
           sport: normalizeToSupportedSport(sport),
@@ -1621,7 +1640,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           })
           // Never fail the chat turn for grounding. An unavailable packet is one missing section,
           // and every other source in this handler degrades the same way.
-          .catch(() => null)
+          .catch(() => null),
+          3000,
+        )
       : Promise.resolve(null)
 
   const leagueSportsGroundingTask: Promise<{ serialized: string; packet: Awaited<ReturnType<typeof buildLeagueSportsGroundingPacket>> } | null> =
