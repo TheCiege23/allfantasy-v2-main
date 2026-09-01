@@ -314,7 +314,12 @@ function applyApiSecurityHeaders(pathname: string, response: NextResponse): Next
   return response
 }
 
-function nextWithRouteHeaders(request: NextRequest, pathname: string): NextResponse {
+/**
+ * Exported for `__tests__/middleware-lang-prefetch.test.ts`. The alternative is driving the whole
+ * `middleware()` chain — geo redirects, host canonicalisation, the username gate — to observe one
+ * `Set-Cookie`, which tests the routing far more than the thing under test.
+ */
+export function nextWithRouteHeaders(request: NextRequest, pathname: string): NextResponse {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-af-pathname", pathname)
 
@@ -341,7 +346,39 @@ function nextWithRouteHeaders(request: NextRequest, pathname: string): NextRespo
       headers: requestHeaders,
     },
   })
-  if (validLang) {
+  /*
+   * ── 🛑 A PREFETCH IS NOT A CHOICE, AND THIS COOKIE LASTS A YEAR ─────────────────────────────
+   *
+   * `LandingV4`'s language switch is a next/link to `/?lang=es`, so the App Router prefetches it
+   * the moment it enters the viewport. That prefetch reaches this function, which stamped
+   * `af_lang=es` for 365 days — and every later page server-renders from the cookie. A
+   * first-time English visitor was switched to Spanish site-wide without clicking anything.
+   *
+   * Measured against production 2026-09-01, before the fix:
+   *
+   *     GET /?lang=es                            → Set-Cookie: af_lang=es; Max-Age=31536000
+   *     GET /?lang=es  Next-Router-Prefetch: 1   → Set-Cookie: af_lang=es; Max-Age=31536000
+   *     GET /            (control, no param)     → no cookie
+   *
+   * The control matters: it is what proves the check can report a negative, so the identical
+   * second line is a real finding rather than a probe that stamps everything.
+   *
+   * ⚠ ONLY THE RESPONSE COOKIE IS SKIPPED — THE REQUEST REWRITE ABOVE STILL RUNS, DELIBERATELY.
+   * A prefetch must still RENDER the requested language, because that payload goes into the
+   * router cache and is what the user sees if they do click. Skipping both would trade a
+   * wrong-language visitor for a wrong-language flash on the very click that asked for it.
+   * Render in Spanish, remember nothing: the switch stays universal for anyone who chooses it,
+   * and costs nothing to anyone who does not.
+   *
+   * ⚠ `RSC: 1` ALONE IS NOT A PREFETCH. A real client-side navigation is also an RSC request;
+   * only `Next-Router-Prefetch` distinguishes them, so gating on `RSC` would break the switch
+   * for every soft navigation. Verified before the change: an RSC request WITHOUT the prefetch
+   * header stamps, and must go on stamping.
+   *
+   * `Sec-Purpose` and `Purpose` cover browser-initiated speculation, which arrives without any
+   * Next header at all.
+   */
+  if (validLang && !isSpeculativeRequest(request)) {
     response.cookies.set("af_lang", validLang, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
@@ -349,6 +386,23 @@ function nextWithRouteHeaders(request: NextRequest, pathname: string): NextRespo
     })
   }
   return response
+}
+
+/**
+ * A request the user did not ask for: a Next router prefetch, or browser speculation.
+ *
+ * Deliberately narrow. Anything not positively identified as speculative is treated as a real
+ * navigation, so the failure mode is "we honoured a switch someone meant" rather than "we
+ * ignored one".
+ */
+function isSpeculativeRequest(request: NextRequest): boolean {
+  const headers = request.headers
+  if (headers.get("next-router-prefetch") === "1") return true
+  // Chrome's Speculation Rules: "prefetch" or "prefetch;prerender".
+  if ((headers.get("sec-purpose") ?? "").includes("prefetch")) return true
+  // Legacy header still sent by some browsers and link-scanning proxies.
+  if ((headers.get("purpose") ?? "").toLowerCase() === "prefetch") return true
+  return false
 }
 
 /**
