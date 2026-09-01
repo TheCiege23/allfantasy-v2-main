@@ -475,6 +475,16 @@ export interface SleeperTransaction {
   consenter_ids: number[];
   status_updated: number;
   metadata?: Record<string, unknown>;
+  /**
+   * Where a waiver claim's FAAB bid lives (`waiver_bid`), plus the claim sequence.
+   *
+   * ⚠ Left as an open record rather than a narrow shape, matching the note already on
+   * `lib/league-import/adapters/sleeper/types.ts` — Sleeper varies this object by league
+   * configuration and a narrow type would drop fields silently. `lib/core-app/leagueActivity.ts`
+   * already reads `settings.waiver_bid` this way; this declaration just stops the field being
+   * invisible to anything consuming `SleeperTransaction` directly.
+   */
+  settings?: Record<string, unknown>;
 }
 
 export async function getLeagueTransactions(
