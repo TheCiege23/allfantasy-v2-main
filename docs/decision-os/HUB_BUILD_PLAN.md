@@ -43,7 +43,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **4.4** No-fact rule | `not_entitled` had NO producer — the resolver collapsed 5 reasons to null. Fixed additively; composes with the prompt's existing confidence scheme |
 | ✅ | **4.5** Retire duplicate routes | Goal state already reached: `/api/chimmy` IS a shim with 0 callers (docs say otherwise, docs are stale). `/api/ai/chimmy` out of scope. §2.18 |
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
-| ⬜ | **5.2** Entitlement + degradation pass | |
+| ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ⬜ | **5.3** Flags and kill switches | |
 | ⬜ | **6.1** Collapse the three health scorers | Deferred by D10 |
 | ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
@@ -732,6 +732,67 @@ the gate working as designed, not an override.
 a claim carrying the current token rebind the name — the same "same work under
 another name" problem the push QUEUE already solves with `sameWork`/rebind, and
 which the pusher lock does not.
+
+### 2.20 The packet violated its own stated invariant, in two places, and one was silence
+
+5.2's rule is "every path must degrade to a named gap, never to a zero". The packet's own header
+already said it — an unavailable fact is `present: false` with a reason, **"never an empty array
+or a zero"** — and cited `devyValueBoard`, where `devyValue` is zero-not-null for 1,455 of 1,718
+players so 85% of a board renders an absence as a confident "worthless".
+
+Nothing enforced it. Two defects, and the second is worse than a zero.
+
+**a) An empty collection read as *available*.** `rows ? present(rows) : absent(…)` accepts `[]`,
+because `[]` is truthy. A cold league produced a slice reading present with nothing in it, and the
+serializer wrote `- Projections: available` with no gap and no remedy.
+
+⚠ **The three `value-os` / `projection-os` sources already collapse empty to null in their own
+`derive`, so this was LATENT there rather than live.** It is enforced in the packet anyway: that
+convention is hand-repeated in three `derive` bodies and a fourth source added without it would
+reintroduce the bug silently. The **live** case was the eight context slices, which come from
+`ChimmyContextEngine`'s providers and obey no such convention.
+
+⚠ The predicate handles **arrays and strings only**. An empty object is a plausible emptiness
+too, but `Object.keys` is empty for a class instance whose data lives on its prototype — so
+treating `{}` as absent risks declaring a REAL fact missing. Under-refusing is recoverable;
+fabricating an absence is not.
+
+**b) 🛑 A dead context engine produced ZERO gaps — not a zero, a silence.** `loadContext` is one
+call behind twelve providers. When *it* threw, the builder's catch set `contextFacts = null`; the
+gap list is built by walking `contextFacts`; so matchup, roster, standings, rankings, difficulty,
+imported history, replay insights and the devy board vanished with **no availability line and no
+missing line**. The model was handed a complete-LOOKING picture. An absent fact that announces
+itself is recoverable; this one did not announce itself, which is the single failure mode the
+packet exists to prevent.
+
+**c) A dead ternary.** `reason: p?.error ? 'not_computed' : 'not_computed'` — the same value in
+both branches, reading as a distinction being made. The reason genuinely is `not_computed` either
+way (a producer exists and returned nothing), but the real distinction lives in the detail and the
+**remedy**, which were shared. "It broke" and "there is none yet" need different actions from the
+user, so they now say different things and a test pins that they differ.
+
+**Proved, not asserted.** `__tests__/decision-os/grounding-degradation.test.ts` drives the whole
+builder with mocked loaders. Against the pre-fix `packet.ts`, restored from `HEAD` and
+byte-compared both ways:
+
+```
+Tests  5 failed | 5 passed (10)
+  × a present slice is never an empty collection
+  × an empty producer result becomes a NAMED gap rather than disappearing
+  × eight named gaps, not silence, when loadContext throws
+  × and the prompt SAYS so
+  × a single failed provider names ITSELF, and says something different from "no data"
+```
+
+⚠ **Its assertions are STRUCTURAL, not per-slice.** `everySlice()` walks the packet including
+`contextFacts`, rather than listing eight names — a suite that names them goes green forever the
+moment a ninth is added. And failures report the offending slice NAMES, not a count: "expected 1
+to be 0" would not say which slice went silent.
+
+⚠ **What the existing `grounding-packet-gaps.test.ts` could not have caught.** It tests the pure
+helpers with hand-built slices, which proves `collectGaps` behaves but never that the BUILDER
+produces the slices it is handed. Both regressions lived in the assembly. Same lesson as §2.14 and
+§2.16, in a third costume: testing the part is not testing the path.
 
 ### 2.19 The guard over the build script had been asserting something false since June
 
