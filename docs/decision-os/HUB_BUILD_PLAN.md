@@ -672,6 +672,54 @@ per §2.14.
 **Still to do:** the migration itself. The census is the specification; nothing
 has moved behind Decision OS yet.
 
+### 2.17 The pusher lock has two failure modes neither of us had hit, and both happened tonight
+
+Recorded here rather than in CLAUDE.md, which is the owner's file — but both are
+about the shared push convention rather than about this plan, so they belong
+wherever that convention is documented if the owner wants them there.
+
+**1. A HOLDER WHO IS VERIFYING LOOKS IDENTICAL TO A HOLDER WHO HAS VANISHED.**
+
+The lock expires 45 minutes after its last heartbeat, and **the heartbeat is a
+push**. Between batches this session ran a full `decision-os` vitest sweep
+(~130s), several scoped typechecks, and a detached-worktree baseline run. That
+is more than 45 minutes of doing exactly what the role exists to do, and the
+lock lapsed underneath it.
+
+CLAUDE.md already records a false-positive vacancy caused by a session RENAME
+and says to ask before claiming. The instinct is right and the reason is
+broader: **a quiet holder may be mid-verification, not absent.**
+
+**2. 🛑 AFTER A RENAME, THE HOLDER CANNOT RE-CLAIM ITS OWN ROLE.**
+
+`pusher.json` records a session NAME. This session's name rotated
+(`allfantasy-v2-main-18` → `-86`) *between* re-claiming the lapsed lock and the
+next command. The result:
+
+```
+lock says   allfantasy-v2-main-18 holds it, heartbeat 1 min ago
+ListAgents  that name is not reachable; this session is now -86
+re-claim    ✋ REFUSED — "already holds the pusher role, heartbeat 1 min ago.
+               Claiming would take it from a live holder."
+```
+
+The guard is behaving correctly on every input it can see: a fresh heartbeat
+from a named holder. But the holder is *this session*, the name is unreachable,
+and **the refusal is aimed at the one session entitled to claim it.** A peer
+would correctly refuse to take it (per the ask-first rule), and its owner
+cannot. The role is stranded until the 45-minute expiry.
+
+⚠ **PUSHING STILL WORKS, AND THAT IS THE IMPORTANT PART.** The gate checks
+`AF_PUSH_TOKEN`, not the name, and this session holds the valid token it was
+issued. So the role is functionally intact and only its *label* is stale — the
+name is an addressing problem, not an authorisation one. Using the held token is
+the gate working as designed, not an override.
+
+**What would fix it:** key the lock to something that survives a rename, or let
+a claim carrying the current token rebind the name — the same "same work under
+another name" problem the push QUEUE already solves with `sameWork`/rebind, and
+which the pusher lock does not.
+
 ## 3. Target architecture
 
 ```
