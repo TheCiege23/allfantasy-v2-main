@@ -37,9 +37,40 @@ import { getCareerCard } from '@/lib/dashboard-intel/careerCardService'
  * ⚠ These budgets do NOT fix the underlying hang; they bound it and make it say so. Why
  * `getCommandCenter` does not complete for a large account is a separate, open question, and it
  * presumably affects the dashboard this shares its payload with.
+ *
+ * ── 🛑 CUT AGAIN, 1500/800 -> 600/400, BECAUSE THE WAIT WAS BUYING NOTHING ──────────────────
+ *
+ * Re-measured 2026-09-01 after the packet was parallelised. The slices now overlap properly —
+ * 3,992ms of slice work completing in 1,545ms of wall clock — which left exactly one thing on
+ * the critical path:
+ *
+ *     buildMs        1545
+ *     portfolio      1500   <- its budget to the millisecond. a timeout, not a duration.
+ *     next longest    523   (the whole context engine; devy 511 dominates it)
+ *
+ * 1545 - 1500 = 45. Portfolio was 97% of the wall clock and contributed zero bytes to the
+ * packet. Every other slice finished inside its shadow.
+ *
+ * ⚠ THE REASON A SMALLER BUDGET LOSES ALMOST NOTHING IS STRUCTURAL, NOT OPTIMISM.
+ * `getCommandCenter` walks up to 12 leagues in a sequential `for…of` with six timeout-bounded
+ * calls each (~23s per league worst case, see docs/decision-os/SLEEPER_HISTORY_SCOPE.md §1).
+ * From a COLD cache no budget in this range saves it. From a warm 10-min `sportsDataCache` it
+ * is an ordinary read. There is very little in between, so the 1500ms was mostly spent
+ * discovering the cache was cold — slowly.
+ *
+ * The honest cost, stated rather than buried: a warm read that genuinely takes 600-1500ms is
+ * now dropped where it used to land. 600 rather than the ~250 the arithmetic invites is the
+ * margin for that, since a 543-league payload is not a small row.
+ *
+ * ⚠ AND THE CAREER CARD HAD TO COME DOWN WITH IT OR THE CUT DOES NOTHING ON THE WARM PATH.
+ * It only runs AFTER the command centre succeeds (see the early return below), so the slice's
+ * true worst case is the SUM. At 1500/800 a warm-but-slow account still spent ~1400ms and the
+ * critical path never moved. Bounded together the slice cannot exceed 600 + 400 = 1000ms, and
+ * the measured typical case is ~570ms of build — the engine, which is where the floor should
+ * be.
  */
-const COMMAND_CENTER_BUDGET_MS = 1500
-const CAREER_CARD_BUDGET_MS = 800
+const COMMAND_CENTER_BUDGET_MS = 600
+const CAREER_CARD_BUDGET_MS = 400
 
 const TIMED_OUT: unique symbol = Symbol('portfolio-grounding-timeout')
 

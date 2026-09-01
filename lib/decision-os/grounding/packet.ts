@@ -17,6 +17,7 @@ import {
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
+import { stampLineupSlots, starterSlotsFromRules } from './stampLineupSlots'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
 import type { ValueLookup } from '../value/contract'
@@ -313,6 +314,48 @@ const SLICE_TO_PROVIDER: Record<string, EngineProviderName> = { rankings: 'ranki
  * inconclusive is the shape `toEvidencePacket` already turns into a `not_safe_to_act_on` signal,
  * so this reaches three-brain as "you have a roster, you do not have who is on it".
  */
+/**
+ * Name each starter's lineup slot, when the league's template and the lineup provably agree.
+ *
+ * ⚠ THE ROSTER AND THE RULES ARE TWO SLICES AND THIS IS THE ONLY PLACE BOTH ARE IN HAND. The
+ * slot vocabulary is a LEAGUE fact and the lineup is a ROSTER fact; joining them in the provider
+ * would mean a second query for `leagueRules`, which this packet has already paid for. So the
+ * join happens here, costs nothing, and `lib/decision-os/grounding/stampLineupSlots.ts` owns the
+ * decision about whether the two are actually in correspondence.
+ *
+ * Silent on failure BY DESIGN: an unstamped starter keeps `slot: null`, which is exactly what it
+ * carried before this existed. There is no regression available here — only a label that is
+ * right or a label that is absent.
+ */
+function withStampedSlots(
+  slice: GroundedSlice<unknown>,
+  rulesValue: unknown,
+): GroundedSlice<unknown> {
+  if (!slice.present) return slice
+  const v = slice.value as { starters?: unknown } | null
+  if (!Array.isArray(v?.starters) || v.starters.length === 0) return slice
+  const starters = v.starters as Array<{ position?: unknown; slot?: unknown }>
+
+  const rosterRules = (rulesValue as { roster?: { starters?: unknown } } | null)?.roster
+  const result = stampLineupSlots({
+    starters: starters.map((p) => ({
+      position: typeof p?.position === 'string' ? p.position : null,
+      slot: typeof p?.slot === 'string' ? p.slot : null,
+    })),
+    starterSlots: starterSlotsFromRules(rosterRules?.starters),
+  })
+  if (!result.stamped) return slice
+
+  /*
+   * Writes `slot` onto the existing starter objects rather than rebuilding the value. The value
+   * is `unknown` here, so a copy would have to guess at its shape and would drop any field this
+   * function does not know about — and the same objects were already enriched in place by the
+   * canonical-registry pass in RosterContextProvider. One request owns this bundle.
+   */
+  for (let i = 0; i < starters.length; i++) starters[i].slot = result.slots[i]
+  return slice
+}
+
 function withResolvedIdentity(slice: GroundedSlice<unknown>): GroundedSlice<unknown> {
   if (!slice.present) return slice
   const v = slice.value as { starters?: unknown; bench?: unknown } | null
@@ -786,7 +829,10 @@ export async function buildDecisionOsGroundingPacket(
        */
       contextFacts = {
         matchup: grade('matchup', bundle.matchup, 'lineupDecision'),
-        roster: withResolvedIdentity(grade('roster', bundle.roster, 'lineupDecision')),
+        roster: withStampedSlots(
+          withResolvedIdentity(grade('roster', bundle.roster, 'lineupDecision')),
+          leagueRules.present ? leagueRules.value : null,
+        ),
         standings: grade('standings', bundle.standings, 'standings'),
         rankings: grade('ranking', bundle.rankings, 'standings'),
         leagueDifficulty: grade('leagueDifficulty', bundle.leagueDifficulty, 'standings'),
