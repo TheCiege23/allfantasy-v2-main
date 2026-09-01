@@ -218,24 +218,44 @@ Phases are ordered so each is independently landable and verifiable.
 **Measured, not assumed:**
 - 22 tests pass across the new file plus the two existing suites it touches
   (`profile-image-upload-storage-service`, `auth-guard-age-vs-verification`).
-- `npm run typecheck`: **145 `error TS` lines, tsc exit 2** — normal for this
-  repo's standing baseline. **Zero in any file this phase touched**, and zero in
-  any avatar/settings consumer. ⚠ Run in the shared, dirty checkout, so it is not
-  an attestation of a commit — re-run detached before handing to the pusher.
-- **Positive control run.** The guard was mutated to re-add the age check, the
-  mutation was proved applied with `diff -q`, the suite went **red on 2 tests**
-  including the differential one, and the restore was verified identical. The
-  test can actually fail.
+- Typecheck of the **first** commit (`062d5cbf6`), run detached against its parent
+  `97c95d5e8`: **145 `error TS` lines and tsc exit 2 on BOTH**, and the two outputs
+  were **byte-identical** (59381 bytes) — so that commit introduced no new
+  diagnostic anywhere, consumers included. The gate revert was measured again on
+  the follow-up commit.
+- **Positive control, twice.** First the guard was mutated to re-add the age check
+  (suite went red). Then, after the revert, the ROUTE was mutated back onto
+  `requireVerifiedUser` and the route-level test failed with exactly
+  `"error": "AGE_REQUIRED"` — the reported bug, reproduced on demand. Both
+  mutations were proved applied with `diff -q` and both restores verified identical.
 
-🛑 **ONE CONSEQUENCE TO ACCEPT OR OVERRULE.** `/api/user/profile/avatar` was
-session-only before this. It now requires a verified email or phone, per spec
-answer #6. That **removes** the age gate (fixing the reported bug) but **adds** a
-verification gate on the `/profile` path, which previously had none. Accounts with
-no verified email or phone could upload before and cannot now. The comment in
-`__tests__/auth-guard-age-vs-verification.test.ts` records that population as
-material ("17 of 48 production accounts" at the time it was written — historical,
-not a current measurement). If that trade is not wanted, drop
-`requireContactVerifiedUser` from the route back to `requireAuth`.
+⚠ **The first version of the test did not test the route at all.** It asserted on
+the guards only, so it would have stayed green if someone re-gated the route — the
+precise regression the file exists to catch. `it('the ROUTE itself uploads for the
+worst-case account')` drives the real POST handler and is the one that matters.
+
+⚠ **And that route test cannot build its multipart body from `new File(...)` or
+`new Blob(...)`.** undici's FormData validates against its OWN File class, and
+neither global here is it; appending either trips a webidl assert that the route's
+catch turns into an opaque **500 that reads exactly like a gate refusal**. `req.formData()`
+is stubbed instead. Do not "improve" it into a real FormData.
+
+🛑 **THE GATE WAS NARROWED, FLAGGED, AND THEN WIDENED AGAIN — SETTLED AS
+SESSION-ONLY.** The first cut used a new `requireContactVerifiedUser` guard
+(contact verification, no age check). That fixed the Google population but **added**
+a verification requirement to the `/profile` path, which had none before, shutting
+out every account with no verified email or phone. The user's answer #6 had said to
+require a verified email; shown the actual cost, they overruled it with **"do not
+narrow"**. The later, more specific instruction wins.
+
+**Final gate: `requireAuth` — signed in, nothing more.** `requireContactVerifiedUser`
+was **deleted** rather than left in place, because an unused exported guard is the
+same footgun as `hooks/usePushSubscription.ts` in §2.5: the next person finds it by
+name and wires it up. The reasoning it carried now lives in the route's own header.
+
+⚠ `requireAuth` does **not** create a `userProfile` row, unlike the stricter guards,
+which is why the preset clear uses `updateMany` (a no-op on a missing row) rather
+than `update` (a throw). Do not "tidy" that into `update`.
 
 ### Phase 2 — Avatar identity scope (spec item 10)
 
