@@ -9,6 +9,9 @@
 
 import { z } from 'zod'
 
+// The single activity formula, shared with league-health-engine (6.1).
+import { computeActivityScore } from '@/lib/league-health/activityScore'
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -101,13 +104,29 @@ function computeLeagueHealth(input: CommissionerInput): number {
 }
 
 function computeEngagement(input: CommissionerInput): number {
-  let score = 40
-  const tradesPerTeam = input.totalTradesThisSeason / Math.max(input.numTeams, 1)
-  const claimsPerTeam = input.totalWaiverClaims / Math.max(input.numTeams, 1)
-  score += Math.min(25, tradesPerTeam * 8)
-  score += Math.min(25, claimsPerTeam * 3)
-  if (input.inactiveManagers === 0) score += 10
-  return Math.max(0, Math.min(100, Math.round(score)))
+  /*
+   * ⚠ DELEGATES SINCE 6.1 — this was the SECOND copy of the activity formula, with its own
+   * constants and its own base of 40, and it disagreed with league-health's by 10 points on an
+   * empty league. Both now call `computeActivityScore`.
+   *
+   * 🛑 CHAT AND LINEUP ARE PASSED AS `null`, NOT 0. This input type has neither field, and
+   * scoring an unavailable term as zero would cap this route at 70 for inputs that used to reach
+   * 100 — against its own `>= 60` "good engagement" threshold, a silent regression. `null` drops
+   * those weights from the denominator instead, so the range stays 0–100 over the terms that
+   * exist here.
+   *
+   * ⚠ The base is now earned by participation, so a league where everyone has left scores 0
+   * where it used to score 40. `activeManagers` is derived — this type carries only its
+   * complement.
+   */
+  return computeActivityScore({
+    activeManagers: Math.max(0, input.numTeams - input.inactiveManagers),
+    numTeams: input.numTeams,
+    totalTrades: input.totalTradesThisSeason,
+    totalWaiverClaims: input.totalWaiverClaims,
+    chatMessageCount: null,
+    lineupSubmissionRate: null,
+  })
 }
 
 function computeFairness(input: CommissionerInput): number {

@@ -69,6 +69,7 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
     commissionerIntelligence: present('Two managers have not set a lineup in three weeks.'),
     leagueIntelligence: absent('not_computed', 'No brief could be built.', 'Needs recorded activity.'),
     portfolio: present('Three leagues, one contending.'),
+    savedAnalysis: absent('not_entitled', 'The saved analysis for this league is not available to you.', 'Ask the league commissioner, who can see it.'),
     gaps: [
       { slice: 'devyValues', reason: 'no_producer', detail: 'No devy model for NFL.', remedy: 'Nothing to fix.' },
       { slice: 'leagueIntelligence', reason: 'not_computed', detail: 'No brief could be built.', remedy: 'Needs recorded activity.' },

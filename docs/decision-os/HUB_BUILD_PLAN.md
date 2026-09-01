@@ -45,8 +45,8 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
-| 🟨 | **6.1** Collapse the three health scorers | Premise measured and wrong twice (§2.22, §2.23); all three documented at their definition sites. **Step C DONE** — the hub activity base is now earned by participation, so a dead league scores 0 instead of 30 and hub and behavioural agree on the worst case, with fully-staffed leagues byte-identical (§2.24). **Step A landed** — participation is on the snapshot, gated + bounded + refusing rather than reporting zero, and the primary commissioner surface reads it (§2.25). Eight surfaces remain, listed there |
-| 🟨 | **6.2** three-brain as Chimmy's reasoning layer | **Adapter landed** — `groundingPacketToEvidence`, 14 tests. Chimmy is NOT wired to it: three-brain calls Anthropic, so that needs a flag, a ceiling and an outcome marker like the packet got. See §2.27 |
+| ✅ | **6.1** Collapse the three health scorers | **Collapsed.** One `computeActivityScore`, two callers — the two private copies disagreed by 10 points on an empty league and neither could report one as dead. All three scores now read 0 on a dormant league (spread was 40). Labels say Activity; participation is on the commissioner hub. §2.22–§2.24, §2.26, §2.28 |
+| ✅ | **6.2** three-brain as Chimmy's reasoning layer | **Landed as a READ, not a run.** Inline is a category error — ~75s worst case against a 3s ceiling, measured. Chimmy now reads three-brain's SAVED conclusion as a graded slice, plus `groundingPacketToEvidence` for callers that can afford to run it. §2.27, §2.28 |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
 
 ---
@@ -1060,6 +1060,59 @@ them stale.
 `/api/chat/chimmy` adds a model call per turn to the highest-traffic route in the product. That
 needs the same treatment the grounding packet got — flag, ceiling, outcome marker — and the
 `buildMs` number nobody has read yet. The adapter makes the call cheap to add; it does not make it.
+
+### 2.28 The collapse, and why three-brain reads instead of runs
+
+**6.1 — one formula, two callers.** `league-health-engine` and `commissioner-assistant-engine`
+each carried a private `computeEngagement`:
+
+```
+league-health   base 30 + min(20, trades×6) + min(20, claims×2.5) + min(15, chat×0.3)
+                        + 15 (lineup ≥ .95) or 8 (≥ .8)
+assistant       base 40 + min(25, trades×8) + min(25, claims×3)   + 10 if none inactive
+```
+
+Both labelled engagement, both 0–100, disagreeing by 10 points on an empty league, and neither
+able to report one as dead. Both now call `lib/league-health/activityScore.ts`.
+
+🛑 **A NAIVE COLLAPSE WOULD HAVE REGRESSED THE ASSISTANT SILENTLY.** It has no chat count and
+no lineup rate, so calling league-health's formula directly caps it at **70** for inputs that used
+to reach 100 — against its own `>= 60` "good engagement" threshold. So an unavailable term leaves
+the **denominator** rather than scoring zero: the result normalises against the maximum actually
+achievable. `chatMessageCount: 0` means "we looked and there were none"; `null` means "this caller
+cannot know". Collapsing those two is the same absent-is-not-zero mistake the packet exists to
+prevent, one layer down.
+
+Measured before and after — all three scores now agree on the case that matters:
+
+```
+                    hub   assistant   behavioural   spread
+DORMANT   before     30          40             0       40
+          after       0           0             0        0
+HEALTHY   after      92          89            90        3
+```
+
+**6.2 — read, not run, and that is measured rather than preferred.**
+
+```
+runThreeBrainAnalysis   DeepSeek ∥ Grok → OpenAI synthesis → optional Claude review
+DEFAULT_TIMEOUT_MS      25_000, PER PROVIDER   → ~75s worst case, three vendors
+the chat budget         3_000ms
+```
+
+Wiring that inline would have been a flag nobody could ever turn on. But the analyses are already
+**persisted** — `decisionIntelligenceRun`, per user and league — and `readLeagueIntelligence` is
+entitlement-checked and documented never to throw. So Chimmy reads the conclusion three-brain
+already reached: one indexed read, no provider call, no added latency, and P3 holds by
+construction because nothing is generated.
+
+⚠ **`locked` becomes `not_entitled` — the SECOND real producer of that reason**, which until now
+only commissioner intelligence could raise. `evidence_unavailable` becomes `not_computed`.
+Collapsing them into "no analysis" would be the reason-losing this packet was built to stop.
+
+⚠ The slice is killable like the other nine (`savedAnalysis`), flows through the serializer, and
+is carried by `groundingPacketToEvidence` — which remains available for callers that CAN afford
+to run an analysis: the crons and POST routes, not a chat turn.
 
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 

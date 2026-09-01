@@ -42,7 +42,7 @@ import { prisma } from '@/lib/prisma'
  * `CACHE_MS`. Steady state is zero queries per turn.
  */
 
-/** The nine feeds a packet assembles. Each is independently killable. */
+/** The ten feeds a packet assembles. Each is independently killable. */
 export type DecisionOsFeed =
   | 'importAssertions'
   | 'leagueRules'
@@ -53,6 +53,7 @@ export type DecisionOsFeed =
   | 'commissionerIntelligence'
   | 'leagueIntelligence'
   | 'portfolio'
+  | 'savedAnalysis'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -64,6 +65,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'commissionerIntelligence',
   'leagueIntelligence',
   'portfolio',
+  'savedAnalysis',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'
