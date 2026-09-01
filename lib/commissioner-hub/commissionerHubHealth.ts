@@ -79,16 +79,21 @@ export type CommissionerLeagueHealthSnapshot = {
   /**
    * Passed through verbatim from `monitorLeagueHealth` — this file computes none of it.
    *
-   * ⚠ IT MEASURES ACTIVITY (transactions, chat, lineup submission) AND FLOORS AT 30, so it
-   * cannot report a dead league as dead. See the full note on `LeagueHealthResult.engagementScore`
-   * in `lib/league-health/league-health-engine.ts`, and do not compare it with
-   * `leagueEngagementScore` from `lib/decision-os/behavioral/league-intelligence.ts` — same name,
-   * same scale, different question, 40 points apart on a dormant league.
+   * ⚠ IT MEASURES ACTIVITY (transactions, chat, lineup submission), and since 6.1 its base is
+   * scaled by active-manager share rather than granted — so it CAN now reach 0, where it used to
+   * floor at 30. A fully-staffed league is unchanged. See the full note on
+   * `LeagueHealthResult.engagementScore` in `lib/league-health/league-health-engine.ts`.
+   *
+   * ⚠ IT IS STILL A DIFFERENT QUESTION from `leagueEngagementScore` in
+   * `lib/decision-os/behavioral/league-intelligence.ts` — throughput versus people. They now
+   * agree at 0 on a dormant league, which is the gap 6.1 closed, but they will still diverge on
+   * a league that is fully staffed and silent, or half-empty and busy. Do not treat them as
+   * interchangeable just because the worst case lines up.
    *
    * 🛑 NINE UI SURFACES READ THIS FIELD and label it "Engagement" in five languages
    * (`dashboard.warroom.commissionerHQ.health.engagementScore`). The behavioural score reaches
    * ZERO surfaces. So 6.1's "collapse the scorers, keep the behavioural one" is not a swap —
-   * it would repoint every one of those dashboards at a number with a different floor.
+   * it would repoint every one of those dashboards at a different question.
    */
   engagementScore: number
   fairnessScore: number

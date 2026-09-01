@@ -128,12 +128,13 @@ export interface LeagueBehavioralIntelligence {
    * Composite engagement score (0–100).
    * Weights: participation breadth 50 %, average manager depth 50 %.
    *
-   * 🛑 THIS IS PARTICIPATION, AND IT IS THE ONLY ONE OF THREE THAT CAN SAY A LEAGUE IS DEAD.
-   * It floors at 0, so a league nobody is playing scores 0 and tiers as `dormant`. The two
-   * activity-flavoured scores wearing the same name cannot: `LeagueHealthResult.engagementScore`
-   * has an unconditional base of 30 and `CommissionerResult.engagementScore` a base of 40.
-   * Measured spread on a dormant league is 40 points, and 2 points on a healthy one — they agree
-   * where it does not matter. `scripts/probe-league-health-scorer-divergence.ts` reproduces it.
+   * 🛑 THIS IS PARTICIPATION, AND IT MEASURES PEOPLE RATHER THAN THROUGHPUT.
+   * It floors at 0, so a league nobody is playing scores 0 and tiers as `dormant`. Until 6.1 it
+   * was the ONLY one of three that could say so — `LeagueHealthResult.engagementScore` has since
+   * had its base scaled by active-manager share and can now reach 0 too, closing a measured
+   * 40-point gap on a dormant league. `CommissionerResult.engagementScore` still floors at 40, but
+   * that lineage is isolated. `scripts/probe-league-health-scorer-divergence.ts` reproduces all
+   * three.
    *
    * ⚠ AND IT REACHES NO UI. Grepped across `app/` and `components/`: this score has ZERO
    * surfaces, where the hub's activity score has NINE. D10 says keep this one, which is right on
