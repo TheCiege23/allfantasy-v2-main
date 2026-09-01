@@ -4,6 +4,7 @@ import { createImportOsLoaders } from '../import-os'
 import { createValueOsLoaders } from '../value-os'
 import { createProjectionOsLoaders } from '../projection-os'
 import { createLeagueOsLoaders } from '../league-os'
+import { ChimmyContextEngine } from '@/lib/chimmy-context/ChimmyContextEngine'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
@@ -83,6 +84,45 @@ export interface GroundedSlice<T> {
   gap: GroundingGap | null
 }
 
+/**
+ * The eight `ChimmyContextEngine` slices that are FACTS or JUDGEMENTS, brought behind Decision OS
+ * (4.3, D1). Each carries a conclusiveness verdict; the three that are identity or global lookups
+ * deliberately do not appear here — see {@link ContextLookups}.
+ *
+ * ⚠ THE PROVIDERS ARE REUSED, NOT REIMPLEMENTED. `ChimmyContextEngine` already runs them under
+ * `Promise.allSettled` with a per-provider TTL cache and timeout, and it has been doing so
+ * correctly the whole time — it simply had no consumer on the chat path. Rewriting twelve
+ * providers to "move them behind Decision OS" would have created twelve rivals to working code,
+ * which is the mistake §2.14 and §2.16 both record. Decision OS wraps them and adds the two things
+ * they cannot know: how stale the league's import is, and whether a claim may be made at all.
+ */
+export interface ContextFacts {
+  matchup: GroundedSlice<unknown>
+  roster: GroundedSlice<unknown>
+  standings: GroundedSlice<unknown>
+  rankings: GroundedSlice<unknown>
+  leagueDifficulty: GroundedSlice<unknown>
+  importedHistory: GroundedSlice<unknown>
+  replayInsights: GroundedSlice<unknown>
+  devy: GroundedSlice<unknown>
+}
+
+/**
+ * The three slices that need no verdict, kept UNGRADED and structurally separate.
+ *
+ * 🛑 THE SEPARATION IS THE CENSUS MADE STRUCTURAL. `user` and `activeLeague` are identity — who is
+ * asking and which league, not claims that can be stale or wrong. `sportsSchedule` is a global
+ * fixture list that no league's import can bear on. Routing any of them through `isConclusive`
+ * would attach a freshness caveat to a fact that has no freshness, and over-declaring dependencies
+ * is exactly how the per-fact machinery decays back into a league-level boolean (see
+ * `conclusive.ts`).
+ */
+export interface ContextLookups {
+  user: unknown | null
+  activeLeague: unknown | null
+  sportsSchedule: unknown | null
+}
+
 export interface DecisionOsGroundingPacket {
   leagueId: string | null
   userId: string | null
@@ -94,6 +134,11 @@ export interface DecisionOsGroundingPacket {
   marketValues: GroundedSlice<ValueLookup[]>
   devyValues: GroundedSlice<ValueLookup[]>
   projections: GroundedSlice<ProjectionFact[]>
+
+  /** The eight graded context slices (4.3). Absent when no league is in scope. */
+  contextFacts: ContextFacts | null
+  /** The three ungraded lookups (4.3). Absent when no league is in scope. */
+  contextLookups: ContextLookups | null
 
   /**
    * Every gap on the packet, flattened.
@@ -294,8 +339,78 @@ export async function buildDecisionOsGroundingPacket(
     }
   }
 
+  // ── The eight graded context slices, and the three ungraded lookups (4.3) ─────────────────
+  let contextFacts: ContextFacts | null = null
+  let contextLookups: ContextLookups | null = null
+
+  if (args.userId && leagueId) {
+    /*
+     * ⚠ ONE ENGINE CALL, NOT TWELVE. `loadContext` already runs its providers concurrently under
+     * allSettled with a per-provider TTL cache and timeout. Calling it once and grading the result
+     * is what "moving the providers behind Decision OS" means; calling each provider separately
+     * would discard the caching and the isolation it already does correctly.
+     */
+    const bundle = await new ChimmyContextEngine()
+      .loadContext({ userId: args.userId, leagueId, week: args.week ?? null })
+      .catch(() => null)
+
+    if (bundle) {
+      // `meta.providers[].cached` is the engine's own answer to "was this served warm".
+      const servedBy = new Map(bundle.meta.providers.map((p) => [p.name, p]))
+      const grade = (
+        name: string,
+        value: unknown,
+        profile: FactProfileName,
+      ): GroundedSlice<unknown> => {
+        const p = servedBy.get(name)
+        if (value == null) {
+          return absent({
+            reason: p?.error ? 'not_computed' : 'not_computed',
+            detail: p?.error
+              ? `The ${name} provider failed: ${String(p.error).slice(0, 120)}`
+              : `No ${name} data is available for this league.`,
+            remedy: 'It is retried on the next question; a league re-sync also refreshes it.',
+          })
+        }
+        const v = verdictFor(profile)
+        const slice = present(value, { servedFrom: p?.cached ? 'store' : 'live', conclusive: v })
+        return v.ok ? slice : { ...slice, gap: gapFromVerdict(v) }
+      }
+
+      /*
+       * Profile choices, each the narrowest true dependency — over-declaring rebuilds the
+       * league-level boolean `conclusive.ts` exists to avoid.
+       *
+       *   matchup / roster   lineupDecision   act-on-it-now data; 2h and needs parity
+       *   standings / rankings / difficulty   standings   derived from rosters, tolerates lag
+       *   importedHistory / replay            managerBehaviour   claims ABOUT a manager
+       *   devy                                globalPlayerValue  a global board; no league
+       *                                                          import can bear on it
+       */
+      contextFacts = {
+        matchup: grade('matchup', bundle.matchup, 'lineupDecision'),
+        roster: grade('roster', bundle.roster, 'lineupDecision'),
+        standings: grade('standings', bundle.standings, 'standings'),
+        rankings: grade('rankings', bundle.rankings, 'standings'),
+        leagueDifficulty: grade('leagueDifficulty', bundle.leagueDifficulty, 'standings'),
+        importedHistory: grade('importHistory', bundle.importedHistory, 'managerBehaviour'),
+        replayInsights: grade('replayInsights', bundle.replayInsights, 'managerBehaviour'),
+        devy: grade('devy', bundle.devy, 'globalPlayerValue'),
+      }
+
+      contextLookups = {
+        user: bundle.user,
+        activeLeague: bundle.activeLeague,
+        sportsSchedule: bundle.sportsSchedule,
+      }
+    }
+  }
+
   const slices: Array<[string, GroundedSlice<unknown>]> = [
     ['importAssertions', importSlice as GroundedSlice<unknown>],
+    ...(contextFacts
+      ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
+      : []),
     ['leagueRules', leagueRules],
     ['marketValues', marketValues as GroundedSlice<unknown>],
     ['devyValues', devyValues as GroundedSlice<unknown>],
@@ -311,6 +426,8 @@ export async function buildDecisionOsGroundingPacket(
     marketValues,
     devyValues,
     projections,
+    contextFacts,
+    contextLookups,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,
