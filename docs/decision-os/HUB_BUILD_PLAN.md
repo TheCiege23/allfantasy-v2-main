@@ -45,7 +45,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
-| ⬜ | **6.1** Collapse the three health scorers | Deferred by D10 |
+| 🟨 | **6.1** Collapse the three health scorers | **Premise measured and WRONG.** Five modules, three formulas, two of the named three are layered. 40-point divergence on a dormant league, 2 on a healthy one. `scripts/probe-league-health-scorer-divergence.ts`. The collapse itself needs a threshold decision — see §2.22 |
 | ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
 
@@ -732,6 +732,80 @@ the gate working as designed, not an override.
 a claim carrying the current token rebind the name — the same "same work under
 another name" problem the push QUEUE already solves with `sameWork`/rebind, and
 which the pusher lock does not.
+
+### 2.22 "Three health scorers" was wrong in both directions, and the divergence is 40 points
+
+6.1 says: collapse `commissionerHubHealth`, `decision-os/commissioner-health`, and
+`behavioral/league-intelligence`'s `leagueEngagementScore`; keep the third. Reading them before
+touching anything found the premise wrong twice over.
+
+**There are FIVE modules, and only THREE compute a number.**
+
+| module | role |
+|---|---|
+| `lib/league-health/league-health-engine` | **computes** — and feeds the next one |
+| `lib/commissioner-hub/commissionerHubHealth` | packages the above as a snapshot |
+| `lib/decision-os/commissioner-health/` | **consumes** that snapshot — `import type` in **7 files** |
+| `lib/commissioner-assistant/…-engine` | computes, separately |
+| `lib/decision-os/behavioral/league-intelligence` | computes, separately again |
+
+So two of the plan's named three are **layered, not rival** — `commissioner-health/` is the
+Decision OS pipeline that takes `commissionerHubHealth`'s snapshot as input. And the module that
+actually **births** the number those two report, `league-health-engine`, was never named at all.
+
+⚠ **Same shape as §2.14**, where an alarm about "two independent waiver resolvers" turned out to
+be one calling the other through a barrel. A census that stops at "who imports it" rather than
+"what do they do with it" has now given the wrong answer four times.
+
+**— and Chimmy reaches none of them.** The stated symptom is that "Chimmy's answer to *is my
+league healthy* depends on which module answers". Grepped across `app/api/chat/**`,
+`app/api/chimmy/**`, `app/api/ai/**`, `lib/intelligence/**`, `lib/chimmy-context/**` and
+`lib/decision-os/grounding/**`: **zero hits for any of the five.** Whatever 6.1 fixes, it is not
+that.
+
+**The divergence is real, and it is concentrated exactly where it hurts.** Measured by
+`scripts/probe-league-health-scorer-divergence.ts`, which calls the real functions rather than
+reimplementing them — all three modules are pure, verified zero prisma and zero fetch:
+
+```
+league shape                                    hub-engine   assistant   behavioural   spread
+DORMANT  - nobody has done anything                     30          40             0      40
+HALF-DEAD - six managers gone, little activity          35          43            39       8
+HEALTHY  - everyone active, busy                        92          90            90       2
+```
+
+🛑 **TWO OF THE THREE CANNOT REPORT A DEAD LEAGUE AS DEAD.** Their bases are additive and every
+term is non-negative, so no input reaches zero:
+
+```
+hub-engine   base 30 + trades + claims + chat + lineup-rate bonus   FLOOR 30
+assistant    base 40 + trades + claims + 10 if none inactive        FLOOR 40
+behavioural  active-manager share x0.5 + per-manager depth x0.5     floor  0
+```
+
+They agree to within 2 points on a healthy league and disagree by 40 on the one a commissioner
+actually needs to be told about. That is the case for D10's "keep the third", now measured rather
+than asserted.
+
+⚠ **AND THE COLLAPSE IS NOT A DROP-IN, WHICH IS WHY IT IS NOT DONE HERE.**
+`commissioner-health/rules.ts:69` reads
+
+```ts
+if (snapshot.engagementScore < 40) out.push(verdict('engagement_low', …, 'warning'))
+```
+
+That threshold is calibrated against a scale whose **floor is 30**, so today it fires only in the
+band [30, 39]. Repointing the snapshot at the behavioural score (floor 0) widens the firing band
+to [0, 39] — every dormant league starts warning. That is very likely the *desired* behaviour, but
+it is a change to when a commissioner gets told their league is dying, and it belongs to the user
+rather than arriving as a side effect of a refactor.
+
+⚠ **A note on what these three actually measure**, because "collapse" may be the wrong verb:
+hub-engine scores *transaction + chat + lineup activity*; the assistant scores *transactions and
+inactivity*; the behavioural one scores *manager participation breadth and depth*. Three different
+questions wearing one name on one scale. Deleting two answers is not obviously better than naming
+what each measures — but a reader today cannot tell which question was answered, and that part is
+indefensible either way.
 
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 
