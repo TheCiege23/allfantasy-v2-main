@@ -211,6 +211,14 @@
     {
       "path": "/api/cron/tournament-weekly-scores?auto=1",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/sleeper-historical-refresh",
+      "schedule": "20 3 * * *"
+    },
+    {
+      "path": "/api/cron/sleeper-historical-refresh",
+      "schedule": "20 15 * * *"
     }
   ]
 }

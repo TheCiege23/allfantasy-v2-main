@@ -10,11 +10,19 @@ import {
   fetchSleeperRosterToOwner,
 } from "./sleeper-historical";
 import { persistStandings, persistDynastySeason, persistTradesForSeason } from "./normalize-historical";
-import type { BackfillStatus, BackfillObservability } from "./types";
+import { isSeasonComplete } from "@/lib/league-import/seasonCompletion";
+import type { BackfillStatus, BackfillObservability, HistoricalSeasonRef } from "./types";
 
 export interface DynastyBackfillInput {
   leagueId: string;
-  /** If true, run even when league is not marked dynasty */
+  /**
+   * If true, run even when league is not marked dynasty.
+   *
+   * ⚠ THIS IS NOT THE SIBLINGS' `force` AND MUST NOT BE WIRED INTO THE COMPLETION GATE BY
+   * ANALOGY. In the draft/season-state/transaction services `force` means "refetch a season we
+   * already hold"; here it means "this league is not dynasty, run anyway". Two different
+   * questions behind one word. `skipExistingSeasons` is the local equivalent of the other one.
+   */
   force?: boolean;
   /** Max seasons to import (oldest first). Omit = all discovered */
   maxSeasons?: number;
@@ -121,7 +129,14 @@ export async function runDynastyBackfill(input: DynastyBackfillInput): Promise<D
     },
   });
 
-  let discovered: Array<{ platformLeagueId: string; season: number; provider: string }> = [];
+  /*
+   * ⚠ ANNOTATED WITH THE REAL TYPE, NOT AN INLINE STRUCTURAL ONE. This was
+   * `Array<{ platformLeagueId: string; season: number; provider: string }>` — which silently
+   * stripped `status` back off the refs `discoverSleeperSeasons` returns, so the completion gate
+   * below would have had nothing to read even after the field was added upstream. A narrower
+   * local annotation is an easy way to undo a widening two files away and typecheck perfectly.
+   */
+  let discovered: HistoricalSeasonRef[] = [];
   try {
     discovered = await discoverSleeperSeasons(platformLeagueId, league.userId);
   } catch (e: any) {
@@ -150,7 +165,24 @@ export async function runDynastyBackfill(input: DynastyBackfillInput): Promise<D
 
   for (const ref of sorted) {
     try {
-      if (skipExistingSeasons) {
+      /*
+       * ── 🛑 THE FIFTH PLACE THIS GATE SHAPE WAS FOUND ─────────────────────────────────────
+       *
+       * This used to be `if (skipExistingSeasons)` alone, so a season was skipped whenever a
+       * SeasonResult row existed. Importing mid-season writes that row for the season being
+       * PLAYED, and every later run then skipped it — standings and trades frozen at the moment
+       * of import, with `seasonsSkipped` reporting it as done.
+       *
+       * The draft, season-state and matchup siblings were fixed in the same way (see
+       * `lib/league-import/seasonCompletion.ts`). This one was missed because it lives under
+       * `lib/dynasty-import/`, not `lib/league-import/`, and because `HistoricalSeasonRef` had
+       * discarded the provider's `status` — so there was nothing here to gate on.
+       *
+       * ⚠ IT MATTERS MOST NOW, not before. Until this is scheduled the bug is bounded by how
+       * rarely anyone re-runs a backfill by hand; on a timer it would freeze the live season of
+       * every league the rotation touches.
+       */
+      if (skipExistingSeasons && isSeasonComplete({ status: ref.status })) {
         const existing = await prisma.seasonResult.findFirst({
           where: { leagueId, season: String(ref.season) },
         });

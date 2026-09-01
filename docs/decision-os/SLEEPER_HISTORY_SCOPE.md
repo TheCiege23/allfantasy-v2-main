@@ -144,10 +144,22 @@ someone running that script by hand.
 
 **Waivers.** `WaiverTransaction`'s only writer is our own free-agent engine.
 `WaiverClaim`'s only writers are a backfill and a seed script. There is **no writer
-for Sleeper-originated waiver claims at all** — absent, not stale. Confirmed again on
-2026-09-01: `SleeperTradeFactIngest` opens with `if (tx.type !== 'trade' …) continue`, so
-the one scheduled Sleeper transaction path drops every waiver and free agent on the floor.
-**This half of the original finding was correct.**
+for Sleeper-originated waiver claims at all** — absent, not stale. `SleeperTradeFactIngest`
+opens with `if (tx.type !== 'trade' …) continue`, so it drops every waiver and free agent
+on the floor. **This half of the original finding was correct.**
+
+> ⚠ **CORRECTION TO THE CORRECTION, same day, and it is the same mistake one layer down.**
+> The paragraph above originally called `SleeperTradeFactIngest` "the ONE scheduled Sleeper
+> transaction path". It is not. `/api/cron/decision-os-activity-ingest` pulls **all 18
+> transaction weeks daily for ≤40 leagues**, and its type union is
+> `'trade' | 'waiver' | 'roster_move' | 'draft_pick'` — **waivers included**.
+>
+> So "Sleeper waivers reach nothing" is true of **`TransactionFact` and `WaiverTransaction`**,
+> and false of **`DecisionOsImportedActivity`**. Different tables, different consumers
+> (`MetaAnalysisService` reads the former; the Decision OS behavioural surfaces read the
+> latter), and a claim about one is not a claim about the other. Naming the table is the
+> difference between a finding and an overstatement — the third time in this document that
+> a confident negative had to be narrowed rather than withdrawn.
 
 ### ⚠ The data is already bought and thrown away
 
@@ -213,7 +225,7 @@ found this:
 | 1 | ~~Schedule the backfill orchestrator~~ **Fix the completion gates** | DONE. Past and present are now distinguishable, which every later step depends on. Scheduling anything before this would have propagated the frozen-season bug on a timer. |
 | 1b | ~~Give the matchup service the same gate~~ | DONE. It had none, so every run re-fetched FOUR Sleeper endpoints per season — rosters, both playoff brackets, and multi-week `fetchWeekMatchups` — re-learning settled history. Now gated on the same shared predicate. |
 | 1d | **The predicate is provider-agnostic, at the user's instruction** | It was first written under `sleeper/` and typed on `SleeperLeague`. Past-versus-present is a PRODUCT rule and every import has both kinds of season, so it now lives at `lib/league-import/seasonCompletion.ts`. `'complete'` is already the shared vocabulary: espn/fantrax/mfl/yahoo all map `isFinished ? 'complete' : 'in_season'`, sleeper passes its own through, fleaflicker maps none — correctly not-complete. |
-| 1c | **Then schedule the orchestrator** | Only meaningful once the gates refresh the live season and skip finished ones. |
+| 1c | ~~**Then schedule the orchestrator**~~ | **DONE, 2026-09-01** — and it exposed a FIFTH gate of the same shape. See below. |
 | 2 | ~~**`SleeperHistoricalTransactionSyncService`**~~ | **DONE, 2026-09-01** — and it needed **no migration**, which is the part this plan had wrong. See below. |
 | 3 | **Repoint `getLeagueContext` + `/rosters`** | Free today — that data is already in the DB via the 30-min sync. Deletes 24 of 60 calls per render with no new writer. |
 | 4 | **Repoint drafts, matchups, H2H** | Only safe once 1 and 2 hold. `getLeagueH2H` is completed head-to-head history, immutable, re-fetched live on every render — the clearest case. |
@@ -286,9 +298,45 @@ Two smaller things found by writing the tests rather than by reading the code:
   `faabNet`: one is a purchase from the league, the other a transfer between managers, and
   folding them together would misreport both.
 
-Still open, and deliberately not done here: **step 1c**, scheduling the orchestrator. The
-service runs at import today. Until 1c lands, the ~45-day trade rotation above is still the
-only thing refreshing an already-imported league.
+### ✅ Step 1c, 2026-09-01 — scheduled, and it found the fifth gate
+
+`/api/cron/sleeper-historical-refresh`, twice daily (`20 3` and `20 15` UTC), staleness-ordered
+by `DynastyBackfillStatus.updatedAt` ascending, ≤25 leagues a fire, 240s `createRunBudget`
+checked between leagues, per-league failure isolation, `SyncJobRun` telemetry.
+
+The ordering needs no stored cursor because `runDynastyBackfill` **upserts that status row at
+the start of every run** — so refreshing a league is what makes it the least stale, and coverage
+is complete since every imported Sleeper league ran the orchestrator once at import.
+
+🛑 **A FIFTH COMPLETION GATE, AND THIS ONE WAS THE DANGEROUS ONE TO SCHEDULE.**
+`lib/dynasty-import/backfill-orchestrator.ts` skipped any season with a `SeasonResult` row —
+identical in shape to the four already repaired, missed because it lives under
+`lib/dynasty-import/` and every census had been of `lib/league-import/`. Left alone it would have
+frozen standings and trades for the live season of **every league the rotation touches**, on a
+timer, while `seasonsSkipped` reported success.
+
+⚠ **It had a second half that typechecked perfectly.** `discoverSleeperSeasons` dropped `status`
+when mapping to `HistoricalSeasonRef`, *and* the orchestrator annotated its local `discovered`
+with an inline structural type that omitted the field. Either alone leaves the gate with nothing
+to read. A narrower local annotation silently undoes a widening two files away — worth
+remembering next to the "a type widening surfaces in a CONSUMER's file" note in CLAUDE.md.
+
+⚠ **`force` means something DIFFERENT here** — "run even though this league is not dynasty",
+not "refetch a season we already hold". `skipExistingSeasons` is the local equivalent of the
+siblings' `force`. Wiring the wrong one in by analogy would re-open the gate entirely, so the
+field now says so at its definition.
+
+**Coverage, stated rather than implied.** At ≤25 leagues a fire and two fires a day, a
+543-league account laps in **roughly eleven days**. That is a large improvement on the ~45-day
+trade rotation it supplements and it is **still not "up to date"**. Raising the frequency is a
+one-line change to `cron-schedule.json`; the twice-daily cadence is the user's standing
+instruction for system-side refreshes and was not raised unilaterally.
+
+⚠ **Known duplication, recorded rather than discovered later.** Transactions for one league can
+now be fetched by three paths: the new transaction sibling, `runDynastyBackfill` (which loops
+weeks of its own for trades), and `decision-os-activity-ingest`. With every gate working each
+touches only the season still being played, so it is bounded — but it is real. Collapsing it
+means giving the orchestrator a single fetch to share, which is a refactor, not this change.
 
 ---
 
