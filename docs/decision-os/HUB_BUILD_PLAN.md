@@ -45,7 +45,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
-| 🟨 | **6.1** Collapse the three health scorers | **Premise measured and WRONG**, twice. Five modules, three formulas, two of the named three layered; 40-point divergence on a dormant league. The three are now documented at their definition sites so they cannot be confused. **The collapse itself is a product decision, not a refactor** — the score D10 keeps reaches ZERO UI surfaces and the one it replaces reaches NINE. See §2.22 and §2.23 |
+| 🟨 | **6.1** Collapse the three health scorers | Premise measured and wrong twice (§2.22, §2.23); all three documented at their definition sites. **Step C DONE** — the hub activity base is now earned by participation, so a dead league scores 0 instead of 30 and hub and behavioural agree on the worst case, with fully-staffed leagues byte-identical (§2.24). **Step A next**: repoint the nine surfaces to participation |
 | ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
 
@@ -859,6 +859,66 @@ participation, which was unknowable before.
 `LeagueHealthInputSchema` and read **nowhere in the engine**. It is the one field that would let
 the activity score notice an empty league. Left alone deliberately — consuming it would change
 nine dashboards, which is the same product decision as above.
+
+### 2.24 The base was granted, not earned — and the field that fixes it was already there
+
+6.1 step C, decided by the user after §2.23 laid out the trade-offs.
+
+`computeEngagement` opened with an unconditional `let score = 30`. Every other term is
+non-negative, so **30 was a floor no input could get below**: a league where nothing had happened
+and nobody was left scored 30/100 under a label reading "Engagement". Not approximate — false.
+
+**⚠ THE FIELD THAT FIXES IT NEEDED NO NEW DATA AND WAS ALREADY BEING PASSED.**
+`activeManagers` is declared by `LeagueHealthInputSchema` and was referenced **nowhere in the
+engine** — measured, zero occurrences. `commissionerHubHealth` has always supplied it as
+`teamCount - inactiveTeams`, where inactive means a roster untouched for `INACTIVE_AFTER_MS`
+(14 days). The base is now `30 × clamp(activeManagers / numTeams, 0, 1)`.
+
+```
+league shape                                    hub-engine   assistant   behavioural
+DORMANT   - nobody has done anything              0 (was 30)         40             0
+HALF-DEAD - six managers gone, little activity   20 (was 35)         43            39
+HEALTHY   - everyone active, busy                92 (unchanged)      90            90
+```
+
+**🛑 A FULLY-STAFFED LEAGUE IS BYTE-IDENTICAL, AND THAT IS THE WHOLE SAFETY ARGUMENT.**
+`activeShare === 1` returns exactly the old base, so none of the nine dashboards reading this
+number move for a healthy league. The change bites only as managers actually leave — which is
+when it should. That property is pinned by the FIRST test in the suite, with an expected value
+computed from the old formula by hand rather than snapshotted, because a snapshot would have
+recorded whatever the new code produced.
+
+**Only the base scales, deliberately.** Scaling the whole score would re-weight the formula and
+dock a league 8% for one inactive manager in twelve. The defect was the FLOOR. A league with real
+transaction volume genuinely has activity worth counting — so "was busy, then died" still keeps
+credit for the season, which is a different situation from "never started" and is pinned by its
+own test.
+
+**⚠ THE ONE REAL BEHAVIOUR CHANGE, measured rather than described.** `rules.ts` fires
+`engagement_low` below 40. A league with half its managers gone, twelve trades and lineups still
+auto-submitting:
+
+```
+before   30 (unconditional) + 6 + 0 + 0 + 15 = 51   -> silent
+after    15 (base x 0.5)    + 6 + 0 + 0 + 15 = 36   -> warns
+```
+
+A half-empty league coasting on lineup auto-submission is exactly what a commissioner should hear
+about, and it used to say nothing. The threshold stays at 40; leagues that were already below it
+move further down rather than crossing back.
+
+**Controls, both directions.** 11 tests. Against the pre-change engine restored from `HEAD` and
+byte-compared: **6 failed, 5 passed** — and the five that passed include the fully-staffed
+"UNCHANGED" case, which is the point. A test that only went red would prove the change happened;
+one that stays green on both proves the change is *contained*.
+
+⚠ **Three comments written an hour earlier went stale the moment this landed** — all three said
+"floors at 30". Corrected in the same commit. A definition-site note that describes the previous
+behaviour is worse than none, because it is trusted.
+
+⚠ **The remaining 40-point spread is entirely `commissioner-assistant`**, whose base of 40 is
+still unconditional. Left alone deliberately: one consumer, and measured never to appear in the
+same file as the hub lineage, so nothing at a call site can confuse them.
 
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 

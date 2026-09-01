@@ -59,13 +59,14 @@ export interface LeagueHealthResult {
    *     base 30 + min(20, trades/team × 6) + min(20, claims/team × 2.5)
    *             + min(15, chat × 0.3) + 15 (lineup ≥ 0.95) or 8 (≥ 0.8)
    *
-   * ⚠ ITS FLOOR IS 30, NOT 0. Every term is non-negative and the base is unconditional, so this
-   * number CANNOT report that a league is dead. It also never reads `input.activeManagers` —
-   * which the schema declares and, measured, **nothing in this file reads at all**.
+   * ⚠ ITS FLOOR WAS 30 UNTIL 6.1 AND IS NOW 0. The base used to be granted unconditionally, so a
+   * league where nothing had happened and nobody was left still scored 30/100. It is now scaled by
+   * `activeManagers / numTeams` — a field the schema had always declared and this file read
+   * NOWHERE. A fully-staffed league is unaffected; the change bites only as managers leave.
    *
-   * That is not the defect it looks like: `computeSustainability` subtracts 10 per inactive
-   * manager, so a dormant league scores 0 there and fires `sustainability_low` plus
-   * `league_health_critical`. The league IS flagged. This number simply is not the thing doing it.
+   * ⚠ A DEAD LEAGUE WAS NEVER UNFLAGGED, THOUGH. `computeSustainability` subtracts 10 per
+   * inactive manager, so a dormant league has always scored 0 there and fired `sustainability_low`
+   * plus `league_health_critical`. The fix was to a number that was false, not to a missing alarm.
    *
    * ⚠ DO NOT COMPARE IT WITH `leagueEngagementScore` from
    * `lib/decision-os/behavioral/league-intelligence.ts`. Same name, same 0–100 scale, different
@@ -104,8 +105,35 @@ export interface LeagueHealthResult {
 
 function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)) }
 
+/**
+ * 🛑 THE BASE IS EARNED BY PARTICIPATION, NOT GRANTED (6.1 / §2.23).
+ *
+ * It used to be an unconditional `30`, so a league where literally nothing had happened and
+ * nobody was left scored 30/100 — a third healthy, which is not approximate but false. Every
+ * other term is non-negative, so 30 was a floor no input could get below.
+ *
+ * ⚠ AND THE FIELD THAT FIXES IT WAS ALREADY HERE AND UNREAD. `activeManagers` is declared by
+ * `LeagueHealthInputSchema` and was referenced NOWHERE in this file — measured, zero occurrences.
+ * `commissionerHubHealth` has always passed it: `teamCount - inactiveTeams`, where inactive means
+ * a roster untouched for `INACTIVE_AFTER_MS` (14 days). So this needs no new data.
+ *
+ * ⚠ A FULLY-STAFFED LEAGUE IS BYTE-IDENTICAL TO BEFORE. `activeShare === 1` gives back exactly
+ * the old base of 30, which is what keeps this off the nine dashboards that read this number.
+ * The change only bites as managers actually leave, which is when it should.
+ *
+ * ⚠ ONLY THE BASE SCALES, DELIBERATELY. Scaling the whole score would re-weight the formula and
+ * dock a league 8% for one inactive manager out of twelve. The defect being fixed is the FLOOR,
+ * and a league with real transaction volume genuinely has activity worth counting.
+ *
+ * ⚠ THIS STILL MEASURES ACTIVITY, NOT PARTICIPATION. A league that was busy and has since died
+ * keeps credit for the season's trades — correctly, that is a different situation from one that
+ * never started, and `computeSustainability` scores it 0 either way. See the note on
+ * `LeagueHealthResult.engagementScore`.
+ */
 function computeEngagement(input: LeagueHealthInput): number {
-  let score = 30
+  // Clamped because bad data (activeManagers > numTeams) must not buy a base above 30.
+  const activeShare = clamp(input.activeManagers / Math.max(input.numTeams, 1), 0, 1)
+  let score = 30 * activeShare
   const tradesPerTeam = input.totalTradesThisSeason / Math.max(input.numTeams, 1)
   const claimsPerTeam = input.totalWaiverClaims / Math.max(input.numTeams, 1)
   score += Math.min(20, tradesPerTeam * 6)
