@@ -39,7 +39,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **3.3** `isConclusive(fact)` | `lib/decision-os/conclusive.ts`. Per-fact profiles + remedy on every blocker. Two controls proven red |
 | ✅ | **4.1** `buildDecisionOsGroundingPacket()` | `lib/decision-os/grounding/packet.ts`. Shape read off the 15, not invented. Per-slice conclusiveness + remedy |
 | ✅ | **4.2** Wire into `/api/chat/chimmy` | Beside the existing packet, behind `DECISION_OS_GROUNDING_ENABLED`. Delta vs origin/main baseline: **0** |
-| 🔄 | **4.3** Move orphaned grounding behind Decision OS | 15 censused (§2.16). Found + fixed a real bug in my own devy adapter. Migration itself still to do |
+| ✅ | **4.3** Move orphaned grounding behind Decision OS | 8 graded + 3 ungraded, providers reused not rewritten. §2.16. Caught a bug in my own devy adapter |
 | ⬜ | **4.4** No-fact rule | |
 | ⬜ | **4.5** Retire duplicate routes | |
 | ⬜ | **5.1** Internal proof surface | |
@@ -642,8 +642,13 @@ Plus the three resolvers: `commissionerGrounding` (already has
 `ok/empty/restricted` — the source of the `not_entitled` reason),
 `leagueIntelligenceGrounding`, `portfolioGrounding`.
 
-**Seven are judgements or facts needing a verdict; three are identity or global
-lookups that need none; two are entitlement and provenance.** That split is what
+**Eight are judgements or facts needing a verdict; three are identity or global
+lookups that need none; one is entitlement.** (That is the twelve providers. The
+three resolvers sit outside the count: commissioner grounding is entitlement and
+provenance, the other two are league and portfolio briefs.) ⚠ An earlier draft of
+this section said SEVEN and did not add up — 7+3+2 leaves twelve unaccounted for
+against fifteen. The table was right; the sentence under it was not. That split
+is what
 4.3's migration should follow — a lookup routed through conclusiveness gains
 nothing and loses clarity.
 
@@ -669,8 +674,16 @@ both call `buildDevyValueBoard` and translate it for different consumers (a
 prompt slice, a `CanonicalValue`). That is legitimate — checked before assuming,
 per §2.14.
 
-**Still to do:** the migration itself. The census is the specification; nothing
-has moved behind Decision OS yet.
+**Migration done.** The eight graded slices are `DecisionOsGroundingPacket.contextFacts`;
+the three lookups are `contextLookups`, ungraded and structurally separate so the
+census is enforced by the type rather than remembered.
+
+⚠ **The providers are REUSED, not reimplemented.** `ChimmyContextEngine` already
+runs them concurrently with a per-provider TTL cache and timeout, and has been
+doing so correctly all along — it simply had no consumer on the chat path.
+Rewriting twelve providers to "move them behind Decision OS" would have created
+twelve rivals to working code, which is the mistake §2.14 and §2.16 both record.
+One `loadContext` call, then grade the result.
 
 ### 2.17 The pusher lock has two failure modes neither of us had hit, and both happened tonight
 

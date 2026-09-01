@@ -56,6 +56,20 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Market player values', packet.marketValues as GroundedSlice<unknown>],
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
+    // The eight graded context slices (4.3). Rendered alongside the rest because a reader should
+    // not have to know which subsystem produced a fact to know whether it is safe to use.
+    ...(packet.contextFacts
+      ? ([
+          ['Matchup', packet.contextFacts.matchup],
+          ['Roster', packet.contextFacts.roster],
+          ['Standings', packet.contextFacts.standings],
+          ['Rankings', packet.contextFacts.rankings],
+          ['League difficulty', packet.contextFacts.leagueDifficulty],
+          ['Imported history', packet.contextFacts.importedHistory],
+          ['Replay insights', packet.contextFacts.replayInsights],
+          ['Devy board', packet.contextFacts.devy],
+        ] as Array<[string, GroundedSlice<unknown>]>)
+      : []),
   ]
 
   const available = slices.map(([n, s]) => sliceLine(n, s, now)).filter((x): x is string => x !== null)
