@@ -1,18 +1,39 @@
 const APP_NAME = 'AllFantasy';
-const CACHE_VER = 'v1.0.5';
+const CACHE_VER = 'v1.0.6';
 const CACHE_STATIC = `${APP_NAME}-static-${CACHE_VER}`;
 const CACHE_PAGES = `${APP_NAME}-pages-${CACHE_VER}`;
 const CACHE_IMAGES = `${APP_NAME}-images-${CACHE_VER}`;
 const ALL_CACHES = [CACHE_STATIC, CACHE_PAGES, CACHE_IMAGES];
 
+/*
+ * ⚠ EVERY ENTRY HERE IS FETCHED ON EVERY INSTALL, AND THREE OF THE ORIGINAL
+ * SEVEN WERE STALE. Measured by running `cache.add` on each against production
+ * rather than reasoning about it, because the interesting one does not fail:
+ *
+ *   /app/home    REJECTED — 404. The route went away when /app became /core.
+ *   /favicon.ico REJECTED — 404. This app declares its icons in layout
+ *                metadata and ships no .ico at all.
+ *   /app         CACHED, and that is the bad one. cache.add FOLLOWS redirects,
+ *                so /app 307s to /core, /core 307s to /login, and the LOGIN
+ *                PAGE gets stored under the /app key (status 200,
+ *                redirected=true). `/^\/app/` is in NETWORK_FIRST_PATTERNS
+ *                below, so an offline hit on any /app* URL served that login
+ *                HTML back as if it were the app shell.
+ *
+ * The install handler wraps each add in its own catch, so the two rejections
+ * were console warnings rather than a broken install — which is exactly why all
+ * three survived a rename of the whole app shell. They are dropped, not
+ * repointed.
+ *
+ * `/login` is added because it is where an offline launch actually lands:
+ * start_url is /core, and /core 307s to /login for anyone not signed in.
+ */
 const PRECACHE_ASSETS = [
   '/',
-  '/app',
-  '/app/home',
+  '/login',
   '/offline',
   '/manifest.webmanifest',
   '/af-crest.png',
-  '/favicon.ico',
 ];
 
 const NEVER_CACHE = [
