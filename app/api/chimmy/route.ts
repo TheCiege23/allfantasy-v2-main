@@ -636,7 +636,12 @@ export async function POST(req: NextRequest) {
   // No league attached → dashboard-level portfolio grounding instead (the same
   // Command Center payload the dashboard renders, so chat and UI agree).
   if (!anthropicContext.leagueIntelligenceGrounding && !parseResult.data.userContext.leagueId) {
-    anthropicContext.leagueIntelligenceGrounding = await resolvePortfolioGrounding({ userId })
+    // A timeout and an empty portfolio both mean "no text for the prompt" HERE — this route has no
+    // gap channel to carry the difference into. The packet's grading is where the distinction is
+    // acted on; see `PortfolioGroundingOutcome`.
+    const portfolio = await resolvePortfolioGrounding({ userId })
+    anthropicContext.leagueIntelligenceGrounding =
+      portfolio.status === 'ok' ? portfolio.text : null
   }
   const tokenSpendId = gate.tokenSpend?.id ?? null
 
