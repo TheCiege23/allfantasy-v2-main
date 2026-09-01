@@ -194,6 +194,34 @@ const NOT_REQUESTED: GroundingGap = {
   remedy: 'Ask about it and it will be gathered.',
 }
 
+/**
+ * 🛑 EMPTINESS IS ABSENCE, NOT A FACT (5.2).
+ *
+ * The header above says an unavailable fact is `present: false` with a reason, "never an empty
+ * array or a zero" — and until this predicate existed, nothing enforced it. `rows ? present(rows)`
+ * takes `[]`, because `[]` is truthy. A cold league then produced a slice reading *available* with
+ * nothing in it, the serializer rendered `- Projections: available`, and no gap was raised. That
+ * is the devy board failure the header cites, one layer up: an absence of data rendered as a
+ * confident nothing.
+ *
+ * ⚠ THE THREE `value-os` / `projection-os` SOURCES ALREADY COLLAPSE EMPTY TO NULL IN THEIR OWN
+ * `derive` — so this hole was latent there, not live. It is enforced here anyway because that
+ * convention is repeated by hand in three places, and a fourth source added without it would
+ * reintroduce the bug silently. The live case was the context providers, which are
+ * `ChimmyContextEngine`'s and obey no such convention.
+ *
+ * ⚠ ARRAYS AND STRINGS ONLY, DELIBERATELY. An empty object is a plausible emptiness too, but
+ * `Object.keys` is empty for a class instance whose data lives on its prototype — so treating
+ * `{}` as absent risks declaring a REAL fact missing, which is a lie in the more damaging
+ * direction. Under-refusing is recoverable; fabricating an absence is not.
+ */
+function hasSubstance<T>(v: T | null | undefined): v is T {
+  if (v == null) return false
+  if (Array.isArray(v)) return v.length > 0
+  if (typeof v === 'string') return v.trim().length > 0
+  return true
+}
+
 function absent<T>(gap: GroundingGap, conclusive: ConclusivenessVerdict = { ok: true }): GroundedSlice<T> {
   return { present: false, value: null, asOf: null, servedFrom: null, confidence: null, conclusive, gap }
 }
@@ -323,7 +351,7 @@ export async function buildDecisionOsGroundingPacket(
     const rows = await valueOs
       .loadMarket({ sport: args.sport, format: args.valueFormat.format, qbFormat: args.valueFormat.qbFormat })
       .catch(() => null)
-    marketValues = rows
+    marketValues = hasSubstance(rows)
       ? present(rows, { servedFrom: 'store', conclusive: v })
       : absent({
           reason: 'not_computed',
@@ -337,7 +365,7 @@ export async function buildDecisionOsGroundingPacket(
   if (want.devy) {
     const v = verdictFor('globalPlayerValue')
     const rows = await valueOs.loadDevy({ sport: args.sport, currentSeason: args.season }).catch(() => null)
-    devyValues = rows
+    devyValues = hasSubstance(rows)
       ? present(rows, { servedFrom: 'store', conclusive: v })
       : absent({
           reason: args.sport.toUpperCase() === 'NCAAF' ? 'not_computed' : 'no_producer',
@@ -359,7 +387,7 @@ export async function buildDecisionOsGroundingPacket(
     const facts = await projectionOs
       .loadFor({ sport: args.sport, season: args.season, week: args.week ?? null }, args.leagueIdpRules ?? null)
       .catch(() => null)
-    if (!facts) {
+    if (!hasSubstance(facts)) {
       projections = absent({
         reason: 'not_computed',
         detail: `No projections are held for ${args.sport} ${args.season}${args.week ? ` week ${args.week}` : ''}.`,
@@ -397,13 +425,23 @@ export async function buildDecisionOsGroundingPacket(
         profile: FactProfileName,
       ): GroundedSlice<unknown> => {
         const p = servedBy.get(name)
-        if (value == null) {
+        if (!hasSubstance(value)) {
+          /*
+           * ⚠ THE REASON IS `not_computed` EITHER WAY, AND THAT IS CORRECT RATHER THAN LAZY: a
+           * producer exists for this and returned nothing, which is exactly what the reason means.
+           * It was previously written as a ternary with the SAME value in both branches — a dead
+           * expression that reads as a distinction being made. The distinction is real, but it
+           * lives in the detail and the remedy, so it is made there and only there.
+           */
+          const failed = p?.error != null
           return absent({
-            reason: p?.error ? 'not_computed' : 'not_computed',
-            detail: p?.error
-              ? `The ${name} provider failed: ${String(p.error).slice(0, 120)}`
+            reason: 'not_computed',
+            detail: failed
+              ? `The ${name} provider failed: ${String(p!.error).slice(0, 120)}`
               : `No ${name} data is available for this league.`,
-            remedy: 'It is retried on the next question; a league re-sync also refreshes it.',
+            remedy: failed
+              ? 'It is retried on the next question; if it keeps failing the league needs a re-sync.'
+              : 'A league re-sync refreshes it; a league with no recorded activity yet stays empty.',
           })
         }
         const v = verdictFor(profile)
@@ -436,6 +474,36 @@ export async function buildDecisionOsGroundingPacket(
         user: bundle.user,
         activeLeague: bundle.activeLeague,
         sportsSchedule: bundle.sportsSchedule,
+      }
+    } else {
+      /*
+       * 🛑 THE WORST DEGRADATION IN THIS FILE, AND IT WAS SILENCE RATHER THAN A ZERO (5.2).
+       *
+       * `loadContext` is one call behind twelve providers. When IT throws — not a provider, the
+       * engine — the catch above turned eight facts into `contextFacts = null`, and because the
+       * gap list is built by walking `contextFacts`, the packet then carried ZERO gaps for them.
+       * The serializer renders neither an availability line nor a missing line, so the model was
+       * handed a complete-LOOKING picture with matchup, roster, standings, rankings, difficulty,
+       * history, replay and the devy board quietly absent.
+       *
+       * An absent fact that announces itself is recoverable. An absent fact that does not is the
+       * single failure mode this packet exists to prevent, so the eight are materialised as named
+       * gaps instead.
+       */
+      const engineDown: GroundingGap = {
+        reason: 'not_computed',
+        detail: 'League context could not be assembled — the context engine did not return.',
+        remedy: 'Ask again; if it persists, re-sync the league and the providers rebuild from it.',
+      }
+      contextFacts = {
+        matchup: absent(engineDown),
+        roster: absent(engineDown),
+        standings: absent(engineDown),
+        rankings: absent(engineDown),
+        leagueDifficulty: absent(engineDown),
+        importedHistory: absent(engineDown),
+        replayInsights: absent(engineDown),
+        devy: absent(engineDown),
       }
     }
   }
@@ -480,7 +548,7 @@ export async function buildDecisionOsGroundingPacket(
     args.userId ? resolvePortfolioGrounding({ userId: args.userId }).catch(() => null) : Promise.resolve(null),
   ])
 
-  const leagueIntelligence: GroundedSlice<string> = leagueIntelText
+  const leagueIntelligence: GroundedSlice<string> = hasSubstance(leagueIntelText)
     ? present(leagueIntelText, { servedFrom: 'live', conclusive: verdictFor('standings') })
     : absent({
         reason: 'not_computed',
@@ -488,7 +556,7 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'It needs recorded league activity — trades, matchups, valuations — to summarise.',
       })
 
-  const portfolio: GroundedSlice<string> = portfolioText
+  const portfolio: GroundedSlice<string> = hasSubstance(portfolioText)
     ? // Cross-league by nature: one league's import cannot bear on it, so no verdict applies.
       present(portfolioText, { servedFrom: 'live', conclusive: { ok: true } })
     : absent({
