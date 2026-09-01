@@ -159,10 +159,22 @@ export function isolationFailureReason(facts: IsolationFacts): string | null {
   return null
 }
 
-/** The minimum a caller must hand us — `Prisma.TransactionClient` satisfies it. */
-export type RawQueryable = {
-  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>
-}
+/**
+ * How the assertion gets its facts.
+ *
+ * ⚠ A FUNCTION RATHER THAN A CLIENT, BECAUSE INVARIANT 1 SAYS SO — and eslint enforces it.
+ * The first version called `tx.$queryRawUnsafe(ISOLATION_FACTS_SQL)` right here and tripped
+ * `no-restricted-syntax`: "Raw SQL is confined to lib/domain/db.ts and lib/db/admin/. Raw
+ * queries bypass the Prisma extensions entirely, so tenancy and soft-delete scoping simply do
+ * not apply to them."
+ *
+ * That rule is right even though this particular query is a read of `pg_roles` and `pg_policy`
+ * where tenancy scoping is meaningless — the invariant is about WHERE raw SQL may live, not
+ * about whether each individual statement is harmless, and a security module is the last place
+ * to argue for an exception. So `db.ts` runs the statement and hands the rows back, and
+ * everything here stays pure and testable without a database.
+ */
+export type IsolationFactsReader = () => Promise<IsolationFactsRow[]>
 
 /**
  * Build the assertion with its own memo.
@@ -175,7 +187,7 @@ export type RawQueryable = {
 export function createIsolationAssertion(getConnectionSource: () => string | null) {
   let verdict: { ok: true } | { ok: false; error: IsolationNotEnforceableError } | null = null
 
-  return async function assertIsolationEnforceable(tx: RawQueryable): Promise<void> {
+  return async function assertIsolationEnforceable(readFacts: IsolationFactsReader): Promise<void> {
     if (verdict) {
       if (verdict.ok) return
       throw verdict.error
@@ -183,7 +195,7 @@ export function createIsolationAssertion(getConnectionSource: () => string | nul
 
     let rows: IsolationFactsRow[]
     try {
-      rows = await tx.$queryRawUnsafe<IsolationFactsRow[]>(ISOLATION_FACTS_SQL)
+      rows = await readFacts()
     } catch (cause) {
       /*
        * ⚠ AN UNANSWERABLE QUESTION IS NOT A PASS. If the catalogue query itself fails we do not
