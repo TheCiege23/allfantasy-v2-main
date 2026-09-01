@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { Upload, Trash2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ProfileImagePreviewController } from "@/components/identity/ProfileImagePreviewController"
-import { setProfileAvatarUrl, AVATAR_PRESET_EMOJI } from "@/lib/avatar"
+import { setProfileAvatarUrl, uploadProfileImage, AVATAR_PRESET_EMOJI } from "@/lib/avatar"
 import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
 
@@ -13,13 +13,17 @@ export function ProfileSettingsSection({
   saving,
   onSave,
   onRefetch,
-  uploadLeagueId,
 }: {
   profile: SettingsProfile
   saving: boolean
   onSave: SettingsOnSave
   onRefetch: () => void
-  uploadLeagueId: string | null
+  /**
+   * @deprecated Unused since avatar upload moved off `/api/chat/upload` onto the dedicated
+   * avatar route, which is not league-scoped. Kept in the type so existing callers still
+   * compile; drop it and its call sites when they are next touched.
+   */
+  uploadLeagueId?: string | null
 }) {
   const { t } = useLanguage()
   const [displayName, setDisplayName] = useState(profile?.displayName ?? "")
@@ -53,33 +57,13 @@ export function ProfileSettingsSection({
     })
   }
 
-  const persistAvatarFromUpload = async (
-    file: File
-  ): Promise<{ ok: true } | { ok: false; error: string }> => {
-    const fd = new FormData()
-    fd.append("file", file)
-    fd.append("type", "image")
-    if (uploadLeagueId) {
-      fd.append("leagueId", uploadLeagueId)
-    } else {
-      fd.append("purpose", "profile")
-    }
-    const res = await fetch("/api/chat/upload", { method: "POST", body: fd })
-    const data = (await res.json()) as { url?: string; error?: string }
-    if (!res.ok) return { ok: false, error: data.error ?? "Upload failed" }
-    if (!data.url) return { ok: false, error: "No file URL returned" }
-    const patch = await fetch("/api/user/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatarUrl: data.url, avatarPreset: null }),
-    })
-    if (!patch.ok) {
-      const err = (await patch.json().catch(() => ({}))) as { error?: string }
-      return { ok: false, error: err.error ?? "Could not save avatar" }
-    }
-    return { ok: true }
-  }
-
+  /*
+   * ⚠ THIS USED TO POST TO `/api/chat/upload` AND IT FAILED FOR EVERY GOOGLE SIGN-IN.
+   * That route is gated by `requireVerifiedUser`, which demands `ageConfirmedAt` — a field
+   * no OAuth sign-in ever writes — so changing a profile picture returned 403
+   * `AGE_REQUIRED` here while the identical action on `/profile` succeeded. It also
+   * needed a follow-up PATCH to clear the preset; the avatar route now does that itself.
+   */
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ""
@@ -90,7 +74,7 @@ export function ProfileSettingsSection({
     })
     setUploadError(null)
     setUploading(true)
-    const result = await persistAvatarFromUpload(file)
+    const result = await uploadProfileImage(file)
     setUploading(false)
     setPreviewObjectUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev)
