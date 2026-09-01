@@ -61,11 +61,36 @@ import { syncSleeperHistoricalSeasonStateAfterImport } from '@/lib/league-import
 const rosterFindMany = vi.fn(async () => [] as unknown[])
 const chainMock = vi.mocked(getSleeperHistoricalLeagueChain)
 
+/*
+ * ── 🛑 THESE FIXTURES GAINED A `status`, AND THAT IS THE WHOLE POINT ─────────────────────────
+ *
+ * They used to be `{ season: '2025' }` with no status, and the assertions below read "skips
+ * seasons that already have DraftFact rows". That was the BUG, pinned as the spec: the gate
+ * tested whether rows existed, so importing mid-season stamped rows for the season being PLAYED
+ * and every later run skipped it. A user's live draft and roster froze at the instant they
+ * imported, while a counter named `seasonsSkippedAlreadyComplete` reported it as finished.
+ *
+ * `seasonCompletion.ts` fixed the gate to ask Sleeper whether the season is actually over. This
+ * suite was NOT updated in that commit and went red on main — caught here rather than by the
+ * attestation, which ran the new test and not the existing one covering the changed code.
+ *
+ * The chain walks newest-first, so element 0 is the season in progress. That ordering is what
+ * makes the regression test below meaningful.
+ */
 function threeSeasonChain() {
   return [
-    { season: 2025, externalLeagueId: 'lg-2025', league: { season: '2025' } },
-    { season: 2024, externalLeagueId: 'lg-2024', league: { season: '2024' } },
-    { season: 2023, externalLeagueId: 'lg-2023', league: { season: '2023' } },
+    { season: 2025, externalLeagueId: 'lg-2025', league: { season: '2025', status: 'in_season' } },
+    { season: 2024, externalLeagueId: 'lg-2024', league: { season: '2024', status: 'complete' } },
+    { season: 2023, externalLeagueId: 'lg-2023', league: { season: '2023', status: 'complete' } },
+  ] as never
+}
+
+/** Every season finished — the only shape in which the gate may skip everything. */
+function allCompleteChain() {
+  return [
+    { season: 2025, externalLeagueId: 'lg-2025', league: { season: '2025', status: 'complete' } },
+    { season: 2024, externalLeagueId: 'lg-2024', league: { season: '2024', status: 'complete' } },
+    { season: 2023, externalLeagueId: 'lg-2023', league: { season: '2023', status: 'complete' } },
   ] as never
 }
 
@@ -81,8 +106,8 @@ describe('Sleeper historical draft sync — completion gate', () => {
     chainMock.mockResolvedValue(threeSeasonChain())
   })
 
-  it('skips seasons that already have DraftFact rows and does not call the provider for them', async () => {
-    // 2025 and 2024 already imported; only 2023 is missing.
+  it('skips a FINISHED season that already has DraftFact rows, and no others', async () => {
+    // Rows exist for 2025 and 2024; 2023 is missing. Only 2024 is both finished AND imported.
     draftFactFindFirst.mockImplementation(async ({ where }: { where: { season: number } }) => {
       return where.season === 2023 ? null : { id: `existing-${where.season}` }
     })
@@ -90,14 +115,34 @@ describe('Sleeper historical draft sync — completion gate', () => {
     const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
 
     expect(result.seasonsConsidered).toBe(3)
-    expect(result.seasonsSkippedAlreadyComplete).toBe(2)
-    expect(result.providerCallsAvoided).toBe(2)
-    // getLeagueDrafts should only have been called for the one missing season (2023).
-    expect(getLeagueDrafts).toHaveBeenCalledTimes(1)
+    expect(result.seasonsSkippedAlreadyComplete).toBe(1)
+    expect(result.providerCallsAvoided).toBe(1)
+    // 2025 (in progress, refetched) and 2023 (finished but never imported).
+    expect(getLeagueDrafts).toHaveBeenCalledTimes(2)
+    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2025')
     expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2023')
   })
 
-  it('does not call the provider at all when every season is already complete', async () => {
+  it('🛑 REGRESSION: the season being PLAYED is refetched even though it has rows', async () => {
+    /*
+     * The bug this gate exists to prevent, pinned directly. Every season has rows; only 2025 is
+     * still in progress. The old row-existence gate skipped all three and reported them
+     * "already complete" — which is how a user's live draft froze at import.
+     *
+     * ⚠ Note this test would PASS against a gate that skips nothing at all, which is why the
+     * test above pins the skip counter as well. Neither is sufficient alone.
+     */
+    draftFactFindFirst.mockResolvedValue({ id: 'existing' })
+
+    const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+
+    expect(result.seasonsSkippedAlreadyComplete).toBe(2) // 2024 + 2023
+    expect(getLeagueDrafts).toHaveBeenCalledTimes(1)
+    expect(getLeagueDrafts).toHaveBeenCalledWith('lg-2025')
+  })
+
+  it('does not call the provider at all when every season is finished and imported', async () => {
+    chainMock.mockResolvedValue(allCompleteChain())
     draftFactFindFirst.mockResolvedValue({ id: 'existing' })
 
     const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
@@ -133,7 +178,7 @@ describe('Sleeper historical roster/season-state sync — completion gate', () =
     leagueSeasonFindFirst.mockResolvedValue(null)
   })
 
-  it('skips seasons with an existing roster snapshot and avoids the users/rosters provider calls', async () => {
+  it('skips a FINISHED season with a roster snapshot, and refetches the one in progress', async () => {
     rosterSnapshotFindFirst.mockImplementation(async ({ where }: { where: { season: number } }) => {
       return where.season === 2023 ? null : { id: `existing-${where.season}` }
     })
@@ -141,10 +186,23 @@ describe('Sleeper historical roster/season-state sync — completion gate', () =
     const result = await syncSleeperHistoricalSeasonStateAfterImport({ leagueId: 'league-1' })
 
     expect(result.seasonsConsidered).toBe(3)
+    // Only 2024. 2025 is still being played and 2023 was never imported.
+    expect(result.seasonsSkippedAlreadyComplete).toBe(1)
+    expect(result.providerCallsAvoided).toBe(1)
+    expect(getLeagueUsers).toHaveBeenCalledTimes(2)
+    expect(getLeagueRosters).toHaveBeenCalledTimes(2)
+  })
+
+  it('🛑 REGRESSION: SEASON_END_ROSTER_SNAPSHOT_PERIOD must not freeze the live season', async () => {
+    // The season-state half of the same bug: a mid-season import stamped "season end" rows for a
+    // season that had not ended, and every later run then skipped it.
+    rosterSnapshotFindFirst.mockResolvedValue({ id: 'existing' })
+
+    const result = await syncSleeperHistoricalSeasonStateAfterImport({ leagueId: 'league-1' })
+
     expect(result.seasonsSkippedAlreadyComplete).toBe(2)
-    expect(result.providerCallsAvoided).toBe(2)
-    expect(getLeagueUsers).toHaveBeenCalledTimes(1)
     expect(getLeagueRosters).toHaveBeenCalledTimes(1)
+    expect(getLeagueRosters).toHaveBeenCalledWith('lg-2025')
   })
 
   it('force=true re-fetches every season even when a roster snapshot already exists', async () => {
