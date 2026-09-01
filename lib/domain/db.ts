@@ -24,16 +24,38 @@
  * T-102"). The moment policies land, running as the owner silently reverts
  * isolation to nothing.
  *
- * That is not left to vigilance. T-102's first assertion is
- * `current_user = 'commish_app'`, and it is specified to "fail loudly
- * otherwise" precisely so this fallback cannot survive into a world where it
- * matters. `resolveConnectionUrl()` below also records which one it took, so
- * the state is inspectable rather than inferred.
+ * ✅ THAT IS NO LONGER LEFT TO VIGILANCE — `./isolationGuard.ts`, called by
+ * `withTenant` before it sets the GUC or runs the callback.
+ *
+ * 🛑 IT WAS LEFT TO VIGILANCE FOR A WHILE, WHICH IS WHY THIS PARAGRAPH IS
+ * WORTH READING RATHER THAN SKIMMING. This header used to end "That is not left
+ * to vigilance. T-102's first assertion is `current_user = 'commish_app'`, and
+ * it is specified to fail loudly otherwise" — written in the future tense about
+ * a protection nobody had built. T-102's policies were applied to production on
+ * 2026-08-31 (9 tables, 27 policies), so the condition this fallback's safety
+ * argument turns on had already occurred, and the only occurrence of
+ * `current_user` in this file was the sentence promising to check it.
+ *
+ * ⚠ AND THE REAL FAILURE IS NOT THE ONE THE PARAGRAPH ABOVE DESCRIBES.
+ * `lib/prisma.ts` does NOT own the tables any more — T-001's transfer moved all
+ * 688 to `commish_migrate`, and `commish_app` owns zero. The role the app
+ * connects as is a MEMBER of the owner, so it matches the maintenance policy
+ * (`FOR ALL TO commish_migrate, commish_purge USING (true)`) and RLS returns
+ * every row. Measured on a Neon branch: `app.tenant_id` set to a tenant owning
+ * one row returned five. Inheriting the owner and being the owner are different
+ * causes with identical symptoms, and only one of them is written down in
+ * TENANCY.md §3.1.
+ *
+ * So the guard asks whether this connection CAN be constrained — bypassrls,
+ * superuser, membership in a `USING (true)` role — rather than whether it is
+ * called `commish_app`. `resolveConnectionUrl()` below records which URL it
+ * took, and the guard reports it when it refuses.
  */
 
 import { PrismaClient, Prisma } from '@prisma/client'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { TenantMismatchError } from './errors'
+import { createIsolationAssertion, type RawQueryable } from './isolationGuard'
 import type { TenantRole } from './roles'
 
 export { TenantMismatchError } from './errors'
@@ -108,7 +130,22 @@ function getClient(): PrismaClient {
  * Postgres. It does NOT export the client, so invariant 2 holds: there is still
  * no way to get a bare client out of this module.
  */
-export function createWithTenant(getDb: () => Pick<PrismaClient, '$transaction'>) {
+export function createWithTenant(
+  getDb: () => Pick<PrismaClient, '$transaction'>,
+  /**
+   * ⚠ REQUIRED, WITH NO DEFAULT, ON PURPOSE.
+   *
+   * The obvious alternatives both fail the same way. A default of "the real assertion" would
+   * break every fake-client test, so someone would reach for the second one: skip the check when
+   * the tx has no `$queryRawUnsafe`. That is a guard that disables itself precisely when it is
+   * handed something it does not recognise — the check-that-cannot-fail shape in the root
+   * CLAUDE.md, in the one module where it costs cross-tenant reads.
+   *
+   * Making it a parameter forces every construction site to say what it wants. Tests pass a
+   * no-op and state why; production passes the real one.
+   */
+  assertIsolationEnforceable: (tx: RawQueryable) => Promise<void>,
+) {
   return async function withTenant<T>(
     tenantId: string,
     fn: (tx: Tx) => Promise<T>,
@@ -148,6 +185,26 @@ export function createWithTenant(getDb: () => Pick<PrismaClient, '$transaction'>
         // ${tenantId}; rewriting this as string interpolation to "simplify" it
         // would put caller-controlled text into a statement that sets the RLS
         // scope. Do not.
+        /*
+         * ⚠ BEFORE set_config, NOT AFTER, AND BEFORE `fn` RUNS.
+         *
+         * This is the assertion the header above promises and nothing implemented — T-102's
+         * "fail loudly otherwise". Its policies were applied to production on 2026-08-31, so the
+         * window the DATABASE_URL fallback's safety argument depends on ("before RLS exists there
+         * is nothing to bypass") has closed.
+         *
+         * The failure it catches is NOT "the app owns the tables": ownership was transferred, and
+         * `commish_app` owns zero. It is that the role the app connects as INHERITS
+         * `commish_migrate` and so matches the maintenance policy `USING (true)`. Measured on a
+         * branch: `app.tenant_id` set to a tenant owning 1 row returned 5. Setting the GUC
+         * succeeds, the read succeeds, any test asserting `withTenant` was called passes, and
+         * every tenant's rows come back.
+         *
+         * Ordering it first means a connection that cannot isolate never reaches `fn` at all —
+         * so there is no window in which a query runs unscoped while the guard is "about to"
+         * complain. See lib/domain/isolationGuard.ts.
+         */
+        await assertIsolationEnforceable(tx)
         await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
         return als.run({ tenantId, tx }, () => fn(tx))
       },
@@ -177,7 +234,10 @@ export function createWithTenant(getDb: () => Pick<PrismaClient, '$transaction'>
  * Note there is no `tenantId` in that `where`. That is the design: RLS supplies
  * it. An app-level filter is a convenience layer, not the control (§2).
  */
-export const withTenant = createWithTenant(getClient)
+export const withTenant = createWithTenant(
+  getClient,
+  createIsolationAssertion(getConnectionSource),
+)
 
 // ─── The bootstrap: which tenant is this user in? ────────────────────────────
 
