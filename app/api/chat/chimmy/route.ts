@@ -1621,8 +1621,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * Losing the section is the correct outcome when it is late — the packet is ADDITIVE while the
    * existing grounding still runs, so a timeout costs freshness annotations, not facts.
    */
+  /**
+   * 🛑 THREE DIFFERENT OUTCOMES USED TO COLLAPSE INTO ONE OBSERVABLE NOTHING.
+   *
+   * The ceiling resolves `null`, an empty serialization resolves `null`, and the `.catch` resolves
+   * `null`. All three then produce no prompt section and no `dataSources` entry, so from outside
+   * they are the same event — and one of them means "we paid to build a packet and threw it away
+   * on every turn", which needs the opposite response from the other two.
+   *
+   * ⚠ THAT IS §2.20's FAILURE IN THIS ROUTE'S OWN WIRING: an absence that does not announce
+   * itself. The packet was given a taxonomy of named gaps precisely so a reader could tell
+   * "missing" from "broken". What surrounds it had none.
+   *
+   * ⚠ AND THE TIMEOUT DOES NOT CANCEL THE WORK. `Promise.race` abandons the result; it does not
+   * stop the producers, so every read still completes and is still billed. A packet that is
+   * routinely late is therefore strictly WORSE than one that is switched off — and switched off
+   * is exactly what it looks like from outside.
+   */
+  type GroundingOutcome = 'off' | 'ok' | 'empty' | 'timeout' | 'error'
+  /*
+   * ⚠ A HOLDER RATHER THAN TWO `let`s, AND THAT IS A TYPE-SYSTEM REASON NOT A STYLE ONE.
+   * TypeScript narrows `let x: GroundingOutcome = 'off'` to the literal `'off'` and does not
+   * track the assignments made inside the callbacks below, so every comparison against another
+   * member is reported as impossible (TS2367 — "'off' and 'timeout' have no overlap"). Property
+   * narrowing is invalidated by the intervening calls, so a holder is correct without a cast.
+   * A cast would have silenced the same diagnostic while teaching the next reader nothing.
+   */
+  const grounding: { outcome: GroundingOutcome; buildMs: number | null } = {
+    outcome: 'off',
+    buildMs: null,
+  }
+
   const withPacketCeiling = <T,>(p: Promise<T>, ms: number): Promise<T | null> =>
-    Promise.race([p, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))])
+    Promise.race([
+      p,
+      new Promise<null>((resolve) =>
+        setTimeout(() => {
+          grounding.outcome = 'timeout'
+          resolve(null)
+        }, ms),
+      ),
+    ])
 
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId
@@ -1635,12 +1674,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           want: { projections: true, leagueRules: true },
         })
           .then((packet) => {
+            grounding.buildMs = packet.meta.durationMs
             const text = serializeDecisionOsGroundingForPrompt(packet)
+            // ⚠ Never overwrite a verdict the ceiling has already reached. The race abandons this
+            // promise but does not stop it, so this callback still runs AFTER a timeout — and
+            // reporting 'ok' for a packet nobody used is worse than reporting nothing at all.
+            if (grounding.outcome !== 'timeout') grounding.outcome = text.length > 0 ? 'ok' : 'empty'
             return text.length > 0 ? text : null
           })
           // Never fail the chat turn for grounding. An unavailable packet is one missing section,
           // and every other source in this handler degrades the same way.
-          .catch(() => null),
+          .catch(() => {
+            if (grounding.outcome !== 'timeout') grounding.outcome = 'error'
+            return null
+          }),
           3000,
         )
       : Promise.resolve(null)
@@ -1803,6 +1850,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Declared so a response can be attributed. A grounding source the answer used but does not
   // name is untraceable afterwards, which is the whole reason dataSources exists.
   if (decisionOsGrounding) dataSources.push('decision_os_grounding_packet')
+  /*
+   * ⚠ A NON-OK OUTCOME IS ATTRIBUTED TOO, which is the opposite of how every other source on
+   * this line behaves — deliberately. The others are additive niceties whose absence is
+   * unremarkable. This one is a flagged feature somebody has to be able to make a decision about,
+   * and "produced nothing", "was too slow" and "threw" are three different decisions.
+   */
+  else if (grounding.outcome !== 'off') dataSources.push(`decision_os_grounding_${grounding.outcome}`)
+
+  if (grounding.outcome === 'timeout') {
+    // Loud, because the cost is paid on EVERY turn and nothing else would surface it.
+    console.warn(
+      `[chimmy] Decision OS grounding exceeded its 3000ms ceiling and was discarded (league ${leagueId}). ` +
+        `The producers still ran and were still billed.`,
+    )
+  } else if (grounding.buildMs != null && grounding.buildMs >= 2000) {
+    // The near miss is the early warning. By the time it times out it has been costing for a
+    // while, so the threshold sits below the ceiling rather than at it.
+    console.warn(
+      `[chimmy] Decision OS grounding took ${grounding.buildMs}ms against a 3000ms ceiling (league ${leagueId}).`,
+    )
+  }
   if (personalizationDirectives) dataSources.push('chimmy_personalization')
   if (sourceReferences.length > 0) dataSources.push('league_source_references')
   if (staleness.warning) dataSources.push('stale_data_warning')
