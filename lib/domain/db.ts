@@ -55,7 +55,12 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { TenantMismatchError } from './errors'
-import { createIsolationAssertion, type RawQueryable } from './isolationGuard'
+import {
+  ISOLATION_FACTS_SQL,
+  createIsolationAssertion,
+  type IsolationFactsReader,
+  type IsolationFactsRow,
+} from './isolationGuard'
 import type { TenantRole } from './roles'
 
 export { TenantMismatchError } from './errors'
@@ -144,7 +149,7 @@ export function createWithTenant(
    * Making it a parameter forces every construction site to say what it wants. Tests pass a
    * no-op and state why; production passes the real one.
    */
-  assertIsolationEnforceable: (tx: RawQueryable) => Promise<void>,
+  assertIsolationEnforceable: (readFacts: IsolationFactsReader) => Promise<void>,
 ) {
   return async function withTenant<T>(
     tenantId: string,
@@ -204,7 +209,19 @@ export function createWithTenant(
          * so there is no window in which a query runs unscoped while the guard is "about to"
          * complain. See lib/domain/isolationGuard.ts.
          */
-        await assertIsolationEnforceable(tx)
+        /*
+         * ⚠ THE RAW STATEMENT LIVES HERE, NOT IN THE GUARD, AND ESLINT IS WHY.
+         * Invariant 1 confines raw SQL to this file and `lib/db/admin/`: "raw queries bypass the
+         * Prisma extensions entirely, so tenancy and soft-delete scoping simply do not apply to
+         * them." The guard originally ran the statement itself and tripped that rule — correctly,
+         * even though this particular query reads `pg_roles` and `pg_policy` where tenancy
+         * scoping is meaningless. The invariant is about where raw SQL may live, and a security
+         * module is the last place to argue for an exception. So the guard stays pure and takes
+         * a reader; the one statement it needs is right here.
+         */
+        await assertIsolationEnforceable(() =>
+          tx.$queryRawUnsafe<IsolationFactsRow[]>(ISOLATION_FACTS_SQL),
+        )
         await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
         return als.run({ tenantId, tx }, () => fn(tx))
       },

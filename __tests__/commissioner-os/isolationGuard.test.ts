@@ -114,7 +114,7 @@ describe('🛑 the real production connection, measured 2026-09-01', () => {
 
   it('is refused, and named by its most severe cause', async () => {
     const assert = createIsolationAssertion(() => 'DATABASE_URL')
-    const err = await assert({ $queryRawUnsafe: async () => [PRODUCTION_ROW] } as never).catch((e) => e)
+    const err = await assert(async () => [PRODUCTION_ROW]).catch((e) => e)
     expect(err).toBeInstanceOf(IsolationNotEnforceableError)
     // BYPASSRLS is checked before membership on purpose: it is the stronger statement, and
     // reporting "member of commish_migrate" would send someone to fix the lesser problem.
@@ -144,32 +144,32 @@ describe('createIsolationAssertion — behaviour against a fake connection', () 
   const src = () => 'DATABASE_URL'
 
   it('lets a clean connection through, and asks Postgres exactly once', async () => {
-    const $queryRawUnsafe = vi.fn(async () => [row()])
+    const readFacts = vi.fn(async () => [row()])
     const assert = createIsolationAssertion(src)
-    await assert({ $queryRawUnsafe } as never)
-    await assert({ $queryRawUnsafe } as never)
-    expect($queryRawUnsafe).toHaveBeenCalledTimes(1)
+    await assert(readFacts)
+    await assert(readFacts)
+    expect(readFacts).toHaveBeenCalledTimes(1)
   })
 
   it('🛑 throws IsolationNotEnforceableError, and keeps throwing', async () => {
-    const $queryRawUnsafe = vi.fn(async () => [row({ role: 'neondb_owner', in_migrate: true })])
+    const readFacts = vi.fn(async () => [row({ role: 'neondb_owner', in_migrate: true })])
     const assert = createIsolationAssertion(src)
 
-    await expect(assert({ $queryRawUnsafe } as never)).rejects.toBeInstanceOf(
+    await expect(assert(readFacts)).rejects.toBeInstanceOf(
       IsolationNotEnforceableError,
     )
     // Caching a FAILURE matters as much as caching a success: a guard that throws once and then
     // passes is worse than no guard, because the first request papers over every later one.
-    await expect(assert({ $queryRawUnsafe } as never)).rejects.toBeInstanceOf(
+    await expect(assert(readFacts)).rejects.toBeInstanceOf(
       IsolationNotEnforceableError,
     )
-    expect($queryRawUnsafe).toHaveBeenCalledTimes(1)
+    expect(readFacts).toHaveBeenCalledTimes(1)
   })
 
   it('carries the facts on the error, so the operator is not left guessing', async () => {
-    const $queryRawUnsafe = async () => [row({ role: 'neondb_owner', in_migrate: true })]
+    const readFacts = async () => [row({ role: 'neondb_owner', in_migrate: true })]
     const assert = createIsolationAssertion(src)
-    const err = await assert({ $queryRawUnsafe } as never).catch((e) => e)
+    const err = await assert(readFacts).catch((e) => e)
     expect(err).toBeInstanceOf(IsolationNotEnforceableError)
     expect((err as IsolationNotEnforceableError).facts.role).toBe('neondb_owner')
     expect(err.message).toContain('DATABASE_URL')
@@ -179,29 +179,29 @@ describe('createIsolationAssertion — behaviour against a fake connection', () 
   it('🛑 an unanswerable question is a REFUSAL, not a pass', async () => {
     // If the catalogue query itself fails we do not know whether isolation holds. "Could not
     // check" reading the same as "fine" is the exact shape this module exists to refuse.
-    const $queryRawUnsafe = vi.fn(async () => {
+    const readFacts = vi.fn(async () => {
       throw new Error('permission denied for table pg_policy')
     })
     const assert = createIsolationAssertion(src)
-    await expect(assert({ $queryRawUnsafe } as never)).rejects.toThrow(/could not determine/i)
+    await expect(assert(readFacts)).rejects.toThrow(/could not determine/i)
   })
 
   it('a transient failure is NOT cached — it is re-asked', async () => {
     let calls = 0
-    const $queryRawUnsafe = vi.fn(async () => {
+    const readFacts = vi.fn(async () => {
       calls += 1
       if (calls === 1) throw new Error('connection reset')
       return [row()]
     })
     const assert = createIsolationAssertion(src)
-    await expect(assert({ $queryRawUnsafe } as never)).rejects.toThrow()
-    await expect(assert({ $queryRawUnsafe } as never)).resolves.toBeUndefined()
+    await expect(assert(readFacts)).rejects.toThrow()
+    await expect(assert(readFacts)).resolves.toBeUndefined()
   })
 
   it('refuses when the query returns no row', async () => {
-    const $queryRawUnsafe = async () => []
+    const readFacts = async () => []
     const assert = createIsolationAssertion(src)
-    await expect(assert({ $queryRawUnsafe } as never)).rejects.toThrow(/no row returned/i)
+    await expect(assert(readFacts)).rejects.toThrow(/no row returned/i)
   })
 })
 
