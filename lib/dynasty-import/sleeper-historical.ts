@@ -27,6 +27,9 @@ export async function discoverSleeperSeasons(
     platformLeagueId: String(h.league_id),
     season: parseInt(String(h.season), 10) || 0,
     provider: "sleeper",
+    // Sleeper already tells us whether the season ended; dropping it here is what forced the
+    // orchestrator's gate to guess from row existence instead.
+    status: h.status ?? null,
   }));
 }
 

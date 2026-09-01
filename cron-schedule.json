@@ -203,6 +203,14 @@
     {
       "path": "/api/cron/morning-briefing",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/sleeper-historical-refresh",
+      "schedule": "20 3 * * *"
+    },
+    {
+      "path": "/api/cron/sleeper-historical-refresh",
+      "schedule": "20 15 * * *"
     }
   ]
 }
