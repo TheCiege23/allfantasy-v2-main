@@ -121,7 +121,24 @@ describe("RosterContextProvider", () => {
     expect(res.data?.bench.map((p) => p.playerId)).toEqual(["p-rb2", "p-wr-ir"])
   })
 
-  it("falls back name=playerId when name is missing", async () => {
+  /*
+   * ── 🛑 THIS TEST USED TO ASSERT THE BUG, BY NAME ──────────────────────────────────────────
+   *
+   * It was called "falls back name=playerId when name is missing" and expected
+   * `starters[0].name` to equal `"p-nameless"` — the player's own id. That is not a fallback,
+   * it is a fabrication, and blessing it in a test is why it reached production: measured on a
+   * live dynasty league 2026-09-01, all 27 players came back named after their ids, and Chimmy
+   * was asked to answer lineup questions about someone called "6804".
+   *
+   * ⚠ CHANGING A TEST TO MAKE YOUR OWN CHANGE PASS NEEDS A REASON, SO HERE IT IS: the assertion
+   * encoded a defect rather than a requirement. `Roster.playerData` holds the provider's bare
+   * ids BY DESIGN — the schema notes that resolving at ingestion would silently discard everyone
+   * who fails to bridge — so "name is missing" is the NORMAL case here, not an edge one. The old
+   * expectation made the normal case indistinguishable from a real name.
+   *
+   * The scenario is kept exactly as written; only the expectation is inverted.
+   */
+  it("🛑 leaves name null when it cannot be resolved — an id is not a name", async () => {
     rosterFindFirstMock.mockResolvedValueOnce({
       playerData: {
         lineup_sections: {
@@ -135,7 +152,12 @@ describe("RosterContextProvider", () => {
     })
     const provider = new RosterContextProvider()
     const res = await provider.load(baseRequest())
-    expect(res.data?.starters[0].name).toBe("p-nameless")
+    // Null, never the id back again. The grounding packet turns an all-null roster into
+    // `unresolved_identity` — a gap a model can see, rather than a name it will trust.
+    expect(res.data?.starters[0].name).toBeNull()
+    // ⚠ The control: the row must still be THERE. A fix that dropped unresolvable players would
+    // trade a false name for a missing team-mate, which is the worse of the two.
+    expect(res.data?.starters[0].playerId).toBe("p-nameless")
   })
 
   it("returns ok:false with null data when Roster.findFirst throws synchronously", async () => {
