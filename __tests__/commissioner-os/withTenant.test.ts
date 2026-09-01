@@ -49,10 +49,23 @@ function makeFakeClient() {
   return { client: { $transaction }, $transaction, tx, boundValues, transactionOptions }
 }
 
+/**
+ * The isolation assertion, stubbed out.
+ *
+ * ⚠ THIS SUITE IS ABOUT CONTROL FLOW, NOT ABOUT ISOLATION, AND THE STUB IS HOW IT SAYS SO.
+ * `createWithTenant` takes the assertion as a REQUIRED argument precisely so this choice is
+ * visible at every construction site. The alternative — having the guard skip itself when the
+ * fake tx has no `$queryRawUnsafe` — would disable it exactly when handed something unfamiliar,
+ * which is the failure the guard exists to prevent, one layer up.
+ *
+ * What the assertion itself does is covered in `isolationGuard.test.ts`, against every branch.
+ */
+const noIsolationCheck = async () => {}
+
 describe('T-002 · withTenant', () => {
   it('opens exactly one transaction and binds the tenantId as a parameter', async () => {
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     const result = await withTenant('tenant-a', async () => 'ok')
 
@@ -69,7 +82,7 @@ describe('T-002 · withTenant', () => {
     // Every read now sits in a transaction, so the 5s Prisma default is too
     // tight. Pinned here so a silent change to either shows up as a test diff.
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     await withTenant('tenant-a', async () => null)
 
@@ -81,7 +94,7 @@ describe('T-002 · withTenant', () => {
     // second connection, which then blocks on the outer transaction's
     // SELECT … FOR UPDATE — a self-deadlock that only appears under load.
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     let outerTx: unknown
     let innerTx: unknown
@@ -107,7 +120,7 @@ describe('T-002 · withTenant', () => {
     // tenant's RLS scope — reads returning the wrong tenant's rows and writes
     // landing in the wrong tenant, with no error anywhere.
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     const attempt = withTenant('tenant-a', async () => {
       return withTenant('tenant-b', async () => 'should not reach here')
@@ -123,7 +136,7 @@ describe('T-002 · withTenant', () => {
     // would be treated as re-entry and silently reuse a transaction that has
     // already committed.
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     await withTenant('tenant-a', async () => null)
     await withTenant('tenant-b', async () => null)
@@ -137,7 +150,7 @@ describe('T-002 · withTenant', () => {
     // request on this async context would then look like re-entry into a dead
     // transaction. AsyncLocalStorage.run unwinds on throw, and this pins it.
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     await expect(
       withTenant('tenant-a', async () => {
@@ -154,7 +167,7 @@ describe('T-002 · withTenant', () => {
     // value matches NOTHING. That is safe, but it presents as "the database is
     // empty" — one of the most expensive bugs to read. Fail at the call site.
     const f = makeFakeClient()
-    const withTenant = createWithTenant(() => f.client as any)
+    const withTenant = createWithTenant(() => f.client as any, noIsolationCheck)
 
     await expect(withTenant('', async () => null)).rejects.toThrow(/non-empty tenantId/)
     expect(f.$transaction).not.toHaveBeenCalled()
