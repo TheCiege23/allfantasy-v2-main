@@ -49,6 +49,60 @@ const defaultDeps: Required<ChimmyGroundingDeps> = {
   },
 }
 
+/**
+ * Why commissioner grounding was or was not produced.
+ *
+ * 🛑 `resolveChimmyCommissionerGrounding` BELOW RETURNS `null` FOR FIVE DIFFERENT REASONS — no
+ * league, not a commissioner-intelligence question, no user, NOT A COMMISSIONER, and grounding
+ * unavailable — and a caller cannot tell them apart. That is fine for its own use, which only
+ * needs "is there text to add", and it is why Decision OS's `not_entitled` gap reason had no
+ * producer: the information is discarded one layer below where D8 needs it.
+ *
+ * "You are not this league's commissioner" and "you did not ask a commissioner question" are
+ * completely different sentences to a user, and only one of them is worth saying.
+ */
+export type CommissionerGroundingOutcome =
+  | { status: 'ok'; text: string }
+  /** The question was not about commissioner intelligence. Not a gap — nothing was wanted. */
+  | { status: 'not_asked' }
+  /** 🛑 The user is not a commissioner of this league. This is the real `not_entitled`. */
+  | { status: 'not_entitled' }
+  /** Asked for, permitted, and the service could not produce it. */
+  | { status: 'unavailable' }
+
+/**
+ * The same resolution, with the reason preserved.
+ *
+ * ⚠ ADDITIVE ON PURPOSE. `resolveChimmyCommissionerGrounding` keeps its exact signature and
+ * behaviour because `/api/chimmy` already calls it; changing that function to return a union would
+ * be a breaking edit to a live path for the benefit of a new one. Both share `defaultDeps`, so
+ * there is one implementation of the access rule rather than two.
+ */
+export async function resolveCommissionerGroundingOutcome(
+  args: ChimmyGroundingArgs,
+  deps: ChimmyGroundingDeps = {},
+): Promise<CommissionerGroundingOutcome> {
+  const d = { ...defaultDeps, ...deps }
+  try {
+    const leagueId = args.leagueId?.trim()
+    if (!leagueId) return { status: 'not_asked' }
+    if (!args.commissionerFlag && !detectCommissionerIntelligenceIntent(args.question)) {
+      return { status: 'not_asked' }
+    }
+    const userId = args.userId ?? (await d.resolveUserId())
+    if (!userId) return { status: 'not_asked' }
+
+    if (!(await d.assertCommissioner(leagueId, userId))) return { status: 'not_entitled' }
+
+    const grounding = await d.buildGrounding(leagueId, userId)
+    return grounding.available ? { status: 'ok', text: grounding.text } : { status: 'unavailable' }
+  } catch {
+    // Never break the chat turn — but say it was unavailable rather than pretending it was
+    // never asked for, which would hide a real failure behind a legitimate-looking silence.
+    return { status: 'unavailable' }
+  }
+}
+
 export async function resolveChimmyCommissionerGrounding(
   args: ChimmyGroundingArgs,
   deps: ChimmyGroundingDeps = {},

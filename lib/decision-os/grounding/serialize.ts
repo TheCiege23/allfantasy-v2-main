@@ -56,6 +56,7 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Market player values', packet.marketValues as GroundedSlice<unknown>],
     ['Devy/college values', packet.devyValues as GroundedSlice<unknown>],
     ['Projections', packet.projections as GroundedSlice<unknown>],
+    ['Commissioner intelligence', packet.commissionerIntelligence as GroundedSlice<unknown>],
     // The eight graded context slices (4.3). Rendered alongside the rest because a reader should
     // not have to know which subsystem produced a fact to know whether it is safe to use.
     ...(packet.contextFacts
@@ -91,10 +92,23 @@ export function serializeDecisionOsGroundingForPrompt(
      * block says "Always include this warning when answering" for the same reason. Telling the
      * model a fact is missing invites it to fill the hole; telling it what to SAY does not.
      */
+    /*
+     * ⚠ THIS COMPOSES WITH THE SYSTEM PROMPT'S EXISTING CONVENTION RATHER THAN REPLACING IT.
+     * `chimmy_system_prompt.md` already carries a missing-data scheme — "Honest about uncertainty
+     * — when data is missing or confidence is low, say so clearly and give a confidence score",
+     * with explicit deductions (missing player data -20%, missing injury report -15%, missing
+     * league settings -10%).
+     *
+     * A second, differently-worded rule for the same situation is how this codebase ends up with
+     * three league-health scorers. So the instruction below tells the model to apply the scheme it
+     * ALREADY has to these specific gaps, and adds only the part the prompt cannot know: the
+     * REASON and the REMEDY, which come from the packet.
+     */
     lines.push(
-      'If the user asks about anything listed as missing, say plainly that you do not have it, ' +
-        'give the reason above, and offer the fix. Do not estimate it, and do not answer from ' +
-        'general knowledge as though it were their league data.',
+      'These are missing data for your confidence score — apply your usual deductions. When the ' +
+        'user asks about any of them, say plainly that you do not have it, give the reason above, ' +
+        'and offer the fix. Do not estimate it, and do not answer from general knowledge as ' +
+        'though it were their league data.',
     )
   }
 
