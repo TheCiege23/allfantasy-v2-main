@@ -10,7 +10,10 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { buildTransactionFacts } from '@/lib/league-import/sleeper/SleeperHistoricalTransactionSyncService'
+import {
+  buildTransactionFacts,
+  firstWeekToFetch,
+} from '@/lib/league-import/sleeper/SleeperHistoricalTransactionSyncService'
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 
 const BASE = {
@@ -197,5 +200,39 @@ describe('the control: these assertions can fail', () => {
     // that would collapse every roster of a trade into a single row — this fails.
     expect(rows[0].transactionId).not.toBe('abc123')
     expect(() => expect(rows[0].transactionId).toBe('abc123')).toThrow()
+  })
+})
+
+describe('firstWeekToFetch — the incremental window', () => {
+  it('walks all 18 on a first pass, because there is nothing to be incremental about', () => {
+    expect(firstWeekToFetch({ hasExistingRows: false, currentWeek: 12 })).toBe(1)
+  })
+
+  it('re-reads the current week AND the one before it', () => {
+    // Sleeper backdates a late waiver settlement into the week it belonged to. A strict
+    // "current week only" window would lose those permanently rather than merely late; one
+    // extra request removes the whole class of miss.
+    expect(firstWeekToFetch({ hasExistingRows: true, currentWeek: 12 })).toBe(11)
+  })
+
+  it('🛑 an UNKNOWN week widens to everything — absence of evidence is not evidence', () => {
+    // getNflState() returning null must never be read as "nothing changed". The expensive
+    // direction is the safe one.
+    expect(firstWeekToFetch({ hasExistingRows: true, currentWeek: null })).toBe(1)
+    expect(firstWeekToFetch({ hasExistingRows: true, currentWeek: Number.NaN })).toBe(1)
+  })
+
+  it('never goes below 1 or above the last leg', () => {
+    expect(firstWeekToFetch({ hasExistingRows: true, currentWeek: 1 })).toBe(1)
+    expect(firstWeekToFetch({ hasExistingRows: true, currentWeek: 0 })).toBe(1)
+    expect(firstWeekToFetch({ hasExistingRows: true, currentWeek: 99 })).toBe(17)
+  })
+
+  it('the control: it actually narrows for a mid-season league', () => {
+    // Without this, every assertion above would pass against a function that returned 1 always
+    // — which is precisely the "safe" bug that would silently keep the 18-week cost.
+    const wide = firstWeekToFetch({ hasExistingRows: false, currentWeek: 12 })
+    const narrow = firstWeekToFetch({ hasExistingRows: true, currentWeek: 12 })
+    expect(narrow).toBeGreaterThan(wide)
   })
 })

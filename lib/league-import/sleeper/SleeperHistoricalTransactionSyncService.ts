@@ -53,12 +53,37 @@
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
-import { getLeagueTransactions, type SleeperTransaction } from '@/lib/sleeper-client'
+import { getLeagueTransactions, getNflState, type SleeperTransaction } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 /** Sleeper reports a regular season plus playoffs inside 18 legs. */
 const MAX_WEEK = 18
+
+/**
+ * The first week worth re-reading for a season we already hold rows for.
+ *
+ * ── ⚠ WHY NOT JUST THE CURRENT WEEK ─────────────────────────────────────────────────────────
+ * Sleeper backdates a late waiver settlement into the week it belonged to, so a strict
+ * "current week only" window would lose those permanently rather than merely late. One week of
+ * overlap costs a single request and removes that whole class of miss.
+ *
+ * 🛑 AND AN UNKNOWN WEEK WIDENS, NEVER NARROWS. `getNflState()` returning null is not evidence
+ * that nothing changed — it is the absence of evidence, and the two must not read the same. The
+ * expensive direction is the safe one, so this falls back to walking everything.
+ *
+ * Pure so every branch is testable without a database or a provider.
+ */
+export function firstWeekToFetch(args: {
+  hasExistingRows: boolean
+  currentWeek: number | null
+}): number {
+  // A first pass has nothing to be incremental about.
+  if (!args.hasExistingRows) return 1
+  const wk = args.currentWeek
+  if (typeof wk !== 'number' || !Number.isFinite(wk) || wk <= 1) return 1
+  return Math.max(1, Math.min(wk, MAX_WEEK) - 1)
+}
 
 export interface SleeperHistoricalTransactionSyncSummary {
   attempted: boolean
@@ -268,20 +293,48 @@ export async function syncSleeperHistoricalTransactionsAfterImport(args: {
        * PLAYED at the moment of import. `shouldSkipImportedSeason` asks the provider whether the
        * season is actually over. See lib/league-import/seasonCompletion.ts.
        */
-      if (shouldSkipImportedSeason({ force: args.force, league: seasonLeague.league })) {
-        const existing = await prisma.transactionFact.findFirst({
+      const existingRowsForSeason = Boolean(
+        await prisma.transactionFact.findFirst({
           where: { leagueId: league.id, season: seasonLeague.season },
           select: { transactionId: true },
-        })
-        if (existing) {
+        }),
+      )
+
+      if (shouldSkipImportedSeason({ force: args.force, league: seasonLeague.league })) {
+        if (existingRowsForSeason) {
           seasonsSkippedAlreadyComplete += 1
           providerCallsAvoided += MAX_WEEK
           continue
         }
       }
 
+      /*
+       * ── ⚠ AN IN-PROGRESS SEASON WE ALREADY HOLD ONLY GAINS TRANSACTIONS IN RECENT WEEKS ────
+       *
+       * Re-reading weeks 1-18 of the LIVE season every four hours re-learns seventeen weeks of
+       * settled history to discover one week of new rows. The completion gate already skips
+       * FINISHED seasons entirely; this is the same idea one level down, for the season that
+       * cannot be skipped.
+       *
+       * Only applied when rows already exist for the season — a first pass still walks all 18,
+       * because there is nothing to be incremental about. And it deliberately re-reads the
+       * PREVIOUS week as well as the current one: Sleeper backdates a late waiver settlement into
+       * the week it belonged to, so a strict "current week only" window would lose those
+       * permanently rather than late.
+       *
+       * ⚠ IF THE WEEK IS UNKNOWN, IT WALKS EVERYTHING. `getNflState` returning null must widen
+       * the window, never narrow it — a missing state read is not evidence that nothing changed,
+       * and the expensive direction is the safe one.
+       */
+      const nflState = existingRowsForSeason ? await getNflState() : null
+      const firstWeek = firstWeekToFetch({
+        hasExistingRows: existingRowsForSeason,
+        currentWeek: typeof nflState?.week === 'number' ? nflState.week : null,
+      })
+      if (firstWeek > 1) providerCallsAvoided += firstWeek - 1
+
       let sawAnyFeed = false
-      for (let week = 1; week <= MAX_WEEK; week++) {
+      for (let week = firstWeek; week <= MAX_WEEK; week++) {
         const weekly = await getLeagueTransactions(seasonLeague.externalLeagueId, week)
         if (!Array.isArray(weekly)) continue
         sawAnyFeed = true
