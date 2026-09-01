@@ -67,6 +67,33 @@ not be a member of any other role here. Managed Postgres default roles
 (Supabase `postgres`, RDS `rds_superuser`) often carry `BYPASSRLS` — assert
 against it rather than assuming.
 
+> 🛑 **MEASURED 2026-09-01: NEON'S `neondb_owner` CARRIES `BYPASSRLS`, AND THAT
+> IS THE ROLE THIS APP CONNECTS AS.** The list above named Supabase and RDS and
+> not Neon, which is the provider we are actually on. Run against the All Fantasy
+> project (Postgres 17):
+>
+> ```
+> role            neondb_owner
+> bypasses_rls    true      ← policies are never evaluated
+> is_superuser    false
+> in_migrate      true
+> in_purge        true
+> policies_exist  true
+> ```
+>
+> ⚠ **THREE INDEPENDENT REASONS, AND THE DOCUMENTED ONE IS THE WEAKEST.** §3.1
+> anticipates "the app owns the tables"; `prisma/migrations-pending/README.md`
+> found "the app INHERITS the owner". Both are real, and neither is what would
+> bite first — `BYPASSRLS` means RLS is skipped before any policy is consulted.
+> So the 9 tables and 27 policies applied by T-102 currently do nothing for the
+> application connection, and would not start doing anything by fixing the
+> membership alone.
+>
+> This is asserted at runtime now rather than remembered: `lib/domain/
+> isolationGuard.ts` refuses to run a tenant-scoped query on a connection that
+> reports any of the three, and `withTenant` calls it before it sets
+> `app.tenant_id` or runs the callback.
+
 ### 3.2 Policies: `FORCE`, scoped `TO` a role
 
 ```sql

@@ -90,6 +90,45 @@ describe('isolationFailureReason — the verdict', () => {
   })
 })
 
+describe('🛑 the real production connection, measured 2026-09-01', () => {
+  /*
+   * Not invented. This is the exact row the shipped ISOLATION_FACTS_SQL returned when run
+   * against the All Fantasy Neon project (icy-field-51189449, Postgres 17) — which also proves
+   * the query itself parses and executes, including `to_regrole` and the oid form of
+   * `pg_has_role`, on the real server rather than only against fakes.
+   *
+   * ⚠ IT IS WORSE THAN THE DOCUMENTED FAILURE. TENANCY.md §3.1 anticipates "the app's role owns
+   * the tables" and the migrations README found "the app's role INHERITS the owner". Both are
+   * true-ish here, and neither is the most severe fact: `neondb_owner` carries BYPASSRLS, so
+   * policies are not evaluated at all. Three independent reasons this connection cannot be
+   * isolated, and RLS on 9 tables with 27 policies does nothing for any of them.
+   */
+  const PRODUCTION_ROW: IsolationFactsRow = {
+    role: 'neondb_owner',
+    bypasses_rls: true,
+    is_superuser: false,
+    in_migrate: true,
+    in_purge: true,
+    policies_exist: true,
+  }
+
+  it('is refused, and named by its most severe cause', async () => {
+    const assert = createIsolationAssertion(() => 'DATABASE_URL')
+    const err = await assert({ $queryRawUnsafe: async () => [PRODUCTION_ROW] } as never).catch((e) => e)
+    expect(err).toBeInstanceOf(IsolationNotEnforceableError)
+    // BYPASSRLS is checked before membership on purpose: it is the stronger statement, and
+    // reporting "member of commish_migrate" would send someone to fix the lesser problem.
+    expect(err.message).toContain('BYPASSRLS')
+    expect(err.message).toContain('neondb_owner')
+  })
+
+  it('⚠ TENANCY.md §3.1 names Supabase and RDS as BYPASSRLS defaults — Neon belongs on that list', () => {
+    // Recorded as a test rather than only prose so the fact survives someone rewriting the doc.
+    expect(factsFromRow(PRODUCTION_ROW).bypassesRls).toBe(true)
+    expect(isolationFailureReason(factsFromRow(PRODUCTION_ROW))).toContain('BYPASSRLS')
+  })
+})
+
 describe('the SQL', () => {
   it('asks about roles in a way that cannot raise when they do not exist', () => {
     // `pg_has_role(name, oid, ...)` returns NULL for a NULL oid, and to_regrole returns NULL
