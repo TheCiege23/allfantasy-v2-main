@@ -42,7 +42,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **4.3** Move orphaned grounding behind Decision OS | 8 graded + 3 ungraded, providers reused not rewritten. §2.16. Caught a bug in my own devy adapter |
 | ✅ | **4.4** No-fact rule | `not_entitled` had NO producer — the resolver collapsed 5 reasons to null. Fixed additively; composes with the prompt's existing confidence scheme |
 | ✅ | **4.5** Retire duplicate routes | Goal state already reached: `/api/chimmy` IS a shim with 0 callers (docs say otherwise, docs are stale). `/api/ai/chimmy` out of scope. §2.18 |
-| ⬜ | **5.1** Internal proof surface | |
+| ✅ | **5.1** Internal proof surface | `/api/admin/decision-os/grounding-proof`. Returns packet AND serialized text; keep-lined in the same commit |
 | ⬜ | **5.2** Entitlement + degradation pass | |
 | ⬜ | **5.3** Flags and kill switches | |
 | ⬜ | **6.1** Collapse the three health scorers | Deferred by D10 |
