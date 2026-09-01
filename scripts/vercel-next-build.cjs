@@ -259,7 +259,7 @@ const filesToKeep = new Set([
   // for the same reason the two tournament crons above do, and it is being added in the SAME change
   // as the schedule entry rather than after it — 263cb59ce is what the other order costs.
   path.join('app', 'api', 'cron', 'domain-os-refresh', 'route.ts').replace(/\\/g, '/'),
-  // Sleeper historical refresh (step 1c, 03:20 and 15:20 UTC) — re-runs the import backfill
+  // Sleeper historical refresh (step 1c, every 4h at :20 past) — re-runs the import backfill
   // orchestrator so an already-imported league stops being frozen at its import date.
   //
   // 🛑 ADDED AFTER THE FACT, WHICH IS THE THING 263cb59ce AND THE COMMENT ABOVE BOTH WARN ABOUT.
