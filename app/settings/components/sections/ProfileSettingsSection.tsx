@@ -5,6 +5,7 @@ import { Upload, Trash2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ProfileImagePreviewController } from "@/components/identity/ProfileImagePreviewController"
 import { setProfileAvatarUrl, uploadProfileImage, AVATAR_PRESET_EMOJI } from "@/lib/avatar"
+import { AvatarCropDialog, shouldCropBeforeUpload } from "@/components/identity/AvatarCropDialog"
 import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
 
@@ -32,6 +33,8 @@ export function ProfileSettingsSection({
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null)
+  /** Non-null while the crop dialog is framing a freshly picked file. */
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -64,10 +67,7 @@ export function ProfileSettingsSection({
    * `AGE_REQUIRED` here while the identical action on `/profile` succeeded. It also
    * needed a follow-up PATCH to clear the preset; the avatar route now does that itself.
    */
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) return
+  const runUpload = async (file: File) => {
     setPreviewObjectUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev)
       return URL.createObjectURL(file)
@@ -82,6 +82,27 @@ export function ProfileSettingsSection({
     })
     if (result.ok) onRefetch()
     else setUploadError(result.error ?? "Upload failed")
+    return result.ok
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    // Cleared before any await so picking the SAME file again still fires a change event.
+    e.target.value = ""
+    if (!file) return
+    setUploadError(null)
+    // GIFs skip the cropper — a canvas crop would flatten the animation.
+    if (shouldCropBeforeUpload(file)) {
+      setCropFile(file)
+      return
+    }
+    await runUpload(file)
+  }
+
+  const handleCropConfirm = async (cropped: File) => {
+    const ok = await runUpload(cropped)
+    // Keep the dialog open on failure so the framing is not lost with the error.
+    if (ok) setCropFile(null)
   }
 
   const handleRemoveImage = async () => {
@@ -121,6 +142,13 @@ export function ProfileSettingsSection({
               accept="image/jpeg,image/png,image/gif,image/webp"
               className="hidden"
               onChange={handleFileChange}
+            />
+            <AvatarCropDialog
+              file={cropFile}
+              open={cropFile !== null}
+              busy={uploading}
+              onCancel={() => setCropFile(null)}
+              onConfirm={handleCropConfirm}
             />
             <button
               type="button"
