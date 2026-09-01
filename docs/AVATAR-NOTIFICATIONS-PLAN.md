@@ -60,6 +60,28 @@ The user is shown the raw code. `ProfileSettingsSection.tsx:70` returns
 `lib/avatar/ProfileImageUploadService.ts` → `POST /api/user/profile/avatar`,
 which only requires a session. **Two doors, one locked, no sign on either.**
 
+🛑 **AND THERE WERE TWO BLOCKED POPULATIONS, NOT ONE — WHICH IS WHY THE FINAL GATE
+HAD TO BE SESSION-ONLY.** Established late, after a peer session pointed out that
+the Play Store tester may have been a reviewer account created with email +
+password rather than Google. Checked rather than assumed:
+
+`app/api/auth/register/route.ts` sets `ageConfirmedAt: now` — but contains **zero
+`emailVerified` assignments**, and sets `phoneVerifiedAt` only when the method is
+PHONE. So an email+password account that has not yet clicked its verification link
+has age confirmed and **no verified contact**. On `/api/chat/upload` that is a 403
+`VERIFICATION_REQUIRED`.
+
+| signup path | `ageConfirmedAt` | verified contact | old failure |
+|---|---|---|---|
+| Google / OAuth | ❌ never set | ✅ from `email_verified` | 403 `AGE_REQUIRED` |
+| email + password, link unclicked | ✅ set at register | ❌ | 403 `VERIFICATION_REQUIRED` |
+
+**Two populations, two different codes, one route.** The first fix
+(`requireContactVerifiedUser`) would have repaired only the top row and left an
+unverified reviewer account still unable to set a picture. The user's "do not
+narrow" instruction is what makes the fix cover both — it was load-bearing, not a
+preference. Any future re-gating of this route must survive **both** rows.
+
 ### 2.2 Avatar — three routes, three limits, two auth models
 
 | Route | Callers | Limit | Auth |
