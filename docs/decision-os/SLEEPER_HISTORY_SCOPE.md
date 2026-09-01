@@ -146,9 +146,52 @@ deliberate**.
 
 ## 5. Proposed order
 
+### 🛑 Step 1 was WRONG as first written, and the correction is the real finding
+
+This document originally said step 1 was "schedule the backfill orchestrator". That was
+inferred from "nothing re-runs it" without reading the gates, and it is wrong in both
+directions:
+
+- scheduled **without `force`**, every season already has rows, so every season is
+  skipped and the cron burns invocations confirming what it knows;
+- scheduled **with `force`**, it re-fetches completed seasons that cannot change — the
+  vendor load the gates exist to avoid.
+
+The gates are not missing. They test the wrong thing. Both the draft and season-state
+services carry a gate commented *"a completed historical season's rows are stable"*
+whose code tests whether **rows exist**:
+
+```ts
+if (!args.force) {
+  const existing = await prisma.X.findFirst({ where: { leagueId, season } })
+  if (existing) { seasonsSkippedAlreadyComplete += 1; continue }
+}
+```
+
+`getSleeperHistoricalLeagueChain` starts at the CURRENT league and walks back, so the
+chain's first element is the season being played; `SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0`
+is written with no completed-season guard. A mid-season import therefore stamps
+"season end" rows for a season that has not ended, and every later run skips it — while a
+counter named `seasonsSkippedAlreadyComplete` reports it finished.
+
+**A user's live roster and draft froze at the instant they imported.** Fixed by
+`lib/league-import/sleeper/seasonCompletion.ts`, which gates on Sleeper's own
+`status === 'complete'` — already carried on every chain element, so it costs no request.
+
+⚠ And the three siblings did not agree with each other, which is why no single reading
+found this:
+
+| service | gate as shipped | effect |
+|---|---|---|
+| draft | rows exist → skip | current season frozen at import |
+| season state | rows exist → skip | current season frozen at import |
+| matchup | none (guard clauses only) | re-fetches every season, every run |
+
 | | step | why this order |
 |---|---|---|
-| 1 | **Schedule the backfill orchestrator** | Three services already exist and go stale immediately. Nothing new is built; a cron entry makes existing work real. Do this FIRST so step 2 lands into a system that stays current. |
+| 1 | ~~Schedule the backfill orchestrator~~ **Fix the completion gates** | DONE. Past and present are now distinguishable, which every later step depends on. Scheduling anything before this would have propagated the frozen-season bug on a timer. |
+| 1b | **Give the matchup service the same gate** | It has none, so it re-fetches completed seasons — the opposite failure, same missing concept. Efficiency, not correctness, so it follows. |
+| 1c | **Then schedule the orchestrator** | Only meaningful once the gates refresh the live season and skip finished ones. |
 | 2 | **`SleeperHistoricalTransactionSyncService`** | The missing fourth sibling. Splits on the discriminator that already exists; trades and waivers to their own tables. |
 | 3 | **Repoint `getLeagueContext` + `/rosters`** | Free today — that data is already in the DB via the 30-min sync. Deletes 24 of 60 calls per render with no new writer. |
 | 4 | **Repoint drafts, matchups, H2H** | Only safe once 1 and 2 hold. `getLeagueH2H` is completed head-to-head history, immutable, re-fetched live on every render — the clearest case. |

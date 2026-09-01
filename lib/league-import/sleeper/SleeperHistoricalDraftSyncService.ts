@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getDraftPicks, getLeagueDrafts, getLeagueRosters } from '@/lib/sleeper-client'
 import { getSourceTeamIdFromPlayerData } from './SleeperHistoricalMatchupSyncService'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
+import { shouldSkipImportedSeason } from './seasonCompletion'
 
 interface PendingSleeperDraftFact {
   sourceDraftId: string
@@ -125,10 +126,17 @@ async function collectSleeperDraftFacts(args: {
   let providerCallsAvoided = 0
 
   for (const seasonLeague of historyChain) {
-    // Completion gate (P0-D): a completed historical season's DraftFact rows are stable —
-    // don't re-hit Sleeper's draft/pick endpoints for a season we already imported. Mirrors the
-    // `skipExistingSeasons` pattern in `lib/dynasty-import/backfill-orchestrator.ts`.
-    if (!args.force) {
+    /*
+     * Completion gate (P0-D): a completed historical season's DraftFact rows are stable — don't
+     * re-hit Sleeper's draft/pick endpoints for a season we already imported.
+     *
+     * 🛑 THIS USED TO TEST ONLY `!args.force`, SO IT SKIPPED ANY SEASON THAT HAD ROWS — INCLUDING
+     * THE ONE BEING PLAYED. The chain starts at the CURRENT league and walks back, so its first
+     * element is the in-progress season; importing mid-season wrote rows for it, and every later
+     * run then skipped it. A user's live draft froze at the moment they imported, while a counter
+     * named `seasonsSkippedAlreadyComplete` reported it as finished. See `seasonCompletion.ts`.
+     */
+    if (shouldSkipImportedSeason({ force: args.force, league: seasonLeague.league })) {
       const existing = await prisma.draftFact.findFirst({
         where: { leagueId: args.internalLeagueId, season: seasonLeague.season },
         select: { draftId: true },
