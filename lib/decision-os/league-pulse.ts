@@ -471,7 +471,8 @@ export function buildCommissionerLeaguePulse({
     ],
     metrics: [
       { label: 'Health', value: `${healthScore}%`, tone: healthScore >= 75 ? 'positive' : 'warning' },
-      { label: 'Engagement', value: `${engagementScore}%`, tone: engagementScore >= 70 ? 'positive' : 'warning' },
+      // 6.1: the ACTIVITY term, averaged across this commissioner's leagues.
+      { label: 'Activity', value: `${engagementScore}%`, tone: engagementScore >= 70 ? 'positive' : 'warning' },
       {
         label: 'Pending',
         value: String(pendingWaivers + pendingTrades),

@@ -46,7 +46,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **5.2** Entitlement + degradation pass | Two live regressions fixed — an empty collection read as *available*, and a dead context engine produced NO gaps at all. `__tests__/decision-os/grounding-degradation.test.ts`, 10 tests, 5 proved red against pre-fix |
 | ✅ | **5.3** Flags and kill switches | `lib/decision-os/flags.ts`. Nine per-feed kills, env OR db, fail-OPEN, one batched cached read. A kill leaves a `disabled` gap — it is said, not just done. 16 tests |
 | 🟨 | **6.1** Collapse the three health scorers | Premise measured and wrong twice (§2.22, §2.23); all three documented at their definition sites. **Step C DONE** — the hub activity base is now earned by participation, so a dead league scores 0 instead of 30 and hub and behavioural agree on the worst case, with fully-staffed leagues byte-identical (§2.24). **Step A landed** — participation is on the snapshot, gated + bounded + refusing rather than reporting zero, and the primary commissioner surface reads it (§2.25). Eight surfaces remain, listed there |
-| ⬜ | **6.2** three-brain as Chimmy's reasoning layer | |
+| 🟨 | **6.2** three-brain as Chimmy's reasoning layer | **Adapter landed** — `groundingPacketToEvidence`, 14 tests. Chimmy is NOT wired to it: three-brain calls Anthropic, so that needs a flag, a ceiling and an outcome marker like the packet got. See §2.27 |
 | ⬜ | **6.3** B2B/B2C cohort unification | Blocked: DB roles `NOLOGIN` |
 
 ---
@@ -1014,6 +1014,52 @@ positional insert is writing the same English string five times — a check that
 `platform-pulse/engine`. They are correct as they stand — they render the composite's component
 — but the same question applies to each, and `LeaguePulseService` is the model answer: it already
 describes its number as "reflects trades, waiver claims, and lineup submission activity".
+
+### 2.27 6.2 is an adapter, and the relabels found a machine key pretending to be a label
+
+**The five relabels.** `Engagement` → `Activity` on the surfaces that render the health
+composite's activity term: `DashboardHero`, `ToolsAndHealth` (×2), `NocturneDashboard`,
+`commissionerLeagueHealthViewModel` (×2), `league-pulse`. The composite now reads
+Activity / Fairness / Sustainability → Overall, which is what it has always computed.
+
+🛑 **`platform-pulse/engine.ts` WAS NOT TOUCHED, AND THAT IS THE FINDING.** Its
+`{ metric: 'engagement' }` looks identical to the others but is a **machine key**, matched by
+`KNOWN_METRICS = new Set(['health', 'engagement', 'fairness', 'sustainability'])` in
+`PlatformPulseCard.tsx:35`. Renaming it would have dropped the metric from the card silently —
+no error, no test, just one fewer number. Same for the two `key: 'engagement'` fields in the
+executive view model: **labels moved, keys did not.**
+
+⚠ `dashboard.pulse.metric.engagement` had exactly ONE consumer, so the KEY was renamed rather
+than re-valued — leaving a key called `…engagement` pointing at "Activity" would have made the
+key itself lie. Four of its five locales already read *Participación / 参与度 / Partisipasyon /
+Mức tham gia*, so English was the only one that matched the number.
+
+**6.2 — an adapter, not an integration.** `runThreeBrainAnalysis` takes an evidence packet and
+never fetches, so P3 holds structurally. `lib/decision-os/grounding/toEvidencePacket.ts` maps:
+
+```
+missingInformation[]  <-  gaps, flattened to keep the REMEDY the target has no field for
+freshness             <-  the import assertions' own staleness, `unknown` when there are none
+providerStatus[]      <-  meta.sources, PLUS meta.killedFeeds as ok:false
+relevantFacts[]       <-  present slices only
+deterministicSignals  <-  present-but-INCONCLUSIVE slices
+```
+
+🛑 **EVERY FACT IS SUMMARISED, BECAUSE THE TARGET IS "MINIMIZED" EVIDENCE THAT GOES TO
+ANTHROPIC.** The grounding packet holds whole projection arrays; passing them through would put
+hundreds of rows into a prompt. A 500-row slice becomes `500 rows (1h old)`, and a test asserts no
+fact exceeds 500 characters or contains a serialized field name. Prose slices survive verbatim up
+to 400 chars — they are the ones worth reading.
+
+⚠ **Present-but-inconclusive becomes a SIGNAL rather than a fact or a gap.** "We have your
+roster, and your league has not synced in two days" is the most useful thing this packet knows and
+the target has no other field for it. Dropped, a model gets stale numbers with nothing marking
+them stale.
+
+⚠ **AND CHIMMY IS NOT WIRED TO IT.** three-brain calls Anthropic; putting it on
+`/api/chat/chimmy` adds a model call per turn to the highest-traffic route in the product. That
+needs the same treatment the grounding packet got — flag, ceiling, outcome marker — and the
+`buildMs` number nobody has read yet. The adapter makes the call cheap to add; it does not make it.
 
 ### 2.21 The kill-switch pattern the plan named would have killed everything on a DB blip
 

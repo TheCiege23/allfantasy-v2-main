@@ -187,10 +187,14 @@ export function buildCommissionerLeagueHealthViewModel(
     whyItMatters: 'Lopsided leagues lose their casual managers first; balance keeps everyone invested.',
   })
 
-  // 5. Engagement — the engagement sub-score.
+  // 5. Activity — the activity sub-score of the health composite (6.1).
+  //
+  // ⚠ THE KEY STAYS `engagement`. It is a machine identifier a consumer may already hold; only
+  // the human-facing label moves. `whyItMatters` below has always described activity — "trades,
+  // waivers, and chat" — so the label was the part disagreeing with its own explanation.
   dimensions.push({
     key: 'engagement',
-    label: 'Engagement',
+    label: 'Activity',
     status: statusFromScore(snapshot.engagementScore),
     score: clamp(snapshot.engagementScore, 0, 100),
     valueLabel: `${snapshot.engagementScore}/100`,
@@ -378,7 +382,8 @@ export function buildLeagueHealthBreakdown(
   if (!snapshot) return { headline: 'League health breakdown is not available yet.', items: [], available: false }
   const items: ExecutiveBarDatum[] = [
     { key: 'overall', label: 'Overall health', value: clamp(snapshot.healthScore, 0, 100) },
-    { key: 'engagement', label: 'Engagement', value: clamp(snapshot.engagementScore, 0, 100) },
+    // Key unchanged, label corrected — see the dimension above.
+    { key: 'engagement', label: 'Activity', value: clamp(snapshot.engagementScore, 0, 100) },
     { key: 'competitive_balance', label: 'Competitive balance', value: clamp(snapshot.fairnessScore, 0, 100) },
     { key: 'sustainability', label: 'Sustainability', value: clamp(snapshot.sustainabilityScore, 0, 100) },
   ].map((d) => ({

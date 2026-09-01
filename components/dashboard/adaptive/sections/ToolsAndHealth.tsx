@@ -237,13 +237,17 @@ function HealthBody({ health }: { health: CommissionerLeagueHealthSnapshot }) {
         <MultiRingChart
           centerValue={String(Math.round(health.healthScore))}
           rings={[
-            { label: 'Engagement', value: health.engagementScore, color: 'var(--af-violet)' },
+            // 6.1: the composite's components are Activity / Fairness / Sustainability. This ring is
+                // the ACTIVITY term (trades, waivers, chat, lineup submission), not participation
+                // — that lives on the commissioner hub and can be null. See
+                // LeagueHealthResult.engagementScore.
+                { label: 'Activity', value: health.engagementScore, color: 'var(--af-violet)' },
             { label: 'Fairness', value: health.fairnessScore, color: 'var(--af-cyan)' },
             { label: 'Sustainability', value: health.sustainabilityScore, color: 'var(--af-emerald)' },
           ]}
         />
         <div style={{ fontSize: 11, lineHeight: 2, minWidth: 0 }}>
-          <HealthLine color="var(--af-violet)" label="Engagement" value={Math.round(health.engagementScore)} />
+          <HealthLine color="var(--af-violet)" label="Activity" value={Math.round(health.engagementScore)} />
           <HealthLine color="var(--af-cyan)" label="Fairness" value={Math.round(health.fairnessScore)} />
           <HealthLine color="var(--af-emerald)" label="Sustainability" value={Math.round(health.sustainabilityScore)} />
         </div>
