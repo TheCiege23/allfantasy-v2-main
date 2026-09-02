@@ -167,6 +167,10 @@ export async function loadMarketValues(args: MarketAdapterArgs): Promise<ValueLo
       unit: 'market_units',
       basis: 'market',
       scope: 'global',
+      // Already selected above and already used as the resolver's `nameHint` — it was being
+      // dropped here, which is what made every market value anonymous in a prompt. No new query.
+      playerName: row.name ?? null,
+      position: row.position ?? null,
       positionRank: row.positionRank ?? null,
       overallRank: row.overallRank ?? null,
       confidence: confidenceFromStdDev(row.marketStdDev, row.value),
