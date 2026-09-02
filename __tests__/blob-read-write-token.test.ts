@@ -86,6 +86,45 @@ describe('blob token resolution', () => {
     process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_SECRET'
     expect(blobTokenSource()).not.toContain('SECRET')
   })
+
+  /*
+   * ⚠ THE WARNING IS THE REMOVAL SIGNAL, so it has to actually fire. Silent debt is
+   * permanent debt: without a line in the log, the day someone tidies the Vercel variables
+   * looks like every other day, and the only evidence this module is still load-bearing
+   * would be someone happening to read it.
+   */
+  it('warns once when the fallback is carrying production, and never leaks the token', async () => {
+    vi.resetModules()
+    const { getBlobReadWriteToken: fresh } = await import("@/lib/blob/readWriteToken")
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      process.env.BLOB1_READ_WRITE_TOKEN = 'vercel_blob_rw_FALLBACK_SECRET'
+      fresh()
+      fresh()
+      fresh()
+      expect(warn).toHaveBeenCalledTimes(1) // once per process, not per upload
+      const msg = String(warn.mock.calls[0]?.[0] ?? '')
+      expect(msg).toContain('BLOB1_READ_WRITE_TOKEN')
+      expect(msg).not.toContain('FALLBACK_SECRET')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('stays quiet when the canonical variable is doing the work', async () => {
+    vi.resetModules()
+    const { getBlobReadWriteToken: fresh } = await import("@/lib/blob/readWriteToken")
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_PRIMARY'
+      process.env.BLOB1_READ_WRITE_TOKEN = 'vercel_blob_rw_FALLBACK'
+      fresh()
+      // Nothing to report: the config is correct and the debt is retired.
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
 })
 
 describe('every upload path uses the resolver', () => {

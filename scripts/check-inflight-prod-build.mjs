@@ -70,6 +70,41 @@ const TYPICAL_BUILD_MIN = 5.9
 
 const allow = () => process.exit(0)
 
+/**
+ * Fail open, but SAY SO.
+ *
+ * 🛑 THE HEADER ABOVE NAMES THIS AS THE STANDING HAZARD: "a fail-open guard cannot report
+ * its own misconfiguration. A wrong constant here is indistinguishable from 'no build is
+ * running', forever." That was true because every error path called `allow()`, which exits
+ * 0 in silence — so a guard that had never once been able to check looked exactly like a
+ * guard that checked and found nothing.
+ *
+ * It has been in that state. Three sessions independently concluded on 2026-09-01 that the
+ * guard was inert, and one of them nearly "fixed" it by repointing the constants — the
+ * precise mistake the header warns against, made for the second time, because a silent
+ * allow gave them nothing to distinguish "cannot see the scope" from "nothing is building".
+ *
+ * The guard still lets the push through: stranding a deploy is worse than the cost, and
+ * that judgement has not changed. What changes is that it now tells you it did not check,
+ * so an unverifiable guard announces itself instead of impersonating a passing one.
+ *
+ * ⚠ WRITTEN TO STDERR, NOT STDOUT, and it never exits non-zero: a pre-push hook's stdout
+ * can be consumed by tooling, and this must not become a new way to block a push.
+ */
+const allowUnchecked = (reason, detail) => {
+  process.stderr.write(
+    `\n[inflight-build-guard] NOT CHECKED — ${reason}\n` +
+      (detail ? `  ${detail}\n` : '') +
+      `  Looking for: project "${PROJECT}" in scope "${SCOPE}".\n` +
+      `  These constants are believed CORRECT — see the header before changing them.\n` +
+      `  "The specified scope does not exist" means this CLI token cannot see the scope,\n` +
+      `  not that the project is missing. Confirm with: vercel teams ls\n` +
+      `  Letting the push through anyway. Concurrent production builds are NOT being\n` +
+      `  prevented right now, so check with the room before pushing.\n\n`,
+  )
+  process.exit(0)
+}
+
 if (process.env.AF_ALLOW_CONCURRENT_PUSH === '1') allow()
 
 /** Pre-push feeds `<localRef> <localSha> <remoteRef> <remoteSha>` on stdin. */
@@ -98,15 +133,32 @@ const res = spawnSync(
   { shell: true, encoding: 'utf8', timeout: 12_000, windowsHide: true },
 )
 
-if (res.error || res.status !== 0 || !res.stdout) allow()
+/*
+ * ⚠ EACH OF THESE WAS A BARE `allow()` AND THEY ARE THE WHOLE PROBLEM. A missing CLI, an
+ * unauthorised scope, a timeout and a malformed payload all exited 0 in silence, which is
+ * byte-identical to "checked, nothing running". They are distinguished now because the
+ * distinction is the only thing that tells you the guard needs fixing.
+ */
+if (res.error) {
+  allowUnchecked('the vercel CLI could not be run', String(res.error.message || res.error))
+}
+if (res.status !== 0) {
+  const stderr = String(res.stderr || '').trim().split('\n')[0] || '(no stderr)'
+  allowUnchecked(`vercel ls exited ${res.status}`, stderr)
+}
+if (!res.stdout) {
+  allowUnchecked('vercel ls produced no output', 'exit was 0 but stdout was empty')
+}
 
 let deployments
 try {
   deployments = JSON.parse(res.stdout).deployments
-} catch {
-  allow()
+} catch (err) {
+  allowUnchecked('could not parse the vercel ls payload', String(err))
 }
-if (!Array.isArray(deployments)) allow()
+if (!Array.isArray(deployments)) {
+  allowUnchecked('the payload had no deployments array', 'shape changed, or the project is empty')
+}
 
 const running = deployments.filter((d) => IN_FLIGHT.has(String(d.state).toUpperCase()))
 if (running.length === 0) allow()

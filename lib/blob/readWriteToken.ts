@@ -25,11 +25,32 @@
  * fallback continuing to win after the underlying problem is solved.
  */
 
+/**
+ * ⚠ WARN ONCE PER PROCESS WHEN THE FALLBACK IS CARRYING PRODUCTION.
+ *
+ * Silent debt is permanent debt. Without this, the day someone tidies the Vercel variables
+ * is indistinguishable from any other day, and the only signal that this file is still
+ * load-bearing would be someone reading it. A line in the server log means the removal
+ * condition is observable: when it stops appearing, this module can be deleted.
+ *
+ * Once per process, not per call — every avatar and chat upload passes through here, and a
+ * warning that floods is a warning nobody reads.
+ */
+let warnedAboutFallback = false
+
 export function getBlobReadWriteToken(): string | undefined {
   const primary = process.env.BLOB_READ_WRITE_TOKEN?.trim()
   if (primary) return primary
   // Created by the Vercel Blob connection that used the `BLOB1` prefix.
   const prefixed = process.env.BLOB1_READ_WRITE_TOKEN?.trim()
+  if (prefixed && !warnedAboutFallback) {
+    warnedAboutFallback = true
+    console.warn(
+      "[blob] Using BLOB1_READ_WRITE_TOKEN — BLOB_READ_WRITE_TOKEN is unset. " +
+        "This fallback is temporary debt: reconnect the Blob store with the BLOB prefix, " +
+        "then delete lib/blob/readWriteToken.ts. See that file's header.",
+    )
+  }
   return prefixed || undefined
 }
 
