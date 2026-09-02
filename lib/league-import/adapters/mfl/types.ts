@@ -89,6 +89,16 @@ export interface MflImportPayload {
     positions: string[]
     points: number
   }>
+  /**
+   * Every future pick each franchise holds, from `TYPE=futureDraftPicks` — including its
+   * OWN untraded picks. The adapter filters to the moved ones; see `parseMflFutureDraftPicks`.
+   */
+  futureDraftPicks?: Array<{
+    currentOwnerFranchiseId: string
+    originalFranchiseId: string
+    season: number
+    round: number
+  }>
   teams: MflImportTeam[]
   schedule: MflImportScheduleWeek[]
   transactions: MflImportTransaction[]
