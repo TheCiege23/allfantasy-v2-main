@@ -83,7 +83,7 @@ function removePath(targetPath) {
       if (code !== 'EBUSY' && code !== 'EPERM') {
         console.warn(`[railway-clean] could not remove ${label}: ${code ?? err.message}`)
         process.exitCode = 1
-        return
+        process.exit(1)
       }
 
       if (attempt < maxAttempts) {
