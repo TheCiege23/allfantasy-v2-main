@@ -18,6 +18,7 @@ import {
   type ScoringContext,
 } from './valueEngine'
 import { gradeTrade } from './grader'
+import { applyFormatFit } from './formats/applyFormat'
 
 export interface EnrichedTradeAsset {
   kind: AssetValueSnapshot['kind']
@@ -31,6 +32,16 @@ export interface EnrichedTradeAsset {
   pickRound?: number | null
   pickLabel?: string | null
   faabAmount?: number | null
+  /**
+   * Player age, when the caller knows it. Dynasty and keeper format models read it; redraft ones
+   * must not. Absent ⇒ any model needing it returns null rather than guessing.
+   */
+  age?: number | null
+  /**
+   * Years of NFL experience, when known. Taxi eligibility depends on it in leagues that have a
+   * taxi squad — Four Horsemen caps it at 3.
+   */
+  experience?: number | null
   sources: AssetValueSnapshot['sources']
 }
 
@@ -72,9 +83,29 @@ export function buildTradeValueSnapshot(input: {
   profiles?: { a?: TeamProfile; b?: TeamProfile }
   /** Slice 16 — real league scoring settings. Omitted ⇒ standard 1-QB redraft. */
   scoring?: ScoringContext | null
+  /**
+   * The week being played, for anything deadline-aware. Omitted ⇒ no format model can judge
+   * trade legality, and every one of them returns `ok: true` rather than assuming closed.
+   */
+  currentWeek?: number | null
+  /**
+   * Format-specific team state, keyed by roster id — Eliminator strikes, eviction status, throne.
+   *
+   * ⚠ Per ROSTER, because these are facts about a TEAM, not about the trade. A manager on three
+   * Eliminator strikes wants a different kind of player from their trade partner who has none,
+   * and a single shared blob could not express that.
+   */
+  teamStateByRosterId?: Record<string, unknown> | null
 }): TradeValueSnapshot {
   const currentSeason = input.currentSeason ?? null
 
+  /*
+   * The format's opinion, asked once per asset and stored BESIDE the price rather than inside it.
+   *
+   * ⚠ `internalValue` is computed exactly as before — `applyFormatFit` never touches it. A reader
+   * comparing this snapshot to one written before format models existed will find identical
+   * values, which is the property that makes the split safe to land.
+   */
   const snapAssets: AssetValueSnapshot[] = input.assets.map((a) => ({
     kind: a.kind,
     fromRosterId: a.fromRosterId,
@@ -89,6 +120,21 @@ export function buildTradeValueSnapshot(input: {
     faabAmount: a.faabAmount ?? null,
     sources: a.sources,
     internalValue: internalValueFor(a, currentSeason, input.scoring),
+    formatFit:
+      a.kind === 'player'
+        ? applyFormatFit({
+            formatId: input.context.leagueType,
+            base: internalValueFor(a, currentSeason, input.scoring),
+            position: a.position,
+            age: a.age ?? null,
+            experience: a.experience ?? null,
+            // The shape the scoring context already resolved — no second source of truth.
+            shape: input.scoring?.shape ?? null,
+            currentWeek: input.currentWeek ?? null,
+            // The state of the roster GIVING the asset up.
+            teamState: input.teamStateByRosterId?.[a.fromRosterId],
+          })
+        : null,
   }))
 
   const sideFor = (rosterId: string): SideTotals => {

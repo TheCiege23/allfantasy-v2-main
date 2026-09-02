@@ -44,6 +44,23 @@ export interface AssetValueSnapshot {
   sources: AssetValueSources
   /** Deterministic normalized 0–10000 trade value for this asset. */
   internalValue: number
+  /**
+   * The league FORMAT's opinion on this asset — a multiplier and a reason, or null.
+   *
+   * 🛑 DELIBERATELY NOT APPLIED TO `internalValue`. User's decision: format, need and injury
+   * effects are a SEPARATE "fit" number shown beside the base, never folded into it. Base stays
+   * market-objective so two managers in different leagues can compare the same player and argue
+   * about it; the moment a format multiplier is baked in, that comparability goes and — worse —
+   * the adjustment becomes invisible, with nothing saying which rule moved the number.
+   *
+   * Null means the league's format has no model. Sixteen of sixteen coded formats today.
+   */
+  formatFit?: {
+    formatId: string | null
+    label: string | null
+    fit: { multiplier: number; reason: string } | null
+    legality: { ok: boolean; reason?: string } | null
+  } | null
 }
 
 export interface TradeValueContext {
