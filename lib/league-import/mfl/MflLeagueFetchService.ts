@@ -874,6 +874,94 @@ function attachMflPlayerDetailsToDraftPicks(args: {
   }))
 }
 
+/**
+ * One scoring rule as MFL states it.
+ *
+ * `code` is MFL's own event abbreviation (its `TYPE=rules` payload names events by short
+ * code). `name` is any human-readable text travelling with the rule — MFL is inconsistent
+ * about supplying one, so it is optional and is the ONLY thing resolution is allowed to key
+ * on. See the resolver's honesty contract.
+ */
+export interface MflScoringRuleRaw {
+  code: string
+  name: string | null
+  /** Positions the rule applies to, as MFL spells them. Empty = all. */
+  positions: string[]
+  points: number
+}
+
+/** MFL collapses single-element arrays to objects and wraps text in `$t`. */
+function mflList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  if (value && typeof value === 'object') return [value]
+  return []
+}
+
+function mflText(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string' || typeof value === 'number') return String(value)
+  if (typeof value === 'object') {
+    const t = (value as Record<string, unknown>)['$t']
+    if (typeof t === 'string' || typeof t === 'number') return String(t)
+  }
+  return ''
+}
+
+/**
+ * Parse `TYPE=rules` into real scoring rules.
+ *
+ * ⚠ SHAPE-AGNOSTIC ON PURPOSE. MFL is not one of the providers with a committed contract
+ * under `contracts/`, and this repo forbids probing a vendor to discover a response shape.
+ * So this reads defensively rather than asserting a layout: it accepts the rule list under
+ * any of the wrappers MFL is known to use, tolerates single-element collapse, and tolerates
+ * `$t` text nodes. Anything it cannot read yields NO rule rather than a malformed one.
+ *
+ * ⚠ IT DOES NOT TRANSLATE CODES TO CANONICAL KEYS, AND THAT IS DELIBERATE. A guessed
+ * scoring key silently mis-scores every player in the league — the failure
+ * `ScoringKeyAliasResolver` documents, where unmatched keys fell through to `pts_ppr` and
+ * understated defenders ~14x. Codes are carried through namespaced and resolved (or not)
+ * by that one resolver, which only accepts mappings it can justify.
+ */
+export function parseMflScoringRules(raw: unknown): MflScoringRuleRaw[] {
+  if (!raw || typeof raw !== 'object') return []
+  const root = raw as Record<string, unknown>
+  const container = (root.rules ?? root) as Record<string, unknown>
+  const entries = mflList(
+    (container as Record<string, unknown>)?.rule ?? (container as Record<string, unknown>)?.rules,
+  )
+
+  const out: MflScoringRuleRaw[] = []
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue
+    const rule = entry as Record<string, unknown>
+
+    const points = Number(mflText(rule.points))
+    if (!Number.isFinite(points)) continue
+
+    const positions = mflText(rule.positions)
+      .split(/[,|\s]+/)
+      .map((p) => p.trim().toUpperCase())
+      .filter(Boolean)
+
+    /* The event carries the code. It may be a bare string, an object with `$t`, or a list
+       of either — a rule can name several events that share one value. */
+    const events = mflList(rule.event ?? rule.events)
+    const codes = (events.length > 0 ? events.map(mflText) : [mflText(rule.event ?? rule.code)])
+      .map((c) => c.trim())
+      .filter(Boolean)
+
+    const name =
+      [rule.name, rule.description, rule.shortDescription, rule.detailedDescription]
+        .map(mflText)
+        .find((n) => n.trim().length > 0) ?? null
+
+    for (const code of codes) {
+      out.push({ code: code.toUpperCase(), name: name || null, positions, points })
+    }
+  }
+  return out
+}
+
 export async function fetchMflLeagueForImport(
   userId: string,
   sourceInput: string,
@@ -907,12 +995,26 @@ export async function fetchMflLeagueForImport(
     fetchMflEndpoint({ ...source, type: 'schedule', apiKey: auth.apiKey }),
     fetchMflEndpoint({ ...source, type: 'transactions', apiKey: auth.apiKey }),
     fetchMflEndpoint({ ...source, type: 'draftResults', apiKey: auth.apiKey }),
+    /*
+     * 🛑 NEVER REQUESTED, WHICH IS WHY MFL SCORING WAS A GUESS FROM THE LEAGUE'S NAME.
+     *
+     * `detectMflScoringFormat` read `settings.scoringType ?? league.name`, lowercased it and
+     * looked for "ppr" and "half" — so a league called "The Half Pint Dynasty" was assigned
+     * half-PPR scoring, and any NFL league that did not describe itself was assigned
+     * "standard" outright. The rules existed the whole time behind `TYPE=rules` and nothing
+     * asked for them.
+     *
+     * Optional like its four neighbours: a league whose key cannot read rules still imports,
+     * it simply reports scoring as missing rather than inventing a format.
+     */
+    fetchMflEndpoint({ ...source, type: 'rules', apiKey: auth.apiKey }),
   ])
 
   const standingsRaw = optionalResults[0].status === 'fulfilled' ? optionalResults[0].value : null
   const scheduleRaw = optionalResults[1].status === 'fulfilled' ? optionalResults[1].value : null
   const transactionsRaw = optionalResults[2].status === 'fulfilled' ? optionalResults[2].value : null
   const draftRaw = optionalResults[3].status === 'fulfilled' ? optionalResults[3].value : null
+  const rulesRaw = optionalResults[4].status === 'fulfilled' ? optionalResults[4].value : null
 
   const settings = parseMflSettings(leagueRaw)
   const league = parseMflLeague(leagueRaw, source, settings)
@@ -968,5 +1070,7 @@ export async function fetchMflLeagueForImport(
     playerMap,
     lineupBreakdownAvailable,
     previousSeasons,
+    /* Real rules, or an empty list when the key could not read them — never a guess. */
+    scoringRules: parseMflScoringRules(rulesRaw),
   }
 }

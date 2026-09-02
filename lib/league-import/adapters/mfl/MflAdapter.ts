@@ -1,12 +1,65 @@
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { MflImportPayload } from './types'
+import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
 
+/**
+ * The league's scoring format, or `null` when MFL did not say.
+ *
+ * 🛑 THIS USED TO READ THE LEAGUE'S NAME. The previous implementation was:
+ *
+ *     const scoringType = `${raw.settings?.scoringType ?? raw.league.name ?? ''}`.toLowerCase()
+ *     if (scoringType.includes('ppr')) return 'ppr'
+ *     if (scoringType.includes('half') || scoringType.includes('0.5')) return 'half'
+ *     return raw.league.sport === 'NFL' ? 'standard' : ...
+ *
+ * So a league called "The Half Pint Dynasty" was assigned half-PPR, a league with "PPR"
+ * anywhere in its title was assigned PPR, and — worse, because it is silent and universal —
+ * EVERY NFL league that did not describe itself was assigned "standard" outright. That is a
+ * fabricated answer presented with the same confidence as a real one, and nothing
+ * downstream could tell the two apart.
+ *
+ * Now: MFL's own `scoring_type` field if it supplied one, otherwise the reception rule that
+ * `TYPE=rules` actually returned, otherwise `null`. A null propagates into the import
+ * coverage block as missing scoring, which the league dashboard states in the user's own
+ * terms — an honest gap the manager can act on, instead of a wrong number they cannot see.
+ */
 function detectMflScoringFormat(raw: MflImportPayload): string | null {
-  const scoringType = `${raw.settings?.scoringType ?? raw.league.name ?? ''}`.toLowerCase()
-  if (scoringType.includes('ppr') || scoringType.includes('point per reception')) return 'ppr'
-  if (scoringType.includes('half') || scoringType.includes('0.5')) return 'half'
-  return raw.league.sport === 'NFL' ? 'standard' : raw.settings?.scoringType ?? null
+  const declared = String(raw.settings?.scoringType ?? '').toLowerCase().trim()
+  if (declared) {
+    if (declared.includes('ppr') || declared.includes('point per reception')) return 'ppr'
+    if (declared.includes('half') || declared.includes('0.5')) return 'half'
+    if (declared.includes('standard')) return 'standard'
+    /* MFL said something we do not recognise. Pass its own word through rather than
+       flattening it to a format we invented. */
+    return raw.settings?.scoringType ?? null
+  }
+
+  /*
+   * Nothing declared — read the rules instead of the name. A reception rule is the only
+   * thing that distinguishes these three formats, and its VALUE is the answer: 1 point is
+   * PPR, a half point is half-PPR, zero (or no reception rule at all in a league that
+   * returned rules) is standard.
+   *
+   * ⚠ REQUIRES A RESOLVED `rec` KEY, NOT A GUESSED CODE. `resolveProviderScoringStatKey`
+   * only maps what it can justify, so this fires when MFL supplied a name we recognise and
+   * stays null when it did not. Guessing which abbreviation means "reception" is exactly
+   * the class of error this whole change removes.
+   */
+  const rules = raw.scoringRules ?? []
+  if (rules.length === 0) return null
+
+  const reception = rules.find(
+    (rule) => resolveProviderScoringStatKey(`mfl_stat_${rule.code}`, { mflStatName: rule.name }) === 'rec',
+  )
+  if (!reception) {
+    /* Rules came back and none of them is a reception we can identify. We know scoring
+       exists but not which format — say nothing rather than assume standard. */
+    return null
+  }
+  if (reception.points >= 0.75) return 'ppr'
+  if (reception.points >= 0.25) return 'half'
+  return 'standard'
 }
 
 function detectMflDynasty(raw: MflImportPayload): boolean {
@@ -74,12 +127,29 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
       waiver_priority: team.waiverPriority,
     }))
 
+    /*
+     * ⚠ `rules: []` WAS HARDCODED — MFL SHIPPED WITH NO SCORING RULES AT ALL, because
+     * nothing ever requested `TYPE=rules`. They are real now.
+     *
+     * Keys are namespaced `mfl_stat_<code>`, exactly as ESPN and Yahoo are, and resolved
+     * downstream by the single `ScoringKeyAliasResolver`. Storing MFL's own code rather
+     * than a translated key is what keeps a mapping we cannot yet justify out of the data:
+     * an unresolved key scores nothing, a WRONG key scores everything wrongly.
+     *
+     * ⚠ AND THE FORMAT IS NO LONGER FORCED TO 'standard'. `?? 'standard'` was the last
+     * place a fabricated answer could re-enter after `detectMflScoringFormat` honestly
+     * returned null.
+     */
+    const mflScoringRules = (raw.scoringRules ?? []).map((rule) => ({
+      stat_key: `mfl_stat_${rule.code}`,
+      points_value: rule.points,
+    }))
     const scoring =
-      raw.settings != null
+      raw.settings != null || mflScoringRules.length > 0
         ? {
-            scoring_format: scoringFormat ?? raw.settings.scoringType ?? 'standard',
-            rules: [],
-            raw: raw.settings.raw,
+            scoring_format: scoringFormat ?? raw.settings?.scoringType ?? null,
+            rules: mflScoringRules,
+            raw: raw.settings?.raw ?? {},
           }
         : null
 

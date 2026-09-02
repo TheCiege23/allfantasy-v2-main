@@ -171,6 +171,44 @@ const YAHOO_STAT_NAME_TO_SLEEPER_KEY: Record<string, string> = {
   'fum lost': 'fum_lost',
 }
 
+
+/**
+ * MFL scoring-rule NAMES (normalized) → Sleeper projection keys.
+ *
+ * ⚠ NAME-KEYED, NOT CODE-KEYED, AND THAT IS THE HONESTY BAR. MFL's `TYPE=rules` names each
+ * event by a short abbreviation, and this repo has no MFL account to derive a code table
+ * from — the ESPN table above exists only because 1,277 player-seasons of agreeing evidence
+ * could be joined, and no such evidence is available here. Recalling what "RE" or "PY" mean
+ * and writing it down as fact is precisely the failure the ESPN note warns about: a guessed
+ * scoring key silently mis-scores every player in the league.
+ *
+ * So this maps only what MFL SPELLS OUT in a rule's own human-readable text, the same
+ * mechanism `YAHOO_STAT_NAME_TO_SLEEPER_KEY` uses and for the same reason. A rule with no
+ * name, or a name not listed here, resolves to null and keeps its `mfl_stat_<code>` key —
+ * unresolved and visibly so, never guessed.
+ *
+ * ⚠ WHEN AN MFL KEY BECOMES AVAILABLE, derive a code table from evidence the way
+ * `scripts/compare-espn-sleeper-stat-ids.mjs` did and commit the evidence alongside it.
+ * Do not populate this from memory.
+ */
+const MFL_STAT_NAME_TO_SLEEPER_KEY: Record<string, string> = {
+  'passing yards': 'pass_yd',
+  'pass yards': 'pass_yd',
+  'passing touchdowns': 'pass_td',
+  'passing td': 'pass_td',
+  'rushing yards': 'rush_yd',
+  'rush yards': 'rush_yd',
+  'rushing touchdowns': 'rush_td',
+  'rushing td': 'rush_td',
+  receptions: 'rec',
+  reception: 'rec',
+  'receiving yards': 'rec_yd',
+  'rec yards': 'rec_yd',
+  'receiving touchdowns': 'rec_td',
+  'receiving td': 'rec_td',
+  'fumbles lost': 'fum_lost',
+}
+
 const YAHOO_OFFENSE_INTERCEPTION_NAMES = new Set(['interceptions', 'interceptions thrown', 'int'])
 
 /** Lowercase, collapse every non-alphanumeric run to one space, trim. */
@@ -195,12 +233,24 @@ export interface YahooCapturedStatCategory {
  */
 export function resolveProviderScoringStatKey(
   statKey: string,
-  options?: { yahooStatCategoriesById?: ReadonlyMap<string, YahooCapturedStatCategory> }
+  options?: {
+    yahooStatCategoriesById?: ReadonlyMap<string, YahooCapturedStatCategory>
+    /** The human-readable name MFL shipped with this rule, when it shipped one. */
+    mflStatName?: string | null
+  }
 ): string | null {
   const key = String(statKey ?? '').trim().toLowerCase()
 
   if (key.startsWith('espn_stat_')) {
     return ESPN_STAT_ID_TO_SLEEPER_KEY[key.slice('espn_stat_'.length)] ?? null
+  }
+
+  if (key.startsWith('mfl_stat_')) {
+    /* Resolvable only from the name MFL supplied — never from the code itself. See the
+       table's note: there is no evidence base for an MFL code mapping yet. */
+    const named = normalizeProviderStatName(String(options?.mflStatName ?? ''))
+    if (!named) return null
+    return MFL_STAT_NAME_TO_SLEEPER_KEY[named] ?? null
   }
 
   if (key.startsWith('yahoo_stat_')) {

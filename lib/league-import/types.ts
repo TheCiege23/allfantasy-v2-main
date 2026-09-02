@@ -118,7 +118,17 @@ export interface NormalizedRoster {
 
 /** Normalized scoring (maps to AF scoring template or settings). */
 export interface NormalizedScoring {
-  scoring_format: string
+  /**
+   * The league's scoring format, or `null` when the provider did not say and it cannot be
+   * derived from the rules.
+   *
+   * ⚠ NULLABLE ON PURPOSE. It was `string`, and the only way to satisfy that for a provider
+   * that stays silent is to invent a value — which MFL did, assigning "standard" to every
+   * NFL league that did not describe itself. A null flows into the import coverage block as
+   * missing scoring and the dashboard says so; a fabricated "standard" is indistinguishable
+   * from a measured one.
+   */
+  scoring_format: string | null
   rules: Array<{ stat_key: string; points_value: number; multiplier?: number }>
   raw?: Record<string, unknown>
 }
