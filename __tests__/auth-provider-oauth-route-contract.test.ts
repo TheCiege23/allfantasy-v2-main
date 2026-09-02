@@ -138,7 +138,21 @@ describe("Auth provider OAuth route contracts", () => {
     const res = await GET(req as any)
 
     expect(res.status).toBe(307)
-    expect(res.headers.get("location")).toContain("/af-legacy?yahoo_error=invalid_state")
+    /*
+     * ⚠ THIS USED TO ASSERT `/af-legacy?yahoo_error=invalid_state` AND HAD BEEN FAILING.
+     * The callback stopped hardcoding /af-legacy on every exit — a manager who started at
+     * /import was dumped on another surface and had to walk back — and `YAHOO_DEFAULT_RETURN_TO`
+     * is now '/import'. The CODE is right and this assertion was left behind, so the suite was
+     * red against correct behaviour, which is the state in which nobody reads it any more.
+     *
+     * Assert on the PARSED url, not a substring: the destination legitimately carries a query
+     * string already, so whether the separator is `?` or `&` is not this test's business — and
+     * matching the literal `?` is what made this brittle in the first place.
+     */
+    const dest = new URL(res.headers.get("location") as string)
+    expect(dest.searchParams.get("yahoo_error")).toBe("invalid_state")
+    expect(dest.pathname).not.toBe("/af-legacy")
+    /* The property this test is actually named for: refuse BEFORE spending the exchange. */
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
@@ -153,7 +167,10 @@ describe("Auth provider OAuth route contracts", () => {
     const res = await GET(req as any)
 
     expect(res.status).toBe(307)
-    expect(res.headers.get("location")).toContain("/af-legacy?yahoo_error=no_code")
+    /* Same stale `/af-legacy` expectation as above; see the note there. */
+    const dest = new URL(res.headers.get("location") as string)
+    expect(dest.searchParams.get("yahoo_error")).toBe("no_code")
+    expect(dest.pathname).not.toBe("/af-legacy")
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
