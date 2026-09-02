@@ -11,6 +11,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const deleteMany = vi.fn()
 const createMany = vi.fn()
 const sessionUpdate = vi.fn()
+/*
+ * ⚠ THE TRANSACTION DOUBLE BELOW EXPOSED ONLY WHAT THE CODE HAPPENED TO CALL AT THE TIME, so it
+ * broke the moment the sync legitimately read inside the transaction — 4 of these 9 failed with
+ * `tx.draftSession.findUnique is not a function`, none of them about the new behaviour.
+ *
+ * Extending the double is the honest repair, not making the production read tolerate a missing
+ * method: a real Prisma transaction client always has `findUnique`, and the read guards the
+ * mirror from overwriting a commissioner's draft order. A tolerant read would leave
+ * `hasLocalOrder` false whenever it failed, so the mirror would WRITE — the guard would fail
+ * OPEN and silently restore the bug it exists to stop.
+ */
+const sessionFindUnique = vi.fn()
 const findManySessions = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
@@ -20,7 +32,10 @@ vi.mock('@/lib/prisma', () => ({
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        draftSession: { update: (...a: unknown[]) => sessionUpdate(...a) },
+        draftSession: {
+          update: (...a: unknown[]) => sessionUpdate(...a),
+          findUnique: (...a: unknown[]) => sessionFindUnique(...a),
+        },
         draftPick: {
           deleteMany: (...a: unknown[]) => deleteMany(...a),
           createMany: (...a: unknown[]) => createMany(...a),
@@ -52,7 +67,12 @@ function mockFetchSequence(draftRes: unknown, picksRes: unknown, usersRes: unkno
 
 beforeEach(() => {
   deleteMany.mockReset(); createMany.mockReset(); sessionUpdate.mockReset(); findManySessions.mockReset()
+  sessionFindUnique.mockReset()
   sessionUpdate.mockResolvedValue({ id: 'sess1' })
+  /* No order set yet. `DraftSession.slotOrder` is `Json @default("[]")`, so the empty default is
+     an empty array rather than null — this is the state these nine tests were always written in,
+     it simply had nothing to read it before. */
+  sessionFindUnique.mockResolvedValue({ slotOrder: [] })
 })
 
 describe('sleeper draft sync: an upstream failure must not blank the board', () => {
