@@ -250,6 +250,24 @@ export const PROBES = {
   },
 
   /*
+   * A HEARTBEAT because there is no single output table that means "this ran". The orchestrator
+   * rotates <=25 leagues per fire and fans out across drafts, matchups, season state and
+   * TransactionFact; every one of those tables is also written by another job, so a table probe
+   * here would be satisfied by that other job and report this one healthy while it did nothing --
+   * the same masking already recorded under the sync-player-images and import-news variants.
+   *
+   * Its gates are also season-aware by design, so a correct run out of season writes no rows at
+   * all. An output probe would be red for months and train everyone to ignore the board.
+   *
+   * ⚠ CONTEXT WORTH KEEPING: until this probe was added the job was invisible in BOTH directions
+   * -- `20 STAR/4 * * *` was declared in cron-schedule.json but absent from cron-slow-tier.yml, so
+   * nothing fired it, and no probe watched it. It had never run on the Actions scheduler at all.
+   * The missing trigger was added in the same change as this entry; landing either one alone
+   * leaves a job that runs unwatched, or a probe that reports a job nothing is running.
+   */
+  '/api/cron/sleeper-historical-refresh': { heartbeat: 'cron-sleeper-historical-refresh' },
+
+  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --
