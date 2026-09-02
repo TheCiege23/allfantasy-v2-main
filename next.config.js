@@ -31,6 +31,28 @@ const nextConfig = {
   },
 
   webpack: (config, { isServer, dev }) => {
+    // Absolute module paths must resolve as absolute paths.
+    //
+    // webpack 5 defaults `resolve.roots` to [context] and enhanced-resolve's
+    // RootsPlugin runs BEFORE the plain absolute-path join, so any request that
+    // starts with "/" is first tried as <context>/<request-minus-leading-slash>.
+    // Next's app loader emits every layout/page/error/not-found file as an
+    // absolute path. On Railway the repo is mounted at /app, so the root layout
+    // is requested as "/app/app/layout.tsx", which the RootsPlugin rewrites to
+    // "/app/app/app/layout.tsx" -- and that file exists: it is the nested
+    // app/app/layout.tsx route layout. The build then compiled THAT as the root
+    // layout: no <html>/<body> in the document, app/globals.css never entered
+    // the module graph, and every route rendered unstyled and failed to hydrate.
+    // Vercel (/vercel/path0) and Windows (C:/...) never hit it because their
+    // roots do not collide with a directory inside the repo. Measured 2026-09-02
+    // with the resolver in isolation and against the served Railway HTML.
+    //
+    // An empty roots list is what Next already uses for its own node resolver;
+    // nothing in this repo imports server-relative "/..." specifiers, and Next's
+    // css-loader does not resolve root-relative url()s, so this is inert
+    // everywhere except where it was silently wrong.
+    config.resolve = { ...config.resolve, roots: [] };
+
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
