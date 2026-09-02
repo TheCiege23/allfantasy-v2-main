@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { relativeRedirect } from '@/lib/http/relative-redirect'
 import { getCurrentUser } from '@/lib/get-current-user'
 import {
   canAccessDecisionTelemetryDebugSurface,
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     `dev-seed-${Date.now()}`,
   )
 
-  return NextResponse.redirect(new URL('/dev/decision-os/telemetry', request.url), 303)
+  return relativeRedirect('/dev/decision-os/telemetry', 303)
 }
 
 export async function GET(request: NextRequest) {

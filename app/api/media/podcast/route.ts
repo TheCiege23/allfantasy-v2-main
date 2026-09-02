@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { generateFantasyPodcastScript } from '@/lib/podcast-engine/FantasyPodcastGenerator'
 import { synthesizeScriptToAudio } from '@/lib/podcast-engine/VoiceSynthesisService'
 import {
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
 
     const podcastEpisode = await getPodcastEpisode(id, session.user.id)
     if (!podcastEpisode) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const baseUrl = process.env.NEXTAUTH_URL ?? new URL(req.url).origin
+    const baseUrl = process.env.NEXTAUTH_URL ?? getServedOrigin(req)
 
     return NextResponse.json({
       id: podcastEpisode.id,
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
 
     const podcastEpisode = await getPodcastEpisode(id, session.user.id)
     if (!podcastEpisode) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const baseUrl = process.env.NEXTAUTH_URL ?? new URL(req.url).origin
+    const baseUrl = process.env.NEXTAUTH_URL ?? getServedOrigin(req)
     return NextResponse.json({
       id: podcastEpisode.id,
       type: 'podcast' as const,
@@ -183,7 +184,7 @@ export async function POST(req: Request) {
 
     const podcastEpisode = await getPodcastEpisode(id, session.user.id)
     if (!podcastEpisode) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const baseUrl = process.env.NEXTAUTH_URL ?? new URL(req.url).origin
+    const baseUrl = process.env.NEXTAUTH_URL ?? getServedOrigin(req)
 
     return NextResponse.json({
       id: podcastEpisode.id,
@@ -280,7 +281,7 @@ export async function POST(req: Request) {
     }
 
     const playbackUrl = getPlaybackUrl(episode)
-    const baseUrl = process.env.NEXTAUTH_URL ?? new URL(req.url).origin
+    const baseUrl = process.env.NEXTAUTH_URL ?? getServedOrigin(req)
 
     const response = {
       id: episode.id,

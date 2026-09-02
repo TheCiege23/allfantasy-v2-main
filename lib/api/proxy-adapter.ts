@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServedOrigin } from '@/lib/http/served-origin'
 
 type ProxyOptions = {
   targetPath: string
@@ -30,7 +31,9 @@ function copyHeaders(req: NextRequest): Headers {
 
 export async function proxyToExisting(req: NextRequest, options: ProxyOptions): Promise<NextResponse> {
   const method = options.method || req.method
-  const target = new URL(options.targetPath, req.nextUrl.origin)
+  // This proxy fetches our OWN routes. req.nextUrl.origin is the bind address
+  // (https://0.0.0.0:8080 on Railway), so every proxied call failed its TLS handshake.
+  const target = new URL(options.targetPath, getServedOrigin(req))
 
   const currentQuery = req.nextUrl.searchParams
   for (const [k, v] of currentQuery.entries()) {

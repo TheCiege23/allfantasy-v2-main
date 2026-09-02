@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { mergeC2CSources } from '@/lib/league-import/c2cMultiSourceMerge'
 import { IMPORT_PROVIDERS, type C2CImportSource } from '@/lib/league-import/types'
 
@@ -56,7 +57,9 @@ export async function POST(req: NextRequest) {
 
   // Delegate to the existing single-provider import preview — reuse its
   // auth, rate limits, and provider adapters. Both calls in parallel.
-  const origin = req.nextUrl.origin
+  // A self-directed fetch: req.nextUrl.origin is the BIND address, and
+  // https://0.0.0.0:8080 fails the TLS handshake against our own plain-HTTP server.
+  const origin = getServedOrigin(req)
   const cookie = req.headers.get('cookie') ?? ''
   const fetchPreview = async (s: C2CImportSource) => {
     const r = await fetch(`${origin}/api/leagues/import/preview`, {

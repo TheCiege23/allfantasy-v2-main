@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { resolveAppUserIdForLeagueCreate } from '@/lib/redraft-creation/resolve-app-user-for-league'
 import { mergeC2CSources } from '@/lib/league-import/c2cMultiSourceMerge'
 import { persistC2CMultiSource } from '@/lib/league-import/c2cMultiSourceCommit'
@@ -64,7 +65,9 @@ export async function POST(req: NextRequest) {
 
   // Re-run the preview pipeline server-side — never trust client-submitted
   // bundles for persistence.
-  const origin = req.nextUrl.origin
+  // A self-directed fetch: req.nextUrl.origin is the BIND address, and
+  // https://0.0.0.0:8080 fails the TLS handshake against our own plain-HTTP server.
+  const origin = getServedOrigin(req)
   const cookie = req.headers.get('cookie') ?? ''
   const fetchPreview = async (s: C2CImportSource) => {
     const r = await fetch(`${origin}/api/leagues/import/preview`, {
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
       playerStatesCreated: commit.playerStatesCreated,
       joinCode: commit.joinCode,
       joinUrl: commit.joinCode
-        ? `${req.nextUrl.origin}/join?code=${encodeURIComponent(commit.joinCode)}`
+        ? `${origin}/join?code=${encodeURIComponent(commit.joinCode)}`
         : null,
       unmatched: mergeResult.unmatched,
     })

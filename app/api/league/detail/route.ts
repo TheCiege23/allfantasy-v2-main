@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { prisma } from '@/lib/prisma'
 import { getLeagueDrafts } from '@/lib/sleeper-client'
 
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
   }
 
   const settings = toRecord(league.settings)
-  const baseUrl = process.env.NEXTAUTH_URL?.trim() || req.nextUrl.origin
+  const baseUrl = process.env.NEXTAUTH_URL?.trim() || getServedOrigin(req)
   const inviteToken = league.invites[0]?.token ?? null
   const inviteUrl = inviteToken ? `${baseUrl}/join/${inviteToken}` : null
   const userRole = userTeam?.role ?? (isOwner ? 'commissioner' : 'member')

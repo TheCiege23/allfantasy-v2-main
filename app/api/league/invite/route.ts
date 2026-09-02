@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
+import { getServedOrigin } from '@/lib/http/served-origin'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     orderBy: { createdAt: 'desc' },
   })
 
-  const baseUrl = process.env.NEXTAUTH_URL?.trim() || req.nextUrl.origin
+  const baseUrl = process.env.NEXTAUTH_URL?.trim() || getServedOrigin(req)
 
   if (existingInvite && !isInviteExpired(existingInvite.expiresAt) && existingInvite.useCount < existingInvite.maxUses) {
     return NextResponse.json({

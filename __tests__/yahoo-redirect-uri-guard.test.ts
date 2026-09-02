@@ -108,7 +108,14 @@ describe('⚠ refused before the round trip, not after', () => {
     // failure, the product looks innocent, and nothing in our logs records that
     // we sent a URI that could never have worked.
     expect(ROUTE).toContain('CHECKED BEFORE THE ROUND TRIP')
-    expect(ROUTE).toContain('checkYahooRedirectUri(redirectUri, request.nextUrl.origin)')
+    /*
+     * ⚠ THE SECOND ARGUMENT USED TO BE request.nextUrl.origin, AND THAT MADE THIS
+     * GUARD REFUSE EVERY CONNECT. A route handler's origin is the address the server
+     * BOUND to, so in production the check read "YAHOO_REDIRECT_URI is
+     * www.allfantasy.ai but this deployment serves 0.0.0.0:8080" and stopped the
+     * flow before it started. The guard was right about what it was told.
+     */
+    expect(ROUTE).toContain('checkYahooRedirectUri(redirectUri, getServedOrigin(request))')
   })
 
   it('⚠ carries the errand through login instead of dropping it', () => {
@@ -120,9 +127,9 @@ describe('⚠ refused before the round trip, not after', () => {
      * `/api/auth/yahoo` has carried a callbackUrl all along; this one never did.
      */
     expect(ROUTE).toContain('THE ERRAND HAS TO SURVIVE THE LOGIN')
-    expect(ROUTE).toContain("login.searchParams.set(")
-    expect(ROUTE).toContain('/api/league/yahoo-auth${request.nextUrl.search}')
+    expect(ROUTE).toContain('callbackUrl: `/api/league/yahoo-auth${request.nextUrl.search}`')
     /* A bare /login is indistinguishable from every other auth bounce. */
+    expect(ROUTE).not.toContain("relativeRedirect('/login')")
     expect(ROUTE).not.toContain("NextResponse.redirect(new URL('/login', request.url))")
   })
 
@@ -150,7 +157,7 @@ describe('⚠ BOTH entry points check, not just the one nobody uses', () => {
    * `lib/yahoo/oauthConfig.ts` was created to end — after redirect_uri and scope.
    */
   it('checks in /api/auth/yahoo too', () => {
-    expect(AUTH_ROUTE).toContain('checkYahooRedirectUri(YAHOO_REDIRECT_URI, request.nextUrl.origin)')
+    expect(AUTH_ROUTE).toContain('checkYahooRedirectUri(YAHOO_REDIRECT_URI, getServedOrigin(request))')
   })
 
   it('refuses BEFORE building the authorize URL, not after', () => {

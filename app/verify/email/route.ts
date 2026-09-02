@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { relativeRedirect, relativeUrl } from "@/lib/http/relative-redirect"
 import { prisma } from "@/lib/prisma"
 import { sha256Hex } from "@/lib/tokens"
 
@@ -10,42 +10,22 @@ function safeReturnTo(input: string | null): string {
 }
 
 /**
- * The Location is RELATIVE on purpose — never an origin taken from `req.url`.
+ * Relative on purpose. A route handler's request origin is the address the server
+ * was BOUND to — https://0.0.0.0:8080 on Railway — so an absolute redirect built
+ * from it sent every verification click to a host no browser can reach. The full
+ * account, with the production measurements, is in lib/http/served-origin.ts.
  *
- * Next builds a route handler's `req.url` from the address the server was BOUND
- * to, not the host the visitor actually reached. `attachRequestMeta` in
- * next-server.js returns `${protocol}://${fetchHostname}:${port}${req.url}`
- * whenever a hostname and port were supplied, and this app must supply them:
- * Railway requires binding every interface, so scripts/railway-next-start.cjs
- * runs `next start -H 0.0.0.0 -p 8080`, and middleware.ts means the hostname
- * cannot be omitted ("To use middleware you must provide a `hostname` and
- * `port` to the Next.js Server"). So `new URL(req.url).origin` was
- * `https://0.0.0.0:8080` — measured in production on 2026-09-02:
- *
- *   GET https://allfantasy.ai/verify/email?token=…
- *   → 307  location: https://0.0.0.0:8080/verify?error=INVALID_LINK&returnTo=%2Fonboarding
- *
- * The emailed link itself was always correct. This redirect is what broke the
- * flow, and it broke it in the worst order: the transaction below marks the
- * address verified and deletes the token FIRST, so the visitor got a browser
- * connection error on a dead host, and a second click then reported
- * INVALID_LINK on an account that was in fact already verified.
- *
- * A relative Location is resolved by the browser against the URL it requested,
- * so it lands on whichever host the visitor came in on — correct in local dev,
- * on a preview deployment and in production alike, without trusting a Host
- * header the way `experimental.trustHostHeader` would.
+ * It failed in the worst order: the transaction below marks the address verified
+ * and deletes the token BEFORE redirecting, so the visitor got a connection error
+ * on a dead host and a second click then reported INVALID_LINK on an account that
+ * was in fact already verified.
  */
 function redirectTo(path: string, returnTo?: string | null) {
-  // Base is a parsing placeholder only; nothing but pathname + search is emitted.
-  const target = new URL(path, "http://relative.invalid")
+  const target = relativeUrl(path)
   if (returnTo && returnTo.startsWith("/")) {
     target.searchParams.set("returnTo", returnTo)
   }
-  return new NextResponse(null, {
-    status: 307,
-    headers: { Location: `${target.pathname}${target.search}` },
-  })
+  return relativeRedirect(target)
 }
 
 export async function GET(req: Request) {

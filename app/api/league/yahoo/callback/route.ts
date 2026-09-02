@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { encrypt } from '@/lib/league-auth-crypto';
+import { getServedOrigin } from '@/lib/http/served-origin'
+import { relativeRedirect, relativeUrl } from '@/lib/http/relative-redirect';
 import {
   readYahooOAuthState,
   sanitizeYahooReturnTo,
@@ -15,14 +17,14 @@ export async function GET(req: NextRequest) {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return NextResponse.redirect(new URL('/login', req.url));
+    return relativeRedirect('/login');
   }
 
   const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID;
   const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET;
   if (!YAHOO_CLIENT_ID || !YAHOO_CLIENT_SECRET) {
     console.error('[Yahoo Callback] Missing YAHOO_CLIENT_ID or YAHOO_CLIENT_SECRET');
-    return NextResponse.redirect(new URL('/leagues?error=yahoo_not_configured', req.url));
+    return relativeRedirect('/leagues?error=yahoo_not_configured');
   }
 
   const code = req.nextUrl.searchParams?.get('code');
@@ -31,11 +33,11 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('[Yahoo Callback] OAuth error:', error);
-    return NextResponse.redirect(new URL(`/leagues?error=yahoo_denied`, req.url));
+    return relativeRedirect('/leagues?error=yahoo_denied');
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/leagues?error=no_code', req.url));
+    return relativeRedirect('/leagues?error=no_code');
   }
 
   // Accept EITHER historical cookie. Once both entry points share one redirect_uri,
@@ -44,10 +46,12 @@ export async function GET(req: NextRequest) {
   const storedState = readYahooOAuthState(req.cookies);
   if (!storedState || storedState !== state) {
     console.error('[Yahoo Callback] State mismatch');
-    return NextResponse.redirect(new URL('/leagues?error=invalid_state', req.url));
+    return relativeRedirect('/leagues?error=invalid_state');
   }
 
-  const redirectUri = process.env.YAHOO_REDIRECT_URI || `${req.nextUrl.origin}/api/league/yahoo/callback`;
+  // getServedOrigin, not req.nextUrl.origin: a route handler's origin is the bind
+  // address (https://0.0.0.0:8080 on Railway), which Yahoo could never call back.
+  const redirectUri = process.env.YAHOO_REDIRECT_URI || `${getServedOrigin(req)}/api/league/yahoo/callback`;
 
   try {
     const tokenRes = await fetch('https://api.login.yahoo.com/oauth2/get_token', {
@@ -67,7 +71,7 @@ export async function GET(req: NextRequest) {
 
     if (!tokenRes.ok) {
       console.error('[Yahoo Callback] Token error:', tokenData);
-      return NextResponse.redirect(new URL('/leagues?error=token_failed', req.url));
+      return relativeRedirect('/leagues?error=token_failed');
     }
 
     const { access_token, refresh_token } = tokenData;
@@ -94,16 +98,16 @@ export async function GET(req: NextRequest) {
      * path, and /import remains the default for a cookie-less round trip.
      */
     const returnTo = sanitizeYahooReturnTo(req.cookies.get(YAHOO_RETURN_TO_COOKIE)?.value);
-    const dest = new URL(returnTo, req.url);
+    const dest = relativeUrl(returnTo);
     dest.searchParams.set('success', 'yahoo_connected');
-    const response = NextResponse.redirect(dest);
+    const response = relativeRedirect(dest);
     // Clear both names -- either could have carried this round-trip.
     for (const name of YAHOO_STATE_COOKIE_NAMES) response.cookies.delete(name);
     response.cookies.delete(YAHOO_RETURN_TO_COOKIE);
     return response;
   } catch (err: any) {
     console.error('[Yahoo Callback] Error:', err);
-    return NextResponse.redirect(new URL('/leagues?error=auth_failed', req.url));
+    return relativeRedirect('/leagues?error=auth_failed');
   }
 }
 

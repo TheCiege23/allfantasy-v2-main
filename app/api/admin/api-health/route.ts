@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/adminAuth"
 import { getApiHealthReport } from "@/lib/admin-dashboard/ApiHealthService"
+import { getServedOrigin } from "@/lib/http/served-origin"
 
 export const dynamic = "force-dynamic"
 
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
   const gate = await requireAdmin()
   if (!gate.ok) return gate.res
 
-  const origin = new URL(request.url).origin
+  // The report self-checks public endpoints against this origin. Built from
+  // request.url it was https://0.0.0.0:8080, so every self-check failed and the
+  // dashboard reported the whole app down — a health check that measured itself.
+  const origin = getServedOrigin(request)
   try {
     const report = await getApiHealthReport(origin)
     return NextResponse.json(report)

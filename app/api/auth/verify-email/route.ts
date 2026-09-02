@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { relativeRedirect } from "@/lib/http/relative-redirect"
 
 /**
  * Legacy entry point for verification links: forwards to /verify/email.
@@ -18,6 +18,6 @@ export async function GET(req: Request) {
   const target = token
     ? `/verify/email?token=${encodeURIComponent(token)}`
     : "/verify"
-  return new NextResponse(null, { status: 308, headers: { Location: target } })
+  return relativeRedirect(target, 308)
 }
 

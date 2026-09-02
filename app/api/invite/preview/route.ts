@@ -3,13 +3,19 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getInvitePreview, recordInviteEvent } from '@/lib/invite-engine'
 import { prisma } from '@/lib/prisma'
+import { getServedOrigin } from '@/lib/http/served-origin'
 
 export const dynamic = 'force-dynamic'
 
+/*
+ * An invite link has to name a host, and neither source this used could be trusted
+ * to. `x-forwarded-host` is set by the caller, so an invite could be minted pointing
+ * at any host an attacker put in a header; `req.nextUrl.origin` is the address the
+ * server BOUND to, which on Railway is https://0.0.0.0:8080. getServedOrigin reads
+ * the configured origin from the environment instead — see lib/http/served-origin.ts.
+ */
 function getBaseUrl(req: NextRequest): string {
-  return req.headers.get('x-forwarded-host')
-    ? `${req.headers.get('x-forwarded-proto') || 'https'}://${req.headers.get('x-forwarded-host')}`
-    : process.env.NEXTAUTH_URL ?? req.nextUrl.origin ?? 'https://allfantasy.ai'
+  return getServedOrigin(req)
 }
 
 /**

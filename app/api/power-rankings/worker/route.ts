@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
+import { getServedOrigin } from "@/lib/http/served-origin"
 import { authOptions } from "@/lib/auth";
 import { getQueue } from "@/lib/queues/bullmq";
 import type { PowerRankingsJobData } from "@/lib/workers/power-rankings-worker";
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
     const body = parsed.data;
     const payload: PowerRankingsJobData = {
       ...body,
-      baseUrl: process.env.NEXTAUTH_URL?.trim() || req.nextUrl.origin || "http://localhost:3000",
+      baseUrl: process.env.NEXTAUTH_URL?.trim() || getServedOrigin(req),
     };
 
     const job = await powerRankingsQueue.add(body.jobType, payload, {

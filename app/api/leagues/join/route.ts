@@ -7,6 +7,7 @@
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
 import { resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
@@ -364,7 +365,7 @@ export async function GET(req: NextRequest) {
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
   const { getFantasyInviteLink } = await import('@/lib/league-invite/LeagueInviteService')
-  const baseUrl = req.nextUrl.origin
+  const baseUrl = getServedOrigin(req)
 
   let result = await getFantasyInviteLink(leagueId, baseUrl)
   if (!result.ok && result.error === 'NO_INVITE_CODE') {

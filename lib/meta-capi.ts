@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import { recordAnalyticsEvent } from "@/lib/analytics/recordAnalyticsEvent"
+import { getServedOrigin } from "@/lib/http/served-origin"
 import {
   DEFAULT_META_PIXEL_ID,
   normalizeMetaCustomData,
@@ -58,11 +59,10 @@ function resolveEventSourceUrl(request?: Request | null, explicit?: string | nul
   if (explicit?.trim()) return explicit.trim()
   const referer = request?.headers.get("referer")?.trim()
   if (referer) return referer
+  // Not `new URL(request.url).origin` — in a route handler that is the bind
+  // address, and Meta would be told the event happened at https://0.0.0.0:8080/.
   try {
-    if (request?.url) {
-      const url = new URL(request.url)
-      return `${url.origin}/`
-    }
+    if (request?.url) return `${getServedOrigin(request)}/`
   } catch {
     // fall through
   }

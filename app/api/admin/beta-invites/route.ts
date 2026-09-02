@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { requireAdmin } from "@/lib/adminAuth"
 import { resolveAdminAuditIdentity } from "@/lib/admin-audit-identity"
+import { getServedOrigin } from "@/lib/http/served-origin"
 import { issueInvite, listInvites, revokeInvite } from "@/lib/beta-invite/betaAdmissionService"
 import { normalizeEmail } from "@/lib/beta-invite/betaAdmissionService"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
@@ -120,7 +121,9 @@ export async function POST(request: Request) {
       note,
     })
 
-    const origin = new URL(request.url).origin
+    // The admin copies this link out of the dashboard and sends it to a person, so
+    // it must name a reachable host — request.url is the bind address here.
+    const origin = getServedOrigin(request)
     // The one-time claim URL — the only place the raw token is ever surfaced.
     const claimUrl = `${origin}/api/auth/beta/claim?token=${encodeURIComponent(issued.rawToken)}`
 

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import crypto from 'crypto'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 
 import {
   buildYahooReturnUrl,
@@ -69,7 +70,13 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo", tool: "AuthYahoo"
    */
   console.log('[Yahoo OAuth] redirect_uri:', YAHOO_REDIRECT_URI)
 
-  const redirectCheck = checkYahooRedirectUri(YAHOO_REDIRECT_URI, request.nextUrl.origin)
+  /*
+   * ⚠ getServedOrigin, not request.nextUrl.origin. checkYahooRedirectUri compares
+   * hosts, and a route handler's origin is the address the server BOUND to — so in
+   * production it read "this deployment serves 0.0.0.0:8080" and refused every Yahoo
+   * connect. Both entry points had it; see lib/http/served-origin.ts.
+   */
+  const redirectCheck = checkYahooRedirectUri(YAHOO_REDIRECT_URI, getServedOrigin(request))
   if (!redirectCheck.ok) {
     console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason)
     /*

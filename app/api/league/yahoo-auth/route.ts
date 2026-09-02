@@ -11,6 +11,8 @@ import {
   YAHOO_FANTASY_SCOPE,
   YAHOO_RETURN_TO_COOKIE,
 } from '@/lib/yahoo/oauthConfig';
+import { getServedOrigin } from '@/lib/http/served-origin'
+import { relativeRedirect } from '@/lib/http/relative-redirect';
 
 export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
@@ -30,23 +32,19 @@ export async function GET(request: NextRequest) {
      * `/login?callbackUrl=/api/league/yahoo-auth` names which route decided the
      * session was missing.
      */
-    const login = request.nextUrl.clone();
-    login.pathname = '/login';
-    login.search = '';
-    login.searchParams.set(
-      'callbackUrl',
-      `/api/league/yahoo-auth${request.nextUrl.search}`,
-    );
-    return NextResponse.redirect(login);
+    const login = new URLSearchParams({
+      callbackUrl: `/api/league/yahoo-auth${request.nextUrl.search}`,
+    });
+    return relativeRedirect(`/login?${login.toString()}`);
   }
 
   const clientId = process.env.YAHOO_CLIENT_ID;
   if (!clientId) {
     console.error('[Yahoo OAuth] YAHOO_CLIENT_ID not configured');
-    return NextResponse.redirect(new URL('/leagues?error=yahoo_not_configured', request.url));
+    return relativeRedirect('/leagues?error=yahoo_not_configured');
   }
 
-  const redirectUri = getYahooRedirectUri(`${request.nextUrl.origin}/api/league/yahoo/callback`);
+  const redirectUri = getYahooRedirectUri(`${getServedOrigin(request)}/api/league/yahoo/callback`);
 
   /*
    * ⚠ CHECKED BEFORE THE ROUND TRIP, BECAUSE YAHOO'S REFUSAL LOOKS LIKE YAHOO'S
@@ -64,10 +62,17 @@ export async function GET(request: NextRequest) {
    */
   console.log('[Yahoo OAuth] redirect_uri:', redirectUri);
 
-  const redirectCheck = checkYahooRedirectUri(redirectUri, request.nextUrl.origin);
+  /*
+   * ⚠ THE ORIGIN HERE DECIDES WHETHER THE FLOW STARTS AT ALL, and it used to be
+   * request.nextUrl.origin — the BIND address. checkYahooRedirectUri compares hosts,
+   * so it read "YAHOO_REDIRECT_URI is www.allfantasy.ai but this deployment serves
+   * 0.0.0.0:8080" and refused every single Yahoo connect in production. The guard was
+   * right about what it was told; it was being told the wrong thing.
+   */
+  const redirectCheck = checkYahooRedirectUri(redirectUri, getServedOrigin(request));
   if (!redirectCheck.ok) {
     console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason);
-    return NextResponse.redirect(new URL('/leagues?error=yahoo_redirect_uri', request.url));
+    return relativeRedirect('/leagues?error=yahoo_redirect_uri');
   }
 
   const state = crypto.randomBytes(16).toString('hex');

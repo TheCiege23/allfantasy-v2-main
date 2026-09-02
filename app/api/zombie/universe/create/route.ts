@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { createZombieUniverseForTier } from '@/lib/zombie/setupEngine'
 import type { ZombieUniverseTierId } from '@/lib/zombie/zombie-universe-tier'
 import { isZombieEligibleLeagueSport } from '@/lib/zombie/zombie-sport-eligibility'
@@ -111,7 +112,9 @@ export async function POST(req: Request) {
     tier: zombieUniverseTier as ZombieUniverseTierId,
   })
 
-  const origin = new URL(req.url).origin
+  // Self-directed fetch — see lib/http/served-origin.ts; new URL(req.url).origin
+  // is the bind address here, not a host anything can connect to.
+  const origin = getServedOrigin(req)
   const cookie = req.headers.get('cookie') ?? ''
 
   const created: { leagueId: string; name?: string | null; levelId: string | null; tierLabel: string | null }[] = []

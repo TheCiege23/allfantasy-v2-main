@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getServedOrigin } from "@/lib/http/served-origin"
 import { generateFantasyPodcastScript } from "@/lib/podcast-engine/FantasyPodcastGenerator"
 import { synthesizeScriptToAudio } from "@/lib/podcast-engine/VoiceSynthesisService"
 import {
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to create episode" }, { status: 500 })
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? new URL(req.url).origin
+  const baseUrl = process.env.NEXTAUTH_URL ?? getServedOrigin(req)
   const shareUrl = getShareUrl(episode.id, baseUrl || "https://allfantasy.ai")
   const playbackUrl = getPlaybackUrl(episode)
 

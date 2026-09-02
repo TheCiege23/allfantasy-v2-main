@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server"
-
+import { relativeRedirect } from "@/lib/http/relative-redirect"
 import { isWellFormedToken } from "@/lib/beta-invite/betaAdmissionService"
 import { setAdmissionCookieOnResponse } from "@/lib/beta-invite/betaAdmissionCookie"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
@@ -27,12 +26,14 @@ export function GET(request: Request) {
   const ip = getClientIp(request)
   const rl = rateLimit(`beta-claim:${ip}`, 30, 600_000)
   if (!rl.success) {
-    return NextResponse.redirect(new URL("/signup?beta=1", url.origin))
+    return relativeRedirect("/signup?beta=1")
   }
 
   const token = (url.searchParams.get("token") ?? "").trim()
 
-  const redirect = NextResponse.redirect(new URL("/signup?beta=1", url.origin))
+  // Relative, not `url.origin` — see lib/http/served-origin.ts. This redirect went
+  // to https://0.0.0.0:8080/signup?beta=1 in production, so every invite link was dead.
+  const redirect = relativeRedirect("/signup?beta=1")
 
   if (token && isWellFormedToken(token)) {
     setAdmissionCookieOnResponse(redirect, token)

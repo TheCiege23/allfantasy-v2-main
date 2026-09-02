@@ -4,7 +4,7 @@ import { sha256Hex, makeToken } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { logPasswordResetAudit } from "@/lib/auth/password-reset-audit"
 import { getResendFromEmail } from "@/lib/resend-client"
-import { getPublicSiteOrigin } from "@/lib/site-public-origin"
+import { getServedOrigin } from "@/lib/http/served-origin"
 
 export const runtime = "nodejs"
 
@@ -17,26 +17,20 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;")
 }
 
+/*
+ * 🛑 THIS SHIPPED PASSWORD-RESET EMAILS POINTING AT https://0.0.0.0:8080.
+ *
+ * The production branch guarded against exactly two bad hostnames — "localhost"
+ * and "*.vercel.app" — and `0.0.0.0` is neither, so it sailed through and was
+ * returned as the app base. Every reset link in production carried it. The guard
+ * was written for the hosts that were wrong at the time and could not know about
+ * a bind address, which is the case for an allowlist stated as a denylist.
+ *
+ * getServedOrigin answers the question the whole function was asking, once, in
+ * one place — see lib/http/served-origin.ts.
+ */
 function resolvePasswordResetAppBase(req: Request): string {
-  const requestOrigin = new URL(req.url).origin
-
-  if (process.env.NODE_ENV === "production") {
-    try {
-      const hostname = new URL(requestOrigin).hostname.toLowerCase()
-      if (hostname && hostname !== "localhost" && !hostname.endsWith(".vercel.app")) {
-        return requestOrigin
-      }
-    } catch {}
-
-    return getPublicSiteOrigin()
-  }
-
-  return (
-    process.env.NEXTAUTH_URL?.trim() ||
-    process.env.APP_BASE_URL?.trim() ||
-    process.env.APP_URL?.trim() ||
-    requestOrigin
-  )
+  return getServedOrigin(req)
 }
 
 export async function POST(req: Request) {
