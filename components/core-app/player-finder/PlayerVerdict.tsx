@@ -1,4 +1,5 @@
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
+import { fixesTotal, formatDelta, type PlayerMove } from '@/lib/core-app/playerMoves'
 
 /**
  * The "Ask Chimmy" verdict card — computed, not generated.
@@ -6,22 +7,22 @@ import type { LeagueImpact } from '@/lib/core-app/playerImpact'
  * ⚠ NO LLM CALL, DELIBERATELY. The handoff draws this as a written paragraph,
  * which invites generating it on page load. That would bill a Chimmy request on
  * every player view — the exact per-visit cost that was stripped out of the home
- * screen in #433. Everything below is assembled from `impact`, which is already
- * computed for this screen, so the card costs nothing at rest and cannot say
- * something the data does not support. "Ask Chimmy" stays the click-through that
- * actually spends a token.
+ * screen in #433. Everything below is assembled from `impact` and the composed
+ * moves, which are already computed for this screen, so the card costs nothing
+ * at rest and cannot say something the data does not support. "Ask Chimmy"
+ * stays the click-through that actually spends a token.
  *
- * ⚠ IT ONLY CLAIMS WHAT `impact` MEASURED. The handoff's headline is "He's
- * healthy and misplaced in two leagues. Two minutes of fixes for +13.0." The
- * second half of that sentence is NOT derivable from what we hold: `replacements`
- * answers "who should play INSTEAD of him", not "how many points does starting
- * him gain over your current starter". Those are different questions and the
- * inverse is not stored, so this states where he is sitting and what he is worth
- * under each league's own scoring, and stops there.
+ * ⚠ THE "+13.0" IS NOW DERIVABLE, AND ONLY FROM MEASURED HALVES. This card used
+ * to stop at "where he is sitting", because `replacements` answers "who plays
+ * INSTEAD of him" and the inverse was not stored. `impact.startOver` now stores
+ * the inverse — the weakest starter he is eligible to replace, priced under that
+ * league's scoring — and an IR-slot player's whole projection is the IR fix. The
+ * total is the sum of those, or absent when none could be priced. It is never a
+ * generic number.
  *
  * ⚠ SLOT TRUTH BEATS PROJECTION — the handoff's rule and this screen's reason to
  * exist. A benched player with a good number is the headline, so the count of
- * leagues where he is NOT in the lineup leads.
+ * leagues where he is misplaced leads.
  */
 
 function fmt(n: number): string {
@@ -31,14 +32,21 @@ function fmt(n: number): string {
 export function PlayerVerdict({
   playerName,
   impact,
+  moves,
 }: {
   playerName: string
   impact: LeagueImpact[]
+  /** The composed moves for this player; the league-scored ones drive the headline. */
+  moves: PlayerMove[]
 }) {
   if (impact.length === 0) return null
 
   const benched = impact.filter((i) => !i.isStarting)
   const starting = impact.filter((i) => i.isStarting)
+  const fixes = moves.filter((m) => m.tone !== 'good')
+  const total = fixesTotal(fixes)
+  const n = impact.length
+  const leagues = n === 1 ? 'league' : 'leagues'
 
   /*
    * Only leagues where we could actually price him under that league's scoring.
@@ -49,22 +57,38 @@ export function PlayerVerdict({
     .map((i) => (i.afPoints.available ? { league: i, points: i.afPoints.data.points } : null))
     .filter((x): x is { league: LeagueImpact; points: number } => x !== null)
     .sort((a, b) => b.points - a.points)
-
   const best = pricedBenched[0] ?? null
 
   let headline: string
-  if (benched.length === 0) {
+  if (fixes.length > 0) {
+    const count = fixes.length === 1 ? 'One fix' : `${fixes.length} fixes`
+    headline = `He is misplaced in ${fixes.length} of ${n} ${leagues}. ${count}${
+      total != null ? ` for ${formatDelta(total)}` : ''
+    }.`
+  } else if (benched.length === 0) {
     headline = `He is in your lineup in all ${starting.length} ${
       starting.length === 1 ? 'league' : 'leagues'
     } you roster him.`
+  } else if (benched.every((b) => b.startOver != null)) {
+    // Every benched league was priced both ways and none gained — the bench is right.
+    headline = `He is on your bench in ${benched.length} of ${n} ${leagues}, and that is the right call under each league's scoring.`
   } else if (best) {
-    headline = `He is on your bench in ${benched.length} of ${impact.length} ${
-      impact.length === 1 ? 'league' : 'leagues'
-    } — worth ${fmt(best.points)} in ${best.league.leagueName}.`
+    headline = `He is on your bench in ${benched.length} of ${n} ${leagues} — worth ${fmt(best.points)} in ${best.league.leagueName}.`
   } else {
-    headline = `He is on your bench in ${benched.length} of ${impact.length} ${
-      impact.length === 1 ? 'league' : 'leagues'
-    }.`
+    headline = `He is on your bench in ${benched.length} of ${n} ${leagues}.`
+  }
+
+  /*
+   * The phone's "Open in Sleeper / Open in ESPN" pair — one button per platform
+   * screen the fixes land on, so a two-league problem is two taps. Desktop has
+   * the full move cards for this and hides these.
+   */
+  const opens: Array<{ href: string; label: string; external: boolean }> = []
+  for (const m of fixes) {
+    if (!m.link) continue
+    if (opens.some((o) => o.href === m.link!.href)) continue
+    opens.push({ href: m.link.href, label: m.link.label, external: m.link.external })
+    if (opens.length === 3) break
   }
 
   return (
@@ -83,9 +107,14 @@ export function PlayerVerdict({
               says ship it as ASK CHIMMY to match the rest of the product. */}
           <span className="af-label">Ask Chimmy</span>
           <span className="af-pf-verdict-scope af-num">
-            {impact.length} {impact.length === 1 ? 'LEAGUE' : 'LEAGUES'}
+            Verdict · {n} {n === 1 ? 'league' : 'leagues'}
           </span>
         </span>
+        {total != null ? (
+          <span className="af-pf-verdict-total af-num" data-tone="good">
+            {formatDelta(total)}
+          </span>
+        ) : null}
       </header>
 
       <p className="af-pf-verdict-headline">{headline}</p>
@@ -106,6 +135,21 @@ export function PlayerVerdict({
           </li>
         ))}
       </ul>
+
+      {opens.length > 0 ? (
+        <div className="af-pf-verdict-opens af-pf-m-only">
+          {opens.map((o) => (
+            <a
+              key={o.href}
+              className="af-btn af-pf-verdict-open"
+              href={o.href}
+              {...(o.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+            >
+              {o.label}
+            </a>
+          ))}
+        </div>
+      ) : null}
 
       {/*
         The read-only promise is stated, not implied — the handoff is explicit

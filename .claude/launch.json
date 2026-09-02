@@ -75,6 +75,21 @@
       }
     },
     {
+      "// next-dev-player-finder": "2a Player Finder (core / league / mobile) visual pass. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-player-finder",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-player-finder",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
       "// next-dev-matchup": "core/matchup visual pass. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
       "name": "next-dev-matchup",
       "runtimeExecutable": "node",
