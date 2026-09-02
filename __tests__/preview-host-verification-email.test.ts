@@ -57,6 +57,6 @@ describe("verify/email degrades safely for tokens it cannot resolve (#14, no ser
 
   it("wraps the verify transaction so a failure redirects rather than 500s", () => {
     expect(consume).toMatch(/catch \(txErr\)/)
-    expect(consume).toMatch(/redirectTo\(req, "\/verify\?error=INVALID_LINK"/)
+    expect(consume).toMatch(/redirectTo\("\/verify\?error=INVALID_LINK"/)
   })
 })
