@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  requireVerifiedUser: vi.fn(),
+  requireAuth: vi.fn(),
   leagueFindFirst: vi.fn(),
   threadMemberFindFirst: vi.fn(),
   put: vi.fn(),
 }))
 
-vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: mocks.requireVerifiedUser }))
+vi.mock('@/lib/auth-guard', () => ({ requireAuth: mocks.requireAuth }))
 vi.mock('@vercel/blob', () => ({ put: mocks.put }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -27,7 +27,7 @@ describe('POST /api/chat/upload — DM and huddle attachments', () => {
     vi.clearAllMocks()
     // The route 503s without it; uploads need this set in production too.
     vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'test-token')
-    mocks.requireVerifiedUser.mockResolvedValue({ ok: true, userId: 'me' })
+    mocks.requireAuth.mockResolvedValue({ ok: true, userId: 'me' })
     mocks.threadMemberFindFirst.mockResolvedValue({ id: 'm1' })
     mocks.put.mockResolvedValue({ url: 'https://blob/a.png' })
   })
