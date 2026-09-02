@@ -53,6 +53,13 @@ export const dynamic = "force-dynamic"
 
 export const maxDuration = 300
 
+/**
+ * Heartbeat identity for the `?source=tsdb-only` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs. Must stay in step with that map -- renaming it here without
+ * renaming it there makes the freshness monitor report CONFIG ("no rows for job_name") forever.
+ */
+const JOB_TSDB = "cron-import-schedules-tsdb"
+
 /** Every league the TheSportsDB ingest covers. */
 const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
 
@@ -185,9 +192,28 @@ async function handle(req: NextRequest) {
      * rotation would give the same sport the lead on all four.
      */
     if (runScheduleBlocks && url.searchParams.get('tsdb') !== '0') {
-      const tsdb: Record<string, unknown> = {}
-      const deferred: string[] = []
-      for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
+      /*
+       * Heartbeat for the `?source=tsdb-only` schedule, which is the only cron that reaches this
+       * block on its own six-hourly cadence.
+       *
+       * ⚠ NOT A TABLE PROBE. `ingestSchedule` upserts `sportsGame` — NOT `fantasy_schedule_games`,
+       * which has never held a row and is the table the old NO_PROBE note pointed at. But
+       * `sportsGame` is written by `import-scores` every two minutes, so a table probe here would
+       * be satisfied by that job and report this one healthy while it wrote nothing. Same
+       * shared-probe false green as `?sport=all` already carries a caveat about.
+       *
+       * ⚠ THE WEEKLY `?sport=all` FIRE ALSO REACHES THIS BLOCK and so also refreshes this
+       * heartbeat. That is acceptable rather than ideal: the allowance for `10 STAR/6 * * *` is
+       * 6h x 3 = 18h, which is far shorter than a week, so a weekly run cannot hold the probe
+       * green if the six-hourly schedule stops. A mode-scoped wrap would be tighter, but it would
+       * also record nothing on the weekly path and make THAT fire invisible.
+       */
+      const runTsdb = async () => {
+        const tsdb: Record<string, unknown> = {}
+        const deferred: string[] = []
+        let gamesWritten = 0
+        let failedSports = 0
+        for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
         if (budget.exhausted()) {
           deferred.push(s)
           continue
@@ -201,6 +227,7 @@ async function handle(req: NextRequest) {
           const sportBudgetMs = Math.max(0, budget.remainingMs() - 20_000)
           const sched = await ingestSchedule(s, { budgetMs: sportBudgetMs })
           const entry: Record<string, unknown> = { season: sched.season, games: sched.written }
+          gamesWritten += sched.written
           // A partial sweep is progress, not failure — but it has to SAY so, or a sport that never
           // finishes looks identical to one that had nothing to write.
           if (sched.deferred > 0) entry.deferredEvents = sched.deferred
@@ -216,10 +243,28 @@ async function handle(req: NextRequest) {
           tsdb[s] = entry
         } catch (err) {
           tsdb[s] = { error: String(err).slice(0, 120) }
+          failedSports += 1
         }
       }
-      if (deferred.length) tsdb.deferredSports = deferred
-      results.thesportsdb = tsdb
+        if (deferred.length) tsdb.deferredSports = deferred
+        return { tsdb, gamesWritten, failedSports, deferredCount: deferred.length }
+      }
+
+      const tsdbRun = await withSyncJobRun(
+        { jobName: JOB_TSDB, trigger: 'cron' },
+        runTsdb,
+        (r) => ({
+          rowsWritten: r.gamesWritten,
+          rowsSkipped: r.deferredCount,
+          /*
+           * PARTIAL when a sport threw or was deferred for budget. Both are real outcomes this
+           * route already reports in its body — a sport deferred every run is starved, and the
+           * telemetry should not call that a clean success.
+           */
+          status: r.failedSports > 0 || r.deferredCount > 0 ? ('partial' as const) : ('success' as const),
+        }),
+      )
+      results.thesportsdb = tsdbRun.tsdb
     }
 
     /*

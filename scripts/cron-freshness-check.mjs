@@ -65,6 +65,9 @@ const MIN_ALLOWANCE_MS = 20 * 60_000
  * `column` is optional: when omitted the script introspects information_schema and picks the first
  * available freshness column, reporting which one it used. A probe naming a table or column that
  * does not exist is reported as a CONFIG ERROR and fails the run -- it must never look like "fresh".
+ * A column that EXISTS but is NULL on every row is a separate state, UNPOPULATED: the counts cannot
+ * say whether the map is wrong or nothing has written it yet, so the checker reports what it saw
+ * and names both causes instead of asserting one. It fails the run just the same.
  *
  * Jobs absent from this map are reported as UNMONITORED rather than skipped silently. A monitor
  * that quietly covers two-thirds of the fleet while printing "all healthy" is how the last outage
@@ -191,16 +194,40 @@ export const PROBES = {
   // Every 6h, so 9h allows one missed fire before it goes red.
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
 
-  // OUTPUT probe on purpose, and the stronger claim is the point. A heartbeat here would report
-  // green for the exact bug this job was written to end: `notification_outbox` was write-only for
-  // months (4 rows, all pending, attemptCount 0, newest 2026-06-21) because no consumer existed.
-  // `sentAt` only moves when mail actually goes out, so a drain that runs and delivers nothing
-  // still goes red.
-  //
-  // ⚠ EXPECT THIS RED UNTIL THE FIRST REAL NOTIFICATION SENDS. Pre-season the producers are idle,
-  // so max(sentAt) is null. That is correct and it resolves itself the first time waivers process.
-  // Do not mute it to get a green board.
-  '/api/cron/notification-outbox-relay': { table: 'notification_outbox', column: 'sentAt' },
+  /*
+   * WAS AN OUTPUT PROBE ON `notification_outbox.sentAt`, DELIBERATELY, AND THE REASONING IS KEPT
+   * HERE BECAUSE IT WAS GOOD. The original note read: "A heartbeat here would report green for the
+   * exact bug this job was written to end: `notification_outbox` was write-only for months (4 rows,
+   * all pending, attemptCount 0, newest 2026-06-21) because no consumer existed... Do not mute it
+   * to get a green board."
+   *
+   * That was right when written. It is superseded 2026-09-02 on measurement, not on preference:
+   *
+   *   1. THE CONSUMER EXISTS AND RUNS. `sync_job_runs` holds 796 rows for
+   *      `cron-notification-outbox-relay`, most recent minutes ago, and the fast-tier dispatcher
+   *      logs it OK on every fire (389ms / 1567ms / 513ms in one window). The write-only-queue bug
+   *      the output probe was guarding is fixed, and a heartbeat detects its return.
+   *   2. THOSE FOUR ROWS ARE CLOSED, NOT STUCK. All four are `status='skipped'` with `lastError`
+   *      "Retired 2026-08-30: ... Stale on arrival; not delivered by operator decision." They are
+   *      the pre-consumer backlog, retired on purpose. The queue holds no live work.
+   *   3. SO max(sentAt) IS NULL FOR A THIRD REASON THE NOTE DID NOT ANTICIPATE — not "producers
+   *      idle pre-season", not "drain broken", but "the only rows that ever existed were retired
+   *      unsent by decision". No amount of waiting resolves that; it needs new traffic.
+   *
+   * 🛑 AND THE PROBE DID NOT REPORT ANY OF THAT — IT REPORTED SOMETHING FALSE. An all-NULL column
+   * makes the checker emit CONFIG `"sentAt" is NULL on all 4 rows -- wrong column for this table`.
+   * The column is correct. A monitor asserting a false cause is worse than one that is merely
+   * pessimistic: it sends the next reader to fix a mapping that was never broken.
+   *
+   * ⚠ WHAT THIS TRADE COSTS, STATED PLAINLY: the heartbeat proves the relay RAN, not that mail
+   * WENT OUT. A relay that runs and silently delivers nothing now reads green. That regression is
+   * real and it is the original author's point. Restoring the strong claim without the false
+   * diagnosis means fixing the CHECKER — teaching it to separate "column exists, all NULL"
+   * (honest EMPTY/STALE) from "column absent" (CONFIG) — and then this can go back to
+   * { table: 'notification_outbox', column: 'sentAt' }. That is the better long-term fix and it
+   * is not done here.
+   */
+  '/api/cron/notification-outbox-relay': { heartbeat: 'cron-notification-outbox-relay' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
@@ -313,6 +340,46 @@ export const PROBES = {
   '/api/cron/alert-sweep': { heartbeat: 'cron-alert-sweep' },
 
   /*
+   * THE THREE "WRITES NOWHERE" SUSPECTS, RESOLVED 2026-09-02 — AND NONE OF THEM WAS BROKEN.
+   * All three sat in NO_PROBE on notes that named a table the job never touches, or read a
+   * feature flag as a dead job. Each note sent the next reader hunting for a bug that was not
+   * there, which is the same defect the UNPOPULATED state was added to stop the checker itself
+   * committing. Measured against production before moving any of them.
+   *
+   *   import-standings      writes `SportsDataCache` under `<SPORT>:standings:<season>:<abbrev>`,
+   *                         NOT a `standings` table. 64 live NFL rows. Working the whole time.
+   *   ?source=tsdb-only     `ingestSchedule` upserts `sportsGame` (26,924 rows), NOT
+   *                         `fantasy_schedule_games`. And "tsdb-only" matching neither "all" nor
+   *                         "rolling_insights" nor "api_sports" is the DESIGN — it is how this
+   *                         mode runs the TSDB block alone, documented in the route.
+   *   trade-weekly-recalib  gated on TRADE_ENGINE_WEEKLY_RECALIBRATION_ENABLED, default off. Its
+   *                         own docstring says it no-ops with zero Prisma calls when disabled, so
+   *                         TradeLearningStats holding zero rows is the CORRECT state.
+   *
+   * ⚠ ALL THREE ARE HEARTBEATS, AND NONE OF THEM COULD BE AN OUTPUT PROBE. Every table they do
+   * write is written far more often by another job — SportsDataCache by many, `sportsGame` by
+   * import-scores every two minutes — so a table probe would be satisfied by that other job and
+   * report these healthy while they did nothing. The shared-probe false green, three more times.
+   *
+   * ⚠ AND NONE OF THEM EMITTED A HEARTBEAT UNTIL THIS CHANGE. withSyncJobRun was added to all
+   * three routes in the same commit; a probe naming a job_name nothing writes reports CONFIG
+   * forever. Expect exactly that until each next fires — six hours, four hours, and up to a week
+   * respectively.
+   */
+  '/api/cron/import-standings': { heartbeat: 'cron-import-standings' },
+  '/api/cron/import-schedules?source=tsdb-only': { heartbeat: 'cron-import-schedules-tsdb' },
+
+  /*
+   * ⚠ THIS ONE RECORDS WHILE ITS FEATURE FLAG IS OFF, DELIBERATELY. The wrap sits outside the
+   * flag check, so the row answers "did the weekly cron fire" — true and checkable whether or not
+   * the recalibration itself is enabled. Recording only on the enabled path would report CONFIG
+   * for as long as the flag stays off, which is indistinguishable from a dead scheduler and is
+   * exactly the confusion this probe exists to remove. A disabled fire records `success` with the
+   * reason in `warnings` and the count in rowsSkipped: the job did what it is configured to do.
+   */
+  '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
+
+  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --
@@ -390,8 +457,6 @@ const HEARTBEAT_TIME_COLUMN = 'started_at'
  * red, and trains everyone to ignore the alarm. Both entries here were exactly that trap.
  */
 export const NO_PROBE = {
-  '/api/cron/import-standings': 'the `standings` table has never held a row -- find where this job actually writes before probing it',
-  '/api/cron/import-schedules?source=tsdb-only': '`fantasy_schedule_games` has never held a row; the tsdb path may be dead',
   '/api/cron/import-player-game-stats?multiSport=1&days=3':
     'writes the same player_game_stats.updatedAt the NFL job an hour earlier probes, so a table ' +
     'probe here reports this one healthy on that run instead. The NFL probe is scoped with ' +
@@ -431,7 +496,6 @@ export const NO_PROBE = {
   '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
 
   // ── HAS NEVER PRODUCED ANYTHING ──
-  '/api/cron/trade-weekly-recalibration': 'TradeLearningStats holds ZERO rows -- this job has never produced output on any scheduler. Investigate before probing.',
 
   /*
    * Classified 2026-08-30. It had been an UNCLASSIFIED gap since it was added, which is the one
@@ -452,6 +516,33 @@ export const NO_PROBE = {
     'a query-param mode of the import-news route writing the same player_news the base job writes ' +
     'every 15 minutes, so a table probe here is satisfied by that job. Zero new rows is also ' +
     'legitimate (X may have nothing in the window). Needs a per-mode heartbeat.',
+
+  /*
+   * The backfill sweeper, added with the route in 5e0624675 / 4b7a82d1c.
+   *
+   * ⚠ THIS ONE IS UNPROBEABLE FOR A REASON THE OTHERS ARE NOT, AND IT IS THE INTERESTING ONE.
+   * Every entry above is unprobed because it SHARES a table with a job that runs more often --
+   * the shared-probe false green. This job's problem is the opposite: on a healthy platform it
+   * correctly writes NOTHING. It exists to re-drive historical backfills that died mid-run, so
+   * zero writes is the SUCCESS case and the steady state. Any output probe would therefore
+   * report it stale precisely when it is working, and green only when leagues are broken.
+   *
+   * It also has no freshness column to probe even when it does work: it stamps
+   * League.settings.historicalBackfillStatus, a JSON blob that the import path and the manual
+   * retry route both write, so a table probe would be satisfied by either of those instead --
+   * the same shared-probe shape as ?riProfiles=1 above, on top of the inversion.
+   *
+   * The fix is a heartbeat, and it must be a real one: the route does not call withSyncJobRun
+   * today, so pointing a heartbeat probe at it now would report CONFIG forever rather than
+   * measure anything. Checked before writing this rather than assumed.
+   */
+  '/api/cron/import-backfill-sweeper':
+    'a repair job whose healthy steady state is writing NOTHING -- it re-drives historical ' +
+    'backfills stuck at pending, so zero writes means every league is fine. An output probe ' +
+    'would read stale exactly when it is working and green only when leagues are broken. It ' +
+    'also stamps League.settings JSON that the import and manual-retry paths both write, so a ' +
+    'table probe would be satisfied by those. Needs a withSyncJobRun heartbeat on the route, ' +
+    'which it does not emit yet.',
 }
 
 /**
@@ -534,6 +625,36 @@ export function maxGapMs(schedule) {
   }
   return maxGap > 0 ? maxGap : null
 }
+
+/**
+ * Turn one probe's row counts into a state. Pure, and exported so the states can be TESTED.
+ *
+ * ⚠ EXTRACTED FROM THE MIDDLE OF THE QUERY LOOP ON PURPOSE. It used to be an inline if/else with
+ * a live `pg` client either side of it, so the only way to exercise a state was to reach a
+ * database holding data in exactly that shape — which meant in practice that no state was ever
+ * exercised, and a new one could be added with nothing to prove it fires. This file's own header
+ * says a monitor that has never gone red is not evidence; that applies to the monitor's own
+ * classifier first.
+ *
+ * The four callers' inputs map straight from `maxAge()`:
+ *   rowCount        count(*)      — rows in the table
+ *   timestampCount  count(col)    — rows where the freshness column is NOT NULL
+ *   ageMs           now - max(col), or null when there is no timestamp at all
+ *
+ * ⚠ ORDER IS LOAD-BEARING. UNPOPULATED and EMPTY are decided BEFORE the seasonal softening,
+ * because a column nothing has written is broken in or out of season. Moving the season check
+ * above them would let an out-of-season job report IDLE — healthy — while its probe pointed at a
+ * column that does not get written at all.
+ */
+export function classifyFreshness({ rowCount, timestampCount, ageMs, allowanceMs, outOfSeason = false }) {
+  if (rowCount > 0 && timestampCount === 0) return 'UNPOPULATED'
+  if (ageMs == null) return 'EMPTY'
+  if (ageMs > allowanceMs && outOfSeason) return 'IDLE'
+  return ageMs > allowanceMs ? 'STALE' : 'OK'
+}
+
+/** The states that do NOT fail a run. Kept beside the classifier so the two cannot drift apart. */
+export const HEALTHY_STATES = new Set(['OK', 'IDLE'])
 
 // ───────────────────────────── formatting ────────────────────────────────
 
@@ -687,25 +808,38 @@ async function main() {
 
       const { newest, rowCount, timestampCount: tsCount, ageMs } = row
 
-      let state
-      if (rowCount > 0 && tsCount === 0) {
-        state = 'CONFIG'
-      } else if (ageMs == null) {
-        state = 'EMPTY'
-      } else if (ageMs > allowanceMs && probe.seasonal && !isInSeason(probe.seasonal.sport, now)) {
-        /*
-         * Out of season the job cannot have new data, so age carries no information about health.
-         * Reported as IDLE rather than OK: OK would claim the data is fresh, which it is not. IDLE
-         * says "stale, and expected to be" -- a third state, because collapsing it into either of
-         * the other two loses the distinction that makes the alarm worth reading.
-         *
-         * CONFIG and EMPTY are checked FIRST and are never softened: a wrong column or a table that
-         * has never held a row is broken in or out of season.
-         */
-        state = 'IDLE'
-      } else {
-        state = ageMs > allowanceMs ? 'STALE' : 'OK'
-      }
+      /*
+       * ⚠ `UNPOPULATED` WAS `CONFIG`, DETAILED "wrong column for this table" — AN ASSERTED CAUSE
+       * THE COUNTS CANNOT ESTABLISH. Two different situations produce an all-NULL column, and
+       * `count(col)` against `count(*)` cannot tell them apart:
+       *
+       *   the probe names the WRONG COLUMN   — `player_game_stats` holds 252,768 rows with
+       *                                        `fetched_at` NULL on every one. The map is wrong.
+       *   the column is RIGHT, nothing set it — `notification_outbox.sentAt` was NULL on all 4
+       *                                        rows because the only rows that ever existed were
+       *                                        retired unsent by operator decision (2026-08-30).
+       *
+       * Reporting the first as fact sent the reader to fix a mapping that was never broken, which
+       * is worse than a stale red: it spends someone's attention on a non-bug and teaches them the
+       * board lies. Whether the column EXISTS is a different question, answered above, and still a
+       * real CONFIG. What is left here is an observation, so it is reported as one.
+       *
+       * ⚠ IT STILL FAILS THE RUN. `HEALTHY_STATES` holds only OK and IDLE, so the alarm is exactly
+       * as loud as before — the wording changed, the severity did not. A column nothing has ever
+       * populated is a finding under either cause, and softening it here would be the "green board"
+       * the outbox probe's original author rightly warned against.
+       *
+       * Out of season IDLE means "stale, and expected to be" — not OK, which would claim the data
+       * is fresh when it is not. UNPOPULATED and EMPTY are decided BEFORE that softening, inside
+       * classifyFreshness: a column nothing writes is broken in or out of season.
+       */
+      const state = classifyFreshness({
+        rowCount,
+        timestampCount: tsCount,
+        ageMs,
+        allowanceMs,
+        outOfSeason: Boolean(probe.seasonal && !isInSeason(probe.seasonal.sport, now)),
+      })
       results.push({
         ...base,
         column,
@@ -714,7 +848,10 @@ async function main() {
         ageMs,
         state,
         caveat: probe.caveat ?? null,
-        detail: state === 'CONFIG' ? `"${column}" is NULL on all ${rowCount} rows -- wrong column for this table` : undefined,
+        detail:
+          state === 'UNPOPULATED'
+            ? `"${column}" exists on "${probe.table}" but is NULL on all ${rowCount} row(s) -- either this probe names the wrong column, or the column is correct and nothing has populated it yet. Find what writes it before changing the map.`
+            : undefined,
       })
     }
   } finally {
@@ -722,7 +859,7 @@ async function main() {
   }
 
   // IDLE is a healthy outcome: the job is correct and simply has nothing to do this month.
-  const bad = results.filter((r) => r.state !== 'OK' && r.state !== 'IDLE')
+  const bad = results.filter((r) => !HEALTHY_STATES.has(r.state))
 
   if (asJson) {
     console.log(JSON.stringify({ results, unmonitored, failing: bad.length }, null, 2))
@@ -735,10 +872,17 @@ async function main() {
         : r.state === 'IDLE' ? 'idle'
         : r.state === 'STALE' ? 'STALE'
         : r.state === 'EMPTY' ? 'EMPTY'
+        : r.state === 'UNPOPULATED' ? 'NULLCOL'
         : 'CONFIG'
-      const age = r.state === 'CONFIG' ? r.detail : `${fmtAge(r.ageMs)} old (allow ${fmtAge(r.allowanceMs)})`
+      /*
+       * Show the detail whenever there is one, rather than only for CONFIG. Every CONFIG result
+       * sets `detail`, and UNPOPULATED now does too; for the rest it is undefined and the age
+       * string is the useful line. Keying on the STATE meant a new state printed
+       * "never old (allow 3.0d)" and buried the reason it was flagged.
+       */
+      const age = r.detail ?? `${fmtAge(r.ageMs)} old (allow ${fmtAge(r.allowanceMs)})`
       const kind = r.kind === 'heartbeat' ? 'hb ' : '   '
-      console.log(`  ${mark.padEnd(6)} ${r.tier.padEnd(5)} ${kind}${r.path.padEnd(52)} ${age}`)
+      console.log(`  ${mark.padEnd(7)} ${r.tier.padEnd(5)} ${kind}${r.path.padEnd(52)} ${age}`)
       if (r.caveat) console.log(`             ^ ${r.caveat}`)
     }
     if (unmonitored.length > 0) {

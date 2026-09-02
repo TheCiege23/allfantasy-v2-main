@@ -10,7 +10,13 @@ import {
   slowTierSchedules,
   SLOW_TIER_EXCLUSIONS,
 } from '../scripts/cron-tier.mjs'
-import { maxGapMs, NO_PROBE, PROBES } from '../scripts/cron-freshness-check.mjs'
+import {
+  classifyFreshness,
+  HEALTHY_STATES,
+  maxGapMs,
+  NO_PROBE,
+  PROBES,
+} from '../scripts/cron-freshness-check.mjs'
 
 /**
  * Scheduling moved off the host after all 41 crons died on the Vercel -> Railway migration and
@@ -228,5 +234,68 @@ describe('cron-slow-tier.yml stays in sync with vercel.json', () => {
 
   it('declares no schedule twice', () => {
     expect(new Set(declared).size).toBe(declared.length)
+  })
+})
+
+/*
+ * The freshness classifier's own states.
+ *
+ * ⚠ WHY THIS EXISTS AT ALL. Until `classifyFreshness` was extracted, these branches lived inside
+ * the query loop with a live `pg` client either side of them, so exercising a state meant reaching
+ * a database holding data in exactly that shape — which meant in practice that none of them was
+ * ever exercised. The monitor's own header says a check that has never gone red is not evidence;
+ * that applies to the monitor's classifier first.
+ *
+ * The case that motivated it: an all-NULL column used to report CONFIG `"wrong column for this
+ * table"`, asserting a cause the counts cannot establish. `player_game_stats` (252,768 rows,
+ * fetched_at NULL on every one) really is a wrong column; `notification_outbox.sentAt` was NULL
+ * because its only four rows were retired unsent by operator decision. Same counts, opposite
+ * causes.
+ */
+describe('classifyFreshness', () => {
+  const ALLOW = 60_000
+
+  it('reports UNPOPULATED — not CONFIG — when the column exists but is NULL on every row', () => {
+    expect(
+      classifyFreshness({ rowCount: 252_768, timestampCount: 0, ageMs: null, allowanceMs: ALLOW }),
+    ).toBe('UNPOPULATED')
+  })
+
+  it('separates UNPOPULATED (rows exist, none stamped) from EMPTY (no rows at all)', () => {
+    expect(classifyFreshness({ rowCount: 4, timestampCount: 0, ageMs: null, allowanceMs: ALLOW })).toBe('UNPOPULATED')
+    expect(classifyFreshness({ rowCount: 0, timestampCount: 0, ageMs: null, allowanceMs: ALLOW })).toBe('EMPTY')
+  })
+
+  it('reports OK inside the allowance and STALE beyond it', () => {
+    expect(classifyFreshness({ rowCount: 10, timestampCount: 10, ageMs: ALLOW - 1, allowanceMs: ALLOW })).toBe('OK')
+    expect(classifyFreshness({ rowCount: 10, timestampCount: 10, ageMs: ALLOW + 1, allowanceMs: ALLOW })).toBe('STALE')
+  })
+
+  it('softens STALE to IDLE only when the probe is out of season', () => {
+    const args = { rowCount: 10, timestampCount: 10, ageMs: ALLOW + 1, allowanceMs: ALLOW }
+    expect(classifyFreshness({ ...args, outOfSeason: true })).toBe('IDLE')
+    expect(classifyFreshness({ ...args, outOfSeason: false })).toBe('STALE')
+  })
+
+  /*
+   * ⚠ THE ORDER GUARD. Out of season, a job cannot have new data, so age carries no information —
+   * but a column NOTHING writes is broken in or out of season. If the seasonal softening were
+   * moved above the UNPOPULATED/EMPTY checks, a misconfigured probe would report IDLE, which
+   * `HEALTHY_STATES` treats as passing, and the alarm would be silently disabled for months.
+   */
+  it('never softens UNPOPULATED or EMPTY to IDLE, even out of season', () => {
+    expect(
+      classifyFreshness({ rowCount: 99, timestampCount: 0, ageMs: null, allowanceMs: ALLOW, outOfSeason: true }),
+    ).toBe('UNPOPULATED')
+    expect(
+      classifyFreshness({ rowCount: 0, timestampCount: 0, ageMs: null, allowanceMs: ALLOW, outOfSeason: true }),
+    ).toBe('EMPTY')
+  })
+
+  it('treats only OK and IDLE as healthy, so UNPOPULATED still fails the run', () => {
+    expect([...HEALTHY_STATES].sort()).toEqual(['IDLE', 'OK'])
+    for (const s of ['UNPOPULATED', 'EMPTY', 'STALE', 'CONFIG']) {
+      expect(HEALTHY_STATES.has(s), `${s} must fail the run`).toBe(false)
+    }
   })
 })

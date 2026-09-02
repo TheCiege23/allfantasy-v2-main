@@ -17,6 +17,11 @@ import { prisma } from '@/lib/prisma'
 import { resolveChimmyIntentRoute } from '@/lib/ai/chimmyIntentRouter'
 import { DEFAULT_WORLD_CUP_SCORING } from '@/lib/world-cup/worldCupBracketBuilder'
 import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
+// BUG-1: read the league instead of guessing from the question. `leagueValueFormat` is a pure
+// module (one import) rather than `grounding/packet`, whose 17 imports include ChimmyContextEngine
+// — this path runs on EVERY chat message, including the ones that never build a packet.
+import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
+import { deriveValueFormat, deriveLeagueSizeAndPpr } from '@/lib/decision-os/grounding/leagueValueFormat'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
 import { getCachedGameWeather } from '@/lib/weather/weatherService'
@@ -438,26 +443,93 @@ function extractLikelyPlayerName(message: string): string | null {
   return null
 }
 
-async function buildFantasyCalcValueAnswer(message: string): Promise<string | null> {
+/**
+ * ── 🛑 THIS USED TO READ THE QUESTION AND CALL IT THE LEAGUE'S SETTINGS (BUG-1) ──────────────
+ *
+ * Measured in production 2026-09-02 on a league the owner confirms is DYNASTY:
+ *
+ *   Q  "What's Jeremiyah Love worth in King Gingerbeards SF 2026!!!?"
+ *   A  "...FantasyCalc REDRAFT value is 3779 ... Settings: superflex, 12-team PPR."
+ *      correct dynasty value 6644 — a 43% understatement of a dynasty asset
+ *
+ * Four inputs were fabricated and all four were presented as the user's league settings:
+ *   isDynasty     /dynasty|keeper|future/i against the MESSAGE
+ *   isSuperflex   /superflex|\bsf\b|2qb/i  against the MESSAGE — right only because the league
+ *                 NAME happened to contain "SF"
+ *   numTeams/ppr  hardcoded in the query
+ *   "12-team PPR" a string LITERAL, emitted identically for every league on the platform
+ *
+ * It signed off "Source: FantasyCalc current values", which made invented settings read as sourced.
+ *
+ * ⚠ THE PRICE IS THE DEFECT; THE SENTENCE IS ONLY HOW IT ANNOUNCED ITSELF. Deleting the settings
+ * line would have silenced the symptom while still serving a redraft price to a dynasty league.
+ * So the fix changes what is FETCHED, and the wording follows from it.
+ *
+ * ⚠ EXPORTED so the behaviour is testable directly. The short-circuit that calls this runs before
+ * the grounding packet on every message (`route.ts:1387` vs `1667`), so nothing downstream can
+ * correct it — it has to be right here.
+ */
+export async function buildFantasyCalcValueAnswer(
+  message: string,
+  leagueId?: string | null,
+): Promise<string | null> {
   if (!/\b(trade value|fantasycalc|value|worth)\b/i.test(message)) return null
   const playerName = extractLikelyPlayerName(message)
   if (!playerName) return null
-  const isDynasty = /\bdynasty|keeper|future\b/i.test(message)
-  const isSuperflex = /\bsuperflex|\bsf\b|2qb|two qb/i.test(message)
+
+  /*
+   * Read the LEAGUE. `loadRules` is the 60s-TTL Decision OS loader the grounding packet already
+   * uses, so a warm league costs nothing and producer and consumer share one derivation.
+   * Null on any failure — never a default, because a default here becomes a stated claim below.
+   */
+  let rules: unknown = null
+  if (leagueId) {
+    rules = await createLeagueOsLoaders()
+      .loadRules(leagueId)
+      .catch(() => null)
+  }
+  const fmt = deriveValueFormat(rules)
+  const size = deriveLeagueSizeAndPpr(rules)
+
+  // With no resolvable league we still price the player, but on an explicitly GENERIC basis that
+  // the answer names as generic. What we must never do is call it theirs.
+  const isDynasty = fmt?.format === 'DYNASTY'
+  const numQbs = fmt?.qbFormat === 'SUPERFLEX' ? 2 : 1
 
   try {
     const values = await getFantasyCalcValuesDbFirst({
       isDynasty,
-      numQbs: isSuperflex ? 2 : 1,
-      numTeams: 12,
-      ppr: 1,
+      numQbs,
+      numTeams: size.numTeams ?? 12,
+      ppr: size.ppr ?? 1,
     })
     const found = findPlayerByName(values, playerName)
     if (!found) {
       return `I could not find ${playerName} in the FantasyCalc value feed I can access right now.`
     }
     const tier = getValueTier(found.value)
-    return `${found.player.name}'s FantasyCalc ${isDynasty ? 'dynasty' : 'redraft'} value is ${found.value} (${tier} tier), overall rank #${found.overallRank}, position rank #${found.positionRank}, with a 30-day trend of ${found.trend30Day > 0 ? '+' : ''}${found.trend30Day}. Settings: ${isSuperflex ? 'superflex' : '1QB'}, 12-team PPR. Source: FantasyCalc current values.`
+    const trend = `${found.trend30Day > 0 ? '+' : ''}${found.trend30Day}`
+    const head =
+      `${found.player.name}'s FantasyCalc ${isDynasty ? 'dynasty' : 'redraft'} value is ` +
+      `${found.value} (${tier} tier), overall rank #${found.overallRank}, position rank ` +
+      `#${found.positionRank}, with a 30-day trend of ${trend}.`
+
+    /*
+     * ⚠ THE SETTINGS SENTENCE IS EMITTED ONLY WHEN IT WAS READ. Each clause is included only if
+     * the league actually stated it — a partially-known league gets a partial sentence, never a
+     * padded one. No league, or unreadable rules, and the claim is replaced by a statement of what
+     * basis was used and why, which is the honest version of the same information.
+     */
+    if (!fmt) {
+      const why = leagueId
+        ? `I could not read that league's settings, so this is the standard 1QB redraft market`
+        : `You did not name a league, so this is the standard 1QB redraft market`
+      return `${head} ${why}, not your league's. Source: FantasyCalc current values.`
+    }
+    const parts = [fmt.qbFormat === 'SUPERFLEX' ? 'superflex' : '1QB']
+    if (size.numTeams != null) parts.push(`${size.numTeams}-team`)
+    if (size.ppr != null) parts.push(size.ppr === 1 ? 'PPR' : size.ppr === 0.5 ? 'half-PPR' : `${size.ppr} per reception`)
+    return `${head} Settings read from your league: ${parts.join(', ')}. Source: FantasyCalc current values.`
   } catch {
     return `I do not have reliable FantasyCalc value data for ${playerName} right now.`
   }
@@ -693,6 +765,12 @@ export type DeterministicResult =
 export async function tryDeterministicAnswerDetailed(
   message: string,
   locale?: string,
+  /**
+   * BUG-1. The route has this resolved at line 1159, two hundred lines before it calls us, and it
+   * simply was not passed — which is how the value path ended up guessing league settings from the
+   * question text. Optional so every existing caller and test compiles unchanged.
+   */
+  leagueId?: string | null,
 ): Promise<DeterministicResult | null> {
   const answer = (text: string): DeterministicResult => ({ kind: 'answer', text })
   const refusal = (text: string): DeterministicResult => ({ kind: 'refusal', text })
@@ -709,7 +787,7 @@ export async function tryDeterministicAnswerDetailed(
   }
   const teamResult = await buildTeamResultAnswer(message)
   if (teamResult) return answer(teamResult)
-  const fantasyCalcValue = await buildFantasyCalcValueAnswer(message)
+  const fantasyCalcValue = await buildFantasyCalcValueAnswer(message, leagueId ?? null)
   if (fantasyCalcValue) return answer(fantasyCalcValue)
   const weather = await buildCachedWeatherAnswer(message, safeLocale)
   if (weather) return answer(weather)
@@ -760,8 +838,9 @@ export async function tryDeterministicAnswerDetailed(
 export async function tryDeterministicAnswer(
   message: string,
   locale?: string,
+  leagueId?: string | null,
 ): Promise<string | null> {
-  return (await tryDeterministicAnswerDetailed(message, locale))?.text ?? null
+  return (await tryDeterministicAnswerDetailed(message, locale, leagueId))?.text ?? null
 }
 
 /** Metadata marker for deterministic responses. */

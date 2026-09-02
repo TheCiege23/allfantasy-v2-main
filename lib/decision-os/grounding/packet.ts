@@ -18,9 +18,6 @@ import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } fro
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
 import { stampLineupSlots, starterSlotsFromRules } from './stampLineupSlots'
-// Reused rather than reimplemented: the trade shadow already derives the market's QB bucket from
-// starting slots with this exact function, and two copies would eventually disagree.
-import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
 import type { ValueLookup } from '../value/contract'
@@ -479,66 +476,15 @@ export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>):
   return oldest
 }
 
-/**
- * The market format this league prices against, read off the rules the packet ALREADY loaded.
- *
- * ── 🛑 R1.2. THE CALLER USED TO HAVE TO SUPPLY THIS, AND THE ONE CALLER THAT MATTERS DID NOT ──
- * `/api/chat/chimmy` passed no `valueFormat`, and the market slice was gated on
- * `want.values && args.valueFormat` — so the entire offence/market valuation lane was absent from
- * every answer, and setting `want.values: true` alone would have bought nothing. The proof
- * surface had the same hole.
- *
- * ⚠ DERIVED HERE RATHER THAN DEMANDED FROM CALLERS, for the reason `OsFactSource.scopeKey`
- * exists: two call sites computing the same key eventually disagree. The rules are already in
- * hand, so this costs no query.
- *
- * ⚠ KEEPER MAPS TO DYNASTY. `PlayerValueSnapshot` holds exactly four combinations — measured on
- * production: DYNASTY/REDRAFT × SUPERFLEX/ONE_QB — so every league must land on one of them. A
- * keeper league carries assets across seasons, which is what the dynasty market prices; calling it
- * REDRAFT would price a held asset as a rental.
+/*
+ * ⚠ MOVED to ./leagueValueFormat and RE-EXPORTED here, so every existing importer and test is
+ * untouched. It moved because `lib/ai/deterministic.ts` needs the same derivation on a far hotter
+ * path — it runs on every chat message — and importing it from THIS module would evaluate all 17
+ * of packet.ts's imports, `ChimmyContextEngine` included, on messages that never build a packet.
+ * One implementation, two callers, no second copy to drift.
  */
-export function deriveValueFormat(rules: unknown): { format: string; qbFormat: string } | null {
-  if (!rules || typeof rules !== 'object') return null
-  const r = rules as { general?: { format?: unknown }; roster?: { starters?: unknown } }
-  const raw = typeof r.general?.format === 'string' ? r.general.format : null
-  if (!raw) return null
-  return {
-    format: /dynasty|keeper/i.test(raw) ? 'DYNASTY' : 'REDRAFT',
-    // Shared with the trade shadow's own derivation rather than reimplemented — it reads
-    // SUPER_FLEX/SF slots and a second QB slot, both of which mean the same thing to the market.
-    qbFormat: detectQbFormat(r.roster?.starters),
-  }
-}
-
-/**
- * This league's scoring, as the `statKey → points` map `rescoreIdpForLeague` expects.
- *
- * 🛑 WITHOUT IT EVERY PROJECTION IS THE *BALANCED* IDP PRESET, NOT A NEUTRAL ONE. Measured on
- * production 2026-09-02: a superflex dynasty league rostering Khalil Mack (LB) and Jonas Sanker
- * (DB) was shown `canonical preset, NOT this league` on every row. `projection-os` warns about
- * exactly this — the stored number is materially wrong for a tackle-heavy league, and nothing
- * about it looks wrong.
- *
- * ⚠ ALL ACTIVE RULES ARE PASSED, NOT A FILTERED "IDP" SUBSET. `rescoreIdpForLeague` iterates the
- * PROJECTION's component amounts and looks each one up in this map, so a non-IDP key is never
- * read. Filtering on `category` here would instead risk dropping a real IDP rule whose category
- * is spelled differently by one importer — a silent under-scoring rather than a harmless extra key.
- */
-export function deriveIdpRules(rules: unknown): Record<string, number> | null {
-  if (!rules || typeof rules !== 'object') return null
-  const active = (rules as { scoring?: { activeRules?: unknown } }).scoring?.activeRules
-  if (!Array.isArray(active)) return null
-  const out: Record<string, number> = {}
-  for (const row of active) {
-    if (!row || typeof row !== 'object') continue
-    const k = (row as { statKey?: unknown }).statKey
-    const v = (row as { pointsValue?: unknown }).pointsValue
-    if (typeof k === 'string' && k.length > 0 && typeof v === 'number' && Number.isFinite(v)) out[k] = v
-  }
-  // Null rather than `{}` — an empty map would rescore every projection to zero and report
-  // `rescored: true`, which is the confident-wrong-number failure this packet exists to prevent.
-  return Object.keys(out).length > 0 ? out : null
-}
+export { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
+import { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
 
 export interface GroundingPacketArgs {
   leagueId?: string | null

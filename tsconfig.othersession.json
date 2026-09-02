@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "types/**/*.d.ts",
+    "next-env.d.ts",
+    "app/core/[[...screen]]/page.tsx",
+    "app/career-share/page.tsx",
+    "app/leagues/page.tsx",
+    "app/dev/handoff-preview/**/*.tsx",
+    "components/core-app/AfCoreShell.tsx",
+    "components/core-app/screens/CareerShare.tsx",
+    "components/core-app/screens/NotificationsCenter.tsx",
+    "components/core-app/screens/RivalryRadar.tsx",
+    "components/core-app/screens/SeasonOutlook.tsx",
+    "components/core-app/screens/YourWeek.tsx",
+    "components/core-app/screens/Career.tsx",
+    "components/core-app/screens/Tools.tsx",
+    "components/core-app/comms/**/*.tsx",
+    "components/core-app/support/**/*.tsx",
+    "components/core-app/league-tile/**/*.tsx",
+    "components/dashboard/nocturne/NocturneDashboard.tsx",
+    "lib/core-app/**/*.ts",
+    "lib/draft-notifications/draftEmails.ts",
+    "lib/trade-intel/tradeGradeEmail.ts",
+    "lib/trade-intel/tradeNotifyService.ts"
+  ]
+}

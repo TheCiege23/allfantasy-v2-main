@@ -1547,19 +1547,36 @@ export default async function AdminPage({
   }
 
   /*
-   * ⚠ GROWTH IS SUPPLEMENTARY AND FAILS SOFT. The metrics fetch above owns the
-   * page — if it dies there is nothing to show. This one must not inherit that
-   * power: an operator opening /admin during an incident needs the verdict and
-   * the provider table far more than a chart, and taking the whole console down
-   * because a time-series query timed out would be the worst possible moment to
-   * lose it. A null here simply omits the card.
+   * ⚠ GROWTH IS SUPPLEMENTARY AND MUST NOT BE ABLE TO HOLD THE PAGE. The metrics
+   * fetch above owns /admin — if it dies there is nothing to show. This one must
+   * not inherit that power: an operator opening /admin during an incident needs
+   * the verdict and the provider table far more than a chart.
+   *
+   * 🛑 A try/catch IS NOT ENOUGH, AND SHIPPING ONE HERE TOOK /admin DOWN.
+   * The first version of this block caught errors and called that "fails soft".
+   * Slowness is not an error. A query that takes ninety seconds throws nothing —
+   * it just blocks the await, and the whole console spins with no error anywhere
+   * to explain why. Reported from production on 2026-09-02: /admin "keeps
+   * spinning" while /api/health answered in 0.16s, because the page was waiting
+   * on this call and nothing bounded it.
+   *
+   * So the bound is a RACE, not a catch. Whichever finishes first wins; if the
+   * timer wins the card is omitted and every other panel still renders.
    */
-  let growth: Awaited<ReturnType<typeof getAdminGrowthSeries>> | null = null
-  try {
-    growth = await getAdminGrowthSeries()
-  } catch {
-    growth = null
-  }
+  const GROWTH_BUDGET_MS = 4000
+  /*
+   * ⚠ THE .catch() IS ON THE WORK, NOT ON THE RACE, AND THAT PLACEMENT MATTERS.
+   * If the timer wins and the query rejects a minute later, a rejection settled
+   * against a promise nobody is awaiting any more is an UNHANDLED rejection —
+   * which in a Node server is a process-level event, not a caught error. Catching
+   * on the inner promise means it is always handled, whoever wins the race.
+   */
+  const growthWork = getAdminGrowthSeries().catch(() => null)
+  const growthBudget = new Promise<null>((resolve) => setTimeout(() => resolve(null), GROWTH_BUDGET_MS))
+  const growth: Awaited<ReturnType<typeof getAdminGrowthSeries>> | null = await Promise.race([
+    growthWork,
+    growthBudget,
+  ])
 
   return (
     <main className="af-cc min-h-dvh">
@@ -1600,7 +1617,16 @@ export default async function AdminPage({
                 AF
               </text>
             </svg>
-            <div className="af-cc-bar-title">Command Center</div>
+            {/*
+              ⚠ AN <h1>, NOT A STYLED <div>. The handoff draws this as a 14px
+              bar title, and rendering it as a div is how the page silently lost
+              its only heading — no document outline, and nothing for a screen
+              reader to navigate to. The visual is identical either way; the
+              semantics are not. Caught by admin-page-render's
+              getByRole("heading", …) once great-dubinsky repaired the fixture
+              that had been masking that test.
+            */}
+            <h1 className="af-cc-bar-title">Command Center</h1>
             <div className="af-cc-admin-chip">Admin</div>
             <DeploymentMarker />
             <div className="af-cc-spacer" />

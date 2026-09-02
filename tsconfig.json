@@ -54,7 +54,18 @@
     ".next-build-check/types/**/*.ts",
     ".next-dev-visuals-b2/types/**/*.ts",
     ".next-localrepro/types/**/*.ts",
-    ".next-railwaysim/types/**/*.ts"
+    ".next-railwaysim/types/**/*.ts",
+    ".next-dev-my-team/types/**/*.ts",
+    ".next-dev-passing/types/**/*.ts",
+    ".next-dev-notifications/types/**/*.ts",
+    ".next-dev-core-rail/types/**/*.ts",
+    ".next-dev-tournament-hub/types/**/*.ts",
+    ".next-dev-pwa/types/**/*.ts",
+    ".next-dev-value-engine/types/**/*.ts",
+    ".next-dev-admin/types/**/*.ts",
+    ".next-dev-decision-os/types/**/*.ts",
+    ".next-prod-decision-os/types/**/*.ts",
+    ".next-dev-player-finder/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

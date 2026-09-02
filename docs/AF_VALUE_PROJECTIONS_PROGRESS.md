@@ -7,7 +7,51 @@ Updated as each step lands. **Nothing here is pushed to production.**
 
 ---
 
-## 📦 HAND-OFF — delivered 2026-09-02, awaiting a decision
+## ✅ LANDED ON MAIN — 2026-09-02
+
+All work is on `origin/main`, verified **by patch-id** rather than by ancestry (a cherry-pick
+renames every commit it touches, so ancestry answers "no" about work that is sitting right there):
+
+| my pick | patch-id | on main as | batch |
+|---|---|---|---|
+| `7b421e8b1` | `95daf80a5…` | **`821b8231d`** | 3 |
+| `b683b07b5` | `d18d60764…` | **`b1e67d2bf`** | 3 |
+| `4c490c2e5` | `350b92687…` | **`821660ae6`** | 4 |
+
+`origin/main` = `9b19a3d76c5f9e973494ebd966d1815f245148d3`. Batch 3 deployed 06:07Z
+(`dpl_D6EVJPm8Ln9H7WcR21uLxtEENrPv`).
+
+**Every gate measured 145/145 detached with a sentinel**, none in my files.
+
+### ⏳ The one thing still unverified: does it work at runtime?
+
+Every test injects its ports. The real path — `AFProjectionSnapshot` read against a live database,
+the season fallback firing on a real cron — has **never executed**. That has been on the
+not-verified list since the first hand-off.
+
+**Pre-cron baseline, captured 06:08Z** so the comparison is a measurement rather than an inference:
+
+```
+latest run              2026-09-01 07:53Z  (the day BEFORE the fix)
+NFL since 08-20         10 runs · rows_written TOTAL 0 · every one status=success
+NFL metadata            src=2026 · noSourceSeasonYet=TRUE · sourceSeasonFallback=null
+AFProjectionSnapshot    NFL 1,576 rows · with_ros 0 · newest 2026-08-20 07:50Z
+                        NCAAF 10,189 rows · with_ros 0
+```
+
+All three "after" signals sit at their failing values. First fire under the new code: **07:50Z**.
+
+⚠ **A control stated in advance.** NCAAF refuses for `insufficient_sample`, not `no_games_played`,
+so the fallback must **not** fire for it. If NCAAF's numbers move, my reasoning is wrong and that
+is a finding, not noise — declared before the result so it cannot be rationalised afterwards.
+
+⚠ **And a correction to my own earlier framing:** the 2026-season flip is not NFL-specific. NHL,
+NBA and NCAAB already run on `src=2025` by ordinary means; only NFL, NCAAF and MLB are on 2026. NFL
+rolling back would put it in the majority, not make it exceptional.
+
+---
+
+## 📦 HAND-OFF — delivered 2026-09-02
 
 | | |
 |---|---|

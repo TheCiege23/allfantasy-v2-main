@@ -1,0 +1,4 @@
+{ "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "skipLibCheck": true },
+  "include": [],
+  "files": ["lib/core-app/leagueStandings.ts"] }

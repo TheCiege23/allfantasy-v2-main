@@ -1,0 +1,62 @@
+{
+  "target": "http://127.0.0.1:3000",
+  "at": "2026-08-29T13:18:12.901Z",
+  "results": [
+    {
+      "archetype": "casual-returner",
+      "mission": "sweep-player-browser",
+      "succeeded": false,
+      "steps": 1,
+      "findings": [
+        {
+          "severity": "blocker",
+          "title": "Screen has nothing to interact with",
+          "narrative": "The persona arrived and found no enabled, visible control at all. Either the page failed to render or it is a genuine dead end.",
+          "url": "about:blank",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/players",
+          "evidence": "Invalid Sentry Dsn: [SENSITIVE]",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/players",
+          "evidence": "WebSocket connection to 'ws://127.0.0.1:3000/_next/webpack-hmr' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/players",
+          "evidence": "The method FB.getLoginStatus can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/players",
+          "evidence": "[next-auth][error][CLIENT_FETCH_ERROR] \nhttps://next-auth.js.org/errors#client_fetch_error Failed to fetch {error: Object, url: /api/auth/session, message: Failed to fetch}",
+          "archetype": "casual-returner",
+          "step": 1
+        }
+      ],
+      "trail": [
+        "00. started at /players — goal: Look around the player browser and see if anything is broken",
+        "01. pressed the browser Back button"
+      ]
+    }
+  ]
+}

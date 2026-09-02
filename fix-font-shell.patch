@@ -1,0 +1,86 @@
+From 72ce48d5068f48b33234f0e6891a05859a0b0c65 Mon Sep 17 00:00:00 2001
+From: Guap <allfantasysportsapp@gmail.com>
+Date: Tue, 25 Aug 2026 21:03:12 -0400
+Subject: [PATCH] Every App Router route shipped HTML with no document shell,
+ and a white page
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Next's Google Fonts optimizer is on by default. It rewrites rendered HTML to
+hoist <link rel=stylesheet href=fonts.googleapis.com...> into <head> and inline
+the CSS. The root layout puts those links INSIDE <body> deliberately — the
+comment there explains a <link> at that position is the one place stylesheet
+ordering is guaranteed, after an @import in af-core.css was measured being
+dropped when another af-*.css concatenated ahead of it.
+
+The optimizer does not cope with that placement. It strips the <link> and takes
+<!DOCTYPE>, <html>, <head> and <body> with it.
+
+Measured against production before this change: `/`, `/login`, `/pricing`,
+`/privacy` and the not-found route all began at `<meta charSet="utf-8"/>` with
+no shell — 54,609 bytes of real content, no wrapper. `/500` came through with a
+correct `<!DOCTYPE html><html><head>`; it is the one Pages Router route and has
+no Google Fonts link. That split is the whole diagnosis: the corruption tracks
+the font link, not the router, not the host.
+
+Downstream, the browser parses the fragment in QUIRKS MODE and synthesises a
+bare <body> — without `className="antialiased min-h-screen mode-readable"` and
+without `style={{background:'var(--bg)',color:'var(--text)'}}`. Those two
+tokens are what give the page a background and a text colour, so the content
+mounts and renders invisibly. 11 child nodes present, nothing on screen. React
+then fails to hydrate against a tree that does not match what it emitted, retries
+a client render, fails again and throws AggregateError from the scheduler,
+unmounting what was there.
+
+Nothing about this was host-specific. It reproduced identically on the Railway
+service domain and on www.allfantasy.ai, with every CSS chunk, JS chunk and API
+call returning 200, on a cold build with no cache reuse. It has been present for
+as long as the font links have been in the layout, which is why the production
+domain has never rendered.
+
+Turning the optimizer off leaves the links where the layout puts them and the
+stylesheet ordering the comment protects. The fonts still load from Google; they
+are simply not inlined at build time, which costs one request and no correctness.
+
+The alternative — moving the links into <head> — was not taken. That is the
+placement the layout comment explicitly argues against, and it would trade a
+document-shell bug for the font-ordering bug it was written to prevent.
+---
+ next.config.js | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/next.config.js b/next.config.js
+index 9a011c34..bc85c535 100644
+--- a/next.config.js
++++ b/next.config.js
+@@ -18,6 +18,26 @@ const isRailwayRuntime = !!(
+ 
+ const nextConfig = {
+   reactStrictMode: true,
++
++  // Next's built-in Google Fonts optimizer rewrites the rendered HTML to hoist and
++  // inline <link> tags pointing at fonts.googleapis.com into <head>. The root layout
++  // places those links INSIDE <body> on purpose (see the comment in app/layout.tsx
++  // about stylesheet ordering), and the optimizer mangles the document trying to move
++  // them: the <link> is stripped from the output and <!DOCTYPE>/<html>/<head>/<body>
++  // go with it.
++  //
++  // Measured on production 2026-08-26: every App Router route served 54KB of HTML
++  // beginning at `<meta charSet="utf-8"/>` with no document shell, while /500 — the
++  // one Pages Router route, which has no Google Fonts link — was emitted correctly.
++  // The browser then falls into quirks mode and synthesises a bare <body> without the
++  // `mode-readable` class or the inline background/color that define --bg/--text, so
++  // the content renders invisibly; the same shell mismatch fails hydration with an
++  // AggregateError. Net effect: a blank white page on every route.
++  //
++  // Disabling the optimizer leaves the links exactly where the layout puts them. The
++  // fonts still load from Google, just not inlined at build time.
++  optimizeFonts: false,
++
+   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
+ 
+   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
+-- 
+2.34.1
+

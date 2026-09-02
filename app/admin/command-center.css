@@ -174,7 +174,13 @@ html[data-mode='af'] .af-cc--adaptive {
   background: var(--surface2);
 }
 
+/*
+ * Carries an <h1>. The `font` shorthand already overrides the UA's size and
+ * weight; `margin: 0` is the part that has to be said explicitly, or the bar
+ * grows by the UA's default heading margin.
+ */
 .af-cc-bar-title {
+  margin: 0;
   font: 800 14px/1 var(--af-cc-sans);
   color: var(--text);
 }

@@ -1,0 +1,209 @@
+              Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is missing the following properties from type 'readonly 
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly 
+            Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+            Type '{ id: string; }' is not comparable to type 'never'.
+          Index signature for type 'string' is missing in type 'PlayerValuation[]'.
+          Property 'where' is incompatible with index signature.
+          Type 'Record<string, unknown>' is not assignable to type 'InputJsonValue | null | undefined'.
+          Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+          Type 'null' is not assignable to type 'Date'.
+          Type 'undefined' is not assignable to type 'string | null'.
+          Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; }' is missing the following properties from type 'readonly 
+          Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+        Index signature for type 'string' is missing in type 'HeyGenPayloadMetadata'.
+        Index signature for type 'string' is missing in type 'PlayoffConfig'.
+        Property 'metadata' is incompatible with index signature.
+        Type 'Date | null' is not assignable to type 'Date'.
+        Type 'PlayerValuation[]' is not assignable to type 'InputJsonObject'.
+        Type 'Record<string, unknown> | undefined' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+        Type 'null' is not assignable to type '"commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined'.
+        Type 'null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+        Type 'null' is not assignable to type 'string'.
+        Type 'string | undefined' is not assignable to type 'string | null'.
+        Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; }' is not assignable to type 'InputJsonValue | null | undefined'.
+        Type '{ id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }' is missing the following properties from type 'DbPick': selectedTeamId, selectedSlotKey
+        Type '{ where: { id: string; }; data: Record<string, unknown>; }' is not comparable to type '{ [x: string]: never; }'.
+        Types of property 'settings' are incompatible.
+      Property 'username' is missing in type '{ id: string; displayName: string | null; email: string; }' but required in type '{ displayName: string | null; username: string | null; email: string; }'.
+      Type '"created"' is not assignable to type '"error" | "updated" | "skipped" | "no_match"'.
+      Type 'HeyGenPayloadMetadata' is not assignable to type 'InputJsonObject'.
+      Type 'NewsEnrichedRosterFacts' is missing the following properties from type 'EnrichedRosterFacts': playerMetadataEnriched, metadataCompleteness, playerIds, starterIds, and 5 more.
+      Type 'PlayerValuation[]' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type 'PlayoffConfig' is not assignable to type 'InputJsonObject'.
+      Type 'ProjectionEnrichedRosterFacts' is missing the following properties from type 'EnrichedRosterFacts': playerMetadataEnriched, metadataCompleteness, playerIds, starterIds, and 5 more.
+      Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonObject'.
+      Type 'WeatherEnrichedRosterFacts' is missing the following properties from type 'EnrichedRosterFacts': playerMetadataEnriched, metadataCompleteness, playerIds, starterIds, and 5 more.
+      Type 'string | null | undefined' is not assignable to type '"commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined'.
+      Type 'string | null' is not assignable to type 'string'.
+      Type 'string' is not assignable to type '"high" | "low" | "medium"'.
+      Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; } | null' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type '{ [x: string]: unknown; }' is missing the following properties from type 'readonly 
+      Type '{ id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }[]' is not comparable to type 'DbPick[]'.
+      Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; }' is not assignable to type 'LeagueUncheckedCreateInput'.
+      Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; }' is not assignable to type 'LeagueUpdateInput'.
+      Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 4 more ...; isDynasty: boolean; }' is not assignable to type 'LeagueUpdateInput'.
+      Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 7 more ...; platformLeagueId: string; }' is not assignable to type 'LeagueUncheckedCreateInput'.
+      Type '{ where: { id: string; }; data: Record<string, unknown>; }' is not comparable to type '{ [x: string]: never; } & "Please either choose `select` or `omit`."'.
+      Types of parameters 'id' and 'value' are incompatible.
+      Types of property 'pickLockAt' are incompatible.
+      Types of property 'settings' are incompatible.
+      Types of property 'sourcePayload' are incompatible.
+    Argument of type '
+    Index signature for type 'string' is missing in type 'ReputationScoreWeights'.
+    Property 'metadata' is incompatible with index signature.
+    Property 'players' is incompatible with index signature.
+    Type '
+    Type '"error" | "updated" | "created" | "skipped"' is not assignable to type '"error" | "updated" | "skipped" | "no_match"'.
+    Type '45000' is not assignable to type 'never'.
+    Type 'HeyGenPayloadMetadata' is not assignable to type 'InputJsonValue | null | undefined'.
+    Type 'NewsEnrichedRosterFacts[]' is not assignable to type 'EnrichedRosterFacts[]'.
+    Type 'PlayoffConfig' is not assignable to type 'InputJsonValue | null | undefined'.
+    Type 'ProjectionEnrichedRosterFacts[]' is not assignable to type 'EnrichedRosterFacts[]'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly 
+    Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonValue | null | undefined'.
+    Type 'WeatherEnrichedRosterFacts[]' is not assignable to type 'EnrichedRosterFacts[]'.
+    Type 'number' has no properties in common with type '{ relatedGraph?: GraphModel | null | undefined; relatedKpi?: MetricPresentation | null | undefined; }'.
+    Type 'string' is not assignable to type 'WorldCupBracketTab'.
+    Type '{ [x: string]: unknown; }' is not assignable to type 'InputJsonValue | null | undefined'.
+    Type '{ id: string; name: string; pickLockAt: Date | null; }' is not assignable to type '{ id: string; name: string; pickLockAt: Date; }'.
+    Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; }' is not assignable to type 'Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput'.
+    Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; }' is not assignable to type 'Without<LeagueUncheckedUpdateInput, LeagueUpdateInput> & LeagueUpdateInput'.
+    Type '{ name?: string | undefined; settings?: Record<string, unknown> | undefined; hubSettings?: Record<string, unknown> | undefined; }' is not assignable to type 'LegacyTournamentUpdateInput'.
+    Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 4 more ...; isDynasty: boolean; }' is not assignable to type 'Without<LeagueUncheckedUpdateInput, LeagueUpdateInput> & LeagueUpdateInput'.
+    Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 7 more ...; platformLeagueId: string; }' is not assignable to type 'Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput'.
+    Type '{ status: string; homeScore: null; awayScore: null; homePenaltyScore: null; awayPenaltyScore: null; winnerTeamId: null; winnerTeamName: null; elapsedMinute: null; injuryTime: null; period: null; ... 8 more ...; awayTeamLogo: string | null; }' is not assignable to type 'WorldCupBracketMatchUncheckedUpdateInput'.
+    Type '{ where: { id: string; }; data: Record<string, unknown>; }' is not comparable to type 'SelectSubset<any, RosterUpdateArgs<DefaultArgs>>'.
+    Types of property 'gameStatus' are incompatible.
+    Types of property 'picks' are incompatible.
+    Types of property 'plan' are incompatible.
+    Types of property 'teamId' are incompatible.
+    Types of property 'upsetRiskLabel' are incompatible.
+    Types of property 'user' are incompatible.
+  Overload 1 of 2, '
+  Overload 2 of 2, '
+  Property 'WEATHER_REFRESH_BUDGET_MS' is incompatible with index signature.
+  Property 'id' does not exist on type 'WorldCupOfficialGroupTeam'.
+  Property 'loadingMessage' does not exist on type 'IntrinsicAttributes & PlayerPanelProps'.
+  Property 'onClear' does not exist on type 'IntrinsicAttributes & QueuePanelProps'.
+  Property 'onFeedback' does not exist on type 'IntrinsicAttributes & WorldCupChatMessageBubbleProps'.
+  Property 'resolveSportList' is incompatible with index signature.
+  Property 'where' is missing in type '{}' but required in type 'Subset<{ where: { sport: LeagueSport; }; }, LeagueCountArgs<DefaultArgs>>'.
+  Type '"FatalAutomationError"' is not assignable to type '"AutomationError"'.
+  Type '"RetryableAutomationError"' is not assignable to type '"AutomationError"'.
+  Type '"fast"' is not assignable to type 'ProviderProfile | undefined'.
+  Type 'CachedValuationPayload' is not assignable to type 'InputJsonObject'.
+  Type 'Date' is not assignable to type 'string'.
+  Type 'DbMatch' is missing the following properties from type 'WorldCupMatchView': roundIndex, matchNumber, homeTeamLogo, awayTeamLogo, and 2 more.
+  Type 'Member' is not assignable to type 'ChatMember'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly 
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'ReputationScoreWeights' is not assignable to type 'InputJsonObject'.
+  Type 'SleeperLeague' is not assignable to type 'InputJsonObject'.
+  Type 'null' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'boolean'.
+  Type 'undefined' is not assignable to type 'number | null'.
+  Type 'undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'string'.
+  Type '{ [x: string]: unknown; }' is missing the following properties from type 'readonly 
+  Type '{ [x: string]: unknown; }' is not assignable to type 'undefined'.
+  Type '{ canonicalPlayerId: string; kickoff: string | null; gameStatus: CanonicalGameStatus | null; lockEvidence: SportsDataLockEvidence; locked: boolean; }' is not assignable to type '{ canonicalPlayerId: string; kickoff: string | null; gameStatus: string; lockEvidence: string; locked: boolean; }'.
+  Type '{ id: string; createdAt: Date; updatedAt: Date; status: string; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null; round: string; ... 24 more ...; sourcePayload: JsonValue; }' is missing the following properties from type '{ id: string; homeTeam: string | null; awayTeam: string | null; round: string | null; status: string | null; homeScore: number | null; awayScore: number | null; startsAt: Date | null; }': homeTeam, awayTeam
+  Type '{ id: string; createdAt: Date; updatedAt: Date; status: string; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null; round: string; ... 24 more ...; sourcePayload: JsonValue; }' is missing the following properties from type '{ id: string; homeTeam: string | null; awayTeam: string | null; }': homeTeam, awayTeam
+  Type '{ id: string; name: string; country: string; fifaCode: string; groupName: string; qualificationStatus: string; sourcePayload: { source: string; challengeId: string; groupKey: string; seedOrder: number; note: string; }; }' is missing the following properties from type '{ id: string; createdAt: Date; updatedAt: Date; name: string; logoUrl: string | null; country: string; sourcePayload: JsonValue; fifaCode: string | null; groupName: string | null; qualificationStatus: string; flagUrl: string | null; apiTeamId: number | null; }': createdAt, updatedAt, logoUrl, flagUrl, apiTeamId
+  Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; }' is not assignable to type '
+  Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; }' is not assignable to type '
+  Type '{ matchDescription: string; championName: string; reignLengthDays: number; pickConcentration: { champPickPct: number; challengerPickPct: number; }; upsetRiskLabel: string; }' is not assignable to type '{ matchDescription: string; championName: string; reignLengthDays: number; pickConcentration: { champPickPct: number; challengerPickPct: number; }; upsetRiskLabel: "high" | "low" | "medium"; }'.
+  Type '{ name?: string | undefined; settings?: Record<string, unknown> | undefined; hubSettings?: Record<string, unknown> | undefined; }' is not assignable to type 'Without<LegacyTournamentUncheckedUpdateInput, LegacyTournamentUpdateInput> & LegacyTournamentUpdateInput'.
+  Type '{ picks: { id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }[]; participant: { displayName: string; }; } & { id: string; createdAt: Date; ... 15 more ...; isComplete: boolean; }' is not comparable to type 'DbEntryForLb'.
+  Type '{ plan?: string | null | undefined; tokenBalance?: number | undefined; }' is not assignable to type '{ plan?: "commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined; tokenBalance?: number | undefined; }'.
+  Type '{ port?: CanonicalWorldPort | undefined; now?: Date | undefined; staleAfterMs?: number | undefined; }' is missing the following properties from type 'EnrichedWorldDeps': resolveWorld, resolveMetadata
+  Type '{ rosterId: string; teamId: string | null; players: { newsContext: NewsSignalContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }' is not assignable to type 'NewsEnrichedRosterFacts'.
+  Type '{ rosterId: string; teamId: string | null; players: { projectionContext: ProjectionContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }' is not assignable to type 'ProjectionEnrichedRosterFacts'.
+  Type '{ rosterId: string; teamId: string | null; players: { weatherContext: WeatherContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }' is not assignable to type 'WeatherEnrichedRosterFacts'.
+  Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 4 more ...; isDynasty: boolean; }' is not assignable to type '
+  Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 7 more ...; platformLeagueId: string; }' is not assignable to type '
+  Type '{ status: string; homeScore: null; awayScore: null; homePenaltyScore: null; awayPenaltyScore: null; winnerTeamId: null; winnerTeamName: null; elapsedMinute: null; injuryTime: null; period: null; ... 8 more ...; awayTeamLogo: string | null; }' is not assignable to type 'Without<WorldCupBracketMatchUpdateInput, WorldCupBracketMatchUncheckedUpdateInput> & WorldCupBracketMatchUncheckedUpdateInput'.
+  Types of parameters 'args' and 'args' are incompatible.
+  Types of parameters 'c' and 'value' are incompatible.
+  Types of parameters 'nextTab' and 'tab' are incompatible.
+  Types of parameters 'options' and 'index' are incompatible.
+  Types of property '[`${PREFIX}data`]' are incompatible.
+  Types of property 'action' are incompatible.
+  Types of property 'heygen' are incompatible.
+  Types of property 'hubSettings' are incompatible.
+  Types of property 'rosters' are incompatible.
+  Types of property 'summary' are incompatible.
+.next/types/app/api/cron/sync-player-images/route.ts
+.next/types/app/api/weather/refresh-cron/route.ts
+.next/types/app/leagues/sync/page.ts
+app/ai-chat/page.tsx
+app/api/admin/world-cup/actions/route.ts
+app/api/fantasy-media/episodes/[id]/retry/route.ts
+app/api/leagues/[leagueId]/draft/pick/route.ts
+app/api/tournament/[tournamentId]/bulk-update/route.ts
+app/api/tournament/[tournamentId]/league-settings-request/[requestId]/route.ts
+app/api/tournament/[tournamentId]/league-settings-request/route.ts
+app/api/tournament/[tournamentId]/legacy-settings/route.ts
+app/api/tournament/[tournamentId]/settings/update/route.ts
+app/api/tournament/[tournamentId]/theme/route.ts
+app/world-cup/finish/page.tsx
+components/app/draft-room/DraftRoomPageClient.tsx
+components/bracket/LeagueHomeTabs.tsx
+components/brackets/playoffs/PlayoffBracketEntryShell.tsx
+components/brackets/playoffs/PlayoffBracketShell.tsx
+components/brackets/world-cup/WorldCupBracketSettingsPanel.tsx
+components/brackets/world-cup/WorldCupBracketShell.tsx
+components/brackets/world-cup/WorldCupMatchupCard.tsx
+components/core-app/screens/ImportV4.tsx
+components/league-import/CommissionerIntelligencePreview.tsx
+lib/ai/engine/engine.ts
+lib/ai/engine/plugins/aew.plugin.ts
+lib/ai/engine/plugins/worldCup.plugin.ts
+lib/ai/insights/rootingGuide.ts
+lib/ai/waivers/waiverRecommendationService.ts
+lib/ai/working-memory.ts
+lib/automation/errors.ts
+lib/automation/jobs/waivers/processLeagueWaiversJob.ts
+lib/chimmy-context/prompt/PromptComposer.ts
+lib/chimmy-context/structuredPromptPayload.ts
+lib/chimmy-context/telemetry/recordFeedback.ts
+lib/decision-os/world/adpEnrichedWorld.ts
+lib/decision-os/world/injuryEnrichedWorld.ts
+lib/decision-os/world/newsEnrichedWorld.ts
+lib/decision-os/world/projectionEnrichedWorld.ts
+lib/decision-os/world/weatherEnrichedWorld.ts
+lib/fantasy-media/VideoGenerationJobTracker.ts
+lib/fantasy-os/sports-runtime/lineupIntegration.ts
+lib/guillotine/GuillotineEliminationEngine.ts
+lib/guillotine/GuillotineEventLog.ts
+lib/identity/DuplicateManagerRiskService.ts
+lib/league/league-dashboard-view.ts
+lib/league/sleeper-import-process.ts
+lib/meta-client.ts
+lib/nba-schedule/NbaScheduleConfigService.ts
+lib/onboarding-retention/OnboardingProgressService.ts
+lib/platform-analytics/PlatformAnalyticsService.ts
+lib/player-comparison-lab/MultiPlayerComparisonService.ts
+lib/player-valuation-features.ts
+lib/playoff-settings/PlayoffConfigService.ts
+lib/playoffs/playoffChallengeConfig.ts
+lib/playoffs/playoffClientApi.ts
+lib/playoffs/playoffSeriesSyncService.ts
+lib/playoffs/playoffService.ts
+lib/referral/ReferralService.ts
+lib/reputation-engine/ReputationConfigService.ts
+lib/tournament-mode/TournamentAdvancementService.ts
+lib/tournament-mode/TournamentAuditService.ts
+lib/tournament-mode/TournamentCreationService.ts
+lib/tournament/tournamentMiniCommissionerNotifications.ts
+lib/world-cup/worldCupBracketReminderService.ts
+lib/world-cup/worldCupChimmyPrivateReply.ts
+lib/world-cup/worldCupDataSyncService.ts
+lib/world-cup/worldCupEdgeReportAi.ts
+lib/world-cup/worldCupEntryFinalizeService.ts
+lib/world-cup/worldCupGroupStageResultService.ts
+lib/world-cup/worldCupGroupStageScoringService.ts
+lib/world-cup/worldCupGroupStageService.ts
+lib/world-cup/worldCupJoinGate.ts
+lib/world-cup/worldCupSimulationService.ts
+server/api-route-modules/league-survivor/foundation/route.ts

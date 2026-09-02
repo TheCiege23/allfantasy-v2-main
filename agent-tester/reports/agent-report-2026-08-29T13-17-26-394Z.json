@@ -1,0 +1,109 @@
+{
+  "target": "http://127.0.0.1:3000",
+  "at": "2026-08-29T13:17:26.398Z",
+  "results": [
+    {
+      "archetype": "casual-returner",
+      "mission": "sweep-pricing",
+      "succeeded": false,
+      "steps": 3,
+      "findings": [
+        {
+          "severity": "blocker",
+          "title": "Screen has nothing to interact with",
+          "narrative": "The persona arrived and found no enabled, visible control at all. Either the page failed to render or it is a genuine dead end.",
+          "url": "about:blank",
+          "archetype": "casual-returner",
+          "step": 3
+        },
+        {
+          "severity": "major",
+          "title": "\"Start free\" appears to do nothing",
+          "narrative": "The user clicked \"Start free\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "Invalid Sentry Dsn: [SENSITIVE]",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "WebSocket connection to 'ws://127.0.0.1:3000/_next/webpack-hmr' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "The method FB.getLoginStatus can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "Request failed with 401",
+          "narrative": "A request the page depends on was rejected.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "401 http://127.0.0.1:3000/api/tokens/balance",
+          "archetype": "casual-returner",
+          "step": 2
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "archetype": "casual-returner",
+          "step": 2
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "[ErrorHandling] token-balance: Error: Unauthorized\n    at run (webpack-internal:///(app-pages-browser)/./lib/error-handling/fetch-with-retry.ts:32:21)\n    at async retryWithBackoff (webpack-internal:///(app-pages-browser)/./lib/error-handling/retry.ts:26:20)\n    at async fetchWithRetry (webpack-internal:///(app-pages-browser)/./lib/error-handling/fetch-with-retry.ts:37:16)\n    at async eval (webpack-internal:///(app-pages-browser)/./hooks/useTokenBalance.ts:106:25) {context: token-balance, statu",
+          "archetype": "casual-returner",
+          "step": 2
+        },
+        {
+          "severity": "minor",
+          "title": "Request failed with 401",
+          "narrative": "A request the page depends on was rejected.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "401 http://127.0.0.1:3000/api/subscription/entitlements",
+          "archetype": "casual-returner",
+          "step": 2
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/pricing",
+          "evidence": "Failed to fetch RSC payload for http://127.0.0.1:3000/signup. Falling back to browser navigation. TypeError: Failed to fetch\n    at fetchServerResponse (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/fetch-server-response.js:59:27)\n    at InnerLayoutRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/layout-router.js:305:90)\n    at renderWithHooks (webpack-internal:///(app-pages-browser)/./node_modules/next",
+          "archetype": "casual-returner",
+          "step": 3
+        }
+      ],
+      "trail": [
+        "00. started at /pricing — goal: Look around the pricing and see if anything is broken",
+        "01. clicked \"Start free\"",
+        "02. clicked \"Create an account\"",
+        "02. could not interact with \"Create an account\"",
+        "03. pressed the browser Back button"
+      ]
+    }
+  ]
+}

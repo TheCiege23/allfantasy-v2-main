@@ -1,0 +1,220 @@
+{
+  "target": "http://127.0.0.1:3000",
+  "at": "2026-08-29T13:14:46.792Z",
+  "results": [
+    {
+      "archetype": "casual-returner",
+      "mission": "sweep-landing-page",
+      "succeeded": false,
+      "steps": 11,
+      "findings": [
+        {
+          "severity": "blocker",
+          "title": "Screen has nothing to interact with",
+          "narrative": "The persona arrived and found no enabled, visible control at all. Either the page failed to render or it is a genuine dead end.",
+          "url": "about:blank",
+          "archetype": "casual-returner",
+          "step": 11
+        },
+        {
+          "severity": "major",
+          "title": "\"Get started free\" appears to do nothing",
+          "narrative": "The user clicked \"Get started free\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "major",
+          "title": "\"SideQuest Turn the side hustle into a tracked, finishable qu\" appears to do nothing",
+          "narrative": "The user clicked \"SideQuest Turn the side hustle into a tracked, finishable qu\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "casual-returner",
+          "step": 3
+        },
+        {
+          "severity": "major",
+          "title": "\"Cafe Con Chimmy Culture, coffee and conversation from the Ch\" appears to do nothing",
+          "narrative": "The user clicked \"Cafe Con Chimmy Culture, coffee and conversation from the Ch\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "casual-returner",
+          "step": 6
+        },
+        {
+          "severity": "major",
+          "title": "\"Parent Playbook Practical plays for parents, one situation a\" appears to do nothing",
+          "narrative": "The user clicked \"Parent Playbook Practical plays for parents, one situation a\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "casual-returner",
+          "step": 7
+        },
+        {
+          "severity": "major",
+          "title": "\"PetPass Every pet record, vet visit and reminder in one pass\" appears to do nothing",
+          "narrative": "The user clicked \"PetPass Every pet record, vet visit and reminder in one pass\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "casual-returner",
+          "step": 8
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "Invalid Sentry Dsn: [SENSITIVE]",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "WebSocket connection to 'ws://127.0.0.1:3000/_next/webpack-hmr' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "The method FB.getLoginStatus can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "\"Get started free\" took 6.4s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.4s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6397ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "\"Start free\" took 6.2s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.2s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6188ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 2
+        },
+        {
+          "severity": "minor",
+          "title": "\"SideQuest Turn the side hustle into a tracked, finishable qu\" took 6.1s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6146ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 3
+        },
+        {
+          "severity": "minor",
+          "title": "\"Sign in\" took 6.1s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6117ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 4
+        },
+        {
+          "severity": "minor",
+          "title": "\"Gooby Social discovery for people and their dogs. gogooby.co\" took 6.1s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6106ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 5
+        },
+        {
+          "severity": "minor",
+          "title": "\"Cafe Con Chimmy Culture, coffee and conversation from the Ch\" took 6.1s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6130ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 6
+        },
+        {
+          "severity": "minor",
+          "title": "\"Parent Playbook Practical plays for parents, one situation a\" took 6.2s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.2s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6172ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 7
+        },
+        {
+          "severity": "minor",
+          "title": "\"PetPass Every pet record, vet visit and reminder in one pass\" took 6.1s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6119ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 8
+        },
+        {
+          "severity": "minor",
+          "title": "\"AF AllFantasy\" took 6.2s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.2s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6166ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 9
+        },
+        {
+          "severity": "minor",
+          "title": "\"StoryVault Record and keep the family stories before they ar\" took 6.1s",
+          "narrative": "This persona gives up after 6.0s. The screen was unresponsive for 6.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=6116ms patience=6000ms",
+          "archetype": "casual-returner",
+          "step": 10
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "Failed to fetch RSC payload for http://127.0.0.1:3000/login. Falling back to browser navigation. TypeError: Failed to fetch\n    at fetchServerResponse (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/fetch-server-response.js:59:27)\n    at eval (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/prefetch-cache-utils.js:136:106)\n    at Object.task (webpack-internal:///(app-pages-browser)/./node_modules",
+          "archetype": "casual-returner",
+          "step": 11
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "Failed to fetch RSC payload for http://127.0.0.1:3000/signup. Falling back to browser navigation. TypeError: Failed to fetch\n    at fetchServerResponse (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/fetch-server-response.js:59:27)\n    at eval (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/prefetch-cache-utils.js:136:106)\n    at Object.task (webpack-internal:///(app-pages-browser)/./node_module",
+          "archetype": "casual-returner",
+          "step": 11
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "Failed to fetch RSC payload for http://127.0.0.1:3000/. Falling back to browser navigation. TypeError: Failed to fetch\n    at fetchServerResponse (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/fetch-server-response.js:59:27)\n    at InnerLayoutRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/layout-router.js:305:90)\n    at renderWithHooks (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/",
+          "archetype": "casual-returner",
+          "step": 11
+        }
+      ],
+      "trail": [
+        "00. started at / — goal: Look around the landing page and see if anything is broken",
+        "01. clicked \"Get started free\"",
+        "02. clicked \"Start free\"",
+        "03. clicked \"SideQuest Turn the side hustle into a tracked, finishable qu\"",
+        "04. clicked \"Sign in\"",
+        "05. clicked \"Gooby Social discovery for people and their dogs. gogooby.co\"",
+        "06. clicked \"Cafe Con Chimmy Culture, coffee and conversation from the Ch\"",
+        "07. clicked \"Parent Playbook Practical plays for parents, one situation a\"",
+        "08. clicked \"PetPass Every pet record, vet visit and reminder in one pass\"",
+        "09. clicked \"AF AllFantasy\"",
+        "10. clicked \"StoryVault Record and keep the family stories before they ar\"",
+        "11. pressed the browser Back button"
+      ]
+    }
+  ]
+}

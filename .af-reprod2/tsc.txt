@@ -1,0 +1,381 @@
+.next/types/app/api/cron/sync-player-images/route.ts(8,13): error TS2344: Type 'OmitWithTag<typeof import("F:/allfantasy-v2-main/app/api/cron/sync-player-images/route"), "DELETE" | "PUT" | "POST" | "GET" | "runtime" | "config" | "PATCH" | "dynamic" | "HEAD" | "OPTIONS" | ... 5 more ... | "maxDuration", "">' does not satisfy the constraint '{ [x: string]: never; }'.
+  Property 'resolveSportList' is incompatible with index signature.
+    Type '(raw: string | null, now?: Date) => string[]' is not assignable to type 'never'.
+.next/types/app/api/weather/refresh-cron/route.ts(8,13): error TS2344: Type 'OmitWithTag<typeof import("F:/allfantasy-v2-main/app/api/weather/refresh-cron/route"), "GET" | "POST" | "DELETE" | "HEAD" | "config" | "generateStaticParams" | "revalidate" | "dynamic" | ... 7 more ... | "PATCH", "">' does not satisfy the constraint '{ [x: string]: never; }'.
+  Property 'WEATHER_REFRESH_BUDGET_MS' is incompatible with index signature.
+    Type '45000' is not assignable to type 'never'.
+.next/types/app/leagues/sync/page.ts(2,24): error TS2307: Cannot find module '../../../../../app/leagues/sync/page.js' or its corresponding type declarations.
+.next/types/app/leagues/sync/page.ts(5,29): error TS2307: Cannot find module '../../../../../app/leagues/sync/page.js' or its corresponding type declarations.
+app/ai-chat/page.tsx(31,44): error TS2339: Property 'user' does not exist on type 'never'.
+app/api/admin/world-cup/actions/route.ts(71,9): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+app/api/admin/world-cup/actions/route.ts(72,9): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+app/api/admin/world-cup/actions/route.ts(73,9): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+app/api/fantasy-media/episodes/[id]/retry/route.ts(54,7): error TS2322: Type '{ heygen: HeyGenPayloadMetadata; retry: { at: string; previousJobId: string | null; }; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Types of property 'heygen' are incompatible.
+    Type 'HeyGenPayloadMetadata' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type 'HeyGenPayloadMetadata' is not assignable to type 'InputJsonObject'.
+        Index signature for type 'string' is missing in type 'HeyGenPayloadMetadata'.
+app/api/leagues/[leagueId]/draft/pick/route.ts(205,14): error TS2339: Property 'idempotentReplay' does not exist on type 'SubmitPickResult'.
+app/api/tournament/[tournamentId]/bulk-update/route.ts(51,15): error TS2322: Type '{ hubSettings: { [x: string]: unknown; }; }' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Types of property 'hubSettings' are incompatible.
+    Type '{ [x: string]: unknown; }' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type '{ [x: string]: unknown; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/league-settings-request/[requestId]/route.ts(76,15): error TS2322: Type '{ [x: string]: unknown; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type '{ [x: string]: unknown; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/league-settings-request/route.ts(110,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/legacy-settings/route.ts(67,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/legacy-settings/route.ts(68,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/settings/update/route.ts(185,5): error TS2322: Type '{ name?: string | undefined; settings?: Record<string, unknown> | undefined; hubSettings?: Record<string, unknown> | undefined; }' is not assignable to type '(Without<LegacyTournamentUpdateInput, LegacyTournamentUncheckedUpdateInput> & LegacyTournamentUncheckedUpdateInput) | (Without<...> & LegacyTournamentUpdateInput)'.
+  Type '{ name?: string | undefined; settings?: Record<string, unknown> | undefined; hubSettings?: Record<string, unknown> | undefined; }' is not assignable to type 'Without<LegacyTournamentUncheckedUpdateInput, LegacyTournamentUpdateInput> & LegacyTournamentUpdateInput'.
+    Type '{ name?: string | undefined; settings?: Record<string, unknown> | undefined; hubSettings?: Record<string, unknown> | undefined; }' is not assignable to type 'LegacyTournamentUpdateInput'.
+      Types of property 'settings' are incompatible.
+        Type 'Record<string, unknown> | undefined' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+          Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/theme/route.ts(79,7): error TS2322: Type '{ [x: string]: unknown; }' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type '{ [x: string]: unknown; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/api/tournament/[tournamentId]/theme/route.ts(80,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+app/world-cup/finish/page.tsx(18,17): error TS2339: Property 'user' does not exist on type '{}'.
+components/app/draft-room/DraftRoomPageClient.tsx(3646,9): error TS2322: Type '{ players: PlayerEntry[]; draftedNames: Set<string>; draftedPlayerIds: Set<string>; presentationVariant: "default" | "redraft_snake"; sport: string; canDraft: boolean; ... 25 more ...; isPlayerQueued: (p: PlayerEntry) => boolean; }' is not assignable to type 'IntrinsicAttributes & PlayerPanelProps'.
+  Property 'loadingMessage' does not exist on type 'IntrinsicAttributes & PlayerPanelProps'.
+components/app/draft-room/DraftRoomPageClient.tsx(3854,11): error TS2322: Type '{ queue: QueueEntry[]; playerMetaById: Record<string, { headshotUrl?: string | null | undefined; teamLogoUrl?: string | null | undefined; adp?: number | null | undefined; rank?: number | ... 1 more ... | undefined; }>; ... 20 more ...; presentationVariant: "default" | "redraft_snake"; }' is not assignable to type 'IntrinsicAttributes & QueuePanelProps'.
+  Property 'onClear' does not exist on type 'IntrinsicAttributes & QueuePanelProps'.
+components/bracket/LeagueHomeTabs.tsx(195,9): error TS2322: Type 'Member[]' is not assignable to type 'ChatMember[]'.
+  Type 'Member' is not assignable to type 'ChatMember'.
+    Types of property 'user' are incompatible.
+      Property 'username' is missing in type '{ id: string; displayName: string | null; email: string; }' but required in type '{ displayName: string | null; username: string | null; email: string; }'.
+components/brackets/playoffs/PlayoffBracketEntryShell.tsx(94,23): error TS18047: 'activeEntry' is possibly 'null'.
+components/brackets/playoffs/PlayoffBracketEntryShell.tsx(103,51): error TS18047: 'activeEntry' is possibly 'null'.
+components/brackets/playoffs/PlayoffBracketEntryShell.tsx(111,21): error TS18047: 'activeEntry' is possibly 'null'.
+components/brackets/playoffs/PlayoffBracketEntryShell.tsx(156,20): error TS18047: 'activeEntry' is possibly 'null'.
+components/brackets/playoffs/PlayoffBracketShell.tsx(55,44): error TS2339: Property 'participants' does not exist on type 'PlayoffChallengeView'.
+components/brackets/playoffs/PlayoffBracketShell.tsx(55,65): error TS2339: Property 'participants' does not exist on type 'PlayoffChallengeView'.
+components/brackets/playoffs/PlayoffBracketShell.tsx(449,32): error TS7006: Parameter 'participant' implicitly has an 'any' type.
+components/brackets/world-cup/WorldCupBracketSettingsPanel.tsx(253,71): error TS18049: 'thirdPlacePoints' is possibly 'null' or 'undefined'.
+components/brackets/world-cup/WorldCupBracketSettingsPanel.tsx(355,36): error TS2322: Type 'number | null | undefined' is not assignable to type 'number | null'.
+  Type 'undefined' is not assignable to type 'number | null'.
+components/brackets/world-cup/WorldCupBracketSettingsPanel.tsx(600,45): error TS2322: Type 'number | null | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+components/brackets/world-cup/WorldCupBracketShell.tsx(2697,29): error TS2345: Argument of type 'string' is not assignable to parameter of type 'WorldCupBracketTab'.
+components/brackets/world-cup/WorldCupBracketShell.tsx(2738,11): error TS2322: Type 'string | Date | null' is not assignable to type 'string | null'.
+  Type 'Date' is not assignable to type 'string'.
+components/brackets/world-cup/WorldCupBracketShell.tsx(4573,115): error TS2322: Type '(nextTab: Tab) => void' is not assignable to type '(tab: string) => void'.
+  Types of parameters 'nextTab' and 'tab' are incompatible.
+    Type 'string' is not assignable to type 'WorldCupBracketTab'.
+components/brackets/world-cup/WorldCupBracketShell.tsx(4578,101): error TS2322: Type '(nextTab: Tab) => void' is not assignable to type '(tab: string) => void'.
+  Types of parameters 'nextTab' and 'tab' are incompatible.
+    Type 'string' is not assignable to type 'WorldCupBracketTab'.
+components/brackets/world-cup/WorldCupBracketShell.tsx(6290,19): error TS2322: Type '{ key: string; message: WorldCupPoolChatMessage; isVoting: boolean; onVote: (optionId: string) => undefined; onPostToPool: ((msg: WorldCupPoolChatMessage) => void) | undefined; onFeedback: (messageId: any, rating: any) => void; labels: { ...; }; }' is not assignable to type 'IntrinsicAttributes & WorldCupChatMessageBubbleProps'.
+  Property 'onFeedback' does not exist on type 'IntrinsicAttributes & WorldCupChatMessageBubbleProps'.
+components/brackets/world-cup/WorldCupBracketShell.tsx(6290,32): error TS7006: Parameter 'messageId' implicitly has an 'any' type.
+components/brackets/world-cup/WorldCupBracketShell.tsx(6290,43): error TS7006: Parameter 'rating' implicitly has an 'any' type.
+components/brackets/world-cup/WorldCupMatchupCard.tsx(50,43): error TS2345: Argument of type 'string | null | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+components/core-app/screens/ImportV4.tsx(1489,24): error TS2367: This comparison appears to be unintentional because the types '"idle" | "discovering" | "attest" | "preview"' and '"done"' have no overlap.
+components/core-app/screens/ImportV4.tsx(1812,19): error TS2367: This comparison appears to be unintentional because the types '"idle" | "discovering" | "attest" | "preview"' and '"previewing"' have no overlap.
+components/core-app/screens/ImportV4.tsx(1813,19): error TS2367: This comparison appears to be unintentional because the types '"idle" | "discovering" | "attest" | "preview"' and '"committing"' have no overlap.
+components/core-app/screens/ImportV4.tsx(1843,18): error TS2367: This comparison appears to be unintentional because the types '"idle" | "discovering" | "attest" | "preview"' and '"previewing"' have no overlap.
+components/core-app/screens/ImportV4.tsx(1843,46): error TS2367: This comparison appears to be unintentional because the types '"idle" | "discovering" | "attest" | "preview"' and '"committing"' have no overlap.
+components/core-app/screens/ImportV4.tsx(1843,81): error TS2339: Property 'sourceId' does not exist on type 'never'.
+components/league-import/CommissionerIntelligencePreview.tsx(463,17): error TS2345: Argument of type '(rec: { id: string; tier: string; category: string; entityId: string; priority: string; severity: string; confidence: string; affectedDimensions: string[]; expectedImpact: string; derivation: string[]; ... 6 more ...; uncertainty: string[]; }, options?: { ...; } | undefined) => RecommendationPresentation' is not assignable to parameter of type '(value: { id: string; tier: string; category: string; entityId: string; priority: string; severity: string; confidence: string; affectedDimensions: string[]; expectedImpact: string; derivation: string[]; ... 6 more ...; uncertainty: string[]; }, index: number, array: { ...; }[]) => RecommendationPresentation'.
+  Types of parameters 'options' and 'index' are incompatible.
+    Type 'number' has no properties in common with type '{ relatedGraph?: GraphModel | null | undefined; relatedKpi?: MetricPresentation | null | undefined; }'.
+lib/ai/engine/engine.ts(252,5): error TS2322: Type 'unknown' is not assignable to type 'Record<string, unknown>'.
+lib/ai/engine/plugins/aew.plugin.ts(112,7): error TS2322: Type '{ matchDescription: string; championName: string; reignLengthDays: number; pickConcentration: { champPickPct: number; challengerPickPct: number; }; upsetRiskLabel: string; }[]' is not assignable to type '{ matchDescription: string; championName: string; reignLengthDays: number; pickConcentration: { champPickPct: number; challengerPickPct: number; }; upsetRiskLabel: "high" | "low" | "medium"; }[]'.
+  Type '{ matchDescription: string; championName: string; reignLengthDays: number; pickConcentration: { champPickPct: number; challengerPickPct: number; }; upsetRiskLabel: string; }' is not assignable to type '{ matchDescription: string; championName: string; reignLengthDays: number; pickConcentration: { champPickPct: number; challengerPickPct: number; }; upsetRiskLabel: "high" | "low" | "medium"; }'.
+    Types of property 'upsetRiskLabel' are incompatible.
+      Type 'string' is not assignable to type '"high" | "low" | "medium"'.
+lib/ai/engine/plugins/worldCup.plugin.ts(210,24): error TS2352: Conversion of type '{ id: string; createdAt: Date; updatedAt: Date; status: string; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null; round: string; ... 24 more ...; sourcePayload: JsonValue; }[]' to type '{ id: string; homeTeam: string | null; awayTeam: string | null; }[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ id: string; createdAt: Date; updatedAt: Date; status: string; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null; round: string; ... 24 more ...; sourcePayload: JsonValue; }' is missing the following properties from type '{ id: string; homeTeam: string | null; awayTeam: string | null; }': homeTeam, awayTeam
+lib/ai/engine/plugins/worldCup.plugin.ts(221,45): error TS2352: Conversion of type '{ id: string; createdAt: Date; updatedAt: Date; status: string; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null; round: string; ... 24 more ...; sourcePayload: JsonValue; }[]' to type '{ id: string; homeTeam: string | null; awayTeam: string | null; round: string | null; status: string | null; homeScore: number | null; awayScore: number | null; startsAt: Date | null; }[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ id: string; createdAt: Date; updatedAt: Date; status: string; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null; round: string; ... 24 more ...; sourcePayload: JsonValue; }' is missing the following properties from type '{ id: string; homeTeam: string | null; awayTeam: string | null; round: string | null; status: string | null; homeScore: number | null; awayScore: number | null; startsAt: Date | null; }': homeTeam, awayTeam
+lib/ai/engine/plugins/worldCup.plugin.ts(312,16): error TS2352: Conversion of type '({ picks: { id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }[]; participant: { displayName: string; }; } & { id: string; createdAt: Date; ... 15 more ...; isComplete: boolean; })[]' to type 'DbEntryForLb[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ picks: { id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }[]; participant: { displayName: string; }; } & { id: string; createdAt: Date; ... 15 more ...; isComplete: boolean; }' is not comparable to type 'DbEntryForLb'.
+    Types of property 'picks' are incompatible.
+      Type '{ id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }[]' is not comparable to type 'DbPick[]'.
+        Type '{ id: string; round: string; isCorrect: boolean | null; matchId: string; selectedTeamName: string; pointsAwarded: number; }' is missing the following properties from type 'DbPick': selectedTeamId, selectedSlotKey
+lib/ai/insights/rootingGuide.ts(104,27): error TS2339: Property 'id' does not exist on type 'InsightMatch'.
+lib/ai/waivers/waiverRecommendationService.ts(95,9): error TS2353: Object literal may only specify known properties, and 'faabBalance' does not exist in type 'RosterSelect<DefaultArgs>'.
+lib/ai/waivers/waiverRecommendationService.ts(104,32): error TS2339: Property 'players' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; leagueId: string; settings: JsonValue; platformUserId: string; playerData: JsonValue; faabRemaining: number | null; waiverPriority: number | null; dispersalDraftPasses: boolean; }'.
+lib/ai/waivers/waiverRecommendationService.ts(104,45): error TS7006: Parameter 'p' implicitly has an 'any' type.
+lib/ai/waivers/waiverRecommendationService.ts(105,30): error TS2339: Property 'faabBalance' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; leagueId: string; settings: JsonValue; platformUserId: string; playerData: JsonValue; faabRemaining: number | null; waiverPriority: number | null; dispersalDraftPasses: boolean; }'.
+lib/ai/waivers/waiverRecommendationService.ts(130,37): error TS2339: Property 'leaguePlayer' does not exist on type 'ExtendedPrismaClient'.
+lib/ai/waivers/waiverRecommendationService.ts(145,16): error TS7006: Parameter 'fa' implicitly has an 'any' type.
+lib/ai/waivers/waiverRecommendationService.ts(146,13): error TS7006: Parameter 'fa' implicitly has an 'any' type.
+lib/ai/waivers/waiverRecommendationService.ts(280,45): error TS2339: Property 'id' does not exist on type '{ name: string; position: string; }'.
+lib/ai/working-memory.ts(308,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/ai/working-memory.ts(319,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/automation/errors.ts(16,12): error TS2416: Property 'name' in type 'RetryableAutomationError' is not assignable to the same property in base type 'AutomationError'.
+  Type '"RetryableAutomationError"' is not assignable to type '"AutomationError"'.
+lib/automation/errors.ts(21,12): error TS2416: Property 'name' in type 'FatalAutomationError' is not assignable to the same property in base type 'AutomationError'.
+  Type '"FatalAutomationError"' is not assignable to type '"AutomationError"'.
+lib/automation/jobs/waivers/processLeagueWaiversJob.ts(133,9): error TS2322: Type '{ dryRun: true; summary: WaiverAutomationSummary; }' is not assignable to type 'InputJsonValue'.
+  Types of property 'summary' are incompatible.
+    Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonObject'.
+        Property 'metadata' is incompatible with index signature.
+          Type 'Record<string, unknown>' is not assignable to type 'InputJsonValue | null | undefined'.
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/automation/jobs/waivers/processLeagueWaiversJob.ts(152,9): error TS2322: Type '{ dryRun: true; trigger: WaiverAutomationTrigger; summary: WaiverAutomationSummary; }' is not assignable to type 'InputJsonValue | undefined'.
+  Types of property 'summary' are incompatible.
+    Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonObject'.
+        Property 'metadata' is incompatible with index signature.
+          Type 'Record<string, unknown>' is not assignable to type 'InputJsonValue | null | undefined'.
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/automation/jobs/waivers/processLeagueWaiversJob.ts(205,7): error TS2322: Type '{ trigger: WaiverAutomationTrigger; summary: WaiverAutomationSummary; }' is not assignable to type 'InputJsonValue | undefined'.
+  Types of property 'summary' are incompatible.
+    Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type 'WaiverAutomationSummary' is not assignable to type 'InputJsonObject'.
+        Property 'metadata' is incompatible with index signature.
+          Type 'Record<string, unknown>' is not assignable to type 'InputJsonValue | null | undefined'.
+            Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/chimmy-context/prompt/PromptComposer.ts(76,7): error TS2739: Type '{ general: Set<string>; sports_schedule: Set<string>; matchup: Set<string>; start_sit: Set<string>; waiver: Set<string>; trade: Set<string>; dynasty: Set<string>; rankings: Set<...>; draft: Set<...>; }' is missing the following properties from type 'Record<ChimmyIntent, Set<string>>': injury, weather, commissioner, bracket
+lib/chimmy-context/structuredPromptPayload.ts(377,14): error TS2339: Property 'scoringSummary' does not exist on type 'LeagueSummary'.
+lib/chimmy-context/structuredPromptPayload.ts(380,36): error TS2339: Property 'scoringSummary' does not exist on type 'LeagueSummary'.
+lib/chimmy-context/telemetry/recordFeedback.ts(136,52): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'AiFailureContext'.
+lib/decision-os/world/adpEnrichedWorld.ts(143,88): error TS2345: Argument of type '{ port?: CanonicalWorldPort | undefined; now?: Date | undefined; staleAfterMs?: number | undefined; } | undefined' is not assignable to parameter of type 'EnrichedWorldDeps | undefined'.
+  Type '{ port?: CanonicalWorldPort | undefined; now?: Date | undefined; staleAfterMs?: number | undefined; }' is missing the following properties from type 'EnrichedWorldDeps': resolveWorld, resolveMetadata
+lib/decision-os/world/injuryEnrichedWorld.ts(139,88): error TS2345: Argument of type '{ port?: CanonicalWorldPort | undefined; now?: Date | undefined; staleAfterMs?: number | undefined; } | undefined' is not assignable to parameter of type 'EnrichedWorldDeps | undefined'.
+  Type '{ port?: CanonicalWorldPort | undefined; now?: Date | undefined; staleAfterMs?: number | undefined; }' is missing the following properties from type 'EnrichedWorldDeps': resolveWorld, resolveMetadata
+lib/decision-os/world/newsEnrichedWorld.ts(87,18): error TS2430: Interface 'NewsEnrichedCanonicalWorld' incorrectly extends interface 'EnrichedCanonicalWorld'.
+  Types of property 'rosters' are incompatible.
+    Type 'NewsEnrichedRosterFacts[]' is not assignable to type 'EnrichedRosterFacts[]'.
+      Type 'NewsEnrichedRosterFacts' is missing the following properties from type 'EnrichedRosterFacts': playerMetadataEnriched, metadataCompleteness, playerIds, starterIds, and 5 more.
+lib/decision-os/world/newsEnrichedWorld.ts(237,9): error TS2322: Type '{ rosterId: string; teamId: string | null; players: { newsContext: NewsSignalContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }[]' is not assignable to type 'NewsEnrichedRosterFacts[]'.
+  Type '{ rosterId: string; teamId: string | null; players: { newsContext: NewsSignalContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }' is not assignable to type 'NewsEnrichedRosterFacts'.
+    Types of property 'teamId' are incompatible.
+      Type 'string | null' is not assignable to type 'string'.
+        Type 'null' is not assignable to type 'string'.
+lib/decision-os/world/newsEnrichedWorld.ts(331,22): error TS2339: Property 'leagueFacts' does not exist on type 'EnrichedCanonicalWorld'.
+lib/decision-os/world/projectionEnrichedWorld.ts(69,18): error TS2430: Interface 'ProjectionEnrichedCanonicalWorld' incorrectly extends interface 'EnrichedCanonicalWorld'.
+  Types of property 'rosters' are incompatible.
+    Type 'ProjectionEnrichedRosterFacts[]' is not assignable to type 'EnrichedRosterFacts[]'.
+      Type 'ProjectionEnrichedRosterFacts' is missing the following properties from type 'EnrichedRosterFacts': playerMetadataEnriched, metadataCompleteness, playerIds, starterIds, and 5 more.
+lib/decision-os/world/projectionEnrichedWorld.ts(204,9): error TS2322: Type '{ rosterId: string; teamId: string | null; players: { projectionContext: ProjectionContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }[]' is not assignable to type 'ProjectionEnrichedRosterFacts[]'.
+  Type '{ rosterId: string; teamId: string | null; players: { projectionContext: ProjectionContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }' is not assignable to type 'ProjectionEnrichedRosterFacts'.
+    Types of property 'teamId' are incompatible.
+      Type 'string | null' is not assignable to type 'string'.
+        Type 'null' is not assignable to type 'string'.
+lib/decision-os/world/projectionEnrichedWorld.ts(279,11): error TS2339: Property 'leagueFacts' does not exist on type 'EnrichedCanonicalWorld'.
+lib/decision-os/world/weatherEnrichedWorld.ts(87,18): error TS2430: Interface 'WeatherEnrichedCanonicalWorld' incorrectly extends interface 'EnrichedCanonicalWorld'.
+  Types of property 'rosters' are incompatible.
+    Type 'WeatherEnrichedRosterFacts[]' is not assignable to type 'EnrichedRosterFacts[]'.
+      Type 'WeatherEnrichedRosterFacts' is missing the following properties from type 'EnrichedRosterFacts': playerMetadataEnriched, metadataCompleteness, playerIds, starterIds, and 5 more.
+lib/decision-os/world/weatherEnrichedWorld.ts(272,9): error TS2322: Type '{ rosterId: string; teamId: string | null; players: { weatherContext: WeatherContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }[]' is not assignable to type 'WeatherEnrichedRosterFacts[]'.
+  Type '{ rosterId: string; teamId: string | null; players: { weatherContext: WeatherContext; playerId: string; name: string | null; position: string | null; eligiblePositions: string[]; ... 4 more ...; source: string | null; }[]; }' is not assignable to type 'WeatherEnrichedRosterFacts'.
+    Types of property 'teamId' are incompatible.
+      Type 'string | null' is not assignable to type 'string'.
+        Type 'null' is not assignable to type 'string'.
+lib/decision-os/world/weatherEnrichedWorld.ts(351,22): error TS2339: Property 'leagueFacts' does not exist on type 'EnrichedCanonicalWorld'.
+lib/fantasy-media/VideoGenerationJobTracker.ts(26,7): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/fantasy-os/sports-runtime/lineupIntegration.ts(149,7): error TS2322: Type '{ canonicalPlayerId: string; kickoff: string | null; gameStatus: CanonicalGameStatus | null; lockEvidence: SportsDataLockEvidence; locked: boolean; }[]' is not assignable to type '{ canonicalPlayerId: string; kickoff: string | null; gameStatus: string; lockEvidence: string; locked: boolean; }[]'.
+  Type '{ canonicalPlayerId: string; kickoff: string | null; gameStatus: CanonicalGameStatus | null; lockEvidence: SportsDataLockEvidence; locked: boolean; }' is not assignable to type '{ canonicalPlayerId: string; kickoff: string | null; gameStatus: string; lockEvidence: string; locked: boolean; }'.
+    Types of property 'gameStatus' are incompatible.
+      Type 'string | null' is not assignable to type 'string'.
+        Type 'null' is not assignable to type 'string'.
+lib/guillotine/GuillotineEliminationEngine.ts(111,12): error TS2352: Conversion of type '<T extends RosterUpdateArgs>(args: SelectSubset<T, RosterUpdateArgs<DefaultArgs>>) => Prisma__RosterClient<GetFindResult<$RosterPayload<DefaultArgs>, T, {}>, never, DefaultArgs>' to type '(args: { where: { id: string; }; data: Record<string, unknown>; }) => Promise<unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Types of parameters 'args' and 'args' are incompatible.
+    Type '{ where: { id: string; }; data: Record<string, unknown>; }' is not comparable to type 'SelectSubset<any, RosterUpdateArgs<DefaultArgs>>'.
+      Type '{ where: { id: string; }; data: Record<string, unknown>; }' is not comparable to type '{ [x: string]: never; } & "Please either choose `select` or `omit`."'.
+        Type '{ where: { id: string; }; data: Record<string, unknown>; }' is not comparable to type '{ [x: string]: never; }'.
+          Property 'where' is incompatible with index signature.
+            Type '{ id: string; }' is not comparable to type 'never'.
+lib/guillotine/GuillotineEventLog.ts(17,7): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/identity/DuplicateManagerRiskService.ts(248,78): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+lib/league/league-dashboard-view.ts(191,19): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(predicate: (value: string | undefined, index: number, array: (string | undefined)[]) => value is string, thisArg?: any): string[]', gave the following error.
+    Argument of type '(id: string | null) => id is string' is not assignable to parameter of type '(value: string | undefined, index: number, array: (string | undefined)[]) => value is string'.
+      Types of parameters 'id' and 'value' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string | null'.
+          Type 'undefined' is not assignable to type 'string | null'.
+  Overload 2 of 2, '(predicate: (value: string | undefined, index: number, array: (string | undefined)[]) => unknown, thisArg?: any): (string | undefined)[]', gave the following error.
+    Argument of type '(id: string | null) => id is string' is not assignable to parameter of type '(value: string | undefined, index: number, array: (string | undefined)[]) => unknown'.
+      Types of parameters 'id' and 'value' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string | null'.
+          Type 'undefined' is not assignable to type 'string | null'.
+lib/league/sleeper-import-process.ts(395,5): error TS2322: Type '{ settings?: { [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; ... 5 more ...; isDynasty: boolean; } | { ...; }' is not assignable to type '(Without<LeagueUpdateInput, LeagueUncheckedUpdateInput> & LeagueUncheckedUpdateInput) | (Without<...> & LeagueUpdateInput)'.
+  Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 4 more ...; isDynasty: boolean; }' is not assignable to type '(Without<LeagueUpdateInput, LeagueUncheckedUpdateInput> & LeagueUncheckedUpdateInput) | (Without<...> & LeagueUpdateInput)'.
+    Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 4 more ...; isDynasty: boolean; }' is not assignable to type 'Without<LeagueUncheckedUpdateInput, LeagueUpdateInput> & LeagueUpdateInput'.
+      Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 4 more ...; isDynasty: boolean; }' is not assignable to type 'LeagueUpdateInput'.
+        Types of property 'settings' are incompatible.
+          Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+            Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+              Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/league/sleeper-import-process.ts(396,5): error TS2322: Type '{ settings?: { [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; ... 8 more ...; platformLeagueId: string; } | { ...; }' is not assignable to type '(Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput) | (Without<...> & LeagueCreateInput)'.
+  Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 7 more ...; platformLeagueId: string; }' is not assignable to type '(Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput) | (Without<...> & LeagueCreateInput)'.
+    Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 7 more ...; platformLeagueId: string; }' is not assignable to type 'Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput'.
+      Type '{ settings?: { [key: string]: unknown; type?: number | null; leg?: number | null; } | undefined; rosterSize: number; starters?: string[] | undefined; name: string; avatarUrl: string | null; leagueSize: number | null; ... 7 more ...; platformLeagueId: string; }' is not assignable to type 'LeagueUncheckedCreateInput'.
+        Types of property 'settings' are incompatible.
+          Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+            Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+              Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/league/sleeper-import-process.ts(436,5): error TS2322: Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; } | { ...; }' is not assignable to type '(Without<LeagueUpdateInput, LeagueUncheckedUpdateInput> & LeagueUncheckedUpdateInput) | (Without<...> & LeagueUpdateInput)'.
+  Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; }' is not assignable to type '(Without<LeagueUpdateInput, LeagueUncheckedUpdateInput> & LeagueUncheckedUpdateInput) | (Without<...> & LeagueUpdateInput)'.
+    Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; }' is not assignable to type 'Without<LeagueUncheckedUpdateInput, LeagueUpdateInput> & LeagueUpdateInput'.
+      Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 9 more ...; isDynasty: boolean; }' is not assignable to type 'LeagueUpdateInput'.
+        Types of property 'settings' are incompatible.
+          Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+            Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+              Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/league/sleeper-import-process.ts(437,5): error TS2322: Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; } | { ...; }' is not assignable to type '(Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput) | (Without<...> & LeagueCreateInput)'.
+  Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; }' is not assignable to type '(Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput) | (Without<...> & LeagueCreateInput)'.
+    Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; }' is not assignable to type 'Without<LeagueCreateInput, LeagueUncheckedCreateInput> & LeagueUncheckedCreateInput'.
+      Type '{ leagueVariant: null; importWins: null; importLosses: null; importTies: null; importMadePlayoffs: null; importWonChampionship: null; importFinalStanding: null; importPointsFor: null; settings?: { ...; } | undefined; ... 12 more ...; platformLeagueId: string; }' is not assignable to type 'LeagueUncheckedCreateInput'.
+        Types of property 'settings' are incompatible.
+          Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; } | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+            Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+              Type '{ [key: string]: unknown; type?: number | null | undefined; leg?: number | null | undefined; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/league/sleeper-import-process.ts(448,7): error TS2322: Type 'SleeperLeague' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'SleeperLeague' is not assignable to type 'InputJsonObject'.
+    Property 'metadata' is incompatible with index signature.
+      Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; } | null' is not assignable to type 'InputJsonValue | null | undefined'.
+        Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; }' is not assignable to type 'InputJsonValue | null | undefined'.
+          Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/league/sleeper-import-process.ts(453,7): error TS2322: Type 'SleeperLeague' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'SleeperLeague' is not assignable to type 'InputJsonObject'.
+    Property 'metadata' is incompatible with index signature.
+      Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; } | null' is not assignable to type 'InputJsonValue | null | undefined'.
+        Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; }' is not assignable to type 'InputJsonValue | null | undefined'.
+          Type '{ [key: string]: unknown; co_commissioners?: string[] | null | undefined; }' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/meta-client.ts(109,7): error TS2339: Property 'push' does not exist on type 'never'.
+lib/meta-client.ts(110,7): error TS2339: Property 'loaded' does not exist on type 'never'.
+lib/meta-client.ts(111,7): error TS2339: Property 'version' does not exist on type 'never'.
+lib/meta-client.ts(112,7): error TS2339: Property 'queue' does not exist on type 'never'.
+lib/meta-client.ts(143,3): error TS2722: Cannot invoke an object which is possibly 'undefined'.
+lib/nba-schedule/NbaScheduleConfigService.ts(65,13): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/onboarding-retention/OnboardingProgressService.ts(189,9): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/platform-analytics/PlatformAnalyticsService.ts(378,50): error TS2345: Argument of type '{ where: { sport: LeagueSport; }; } | {}' is not assignable to parameter of type 'Subset<{ where: { sport: LeagueSport; }; }, LeagueCountArgs<DefaultArgs>> | undefined'.
+  Property 'where' is missing in type '{}' but required in type 'Subset<{ where: { sport: LeagueSport; }; }, LeagueCountArgs<DefaultArgs>>'.
+lib/player-comparison-lab/MultiPlayerComparisonService.ts(251,3): error TS2741: Property 'marketAdp' is missing in type '{ fantasyCalc: boolean; sleeper: boolean; espnInjuryFeed: boolean; internalAdp: boolean; internalProjections: boolean; leagueScoringSettings: boolean; }' but required in type 'DeterministicSourceFlags'.
+lib/player-valuation-features.ts(492,15): error TS2322: Type 'CachedValuationPayload' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'CachedValuationPayload' is not assignable to type 'InputJsonObject'.
+    Property 'players' is incompatible with index signature.
+      Type 'PlayerValuation[]' is not assignable to type 'InputJsonValue | null | undefined'.
+        Type 'PlayerValuation[]' is not assignable to type 'InputJsonObject'.
+          Index signature for type 'string' is missing in type 'PlayerValuation[]'.
+lib/player-valuation-features.ts(493,25): error TS2322: Type 'CachedValuationPayload' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'CachedValuationPayload' is not assignable to type 'InputJsonObject'.
+    Property 'players' is incompatible with index signature.
+      Type 'PlayerValuation[]' is not assignable to type 'InputJsonValue | null | undefined'.
+        Type 'PlayerValuation[]' is not assignable to type 'InputJsonObject'.
+          Index signature for type 'string' is missing in type 'PlayerValuation[]'.
+lib/playoff-settings/PlayoffConfigService.ts(89,7): error TS2322: Type '{ playoff_config_data: PlayoffConfig; playoffStartWeek: number; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Types of property '[`${PREFIX}data`]' are incompatible.
+    Type 'PlayoffConfig' is not assignable to type 'InputJsonValue | null | undefined'.
+      Type 'PlayoffConfig' is not assignable to type 'InputJsonObject'.
+        Index signature for type 'string' is missing in type 'PlayoffConfig'.
+lib/playoffs/playoffChallengeConfig.ts(95,49): error TS2339: Property 'seriesWinnerPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(95,86): error TS2339: Property 'seriesWinnerPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(96,52): error TS2339: Property 'exactSeriesScoreBonus' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(96,92): error TS2339: Property 'exactSeriesScoreBonus' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(97,48): error TS2339: Property 'seriesLengthBonus' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(97,84): error TS2339: Property 'seriesLengthBonus' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(98,47): error TS2339: Property 'upsetBonusPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(98,82): error TS2339: Property 'upsetBonusPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(99,47): error TS2339: Property 'spreadPickPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(99,82): error TS2339: Property 'spreadPickPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(100,50): error TS2339: Property 'overUnderPickPoints' does not exist on type '{}'.
+lib/playoffs/playoffChallengeConfig.ts(100,88): error TS2339: Property 'overUnderPickPoints' does not exist on type '{}'.
+lib/playoffs/playoffClientApi.ts(1,39): error TS2724: '"./types"' has no exported member named 'PlayoffChallengeListItem'. Did you mean 'PlayoffChallengeView'?
+lib/playoffs/playoffClientApi.ts(1,87): error TS2305: Module '"./types"' has no exported member 'PlayoffCreateResponse'.
+lib/playoffs/playoffSeriesSyncService.ts(1744,48): error TS2367: This comparison appears to be unintentional because the types '"schedule_only" | "teams_schedule_only"' and '"results_only"' have no overlap.
+lib/playoffs/playoffService.ts(5,39): error TS2724: '"./types"' has no exported member named 'PlayoffChallengeListItem'. Did you mean 'PlayoffChallengeView'?
+lib/playoffs/playoffService.ts(5,87): error TS2305: Module '"./types"' has no exported member 'PlayoffCreateResponse'.
+lib/playoffs/playoffService.ts(344,5): error TS2353: Object literal may only specify known properties, and 'participants' does not exist in type 'PlayoffChallengeView'.
+lib/referral/ReferralService.ts(140,9): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/referral/ReferralService.ts(302,9): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/reputation-engine/ReputationConfigService.ts(110,7): error TS2322: Type 'ReputationScoreWeights' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'ReputationScoreWeights' is not assignable to type 'InputJsonObject'.
+    Index signature for type 'string' is missing in type 'ReputationScoreWeights'.
+lib/reputation-engine/ReputationConfigService.ts(114,7): error TS2322: Type 'ReputationScoreWeights' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'ReputationScoreWeights' is not assignable to type 'InputJsonObject'.
+    Index signature for type 'string' is missing in type 'ReputationScoreWeights'.
+lib/tournament-mode/TournamentAdvancementService.ts(84,83): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/tournament-mode/TournamentAuditService.ts(41,7): error TS2322: Type 'Record<string, unknown> | undefined' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+    Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/tournament-mode/TournamentCreationService.ts(71,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/tournament-mode/TournamentCreationService.ts(171,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/tournament-mode/TournamentCreationService.ts(172,7): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'JsonNull | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/tournament/tournamentMiniCommissionerNotifications.ts(19,9): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type 'Record<string, unknown>' is missing the following properties from type 'readonly (InputJsonValue | null)[]': length, concat, join, slice, and 26 more.
+lib/world-cup/worldCupBracketReminderService.ts(194,31): error TS2345: Argument of type '(c: { id: string; name: string; pickLockAt: Date; }) => { id: string; name: string; pickLockAt: Date; }' is not assignable to parameter of type '(value: { id: string; name: string; pickLockAt: Date | null; }, index: number, array: { id: string; name: string; pickLockAt: Date | null; }[]) => { id: string; name: string; pickLockAt: Date; }'.
+  Types of parameters 'c' and 'value' are incompatible.
+    Type '{ id: string; name: string; pickLockAt: Date | null; }' is not assignable to type '{ id: string; name: string; pickLockAt: Date; }'.
+      Types of property 'pickLockAt' are incompatible.
+        Type 'Date | null' is not assignable to type 'Date'.
+          Type 'null' is not assignable to type 'Date'.
+lib/world-cup/worldCupChimmyPrivateReply.ts(135,7): error TS2322: Type 'number | null | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+lib/world-cup/worldCupChimmyPrivateReply.ts(460,9): error TS2353: Object literal may only specify known properties, and 'locale' does not exist in type 'WcChimmyCacheInput'.
+lib/world-cup/worldCupChimmyPrivateReply.ts(476,11): error TS2322: Type '{ plan?: string | null | undefined; tokenBalance?: number | undefined; } | undefined' is not assignable to type '{ plan?: "commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined; tokenBalance?: number | undefined; } | undefined'.
+  Type '{ plan?: string | null | undefined; tokenBalance?: number | undefined; }' is not assignable to type '{ plan?: "commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined; tokenBalance?: number | undefined; }'.
+    Types of property 'plan' are incompatible.
+      Type 'string | null | undefined' is not assignable to type '"commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined'.
+        Type 'null' is not assignable to type '"commissioner" | "pro" | "war_room" | "supreme" | "free" | undefined'.
+lib/world-cup/worldCupChimmyPrivateReply.ts(490,11): error TS2322: Type '"fast" | "cheap"' is not assignable to type 'ProviderProfile | undefined'.
+  Type '"fast"' is not assignable to type 'ProviderProfile | undefined'.
+lib/world-cup/worldCupChimmyPrivateReply.ts(572,23): error TS2367: This comparison appears to be unintentional because the types '"unavailable" | "clean" | null' and '"blocked"' have no overlap.
+lib/world-cup/worldCupChimmyPrivateReply.ts(645,9): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupChimmyPrivateReply.ts(677,5): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupDataSyncService.ts(534,24): error TS2345: Argument of type '{ providerId: string; action: "error" | "updated" | "created" | "skipped"; officialFixtureId?: string | undefined; }' is not assignable to parameter of type '{ providerId: string; matchId?: string | undefined; action: "error" | "updated" | "skipped" | "no_match"; }'.
+  Types of property 'action' are incompatible.
+    Type '"error" | "updated" | "created" | "skipped"' is not assignable to type '"error" | "updated" | "skipped" | "no_match"'.
+      Type '"created"' is not assignable to type '"error" | "updated" | "skipped" | "no_match"'.
+lib/world-cup/worldCupDataSyncService.ts(1522,22): error TS2339: Property 'officialFixturesCreated' does not exist on type 'WorldCupInjurySyncResult'.
+lib/world-cup/worldCupDataSyncService.ts(1523,22): error TS2339: Property 'officialFixturesUpdated' does not exist on type 'WorldCupInjurySyncResult'.
+lib/world-cup/worldCupDataSyncService.ts(1523,62): error TS2339: Property 'bracketMatchesUpdated' does not exist on type 'WorldCupInjurySyncResult'.
+lib/world-cup/worldCupEdgeReportAi.ts(161,9): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupEdgeReportAi.ts(207,7): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupEdgeReportAi.ts(238,7): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupEdgeReportAi.ts(278,9): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupEdgeReportAi.ts(317,5): error TS2353: Object literal may only specify known properties, and 'billingReason' does not exist in type 'AiAuditEntry'.
+lib/world-cup/worldCupEntryFinalizeService.ts(128,11): error TS2322: Type 'DbMatch[]' is not assignable to type 'WorldCupMatchView[]'.
+  Type 'DbMatch' is missing the following properties from type 'WorldCupMatchView': roundIndex, matchNumber, homeTeamLogo, awayTeamLogo, and 2 more.
+lib/world-cup/worldCupGroupStageResultService.ts(6,98): error TS2305: Module '"./worldCupGroupResolver"' has no exported member 'WorldCupRoundOf32MappingRow'.
+lib/world-cup/worldCupGroupStageResultService.ts(56,14): error TS2339: Property 'providerId' does not exist on type 'WorldCupProviderGroupStanding'.
+lib/world-cup/worldCupGroupStageResultService.ts(56,43): error TS2339: Property 'providerId' does not exist on type 'WorldCupProviderGroupStanding'.
+lib/world-cup/worldCupGroupStageResultService.ts(173,43): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+lib/world-cup/worldCupGroupStageResultService.ts(191,32): error TS2339: Property 'fairPlayPoints' does not exist on type 'WorldCupProviderGroupStanding'.
+lib/world-cup/worldCupGroupStageResultService.ts(207,70): error TS2339: Property 'row' does not exist on type 'WorldCupGroupStanding'.
+lib/world-cup/worldCupGroupStageScoringService.ts(231,20): error TS2783: 'actualRank' is specified more than once, so this usage will be overwritten.
+lib/world-cup/worldCupGroupStageService.ts(204,50): error TS2339: Property 'id' does not exist on type 'WorldCupOfficialGroupTeam | { id?: string | null | undefined; fifaCode?: string | null | undefined; name?: string | null | undefined; country?: string | null | undefined; }'.
+  Property 'id' does not exist on type 'WorldCupOfficialGroupTeam'.
+lib/world-cup/worldCupGroupStageService.ts(698,25): error TS2345: Argument of type '{ id: string; name: string; country: string; fifaCode: string; groupName: string; qualificationStatus: string; sourcePayload: { source: string; challengeId: string; groupKey: string; seedOrder: number; note: string; }; }' is not assignable to parameter of type '{ id: string; createdAt: Date; updatedAt: Date; name: string; logoUrl: string | null; country: string; sourcePayload: JsonValue; fifaCode: string | null; groupName: string | null; qualificationStatus: string; flagUrl: string | null; apiTeamId: number | null; }'.
+  Type '{ id: string; name: string; country: string; fifaCode: string; groupName: string; qualificationStatus: string; sourcePayload: { source: string; challengeId: string; groupKey: string; seedOrder: number; note: string; }; }' is missing the following properties from type '{ id: string; createdAt: Date; updatedAt: Date; name: string; logoUrl: string | null; country: string; sourcePayload: JsonValue; fifaCode: string | null; groupName: string | null; qualificationStatus: string; flagUrl: string | null; apiTeamId: number | null; }': createdAt, updatedAt, logoUrl, flagUrl, apiTeamId
+lib/world-cup/worldCupJoinGate.ts(43,5): error TS2322: Type 'boolean | undefined' is not assignable to type 'boolean'.
+  Type 'undefined' is not assignable to type 'boolean'.
+lib/world-cup/worldCupSimulationService.ts(683,72): error TS2322: Type '{ status: string; homeScore: null; awayScore: null; homePenaltyScore: null; awayPenaltyScore: null; winnerTeamId: null; winnerTeamName: null; elapsedMinute: null; injuryTime: null; period: null; ... 8 more ...; awayTeamLogo: string | null; }' is not assignable to type '(Without<WorldCupBracketMatchUpdateInput, WorldCupBracketMatchUncheckedUpdateInput> & WorldCupBracketMatchUncheckedUpdateInput) | (Without<...> & WorldCupBracketMatchUpdateInput)'.
+  Type '{ status: string; homeScore: null; awayScore: null; homePenaltyScore: null; awayPenaltyScore: null; winnerTeamId: null; winnerTeamName: null; elapsedMinute: null; injuryTime: null; period: null; ... 8 more ...; awayTeamLogo: string | null; }' is not assignable to type 'Without<WorldCupBracketMatchUpdateInput, WorldCupBracketMatchUncheckedUpdateInput> & WorldCupBracketMatchUncheckedUpdateInput'.
+    Type '{ status: string; homeScore: null; awayScore: null; homePenaltyScore: null; awayPenaltyScore: null; winnerTeamId: null; winnerTeamName: null; elapsedMinute: null; injuryTime: null; period: null; ... 8 more ...; awayTeamLogo: string | null; }' is not assignable to type 'WorldCupBracketMatchUncheckedUpdateInput'.
+      Types of property 'sourcePayload' are incompatible.
+        Type 'null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+server/api-route-modules/league-survivor/foundation/route.ts(98,7): error TS2322: Type '{ [x: string]: unknown; }' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'.
+  Type '{ [x: string]: unknown; }' is not assignable to type 'undefined'.

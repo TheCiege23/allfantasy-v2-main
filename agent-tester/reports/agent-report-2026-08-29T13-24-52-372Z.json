@@ -1,0 +1,119 @@
+{
+  "target": "http://127.0.0.1:3000",
+  "at": "2026-08-29T13:24:52.403Z",
+  "results": [
+    {
+      "archetype": "anxious-first-timer",
+      "mission": "sweep-landing-page-on-mobile",
+      "succeeded": false,
+      "steps": 5,
+      "findings": [
+        {
+          "severity": "blocker",
+          "title": "Screen has nothing to interact with",
+          "narrative": "The persona arrived and found no enabled, visible control at all. Either the page failed to render or it is a genuine dead end.",
+          "url": "about:blank",
+          "archetype": "anxious-first-timer",
+          "step": 5
+        },
+        {
+          "severity": "major",
+          "title": "\"Get started free\" appears to do nothing",
+          "narrative": "The user clicked \"Get started free\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "anxious-first-timer",
+          "step": 1
+        },
+        {
+          "severity": "major",
+          "title": "\"SideQuest Turn the side hustle into a tracked, finishable qu\" appears to do nothing",
+          "narrative": "The user clicked \"SideQuest Turn the side hustle into a tracked, finishable qu\" and nothing observable happened — no navigation, no new content, no network request. From their side the control is broken.",
+          "url": "http://127.0.0.1:3000/",
+          "archetype": "anxious-first-timer",
+          "step": 3
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "Invalid Sentry Dsn: [SENSITIVE]",
+          "archetype": "anxious-first-timer",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "WebSocket connection to 'ws://127.0.0.1:3000/_next/webpack-hmr' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+          "archetype": "anxious-first-timer",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "The method FB.getLoginStatus can no longer be called from http pages. https://developers.facebook.com/blog/post/2018/06/08/enforce-https-facebook-login/",
+          "archetype": "anxious-first-timer",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "\"Get started free\" took 10.2s",
+          "narrative": "This persona gives up after 10.0s. The screen was unresponsive for 10.2s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=10214ms patience=10000ms",
+          "archetype": "anxious-first-timer",
+          "step": 1
+        },
+        {
+          "severity": "minor",
+          "title": "\"Start free\" took 10.1s",
+          "narrative": "This persona gives up after 10.0s. The screen was unresponsive for 10.1s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=10129ms patience=10000ms",
+          "archetype": "anxious-first-timer",
+          "step": 2
+        },
+        {
+          "severity": "minor",
+          "title": "\"SideQuest Turn the side hustle into a tracked, finishable qu\" took 10.5s",
+          "narrative": "This persona gives up after 10.0s. The screen was unresponsive for 10.5s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=10454ms patience=10000ms",
+          "archetype": "anxious-first-timer",
+          "step": 3
+        },
+        {
+          "severity": "minor",
+          "title": "\"Sign in\" took 10.2s",
+          "narrative": "This persona gives up after 10.0s. The screen was unresponsive for 10.2s, so a real user in this mood would have left or hit the button again.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "elapsed=10168ms patience=10000ms",
+          "archetype": "anxious-first-timer",
+          "step": 4
+        },
+        {
+          "severity": "minor",
+          "title": "JavaScript error in the console",
+          "narrative": "The page logged an error while the user was on it. It did not necessarily break anything visible, but it is unhandled.",
+          "url": "http://127.0.0.1:3000/",
+          "evidence": "Failed to fetch RSC payload for http://127.0.0.1:3000/login. Falling back to browser navigation. TypeError: Failed to fetch\n    at fetchServerResponse (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/router-reducer/fetch-server-response.js:59:27)\n    at InnerLayoutRouter (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/layout-router.js:305:90)\n    at renderWithHooks (webpack-internal:///(app-pages-browser)/./node_modules/next/",
+          "archetype": "anxious-first-timer",
+          "step": 5
+        }
+      ],
+      "trail": [
+        "00. started at / — goal: Look around the landing page on mobile and see if anything is broken",
+        "01. clicked \"Get started free\"",
+        "02. clicked \"Start free\"",
+        "03. pressed the browser Back button",
+        "03. clicked \"SideQuest Turn the side hustle into a tracked, finishable qu\"",
+        "04. clicked \"Sign in\"",
+        "05. pressed the browser Back button"
+      ]
+    }
+  ]
+}

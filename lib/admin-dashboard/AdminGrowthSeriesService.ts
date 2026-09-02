@@ -269,6 +269,13 @@ export function markCurrentBucket(
   return buckets.map((b) => (b.key === currentKey ? { ...b, partial: true } : b))
 }
 
+/*
+ * Upper bound on rows pulled for the distinct-active-users calculation. Big
+ * enough that this app's real volume is unaffected, small enough that a table
+ * which has grown without anyone noticing cannot stall the admin console.
+ */
+const ACTIVE_USER_ROW_CAP = 200_000
+
 const COMPLETED_PAYMENT_STATUSES = ["completed", "paid", "succeeded"]
 
 export async function getAdminGrowthSeries(now: Date = new Date()): Promise<AdminGrowthSeries> {
@@ -285,9 +292,33 @@ export async function getAdminGrowthSeries(now: Date = new Date()): Promise<Admi
       where: { createdAt: { gte: since }, status: { in: COMPLETED_PAYMENT_STATUSES } },
       select: ts,
     }),
+    /*
+     * 🛑 THIS QUERY TOOK /admin DOWN ON 2026-09-02 AND THE COMMENT ABOVE
+     * PREDICTED IT. The header says AnalyticsEvent "is the one table here that
+     * can grow without bound" and has no index on `createdAt` alone — and it
+     * was then written as an unbounded findMany over 400 days anyway. Postgres
+     * cannot serve `createdAt >= x` from `[event, createdAt]` or
+     * `[path, createdAt]` (wrong leading column), and `userId IS NOT NULL` is
+     * not selective, so it degrades to a sequential scan that ships every
+     * matching row over the wire. Writing the risk down is not the same as
+     * bounding it.
+     *
+     * `take` makes the cost predictable. Newest-first so the recent buckets —
+     * the ones anyone actually reads — are always complete.
+     *
+     * ⚠ THE CAP BIASES THE OLDEST BUCKETS, AND THAT IS A REAL TRADE, NOT A
+     * FREE WIN. Past the cap the earliest months undercount distinct users.
+     * That is preferable to a console that will not load, but it is a stopgap:
+     * the correct fix is a GROUP BY with COUNT(DISTINCT "userId") in the
+     * database, returning ~30 rows instead of a million, or a maintained
+     * rollup. Both need to be measured against a real database before shipping,
+     * which is exactly what this checkout cannot do.
+     */
     prisma.analyticsEvent.findMany({
       where: { createdAt: { gte: since }, userId: { not: null } },
       select: { createdAt: true, userId: true },
+      orderBy: { createdAt: "desc" },
+      take: ACTIVE_USER_ROW_CAP,
     }),
   ])
 
