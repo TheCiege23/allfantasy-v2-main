@@ -547,6 +547,32 @@ export default async function AfCorePage({
   }))
 
   /*
+   * What the Trade Center needs beyond the league it is scoped to: the
+   * league's resolved type and variant (they scope the asset legend — a
+   * redraft league must not advertise future picks) and every played league
+   * for the cross-league offers strip. Resolved through the same
+   * resolveLeagueCardTypeKey the rail uses, so the two never disagree.
+   */
+  const tradeLeagueRow = selectedLeagueId
+    ? (playedLeagues.find((l) => l.id === selectedLeagueId) ?? null)
+    : null
+  const tradeLeagueTypeKey = tradeLeagueRow
+    ? resolveLeagueCardTypeKey({
+        leagueType: tradeLeagueRow.leagueType,
+        leagueVariant: tradeLeagueRow.leagueVariant,
+        settings: tradeLeagueRow.settings ?? undefined,
+        isDynasty: tradeLeagueRow.isDynasty,
+      })
+    : null
+  const tradeStripLeagues = playedLeagues.map((l) => ({
+    id: l.id,
+    name: l.name,
+    platform: String(l.platform ?? 'manual').toLowerCase(),
+    mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
+    meta: [l.sport, l.teamCount ? `${l.teamCount} teams` : null].filter(Boolean).join(' · ') || null,
+  }))
+
+  /*
    * Whether the selected league has any scored week, for the nav gate.
    *
    * 🛑 FOUR TABS READ SCORED WEEKS AND NOTHING ELSE. On a league with none —
@@ -1725,6 +1751,10 @@ export default async function AfCorePage({
                   ? `Deadline · week ${trades.deadline.data.week}`
                   : null
               }
+              platform={trades.league.platform}
+              leagueType={tradeLeagueTypeKey}
+              leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
+              leagues={tradeStripLeagues}
             />
             <Trades data={trades} />
           </>

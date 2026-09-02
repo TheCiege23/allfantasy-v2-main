@@ -8,6 +8,7 @@ import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
+import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -34,6 +35,13 @@ import '@/components/core-app/af-trade-center.css'
  *
  * ⚠ NO NEW API ROUTE. This posts to the existing `/api/trade-value/analyze`.
  * The repo sits at the platform's route ceiling and a page is not worth one.
+ *
+ * VISUAL UPGRADE (design-refs/trade-center-handoff, Core artboard): a
+ * cross-league offers strip above the context bar, platform marks wherever a
+ * league is named, a league-aware asset legend, position colour on the position
+ * token, a value-balance rail under the builder, the verdict as the hero with
+ * a two-ended balance track, and the contender / rebuilder reads the engine
+ * already returned but this page never rendered.
  */
 
 /** Asset vocabulary the legend documents, per the handoff. */
@@ -45,6 +53,75 @@ const ASSET_TYPES: Array<{ key: string; label: string; glyph: string; color: str
   { key: 'weapon', label: 'Weapon · Zombie', glyph: 'W', color: '#fb5b78' },
   { key: 'serum', label: 'Serum · Zombie', glyph: 'S', color: '#a78bfa' },
 ]
+
+/**
+ * Which of those classes THIS league can trade.
+ *
+ * The legend used to list all six everywhere, so a redraft league advertised
+ * future picks — the very asset the format banner then refuses. Keyed on the
+ * resolved league type (`resolveLeagueCardTypeKey`) and the raw variant, never
+ * on a display string. Unknown type → the full vocabulary, because "we do not
+ * know" must not read as "this league forbids picks".
+ */
+function assetTypesFor(
+  leagueType: string | null | undefined,
+  leagueVariant: string | null | undefined,
+): { types: typeof ASSET_TYPES; scoped: boolean } {
+  const type = (leagueType ?? '').toLowerCase()
+  const variant = (leagueVariant ?? '').toLowerCase()
+  if (!type && !variant) return { types: ASSET_TYPES, scoped: false }
+
+  const keys = new Set<string>(['player', 'faab'])
+  /* Picks exist only where there is a future draft to send them into. */
+  if (type === 'dynasty' || type === 'keeper') keys.add('pick')
+  if (variant === 'zombie') {
+    keys.add('weapon')
+    keys.add('serum')
+  }
+  if (variant === 'survivor') keys.add('idol')
+  return { types: ASSET_TYPES.filter((a) => keys.has(a.key)), scoped: true }
+}
+
+/** Single letter for a platform mark, matching the rail's PLATFORM_MARK. */
+const PLATFORM_MARK: Record<string, string> = {
+  sleeper: 'S',
+  espn: 'E',
+  yahoo: 'Y',
+  cbs: 'C',
+  mfl: 'M',
+  fantrax: 'F',
+  fleaflicker: 'L',
+}
+function platformMark(platform: string): string {
+  return PLATFORM_MARK[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase()
+}
+
+/**
+ * Position colour, the same assignment the league Trades tab uses for its
+ * trade-block cards, so a WR reads the same colour on every trade surface.
+ */
+const POSITION_TONE: Record<string, string> = {
+  QB: 'qb',
+  RB: 'rb',
+  WR: 'wr',
+  TE: 'te',
+  DL: 'dl',
+  DE: 'dl',
+  DT: 'dl',
+  NT: 'dl',
+  LB: 'lb',
+  DB: 'db',
+  CB: 'db',
+  S: 'db',
+  SS: 'db',
+  FS: 'db',
+  K: 'k',
+  DEF: 'def',
+  DST: 'def',
+}
+function positionTone(position: string): string {
+  return POSITION_TONE[position.toUpperCase()] ?? 'other'
+}
 
 type Line = {
   name: string
@@ -101,7 +178,32 @@ function totalOf(lines: Line[]): string {
   return priced.reduce((a, b) => a + b, 0).toLocaleString()
 }
 
+/** The same sum as a number, null when nothing on the side is priced. */
+function pricedTotal(lines: Line[]): number | null {
+  const priced = lines
+    .map((l) => l.marketValue)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  return priced.length === 0 ? null : priced.reduce((a, b) => a + b, 0)
+}
+
+function unpricedCount(lines: Line[]): number {
+  return lines.filter((l) => l.marketValue == null).length
+}
+
+/** A line's asset class, read off the position the builder stamps on it. */
+function kindOf(line: Line): 'player' | 'pick' | 'faab' {
+  return line.position === 'PICK' ? 'pick' : line.position === 'FAAB' ? 'faab' : 'player'
+}
+
+function glyphFor(line: Line): { glyph: string; color: string } {
+  const t = ASSET_TYPES.find((a) => a.key === kindOf(line)) ?? ASSET_TYPES[0]!
+  return { glyph: t.glyph, color: t.color }
+}
+
 const NOTE_GROUPS: Array<{ key: keyof AnalyzeResult; tone: string; title: string }> = [
+  /* Format notes lead the page as a banner when they BLOCK the deal; when they
+     only describe it (a zombie league's trading rules) they are context. */
+  { key: 'formatNotes', tone: 'format', title: 'Format' },
   { key: 'scaleNotes', tone: 'scale', title: 'League & roster shape' },
   { key: 'postureNotes', tone: 'posture', title: 'Where each side stands' },
   { key: 'pickNotes', tone: 'pick', title: 'What these picks really are' },
@@ -137,6 +239,14 @@ export function TradeCenter(props: {
   /** Opponent label, when the caller knows one. */
   opponentLabel?: string | null
   deadlineLabel?: string | null
+  /** Source platform id (sleeper, espn, …) — drives the platform marks. */
+  platform?: string | null
+  /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
+  leagueType?: string | null
+  /** Raw `League.leagueVariant` (zombie, survivor, …) — adds that format's asset classes. */
+  leagueVariant?: string | null
+  /** Every connected league, for the cross-league offers strip. Omit to hide the strip. */
+  leagues?: StripLeague[] | null
 }) {
   const [result, setResult] = useState<AnalyzeResult | null>(null)
   const [busy, setBusy] = useState(false)
@@ -452,6 +562,32 @@ export function TradeCenter(props: {
   const intel = result?.tradeIntelligence
 
   /*
+   * ── Value balance ────────────────────────────────────────────────────
+   *
+   * The two priced totals side by side, before any verdict. It is the
+   * arithmetic the manager can check themselves, which is why it sits under
+   * the builder rather than inside the verdict card.
+   *
+   * ⚠ UNPRICED LINES ARE EXCLUDED, AND THE RAIL SAYS SO. Counting a defender
+   * the feed cannot price as zero would tilt the bar against whichever side
+   * holds him — the same rule as the em dash on his row.
+   */
+  const balance = (() => {
+    const g = pricedTotal(give)
+    const k = pricedTotal(get)
+    if (g == null && k == null) return null
+    if (g == null || k == null || g + k === 0) {
+      return { give: g, get: k, givePct: null as number | null, diff: null as number | null, pct: null as number | null }
+    }
+    const givePct = Math.round((g / (g + k)) * 100)
+    const diff = k - g
+    const pct = Math.round((Math.abs(diff) / Math.max(g, k)) * 100)
+    return { give: g, get: k, givePct, diff, pct }
+  })()
+
+  const legend = assetTypesFor(props.leagueType, props.leagueVariant)
+
+  /*
    * Hand the deal to Chimmy.
    *
    * ⚠ PREFILL, NEVER SEND. The comms contract is explicit: a screen that fires a
@@ -491,13 +627,27 @@ export function TradeCenter(props: {
         <div className="af-label">Core · Trades</div>
         <h1>Trade Center</h1>
         <p className="af-tc-lede">
-          Build a deal across any asset class this league allows. Context below the verdict is
-          additive — it never touches the score above it.
+          Build a deal across any league you&rsquo;re in and any asset class it allows. Context
+          below the verdict is additive &mdash; it never touches the score above it.
         </p>
       </header>
 
+      {/* Every league at a glance, before this one's context — see the strip's own header. */}
+      {props.leagues && props.leagues.length > 0 ? (
+        <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
+      ) : null}
+
       {props.league ? (
         <div className="af-tc-context">
+          {props.platform ? (
+            <span
+              className="af-tc-mark af-platform"
+              data-platform={props.platform.toLowerCase()}
+              aria-hidden
+            >
+              {platformMark(props.platform)}
+            </span>
+          ) : null}
           <span className="af-tc-context-name">{props.league.name}</span>
           <span className="af-tc-context-meta">
             {[props.league.format, props.league.teamCount ? `${props.league.teamCount} teams` : null]
@@ -512,10 +662,16 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {/* The full asset vocabulary, shown regardless of what this deal contains. */}
+      {/*
+        The asset vocabulary this LEAGUE can trade, shown regardless of what this
+        deal contains. Scoped by the league's type when the caller knows it; the
+        full six otherwise, because an unknown type must not read as a rule.
+      */}
       <div className="af-tc-legend">
-        <span className="af-tc-legend-label">Asset types supported</span>
-        {ASSET_TYPES.map((a) => (
+        <span className="af-tc-legend-label">
+          {legend.scoped ? 'Asset types in this league' : 'Asset types supported'}
+        </span>
+        {legend.types.map((a) => (
           <span key={a.key} className="af-tc-asset-pill">
             <span className="af-tc-glyph" style={{ background: a.color }}>
               {a.glyph}
@@ -610,6 +766,18 @@ export function TradeCenter(props: {
               <span className="af-tc-team-name">{side.label}</span>
               {side.handle ? <span className="af-tc-team-handle">{side.handle}</span> : null}
               {side.isYou ? <span className="af-tc-you">YOU</span> : null}
+              {props.platform ? (
+                <>
+                  <span className="af-tc-spacer" />
+                  <span
+                    className="af-tc-mark af-tc-mark--sm af-platform"
+                    data-platform={props.platform.toLowerCase()}
+                    aria-hidden
+                  >
+                    {platformMark(props.platform)}
+                  </span>
+                </>
+              ) : null}
             </div>
             <span className="af-tc-sends">Sends</span>
 
@@ -617,14 +785,32 @@ export function TradeCenter(props: {
               <p className="af-tc-row-sub">Nothing added yet.</p>
             ) : (
               side.lines.map((l, i) => (
-                <div key={`${side.label}-${l.name}-${i}`} className="af-tc-row">
-                  <span className="af-tc-glyph" style={{ background: ASSET_TYPES[0]!.color }}>
-                    P
+                <div
+                  key={`${side.label}-${l.name}-${i}`}
+                  className="af-tc-row"
+                  data-kind={kindOf(l)}
+                >
+                  <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
+                    {glyphFor(l).glyph}
                   </span>
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{l.name}</span>
                     <span className="af-tc-row-sub">
-                      {[l.position, l.team].filter(Boolean).join(' · ')}
+                      {l.position ? (
+                        <span className="af-tc-pos" data-pos={positionTone(l.position)}>
+                          {l.position}
+                        </span>
+                      ) : null}
+                      {l.team ? <span>{l.team}</span> : null}
+                      {/*
+                        A player the feed could not price gets a tag, not a
+                        zero. Picks and FAAB are unpriced by nature, so no tag.
+                      */}
+                      {l.marketValue == null && kindOf(l) === 'player' ? (
+                        <span className="af-tc-tag" data-tone="bad">
+                          Unpriced
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <span
@@ -672,12 +858,54 @@ export function TradeCenter(props: {
             )}
 
             <div className="af-tc-total">
-              <span>Total</span>
-              <b>{totalOf(side.lines)}</b>
+              <span>
+                Total
+                {unpricedCount(side.lines) > 0 ? (
+                  <span className="af-tc-total-note"> · {unpricedCount(side.lines)} unpriced</span>
+                ) : null}
+              </span>
+              <b className="af-num">{totalOf(side.lines)}</b>
             </div>
           </div>
         ))}
       </div>
+
+      {/*
+        ⚠ HIDDEN WHEN THE FORMAT BLOCKS THE DEAL, for the same reason the
+        verdict is: a bar under a "this cannot happen" banner still gets read as
+        a comparison.
+      */}
+      {balance && !blocked ? (
+        <div className="af-tc-balance">
+          <div className="af-tc-balance-head">
+            <span className="af-label">Value balance</span>
+            <span className="af-tc-row-sub">priced assets only</span>
+            <span className="af-tc-spacer" />
+            <span
+              className="af-tc-balance-delta af-num"
+              data-tone={
+                balance.diff == null ? 'faint' : balance.diff > 0 ? 'good' : balance.diff < 0 ? 'bad' : 'muted'
+              }
+            >
+              {balance.diff == null
+                ? 'Nothing priced on one side'
+                : balance.diff === 0
+                  ? 'Even on priced value'
+                  : `${balance.diff > 0 ? '+' : '−'}${Math.abs(balance.diff).toLocaleString()} to you · ${balance.pct}% apart`}
+            </span>
+          </div>
+          {balance.givePct != null ? (
+            <div className="af-tc-balance-bar" aria-hidden>
+              <span className="af-tc-balance-give" style={{ width: `${balance.givePct}%` }} />
+              <span className="af-tc-balance-get" style={{ width: `${100 - balance.givePct}%` }} />
+            </div>
+          ) : null}
+          <div className="af-tc-balance-ends af-num">
+            <span data-side="give">You send · {money(balance.give)}</span>
+            <span data-side="get">You get · {money(balance.get)}</span>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <p className="af-tc-nosignal">{error}</p> : null}
 
@@ -687,35 +915,67 @@ export function TradeCenter(props: {
       */}
       {result && !blocked ? (
         <section className="af-tc-verdict">
-          {yourGrade || theirGrade ? (
-            <div className="af-tc-grade-row">
-              {[
-                { label: 'You', letter: yourGrade },
-                { label: props.opponentLabel ?? 'Them', letter: theirGrade },
-              ].map((g) =>
-                g.letter ? (
-                  <div key={g.label} className="af-tc-grade" data-letter={g.letter}>
-                    <span className="af-tc-grade-letter">{g.letter}</span>
-                    <span className="af-tc-grade-for">{g.label}</span>
-                  </div>
-                ) : null,
-              )}
-            </div>
-          ) : null}
-
-          <div className="af-tc-labels">
-            <strong>{result.labels?.fairnessLabel ?? 'No verdict'}</strong>
-            {result.labels?.confidenceLabel ? (
-              <span className="af-tc-conf">· {result.labels.confidenceLabel}</span>
-            ) : null}
+          <div className="af-tc-verdict-head">
+            <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
+            <span className="af-tc-row-sub">
+              projected &mdash; the realized grade locks in once real production posts
+            </span>
           </div>
 
+          <div className="af-tc-verdict-row">
+            {yourGrade || theirGrade ? (
+              <div className="af-tc-grade-row">
+                {[
+                  { label: 'You', letter: yourGrade },
+                  { label: theirLabel, letter: theirGrade },
+                ].map((g) =>
+                  g.letter ? (
+                    <div key={g.label} className="af-tc-grade" data-letter={g.letter}>
+                      <span className="af-tc-grade-letter">{g.letter}</span>
+                      <span className="af-tc-grade-for">{g.label}</span>
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            ) : null}
+            <span className="af-tc-spacer" />
+            <div className="af-tc-score">
+              {typeof result.fairnessScore === 'number' ? (
+                <span className="af-tc-score-num af-num">
+                  {Math.round(result.fairnessScore)}
+                  <small>/100</small>
+                </span>
+              ) : null}
+              <strong className="af-tc-score-label">
+                {result.labels?.fairnessLabel ?? 'No verdict'}
+              </strong>
+              {result.labels?.confidenceLabel ? (
+                <span className="af-tc-conf">{result.labels.confidenceLabel}</span>
+              ) : null}
+            </div>
+          </div>
+
+          {/*
+            ⚠ THE TRACK IS SIGNED, AND THE ENDS SAY WHICH WAY. The console's
+            fairnessScore is `50 + 50·tanh((get − give) / …)` — 50 is even,
+            below it the deal favours the other side, above it favours the
+            viewer. The dot used to sit on an unlabelled bar; a manager reading
+            41 could not tell whether that was good or bad for them.
+          */}
           {typeof result.fairnessScore === 'number' ? (
-            <div className="af-tc-track">
-              <span
-                className="af-tc-dot"
-                style={{ left: `${Math.max(0, Math.min(100, result.fairnessScore))}%` }}
-              />
+            <div className="af-tc-track-wrap">
+              <div className="af-tc-track">
+                <span className="af-tc-track-mid" aria-hidden />
+                <span
+                  className="af-tc-dot"
+                  style={{ left: `${Math.max(0, Math.min(100, result.fairnessScore))}%` }}
+                />
+              </div>
+              <div className="af-tc-track-ends af-label" aria-hidden>
+                <span>Favours {theirLabel}</span>
+                <span>Even</span>
+                <span>Favours you</span>
+              </div>
             </div>
           ) : null}
 
@@ -750,6 +1010,8 @@ export function TradeCenter(props: {
           {NOTE_GROUPS.map((g) => {
             const notes = (result[g.key] as string[] | undefined) ?? []
             if (notes.length === 0) return null
+            /* Already on screen as the banner that suppressed the verdict. */
+            if (g.key === 'formatNotes' && blocked) return null
             return (
               <div key={g.tone} className="af-tc-note" data-tone={g.tone}>
                 <p className="af-tc-note-title">{g.title}</p>
@@ -777,6 +1039,28 @@ export function TradeCenter(props: {
               <div className="af-tc-pair-value">{intel.whoWinsLongTerm ?? '—'}</div>
             </div>
           </div>
+
+          {/*
+            The engine has always returned both reads; this page rendered
+            neither. They are the two honest answers to "should I do this",
+            because the right one depends on a fact only the manager knows.
+          */}
+          {intel.contenderRecommendation || intel.rebuilderRecommendation ? (
+            <div className="af-tc-reads">
+              {intel.contenderRecommendation ? (
+                <div className="af-tc-read" data-tone="contender">
+                  <div className="af-tc-pair-label">Contender read</div>
+                  <p>{intel.contenderRecommendation}</p>
+                </div>
+              ) : null}
+              {intel.rebuilderRecommendation ? (
+                <div className="af-tc-read" data-tone="rebuilder">
+                  <div className="af-tc-pair-label">Rebuilder read</div>
+                  <p>{intel.rebuilderRecommendation}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {(intel.tradeWarnings ?? []).length > 0 ? (
             <>
