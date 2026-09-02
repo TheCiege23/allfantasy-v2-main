@@ -180,6 +180,41 @@ describe('the dead second service worker stays dead', () => {
   })
 })
 
+describe('the iPhone dead end', () => {
+  /*
+   * 🛑 iOS DOES NOT EXPOSE `PushManager` IN A NORMAL SAFARI TAB — only in a site added to
+   * the Home Screen. So `readPermission()` returns 'unsupported' for every iPhone user who
+   * has not installed the app, the `if (!supported)` early return fired, and they were
+   * told "this browser doesn't support web push notifications". It does. They were two
+   * taps away.
+   *
+   * ⚠ AND THE INSTRUCTION THAT FIXES IT WAS PHYSICALLY UNREACHABLE. The "add to Home
+   * Screen" hint lives AFTER that early return, so the one surface explaining the fix
+   * never rendered for the only people who needed it. Reported by a user who found no
+   * Enable button and no reason given.
+   *
+   * Asserted on ordering because that is what the bug was: both branches existed, in the
+   * wrong sequence.
+   */
+  it('checks needsHomeScreen BEFORE declaring the browser unsupported', () => {
+    const src = read('components/notifications/EnableWebPushCard.tsx')
+    const unsupportedGuard = src.indexOf('if (!supported)')
+    const homeScreenBranch = src.indexOf('needsHomeScreen', unsupportedGuard)
+    const deadEndCopy = src.indexOf("doesn&apos;t support web push")
+    expect(unsupportedGuard).toBeGreaterThan(-1)
+    expect(homeScreenBranch).toBeGreaterThan(-1)
+    // The iOS branch must come between the guard and the generic dead-end message.
+    expect(homeScreenBranch).toBeLessThan(deadEndCopy)
+  })
+
+  it('tells a blocked user how to clear it, not just that it is blocked', () => {
+    // A denial is sticky and cannot be re-asked from script, so this copy is the only exit.
+    const src = read('components/notifications/EnableWebPushCard.tsx')
+    const denied = src.slice(src.indexOf("permission === 'denied'"))
+    expect(denied).toMatch(/Allow|Permissions|Settings/)
+  })
+})
+
 describe('the install prompt is capturable where signed-in users are', () => {
   /*
    * 🛑 `initPWA` ATTACHES THE `beforeinstallprompt` LISTENER, AND ITS ONLY CALLER WAS

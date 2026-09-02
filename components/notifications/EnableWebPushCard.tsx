@@ -67,6 +67,32 @@ export function EnableWebPushCard({ className }: { className?: string }) {
   }
 
   if (!supported) {
+    /*
+     * 🛑 ON IPHONE, "UNSUPPORTED" USUALLY MEANS "NOT INSTALLED YET", AND SAYING THE FIRST
+     * THING SENDS THE USER AWAY FROM THE FIX.
+     *
+     * iOS does not expose `PushManager` at all in a normal Safari tab — only in a site
+     * added to the Home Screen. So `readPermission()` returns 'unsupported', this early
+     * return fired, and the user was told their browser cannot do notifications. It can.
+     * They were two taps away.
+     *
+     * Worse, the Home Screen instruction further down this component is unreachable from
+     * here: it lives after this return, so the ONE surface that explains the fix never
+     * rendered for the only people who needed it. Reported by a user who found no Enable
+     * button at all and no reason given.
+     */
+    if (needsHomeScreen) {
+      return (
+        <div className={className}>
+          <p className="text-sm font-semibold">Game-day alerts</p>
+          <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">
+            Add AllFantasy to your Home Screen first — iPhone only allows notifications for
+            installed apps. Tap the Share button, choose <strong>Add to Home Screen</strong>,
+            then open AllFantasy from there and come back to this screen.
+          </p>
+        </div>
+      )
+    }
     return (
       <div className={className}>
         <p className="text-sm text-[var(--af-muted,#9aa4b2)]">
@@ -102,9 +128,20 @@ export function EnableWebPushCard({ className }: { className?: string }) {
         </p>
       )}
 
+      {/*
+        ⚠ A DENIAL IS STICKY AND CANNOT BE RE-ASKED FROM SCRIPT, so this copy is the only
+        way out and it has to carry the actual steps. Saying "check your browser settings"
+        names the problem and leaves the user to hunt — reported by the first person to
+        hit it, who had been blocked by the unprompted request this app used to fire on
+        the league page.
+      */}
       {permission === 'denied' && (
         <p className="mt-2 text-xs text-amber-400">
-          Notifications are blocked for this site. Re-enable them in your browser settings.
+          Notifications are blocked for this site, and we can&apos;t ask again — you&apos;ll
+          need to clear it once. On desktop Chrome or Edge, click the icon to the left of the
+          web address, then set Notifications to Allow. On Android, tap the same icon →
+          Permissions → Notifications. On iPhone, check Settings → Notifications → AllFantasy.
+          Then reload this page.
         </p>
       )}
 
