@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06070f; --surface:#0d1020; --surface2:#0a0c1a;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.13);
+  --text:#eef0fa; --text2:#c3c9e6; --muted:#8f97bd; --faint:#5d648a;
+  --accent:#22d3ee; --accent-ink:#04050c; --accent-soft:rgba(34,211,238,.09); --accent-line:rgba(34,211,238,.3);
+  --good:#34d399; --warn:#fbbf24; --bad:#fb5b78; --violet:#a78bfa; --orange:#fb923c;
+  --chip:rgba(255,255,255,.05); --chip-line:rgba(255,255,255,.1);
+}
+html{background:var(--bg)} body{margin:0;background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,sans-serif}
+h1,h2,h3{margin:0;font-weight:900;letter-spacing:-.03em}
+a{color:var(--accent)} a:hover{color:#67e4f7}
+::-webkit-scrollbar{display:none}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg);padding:40px 0 100px">
+  <div style="max-width:1200px;margin:0 auto;padding:0 40px;display:flex;flex-direction:column;gap:22px">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">CORE · TRADES</div>
+        <h1 style="font-size:34px;letter-spacing:-.02em;color:var(--text)">Trade Center</h1>
+        <div style="font:400 13px/1.55 'Archivo',sans-serif;color:var(--muted);max-width:62ch">Build a deal across any league you're in and any asset class it allows. Context below the verdict is additive — it never touches the score above it.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PREVIEW STATE</div>
+        <div style="display:flex;padding:4px;gap:3px;background:var(--chip);border:1px solid var(--chip-line);border-radius:10px">
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.analyzed }};color:{{ v.tabColor.analyzed }}" onClick="{{ setView_analyzed }}">Analyzed</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.degraded }};color:{{ v.tabColor.degraded }}" onClick="{{ setView_degraded }}">Degraded data</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.blocked }};color:{{ v.tabColor.blocked }}" onClick="{{ setView_blocked }}">Format blocked</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.multi }};color:{{ v.tabColor.multi }}" onClick="{{ setView_multi }}">Multi-team</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.cross }};color:{{ v.tabColor.cross }}" onClick="{{ setView_cross }}">Cross-platform</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">OFFERS ACROSS YOUR LEAGUES</div>
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+        <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">Sleeper and Yahoo are read · other platforms are not, and say so</div>
+      </div>
+      <div style="display:flex;gap:10px;overflow:auto;padding-bottom:2px">
+        <sc-for list="{{ v.leagueTiles }}" as="lt" hint-placeholder-count="5">
+          <div style="cursor:pointer;flex:none;width:224px;display:flex;flex-direction:column;gap:9px;padding:12px 13px;background:{{ lt.bg }};border:1px solid {{ lt.border }};border-radius:13px" onClick="{{ lt.pick }}">
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="flex:none;width:26px;height:26px;border-radius:8px;background:{{ lt.pBg }};color:{{ lt.pFg }};display:flex;align-items:center;justify-content:center;font:900 11px/1 'Archivo',sans-serif">{{ lt.pMark }}</div>
+              <div style="min-width:0;display:flex;flex-direction:column;gap:2px">
+                <div style="font:800 12.5px/1.2 'Archivo',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ lt.name }}</div>
+                <div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ lt.meta }}</div>
+              </div>
+            </div>
+            <div style="font:700 10px/1.3 'JetBrains Mono',monospace;letter-spacing:.02em;color:{{ lt.statusColor }}">{{ lt.status }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface)">
+      <div style="flex:none;width:30px;height:30px;border-radius:9px;background:{{ v.league.pBg }};color:{{ v.league.pFg }};display:flex;align-items:center;justify-content:center;font:900 12px/1 'Archivo',sans-serif">{{ v.league.pMark }}</div>
+      <div style="font:800 14px/1 'Archivo',sans-serif;color:var(--text)">{{ v.league.name }}</div>
+      <div style="width:1px;height:16px;background:var(--line2)"></div>
+      <div style="font:400 12px/1 'Archivo',sans-serif;color:var(--muted)">{{ v.league.format }}</div>
+      <div style="flex:1"></div>
+      <div style="font:400 12px/1 'Archivo',sans-serif;color:var(--muted)">{{ v.league.oppLabel }}</div>
+      <div style="padding:6px 10px;border-radius:7px;border:1px solid var(--line2);background:var(--surface2);font:700 11.5px/1 'Archivo',sans-serif;color:var(--text2);white-space:nowrap">{{ v.league.oppValue }}</div>
+      <div style="padding:6px 10px;border-radius:7px;border:1px solid rgba(251,191,36,.4);background:rgba(251,191,36,.08);font:700 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--warn);white-space:nowrap">{{ v.league.deadlineTag }}</div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface)">
+      <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--faint);margin-right:2px">ASSET TYPES IN THIS LEAGUE</div>
+      <sc-for list="{{ v.legend }}" as="lg" hint-placeholder-count="6">
+        <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 6px;border-radius:999px;border:1px solid var(--line2);background:var(--surface2)">
+          <div style="width:18px;height:18px;border-radius:5px;background:{{ lg.color }};color:#04050c;display:flex;align-items:center;justify-content:center;font:900 10px/1 'Archivo',sans-serif">{{ lg.glyph }}</div>
+          <div style="font:600 12px/1 'Archivo',sans-serif;color:var(--text2);white-space:nowrap">{{ lg.label }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ v.blocked }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:12px;padding:14px 16px;border-radius:13px;border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.07)">
+        <div style="flex:none;width:26px;height:26px;border-radius:8px;background:rgba(251,191,36,.18);color:var(--warn);display:flex;align-items:center;justify-content:center;font:900 14px/1 'Archivo',sans-serif">!</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font:800 14px/1.3 'Archivo',sans-serif;color:var(--text)">This trade can't be evaluated as shown</div>
+          <sc-for list="{{ v.formatNotes }}" as="n" hint-placeholder-count="1">
+            <div style="font:400 12.5px/1.55 'Archivo',sans-serif;color:var(--text2)">{{ n }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.linked }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:12px;padding:14px 16px;border-radius:13px;border:1px solid var(--accent-line);background:var(--accent-soft)">
+        <div style="flex:none;width:26px;height:26px;border-radius:8px;background:rgba(34,211,238,.16);color:var(--accent);display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"></path><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"></path></svg>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font:800 14px/1.3 'Archivo',sans-serif;color:var(--text)">Linked cross-platform deal — two one-way moves, not one atomic trade</div>
+          <sc-for list="{{ v.formatNotes }}" as="n" hint-placeholder-count="1">
+            <div style="font:400 12.5px/1.55 'Archivo',sans-serif;color:var(--text2)">{{ n }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.showPartners }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface)">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">TRADING WITH</div>
+          <div style="font:400 11px/1 'Archivo',sans-serif;color:var(--faint)">Naming the other side turns on their half of the ledger — holes, waiver cost, how they've paid before.</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ v.partners }}" as="pc" hint-placeholder-count="4">
+            <div style="cursor:pointer;display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:7px;border:1px solid {{ pc.border }};background:{{ pc.bg }};font:700 11.5px/1 'Archivo',sans-serif;color:{{ pc.color }}" onClick="{{ pc.pick }}">
+              <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">{{ pc.record }}</div>
+              <div>{{ pc.name }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.notLinked }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:repeat({{ v.builderCols }}, minmax(0, 1fr));gap:14px">
+        <sc-for list="{{ v.teams }}" as="t" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid {{ t.borderColor }};border-radius:14px;background:var(--surface)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="display:flex;align-items:baseline;gap:8px;min-width:0;flex-wrap:wrap">
+                <div style="font:800 15px/1.2 'Archivo',sans-serif;color:var(--text)">{{ t.name }}</div>
+                <div style="font:400 11.5px/1 'Archivo',sans-serif;color:var(--faint)">{{ t.handle }}</div>
+                <sc-if value="{{ t.isYou }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:3px 7px;border-radius:5px;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);font:800 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em">YOU</div>
+                </sc-if>
+              </div>
+              <div style="flex:none;display:flex;align-items:center;gap:6px">
+                <div style="font:400 10.5px/1 'Archivo',sans-serif;color:var(--faint)">{{ t.record }}</div>
+                <div style="width:22px;height:22px;border-radius:7px;background:{{ t.pBg }};color:{{ t.pFg }};display:flex;align-items:center;justify-content:center;font:900 10px/1 'Archivo',sans-serif">{{ t.pMark }}</div>
+              </div>
+            </div>
+            <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ t.sendLabelColor }}">SENDS</div>
+            <sc-for list="{{ t.sends }}" as="a" hint-placeholder-count="2">
+              <div style="display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:10px;background:var(--surface2);border:1px solid var(--line)">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="flex:none;width:22px;height:22px;border-radius:6px;background:{{ a.typeColor }};color:#04050c;display:flex;align-items:center;justify-content:center;font:900 10px/1 'Archivo',sans-serif">{{ a.typeGlyph }}</div>
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                    <div style="font:700 13px/1.25 'Archivo',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</div>
+                    <div style="display:flex;align-items:center;gap:5px;font:400 11px/1.3 'Archivo',sans-serif;color:var(--muted)"><span style="font-weight:800;color:{{ a.posColor }}">{{ a.pos }}</span><span>{{ a.sub }}</span></div>
+                  </div>
+                  <div style="flex:none;font:700 12.5px/1 'JetBrains Mono',monospace;color:{{ a.mvColor }};font-variant-numeric:tabular-nums">{{ a.mvDisplay }}</div>
+                  <div style="cursor:pointer;flex:none;width:22px;height:22px;color:var(--faint);display:flex;align-items:center;justify-content:center;font:700 15px/1 'Archivo',sans-serif" onClick="{{ a.remove }}">×</div>
+                </div>
+                <sc-if value="{{ a.tag }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-left:31px;display:inline-flex;align-self:flex-start;padding:3px 6px;border-radius:4px;background:{{ a.tagSoft }};font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ a.tagColor }}">{{ a.tag }}</div>
+                </sc-if>
+                <sc-if value="{{ a.destName }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-left:31px;font:600 10.5px/1 'Archivo',sans-serif;color:var(--accent)">→ {{ a.destName }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <div style="cursor:pointer;display:flex;align-items:center;justify-content:center;padding:9px;border:1px dashed var(--line2);border-radius:10px;font:600 12px/1 'Archivo',sans-serif;color:var(--muted)" onClick="{{ t.addAsset }}">+ Add asset</div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;border-top:1px solid var(--line)">
+              <div style="font:400 12px/1 'Archivo',sans-serif;color:var(--muted)">Total <span style="color:var(--faint)">· {{ t.unpricedNote }}</span></div>
+              <div style="font:900 15px/1 'JetBrains Mono',monospace;color:var(--text);font-variant-numeric:tabular-nums">{{ t.totalDisplay }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ v.canAddTeam }}" hint-placeholder-val="{{ true }}">
+        <div style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:1px dashed var(--line2);border-radius:11px;font:700 12px/1 'Archivo',sans-serif;color:var(--muted)" onClick="{{ addTeam }}">+ Add another team</div>
+      </sc-if>
+
+      <sc-if value="{{ v.balance.shown }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface2)">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+            <div style="display:flex;align-items:baseline;gap:8px"><div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">VALUE BALANCE</div><div style="font:400 11px/1 'Archivo',sans-serif;color:var(--faint)">priced assets only</div></div>
+            <div style="font:700 11px/1 'JetBrains Mono',monospace;color:{{ v.balance.deltaColor }}">{{ v.balance.deltaText }}</div>
+          </div>
+          <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--chip);border:1px solid var(--line)">
+            <div style="width:{{ v.balance.givePct }}%;background:var(--bad);opacity:.85"></div>
+            <div style="width:{{ v.balance.getPct }}%;background:var(--good);opacity:.85"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font:700 11px/1 'JetBrains Mono',monospace">
+            <div style="color:var(--bad)">You send · {{ v.balance.give }}</div>
+            <div style="color:var(--good)">You get · {{ v.balance.get }}</div>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{ v.linked }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:14px">
+        <sc-for list="{{ v.legGroups }}" as="leg" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div style="width:24px;height:24px;border-radius:7px;background:{{ leg.bg }};color:{{ leg.fg }};display:flex;align-items:center;justify-content:center;font:900 10px/1 'Archivo',sans-serif">{{ leg.mark }}</div>
+              <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ leg.name }}</div>
+              <div style="font:400 11px/1 'Archivo',sans-serif;color:var(--muted)">{{ leg.sport }}</div>
+              <div style="flex:1"></div>
+              <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;color:var(--muted);background:var(--chip);border:1px solid var(--chip-line);padding:5px 8px;border-radius:6px" onClick="{{ leg.cycle }}">change league</div>
+            </div>
+            <sc-for list="{{ leg.teams }}" as="t" hint-placeholder-count="2">
+              <div style="display:flex;flex-direction:column;gap:8px;padding:11px 12px;border:1px solid {{ t.borderColor }};border-radius:12px;background:var(--surface2)">
+                <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                  <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ t.name }}</div>
+                  <div style="font:400 11px/1 'Archivo',sans-serif;color:var(--faint)">{{ t.handle }}</div>
+                  <sc-if value="{{ t.isYou }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:3px 7px;border-radius:5px;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);font:800 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em">YOU</div>
+                  </sc-if>
+                </div>
+                <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ t.sendLabelColor }}">SENDS</div>
+                <sc-for list="{{ t.sends }}" as="a" hint-placeholder-count="1">
+                  <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)">
+                    <div style="flex:none;width:22px;height:22px;border-radius:6px;background:{{ a.typeColor }};color:#04050c;display:flex;align-items:center;justify-content:center;font:900 10px/1 'Archivo',sans-serif">{{ a.typeGlyph }}</div>
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <div style="font:700 13px/1.25 'Archivo',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</div>
+                      <div style="display:flex;align-items:center;gap:5px;font:400 11px/1.3 'Archivo',sans-serif;color:var(--muted)"><span style="font-weight:800;color:{{ a.posColor }}">{{ a.pos }}</span><span>{{ a.sub }}</span></div>
+                    </div>
+                    <div style="flex:none;font:700 12.5px/1 'JetBrains Mono',monospace;color:{{ a.mvColor }}">{{ a.mvDisplay }}</div>
+                    <div style="cursor:pointer;flex:none;width:22px;height:22px;color:var(--faint);display:flex;align-items:center;justify-content:center;font:700 15px/1 'Archivo',sans-serif" onClick="{{ a.remove }}">×</div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ t.emptyLeg }}" hint-placeholder-val="{{ false }}">
+                  <div style="font:400 11.5px/1.5 'Archivo',sans-serif;color:var(--faint);font-style:italic">Nothing back in this leg — balanced by the other leg.</div>
+                </sc-if>
+                <div style="cursor:pointer;display:flex;align-items:center;justify-content:center;padding:8px;border:1px dashed var(--line2);border-radius:9px;font:600 11.5px/1 'Archivo',sans-serif;color:var(--muted)" onClick="{{ t.addAsset }}">+ Add asset</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ v.canAddLeg }}" hint-placeholder-val="{{ true }}">
+        <div style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:1px dashed var(--line2);border-radius:11px;font:700 12px/1 'Archivo',sans-serif;color:var(--muted)" onClick="{{ addLeg }}">+ Add another linked leg</div>
+      </sc-if>
+    </sc-if>
+
+    <div style="opacity:{{ v.verdictOpacity }};position:relative;display:flex;flex-direction:column;gap:14px;padding:18px;border:1px solid var(--accent-line);border-radius:16px;background:var(--surface)">
+      <sc-if value="{{ v.blocked }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:14px;right:14px;font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--warn);background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);padding:5px 7px;border-radius:5px">SUPPRESSED</div>
+      </sc-if>
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--accent)">THE VERDICT</div>
+        <div style="font:400 11px/1 'Archivo',sans-serif;color:var(--faint)">projected — the realized grade locks in once real production posts</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        <sc-if value="{{ v.showGrades }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;gap:10px">
+            <sc-for list="{{ v.gradeTiles }}" as="g" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 14px 10px 10px;border-radius:12px;border:1px solid var(--line2);background:var(--surface2)">
+                <div style="width:44px;height:44px;border-radius:11px;background:{{ g.soft }};border:1px solid {{ g.line }};display:flex;align-items:center;justify-content:center;font:900 24px/1 'Archivo',sans-serif;color:{{ g.color }}">{{ g.letter }}</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="font:800 12px/1.2 'Archivo',sans-serif;color:var(--text);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.name }}</div>
+                  <div style="font:400 10.5px/1.2 'Archivo',sans-serif;color:var(--muted)">{{ g.note }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ v.linked }}" hint-placeholder-val="{{ false }}">
+          <div style="font:400 11.5px/1.5 'Archivo',sans-serif;color:var(--muted);max-width:280px">Letter grades aren't meaningful across platforms — the combined-value read below is the honest one.</div>
+        </sc-if>
+        <div style="flex:1"></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <div style="font:900 40px/1 'JetBrains Mono',monospace;color:var(--accent);letter-spacing:-.02em">{{ v.verdict.fairnessScore }}<span style="font:700 12px/1 'Archivo',sans-serif;color:var(--faint)"> /100</span></div>
+          <div style="font:700 13px/1.3 'Archivo',sans-serif;color:var(--text)">{{ v.verdict.fairnessLabel }}</div>
+          <div style="font:400 11.5px/1.3 'Archivo',sans-serif;color:var(--muted)">{{ v.verdict.confidenceLabel }}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg, rgba(251,91,120,.35), rgba(255,255,255,.06) 50%, rgba(52,211,153,.35));border:1px solid var(--line)">
+          <div style="position:absolute;top:-2px;bottom:-2px;left:50%;width:1px;background:var(--line2)"></div>
+          <div style="position:absolute;top:50%;left:{{ v.verdict.fairnessScore }}%;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);transform:translate(-50%,-50%);box-shadow:0 0 0 3px rgba(34,211,238,.18)"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--faint)">
+          <div>FAVOURS {{ v.verdict.leftName }}</div>
+          <div>EVEN</div>
+          <div>FAVOURS {{ v.verdict.rightName }}</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ v.noSignalWarning }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:10px 12px;border-radius:10px;border:1px solid rgba(251,91,120,.4);background:rgba(251,91,120,.08);font:400 12.5px/1.5 'Archivo',sans-serif;color:#ffd7de">{{ v.noSignalWarning }}</div>
+      </sc-if>
+
+      <sc-if value="{{ v.dataGapsShown }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:5px;padding-top:10px;border-top:1px solid var(--line)">
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">WHAT WE COULDN'T SEE</div>
+          <sc-for list="{{ v.dataGaps }}" as="g" hint-placeholder-count="1">
+            <div style="font:400 12px/1.55 'Archivo',sans-serif;color:var(--muted)">— {{ g }}</div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ v.noteGroupsShown }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px">
+        <sc-for list="{{ v.noteGroups }}" as="grp" hint-placeholder-count="3">
+          <div style="padding:13px 15px;border-radius:13px;background:{{ grp.soft }};border:1px solid {{ grp.line }};display:flex;flex-direction:column;gap:6px">
+            <div style="font:800 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ grp.titleColor }}">{{ grp.title }}</div>
+            <sc-for list="{{ grp.items }}" as="n" hint-placeholder-count="1">
+              <div style="font:400 12.5px/1.55 'Archivo',sans-serif;color:var(--text2)">{{ n }}</div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--accent)">DECISION OS · THIS DEAL</div>
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+      </div>
+      <div style="font:500 13.5px/1.6 'Archivo',sans-serif;color:var(--text)">{{ v.intel.why }}</div>
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px">
+        <div style="padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--line)"><div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--faint)">WINS NOW</div><div style="margin-top:4px;font:800 14px/1.25 'Archivo',sans-serif;color:var(--text)">{{ v.intel.whoWinsNow }}</div></div>
+        <div style="padding:10px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--line)"><div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--faint)">WINS LONG TERM</div><div style="margin-top:4px;font:800 14px/1.25 'Archivo',sans-serif;color:var(--text)">{{ v.intel.whoWinsLongTerm }}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px">
+        <div style="padding:11px 12px;border-radius:11px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.3)"><div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--good)">CONTENDER READ</div><div style="margin-top:5px;font:400 12.5px/1.55 'Archivo',sans-serif;color:var(--text2)">{{ v.intel.contenderRecommendation }}</div></div>
+        <div style="padding:11px 12px;border-radius:11px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.3)"><div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--violet)">REBUILDER READ</div><div style="margin-top:5px;font:400 12.5px/1.55 'Archivo',sans-serif;color:var(--text2)">{{ v.intel.rebuilderRecommendation }}</div></div>
+      </div>
+      <sc-if value="{{ v.intel.warningsShown }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:11px 12px;border-radius:11px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);display:flex;flex-direction:column;gap:4px">
+          <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--warn)">WARNINGS</div>
+          <sc-for list="{{ v.intel.tradeWarnings }}" as="w" hint-placeholder-count="1">
+            <div style="font:400 12.5px/1.5 'Archivo',sans-serif;color:#ffe6b8">— {{ w }}</div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.intel.rebalanceShown }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:11px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--line);display:flex;flex-direction:column;gap:4px">
+          <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--muted)">REBALANCE IDEAS</div>
+          <sc-for list="{{ v.intel.rebalanceSuggestions }}" as="r" hint-placeholder-count="1">
+            <div style="font:400 12.5px/1.5 'Archivo',sans-serif;color:var(--text2)">— {{ r }}</div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.intel.altShown }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:11px 12px;border-radius:11px;background:var(--surface2);border:1px solid var(--line);display:flex;flex-direction:column;gap:7px">
+          <div style="font:700 9.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--muted)">COUNTER TARGETS</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <sc-for list="{{ v.intel.alternateTargets }}" as="tg" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 11px;background:var(--surface);border:1px solid var(--line);border-radius:9px">
+                <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text)">{{ tg.name }} <span style="font-weight:800;color:{{ tg.posColor }}">{{ tg.pos }}</span></div>
+                <div style="font:800 12px/1 'JetBrains Mono',monospace;color:var(--accent)">~{{ tg.mvDisplay }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font:400 12px/1.5 'Archivo',sans-serif;color:var(--muted)">{{ v.intel.alternateTargetsNote }}</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.intel.altNoteOnly }}" hint-placeholder-val="{{ false }}">
+        <div style="font:400 12px/1.5 'Archivo',sans-serif;color:var(--muted)">{{ v.intel.alternateTargetsNote }}</div>
+      </sc-if>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--accent-line);border-radius:14px;background:var(--surface)">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">PROPOSE</div>
+        <div style="font:400 11px/1 'Archivo',sans-serif;color:var(--faint)">Sending is the last thing you do — price it first.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:10px;font:800 13px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent)">{{ v.proposeLabel }}</div>
+        <div style="font:400 12px/1.5 'Archivo',sans-serif;color:var(--muted)">{{ v.proposeNote }}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--accent)">DECISION OS · TRADE FINDER</div>
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+        <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">Ranked against your roster's real holes · Sleeper leagues only</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:10px">
+        <sc-for list="{{ v.partnersFinder }}" as="pt" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--surface2);border:1px solid var(--line);border-radius:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px">
+              <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ pt.team }}</div>
+              <div style="font:400 10.5px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ pt.record }}</div>
+            </div>
+            <div style="align-self:flex-start;font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);padding:5px 7px;border-radius:5px">{{ pt.fit }}</div>
+            <div style="font:700 12.5px/1.35 'Archivo',sans-serif;color:var(--text)">{{ pt.get }} <span style="color:var(--faint);font-weight:400">for</span> {{ pt.give }}</div>
+            <div style="font:700 11px/1 'JetBrains Mono',monospace;color:var(--muted)">{{ pt.values }}</div>
+            <div style="font:400 11.5px/1.5 'Archivo',sans-serif;color:var(--muted)">{{ pt.reason }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1 1 240px;font:400 11.5px/1.5 'Archivo',sans-serif;color:var(--faint)">Grades here are projected, not realized — they price the deal as it stands today rather than how it turns out.</div>
+      <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:10px;font:800 13px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent)">Analyze this trade</div>
+      <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:10px;font:800 13px/1 'Archivo',sans-serif;color:var(--text2);background:transparent;border:1px solid var(--line2)">Save draft</div>
+      <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:10px;font:800 13px/1 'Archivo',sans-serif;color:var(--text2);background:transparent;border:1px solid var(--line2)">Ask Chimmy to explain</div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2720}}'>
+const TYPE_META = {
+  player: { label: 'Player · any position, incl. IDP', glyph: 'P', color: '#22d3ee' },
+  pick: { label: 'Pick', glyph: 'D', color: '#8f97bd' },
+  faab: { label: 'FAAB', glyph: '$', color: '#34d399' },
+  idol: { label: 'Idol · Survivor', glyph: 'I', color: '#fbbf24' },
+  weapon: { label: 'Weapon · Zombie', glyph: 'W', color: '#fb5b78' },
+  serum: { label: 'Serum · Zombie', glyph: 'S', color: '#a78bfa' },
+};
+
+const POS_COLOR = {
+  QB: '#f9a8d4', RB: '#6ee7b7', WR: '#7dd3fc', TE: '#fdba74',
+  DL: '#fcd34d', DE: '#fcd34d', DT: '#fcd34d', LB: '#bef264', DB: '#a5b4fc', CB: '#a5b4fc', S: '#a5b4fc',
+  K: '#fef08a', DEF: '#cbd5e1', PICK: '#8f97bd', FAAB: '#34d399',
+};
+
+const PLATFORM = {
+  sleeper: { mark: 'S', bg: '#1f2a4d', fg: '#9fd4ff', label: 'Sleeper' },
+  espn: { mark: 'E', bg: '#4a1414', fg: '#ffb4b4', label: 'ESPN' },
+  yahoo: { mark: 'Y', bg: '#3a1d55', fg: '#dcb4ff', label: 'Yahoo' },
+  fantrax: { mark: 'F', bg: '#123a2c', fg: '#6fe3ad', label: 'Fantrax' },
+  mfl: { mark: 'M', bg: '#3a2410', fg: '#f0b46a', label: 'MFL' },
+};
+
+const GRADE_COLORS = {
+  A: { color: '#34d399', soft: 'rgba(52,211,153,.12)', line: 'rgba(52,211,153,.3)' },
+  B: { color: '#5eead4', soft: 'rgba(94,234,212,.12)', line: 'rgba(94,234,212,.3)' },
+  C: { color: '#fbbf24', soft: 'rgba(251,191,36,.12)', line: 'rgba(251,191,36,.3)' },
+  D: { color: '#fb923c', soft: 'rgba(251,146,60,.12)', line: 'rgba(251,146,60,.3)' },
+  F: { color: '#fb5b78', soft: 'rgba(251,91,120,.12)', line: 'rgba(251,91,120,.3)' },
+};
+
+const TONES = {
+  format: { soft: 'rgba(255,255,255,.03)', line: 'rgba(255,255,255,.13)', title: '#c3c9e6' },
+  scale: { soft: 'rgba(34,211,238,.06)', line: 'rgba(34,211,238,.3)', title: '#22d3ee' },
+  posture: { soft: '#0d1020', line: 'rgba(255,255,255,.13)', title: '#8f97bd' },
+  pick: { soft: 'rgba(251,146,60,.06)', line: 'rgba(251,146,60,.3)', title: '#fb923c' },
+  leverage: { soft: 'rgba(167,139,250,.06)', line: 'rgba(167,139,250,.3)', title: '#a78bfa' },
+  need: { soft: 'rgba(52,211,153,.06)', line: 'rgba(52,211,153,.3)', title: '#34d399' },
+  bye: { soft: 'rgba(251,91,120,.06)', line: 'rgba(251,91,120,.3)', title: '#fb5b78' },
+};
+
+const TAG = {
+  warn: { color: '#fbbf24', soft: 'rgba(251,191,36,.12)' },
+  bad: { color: '#fb5b78', soft: 'rgba(251,91,120,.12)' },
+  violet: { color: '#a78bfa', soft: 'rgba(167,139,250,.12)' },
+};
+
+const CONNECTED_LEAGUES = [
+  { platform: 'sleeper', name: 'Last League Left', sport: 'NFL · Dynasty' },
+  { platform: 'sleeper', name: 'Bloodline IDP', sport: 'NFL · IDP' },
+  { platform: 'fantrax', name: 'SEC Dynasty Redshirts', sport: 'NCAAF · Dynasty' },
+  { platform: 'espn', name: 'Kingdom Redraft', sport: 'NFL · Redraft' },
+  { platform: 'yahoo', name: 'Yahoo Friends', sport: 'NFL · Redraft' },
+];
+
+const LEAGUE_TILES = [
+  { platform: 'sleeper', name: 'Last League Left', meta: 'NFL · Dynasty · 12 teams', status: '1 offer waiting · from Cold Takes FC', tone: 'accent' },
+  { platform: 'sleeper', name: 'Bloodline IDP', meta: 'NFL · IDP · 14 teams', status: 'Nothing waiting · read 4 min ago', tone: 'muted' },
+  { platform: 'espn', name: 'Kingdom Redraft', meta: 'NFL · Redraft · 10 teams', status: 'Not read — ESPN offers aren’t ingested yet', tone: 'faint' },
+  { platform: 'sleeper', name: 'Zombie Universe VII', meta: 'NFL · Zombie · 16 teams', status: 'Nothing waiting · 8 of 16 alive', tone: 'muted' },
+  { platform: 'fantrax', name: 'SEC Dynasty Redshirts', meta: 'NCAAF · Dynasty · 12 teams', status: 'Not read — Fantrax offers aren’t ingested yet', tone: 'faint' },
+  { platform: 'yahoo', name: 'Yahoo Friends', meta: 'NFL · Redraft · 10 teams', status: 'Nothing waiting · read 12 min ago', tone: 'muted' },
+];
+
+const ADD_QUEUES = {
+  redraft: [
+    { type: 'player', name: 'Search a player…', pos: '', sub: 'Any position — offense, IDP, or K', mvDisplay: '—' },
+    { type: 'faab', name: 'Add FAAB', pos: 'FAAB', sub: 'Enter budget amount', mvDisplay: '—' },
+  ],
+  standard: [
+    { type: 'player', name: 'Search a player…', pos: '', sub: 'Any position — offense, IDP, or K', mvDisplay: '—' },
+    { type: 'pick', name: 'Add a pick', pos: 'PICK', sub: 'Choose season + round', mvDisplay: '—' },
+    { type: 'faab', name: 'Add FAAB', pos: 'FAAB', sub: 'Enter budget amount', mvDisplay: '—' },
+  ],
+  zombie: [
+    { type: 'player', name: 'Search a player…', pos: '', sub: 'Any position — offense, IDP, or K', mvDisplay: '—' },
+    { type: 'weapon', name: 'Add a weapon', pos: '', sub: 'Bomb, blade, or shield tier', mvDisplay: '—' },
+    { type: 'serum', name: 'Add a serum', pos: '', sub: 'Cures infected status', mvDisplay: '—' },
+    { type: 'pick', name: 'Add a pick', pos: 'PICK', sub: 'Choose season + round', mvDisplay: '—' },
+  ],
+};
+
+function baseData() {
+  return {
+    analyzed: {
+      league: { platform: 'sleeper', name: 'Last League Left', format: 'Dynasty · PPR · TE Prem · IDP · 12 teams', oppLabel: 'Opponent', oppValue: 'Cold Takes FC — @kingbuffalo', deadlineTag: 'DEADLINE IN 1 WEEK', addQueue: 'standard', assets: ['player', 'pick', 'faab'] },
+      blocked: false,
+      partners: [
+        { name: 'Cold Takes FC', record: '6-5', on: true },
+        { name: 'Thunderbolts', record: '6-5' },
+        { name: 'Night Owls', record: '3-8' },
+        { name: 'Glass Cannons', record: '8-3' },
+      ],
+      teams: [
+        { id: 'you', name: 'Your Team', handle: '@you', record: '2nd of 12', isYou: true, grade: 'C', gradeNote: 'gives a top-5 asset', sends: [
+          { type: 'player', name: 'CeeDee Lamb', pos: 'WR', sub: 'DAL · Bye 7', mvDisplay: '8,200' },
+          { type: 'player', name: 'Christian Watson', pos: 'WR', sub: 'GB · Bye 5', mvDisplay: '1,850', tag: 'QUESTIONABLE', tone: 'warn' },
+          { type: 'pick', name: '2027 3rd (yours)', pos: 'PICK', sub: 'Projects ~3.11', mvDisplay: '380' },
+          { type: 'faab', name: '$40 FAAB', pos: 'FAAB', sub: 'Waiver budget', mvDisplay: '40' },
+        ] },
+        { id: 'opp', name: 'Cold Takes FC', handle: '@kingbuffalo', record: '7th of 12', isYou: false, grade: 'B', gradeNote: 'wins on value', sends: [
+          { type: 'player', name: 'Bijan Robinson', pos: 'RB', sub: 'ATL · Bye 5', mvDisplay: '7,900' },
+          { type: 'player', name: 'Justin Tucker', pos: 'K', sub: 'BAL · Bye 11', mvDisplay: '—', tag: 'UNPRICED', tone: 'bad' },
+          { type: 'player', name: 'Fred Warner', pos: 'LB', sub: 'SF · IDP', mvDisplay: '—', tag: 'UNPRICED IDP', tone: 'bad' },
+        ] },
+      ],
+      verdict: { fairnessScore: 41, fairnessLabel: 'Tilts toward Cold Takes FC', confidenceLabel: 'Moderate confidence — two unpriced assets' },
+      noSignalWarning: null,
+      dataGaps: ['Justin Tucker carries no market price — kickers aren’t covered by the value feed', 'Fred Warner carries no market price — IDP defenders aren’t covered either'],
+      notes: {
+        formatNotes: [],
+        scaleNotes: ['2 of 3 players coming to you carry no market price — our value feed covers offence and picks only, not IDP or kickers.'],
+        postureNotes: ['You: 2nd of 12, clear of the cut line. Selling a 3rd out of a contending window is a real cost, not a free upgrade.', 'Cold Takes FC: 7th of 12, within a game of the cut line with 3 to play.'],
+        pickNotes: ['Your team is 2nd of 12, so this 2027 3rd projects around 3.11 rather than the middle of the round.'],
+        leverageNotes: ['Cold Takes FC would value CeeDee Lamb about 18% above market — don’t hand him over at market price.'],
+        needNotes: ['Bijan Robinson is worth about 22% more to you than his market price — one startable RB for two slots, and nothing on waivers.', 'Justin Tucker fills a hole the market can’t price: no kicker rostered and none on waivers, so a trade is the only fix.'],
+        byeNotes: ['Bijan Robinson: opens a week 5 hole — 1 startable RB for 2 slots.'],
+      },
+      intel: {
+        whoWinsNow: 'You', whoWinsLongTerm: 'Cold Takes FC',
+        contenderRecommendation: 'You’re 2nd of 12 and clear. A boundary receiver for a bell-cow back raises your floor for the stretch run — fine for a contender.',
+        rebuilderRecommendation: 'If you’re not win-now, this gives up a true WR1 plus a pick for one RB and two unpriced pieces. Hold for a better return.',
+        tradeWarnings: ['Deadline is next week (Week 12).', 'Tucker and Warner carry no market price — the score isn’t pricing either.'],
+        rebalanceSuggestions: ['Ask for a 2026 4th instead of the kicker.', 'Swap Watson for a bench piece if bye coverage matters more than raw value.'],
+        alternateTargets: [ { name: 'Kyle Pitts', pos: 'TE', mvDisplay: '3,100' }, { name: 'Drake London', pos: 'WR', mvDisplay: '4,200' } ],
+        alternateTargetsNote: 'Cold Takes FC has no starting TE — Pitts is more available in a counter than his price suggests.',
+        why: 'Bijan Robinson projects higher weekly value and the deal fills real holes at K and LB — but Lamb is a top-5 asset leaving for one year of a back.',
+      },
+      proposeLabel: 'Propose to Cold Takes FC',
+      proposeNote: 'Posts as an AllFantasy proposal. On Sleeper the partner still accepts there — we can price the offer, not execute it.',
+    },
+    degraded: {
+      league: { platform: 'sleeper', name: 'Bloodline IDP', format: 'Dynasty · IDP · 6pt · 14 teams', oppLabel: 'Opponent', oppValue: 'Sack Exchange — @grindhouse', deadlineTag: 'WEEK 9 · NO DEADLINE', addQueue: 'standard', assets: ['player', 'pick', 'faab'] },
+      blocked: false,
+      partners: [
+        { name: 'Sack Exchange', record: '5-3', on: true },
+        { name: 'Blitz Krieg', record: '6-2' },
+        { name: 'Edge Rushers', record: '2-6' },
+      ],
+      teams: [
+        { id: 'you', name: 'Your Team', handle: '@you', record: '4th of 14', isYou: true, grade: 'C', gradeNote: 'no signal', sends: [
+          { type: 'player', name: 'Fred Warner', pos: 'LB', sub: 'SF · IDP', mvDisplay: '—', tag: 'UNPRICED', tone: 'bad' },
+          { type: 'player', name: 'Micah Parsons', pos: 'DL', sub: 'DAL · IDP', mvDisplay: '—', tag: 'UNPRICED', tone: 'bad' },
+        ] },
+        { id: 'opp', name: 'Sack Exchange', handle: '@grindhouse', record: '6th of 14', isYou: false, grade: 'C', gradeNote: 'no signal', sends: [
+          { type: 'player', name: 'Derwin James', pos: 'DB', sub: 'LAC · IDP', mvDisplay: '—', tag: 'UNPRICED', tone: 'bad' },
+          { type: 'player', name: 'Myles Garrett', pos: 'DL', sub: 'CLE · IDP', mvDisplay: '—', tag: 'UNPRICED', tone: 'bad' },
+        ] },
+      ],
+      verdict: { fairnessScore: 50, fairnessLabel: 'We cannot price this deal', confidenceLabel: 'Low — no priced players on either side' },
+      noSignalWarning: 'This C does not mean an even trade — it means no signal. A deal that produced nothing lands mid-band, same as a genuinely fair one.',
+      dataGaps: ['No market price for any of the 4 IDP players', 'This league’s scoring rewards LB/DL/DB our value feed doesn’t rank'],
+      notes: { formatNotes: [], scaleNotes: ['4 of 4 players carry no market price — nothing here for the verdict to grade.'], postureNotes: [], pickNotes: [], leverageNotes: [], needNotes: [], byeNotes: [] },
+      intel: {
+        whoWinsNow: 'Unknown', whoWinsLongTerm: 'Unknown',
+        contenderRecommendation: 'Not enough priced signal either side. Judge on need and tape, not the score above.',
+        rebuilderRecommendation: 'Same caution rebuilding — no value signal to lean on.',
+        tradeWarnings: ['Every player is unpriced. Treat the score as a placeholder.', 'If graded next season this would flag as no-signal, not an even trade.'],
+        rebalanceSuggestions: [], alternateTargets: [], alternateTargetsNote: null,
+        why: 'All four players play IDP positions our feed doesn’t cover — the verdict above has no priced signal underneath it.',
+      },
+      proposeLabel: 'Propose to Sack Exchange',
+      proposeNote: 'You can still send it. The verdict just can’t vouch for it.',
+    },
+    blocked: {
+      league: { platform: 'espn', name: 'Kingdom Redraft', format: 'Redraft · Standard · 10 teams', oppLabel: 'Opponent', oppValue: 'Iron Reserve — @coach_iron', deadlineTag: 'DEADLINE IN 3 WEEKS', addQueue: 'redraft', assets: ['player', 'faab'] },
+      blocked: true,
+      partners: [
+        { name: 'Iron Reserve', record: '4-7', on: true },
+        { name: 'Waiver Wire Kings', record: '7-4' },
+        { name: 'Bench Mob', record: '5-6' },
+      ],
+      teams: [
+        { id: 'you', name: 'Your Team', handle: '@you', record: '5th of 10', isYou: true, grade: 'C', gradeNote: 'suppressed', sends: [
+          { type: 'player', name: 'Josh Jacobs', pos: 'RB', sub: 'GB · Bye 6', mvDisplay: '4,200' },
+          { type: 'pick', name: '2027 1st (yours)', pos: 'PICK', sub: 'Future pick', mvDisplay: '—', tag: 'DOESN’T EXIST HERE', tone: 'warn' },
+        ] },
+        { id: 'opp', name: 'Iron Reserve', handle: '@coach_iron', record: '8th of 10', isYou: false, grade: 'C', gradeNote: 'suppressed', sends: [
+          { type: 'player', name: 'Breece Hall', pos: 'RB', sub: 'NYJ · Bye 12', mvDisplay: '5,400' },
+        ] },
+      ],
+      verdict: { fairnessScore: 50, fairnessLabel: 'Suppressed', confidenceLabel: 'Can’t be scored as shown' },
+      noSignalWarning: null, dataGaps: [],
+      notes: {
+        formatNotes: ['This is a redraft league and there is 1 future pick in this deal. Redraft leagues have no future picks — the verdict would be doing arithmetic on an asset that doesn’t exist here.', 'Remove the pick and the verdict populates normally.'],
+        scaleNotes: [], postureNotes: [], pickNotes: [], leverageNotes: [], needNotes: [], byeNotes: [],
+      },
+      intel: {
+        whoWinsNow: '—', whoWinsLongTerm: '—',
+        contenderRecommendation: 'Remove the 2027 1st and resubmit — reads as a straight RB swap once the impossible asset is gone.',
+        rebuilderRecommendation: 'Same fix either way: no draft to send a future pick into.',
+        tradeWarnings: [], rebalanceSuggestions: ['Replace the pick with FAAB or waiver priority — those exist here.'],
+        alternateTargets: [], alternateTargetsNote: null,
+        why: 'Can’t be graded as submitted — a future pick in a redraft league isn’t an asset the verdict can price.',
+      },
+      proposeLabel: 'Propose to Iron Reserve',
+      proposeNote: 'ESPN proposals aren’t posted from here yet — this saves the deal and hands you the link to send it there.',
+    },
+    multi: {
+      league: { platform: 'sleeper', name: 'Zombie Universe VII', format: 'Zombie · No Waivers · Free Agency Only · 16 teams', oppLabel: 'Teams in this deal', oppValue: '3-way', deadlineTag: '8 OF 16 ALIVE', addQueue: 'zombie', assets: ['player', 'weapon', 'serum', 'pick'] },
+      blocked: false,
+      partners: [],
+      teams: [
+        { id: 'you', name: 'Your Team', handle: '@you', record: 'alive', isYou: true, grade: 'B', gradeNote: 'sells a bench piece', sends: [
+          { type: 'player', name: 'Micah Parsons', pos: 'DL', sub: 'DAL · IDP', mvDisplay: '—', tag: 'UNPRICED IDP', tone: 'bad', destId: 'b' },
+          { type: 'weapon', name: 'Silver Bomb', pos: '', sub: 'Mutes a team this week', mvDisplay: '—', tag: 'WEAPON', tone: 'bad', destId: 'b' },
+        ] },
+        { id: 'b', name: 'Outbreak Monitors', handle: '@dre', record: 'alive', isYou: false, grade: 'B', gradeNote: 'gets the swing weapon', sends: [
+          { type: 'player', name: 'Isiah Pacheco', pos: 'RB', sub: 'KC', mvDisplay: '2,100', destId: 'you' },
+          { type: 'serum', name: 'Cure Serum', pos: '', sub: 'Removes infected status', mvDisplay: '—', tag: 'SERUM', tone: 'violet', destId: 'c' },
+        ] },
+        { id: 'c', name: 'Last Ones Standing', handle: '@tashaR', record: 'infected', isYou: false, grade: 'C', gradeNote: 'buys a cure', sends: [
+          { type: 'pick', name: '2027 2nd', pos: 'PICK', sub: 'Their own pick', mvDisplay: '900', destId: 'you' },
+        ] },
+      ],
+      verdict: { fairnessScore: 58, fairnessLabel: 'Roughly even across all three', confidenceLabel: 'Low — weapons and serums aren’t priced' },
+      noSignalWarning: null,
+      dataGaps: ['Micah Parsons carries no market price — IDP not covered', 'Silver Bomb / Cure Serum use a separate power curve, not market dollars'],
+      notes: {
+        formatNotes: ['Zombie: no waivers, only free agency — even mid-game. Zombie-status teams can’t trade, so the partner pool only shrinks.'],
+        scaleNotes: ['Three teams, three asset classes with no shared price scale — read each leg on its own terms.'],
+        postureNotes: [], pickNotes: ['Last Ones Standing sends their own 2027 2nd — with 8 of 16 alive, standings carry little signal yet.'],
+        leverageNotes: [], needNotes: [], byeNotes: [],
+      },
+      intel: {
+        whoWinsNow: 'Outbreak Monitors', whoWinsLongTerm: 'Even',
+        contenderRecommendation: 'Trading a bench IDP piece for a productive RB and a future 2nd — fine if Parsons wasn’t playing anyway.',
+        rebuilderRecommendation: 'The Silver Bomb is a one-time swing weapon; a serum + pick is steadier if you’re not chasing this week’s chop line.',
+        tradeWarnings: ['Weapons and serums decay as the field shrinks.', 'Micah Parsons carries no market price — can’t fully score this on value.'],
+        rebalanceSuggestions: ['If Pacheco’s price won’t move, ask for a second late pick instead.'],
+        alternateTargets: [], alternateTargetsNote: 'Already a three-team deal — a counter reopens all three sides, not just one.',
+        why: 'A player, a weapon, and a serum — three currencies, none sharing a price scale. Read leg by leg, not as one net number.',
+      },
+      proposeLabel: 'Propose to both teams',
+      proposeNote: 'All three managers accept before anything moves. One decline voids the whole deal.',
+    },
+    cross: {
+      league: { platform: 'sleeper', name: 'Linked cross-platform deal', format: 'Sleeper (NFL) + Fantrax (NCAAF)', oppLabel: 'Manager', oppValue: '@kingbuffalo — both legs', deadlineTag: '2 LEGS · NOT YET PAIRED', addQueue: 'standard', assets: ['player', 'pick', 'faab'] },
+      blocked: false,
+      partners: [],
+      teams: [
+        { id: 'you-s', legId: 'leg1', legMeta: CONNECTED_LEAGUES[0], name: 'You — Sleeper leg', handle: '@you', isYou: true, grade: 'B', sends: [
+          { type: 'player', name: 'Justin Jefferson', pos: 'WR', sub: 'MIN · Bye 6', mvDisplay: '9,400' },
+        ] },
+        { id: 'opp-s', legId: 'leg1', legMeta: CONNECTED_LEAGUES[0], name: '@kingbuffalo — Sleeper leg', handle: '@kingbuffalo', isYou: false, grade: 'C', sends: [] },
+        { id: 'you-f', legId: 'leg2', legMeta: CONNECTED_LEAGUES[2], name: 'You — Fantrax leg', handle: '@you', isYou: true, grade: 'C', sends: [] },
+        { id: 'opp-f', legId: 'leg2', legMeta: CONNECTED_LEAGUES[2], name: '@kingbuffalo — Fantrax leg', handle: '@kingbuffalo', isYou: false, grade: 'B', sends: [
+          { type: 'player', name: 'Arch Manning', pos: 'QB', sub: 'Texas · Jr · NCAAF', mvDisplay: '8,100' },
+        ] },
+      ],
+      verdict: { fairnessScore: 54, fairnessLabel: 'Reasonably close in combined value', confidenceLabel: 'Low — NFL price vs. a college-prospect model' },
+      noSignalWarning: null,
+      dataGaps: ['Arch Manning’s value comes from a college-prospect model, not the NFL feed Jefferson is priced on.'],
+      notes: {
+        formatNotes: ['Each leg posts to its own platform as its own legal trade. Neither platform can see or enforce the other leg — this only works because both sides trust the same manager to follow through twice.', 'AllFantasy flags either manager if the second leg isn’t confirmed within 48 hours — it can’t reverse a leg that already executed.'],
+        scaleNotes: ['Manning is priced on a college-prospect model years ahead of an NFL snap — a rough cross-sport comparison, not apples-to-apples.'],
+        postureNotes: [], pickNotes: [], leverageNotes: [], needNotes: [], byeNotes: [],
+      },
+      intel: {
+        whoWinsNow: 'Not comparable', whoWinsLongTerm: 'Depends on Manning’s NFL path',
+        contenderRecommendation: 'Jefferson helps you win NFL games now; Manning helps a different roster in a different sport. If Sleeper is your win-now team, the Fantrax return has to be worth it on its own terms.',
+        rebuilderRecommendation: 'Manning’s NFL outlook years out and Jefferson’s guaranteed production now are apples and oranges — only makes sense if you separately value Manning on the Fantrax side.',
+        tradeWarnings: ['Neither platform sees the other leg — this runs on trust.', 'If the Fantrax leg doesn’t confirm in 48 hours, the Sleeper leg gets flagged as unpaired.'],
+        rebalanceSuggestions: ['Add a small same-platform sweetener to the lighter leg so each side carries something both ways.'],
+        alternateTargets: [], alternateTargetsNote: 'A counter here means re-pricing one leg — the other platform’s leg stays as agreed.',
+        why: 'Two one-way moves on two platforms that only balance because the same two people are on both sides. Judge it as one deal only because you trust the follow-through.',
+      },
+      proposeLabel: 'Pair both legs',
+      proposeNote: 'Each leg is sent on its own platform. Pairing records the agreement here so a missing second leg gets flagged.',
+    },
+  };
+}
+
+const FINDER = [
+  { team: 'Thunderbolts', record: '6-5 · bubble', fit: 'BUY-LOW PICKS', get: '2027 1st', give: 'Christian Watson', values: '2,400 for 1,850 · 23% apart', reason: 'Missing a WR1, holds two top-4 picks — depth plus a mid pick matches what they’re buying.' },
+  { team: 'Night Owls', record: '3-8 · selling', fit: 'SELL-NOW STAR', get: 'Puka Nacua', give: 'Watson + 2026 1st + 2027 1st', values: '6,900 for 6,650 · 4% apart', reason: 'Out of the race, openly rebuilding — Nacua is the exact buy-low their record forces.' },
+  { team: 'Glass Cannons', record: '8-3 · contending', fit: 'BIDDING WAR AT RB', get: '2026 1st + 2027 1st + Tank Dell', give: 'Jahmyr Gibbs', values: '6,700 for 7,400 · 9% apart', reason: 'Thin at RB after two injuries — same need as Cold Takes FC, so they’ll bid against each other.' },
+];
+
+function parseVal(s) {
+  const n = parseFloat(String(s).replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+class Component extends DCLogic {
+  state = { view: 'analyzed', teams: baseData().analyzed.teams, partner: 'Cold Takes FC' };
+
+  setView(view) {
+    const base = baseData()[view] || baseData().analyzed;
+    const on = (base.partners || []).find((p) => p.on);
+    this.setState({ view, teams: base.teams, partner: on ? on.name : null });
+  }
+
+  addAsset(teamId, queueKey) {
+    const queue = ADD_QUEUES[queueKey] || ADD_QUEUES.standard;
+    const teams = this.state.teams.map((t) => {
+      if (t.id !== teamId) return t;
+      const next = queue[t.sends.length % queue.length];
+      return { ...t, sends: [...t.sends, { ...next }] };
+    });
+    this.setState({ teams });
+  }
+
+  removeAsset(teamId, idx) {
+    const teams = this.state.teams.map((t) => {
+      if (t.id !== teamId) return t;
+      return { ...t, sends: t.sends.filter((_, i) => i !== idx) };
+    });
+    this.setState({ teams });
+  }
+
+  addTeamFn() {
+    if (this.state.teams.length >= 4) return;
+    const letters = ['B', 'C', 'D'];
+    const n = letters[this.state.teams.length - 1] || 'X';
+    const newTeam = { id: `new${this.state.teams.length}`, name: `Team ${n} — unnamed`, handle: '@add manager', record: '', isYou: false, grade: 'C', gradeNote: 'no assets yet', sends: [] };
+    this.setState({ teams: [...this.state.teams, newTeam] });
+  }
+
+  cycleLeg(legId) {
+    const teams = this.state.teams;
+    const current = teams.find((t) => t.legId === legId);
+    if (!current) return;
+    const idx = CONNECTED_LEAGUES.findIndex((l) => l.name === current.legMeta.name);
+    const next = CONNECTED_LEAGUES[(idx + 1) % CONNECTED_LEAGUES.length];
+    this.setState({ teams: teams.map((t) => (t.legId === legId ? { ...t, legMeta: next } : t)) });
+  }
+
+  addLeg() {
+    const teams = this.state.teams;
+    const legIds = [...new Set(teams.map((t) => t.legId).filter(Boolean))];
+    if (legIds.length >= 3) return;
+    const usedNames = new Set(teams.filter((t) => t.legId).map((t) => t.legMeta.name));
+    const league = CONNECTED_LEAGUES.find((l) => !usedNames.has(l.name)) || CONNECTED_LEAGUES[0];
+    const legId = `leg${legIds.length + 1}`;
+    const label = PLATFORM[league.platform].label;
+    const you = { id: `you-${legId}`, legId, legMeta: league, name: `You — ${label} leg`, handle: '@you', isYou: true, grade: 'C', sends: [] };
+    const opp = { id: `opp-${legId}`, legId, legMeta: league, name: `@kingbuffalo — ${label} leg`, handle: '@kingbuffalo', isYou: false, grade: 'C', sends: [] };
+    this.setState({ teams: [...teams, you, opp] });
+  }
+
+  renderVals() {
+    const DATA = baseData();
+    const view = this.state.view || 'analyzed';
+    const d = DATA[view] || DATA.analyzed;
+    const teams = this.state.teams;
+    const linked = teams.some((t) => t.legId);
+    const platform = PLATFORM[d.league.platform] || PLATFORM.sleeper;
+
+    const tabBg = {}, tabColor = {};
+    for (const k of ['analyzed', 'degraded', 'blocked', 'multi', 'cross']) {
+      tabBg[k] = k === view ? 'var(--accent)' : 'transparent';
+      tabColor[k] = k === view ? 'var(--accent-ink)' : 'var(--muted)';
+    }
+
+    const activeLeagues = new Set(
+      view === 'cross' ? teams.filter((t) => t.legMeta).map((t) => t.legMeta.name) : [d.league.name],
+    );
+    const leagueTiles = LEAGUE_TILES.map((lt) => {
+      const p = PLATFORM[lt.platform];
+      const active = activeLeagues.has(lt.name);
+      const statusColor = lt.tone === 'accent' ? 'var(--accent)' : lt.tone === 'muted' ? 'var(--muted)' : 'var(--faint)';
+      return {
+        ...lt, pMark: p.mark, pBg: p.bg, pFg: p.fg, statusColor,
+        bg: active ? 'var(--accent-soft)' : 'var(--surface)',
+        border: active ? 'var(--accent-line)' : 'var(--line)',
+        pick: () => {},
+      };
+    });
+
+    const teamById = new Map(teams.map((t) => [t.id, t]));
+    const sendColor = (t) => (t.isYou ? 'var(--bad)' : 'var(--good)');
+
+    const teamCards = teams.map((t) => {
+      const sends = t.sends.map((a, i) => {
+        const meta = TYPE_META[a.type] || TYPE_META.player;
+        const tag = a.tag ? TAG[a.tone] || TAG.warn : null;
+        const priced = parseVal(a.mvDisplay) != null;
+        return {
+          ...a,
+          typeGlyph: meta.glyph,
+          typeColor: meta.color,
+          posColor: POS_COLOR[a.pos] || 'var(--muted)',
+          mvColor: priced ? 'var(--text2)' : 'var(--faint)',
+          tagColor: tag ? tag.color : null,
+          tagSoft: tag ? tag.soft : null,
+          destName: a.destId ? (teamById.get(a.destId)?.name ?? null) : null,
+          remove: () => this.removeAsset(t.id, i),
+        };
+      });
+      const priced = sends.map((a) => parseVal(a.mvDisplay)).filter((v) => v != null);
+      const unpriced = sends.length - priced.length;
+      const total = priced.reduce((acc, v) => acc + v, 0);
+      const legPlatform = t.legMeta ? PLATFORM[t.legMeta.platform] : platform;
+      return {
+        ...t,
+        sends,
+        sendLabelColor: sendColor(t),
+        borderColor: t.isYou ? 'var(--accent-line)' : 'var(--line)',
+        pMark: legPlatform.mark, pBg: legPlatform.bg, pFg: legPlatform.fg,
+        totalDisplay: priced.length > 0 ? total.toLocaleString() : '—',
+        totalValue: priced.length > 0 ? total : null,
+        unpricedNote: unpriced > 0 ? `${unpriced} unpriced` : 'all priced',
+        addAsset: () => this.addAsset(t.id, d.league.addQueue),
+      };
+    });
+
+    const you = teamCards.find((t) => t.isYou);
+    const them = teamCards.filter((t) => !t.isYou);
+    const give = you && you.totalValue != null ? you.totalValue : null;
+    const get = them.length > 0 && them.some((t) => t.totalValue != null)
+      ? them.reduce((acc, t) => acc + (t.totalValue || 0), 0)
+      : null;
+    let balance = { shown: false };
+    if (!linked && !d.blocked) {
+      if (give != null && get != null && give + get > 0) {
+        const givePct = Math.round((give / (give + get)) * 100);
+        const diff = get - give;
+        const pct = give > 0 ? Math.round(Math.abs(diff) / give * 100) : null;
+        balance = {
+          shown: true, give: give.toLocaleString(), get: get.toLocaleString(), givePct, getPct: 100 - givePct,
+          deltaText: diff === 0 ? 'Even on priced value' : `${diff > 0 ? '+' : '−'}${Math.abs(diff).toLocaleString()} to you${pct != null ? ` · ${pct}% apart` : ''}`,
+          deltaColor: diff > 0 ? 'var(--good)' : diff < 0 ? 'var(--bad)' : 'var(--muted)',
+        };
+      } else {
+        balance = { shown: true, give: you ? you.totalDisplay : '—', get: '—', givePct: 0, getPct: 0, deltaText: 'Nothing priced on at least one side', deltaColor: 'var(--faint)' };
+      }
+    }
+
+    const gradeTiles = teamCards.map((t) => {
+      const g = GRADE_COLORS[t.grade] || GRADE_COLORS.C;
+      return { letter: t.grade, name: t.name, note: t.gradeNote || '', color: g.color, soft: g.soft, line: g.line };
+    });
+
+    const partners = (d.partners || []).map((p) => {
+      const on = this.state.partner === p.name;
+      return {
+        ...p,
+        border: on ? 'var(--accent)' : 'var(--line2)',
+        bg: on ? 'var(--accent-soft)' : 'var(--surface2)',
+        color: on ? 'var(--accent)' : 'var(--text2)',
+        pick: () => this.setState({ partner: on ? null : p.name }),
+      };
+    });
+
+    const groupDefs = [
+      ['formatNotes', 'FORMAT', 'format'],
+      ['scaleNotes', 'LEAGUE & ROSTER SHAPE', 'scale'],
+      ['postureNotes', 'WHERE EACH SIDE STANDS', 'posture'],
+      ['pickNotes', 'WHAT THESE PICKS REALLY ARE', 'pick'],
+      ['leverageNotes', 'YOUR LEVERAGE', 'leverage'],
+      ['needNotes', 'WHAT IT’S WORTH TO YOU', 'need'],
+      ['byeNotes', 'BYE-WEEK COLLISIONS', 'bye'],
+    ];
+    const noteGroups = groupDefs
+      .filter(([key]) => !(key === 'formatNotes' && (d.blocked || linked)))
+      .filter(([key]) => (d.notes[key] || []).length > 0)
+      .map(([key, title, tone]) => {
+        const c = TONES[tone];
+        return { title, items: d.notes[key], soft: c.soft, line: c.line, titleColor: c.title };
+      });
+
+    const intel = d.intel;
+    const legend = (d.league.assets || Object.keys(TYPE_META)).map((key) => ({ key, label: TYPE_META[key].label, glyph: TYPE_META[key].glyph, color: TYPE_META[key].color }));
+
+    const legIds = [...new Set(teamCards.map((t) => t.legId).filter(Boolean))];
+    const legGroups = legIds.map((legId) => {
+      const legTeams = teamCards.filter((t) => t.legId === legId).map((t) => ({ ...t, emptyLeg: t.sends.length === 0 }));
+      const meta = legTeams[0].legMeta;
+      const p = PLATFORM[meta.platform];
+      return { legId, mark: p.mark, bg: p.bg, fg: p.fg, name: meta.name, sport: meta.sport, teams: legTeams, cycle: () => this.cycleLeg(legId) };
+    });
+
+    const leftName = linked ? 'THEM' : them.length === 1 ? them[0].name.toUpperCase() : 'THE OTHERS';
+    const rightName = you ? 'YOU' : 'SIDE B';
+
+    return {
+      v: {
+        league: { ...d.league, pMark: platform.mark, pBg: platform.bg, pFg: platform.fg },
+        leagueTiles,
+        blocked: d.blocked,
+        linked,
+        notLinked: !linked,
+        showGrades: !linked,
+        showPartners: partners.length > 0,
+        partners,
+        teams: teamCards,
+        builderCols: Math.min(Math.max(teamCards.length, 2), 3),
+        legGroups,
+        canAddTeam: !linked && teams.length < 4,
+        canAddLeg: linked && legIds.length < 3,
+        balance,
+        gradeTiles,
+        legend,
+        formatNotes: d.notes.formatNotes,
+        verdict: { ...d.verdict, leftName, rightName },
+        verdictOpacity: d.blocked ? 0.45 : 1,
+        noSignalWarning: d.noSignalWarning,
+        dataGaps: d.dataGaps,
+        dataGapsShown: d.dataGaps.length > 0,
+        noteGroups,
+        noteGroupsShown: noteGroups.length > 0,
+        tabBg, tabColor,
+        intel: {
+          ...intel,
+          warningsShown: (intel.tradeWarnings || []).length > 0,
+          rebalanceShown: (intel.rebalanceSuggestions || []).length > 0,
+          altShown: (intel.alternateTargets || []).length > 0,
+          alternateTargets: (intel.alternateTargets || []).map((t) => ({ ...t, posColor: POS_COLOR[t.pos] || 'var(--muted)' })),
+          altNoteOnly: (intel.alternateTargets || []).length === 0 && !!intel.alternateTargetsNote,
+        },
+        proposeLabel: d.proposeLabel,
+        proposeNote: d.proposeNote,
+        partnersFinder: FINDER,
+      },
+      addTeam: () => this.addTeamFn(),
+      addLeg: () => this.addLeg(),
+      setView_analyzed: () => this.setView('analyzed'),
+      setView_degraded: () => this.setView('degraded'),
+      setView_blocked: () => this.setView('blocked'),
+      setView_multi: () => this.setView('multi'),
+      setView_cross: () => this.setView('cross'),
+    };
+  }
+}
+</script>
+</body>
+</html>

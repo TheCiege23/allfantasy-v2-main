@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06070f; --surface:#0d1020; --surface2:#0a0c1a;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.13);
+  --text:#eef0fa; --text2:#c3c9e6; --muted:#8f97bd; --faint:#5d648a;
+  --accent:#22d3ee; --accent-ink:#04050c; --accent-soft:rgba(34,211,238,.09); --accent-line:rgba(34,211,238,.3);
+  --good:#34d399; --warn:#fbbf24; --bad:#fb5b78; --violet:#a78bfa; --orange:#fb923c;
+  --chip:rgba(255,255,255,.05); --chip-line:rgba(255,255,255,.1);
+}
+html{background:var(--bg)} body{margin:0;background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,sans-serif}
+h1,h2,h3{margin:0;font-weight:900;letter-spacing:-.03em}
+a{color:var(--accent)} a:hover{color:#67e4f7}
+::-webkit-scrollbar{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg);padding:40px 0 100px">
+  <div style="max-width:1200px;margin:0 auto;padding:0 40px;display:flex;flex-direction:column;gap:22px">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">LAST LEAGUE LEFT · TRADES</div>
+        <h1 style="font-size:34px;letter-spacing:-.02em;color:var(--text)">Trade Center</h1>
+        <div style="font:400 13px/1.55 'Archivo',sans-serif;color:var(--muted);max-width:62ch">Every deal in this league — and the ones with your name on them. Grades here are scored against this league's own rules, so the same trade grades differently next door.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">PREVIEW STATE</div>
+        <div style="display:flex;padding:4px;gap:3px;background:var(--chip);border:1px solid var(--chip-line);border-radius:10px">
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.main }};color:{{ v.tabColor.main }}" onClick="{{ setView_main }}">Populated</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.empty }};color:{{ v.tabColor.empty }}" onClick="{{ setView_empty }}">Empty</div>
+          <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:8px 12px;border-radius:7px;background:{{ v.tabBg.loading }};color:{{ v.tabColor.loading }}" onClick="{{ setView_loading }}">Loading</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface)">
+      <div style="flex:none;width:30px;height:30px;border-radius:9px;background:#1f2a4d;color:#9fd4ff;display:flex;align-items:center;justify-content:center;font:900 12px/1 'Archivo',sans-serif">S</div>
+      <div style="font:800 14px/1 'Archivo',sans-serif;color:var(--text)">Last League Left</div>
+      <div style="width:1px;height:16px;background:var(--line2)"></div>
+      <div style="font:400 12px/1 'Archivo',sans-serif;color:var(--muted)">Dynasty · PPR · TE Prem · IDP · 12 teams</div>
+      <div style="flex:1"></div>
+      <div style="font:700 11px/1 'JetBrains Mono',monospace;color:var(--muted)">{{ v.counts }}</div>
+      <div style="padding:6px 10px;border-radius:7px;border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08);font:700 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--violet);white-space:nowrap">REVIEW · COMMISSIONER · 48H</div>
+      <div style="padding:6px 10px;border-radius:7px;border:1px solid rgba(251,191,36,.4);background:rgba(251,191,36,.08);font:700 10.5px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--warn);white-space:nowrap">DEADLINE · WEEK 12</div>
+    </div>
+
+    <sc-if value="{{ v.isLoading }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:70px 30px;background:var(--surface);border:1px solid var(--line);border-radius:18px;text-align:center">
+        <div style="width:36px;height:36px;border-radius:50%;border:3px solid var(--chip-line);border-top-color:var(--accent);animation:spin 0.9s linear infinite"></div>
+        <div style="font:700 14px/1.4 'Archivo',sans-serif;color:var(--text2)">Reading this league's trades…</div>
+        <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:520px">
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:70%"></div>
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:90%"></div>
+          <div style="height:14px;border-radius:7px;background:var(--chip);width:55%"></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:60px 30px;background:var(--surface);border:1px solid var(--line);border-radius:18px;text-align:center">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--chip);display:flex;align-items:center;justify-content:center;color:var(--faint)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"></path><path d="M3 7h18"></path><path d="M7 21l-4-4 4-4"></path><path d="M21 17H3"></path></svg>
+        </div>
+        <div style="font:800 17px/1.3 'Archivo',sans-serif">No trades in this league yet</div>
+        <div style="font:400 13px/1.5 'Archivo',sans-serif;color:var(--muted);max-width:460px">Nothing has been proposed or completed this season. Start a deal in the builder, or let the finder pick a partner whose roster shape fits yours.</div>
+        <div style="display:flex;gap:8px">
+          <div style="cursor:pointer;font:800 13px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent);padding:11px 16px;border-radius:10px">Build a trade</div>
+          <div style="cursor:pointer;font:800 13px/1 'Archivo',sans-serif;color:var(--text2);border:1px solid var(--line2);padding:11px 16px;border-radius:10px">Find a partner</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ v.isMain }}" hint-placeholder-val="{{ true }}">
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--warn)">NEEDS YOUR ACTION</div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">Offers waiting on you, and reviews waiting on the commissioner</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px">
+          <sc-for list="{{ v.actions }}" as="ac" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid {{ ac.border }};border-radius:14px;background:var(--surface)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ ac.roleColor }};background:{{ ac.roleSoft }};padding:5px 7px;border-radius:5px">{{ ac.role }}</div>
+                <div style="font:400 10.5px/1 'Archivo',sans-serif;color:var(--faint)">{{ ac.when }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <div style="font:800 14px/1.2 'Archivo',sans-serif;color:var(--text)">{{ ac.title }}</div>
+                <div style="font:400 11px/1.4 'Archivo',sans-serif;color:var(--muted)">{{ ac.subtitle }}</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:8px">
+                <div style="display:flex;flex-direction:column;gap:4px;padding:8px 9px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)">
+                  <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--bad)">{{ ac.leftLabel }}</div>
+                  <sc-for list="{{ ac.left }}" as="x" hint-placeholder-count="2">
+                    <div style="font:600 11.5px/1.35 'Archivo',sans-serif;color:var(--text2)">{{ x }}</div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;padding:8px 9px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)">
+                  <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--good)">{{ ac.rightLabel }}</div>
+                  <sc-for list="{{ ac.right }}" as="x" hint-placeholder-count="2">
+                    <div style="font:600 11.5px/1.35 'Archivo',sans-serif;color:var(--text2)">{{ x }}</div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="display:flex;gap:5px">
+                  <sc-for list="{{ ac.grades }}" as="g" hint-placeholder-count="2">
+                    <div style="width:26px;height:26px;border-radius:7px;background:{{ g.soft }};border:1px solid {{ g.line }};display:flex;align-items:center;justify-content:center;font:900 13px/1 'Archivo',sans-serif;color:{{ g.color }}">{{ g.letter }}</div>
+                  </sc-for>
+                </div>
+                <div style="font:400 10.5px/1.4 'Archivo',sans-serif;color:var(--muted)">{{ ac.gradeNote }}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:2px">
+                <sc-for list="{{ ac.buttons }}" as="b" hint-placeholder-count="2">
+                  <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 13px;border-radius:9px;font:800 12px/1 'Archivo',sans-serif;color:{{ b.color }};background:{{ b.bg }};border:1px solid {{ b.border }}">{{ b.label }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">YOUR TRADES</div>
+          <div style="display:flex;padding:3px;gap:3px;background:var(--chip);border:1px solid var(--chip-line);border-radius:9px">
+            <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:7px 11px;border-radius:6px;background:{{ v.yourTabBg.active }};color:{{ v.yourTabColor.active }}" onClick="{{ setYour_active }}">Active · {{ v.yourActiveCount }}</div>
+            <div style="cursor:pointer;font:700 10px/1 'JetBrains Mono',monospace;padding:7px 11px;border-radius:6px;background:{{ v.yourTabBg.completed }};color:{{ v.yourTabColor.completed }}" onClick="{{ setYour_completed }}">Completed · {{ v.yourCompletedCount }}</div>
+          </div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">{{ v.yourHint }}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <sc-for list="{{ v.yourRows }}" as="r" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:118px 1fr 1fr 150px 128px;gap:14px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="align-self:flex-start;font:800 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ r.dirColor }};background:{{ r.dirSoft }};padding:4px 6px;border-radius:4px">{{ r.dir }}</div>
+                <div style="font:700 10px/1 'JetBrains Mono',monospace;color:var(--faint)">{{ r.when }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--bad)">YOU SEND</div>
+                <div style="font:600 12px/1.4 'Archivo',sans-serif;color:var(--text2)">{{ r.sent }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--good)">YOU GET · {{ r.partner }}</div>
+                <div style="font:600 12px/1.4 'Archivo',sans-serif;color:var(--text2)">{{ r.received }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px">
+                <div style="width:28px;height:28px;border-radius:8px;background:{{ r.grade.soft }};border:1px solid {{ r.grade.line }};display:flex;align-items:center;justify-content:center;font:900 14px/1 'Archivo',sans-serif;color:{{ r.grade.color }}">{{ r.grade.letter }}</div>
+                <div style="font:400 10px/1.35 'Archivo',sans-serif;color:var(--muted)">{{ r.gradeNote }}</div>
+              </div>
+              <div style="justify-self:end;font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ r.statusColor }};background:{{ r.statusSoft }};padding:5px 7px;border-radius:5px;white-space:nowrap">{{ r.status }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">LEAGUE TRADE LOG</div>
+          <div style="display:flex;gap:6px">
+            <sc-for list="{{ v.filters }}" as="f" hint-placeholder-count="4">
+              <div style="cursor:pointer;font:700 10.5px/1 'Archivo',sans-serif;padding:7px 10px;border-radius:7px;border:1px solid {{ f.border }};background:{{ f.bg }};color:{{ f.color }}" onClick="{{ f.pick }}">{{ f.label }}</div>
+            </sc-for>
+          </div>
+          <div style="cursor:pointer;display:flex;align-items:center;gap:7px;font:700 10.5px/1 'Archivo',sans-serif;color:{{ v.mine.color }}" onClick="{{ toggleMine }}">
+            <div style="width:30px;height:18px;border-radius:9px;background:{{ v.mine.trackBg }};border:1px solid {{ v.mine.trackLine }};position:relative"><div style="position:absolute;top:2px;left:{{ v.mine.knobLeft }}px;width:12px;height:12px;border-radius:50%;background:{{ v.mine.knob }}"></div></div>
+            <div>Only mine</div>
+          </div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">{{ v.logCount }} · grades are realized where every asset could be priced</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:56px 1.15fr 1.15fr 120px 110px;gap:14px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)">
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">WEEK</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">SIDE A SENDS</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">SIDE B SENDS</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">GRADES A · B</div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);text-align:right">STATUS</div>
+          </div>
+          <sc-for list="{{ v.logRows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:56px 1.15fr 1.15fr 120px 110px;gap:14px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:{{ r.rowBg }}">
+              <div style="font:800 12px/1 'JetBrains Mono',monospace;color:var(--muted)">{{ r.week }}</div>
+              <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px"><div style="font:800 12.5px/1.2 'Archivo',sans-serif;color:var(--text)">{{ r.a }}</div><sc-if value="{{ r.aYou }}" hint-placeholder-val="{{ false }}"><div style="padding:2px 5px;border-radius:4px;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.08em">YOU</div></sc-if></div>
+                <div style="font:400 11.5px/1.4 'Archivo',sans-serif;color:var(--text2)">{{ r.aSends }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px"><div style="font:800 12.5px/1.2 'Archivo',sans-serif;color:var(--text)">{{ r.b }}</div><sc-if value="{{ r.bYou }}" hint-placeholder-val="{{ false }}"><div style="padding:2px 5px;border-radius:4px;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.08em">YOU</div></sc-if></div>
+                <div style="font:400 11.5px/1.4 'Archivo',sans-serif;color:var(--text2)">{{ r.bSends }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="width:26px;height:26px;border-radius:7px;background:{{ r.ga.soft }};border:1px solid {{ r.ga.line }};display:flex;align-items:center;justify-content:center;font:900 13px/1 'Archivo',sans-serif;color:{{ r.ga.color }}">{{ r.ga.letter }}</div>
+                <div style="width:26px;height:26px;border-radius:7px;background:{{ r.gb.soft }};border:1px solid {{ r.gb.line }};display:flex;align-items:center;justify-content:center;font:900 13px/1 'Archivo',sans-serif;color:{{ r.gb.color }}">{{ r.gb.letter }}</div>
+                <sc-if value="{{ r.gradeWhy }}" hint-placeholder-val="{{ false }}">
+                  <div style="font:400 9.5px/1.3 'Archivo',sans-serif;color:var(--faint);max-width:60px">{{ r.gradeWhy }}</div>
+                </sc-if>
+              </div>
+              <div style="justify-self:end;font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ r.statusColor }};background:{{ r.statusSoft }};padding:5px 7px;border-radius:5px;white-space:nowrap">{{ r.status }}</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ v.logEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:26px 16px;text-align:center;font:400 12.5px/1.5 'Archivo',sans-serif;color:var(--muted)">No trades match this filter.</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">TRADE BLOCK</div>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">Players managers have flagged available · synced from Sleeper</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(6, minmax(0, 1fr));gap:10px">
+          <sc-for list="{{ v.block }}" as="p" hint-placeholder-count="6">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:11px;border:2px solid {{ p.border }};border-radius:12px;background:rgba(7,7,26,.9)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+                <div style="font:700 10px/1.3 'Archivo',sans-serif;color:{{ p.label }}">{{ p.pos }} · {{ p.team }}</div>
+                <div style="cursor:pointer;color:{{ p.heart }}" onClick="{{ p.toggle }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="{{ p.heartFill }}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"></path></svg></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:none;width:30px;height:30px;border-radius:50%;background:var(--chip);border:1px solid var(--chip-line);display:flex;align-items:center;justify-content:center;font:800 10px/1 'Archivo',sans-serif;color:var(--muted)">{{ p.initials }}</div>
+                <div style="font:800 12px/1.2 'Archivo',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
+              </div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px">
+                <div style="font:400 10px/1.3 'Archivo',sans-serif;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.owner }}</div>
+                <div style="font:700 10.5px/1 'JetBrains Mono',monospace;color:var(--text2)">{{ p.value }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="flex:1 1 240px;font:400 11.5px/1.5 'Archivo',sans-serif;color:var(--faint)">Pending offers from Sleeper are shown for analysis only — AllFantasy can price them, not respond to them. AllFantasy proposals accept, reject and counter right here.</div>
+        <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:10px;font:800 13px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent)">Build a trade</div>
+        <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:10px;font:800 13px/1 'Archivo',sans-serif;color:var(--text2);border:1px solid var(--line2)">Find a partner</div>
+      </div>
+
+    </sc-if>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1900}}'>
+const GRADE = {
+  A: { color: '#34d399', soft: 'rgba(52,211,153,.12)', line: 'rgba(52,211,153,.3)' },
+  B: { color: '#5eead4', soft: 'rgba(94,234,212,.12)', line: 'rgba(94,234,212,.3)' },
+  C: { color: '#fbbf24', soft: 'rgba(251,191,36,.12)', line: 'rgba(251,191,36,.3)' },
+  D: { color: '#fb923c', soft: 'rgba(251,146,60,.12)', line: 'rgba(251,146,60,.3)' },
+  F: { color: '#fb5b78', soft: 'rgba(251,91,120,.12)', line: 'rgba(251,91,120,.3)' },
+  none: { color: '#5d648a', soft: 'rgba(255,255,255,.04)', line: 'rgba(255,255,255,.13)' },
+};
+function grade(letter) { return { letter: letter || '—', ...(GRADE[letter] || GRADE.none) }; }
+
+const STATUS = {
+  pending: { label: 'PENDING', color: '#fbbf24', soft: 'rgba(251,191,36,.1)' },
+  on_sleeper: { label: 'PENDING · ON SLEEPER', color: '#fbbf24', soft: 'rgba(251,191,36,.1)' },
+  awaiting_commissioner: { label: 'COMMISSIONER REVIEW', color: '#a78bfa', soft: 'rgba(167,139,250,.1)' },
+  accepted: { label: 'COMPLETED', color: '#34d399', soft: 'rgba(52,211,153,.1)' },
+  vetoed: { label: 'VETOED', color: '#fb5b78', soft: 'rgba(251,91,120,.1)' },
+  rejected: { label: 'DECLINED', color: '#8f97bd', soft: 'rgba(255,255,255,.05)' },
+};
+
+const POS = {
+  QB: '#f9a8d4', RB: '#6ee7b7', WR: '#7dd3fc', TE: '#fdba74', DL: '#fcd34d', LB: '#bef264', DB: '#a5b4fc', K: '#fef08a',
+};
+
+/* Every trade in the league this season, newest first. `a`/`b` are the two sides; `you` marks which side is the viewer's. */
+const LOG = [
+  { id: 't0', week: 'WK 11', a: 'Thunderbolts', b: 'Your Team', you: 'b', aSends: 'Rashee Rice', bSends: 'Christian Watson, 2027 4th', ga: 'C', gb: 'B', status: 'on_sleeper', when: '4 hours ago', role: 'incoming', gradeWhy: null, gradeNote: 'Projected · Rice priced 14% above Watson + pick' },
+  { id: 't1', week: 'WK 11', a: 'Cold Takes FC', b: 'Your Team', you: 'b', aSends: 'Bijan Robinson, Justin Tucker, Fred Warner', bSends: 'CeeDee Lamb, Christian Watson, 2027 3rd, $40 FAAB', ga: 'B', gb: 'C', status: 'pending', when: '1 day ago', role: 'incoming', gradeWhy: null, gradeNote: 'Projected · two unpriced pieces on their side' },
+  { id: 't2', week: 'WK 11', a: 'Your Team', b: 'Thunderbolts', you: 'a', aSends: 'Tank Dell', bSends: '2027 1st (Thunderbolts)', ga: 'B', gb: 'C', status: 'pending', when: '2 days ago', role: 'outgoing', gradeWhy: null, gradeNote: 'Projected · waiting on Thunderbolts' },
+  { id: 't3', week: 'WK 10', a: 'Night Owls', b: 'Glass Cannons', you: null, aSends: 'Puka Nacua', bSends: '2026 1st, 2027 2nd (Glass Cannons)', ga: 'B', gb: 'C', status: 'awaiting_commissioner', when: '3 days ago', role: 'commissioner', gradeWhy: null, gradeNote: null },
+  { id: 't4', week: 'WK 9', a: 'Your Team', b: 'Night Owls', you: 'a', aSends: 'Amon-Ra St. Brown', bSends: 'Jahmyr Gibbs', ga: 'A', gb: 'C', status: 'accepted', when: 'Wk 9', gradeWhy: null, gradeNote: 'Realized · +118 net per season so far' },
+  { id: 't5', week: 'WK 8', a: 'Iron Curtain', b: 'Thunderbolts', you: null, aSends: 'Tee Higgins', bSends: '2026 2nd (Thunderbolts)', ga: 'B', gb: 'C', status: 'accepted', when: 'Wk 8', gradeWhy: null, gradeNote: null },
+  { id: 't6', week: 'WK 7', a: 'Glass Cannons', b: 'Bench Mob', you: null, aSends: 'Josh Allen', bSends: 'Jameson Williams, Wan’Dale Robinson', ga: null, gb: null, status: 'vetoed', when: 'Wk 7', gradeWhy: 'never executed', gradeNote: null },
+  { id: 't7', week: 'WK 6', a: 'Glass Cannons', b: 'Your Team', you: 'b', aSends: 'Tank Dell', bSends: '2028 3rd (yours)', ga: 'C', gb: 'C', status: 'accepted', when: 'Wk 6', gradeWhy: null, gradeNote: 'Realized · inside the tie band' },
+  { id: 't8', week: 'WK 5', a: 'Waiver Wire Kings', b: 'Night Owls', you: null, aSends: 'Rome Odunze', bSends: 'Rachaad White', ga: 'D', gb: 'B', status: 'accepted', when: 'Wk 5', gradeWhy: null, gradeNote: null },
+  { id: 't9', week: 'WK 3', a: 'Cold Takes FC', b: 'Iron Curtain', you: null, aSends: 'Derrick Henry', bSends: '2026 1st (Iron Curtain)', ga: null, gb: null, status: 'accepted', when: 'Wk 3', gradeWhy: 'pick unpriced', gradeNote: null },
+  { id: 't10', week: 'WK 2', a: 'Your Team', b: 'Bench Mob', you: 'a', aSends: '$15 FAAB', bSends: 'Jauan Jennings', ga: null, gb: null, status: 'accepted', when: 'Wk 2', gradeWhy: 'FAAB only', gradeNote: 'Not gradable — FAAB has no season value to realize' },
+  { id: 't11', week: 'WK 1', a: 'Thunderbolts', b: 'Your Team', you: 'b', aSends: '2026 2nd (Thunderbolts)', bSends: 'Brian Thomas Jr.', ga: 'C', gb: 'B', status: 'accepted', when: 'Wk 1', gradeWhy: null, gradeNote: 'Realized · +52 net per season' },
+];
+
+const ACTIONS = [
+  {
+    role: 'OFFER TO YOU', roleColor: '#fbbf24', roleSoft: 'rgba(251,191,36,.12)', border: 'rgba(251,191,36,.4)', when: '1 day ago',
+    title: 'Cold Takes FC', subtitle: '@kingbuffalo · 6-5 · expires in 2 days',
+    leftLabel: 'YOU SEND', left: ['CeeDee Lamb', 'Christian Watson', '2027 3rd · $40 FAAB'],
+    rightLabel: 'YOU GET', right: ['Bijan Robinson', 'Justin Tucker', 'Fred Warner'],
+    grades: ['C', 'B'], gradeNote: 'Projected · tilts toward Cold Takes FC',
+    buttons: [
+      { label: 'Accept', color: '#34d399', bg: 'transparent', border: 'rgba(52,211,153,.4)' },
+      { label: 'Reject', color: '#fb5b78', bg: 'transparent', border: 'rgba(251,91,120,.4)' },
+      { label: 'Load into builder', color: '#c3c9e6', bg: 'transparent', border: 'rgba(255,255,255,.13)' },
+    ],
+  },
+  {
+    role: 'ON SLEEPER · READ-ONLY', roleColor: '#9fd4ff', roleSoft: '#1f2a4d', border: 'rgba(255,255,255,.13)', when: '4 hours ago',
+    title: 'Thunderbolts', subtitle: '@dre · proposed in Sleeper, not here',
+    leftLabel: 'YOU SEND', left: ['Christian Watson', '2027 4th'],
+    rightLabel: 'YOU GET', right: ['Rashee Rice'],
+    grades: ['B', 'C'], gradeNote: 'Projected · Rice priced 14% above Watson + pick',
+    buttons: [
+      { label: 'Act on it in Sleeper', color: '#22d3ee', bg: 'rgba(34,211,238,.09)', border: 'rgba(34,211,238,.3)' },
+      { label: 'Load into builder', color: '#c3c9e6', bg: 'transparent', border: 'rgba(255,255,255,.13)' },
+    ],
+  },
+  {
+    role: 'COMMISSIONER REVIEW', roleColor: '#a78bfa', roleSoft: 'rgba(167,139,250,.12)', border: 'rgba(167,139,250,.35)', when: '3 days ago',
+    title: 'Night Owls ⇄ Glass Cannons', subtitle: 'Review window closes in 20h · 2 of 10 votes to veto',
+    leftLabel: 'NIGHT OWLS SEND', left: ['Puka Nacua'],
+    rightLabel: 'GLASS CANNONS SEND', right: ['2026 1st', '2027 2nd'],
+    grades: ['B', 'C'], gradeNote: 'Projected · a rebuilder selling to a contender',
+    buttons: [
+      { label: 'Approve', color: '#34d399', bg: 'transparent', border: 'rgba(52,211,153,.4)' },
+      { label: 'Veto', color: '#fb5b78', bg: 'transparent', border: 'rgba(251,91,120,.4)' },
+    ],
+  },
+];
+
+const BLOCK = [
+  { name: 'Tee Higgins', pos: 'WR', team: 'CIN', owner: 'Thunderbolts', value: '5,100' },
+  { name: 'Rachaad White', pos: 'RB', team: 'TB', owner: 'Waiver Wire Kings', value: '1,900' },
+  { name: 'Dallas Goedert', pos: 'TE', team: 'PHI', owner: 'Bench Mob', value: '1,400' },
+  { name: 'Jordan Love', pos: 'QB', team: 'GB', owner: 'Glass Cannons', value: '4,600' },
+  { name: 'Nick Bosa', pos: 'DL', team: 'SF', owner: 'Thunderbolts', value: '—' },
+  { name: 'Trevon Diggs', pos: 'DB', team: 'DAL', owner: 'Night Owls', value: '—' },
+];
+
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'accepted', label: 'Completed' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'vetoed', label: 'Vetoed' },
+];
+
+function initials(name) {
+  return name.split(/\s+/).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+}
+
+class Component extends DCLogic {
+  state = { view: 'main', yourTab: 'active', filter: 'all', onlyMine: false, watch: { 'Tee Higgins': true } };
+
+  renderVals() {
+    const view = this.state.view;
+    const tabBg = {}, tabColor = {};
+    ['main', 'empty', 'loading'].forEach((k) => {
+      tabBg[k] = k === view ? 'var(--accent)' : 'transparent';
+      tabColor[k] = k === view ? 'var(--accent-ink)' : 'var(--muted)';
+    });
+    const yourTabBg = {}, yourTabColor = {};
+    ['active', 'completed'].forEach((k) => {
+      yourTabBg[k] = k === this.state.yourTab ? 'var(--accent)' : 'transparent';
+      yourTabColor[k] = k === this.state.yourTab ? 'var(--accent-ink)' : 'var(--muted)';
+    });
+
+    const mineAll = LOG.filter((t) => t.you);
+    const yourActive = mineAll.filter((t) => t.status === 'pending' || t.status === 'on_sleeper' || t.status === 'awaiting_commissioner');
+    const yourCompleted = mineAll.filter((t) => t.status === 'accepted');
+    const yourList = this.state.yourTab === 'active' ? yourActive : yourCompleted;
+    const yourRows = yourList.map((t) => {
+      const s = STATUS[t.status];
+      const youAreA = t.you === 'a';
+      const dir = t.status === 'accepted' ? 'DONE' : t.role === 'incoming' ? 'INCOMING' : 'OUTGOING';
+      const dirColor = dir === 'INCOMING' ? '#34d399' : dir === 'OUTGOING' ? '#fbbf24' : '#c3c9e6';
+      const dirSoft = dir === 'INCOMING' ? 'rgba(52,211,153,.12)' : dir === 'OUTGOING' ? 'rgba(251,191,36,.12)' : 'rgba(255,255,255,.06)';
+      const yourLetter = youAreA ? t.ga : t.gb;
+      return {
+        dir, dirColor, dirSoft, when: t.when,
+        partner: (youAreA ? t.b : t.a).toUpperCase(),
+        sent: youAreA ? t.aSends : t.bSends,
+        received: youAreA ? t.bSends : t.aSends,
+        grade: grade(yourLetter),
+        gradeNote: t.gradeNote || (yourLetter ? 'Your side' : 'Not gradable — ' + (t.gradeWhy || 'no signal')),
+        status: s.label, statusColor: s.color, statusSoft: s.soft,
+      };
+    });
+
+    const filters = FILTERS.map((f) => {
+      const on = this.state.filter === f.key;
+      return { ...f, border: on ? 'var(--accent)' : 'var(--line2)', bg: on ? 'var(--accent-soft)' : 'var(--surface2)', color: on ? 'var(--accent)' : 'var(--text2)', pick: () => this.setState({ filter: f.key }) };
+    });
+    const isPending = (t) => t.status === 'pending' || t.status === 'on_sleeper' || t.status === 'awaiting_commissioner';
+    const logRows = LOG
+      .filter((t) => this.state.filter === 'all' ? true : this.state.filter === 'pending' ? isPending(t) : t.status === this.state.filter)
+      .filter((t) => (this.state.onlyMine ? Boolean(t.you) : true))
+      .map((t) => {
+        const s = STATUS[t.status];
+        return {
+          week: t.week, a: t.a, b: t.b, aYou: t.you === 'a', bYou: t.you === 'b', aSends: t.aSends, bSends: t.bSends,
+          ga: grade(t.ga), gb: grade(t.gb), gradeWhy: t.gradeWhy,
+          status: s.label, statusColor: s.color, statusSoft: s.soft,
+          rowBg: t.you ? 'rgba(34,211,238,.035)' : 'transparent',
+        };
+      });
+
+    const watch = this.state.watch;
+    const block = BLOCK.map((p) => {
+      const on = Boolean(watch[p.name]);
+      return {
+        ...p, initials: initials(p.name), border: POS[p.pos] || '#8f97bd', label: POS[p.pos] || '#8f97bd',
+        heart: on ? '#fb5b78' : 'rgba(255,255,255,.3)', heartFill: on ? '#fb5b78' : 'none',
+        toggle: () => this.setState({ watch: { ...watch, [p.name]: !on } }),
+      };
+    });
+
+    const completed = LOG.filter((t) => t.status === 'accepted').length;
+    const pending = LOG.filter(isPending).length;
+    const vetoed = LOG.filter((t) => t.status === 'vetoed').length;
+    const mine = this.state.onlyMine;
+
+    return {
+      v: {
+        isMain: view === 'main', isEmpty: view === 'empty', isLoading: view === 'loading',
+        tabBg, tabColor,
+        counts: `${completed} completed · ${pending} pending · ${vetoed} vetoed`,
+        actions: ACTIONS.map((a) => ({ ...a, grades: a.grades.map(grade) })),
+        yourTabBg, yourTabColor, yourActiveCount: yourActive.length, yourCompletedCount: yourCompleted.length,
+        yourHint: this.state.yourTab === 'active' ? 'Accept, reject and counter live here for AllFantasy proposals' : 'Realized grades — scored on what each side has actually produced since',
+        yourRows,
+        filters,
+        mine: { color: mine ? 'var(--accent)' : 'var(--muted)', trackBg: mine ? 'var(--accent)' : 'var(--chip)', trackLine: mine ? 'var(--accent)' : 'var(--chip-line)', knob: mine ? 'var(--accent-ink)' : 'var(--muted)', knobLeft: mine ? 14 : 2 },
+        logRows, logEmpty: logRows.length === 0,
+        logCount: `${logRows.length} of ${LOG.length} this season`,
+        block,
+      },
+      toggleMine: () => this.setState({ onlyMine: !mine }),
+      setYour_active: () => this.setState({ yourTab: 'active' }),
+      setYour_completed: () => this.setState({ yourTab: 'completed' }),
+      setView_main: () => this.setState({ view: 'main' }),
+      setView_empty: () => this.setState({ view: 'empty' }),
+      setView_loading: () => this.setState({ view: 'loading' }),
+    };
+  }
+}
+</script>
+</body>
+</html>
