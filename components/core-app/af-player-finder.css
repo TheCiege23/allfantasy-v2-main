@@ -219,6 +219,14 @@
 
 /* ── League table ────────────────────────────────────────────────────── */
 
+/*
+ * The safety net for the rule above: whatever the columns' min-content adds
+ * up to, a wide table scrolls inside its own section and never the page.
+ */
+.af-pf-leagues {
+  overflow-x: auto;
+}
+
 .af-pf-table {
   width: 100%;
   border-collapse: collapse;
@@ -281,9 +289,16 @@
   margin-right: 8px;
 }
 
+/*
+ * ⚠ NOT `white-space: nowrap`. A table column cannot shrink below its
+ * min-content, and "Trade for Kincaid →" held on one line pushed the whole
+ * table past the card's right edge in a 492px main column — measured on the
+ * league-in-context view at 1280px. Let it wrap; the floor keeps a short
+ * action from collapsing to one word per line.
+ */
 .af-pf-table-action {
   text-align: right;
-  white-space: nowrap;
+  min-width: 8ch;
 }
 .af-pf-link {
   color: var(--accent);
