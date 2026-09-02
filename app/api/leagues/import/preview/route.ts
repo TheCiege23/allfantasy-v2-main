@@ -19,6 +19,8 @@ import { assertImportCommissioner } from '@/lib/league-import/commissionerGate'
 
 function mapImportPreviewErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
+  /* See the commit route's mapper — a throttled provider is retryable, not missing. */
+  if (code === 'PROVIDER_UNAVAILABLE') return 503
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
   return 500

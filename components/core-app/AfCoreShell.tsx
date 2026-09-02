@@ -167,6 +167,20 @@ export type AfCoreShellProps = {
    * flicker an item in after paint on every navigation.
    */
   hasIdpDefense?: boolean
+  /**
+   * What the selected league's import actually brought across.
+   *
+   * ⚠ EVERY FLAG DEFAULTS TO SHOWN. Undefined means "no coverage block" — a native
+   * league, or one imported before coverage was persisted — and that is not evidence
+   * of absence. Defaulting to hidden would strip working tabs off every league that
+   * predates this. See `importCoverageSummary.ts`.
+   */
+  importCapabilities?: {
+    trades?: boolean
+    draft?: boolean
+    history?: boolean
+    matchups?: boolean
+  }
   /*
    * Devy slots this league rosters, or 0. Gates the per-league Devy tab the same way
    * `hasIdpDefense` gates Defense Hub — a league with no devy slots must not be offered
@@ -289,6 +303,20 @@ function navItems(props: AfCoreShellProps): NavItem[] {
   /* Typed as NavItem rather than generic: a generic erases the literal `key`
      narrowing, so every entry degrades to `string` and stops matching CoreNavKey. */
   const ifScored = (item: NavItem): NavItem[] => (unscored ? [] : [item])
+  /*
+   * Hides a nav entry the source platform cannot fill.
+   *
+   * Product decision: an unusable tab is worse than an absent one. A Fleaflicker
+   * league has no trade history at all, so offering a Trades tab promises a screen
+   * that can only ever be empty — and an empty screen reads as our bug rather than
+   * as the platform's limit. The league dashboard banner says which platform and
+   * what it does not publish, so the absence is explained rather than mysterious.
+   *
+   * ⚠ `!== false`, NOT truthiness. `undefined` is "we have no coverage block" and
+   * must show the item; only an explicit `false` hides it.
+   */
+  const ifImported = (flag: boolean | undefined, item: NavItem): NavItem[] =>
+    flag === false ? [] : [item]
 
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: inLeague('/core') },
@@ -322,14 +350,14 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         ? `/core/matchup?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/matchup',
     }),
-    {
+    ...ifImported(props.importCapabilities?.trades, {
       key: 'trades',
       label: 'Trades',
       glyph: '⇄',
       href: props.selectedLeagueId
         ? `/core/trades?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/trades',
-    },
+    }),
     {
       key: 'waivers',
       label: 'Waivers',

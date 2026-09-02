@@ -11,6 +11,18 @@ import { toast } from 'sonner';
 import { Crown, Loader2, CheckCircle2, History, HelpCircle } from 'lucide-react';
 import { StepHelp } from '@/components/league-creation-wizard/StepHelp';
 
+
+/** One league inside a season that did not import, and why. */
+type LeagueImportFailure = { name: string; reason: string };
+
+type SeasonImportResult = {
+  season: number;
+  status: string;
+  leagueName?: string;
+  /** Present when the season completed but individual leagues inside it did not. */
+  failures?: LeagueImportFailure[];
+};
+
 export default function LegacyImportForm({ userId }: { userId: string }) {
   const [platform, setPlatform] = useState<'sleeper' | 'espn'>('sleeper');
   const [sleeperUsername, setSleeperUsername] = useState('');
@@ -20,7 +32,14 @@ export default function LegacyImportForm({ userId }: { userId: string }) {
   const [startSeason, setStartSeason] = useState(2020);
   const [endSeason, setEndSeason] = useState(2025);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<{ season: number; status: string; leagueName?: string }[]>([]);
+  /**
+   * ⚠ `failures` IS THE POINT OF THIS SHAPE. A season used to report only "success"
+   * and a league count, so a run where one of eleven leagues failed rendered as an
+   * unqualified green tick. `/api/import-sleeper` now returns a per-league reason and
+   * this is where it lands — a season can succeed AND still owe the user an
+   * explanation about part of it.
+   */
+  const [results, setResults] = useState<SeasonImportResult[]>([]);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -52,7 +71,7 @@ export default function LegacyImportForm({ userId }: { userId: string }) {
 
     setLoading(true);
     setResults([]);
-    const importResults: { season: number; status: string; leagueName?: string }[] = [];
+    const importResults: SeasonImportResult[] = [];
 
     try {
       if (platform === 'sleeper') {
@@ -83,10 +102,23 @@ export default function LegacyImportForm({ userId }: { userId: string }) {
             });
             const data = await res.json();
             if (res.ok) {
+              /* The route returns `results: [{ sourceLeagueId, name, status, reason }]`.
+                 Older deploys did not, so an absent array is treated as "no per-league
+                 detail available", never as "nothing failed". */
+              const perLeague = Array.isArray(data.results)
+                ? (data.results as { name?: string; status?: string; reason?: string }[])
+                : [];
+              const failures: LeagueImportFailure[] = perLeague
+                .filter((row) => row?.status === 'failed')
+                .map((row) => ({
+                  name: row.name?.trim() || 'A league',
+                  reason: row.reason?.trim() || 'No reason was given.',
+                }));
               importResults.push({
                 season,
                 status: 'success',
                 leagueName: `${data.imported} league${data.imported !== 1 ? 's' : ''}`,
+                ...(failures.length > 0 ? { failures } : {}),
               });
             } else {
               if (res.status === 429) {
@@ -342,18 +374,37 @@ export default function LegacyImportForm({ userId }: { userId: string }) {
               {results.map((r) => (
                 <div
                   key={r.season}
-                  className="flex items-center justify-between rounded-lg border border-white/5 bg-gray-900/60 px-4 py-3"
+                  className="rounded-lg border border-white/5 bg-gray-900/60 px-4 py-3"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm text-white">{r.season}</span>
-                    {r.leagueName && (
-                      <span className="text-sm text-gray-400">{r.leagueName}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-sm text-white">{r.season}</span>
+                      {r.leagueName && (
+                        <span className="text-sm text-gray-400">{r.leagueName}</span>
+                      )}
+                    </div>
+                    {r.status === 'success' ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-400" />
+                    ) : (
+                      <span className="text-xs text-red-400">{r.status}</span>
                     )}
                   </div>
-                  {r.status === 'success' ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-400" />
-                  ) : (
-                    <span className="text-xs text-red-400">{r.status}</span>
+                  {/*
+                    ⚠ A SEASON CAN SUCCEED AND STILL HAVE LEFT A LEAGUE BEHIND, and the
+                    green tick above says nothing about that. Each one is named with its
+                    own reason, because "1 of 11 didn't import" without saying which or
+                    why is the exact report a user cannot act on.
+                  */}
+                  {r.failures && r.failures.length > 0 && (
+                    <ul className="mt-3 space-y-1.5 border-t border-white/5 pt-3">
+                      {r.failures.map((f, i) => (
+                        <li key={`${r.season}-${i}`} className="text-xs leading-relaxed">
+                          <span className="text-amber-300">{f.name}</span>
+                          <span className="text-gray-500"> — </span>
+                          <span className="text-gray-400">{f.reason}</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               ))}

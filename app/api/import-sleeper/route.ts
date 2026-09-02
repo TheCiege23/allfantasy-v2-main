@@ -73,6 +73,29 @@ const sportMap: Record<"nfl" | "nba" | "mlb" | "nhl" | "mls", LeagueSport> = {
   mls: LeagueSport.SOCCER,
 };
 
+/**
+ * One league's result in a bulk import, as the client will see it.
+ *
+ * `sourceLeagueId` and `name` are on BOTH variants deliberately: a failure the caller
+ * cannot attribute to a league is barely better than a count, and the name is what the
+ * user recognises — they do not know their leagues by Sleeper id.
+ */
+type SleeperLeagueImportOutcome =
+  | {
+      status: "imported";
+      sourceLeagueId: string;
+      name: string;
+      leagueId: string;
+      commentaryTelemetry: MatchupCommentaryTelemetry;
+    }
+  | {
+      status: "failed";
+      sourceLeagueId: string;
+      name: string;
+      /** Written for a person, and always present — never an empty string. */
+      reason: string;
+    };
+
 export async function POST(req: Request) {
   try {
     const auth = await requireVerifiedUser();
@@ -196,9 +219,27 @@ export async function POST(req: Request) {
       );
     }
 
+    /*
+     * ⚠ A FAILED LEAGUE MUST CARRY ITS REASON OUT OF THIS FUNCTION.
+     *
+     * This loop used to answer `null` for every failure. The reason went to
+     * `console.error` and the response carried `failed: <n>` — an integer, with no
+     * league id and no message. So the product could tell a user that one of their
+     * leagues had not imported and was structurally incapable of telling them why:
+     * the information did not exist anywhere the client could reach. Reported by a
+     * test user, and the reason it took a source audit to answer.
+     *
+     * Worse, the `!row` branch below returned `null` WITHOUT logging, so that failure
+     * left no trace at all — not even a server line to go and look for.
+     *
+     * Every path now resolves to a typed outcome. `status` is what the row renders;
+     * `reason` is what makes Retry an informed choice rather than a coin flip.
+     */
     const results = await Promise.all(
       leaguesData.map((leagueData) =>
-        leagueImportLimit(async () => {
+        leagueImportLimit(async (): Promise<SleeperLeagueImportOutcome> => {
+          const sourceLeagueId = leagueData.league_id?.toString() ?? '';
+          const name = leagueData.name?.trim() || sourceLeagueId || 'Unnamed league';
           try {
             if (isLegacy) {
               const row = await upsertSleeperRankingImportLeague(
@@ -208,8 +249,21 @@ export async function POST(req: Request) {
                 sportLabel,
                 sleeperUserId
               );
-              if (!row) return null;
+              if (!row) {
+                /* The only way `upsertSleeperRankingImportLeague` answers null: Sleeper
+                   listed a league with no `league_id`. Nothing the user can act on, but
+                   naming it beats a silent decrement of a counter. */
+                return {
+                  status: "failed",
+                  sourceLeagueId,
+                  name,
+                  reason: "Sleeper returned this league without an ID, so there was nothing to import.",
+                };
+              }
               return {
+                status: "imported",
+                sourceLeagueId,
+                name,
                 leagueId: row.leagueId,
                 commentaryTelemetry: {
                   evaluated: 0,
@@ -221,24 +275,50 @@ export async function POST(req: Request) {
                 } satisfies MatchupCommentaryTelemetry,
               };
             }
-            return await processLeague(leagueData, afUserId, season, sportLabel);
+            const processed = await processLeague(leagueData, afUserId, season, sportLabel);
+            if (!processed) {
+              return {
+                status: "failed",
+                sourceLeagueId,
+                name,
+                reason: "The league was read but could not be saved. Retry — if it keeps failing, tell us the league name.",
+              };
+            }
+            return {
+              status: "imported",
+              sourceLeagueId,
+              name,
+              leagueId: processed.leagueId,
+              commentaryTelemetry: processed.commentaryTelemetry,
+            };
           } catch (error) {
-            console.error(
-              `[Import Sleeper] Failed league ${leagueData.league_id}:`,
-              getErrorMessage(error)
-            );
-            return null;
+            const reason = getErrorMessage(error);
+            console.error(`[Import Sleeper] Failed league ${sourceLeagueId}:`, reason);
+            return {
+              status: "failed",
+              sourceLeagueId,
+              name,
+              /* The server's own message, not a generic one. It is already written for a
+                 person — see `describeSleeperUnavailable` in SleeperLeagueFetchService,
+                 which explains a throttle and says to wait a minute. Falling back only
+                 when an error genuinely carries no message. */
+              reason: reason || "Something went wrong reading this league from Sleeper.",
+            };
           }
         })
       )
     );
 
     const successfulImports = results.filter(
-      (result): result is { leagueId: string; commentaryTelemetry: MatchupCommentaryTelemetry } =>
-        result !== null
+      (result): result is Extract<SleeperLeagueImportOutcome, { status: "imported" }> =>
+        result.status === "imported"
+    );
+    const failures = results.filter(
+      (result): result is Extract<SleeperLeagueImportOutcome, { status: "failed" }> =>
+        result.status === "failed"
     );
     const imported = successfulImports.length;
-    const failed = results.length - imported;
+    const failed = failures.length;
     const commentaryTelemetry = sumCommentaryTelemetry(successfulImports);
 
     /*
@@ -296,7 +376,7 @@ export async function POST(req: Request) {
         const historyJobs: Promise<unknown>[] = [];
         for (let i = 0; i < leaguesData.length; i++) {
           const row = results[i];
-          if (!row) continue;
+          if (row?.status !== "imported") continue;
           const platformLeagueId = leaguesData[i]?.league_id?.toString();
           if (!platformLeagueId) continue;
           historyJobs.push(
@@ -317,6 +397,21 @@ export async function POST(req: Request) {
       userId: afUserId,
       imported,
       failed,
+      /*
+       * The per-league detail. `failed` stays for the callers that already read it, but
+       * a count alone is what made this bug unanswerable — the reason had nowhere to go.
+       * Successes carry no reason field; there is nothing to explain about them.
+       */
+      results: results.map((row) =>
+        row.status === "imported"
+          ? { sourceLeagueId: row.sourceLeagueId, name: row.name, status: row.status }
+          : {
+              sourceLeagueId: row.sourceLeagueId,
+              name: row.name,
+              status: row.status,
+              reason: row.reason,
+            }
+      ),
       total: leaguesData.length,
       isLegacy,
       provider: "sleeper",

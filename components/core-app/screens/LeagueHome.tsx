@@ -448,6 +448,30 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
         </div>
       </header>
 
+      {/*
+        ── What this import could not bring across ───────────────────
+        Top of the screen, above everything, because it changes how to read every
+        number below it — a standings table with no schedule behind it is a
+        different object from one with.
+
+        ⚠ ONLY WHEN THERE IS SOMETHING TO SAY. `sentence` is null both when
+        everything arrived and when the league predates coverage being persisted,
+        and those must both stay silent: a banner on every league is one nobody
+        reads by the second week.
+
+        ⚠ AND IT NAMES THE PLATFORM. "We couldn't get your trade history" reads as
+        our failure and invites a support ticket; "Fleaflicker doesn't publish
+        trade history" is the truth and is something the reader can act on.
+      */}
+      {data.importCoverage.sentence ? (
+        <section className="af-card af-lh-coverage" role="status" aria-label="Import coverage">
+          <span className="af-lh-coverage-glyph" aria-hidden>
+            ◑
+          </span>
+          <p className="af-lh-coverage-text">{data.importCoverage.sentence}</p>
+        </section>
+      ) : null}
+
       {/* ── The other half of this franchise ────────────────────────── */}
       <PairedBand pairing={data.pairing} leagueId={league.id} leagueName={league.name} />
 
