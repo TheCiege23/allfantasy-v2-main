@@ -21,6 +21,9 @@ import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-
 
 function mapImportCommitErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
+  /* The provider never answered — a retry is worth making, so this must not read as
+     404 ("no such league", permanent) or 500 ("we are broken"). */
+  if (code === 'PROVIDER_UNAVAILABLE') return 503
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
   return 500

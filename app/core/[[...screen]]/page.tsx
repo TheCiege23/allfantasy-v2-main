@@ -20,6 +20,10 @@ import type { UserLeague } from '@/app/dashboard/types'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
+import {
+  resolveImportCoverageSummary,
+  UNKNOWN_IMPORT_COVERAGE,
+} from '@/lib/league-import/importCoverageSummary'
 import DevyCore from '@/components/core-app/screens/DevyCore'
 import DevyLeagueTab from '@/components/core-app/screens/DevyLeagueTab'
 import { getDevyCoreData, leagueDevySlotCount } from '@/lib/core-app/devy'
@@ -802,6 +806,28 @@ export default async function AfCorePage({
   const isAdmin = await getAdminAccessState()
     .then((state) => state.status === 'admin')
     .catch(() => false)
+  /*
+   * What the selected league's import could actually deliver — same reasoning as
+   * `hasIdpDefense` above: it gates nav items, so it has to be decidable before you are
+   * on the screen it links to. One read of the league's own settings, no provider call.
+   *
+   * ⚠ DEGRADES TO "SHOW EVERYTHING", NOT TO "HIDE EVERYTHING". The neighbouring gates
+   * degrade to hidden because a dead Defense Hub entry is worse than a missing one. This
+   * one is the opposite: a failed read here would strip Trades off a league that has
+   * trades, so `UNKNOWN_IMPORT_COVERAGE` (all flags true) is the safe fallback and
+   * `resolveImportCoverageSummary` already returns it for anything it cannot read.
+   */
+  const importCoverageSummary = selectedLeagueId
+    ? await prisma.league
+        .findUnique({
+          where: { id: selectedLeagueId },
+          select: { settings: true, platform: true },
+        })
+        .then((row) =>
+          resolveImportCoverageSummary({ settings: row?.settings, platform: row?.platform }),
+        )
+        .catch(() => UNKNOWN_IMPORT_COVERAGE)
+    : UNKNOWN_IMPORT_COVERAGE
 
   /*
    * Devy data is loaded only on the devy screens — it is several queries across the whole
@@ -1476,6 +1502,7 @@ export default async function AfCorePage({
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}
       isAdmin={isAdmin}
+      importCapabilities={importCoverageSummary.capabilities}
       weekLabel={dash34?.weekLabel ?? null}
       plan={plan}
       commissionerCount={commissionerCount}

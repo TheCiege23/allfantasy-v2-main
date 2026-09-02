@@ -3,7 +3,10 @@
  * String input remains backward compatible for legacy Sleeper-only call sites.
  */
 
-import { fetchSleeperLeagueForImport } from './sleeper/SleeperLeagueFetchService'
+import {
+  fetchSleeperLeagueForImport,
+  SleeperImportUnavailableError,
+} from './sleeper/SleeperLeagueFetchService'
 import {
   EspnImportConnectionError,
   EspnImportLeagueNotFoundError,
@@ -56,7 +59,18 @@ export interface ImportedLeagueNormalizationResult {
 export interface ImportedLeagueNormalizationError {
   success: false
   error: string
-  code: 'LEAGUE_NOT_FOUND' | 'NORMALIZATION_FAILED' | 'CONNECTION_REQUIRED' | 'UNAUTHORIZED'
+  code:
+    | 'LEAGUE_NOT_FOUND'
+    | 'NORMALIZATION_FAILED'
+    | 'CONNECTION_REQUIRED'
+    | 'UNAUTHORIZED'
+    /**
+     * The provider was reachable-in-principle but did not answer — a rate limit, a
+     * 5xx, or a timeout that survived every retry. Distinct from LEAGUE_NOT_FOUND
+     * because a retry is worth making and the league ID is not the problem; routes
+     * map it to 503, not 404.
+     */
+    | 'PROVIDER_UNAVAILABLE'
 }
 
 /**
@@ -133,6 +147,15 @@ export async function runImportedLeagueNormalizationPipeline(
     })
     return { success: true, normalized, rawPayload: payload }
   } catch (e) {
+    /*
+     * First, because it is the one failure that used to be reported as its own
+     * opposite: a throttled or timed-out Sleeper league answered "League not found.
+     * Please check your League ID." The message on this error already names what
+     * happened and what to do, so it is passed through verbatim.
+     */
+    if (e instanceof SleeperImportUnavailableError) {
+      return { success: false, error: e.message, code: 'PROVIDER_UNAVAILABLE' }
+    }
     if (e instanceof EspnImportConnectionError) {
       return { success: false, error: e.message, code: 'CONNECTION_REQUIRED' }
     }

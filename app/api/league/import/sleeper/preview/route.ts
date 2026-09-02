@@ -31,7 +31,14 @@ export async function POST(req: NextRequest) {
   if (!result.success) {
     return NextResponse.json(
       { error: result.error },
-      { status: result.code === 'LEAGUE_NOT_FOUND' ? 404 : 500 }
+      {
+        status:
+          result.code === 'LEAGUE_NOT_FOUND'
+            ? 404
+            : result.code === 'PROVIDER_UNAVAILABLE'
+              ? 503
+              : 500,
+      }
     )
   }
 

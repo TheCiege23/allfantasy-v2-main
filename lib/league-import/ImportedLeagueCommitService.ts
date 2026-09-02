@@ -1,10 +1,12 @@
 import type { Prisma } from '@prisma/client'
+import { waitUntil } from '@vercel/functions'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
 import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
+import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
   CanonicalImportBundle,
@@ -231,6 +233,24 @@ export function buildImportedLeagueSettings(normalized: NormalizedImportResult):
       ...normalized.source,
     },
     identity_mappings: normalized.identity_mappings ?? [],
+    /*
+     * ⚠ COMPUTED BY EVERY ADAPTER SINCE THE BEGINNING AND PERSISTED BY NOBODY.
+     *
+     * `normalized.coverage` is an eleven-bucket report of what this provider actually
+     * returned — state, count and a human note per bucket. It reached the preview
+     * response and died there, so the product could not distinguish a ten-year Sleeper
+     * dynasty from a Fleaflicker league with no scoring, schedule, draft, trades or
+     * history. Both said "Imported" and both got the same tabs.
+     *
+     * ⚠ IT IS SPREAD FROM `normalized`, NOT FROM `normalized.league`. The block sits at
+     * the top level of the normalized result; the spread above only covers
+     * `normalized.league`, which is why this needs its own line and why it was easy to
+     * miss for as long as it was.
+     *
+     * Read back through `resolveImportCoverageSummary` — never inline, so the banner
+     * and the nav gating cannot drift apart.
+     */
+    [IMPORT_COVERAGE_SETTINGS_KEY]: normalized.coverage,
   }
 }
 
@@ -697,7 +717,12 @@ export async function persistImportedLeagueFromNormalization(
   } catch {
     /* non-fatal settings stamp */
   }
-  void runHistoricalBackfill({ provider, leagueId: league.id, userId, normalized })
+  const historicalBackfillTask = runHistoricalBackfill({
+    provider,
+    leagueId: league.id,
+    userId,
+    normalized,
+  })
     .then(async (result) => {
       /*
        * ⚠ THIS USED TO WRITE `'complete'` UNCONDITIONALLY AND DROP `result`.
@@ -761,6 +786,37 @@ export async function persistImportedLeagueFromNormalization(
         /* non-fatal */
       }
     })
+
+  /*
+   * 🛑 THIS WAS A BARE `void`, AND ON VERCEL THAT MEANS THE BACKFILL MAY NEVER RUN.
+   *
+   * A promise started but not registered with the platform is killed when the response
+   * is returned — this repo already knows it, and says so in `app/api/leagues/import`:
+   * "Vercel serverless drops fire-and-forget work after the response". That route wraps
+   * its equivalent in `waitUntil`. This one did not.
+   *
+   * The failure mode is the worst kind, because the league is stamped
+   * `historicalBackfillStatus: 'pending'` a few lines above BEFORE the work starts. A
+   * killed backfill therefore leaves a league that says it is still working, forever,
+   * and is indistinguishable from one that is genuinely slow. League history is what
+   * the OS runs on, so this is the difference between an OS with ten years of context
+   * and one with the current week.
+   *
+   * ⚠ THE PROMISE IS STARTED EXACTLY ONCE, ABOVE, AND THE SAME ONE IS HANDED OVER.
+   * The obvious spelling — `try { waitUntil(run()) } catch { void run() }` — calls
+   * `run()` a second time if `waitUntil` throws, because the first call already
+   * happened while evaluating the argument. That would double every backfill outside a
+   * request context.
+   *
+   * ⚠ AND IT MUST NOT THROW HERE. `waitUntil` is only valid inside a request; this
+   * module is also reached from scripts and tests, where it raises. There the promise
+   * is already running and settles on its own, which is exactly the old behaviour.
+   */
+  try {
+    waitUntil(historicalBackfillTask)
+  } catch {
+    void historicalBackfillTask
+  }
 
   try {
     await calculateAndSaveRank(userId)

@@ -1327,3 +1327,44 @@
   object-fit: cover;
   padding: 0;
 }
+
+/* ── Import coverage notice ──────────────────────────────────────────────
+   What the source platform could not give us, said once at the top of the
+   league. Deliberately quieter than `.af-lh-urgent`: nothing here is wrong
+   and nothing needs doing — it is context for reading everything below, not
+   an action. Same card shape so it reads as part of the page rather than an
+   error bolted on top.
+
+   ⚠ Appended at the END of the file, outside every media query. Inserting a
+   block inside an existing `@media` closes that query early and silently
+   moves every rule after it into a narrower one — braces still balance and
+   nothing throws. See CLAUDE.md. */
+
+.af-lh-coverage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.af-lh-coverage-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.af-lh-coverage-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text2);
+}

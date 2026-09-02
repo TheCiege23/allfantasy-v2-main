@@ -2,6 +2,10 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import {
+  resolveImportCoverageSummary,
+  type ImportCoverageSummary,
+} from '@/lib/league-import/importCoverageSummary'
+import {
   buildSeasonTimeline,
   leagueWeekFromSettings,
   regularSeasonWeeks,
@@ -137,6 +141,13 @@ export type LeagueHomeData = {
     season: number | null
     currentWeek: number | null
   }
+  /**
+   * What this league's import actually brought across, and the one sentence to say
+   * about it. `sentence: null` means there is nothing worth interrupting the user
+   * about — either everything arrived, or the league predates coverage being persisted
+   * and we genuinely do not know. See `importCoverageSummary.ts`.
+   */
+  importCoverage: ImportCoverageSummary
   /** The signed-in user's own team in this league, when we can identify it. */
   yourTeam: SectionState<{
     teamName: string
@@ -755,6 +766,12 @@ export async function getLeagueHomeData(
       season: league.season ?? null,
       currentWeek,
     },
+    /* Derived, never stored twice: the banner and the nav gating both read this one
+       function so the sentence and the tabs cannot disagree. */
+    importCoverage: resolveImportCoverageSummary({
+      settings: league.settings,
+      platform: league.platform,
+    }),
     yourTeam,
     weekPicker:
       weekOptions != null && viewWeek != null

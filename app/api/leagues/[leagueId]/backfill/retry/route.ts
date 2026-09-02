@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -66,7 +67,7 @@ export async function POST(
     },
   })
 
-  void (async () => {
+  const retryTask = (async () => {
     /*
      * ⚠ THE RESULT WAS AWAITED AND THROWN AWAY, then `'complete'` written
      * regardless — the same defect as the import path. These services resolve
@@ -135,6 +136,25 @@ export async function POST(
       })
     }
   })()
+
+  /*
+   * 🛑 SAME DEFECT AS THE IMPORT PATH, AND IT MADE THIS ROUTE A NO-OP ON VERCEL.
+   *
+   * The block above was `void (async () => { ... })()` — started, never registered, and
+   * killed when this response returns. So the one endpoint whose entire job is repairing
+   * a stuck backfill could itself do nothing, while flipping the league to `'pending'`
+   * on the way out and answering `{ ok: true, status: 'pending' }`. A repair tool that
+   * reports success and leaves the league in the state it was called to fix.
+   *
+   * Started once, above; the same promise is handed over. See the note in
+   * `ImportedLeagueCommitService` on why `waitUntil(run())` in a try/catch would run the
+   * work twice.
+   */
+  try {
+    waitUntil(retryTask)
+  } catch {
+    void retryTask
+  }
 
   return NextResponse.json({ ok: true, status: 'pending', provider })
 }
