@@ -473,14 +473,7 @@ describe("/admin page render states", () => {
     expect(screen.getAllByText(/Provider Health/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Production Env/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/Traffic \/ Visitors/i)).toBeInTheDocument()
-    /*
-     * Renamed from "Email Notifications" to "Email Center — send a broadcast".
-     * Not cosmetic: the panel IS the mass-email tool (11 audiences, compose,
-     * test-send, confirm), and it sat collapsed behind a title that read like a
-     * settings toggle, so the operator did not know the capability existed. The
-     * assertion tracks the copy because the copy is the fix.
-     */
-    expect(screen.getByText(/Email Center/i)).toBeInTheDocument()
+    expect(screen.getByText(/Email Notifications/i)).toBeInTheDocument()
     expect(screen.getByText(/Sports OS \/ Chimmy Brain/i)).toBeInTheDocument()
     expect(screen.getByText(/Sports OS Identity/i)).toBeInTheDocument()
     expect(screen.getByText(/Provider mapping counts/i)).toBeInTheDocument()
