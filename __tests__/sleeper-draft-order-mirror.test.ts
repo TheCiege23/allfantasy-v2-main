@@ -14,7 +14,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   prisma: {
-    draftSession: { update: vi.fn(async () => ({ id: 'sess-1' })) },
+    draftSession: {
+      update: vi.fn(async () => ({ id: 'sess-1' })),
+      /* Default: nobody has set an order here. `slotOrder` is `Json @default("[]")`, so that
+         is a genuinely empty array rather than null. */
+      findUnique: vi.fn(async () => ({ slotOrder: [] as unknown[] })),
+    },
     draftPick: { deleteMany: vi.fn(async () => ({ count: 0 })), createMany: vi.fn(async () => ({ count: 0 })) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(h.prisma)),
   },
@@ -51,6 +56,8 @@ function updateData() {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  h.prisma.draftSession.findUnique.mockClear()
+  h.prisma.draftSession.findUnique.mockImplementation(async () => ({ slotOrder: [] as unknown[] }))
   h.prisma.draftSession.update.mockClear()
   h.prisma.draftPick.deleteMany.mockClear()
   h.prisma.draftPick.createMany.mockClear()
@@ -142,6 +149,68 @@ describe('an empty order never overwrites a good one', () => {
     mockSleeper({ draft: { ...DRAFT_BASE }, picks: [] })
     await syncDraftFromSleeper('d1', 'sess-1')
     expect(updateData()).not.toHaveProperty('slotOrder')
+  })
+})
+
+describe('the mirror seeds the order and never fights a human for it', () => {
+  /*
+   * 🛑 THE REGRESSION THIS EXISTS TO STOP, FOUND BY READING THE OTHER WRITERS OF THIS COLUMN.
+   * `/draft/lottery/run` (finalize) and `/draft/order` (POST) both write `slotOrder` on
+   * `where: { leagueId }` — `@unique`, so the same row this mirror updates by `id` — and BOTH
+   * refuse unless `status === 'pre_draft'`, which is exactly the window the mirror polls once
+   * a minute. Writing unconditionally replaces a commissioner's lottery result inside 60
+   * seconds with no error and no marker.
+   */
+  it('leaves a lottery result alone rather than replacing it with Sleeper order', async () => {
+    h.prisma.draftSession.findUnique.mockImplementation(async () => ({
+      slotOrder: [{ slot: 1, rosterId: 'af-team-a', displayName: 'Alice' }] as unknown[],
+    }))
+    mockSleeper({
+      draft: { ...DRAFT_BASE, draft_order: { u_b: 1 }, slot_to_roster_id: { '1': 9 } },
+      picks: [],
+      users: [{ user_id: 'u_b', display_name: 'Bob' }],
+    })
+    await syncDraftFromSleeper('d1', 'sess-1')
+    expect(updateData()).not.toHaveProperty('slotOrder')
+  })
+
+  it('seeds when the stored order is the empty default', async () => {
+    mockSleeper({
+      draft: { ...DRAFT_BASE, draft_order: { u_b: 1 }, slot_to_roster_id: { '1': 9 } },
+      picks: [],
+      users: [{ user_id: 'u_b', display_name: 'Bob' }],
+    })
+    await syncDraftFromSleeper('d1', 'sess-1')
+    expect(updateData().slotOrder).toEqual([{ slot: 1, rosterId: '9', displayName: 'Bob' }])
+  })
+
+  /* Reading the wrong row would make the guard pass while protecting nothing. */
+  it('reads the order off the session it is about to update', async () => {
+    mockSleeper({ draft: { ...DRAFT_BASE, slot_to_roster_id: { '1': 9 } }, picks: [] })
+    await syncDraftFromSleeper('d1', 'sess-1')
+    expect(h.prisma.draftSession.findUnique).toHaveBeenCalledWith({
+      where: { id: 'sess-1' },
+      select: { slotOrder: true },
+    })
+  })
+
+  /*
+   * ⚠ THE DELIBERATE ASYMMETRY. These two are FACTS about Sleeper's draft, not preferences
+   * about it: a local `thirdRoundReversal` toggle cannot change how the real draft runs, it
+   * only makes our pick-order maths disagree with the board. So they overwrite, exactly as
+   * `rounds`/`teamCount`/`timerSeconds`/`status` always have — while the order does not.
+   */
+  it('still writes draftType and thirdRoundReversal over a session that has a local order', async () => {
+    h.prisma.draftSession.findUnique.mockImplementation(async () => ({
+      slotOrder: [{ slot: 1, rosterId: 'af-team-a', displayName: 'Alice' }] as unknown[],
+    }))
+    mockSleeper({
+      draft: { ...DRAFT_BASE, type: 'linear', settings: { ...DRAFT_BASE.settings, reversal_round: 3 } },
+      picks: [],
+    })
+    await syncDraftFromSleeper('d1', 'sess-1')
+    expect(updateData().draftType).toBe('linear')
+    expect(updateData().thirdRoundReversal).toBe(true)
   })
 })
 
