@@ -23,6 +23,13 @@ import { checkYahooRedirectUri } from '@/lib/yahoo/oauthConfig'
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
 const ROUTE = read('app/api/league/yahoo-auth/route.ts')
+/*
+ * The OTHER entry point — and the one that matters most, because it is what
+ * `ConnectedPlatforms` and `ImportV4` link to, so it is the door nearly every manager
+ * opens. The guard was wired to `yahoo-auth` only, which is the League Sync dashboard.
+ */
+const AUTH_ROUTE = read('app/api/auth/yahoo/route.ts')
+const IMPORT_SCREEN = read('components/core-app/screens/ImportV4.tsx')
 
 const PROD = 'https://www.allfantasy.ai'
 const LOCAL = 'http://localhost:3000'
@@ -128,5 +135,79 @@ describe('⚠ refused before the round trip, not after', () => {
   it('sends the manager somewhere with a named reason', () => {
     expect(ROUTE).toContain('yahoo_redirect_uri')
     expect(ROUTE).toContain("console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason)")
+  })
+})
+
+describe('⚠ BOTH entry points check, not just the one nobody uses', () => {
+  /*
+   * 🛑 THE GAP. `checkYahooRedirectUri` existed, was tested, and named the exact production
+   * failure — and it was wired ONLY into `/api/league/yahoo-auth`, the League Sync dashboard
+   * button. `/api/auth/yahoo` is what `ConnectedPlatforms` and `ImportV4` link to, so the
+   * check guarded the door almost nobody opens while nearly every manager walked through the
+   * unguarded one and met Yahoo's own error page.
+   *
+   * This is the third and last disagreement between the two entry points that
+   * `lib/yahoo/oauthConfig.ts` was created to end — after redirect_uri and scope.
+   */
+  it('checks in /api/auth/yahoo too', () => {
+    expect(AUTH_ROUTE).toContain('checkYahooRedirectUri(YAHOO_REDIRECT_URI, request.nextUrl.origin)')
+  })
+
+  it('refuses BEFORE building the authorize URL, not after', () => {
+    /* Ordering is the whole point: a check that runs after the redirect is no check. */
+    const check = AUTH_ROUTE.indexOf('checkYahooRedirectUri(')
+    const authorize = AUTH_ROUTE.indexOf('oauth2/request_auth')
+    expect(check).toBeGreaterThan(-1)
+    expect(authorize).toBeGreaterThan(-1)
+    expect(check).toBeLessThan(authorize)
+  })
+
+  it('returns the manager where they started, not a hardcoded surface', () => {
+    /*
+     * The sibling sends everyone to /leagues because it has no returnTo. This route has
+     * carried one since the callback stopped hardcoding /af-legacy, and dropping the user
+     * elsewhere is the errand this file already fixed once.
+     */
+    expect(AUTH_ROUTE).toContain("buildYahooReturnUrl(returnTo, APP_URL, { yahoo_error: 'redirect_uri_not_registered' })")
+  })
+
+  it('⚠ builds that URL rather than appending a bare ?', () => {
+    /*
+     * returnTo is normally `/import?provider=yahoo`. Appending `?yahoo_error=` produced
+     * `?provider=yahoo?yahoo_error=`, which the parser read as provider="yahoo?yahoo_error=..."
+     * and silently fell back to Sleeper — the manager asked for Yahoo and got Sleeper with no
+     * error on the page. Same bug, same file, and it must not come back through this exit.
+     */
+    expect(AUTH_ROUTE).not.toMatch(/\$\{returnTo\}\?yahoo_error/)
+  })
+
+  it('never logs the authorize URL, which carries client_id', () => {
+    expect(AUTH_ROUTE).not.toMatch(/console\.log\([^)]*authUrl/)
+  })
+})
+
+describe('⚠ the one Yahoo error a manager must not be told to retry', () => {
+  /*
+   * Every other code in `describeYahooError` is Yahoo answering, and retrying is reasonable.
+   * `redirect_uri_not_registered` is OURS — the route refused to start because the configured
+   * URI is not registered with Yahoo. A retry is guaranteed to fail, so "please try again"
+   * would have the manager pay for the attempt repeatedly.
+   */
+  it('has an honest message for the code the route now emits', () => {
+    expect(IMPORT_SCREEN).toContain("case 'redirect_uri_not_registered':")
+  })
+
+  it('does not tell them to try again, and does not blame their account', () => {
+    const start = IMPORT_SCREEN.indexOf("case 'redirect_uri_not_registered':")
+    expect(start).toBeGreaterThan(-1)
+    const message = IMPORT_SCREEN.slice(start, IMPORT_SCREEN.indexOf('\n', IMPORT_SCREEN.indexOf('return', start)))
+    expect(message).not.toMatch(/try again/i)
+    expect(message).toMatch(/misconfigured/i)
+  })
+
+  it('keeps the specific host detail in the server log, not on the manager screen', () => {
+    /* checkYahooRedirectUri's reason names the configured vs served host — operator detail. */
+    expect(AUTH_ROUTE).toContain('refusing to start: %s')
+    expect(AUTH_ROUTE).not.toContain('yahoo_error_desc: redirectCheck.reason')
   })
 })

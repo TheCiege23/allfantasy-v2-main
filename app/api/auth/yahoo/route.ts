@@ -5,6 +5,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
 import {
+  buildYahooReturnUrl,
+  checkYahooRedirectUri,
   getYahooRedirectUri,
   getYahooStateCookieDomain,
   sanitizeYahooReturnTo,
@@ -39,8 +41,52 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo", tool: "AuthYahoo"
     return NextResponse.redirect(`${APP_URL}/af-legacy?yahoo_error=not_configured`)
   }
 
+  /*
+   * 🛑 REFUSE A redirect_uri YAHOO CANNOT ACCEPT, RATHER THAN SPENDING THE ROUND TRIP.
+   *
+   * The sibling entry point `/api/league/yahoo-auth` has done this since the guard was
+   * written. THIS one — the entry point `ConnectedPlatforms` and `ImportV4` actually link to,
+   * and therefore the one nearly every manager uses — did not. So the check that exists,
+   * is tested, and names the exact production failure was wired to the door almost nobody
+   * opens. That is the same "two entry points disagree" defect `lib/yahoo/oauthConfig.ts`
+   * was created to end; this is the last of the three, after redirect_uri and scope.
+   *
+   * Without it Yahoo answers a bad URI on ITS OWN error page with
+   * `error=invalid_request&error_description=invalid+redirect+uri`, so the manager sees a
+   * Yahoo failure, the product looks innocent, and nothing here records that we sent a URI
+   * that could never have worked.
+   *
+   * ⚠ IT REPORTS, IT DOES NOT CORRECT. Substituting a guessed URI would send Yahoo one
+   * nobody registered and produce the same failure from a different line. The fix is in
+   * Yahoo's developer console; this only ensures somebody is told.
+   */
+  /*
+   * Logged because the deployment stores this as a SENSITIVE env var, which hides it in the
+   * dashboard but not in the runtime log. A redirect URI is not a secret — it rides in the
+   * browser address bar on every round trip and Yahoo echoes it back on its own error page —
+   * and being unable to read it is what turned one wrong character into several failed
+   * attempts. The auth URL itself is still never logged: it carries client_id.
+   */
+  console.log('[Yahoo OAuth] redirect_uri:', YAHOO_REDIRECT_URI)
+
+  const redirectCheck = checkYahooRedirectUri(YAHOO_REDIRECT_URI, request.nextUrl.origin)
+  if (!redirectCheck.ok) {
+    console.error('[Yahoo OAuth] refusing to start: %s', redirectCheck.reason)
+    /*
+     * Back to where they STARTED, not a hardcoded surface. The sibling sends everyone to
+     * /leagues because it has no returnTo; this route has carried one since the callback
+     * stopped hardcoding /af-legacy, and dropping the user somewhere else is the errand
+     * this file already fixed once. `buildYahooReturnUrl` because returnTo usually already
+     * has a query string — `/import?provider=yahoo` — and appending with a bare `?` is what
+     * previously made the import screen silently fall back to Sleeper.
+     */
+    return NextResponse.redirect(
+      buildYahooReturnUrl(returnTo, APP_URL, { yahoo_error: 'redirect_uri_not_registered' }),
+    )
+  }
+
   const state = crypto.randomBytes(16).toString('hex')
-  
+
   // Build OAuth URL - Yahoo requires minimal parameters
   const params = new URLSearchParams()
   params.append('client_id', YAHOO_CLIENT_ID)
@@ -53,9 +99,9 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo", tool: "AuthYahoo"
   
   const authUrl = `https://api.login.yahoo.com/oauth2/request_auth?${params.toString()}`
   
-  // Never log the full auth URL -- it carries client_id as a query parameter.
-  console.log('Yahoo OAuth - Redirect URI:', YAHOO_REDIRECT_URI)
-  
+  // The redirect_uri is logged above, before the guard. Never log the full auth URL --
+  // it carries client_id as a query parameter.
+
   const response = NextResponse.redirect(authUrl)
   
   /**

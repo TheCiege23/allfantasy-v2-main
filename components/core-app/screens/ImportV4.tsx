@@ -355,6 +355,17 @@ function describeYahooError(code: string, description?: string): string {
       return 'Yahoo would not exchange that sign-in for a token. Please try again.'
     case 'user_fetch_failed':
       return 'Yahoo signed you in, but would not share your fantasy account.'
+    /*
+     * ⚠ THE ONLY CODE HERE THE MANAGER CANNOT FIX, AND THE ONLY ONE WE RAISE OURSELVES.
+     * Every other case above is Yahoo answering; this one is `/api/auth/yahoo` refusing to
+     * start because the configured redirect_uri is not one Yahoo has registered. So it must
+     * NOT say "please try again" — retrying is guaranteed to fail and the manager would keep
+     * paying for the attempt. Say it is ours and that nothing on their side is wrong. The
+     * operator gets the specific reason (which host was configured versus served) in the
+     * server log, where the config detail belongs.
+     */
+    case 'redirect_uri_not_registered':
+      return 'Yahoo sign-in is misconfigured on our side, so we stopped before sending you to Yahoo. Nothing is wrong with your account — we are on it.'
     default:
       return `Yahoo returned an error: ${code}`
   }
