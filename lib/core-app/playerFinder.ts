@@ -830,7 +830,7 @@ export async function getPlayerDetail(
    */
   const impactRows =
     userId && row.sleeperId
-      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds }).catch(() => null)
+      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds: userLeagueIds }).catch(() => null)
       : null
 
   const impact: PlayerDetail['impact'] = impactRows
