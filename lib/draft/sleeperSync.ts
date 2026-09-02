@@ -4,11 +4,96 @@ type SleeperDraft = {
   draft_id?: string
   league_id?: string
   status?: string
+  /** `snake` | `linear` | `auction`. */
+  type?: string
+  /**
+   * The draft ORDER, and the reason a pre-draft board was empty.
+   *
+   * 🛑 BOTH OF THESE WERE IN THE RESPONSE THIS FILE ALREADY FETCHES AND NEITHER WAS READ.
+   * `mirrorActiveSleeperDrafts` includes `pre_draft` in its pollable statuses on purpose,
+   * and says why: "that is when the draft ORDER appears, and a board that only wakes up
+   * once picks start misses the thing managers check most in the days before." But the
+   * order arrives in these two fields, the mirror never looked at them, and in `pre_draft`
+   * there are zero picks — so the board it polls for was blank until the first pick landed.
+   *
+   *   draft_order        { user_id: slot }   who drafts in which slot
+   *   slot_to_roster_id  { slot: roster_id } which roster that slot belongs to
+   *
+   * Sleeper leaves `draft_order` null until the commissioner sets it, which is handled
+   * below rather than assumed away.
+   */
+  draft_order?: Record<string, number> | null
+  slot_to_roster_id?: Record<string, number> | null
   settings?: {
     rounds?: number
     teams?: number
     pick_timer?: number
+    /** Round at which a snake reverses a second time. 3 is third-round reversal. */
+    reversal_round?: number
   }
+}
+
+/** One row of `DraftSession.slotOrder`, whose documented shape this must match exactly. */
+type SlotOrderEntry = { slot: number; rosterId: string; displayName: string }
+
+/**
+ * Map Sleeper's draft type onto ours.
+ *
+ * Unknown values fall back to `snake` rather than being written through: `draftType` drives
+ * board rendering and pick-order maths, and an unrecognised string there would render nothing
+ * rather than render wrongly — but it would do it silently, on a live draft.
+ */
+function mapSleeperDraftType(raw: string | undefined): string {
+  const t = (raw ?? '').toLowerCase().trim()
+  if (t === 'auction') return 'auction'
+  if (t === 'linear') return 'linear'
+  return 'snake'
+}
+
+/**
+ * Build the draft order from the two Sleeper maps plus the users this file already fetched.
+ *
+ * ⚠ COSTS NO EXTRA PROVIDER CALL. `usersById` is already built above for pick attribution,
+ * and both order maps ride on the `/draft/{id}` response that has already been read. The
+ * whole of this was available for free and was being thrown away.
+ *
+ * Returns an empty array when Sleeper has not published an order yet, which the caller
+ * treats as "leave what is there" rather than "the order is empty" — see its note.
+ */
+function buildSlotOrder(
+  draft: SleeperDraft,
+  usersById: Record<string, { display_name?: string }>,
+): SlotOrderEntry[] {
+  const slotToRoster = draft.slot_to_roster_id
+  if (!slotToRoster || typeof slotToRoster !== 'object') return []
+
+  /* `draft_order` is keyed BY USER, so it has to be inverted to answer "who is in slot N".
+     It is also null until the commissioner sets the order, in which case slots still have
+     rosters and simply have no name attached yet. */
+  const userBySlot = new Map<number, string>()
+  const order = draft.draft_order
+  if (order && typeof order === 'object') {
+    for (const [userId, slot] of Object.entries(order)) {
+      const n = Number(slot)
+      if (Number.isInteger(n) && n > 0) userBySlot.set(n, String(userId))
+    }
+  }
+
+  const entries: SlotOrderEntry[] = []
+  for (const [slotKey, rosterId] of Object.entries(slotToRoster)) {
+    const slot = Number(slotKey)
+    if (!Number.isInteger(slot) || slot < 1) continue
+    if (rosterId == null) continue
+    const userId = userBySlot.get(slot)
+    entries.push({
+      slot,
+      rosterId: String(rosterId),
+      /* Empty rather than a placeholder like "Team 4": the board can render a real absence,
+         and a fabricated name is indistinguishable from a manager who chose that name. */
+      displayName: (userId ? usersById[userId]?.display_name : undefined) ?? '',
+    })
+  }
+  return entries.sort((a, b) => a.slot - b.slot)
 }
 
 type SleeperPick = {
@@ -90,12 +175,27 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
   const teams = typeof settings.teams === 'number' ? settings.teams : 12
   const timer = typeof settings.pick_timer === 'number' ? settings.pick_timer : 120
 
+  const slotOrder = buildSlotOrder(draft, usersById)
+  /*
+   * ⚠ AN EMPTY ORDER NEVER OVERWRITES A GOOD ONE, for exactly the reason the picks fetch
+   * above fails closed rather than writing `[]`. Sleeper leaves `draft_order` null until the
+   * commissioner sets it, and can briefly answer without `slot_to_roster_id`; writing the
+   * empty result would blank the order on a board someone is watching, once a minute, and
+   * look like the mirror working. Stale beats empty here too.
+   */
+  const slotOrderPatch = slotOrder.length > 0 ? { slotOrder } : {}
+  /* 3 is Sleeper's third-round reversal. Absent/0 means a plain snake. */
+  const thirdRoundReversal = settings.reversal_round === 3
+
   await prisma.$transaction(async (tx) => {
     const session = await tx.draftSession.update({
       where: { id: internalDraftId },
       data: {
         sleeperDraftId,
         status: mapSleeperStatus(draft.status),
+        draftType: mapSleeperDraftType(draft.type),
+        thirdRoundReversal,
+        ...slotOrderPatch,
         rounds,
         teamCount: teams,
         timerSeconds: timer,
