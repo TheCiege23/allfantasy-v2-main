@@ -166,6 +166,354 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.15 🛑 BUG — CHIMMY REPORTS LEAGUE SETTINGS IT NEVER READ. LIVE, WRONG ANSWERS.
+
+**Filed 2026-09-02, confirmed in production by the owner. Not caused by any of this work — found
+while testing it.**
+
+### Measured
+
+Owner asked production Chimmy, on a league he confirms is **DYNASTY**:
+
+> *"What's Jeremiyah Love worth in King Gingerbeards SF 2026!!!?"*
+>
+> → *"Jeremiyah Love's FantasyCalc **redraft** value is **3779**… Settings: superflex,
+> **12-team PPR**. Source: FantasyCalc current values."*
+
+**The correct dynasty value is 6644** (measured on the same feed the same evening). The answer
+**understated a dynasty asset by 43%**, and named settings it had not read.
+
+### Root cause — `lib/ai/deterministic.ts:440-460`
+
+```js
+if (!/\b(trade value|fantasycalc|value|worth)\b/i.test(message)) return null
+const isDynasty   = /\bdynasty|keeper|future\b/i.test(message)   // ← from the QUESTION TEXT
+const isSuperflex = /\bsuperflex|\bsf\b|2qb|two qb/i.test(message) // ← from the QUESTION TEXT
+await getFantasyCalcValuesDbFirst({ isDynasty, numQbs: …, numTeams: 12, ppr: 1 })  // ← hardcoded
+…
+`Settings: ${isSuperflex ? 'superflex' : '1QB'}, 12-team PPR.`   // ← "12-team PPR" is a LITERAL
+```
+
+Four fabricated inputs, all presented to the user as their league's settings:
+
+| reported | actually |
+|---|---|
+| `redraft` | the word "dynasty" was absent from the sentence |
+| `superflex` | the league NAME happens to contain "SF" — **right by accident** |
+| `12-team` | hardcoded literal, identical for every league |
+| `PPR` | hardcoded literal, identical for every league |
+
+🛑 **This is the exact defect the grounding packet exists to prevent: an unsourced value rendered
+as a fact.** It is the same family as `DevyPlayer.devyValue` being zero-not-null, and as the
+serializer's `available` — except this one is worse, because it does not merely omit the truth, it
+**states a specific falsehood with a confident source line** ("Source: FantasyCalc current values").
+
+### Why it was never caught
+
+`tryDeterministicAnswerDetailed` runs at `app/api/chat/chimmy/route.ts:1387` and returns at ~1496.
+The grounding packet is not built until **1667**. So **every message containing "value" or "worth"
+short-circuits before Decision OS is consulted at all** — the packet's league-aware
+`deriveValueFormat` never runs for the one question it was built for.
+
+⚠ **AND THIS INVALIDATES A12 AS A TEST.** The milestone question — *"what's my WR worth?"* — is the
+single intent that never reaches this work. Choosing it as the acceptance test meant the first
+production check exercised a completely different code path and would have been read as a pass.
+**Pick an acceptance test by tracing which code answers it, not by what it sounds like it exercises.**
+
+### The fix is small — the data is already in scope
+
+`leagueId` is resolved at **route.ts:1159** (and refined at 1189), **200 lines before** the
+deterministic call. It is simply not passed: `tryDeterministicAnswerDetailed(message, requestLocale)`.
+
+1. Pass `leagueId` through.
+2. Resolve the league's real format with **`deriveValueFormat(rules)`** — already written, exported
+   and tested in `lib/decision-os/grounding/packet.ts`, reading `general.format` and
+   `detectQbFormat(roster.starters)`.
+3. Delete the two message regexes and the hardcoded `numTeams` / `ppr` / `"12-team PPR"`.
+4. When no league is in scope, **say so** rather than defaulting — a stated default is a claim.
+
+⚠ **Do not "fix" it by deleting the settings line.** Suppressing the sentence hides the wrongness
+without correcting the VALUE, which is still fetched with `isDynasty`/`numQbs` derived from the
+question text. The price is the defect; the sentence is only how it announces itself.
+
+### ✅ FIXED — `085c5bc85` on base `9b19a3d76`, batch 5
+
+`leagueId` is now passed, the format comes from **`deriveValueFormat`** — the same derivation the
+grounding packet uses, so producer and consumer cannot drift — and all four fabricated inputs are
+gone. With no league in scope, or rules that will not resolve, the answer **states the basis it
+used and that it is not theirs** rather than defaulting silently.
+
+⚠ `deriveValueFormat` / `deriveIdpRules` moved to `grounding/leagueValueFormat.ts` and are
+re-exported from `packet.ts`, so no existing importer changed. They moved because this path runs
+on **every chat message** and `packet.ts` carries 17 imports including `ChimmyContextEngine`; the
+new module has one.
+
+### 🛑 AND THE FIX ALMOST REINTRODUCED THE BUG IT WAS FIXING
+
+**The suite was 68/68 green with a real type error in it.** `FantasyCalcSettings.ppr` is the
+literal union `0 | 0.5 | 1` — the market publishes exactly three buckets — and the new helper
+returned a plain `number`.
+
+A TE-premium league scoring **1.5 per reception has no bucket**. That value would have been
+coerced at the call site into a query for a market that does not exist, **and then printed to the
+user as their PPR setting** — BUG-1 exactly, inside the fix for BUG-1.
+
+**Only the compiler objected.** Narrowing the return type made it visible; an unrepresentable value
+now returns `null`, the query uses a stated default, and the settings sentence **omits PPR** rather
+than inventing one. That is the sixth test.
+
+⚠ **The lesson is about types, not diligence.** Rounding 1.5 → 1 would have passed every test
+written for this fix. The union at the boundary is the entire reason it did not ship — which is
+the argument for a base/tip typecheck gate over a suite-only one, in one concrete case.
+
+### ⚠ Not verified — carried into the landing report verbatim
+
+- **No production run.** Never executed on a deployment.
+- Touches `app/api/chat/chimmy/route.ts`, so it holds its own batch slot: a revert is one commit.
+- **Four other `tryDeterministicAnswer` callers** now get honest generic wording instead of the
+  false `"Settings: 1QB, 12-team PPR"` claim — `app/api/chimmy` (a dead shim, 0 callers),
+  **`app/api/shared/chat/threads/[threadId]/messages` (a real user surface)**, and two in
+  `lib/world-cup/worldCupChimmyPrivateReply`. `leagueId` is optional so they compile unchanged and
+  the change is strictly an improvement, but it is **a behaviour change on surfaces not tested**.
+  Threading `leagueId` into them is a named follow-up, deliberately not done here.
+- Only five suites were run, not the full tree.
+
+---
+
+## 0.14 ✅ LANDED — and my "removes 15" was an artifact
+
+**Batch 3 on `origin/main` = `cc57ecea5`** (verified by `ls-remote`).
+**(a) = `a545b846a` · (b) = `0c2dd1c33`.**
+
+### The reviewer's gate, which is the authoritative number
+
+```
+post-repair base 145   vs   post-repair tip 145
+normalized set: 0 appeared / 0 disappeared
+zero errors in the 81 changed files
+4 of my suites inside a 4,245-passed union
+```
+
+### 🛑 CORRECTION TO §0.12 — "removes 15" was measurement noise, not my code
+
+§0.12 reports base **160** → tip **145**, "adds 0, **removes 15**", and offers a mechanism: that
+changing `OsStore.write` from `Promise<void>` to `Promise<boolean>` improved inference through the
+feed's generic chain, so consumers stopped resolving to `unknown`.
+
+**The mechanism was plausible and it was wrong.** On a healthy base the pair is 145 → 145 with
+**nothing appearing and nothing disappearing**. The 15 were the broken generated Prisma client
+inflating the *base* run, then clearing — not my commits fixing anything.
+
+⚠ **AND THE REASON IT FOOLED ME IS THE PART WORTH KEEPING.** I argued the delta was safe because
+"base, (a) and tip were all measured in ONE environment, minutes apart, same command." That was
+the right instinct and still insufficient: **the environment was being repaired while I measured
+it.** `prisma generate` was regenerating the type surface across those runs, so my base saw a
+more-broken client than my tip. A delta is only meaningful if the environment is *stable* across
+both halves, not merely *the same one*.
+
+**The claim that survives is the one that mattered: ADDS 0.** Both my pair and the reviewer's
+healthy pair agree on it. "Removes 15" is withdrawn.
+
+### What is now live
+
+⚠ **`DECISION_OS_GROUNDING_ENABLED` has been `true` on the live project since ~2026-09-01**, so
+with (b) deployed the packet finally renders what it gathers. Until this deploy it was assembling
+facts on every chat turn and serializing them to the word `available` — the spend without the
+benefit. **Production verification pending: named prices, the two IDP players rescored, latency
+inside the 3 s ceiling.**
+
+---
+
+## 0.13 🛑 RETRACTION — I READ THE WRONG VERCEL PROJECT. THREE FINDINGS ARE WRONG.
+
+**2026-09-02. This invalidates §0.3 and the audit's founding claim. Read it before §0.3.**
+
+### There are two Vercel scopes and I measured the dead one
+
+| | `cafeconchimmy` · `team_2oea…` | `cafeconchimmy-1100s-projects` · `team_xbn5…` |
+|---|---|---|
+| project | `allfantasy-v2-main` | **`allfantasy-v2-main-a6wc`** |
+| state | **dead** — billing-blocked 2026-08-21, no deploys since 08-20 | **LIVE — serves allfantasy.ai** |
+| owns the domain | ❌ `vercel domains ls` → **0 domains** | ✅ |
+| this machine's CLI | ✅ logged in here | ❌ *"scope does not exist"* |
+
+`.vercel/project.json` links this checkout to the **dead** project, and it is gitignored — a
+per-machine link, not a repo defect. **Every `vercel env ls` figure in §0.3 came from the corpse.**
+
+⚠ **`vercel projects ls` ACTIVELY MISLEADS HERE** and nearly made this worse: it prints
+`allfantasy-v2-main → https://www.allfantasy.ai` for the dead project — a **stale alias record**
+from before the domain moved. Only `vercel domains ls` (0 domains) and `vercel domains inspect`
+(*"you don't have access"*) settle it. One more lookup returning a plausible value for a question
+it is not answering.
+
+### The three corrections
+
+| § | claim | verdict |
+|---|---|---|
+| **G1** | *"`DECISION_OS_GROUNDING_ENABLED` does not exist — the packet has never run in production"* | 🛑 **WRONG.** It is `true` on the live project, **Production AND Preview**, added ~2026-09-01. **The packet has been running for about a day.** |
+| §0.3 | *"`FANTASY_OS_EXEC_SYNC_LIVE` is a `Config`-type JSON blob, so the collector is silently off"* | ⚠ **UNVERIFIED.** On the live project it is a normal encrypted Production var; the JSON-blob shape was the dead project's. Value hidden — **not proven either way.** |
+| §0.3, §3 | *"`DECISION_OS_BASE_URL` is Preview-only, so Commissioner OS is demo-mode in production"* | 🛑 **WRONG.** Present in **Production AND Preview** on the live project. |
+
+### 🛑 What G1 being wrong actually means — it makes (b) URGENT, not optional
+
+The flag is **on**. The code that makes it worth having is **not deployed**. So for roughly a day,
+production Chimmy has been:
+
+- building the grounding packet on **every chat turn**, on the highest-traffic route
+- paying ~1.7 s of assembly for it
+- receiving the **old** serializer's output — the word `available` per slice, **zero values**
+
+**The cost is already being paid; (b) is what converts it into facts.** The audit's conclusion
+("the packet is off and needs turning on") inverts to: *the packet is on and has been delivering
+nothing.* Same fix, considerably more urgency.
+
+### What survives, and why
+
+Everything derived from **source or live execution** is untouched — none of it depended on env
+output: the serializer never reading `slice.value` (0 occurrences, read from the file), the narrow
+`want` flags (read from the route), the value lane working end-to-end in a production build against
+the production database, and both commits' typecheck and suite numbers.
+
+### ⚠ The lesson, which is the same one this file keeps recording
+
+`.vercel/project.json` was present the whole time and names the project in one line. **I treated
+CLI output as production truth without checking which project the CLI was pointed at** — the
+environment equivalent of §0.8's dev-server error, where every figure was correctly measured in the
+wrong place. A tool that answers confidently about *something* is not the same as a tool answering
+about *your thing*.
+
+**Rule: before quoting any `vercel` output as production, verify the scope** —
+`vercel whoami`, `vercel teams ls`, and `cat .vercel/project.json`.
+
+---
+
+## 0.12 LANDING STATUS — two commits, one staged, one held
+
+Owner's decision 2026-09-02: **stage (a), hold (b).** Reviewer session gates every push;
+this session pushes nothing.
+
+| | SHA | base | contents | state |
+|---|---|---|---|---|
+| **(a)** | `438371366` | `967b95f94` | domain-OS `write_failed` fix — **no user request path** | ✅ **in batch 3** |
+| **(b)** | `ad79b9c7c` | on (a) | packet · values · chat route · docs | ⏸ **held** |
+
+**Why the split earned itself twice.** It was proposed as a risk split — (a) touches only a cron,
+(b) touches the highest-traffic route. It then paid a second time by accident: when a peer's
+interrupted `npm install` emptied `node_modules/.bin` and broke the generated Prisma client, the
+one test file that could not load belonged to **(b)**. Staging (a) alone sidestepped the outage
+entirely.
+
+### 🛑 THE MEASUREMENT LESSON, WHICH IS THE DURABLE PART
+
+**A total is not a measurement unless you took the baseline yourself, in the same environment.**
+
+Three sessions measured the *same commit* `967b95f94` and got **145**, **160** and **220**. Nobody
+was careless; the generated Prisma client was in a different state each time, and a missing type
+surface **inflates** errors in prisma-importing files (`TS7006` / `TS2339` / `TS2322` clustered
+there) rather than zeroing them — so the failure does not look like a failure.
+
+⚠ **And it nearly produced a wrong report in BOTH directions.** Carrying the reviewer's 145 would
+have attributed someone else's artifact to this commit. Then (a) measured **148** and the obvious
+reading was *"(a) adds 3"* — also wrong. The truth only appeared after measuring the base in the
+same worktree, same command, minutes apart:
+
+```
+base 967b95f94   160
+(a) 438371366    148     ADDS 0, REMOVES 12
+(a)+(b) tip      145     ADDS 0, REMOVES 15
+```
+
+Set comparison, not counts. The arithmetic reconciles exactly: 160 − 12 − 3 = 145.
+
+⚠ (a) removes ten errors **in files it does not touch** — `waiver-ai/engine`, `lineup/shadowSweep`.
+Changing `OsStore.write` from `Promise<void>` to `Promise<boolean>` improved inference through the
+feed's generic chain, so consumers stopped resolving to `unknown`. **A signature change propagating
+into consumers — the mechanism that usually breaks them, running the other way.**
+
+**The rule now applied by the reviewer to every session: gate on a base/tip pair measured in ONE
+environment, never on a bare total.**
+
+### The staleness check that misfires on this branch
+
+`git log <tip>..<base> -- <path>` flagged **10 of 14** of these paths as stale, listing 11
+"missing" commits on `packet.ts` alone. **All false positives.** A cherry-pick renames every
+commit, so main holds that work under different SHAs and the log reports it absent *by name*
+while the bytes match.
+
+Settled by content, which is now the required test:
+- `git rev-parse <base>:<path>` == `git rev-parse <copyParent>:<path>` — **14/14 identical**
+- `git patch-id --stable` — **`7c7db5cdd…` identical** for the picked diff and the original
+
+This is the CLAUDE.md merge-base trap reached from the opposite side: there ancestry wrongly says
+*"not on main"* about shipped work; here it wrongly says *"missing from your copy"* about work
+already in it. **Only a content comparison settles either.**
+
+---
+
+## 0.11 ✅✅ VERIFIED IN A PRODUCTION BUILD — the value lane executed, 2026-09-02
+
+`next build` → `next start`, real league, real production database. **The first time the
+valuation lane has ever run.**
+
+### R1.1 confirmed — values arrive NAMED and PRICED
+
+```
+- Market player values: available (served from store)
+    · Jeremiyah Love (RB) 6644 market_units, rank 16
+    · Bucky Irving (RB) 3035 market_units, rank 76
+    · Jordan Addison (WR) 2072 market_units, rank 105
+    · …and 427 more not shown (Market player values holds 435)
+```
+
+Before this change that entire block was the single word `available`. Note **served from store** —
+the `domain_os_facts` table F1 created is doing the work.
+
+### 🛑 R1.2 confirmed, and the evidence is sharper than a pass/fail
+
+```
+· Khalil Mack (LB)   3.8 pts — rescored for this league
+· Jonas Sanker (DB)  4.2 pts — rescored for this league
+· Ladd Mcconkey (WR) 13.1 pts — canonical preset, NOT this league
+· Ashton Jeanty (RB) 14.8 pts — canonical preset, NOT this league
+```
+
+**Exactly the two IDP players rescored; every offensive player did not.** That is precisely
+correct — `rescoreIdpForLeague` only rescores rows carrying IDP component amounts, so an offensive
+projection legitimately keeps its canonical value and the label says so.
+
+⚠ **And the numbers MOVED.** Against the pre-R1.2 run on the same league: Khalil Mack 4.4 → 3.8,
+Jonas Sanker 4.3 → 4.2. This league's own scoring is now being applied. A test could have shown
+`rescored: true`; only the live run shows the number changing under real rules.
+
+### Latency — no regression, and the cold hit is not the number
+
+| run | buildMs |
+|---|---|
+| 1 (cold) | 3137 ❌ |
+| 2–5 | **1384 · 1733 · 2101 · 1372** ✅ |
+
+Steady state is **under the 3000 ms ceiling with the value lane ON**, and within noise of the
+1730–1782 ms measured before it existed. The extra slice costs effectively nothing.
+
+⚠ `marketValues` and `projections` report **identical** timings every run (837/837, 1083/1083,
+1325/1325). That is the one deliberate dependency R1.2 introduced — both chain off `pRules` — and
+it is visible in the data rather than merely asserted.
+
+### 🆕 Three findings the live run produced
+
+1. **`oldestAsOf` is working and it changed the verdict.** Projections now read *22 days old*
+   rather than the arbitrary *13 days*, which is the honest figure — and it is old enough that
+   the conclusiveness machinery now marks the slice **PRESENT BUT NOT SAFE TO ACT ON**. The fix
+   did not just correct a label; it corrected a decision.
+2. ⚠ **Ten gap lines, eight of them identical.** Every context slice reports the same
+   `teams_rosters did not finish syncing`. Correct, and repetitive enough to crowd the prompt.
+   Worth collapsing shared-cause gaps into one line. **R1.6.**
+3. ⚠ **This league's `teams_rosters` scope is genuinely failing to sync**, which is why eight
+   slices are inconclusive. Not a packet bug — the packet is reporting a real import problem
+   accurately, with a real remedy. **R1.7** to investigate the sync itself.
+
+---
+
 ## 0.10 ✅ R1.2 / G2 DONE — the valuation lane is requested, and derives its own inputs
 
 **Branch only. Not pushed, not deployed (W1).**
@@ -665,19 +1013,37 @@ reported success with `rowsWritten: N`. Both moved together.
 
 ---
 
-## 0.3 ✅ R0.1 RESOLVED — what `vercel env ls` actually said
+## 0.3 ⛔ SUPERSEDED — measured against the DEAD Vercel project. See §0.13.
+
+🛑 **DO NOT QUOTE ANY ENV FIGURE IN THIS SECTION.** It was read with
+`vercel env ls` against `cafeconchimmy/allfantasy-v2-main` — the billing-blocked
+team with no deploys since 2026-08-20. The live site is served by
+`allfantasy-v2-main-a6wc` in `cafeconchimmy-1100s-projects`. **§0.13 carries the
+corrections**; the section is kept below rather than deleted so the error is
+legible and nobody re-derives it.
 
 Run by the owner, 2026-09-01, against `cafeconchimmy/allfantasy-v2-main`.
 **One claim confirmed, three corrected, three new findings.**
 
-### ✅ CONFIRMED — G1 stands, and more firmly than before
+### 🛑 RETRACTED — G1 IS WRONG. THE FLAG IS SET AND THE PACKET HAS BEEN RUNNING.
 
-**`DECISION_OS_GROUNDING_ENABLED` does not exist in Vercel at all** — not in
-Production, not in Preview. Nor does any `DECISION_OS_FEED_*` kill switch.
+**The text below is false.** On the LIVE project `DECISION_OS_GROUNDING_ENABLED`
+is `true` in **Production and Preview**, added ~2026-09-01. See §0.13 for what
+that means — the packet has been assembled and paid for on every chat turn for
+about a day while returning no values, which makes commit (b) urgent rather than
+optional.
 
-**The Decision OS grounding packet has never run in either environment.** The
+~~**`DECISION_OS_GROUNDING_ENABLED` does not exist in Vercel at all** — not in
+Production, not in Preview. Nor does any `DECISION_OS_FEED_*` kill switch.~~
+
+~~**The Decision OS grounding packet has never run in either environment.** The
 earlier finding was read from a committed file; it is now read from the control
-plane. G1 is not an inference any more.
+plane. G1 is not an inference any more.~~
+
+⚠ The `DECISION_OS_FEED_*` half is **unverified**, not retracted — those kill
+switches were absent from the dead project and have not been checked on the live
+one. Absence there would still mean every feed defaults on, which is the
+fail-open behaviour `flags.ts` intends.
 
 ### ✅ CONFIRMED — the four engines really are live in production
 
@@ -686,7 +1052,7 @@ plane. G1 is not an inference any more.
 their `_SHADOW` counterparts and six trade shadow variants. §1's two-pipeline
 finding holds.
 
-### 🛑 CORRECTED #1 — Fantasy OS sync: the flag IS set, and it still does not enable anything
+### ⚠ CORRECTED #1 — RETRACTED IN §0.13: this was the DEAD project
 
 `FANTASY_OS_EXEC_SYNC_LIVE` **exists in Preview + Production** (14d ago). I
 previously reported it absent. That part was wrong — it is absent from the
@@ -726,7 +1092,7 @@ Hit the cron endpoint with the `CRON_SECRET` bearer and read that field. If it
 appears, the collector is off regardless of what the dashboard shows. **This is
 R0.4 and it is a five-minute check that gates Import OS entirely.**
 
-### 🛑 CORRECTED #2 — Commissioner OS can go live in PREVIEW today
+### 🛑 CORRECTED #2 — WRONG, see §0.13: DECISION_OS_BASE_URL IS in Production
 
 `DECISION_OS_BASE_URL` and `DECISION_OS_API_KEY` exist in **Preview only** —
 absent from Production. Also Preview-only:
@@ -1313,6 +1679,12 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R1.4** 🆕 Order the bounded rows by relevance | Bounding works; ordering is first-8. For "what is my WR worth" the right 8 are the asker's players. §0.9 |
 | ✅ | **R1.2** Ask for the value lane (**G2**) | **Done 2026-09-02.** Gate was double-locked; packet now derives `valueFormat` + `leagueIdpRules` from rules it already loads. Red→green, 63/63. Typecheck deferred — machine contention. §0.10 |
 | ⬜ | **R1.5** 🆕 Devy for C2C / devy-slot NFL dynasty leagues | The NCAAF sport test will not find them. §0.10 |
+| ⬜ | **R1.6** 🆕 Collapse gaps that share one cause | 8 identical `teams_rosters` lines crowd the prompt. §0.11 |
+| ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
+| ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
+| ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
+| ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
+| ⬜ | **R1.9** 🆕 Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | Encrypted, so "collector is off" is unverified — not proven either way. §0.13 |
 | ⬜ | **R1.3** Turn the grounding flag on (**G1**) | R1.2 |
 | ⬜ | **R2** Bridge the 4 live engines into the packet | R1 |
 | ⬜ | **R3** Finish Player Value OS | R1 |
