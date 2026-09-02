@@ -171,7 +171,14 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
    */
   const sendPayload = useCallback(
     async (payload: LeagueComposerPayload) => {
-      if (!openThread || busy) return
+      /*
+       * 🛑 SILENT RETURNS DESTROY THE MESSAGE — same defect as CommsDrawer, same reason.
+       * ChatComposer clears its input optimistically BEFORE awaiting this, and restores it
+       * only if this rejects. A bare `return` therefore looks identical to a successful
+       * send and takes the user's text with it. Every non-send path must throw.
+       */
+      if (!openThread) throw new Error('no conversation open')
+      if (busy) throw new Error('still sending the previous message')
       const text = payload.text.trim()
       const metadata: Record<string, unknown> = {}
 
@@ -216,7 +223,9 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         (payload.poll ? `📊 ${payload.poll.question}` : '') ||
         (payload.attachments?.length ? '📎 Media' : '')
 
-      if (!displayText && Object.keys(metadata).length === 0) return
+      // Also a silent return once; `canSend` should make it unreachable, but the draft must
+      // come back rather than vanish if it is ever hit.
+      if (!displayText && Object.keys(metadata).length === 0) throw new Error('nothing to send')
 
       setBusy(true)
       setError(null)
@@ -254,6 +263,9 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         await loadMessages(openThread)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Message not sent.')
+        // ⚠ RETHROW so the composer restores the draft. The inline error alone is not
+        // enough — the text is already gone from the box by the time we get here.
+        throw e
       } finally {
         setBusy(false)
       }

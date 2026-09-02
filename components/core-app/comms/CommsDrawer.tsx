@@ -985,7 +985,17 @@ function LeaguePanel({
    */
   const sendPayload = useCallback(
     async (payload: LeagueComposerPayload) => {
-      if (!scopeId || sending) return
+      /*
+       * 🛑 THESE WERE SILENT `return`s AND THAT DESTROYED MESSAGES. The composer clears its
+       * input optimistically BEFORE awaiting this function, and it cannot distinguish
+       * "sent" from "returned without doing anything" — so every early exit here threw the
+       * user's text away with no request, no error and no trace.
+       *
+       * Throwing instead lets the composer restore the draft. Every non-send path must
+       * throw for that reason; a bare `return` is the bug.
+       */
+      if (!scopeId) throw new Error('no league selected')
+      if (sending) throw new Error('still sending the previous message')
       const text = payload.text.trim()
       const metadata: Record<string, unknown> = {}
 
@@ -1036,7 +1046,9 @@ function LeaguePanel({
         (payload.poll ? `📊 ${payload.poll.question}` : '') ||
         (payload.attachments?.length ? '📎 Media' : '')
 
-      if (!displayText && Object.keys(metadata).length === 0) return
+      // Also a silent return once. `canSend` should make it unreachable, but if it is ever
+      // reached the draft must come back rather than vanish.
+      if (!displayText && Object.keys(metadata).length === 0) throw new Error('nothing to send')
 
       setSending(true)
       try {
@@ -1070,6 +1082,12 @@ function LeaguePanel({
         await load(scopeId)
       } catch (e) {
         setError(e instanceof Error ? `Message not sent (${e.message}).` : 'Message not sent.')
+        /*
+         * ⚠ RETHROW. Setting the inline error is not enough: the composer has already
+         * cleared the user's text and only restores it if this rejects. Swallowing here is
+         * what turned a failed send into a lost message.
+         */
+        throw e
       } finally {
         setSending(false)
       }

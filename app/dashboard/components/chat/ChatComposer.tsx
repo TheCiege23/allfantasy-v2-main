@@ -328,6 +328,31 @@ export function ChatComposer({
         ...(prevPoll ? { poll: { ...prevPoll } } : {}),
       }
       await onSend(payload)
+    } catch (err) {
+      /*
+       * 🛑 PUT THE MESSAGE BACK. The clear above is optimistic and happens BEFORE the send,
+       * so without this a failure destroys what the user typed — silently, because there was
+       * no catch here at all and `finally` only reset the spinner.
+       *
+       * Reported after a send while the browser was offline: the composer emptied, no
+       * request left the machine, no error appeared, and the message was simply gone. The
+       * console showed `net::ERR_INTERNET_DISCONNECTED` on an unrelated endpoint, which is
+       * the only reason the cause was findable at all.
+       *
+       * ⚠ RESTORE FIRST, THEN REPORT. If the toast throws or is suppressed, the user still
+       * has their text back — the draft matters more than the notification.
+       */
+      setText(prevText)
+      setPendingGif(prevGif)
+      setAttachments(prevAttachments)
+      setPollDraft(prevPoll)
+
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+      toast.error(
+        offline
+          ? "You're offline — message not sent. It's back in the box, try again when you reconnect."
+          : `Message not sent${err instanceof Error && err.message ? ` (${err.message})` : ''}. It's back in the box.`,
+      )
     } finally {
       setSending(false)
     }
