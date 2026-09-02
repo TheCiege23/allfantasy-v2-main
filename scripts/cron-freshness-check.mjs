@@ -65,6 +65,9 @@ const MIN_ALLOWANCE_MS = 20 * 60_000
  * `column` is optional: when omitted the script introspects information_schema and picks the first
  * available freshness column, reporting which one it used. A probe naming a table or column that
  * does not exist is reported as a CONFIG ERROR and fails the run -- it must never look like "fresh".
+ * A column that EXISTS but is NULL on every row is a separate state, UNPOPULATED: the counts cannot
+ * say whether the map is wrong or nothing has written it yet, so the checker reports what it saw
+ * and names both causes instead of asserting one. It fails the run just the same.
  *
  * Jobs absent from this map are reported as UNMONITORED rather than skipped silently. A monitor
  * that quietly covers two-thirds of the fleet while printing "all healthy" is how the last outage
@@ -559,6 +562,36 @@ export function maxGapMs(schedule) {
   return maxGap > 0 ? maxGap : null
 }
 
+/**
+ * Turn one probe's row counts into a state. Pure, and exported so the states can be TESTED.
+ *
+ * ⚠ EXTRACTED FROM THE MIDDLE OF THE QUERY LOOP ON PURPOSE. It used to be an inline if/else with
+ * a live `pg` client either side of it, so the only way to exercise a state was to reach a
+ * database holding data in exactly that shape — which meant in practice that no state was ever
+ * exercised, and a new one could be added with nothing to prove it fires. This file's own header
+ * says a monitor that has never gone red is not evidence; that applies to the monitor's own
+ * classifier first.
+ *
+ * The four callers' inputs map straight from `maxAge()`:
+ *   rowCount        count(*)      — rows in the table
+ *   timestampCount  count(col)    — rows where the freshness column is NOT NULL
+ *   ageMs           now - max(col), or null when there is no timestamp at all
+ *
+ * ⚠ ORDER IS LOAD-BEARING. UNPOPULATED and EMPTY are decided BEFORE the seasonal softening,
+ * because a column nothing has written is broken in or out of season. Moving the season check
+ * above them would let an out-of-season job report IDLE — healthy — while its probe pointed at a
+ * column that does not get written at all.
+ */
+export function classifyFreshness({ rowCount, timestampCount, ageMs, allowanceMs, outOfSeason = false }) {
+  if (rowCount > 0 && timestampCount === 0) return 'UNPOPULATED'
+  if (ageMs == null) return 'EMPTY'
+  if (ageMs > allowanceMs && outOfSeason) return 'IDLE'
+  return ageMs > allowanceMs ? 'STALE' : 'OK'
+}
+
+/** The states that do NOT fail a run. Kept beside the classifier so the two cannot drift apart. */
+export const HEALTHY_STATES = new Set(['OK', 'IDLE'])
+
 // ───────────────────────────── formatting ────────────────────────────────
 
 function fmtAge(ms) {
@@ -711,25 +744,38 @@ async function main() {
 
       const { newest, rowCount, timestampCount: tsCount, ageMs } = row
 
-      let state
-      if (rowCount > 0 && tsCount === 0) {
-        state = 'CONFIG'
-      } else if (ageMs == null) {
-        state = 'EMPTY'
-      } else if (ageMs > allowanceMs && probe.seasonal && !isInSeason(probe.seasonal.sport, now)) {
-        /*
-         * Out of season the job cannot have new data, so age carries no information about health.
-         * Reported as IDLE rather than OK: OK would claim the data is fresh, which it is not. IDLE
-         * says "stale, and expected to be" -- a third state, because collapsing it into either of
-         * the other two loses the distinction that makes the alarm worth reading.
-         *
-         * CONFIG and EMPTY are checked FIRST and are never softened: a wrong column or a table that
-         * has never held a row is broken in or out of season.
-         */
-        state = 'IDLE'
-      } else {
-        state = ageMs > allowanceMs ? 'STALE' : 'OK'
-      }
+      /*
+       * ⚠ `UNPOPULATED` WAS `CONFIG`, DETAILED "wrong column for this table" — AN ASSERTED CAUSE
+       * THE COUNTS CANNOT ESTABLISH. Two different situations produce an all-NULL column, and
+       * `count(col)` against `count(*)` cannot tell them apart:
+       *
+       *   the probe names the WRONG COLUMN   — `player_game_stats` holds 252,768 rows with
+       *                                        `fetched_at` NULL on every one. The map is wrong.
+       *   the column is RIGHT, nothing set it — `notification_outbox.sentAt` was NULL on all 4
+       *                                        rows because the only rows that ever existed were
+       *                                        retired unsent by operator decision (2026-08-30).
+       *
+       * Reporting the first as fact sent the reader to fix a mapping that was never broken, which
+       * is worse than a stale red: it spends someone's attention on a non-bug and teaches them the
+       * board lies. Whether the column EXISTS is a different question, answered above, and still a
+       * real CONFIG. What is left here is an observation, so it is reported as one.
+       *
+       * ⚠ IT STILL FAILS THE RUN. `HEALTHY_STATES` holds only OK and IDLE, so the alarm is exactly
+       * as loud as before — the wording changed, the severity did not. A column nothing has ever
+       * populated is a finding under either cause, and softening it here would be the "green board"
+       * the outbox probe's original author rightly warned against.
+       *
+       * Out of season IDLE means "stale, and expected to be" — not OK, which would claim the data
+       * is fresh when it is not. UNPOPULATED and EMPTY are decided BEFORE that softening, inside
+       * classifyFreshness: a column nothing writes is broken in or out of season.
+       */
+      const state = classifyFreshness({
+        rowCount,
+        timestampCount: tsCount,
+        ageMs,
+        allowanceMs,
+        outOfSeason: Boolean(probe.seasonal && !isInSeason(probe.seasonal.sport, now)),
+      })
       results.push({
         ...base,
         column,
@@ -738,7 +784,10 @@ async function main() {
         ageMs,
         state,
         caveat: probe.caveat ?? null,
-        detail: state === 'CONFIG' ? `"${column}" is NULL on all ${rowCount} rows -- wrong column for this table` : undefined,
+        detail:
+          state === 'UNPOPULATED'
+            ? `"${column}" exists on "${probe.table}" but is NULL on all ${rowCount} row(s) -- either this probe names the wrong column, or the column is correct and nothing has populated it yet. Find what writes it before changing the map.`
+            : undefined,
       })
     }
   } finally {
@@ -746,7 +795,7 @@ async function main() {
   }
 
   // IDLE is a healthy outcome: the job is correct and simply has nothing to do this month.
-  const bad = results.filter((r) => r.state !== 'OK' && r.state !== 'IDLE')
+  const bad = results.filter((r) => !HEALTHY_STATES.has(r.state))
 
   if (asJson) {
     console.log(JSON.stringify({ results, unmonitored, failing: bad.length }, null, 2))
@@ -759,10 +808,17 @@ async function main() {
         : r.state === 'IDLE' ? 'idle'
         : r.state === 'STALE' ? 'STALE'
         : r.state === 'EMPTY' ? 'EMPTY'
+        : r.state === 'UNPOPULATED' ? 'NULLCOL'
         : 'CONFIG'
-      const age = r.state === 'CONFIG' ? r.detail : `${fmtAge(r.ageMs)} old (allow ${fmtAge(r.allowanceMs)})`
+      /*
+       * Show the detail whenever there is one, rather than only for CONFIG. Every CONFIG result
+       * sets `detail`, and UNPOPULATED now does too; for the rest it is undefined and the age
+       * string is the useful line. Keying on the STATE meant a new state printed
+       * "never old (allow 3.0d)" and buried the reason it was flagged.
+       */
+      const age = r.detail ?? `${fmtAge(r.ageMs)} old (allow ${fmtAge(r.allowanceMs)})`
       const kind = r.kind === 'heartbeat' ? 'hb ' : '   '
-      console.log(`  ${mark.padEnd(6)} ${r.tier.padEnd(5)} ${kind}${r.path.padEnd(52)} ${age}`)
+      console.log(`  ${mark.padEnd(7)} ${r.tier.padEnd(5)} ${kind}${r.path.padEnd(52)} ${age}`)
       if (r.caveat) console.log(`             ^ ${r.caveat}`)
     }
     if (unmonitored.length > 0) {
