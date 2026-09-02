@@ -20,6 +20,7 @@ import {
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
 import { syncEspnStandingsToDb } from "@/lib/standings/espnStandings"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -31,6 +32,13 @@ import { syncEspnStandingsToDb } from "@/lib/standings/espnStandings"
  */
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
+
+/**
+ * Heartbeat identity in `sync_job_runs`. Must stay in step with PROBES in
+ * scripts/cron-freshness-check.mjs — renaming it here without renaming it there makes the
+ * freshness monitor report CONFIG ("no rows for job_name") forever.
+ */
+const JOB = "cron-import-standings"
 
 function resolveSport(param: string | null): "NFL" | "NCAAF" {
   if (param?.toUpperCase() === "NCAAF") return "NCAAF"
@@ -44,7 +52,7 @@ async function handle(req: NextRequest) {
 
   const startedAt = Date.now()
 
-  try {
+  const runSync = async () => {
     clearAPISportsDiagnostics()
 
     /*
@@ -75,7 +83,33 @@ async function handle(req: NextRequest) {
       }
     }
 
-    const diagnostics = getAPISportsDiagnostics()
+    return { espn, count, provider, diagnostics: getAPISportsDiagnostics() }
+  }
+
+  try {
+    /*
+     * Heartbeat, and it records on every SCHEDULED fire including the failures — `withSyncJobRun`
+     * writes its `running` row before the work and closes it after, so a run that ends in the
+     * zero-rows failure below is still visible as a run that happened.
+     *
+     * ⚠ IT IS A HEARTBEAT AND NOT A TABLE PROBE FOR A REASON WORTH KEEPING. This job writes
+     * `SportsDataCache` under `<SPORT>:standings:<season>:<abbrev>` keys — NOT a `standings`
+     * table, which has never held a row and is what the old NO_PROBE note pointed at. But
+     * SportsDataCache is written by many jobs, so a table probe on it would be satisfied by any
+     * of them and report this one healthy while it wrote nothing. That is the same shared-probe
+     * false green recorded against ?rosters=1 and the sync-player-images variants.
+     */
+    const { espn, count, provider, diagnostics } = await withSyncJobRun(
+      { jobName: JOB, jobScope: sport, sport, trigger: "cron" },
+      runSync,
+      (r) => ({
+        rowsRead: r.espn.fetched,
+        rowsWritten: r.count,
+        rowsSkipped: r.espn.skipped,
+        // Zero rows is the documented failure below; the telemetry must agree with the response.
+        status: r.count === 0 ? ("failed" as const) : ("success" as const),
+      }),
+    )
 
     /*
      * ZERO ROWS IS A FAILURE, and saying so is the point. The previous handler returned

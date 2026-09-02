@@ -340,6 +340,46 @@ export const PROBES = {
   '/api/cron/alert-sweep': { heartbeat: 'cron-alert-sweep' },
 
   /*
+   * THE THREE "WRITES NOWHERE" SUSPECTS, RESOLVED 2026-09-02 — AND NONE OF THEM WAS BROKEN.
+   * All three sat in NO_PROBE on notes that named a table the job never touches, or read a
+   * feature flag as a dead job. Each note sent the next reader hunting for a bug that was not
+   * there, which is the same defect the UNPOPULATED state was added to stop the checker itself
+   * committing. Measured against production before moving any of them.
+   *
+   *   import-standings      writes `SportsDataCache` under `<SPORT>:standings:<season>:<abbrev>`,
+   *                         NOT a `standings` table. 64 live NFL rows. Working the whole time.
+   *   ?source=tsdb-only     `ingestSchedule` upserts `sportsGame` (26,924 rows), NOT
+   *                         `fantasy_schedule_games`. And "tsdb-only" matching neither "all" nor
+   *                         "rolling_insights" nor "api_sports" is the DESIGN — it is how this
+   *                         mode runs the TSDB block alone, documented in the route.
+   *   trade-weekly-recalib  gated on TRADE_ENGINE_WEEKLY_RECALIBRATION_ENABLED, default off. Its
+   *                         own docstring says it no-ops with zero Prisma calls when disabled, so
+   *                         TradeLearningStats holding zero rows is the CORRECT state.
+   *
+   * ⚠ ALL THREE ARE HEARTBEATS, AND NONE OF THEM COULD BE AN OUTPUT PROBE. Every table they do
+   * write is written far more often by another job — SportsDataCache by many, `sportsGame` by
+   * import-scores every two minutes — so a table probe would be satisfied by that other job and
+   * report these healthy while they did nothing. The shared-probe false green, three more times.
+   *
+   * ⚠ AND NONE OF THEM EMITTED A HEARTBEAT UNTIL THIS CHANGE. withSyncJobRun was added to all
+   * three routes in the same commit; a probe naming a job_name nothing writes reports CONFIG
+   * forever. Expect exactly that until each next fires — six hours, four hours, and up to a week
+   * respectively.
+   */
+  '/api/cron/import-standings': { heartbeat: 'cron-import-standings' },
+  '/api/cron/import-schedules?source=tsdb-only': { heartbeat: 'cron-import-schedules-tsdb' },
+
+  /*
+   * ⚠ THIS ONE RECORDS WHILE ITS FEATURE FLAG IS OFF, DELIBERATELY. The wrap sits outside the
+   * flag check, so the row answers "did the weekly cron fire" — true and checkable whether or not
+   * the recalibration itself is enabled. Recording only on the enabled path would report CONFIG
+   * for as long as the flag stays off, which is indistinguishable from a dead scheduler and is
+   * exactly the confusion this probe exists to remove. A disabled fire records `success` with the
+   * reason in `warnings` and the count in rowsSkipped: the job did what it is configured to do.
+   */
+  '/api/cron/trade-weekly-recalibration': { heartbeat: 'cron-trade-weekly-recalibration' },
+
+  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --
@@ -417,8 +457,6 @@ const HEARTBEAT_TIME_COLUMN = 'started_at'
  * red, and trains everyone to ignore the alarm. Both entries here were exactly that trap.
  */
 export const NO_PROBE = {
-  '/api/cron/import-standings': 'the `standings` table has never held a row -- find where this job actually writes before probing it',
-  '/api/cron/import-schedules?source=tsdb-only': '`fantasy_schedule_games` has never held a row; the tsdb path may be dead',
   '/api/cron/import-player-game-stats?multiSport=1&days=3':
     'writes the same player_game_stats.updatedAt the NFL job an hour earlier probes, so a table ' +
     'probe here reports this one healthy on that run instead. The NFL probe is scoped with ' +
@@ -458,7 +496,6 @@ export const NO_PROBE = {
   '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
 
   // ── HAS NEVER PRODUCED ANYTHING ──
-  '/api/cron/trade-weekly-recalibration': 'TradeLearningStats holds ZERO rows -- this job has never produced output on any scheduler. Investigate before probing.',
 
   /*
    * Classified 2026-08-30. It had been an UNCLASSIFIED gap since it was added, which is the one

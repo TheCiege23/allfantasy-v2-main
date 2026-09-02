@@ -29,6 +29,8 @@
  * No DB and no network: the job libraries and Prisma are mocked. This proves route dispatch and
  * telemetry wiring only.
  */
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { PROBES } from '../scripts/cron-freshness-check.mjs'
@@ -316,6 +318,49 @@ describe('every route jobName matches the freshness probe exactly', () => {
     ['/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn', 'cron-playoff-schedule-refresh'],
   ])('%s is probed as %s', (cronPath, jobName) => {
     expect(PROBES[cronPath]?.heartbeat).toBe(jobName)
+  })
+
+  /*
+   * ⚠ THE THREE CASES ABOVE ARE A HARDCODED LIST, AND IT WENT STALE — WHICH IS WHY THIS EXISTS.
+   *
+   * Measured 2026-09-02: renaming a probe to `cron-import-standings-TYPO` — precisely the
+   * CONFIG-forever bug the block above exists to prevent — left this whole suite GREEN at 17/17,
+   * because the new heartbeat was not one of the three listed. A guard that covers three of
+   * twenty-eight routes reads as protection and is not.
+   *
+   * So this walks EVERY heartbeat probe instead of a list someone has to remember to extend. The
+   * path maps mechanically: `/api/cron/x?query` -> `app/api/cron/x/route.ts`.
+   */
+  const DELEGATED_JOB_NAMES: Record<string, string> = {
+    // The route hands off to the collector, which owns the withSyncJobRun call and the name.
+    '/api/cron/fantasy-os-exec-sync': 'lib/fantasy-os/sync/collector/prismaSyncStore.ts',
+  }
+
+  const heartbeatProbes = Object.entries(PROBES).filter(([, v]) => Boolean(v.heartbeat)) as Array<
+    [string, { heartbeat: string }]
+  >
+
+  it('covers every heartbeat probe, not a hand-maintained subset', () => {
+    // Guards the guard: if this drops toward the old hardcoded 3, the sweep below has stopped
+    // sweeping and a typo would once again pass unnoticed.
+    expect(heartbeatProbes.length).toBeGreaterThanOrEqual(20)
+  })
+
+  it.each(heartbeatProbes)('%s declares its jobName in source', (cronPath, probe) => {
+    const routeFile = join(process.cwd(), 'app', `${cronPath.split('?')[0]}`, 'route.ts')
+    expect(existsSync(routeFile), `no route at ${routeFile} for probe ${cronPath}`).toBe(true)
+
+    const delegate = DELEGATED_JOB_NAMES[cronPath]
+    const source = delegate
+      ? readFileSync(join(process.cwd(), delegate), 'utf8')
+      : readFileSync(routeFile, 'utf8')
+
+    expect(
+      source.includes(probe.heartbeat),
+      `PROBES names "${probe.heartbeat}" for ${cronPath}, but that string does not appear in ` +
+        `${delegate ?? routeFile}. Either the route does not record that heartbeat (the probe will ` +
+        `report CONFIG forever), or the route delegates and needs an entry in DELEGATED_JOB_NAMES.`,
+    ).toBe(true)
   })
 
   it('observed jobNames at runtime are the ones PROBES expects', async () => {
