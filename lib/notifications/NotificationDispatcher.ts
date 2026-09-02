@@ -10,6 +10,8 @@ import { sendPushToUser, isPushCategory } from "@/lib/push-notifications"
 import { retryWithBackoff } from "@/lib/error-handling"
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications/tokenMonetizationNotificationBypass"
+import { quietHoursSuppression } from "@/lib/notifications/quietHours"
+import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
 
 export type DispatchNotificationParams = {
   userIds: string[]
@@ -89,10 +91,38 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       const catPrefs = prefs.categories?.[category]
       if (!catPrefs?.enabled) continue
 
+      /*
+       * Per-league override (spec item 15: global by default, per-league where wanted).
+       * Absence inherits the global answer — see leagueOverrides.ts, where treating a
+       * missing entry as a decision would have silenced every league on deploy.
+       */
+      const effectiveLeagueId =
+        leagueId ?? (meta && typeof meta.leagueId === "string" ? meta.leagueId : null)
+      if (!isCategoryAllowedForLeague(prefs, category, effectiveLeagueId)) continue
+
       const availability = getDeliveryMethodAvailability({
         hasEmail: !!profile.email,
         phoneVerified: !!profile.phoneVerifiedAt,
       })
+
+      /*
+       * Quiet hours (spec item 16), evaluated in the USER's timezone.
+       *
+       * ⚠ THIS SUPPRESSES PUSH AND SMS ONLY. The in-app row below is a log; dropping it
+       * would mean the user wakes to no record that anything happened and the unread
+       * badge — which counts stored rows — under-reports their night. Quiet hours defer
+       * a buzz, they do not delete history.
+       *
+       * The profile timezone is passed as the fallback because the stored preference's
+       * own `timezone` was accepted by the API and never read by anything; see
+       * quietHours.ts for what that silently did to every user who set one.
+       */
+      const quiet = quietHoursSuppression(
+        prefs.quietHours,
+        new Date(),
+        severity,
+        profile.timezone
+      )
 
       if (catPrefs.inApp && availability.inApp) {
         await createPlatformNotification({
@@ -150,7 +180,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         }
       }
 
-      if (catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms) {
+      if (catPrefs.sms && availability.sms && profile.phone && !skipChannels?.sms && !quiet.sms) {
         const smsBody = body ? `${title}\n${body}` : title
         const smsSent = await sendSms(profile.phone, smsBody.slice(0, 320))
         if (!smsSent) {
@@ -162,7 +192,13 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         }
       }
 
-      if (catPrefs.inApp && availability.inApp && isPushCategory(category) && !skipChannels?.push) {
+      if (
+        catPrefs.inApp &&
+        availability.inApp &&
+        isPushCategory(category) &&
+        !skipChannels?.push &&
+        !quiet.push
+      ) {
         sendPushToUser(userId, {
           title,
           body: body ?? undefined,

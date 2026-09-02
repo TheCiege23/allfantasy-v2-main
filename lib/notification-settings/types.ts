@@ -29,9 +29,44 @@ export interface NotificationChannelPrefs {
   sms: boolean
 }
 
+/**
+ * Per-league override. Global settings are the default; a league may opt out entirely
+ * or mute individual categories.
+ *
+ * ⚠ AN ABSENT ENTRY MEANS "FOLLOW THE GLOBAL SETTING", NOT "OFF". Every existing row
+ * predates this field, so treating absence as a decision would silence every league in
+ * the product on deploy. `undefined` and `{}` must both inherit.
+ */
+export interface LeagueNotificationOverride {
+  /** false silences this league entirely. Absent = follow global. */
+  enabled?: boolean
+  /** Categories muted for THIS league only. Absent = follow global. */
+  mutedCategories?: NotificationCategoryId[]
+}
+
 export interface NotificationPreferences {
   globalEnabled?: boolean
   categories?: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>>
+  /**
+   * Quiet hours, evaluated in the user's timezone by `lib/notifications/quietHours.ts`.
+   * Suppresses push and SMS only — the in-app row is a log and still gets written.
+   */
+  quietHours?: {
+    startHour: number
+    endHour: number
+    timezone?: string | null
+    allowCritical?: boolean
+    enabled?: boolean
+  }
+  /**
+   * Per-league overrides, keyed by League id.
+   *
+   * ⚠ STORED IN THE EXISTING `UserProfile.notificationPreferences` JSON ON PURPOSE.
+   * A dedicated column or join table would be a schema change, and a migration is not
+   * pushable work in this repo — it is a separate decision that belongs to the account
+   * owner. This shape needs no migration and no backfill, because absence inherits.
+   */
+  leagues?: Record<string, LeagueNotificationOverride>
 }
 
 export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
