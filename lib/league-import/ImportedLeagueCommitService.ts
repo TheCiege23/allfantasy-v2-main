@@ -8,6 +8,7 @@ import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/
 import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import type { ImportWarningRecord } from '@/lib/league-import/types'
 import type {
   CanonicalImportBundle,
   ImportProvider,
@@ -41,6 +42,21 @@ export interface PersistImportedLeagueResult {
   }
   historicalBackfill: unknown
   existed: boolean
+  /**
+   * Post-create steps that did not complete.
+   *
+   * 🛑 EVERY ONE OF THESE USED TO BE `try { } catch { console.warn }` AND NOTHING ELSE, SO AN
+   * IMPORT COULD RETURN 200 WITH A LEAGUE ID AND NO ROSTERS IN IT. `bootstrapLeagueFromImport`
+   * is the step that writes every LeagueTeam and Roster row; when it threw, the league row
+   * still existed, the route still answered `{ leagueId, name, sport }`, and the screen still
+   * said "Imported". The only trace was a server console line no user can reach — the same
+   * shape as the bulk-import failure that started this whole piece of work.
+   *
+   * Empty means every step completed. Non-empty is NOT a failed import: the league is real
+   * and usable, and re-running the affected step is cheap. It is a statement of what is
+   * missing, which is the thing the product could not previously make.
+   */
+  incompleteSteps: ImportWarningRecord[]
 }
 
 function resolveImportedLeagueSport(normalized: NormalizedImportResult): string {
@@ -389,6 +405,43 @@ async function resolveSelfManagerId(
   return null
 }
 
+/**
+ * Run one post-create bootstrap step, recording a failure instead of only logging it.
+ *
+ * 🛑 THE STEPS BELOW ARE ALL "NON-FATAL", AND THAT WAS THE RIGHT CALL FOR THE WRONG REASON.
+ * Failing the whole import because a playoff default could not be written would throw away a
+ * league that is otherwise fine — so swallowing was correct. What was wrong is that the
+ * swallow was total: the reason went to a server console and the caller was told nothing, so
+ * "imported" and "imported with no rosters" were the same 200 response with the same
+ * `{ leagueId, name, sport }` body.
+ *
+ * This keeps the non-fatal behaviour exactly and adds the missing half — the outcome travels
+ * out with the result, becomes an `ImportWarning` row on the run, and reaches the screen.
+ *
+ * ⚠ THE CONSOLE LINE STAYS. It is what an operator greps during an incident, and the caller
+ * receiving a record is not a substitute for that.
+ */
+export async function runBootstrapStep(
+  code: string,
+  message: string,
+  severity: ImportWarningRecord['severity'],
+  into: ImportWarningRecord[],
+  fn: () => Promise<void>,
+): Promise<void> {
+  try {
+    await fn()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.warn(`[ImportedLeagueCommitService] ${code} non-fatal:`, err)
+    into.push({
+      code,
+      message: `${message} (${detail})`,
+      severity,
+      metadata: { step: code },
+    })
+  }
+}
+
 export async function persistImportedLeagueFromNormalization(
   options: PersistImportedLeagueOptions
 ): Promise<PersistImportedLeagueResult> {
@@ -482,15 +535,28 @@ export async function persistImportedLeagueFromNormalization(
         },
       })
 
-  try {
-    const { bootstrapLeagueFromImport } = await import('@/lib/league-import/LeagueCreationBootstrapService')
-    await bootstrapLeagueFromImport(league.id, normalized, {
-      userId,
-      sourceManagerId: options.importerSourceManagerId ?? null,
-    })
-  } catch (err) {
-    console.warn(`[ImportedLeagueCommitService] ${provider} import bootstrap non-fatal:`, err)
-  }
+  /* Collected across every post-create step and returned; see `runBootstrapStep`. */
+  const incompleteSteps: ImportWarningRecord[] = []
+
+  /*
+   * ⚠ THE ONE THAT MATTERS MOST. This writes every LeagueTeam and Roster row. When it threw,
+   * the league still existed and the import still reported success, so the user got an empty
+   * league and no explanation. `error`, not `warn`: a league with no rosters is not a partial
+   * success, it is a league that cannot be used.
+   */
+  await runBootstrapStep(
+    'BOOTSTRAP_ROSTERS_FAILED',
+    'Teams and rosters could not be written for this league',
+    'error',
+    incompleteSteps,
+    async () => {
+      const { bootstrapLeagueFromImport } = await import('@/lib/league-import/LeagueCreationBootstrapService')
+      await bootstrapLeagueFromImport(league.id, normalized, {
+        userId,
+        sourceManagerId: options.importerSourceManagerId ?? null,
+      })
+    },
+  )
 
   /*
    * ⚠ AN IMPORTED LEAGUE THAT NOBODY OWNS IS INVISIBLE ON /core/portfolio.
@@ -596,39 +662,53 @@ export async function persistImportedLeagueFromNormalization(
   // every imported league (any provider) a real RedraftSeason/RedraftRoster
   // so Trade Decision OS and other RedraftSeason-scoped consumers work
   // without any provider-specific branch. Idempotent; never fails the import.
-  try {
-    const { materializeRedraftSeasonForImportedLeague } = await import('@/lib/league-import/canonicalSeasonMaterialization')
-    await materializeRedraftSeasonForImportedLeague(league.id)
-  } catch (err) {
-    console.warn(`[ImportedLeagueCommitService] ${provider} canonical season materialization non-fatal:`, err)
-  }
+  await runBootstrapStep(
+    'CANONICAL_SEASON_FAILED',
+    'The canonical season that Trade Decision OS reads could not be created for this league',
+    'warn',
+    incompleteSteps,
+    async () => {
+      const { materializeRedraftSeasonForImportedLeague } = await import('@/lib/league-import/canonicalSeasonMaterialization')
+      await materializeRedraftSeasonForImportedLeague(league.id)
+    },
+  )
 
   // Block F — persist future traded draft picks into `future_draft_picks`. Runs
   // AFTER the bootstrap so anything the bootstrap writes (league_teams etc.)
   // is available. Non-fatal: a failure here logs a warning but never fails the
   // import — matches the existing gap-fill pattern above.
   if (normalized.traded_picks && normalized.traded_picks.length > 0) {
-    try {
-      await persistTradedPicks(league.id, normalized.traded_picks)
-    } catch (err) {
-      console.warn(`[ImportedLeagueCommitService] ${provider} traded-pick persist non-fatal:`, err)
-    }
+    /* Dynasty pick assets. A silent loss here is invisible until someone goes looking for a
+       pick they know they own. */
+    await runBootstrapStep(
+      'TRADED_PICKS_FAILED',
+      `${normalized.traded_picks.length} traded draft pick(s) could not be saved`,
+      'warn',
+      incompleteSteps,
+      async () => {
+        await persistTradedPicks(league.id, normalized.traded_picks!)
+      },
+    )
   }
 
-  try {
-    const { bootstrapLeagueDraftConfig } = await import('@/lib/draft-defaults/LeagueDraftBootstrapService')
-    const { bootstrapLeagueWaiverSettings } = await import('@/lib/waiver-defaults/LeagueWaiverBootstrapService')
-    const { bootstrapLeaguePlayoffConfig } = await import('@/lib/playoff-defaults/LeaguePlayoffBootstrapService')
-    const { bootstrapLeagueScheduleConfig } = await import('@/lib/schedule-defaults/LeagueScheduleBootstrapService')
-    await Promise.all([
-      bootstrapLeagueDraftConfig(league.id),
-      bootstrapLeagueWaiverSettings(league.id),
-      bootstrapLeaguePlayoffConfig(league.id),
-      bootstrapLeagueScheduleConfig(league.id),
-    ])
-  } catch (err) {
-    console.warn('[ImportedLeagueCommitService] Gap-fill (draft/waiver/playoff/schedule) non-fatal:', err)
-  }
+  await runBootstrapStep(
+    'DEFAULTS_GAPFILL_FAILED',
+    'Draft, waiver, playoff or schedule defaults could not be written',
+    'warn',
+    incompleteSteps,
+    async () => {
+      const { bootstrapLeagueDraftConfig } = await import('@/lib/draft-defaults/LeagueDraftBootstrapService')
+      const { bootstrapLeagueWaiverSettings } = await import('@/lib/waiver-defaults/LeagueWaiverBootstrapService')
+      const { bootstrapLeaguePlayoffConfig } = await import('@/lib/playoff-defaults/LeaguePlayoffBootstrapService')
+      const { bootstrapLeagueScheduleConfig } = await import('@/lib/schedule-defaults/LeagueScheduleBootstrapService')
+      await Promise.all([
+        bootstrapLeagueDraftConfig(league.id),
+        bootstrapLeagueWaiverSettings(league.id),
+        bootstrapLeaguePlayoffConfig(league.id),
+        bootstrapLeagueScheduleConfig(league.id),
+      ])
+    },
+  )
 
   // Layered import, tier 1 (synchronous): write a LeagueSeason row for the
   // CURRENT season from the normalized payload so the History tab shows a
@@ -832,5 +912,6 @@ export async function persistImportedLeagueFromNormalization(
     },
     historicalBackfill,
     existed: Boolean(existing),
+    incompleteSteps,
   }
 }

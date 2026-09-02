@@ -104,6 +104,9 @@ export async function persistImportWithCanonicalAudit(input: {
           league: { id: league.id, name: league.name ?? '', sport: String(league.sport) },
           historicalBackfill: null,
           existed: true,
+          /* Nothing ran, so nothing can be incomplete. Distinct from "every step succeeded"
+             only in that `skipped: true` accompanies it — see this function's own note. */
+          incompleteSteps: [],
         },
         skipped: true,
         runId: existingRun.id,
@@ -162,7 +165,18 @@ export async function persistImportWithCanonicalAudit(input: {
       },
     })
 
-    for (const w of [...input.canonical.warnings, ...(input.additionalWarnings ?? [])]) {
+    /*
+     * ⚠ `persisted.incompleteSteps` JOINS THE WARNINGS THAT ALREADY PERSIST HERE, rather than
+     * getting its own channel. These rows are what `importReviewService` reads, so a bootstrap
+     * step that failed now shows up in exactly the place a partial import was always meant to
+     * be visible — and an import that wrote a league with no rosters stops being reported as
+     * an unqualified success.
+     */
+    for (const w of [
+      ...input.canonical.warnings,
+      ...(input.additionalWarnings ?? []),
+      ...persisted.incompleteSteps,
+    ]) {
       await prisma.importWarning.create({
         data: {
           runId: run.id,
