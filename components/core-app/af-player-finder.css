@@ -246,7 +246,14 @@
 .af-pf-league-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /*
+   * Wraps, because a row can carry four items — platform chip, format,
+   * "rostered by @…" and the "This league" mark — and on a 375px phone that
+   * is wider than the cell. Unwrapped, the items shrank and the owner's
+   * handle broke mid-phrase beside the chips.
+   */
+  flex-wrap: wrap;
+  gap: 4px 6px;
   margin-top: 3px;
   font-size: 11px;
   color: var(--muted);
