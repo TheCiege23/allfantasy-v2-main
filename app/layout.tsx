@@ -136,26 +136,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const gaMeasurementId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
   const metaPixelId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
   const fbAppId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
-  // Bisect for the missing document shell. Next serves every App Router route
-  // without <!DOCTYPE html>, <html>, <head> or <body> while /500 (Pages Router)
-  // is correct, so React is not flushing its preamble. Everything else has been
-  // ruled out by experiment: the fonts optimizer, the Node version, the Tailwind
-  // prebuild, the loader cache, the dist dir and next.config in isolation.
-  //
-  // AF_MINIMAL_LAYOUT=1 renders the smallest possible root document. If the shell
-  // comes back, the cause is inside this subtree and can be narrowed from here.
-  // If it does not, the cause is outside the layout entirely. Temporary.
-  if (process.env.AF_MINIMAL_LAYOUT === '1') {
-    return (
-      <html lang={htmlLang} data-mode={htmlMode} className="scroll-smooth" suppressHydrationWarning>
-        <body className="antialiased min-h-screen mode-readable">
-          <link rel="stylesheet" href="/railway-styles.css" precedence="default" />
-          {children}
-        </body>
-      </html>
-    );
-  }
-
   return (
     <html
       lang={htmlLang}
@@ -169,45 +149,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
-
-        {/*
-          THE BUILD IS NOT EMITTING THE ROOT LAYOUT'S STYLESHEET. `import
-          './globals.css'` is at the top of this file, but no CSS chunk for /layout
-          reaches the page: only the two small route sheets load, so `--bg` and
-          `--text` are never defined, and <body> collapses to height 0 with all of
-          its content present and invisible. That is the exact failure
-          scripts/railway-tailwind-prebuild.cjs describes in its own header —
-          "app-build-manifest.json lists no CSS for /layout, and every page is
-          completely unstyled" — still happening.
-
-          public/railway-styles.css is that same compiled Tailwind, rewritten by the
-          prebuild on every deploy, served, and never referenced by anything.
-          Pointing at it here is what puts the theme back on the page.
-
-          RENDERED FROM THE TREE ON PURPOSE. scripts/railway-next-start.cjs used to
-          inject this link into <head> from outside React, and the comment left
-          behind there records how that went: a <head> child React never rendered is
-          a hydration mismatch, #418 escalates to #423, the document is torn down and
-          the page goes blank. Rendering it here means the server HTML and the client
-          tree agree about it.
-
-          Same-origin, which is why it survives to the output. The Google Fonts links
-          that used to sit a few lines below did not survive; the same-origin
-          <link rel="preload"> in this subtree does.
-
-          THIS IS A WORKAROUND, and it should not outlive the bug. When the layout's
-          CSS chunk is emitted properly this line comes out.
-        */}
-        {/*
-          `precedence` is not decoration. In the React build the App Router ships, a
-          <link rel="stylesheet"> is only treated as a stylesheet RESOURCE — hoisted
-          into <head> and emitted — when it carries one. Without it React drops the
-          element on the floor: measured after #658 shipped, this exact link with no
-          precedence never reached the served HTML at all. It is also why the Google
-          Fonts links that used to live below here disappeared. The two sheets Next
-          emits itself both come out carrying data-precedence="next".
-        */}
-        <link rel="stylesheet" href="/railway-styles.css" precedence="default" />
 
         {/*
           The core-app design handoff's two typefaces. Every .af-core surface
