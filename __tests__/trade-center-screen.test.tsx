@@ -404,3 +404,70 @@ describe('⚠ two questions about the viewer, and one field cannot answer both',
     expect(PANEL).toContain('const myRosterId = props.viewerRosterId')
   })
 })
+
+describe('core visual upgrade — design-refs/trade-center-handoff', () => {
+  const STRIP = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeLeagueStrip.tsx'),
+    'utf8',
+  ).replace(/\r\n/g, '\n')
+
+  it('scopes the asset legend to what this league can trade, once the type is known', () => {
+    /*
+     * A redraft league has no future draft to send a pick into — the format
+     * banner refuses one — so the legend must not advertise it. Keyed on the
+     * resolved type key, never on a display string.
+     */
+    const redraft = text(<TradeCenter league={LEAGUE} leagueType="redraft" />)
+    expect(redraft).toContain('Asset types in this league')
+    expect(redraft).toContain('FAAB')
+    expect(redraft).not.toContain('Idol · Survivor')
+    expect(redraft).not.toContain('Weapon · Zombie')
+
+    const zombie = text(<TradeCenter league={LEAGUE} leagueType="redraft" leagueVariant="zombie" />)
+    expect(zombie).toContain('Weapon · Zombie')
+    expect(zombie).toContain('Serum · Zombie')
+    expect(zombie).not.toContain('Idol · Survivor')
+  })
+
+  it('⚠ keeps the full vocabulary when the league type is unknown', () => {
+    // "We do not know" must not read as "this league forbids picks".
+    const t = text(<TradeCenter league={LEAGUE} />)
+    expect(t).toContain('Asset types supported')
+    expect(t).toContain('Idol · Survivor')
+  })
+
+  it('⚠ the cross-league strip never renders "nothing waiting" for a league it did not read', () => {
+    // The same rule TradeInbox carries, for the same reason.
+    expect(STRIP).toContain('NOT SCANNED IS CHECKED BEFORE EMPTY')
+    expect(STRIP).toContain("if (panel.pending && !panel.pending.scanned)")
+    expect(STRIP).toContain('/api/league/trades-panel?leagueId=')
+  })
+
+  it('caps how many leagues it reads at once', () => {
+    // Each read may sweep a provider's pending transactions.
+    expect(STRIP).toContain('MAX_LEAGUES_READ')
+  })
+
+  it('does not render the strip without a leagues list', () => {
+    expect(text(<TradeCenter league={LEAGUE} />)).not.toContain('Offers across your leagues')
+  })
+
+  it('⚠ names which way the fairness track tilts', () => {
+    /*
+     * fairnessScore is signed — 50 + 50·tanh(...) — and a dot on an unlabelled
+     * bar told a manager nothing about whether 41 was good or bad for them.
+     */
+    expect(SRC).toContain('THE TRACK IS SIGNED, AND THE ENDS SAY WHICH WAY')
+    expect(SRC).toContain('Favours you')
+  })
+
+  it('⚠ the value balance excludes unpriced lines and hides under a format block', () => {
+    expect(SRC).toContain('UNPRICED LINES ARE EXCLUDED, AND THE RAIL SAYS SO')
+    expect(SRC).toContain('balance && !blocked')
+  })
+
+  it('renders the contender and rebuilder reads the engine already returned', () => {
+    expect(SRC).toContain('Contender read')
+    expect(SRC).toContain('Rebuilder read')
+  })
+})

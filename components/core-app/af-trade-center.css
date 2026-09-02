@@ -867,3 +867,394 @@
     min-height: 44px;
   }
 }
+
+/* ── Core visual upgrade ─────────────────────────────────────────────────
+ *
+ * design-refs/trade-center-handoff, Core artboard. Everything below ADDS a
+ * class or restyles one this file already owns; nothing here renames a class,
+ * because TradeInbox, TradeProposePanel, TradeFinderPanel and TradeAssetPicker
+ * all share the `.af-tc-*` vocabulary and would break silently on a rename.
+ */
+
+/* Platform marks — colour from the shared `.af-platform` tokens in af-core. */
+.af-tc-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+.af-tc-mark--sm {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+/* ── Offers across your leagues ─────────────────────────────────────── */
+
+.af-tc-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-tc-strip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.af-tc-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+.af-tc-strip-note {
+  font-size: 10px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+/* Tiles scroll; a manager in nine leagues gets a row, not a wall. */
+.af-tc-tiles {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.af-tc-tiles::-webkit-scrollbar {
+  display: none;
+}
+.af-tc-tile {
+  flex: 0 0 224px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+}
+.af-tc-tile:hover,
+.af-tc-tile:focus-visible {
+  border-color: var(--line2);
+  outline: none;
+}
+.af-tc-tile[data-active='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-tc-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.af-tc-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-tc-tile-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.af-tc-tile-meta {
+  font-size: 10px;
+  color: var(--faint);
+}
+.af-tc-tile-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  color: var(--faint);
+}
+.af-tc-tile-status[data-tone='waiting'] {
+  color: var(--accent);
+}
+.af-tc-tile-status[data-tone='clear'] {
+  color: var(--muted);
+}
+
+/* ── Context bar, team cards ────────────────────────────────────────── */
+
+.af-tc-context .af-tc-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+.af-tc-team-head .af-tc-spacer {
+  flex: 1 1 auto;
+}
+
+/* ── Asset rows ─────────────────────────────────────────────────────── */
+
+/* Scoped to the builder row: `.af-tc-row-sub` is also a sentence class elsewhere. */
+.af-tc-row-body .af-tc-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.af-tc-pos {
+  font-weight: 800;
+  color: var(--muted);
+}
+.af-tc-pos[data-pos='qb'] { color: #f9a8d4; }
+.af-tc-pos[data-pos='rb'] { color: #6ee7b7; }
+.af-tc-pos[data-pos='wr'] { color: #7dd3fc; }
+.af-tc-pos[data-pos='te'] { color: #fdba74; }
+.af-tc-pos[data-pos='dl'] { color: #fcd34d; }
+.af-tc-pos[data-pos='lb'] { color: #bef264; }
+.af-tc-pos[data-pos='db'] { color: #a5b4fc; }
+.af-tc-pos[data-pos='k'] { color: #fef08a; }
+.af-tc-pos[data-pos='def'] { color: #cbd5e1; }
+.af-tc-tag {
+  display: inline-block;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-tc-tag[data-tone='bad'] {
+  color: var(--tc-bad);
+  background: rgba(251, 91, 120, 0.12);
+}
+.af-tc-tag[data-tone='warn'] {
+  color: var(--tc-warn);
+  background: rgba(251, 191, 36, 0.12);
+}
+.af-tc-total-note {
+  color: var(--faint);
+}
+.af-tc-total b {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+/* ── Value balance ──────────────────────────────────────────────────── */
+
+.af-tc-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface2);
+}
+.af-tc-balance-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.af-tc-balance-delta {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.af-tc-balance-delta[data-tone='good'] { color: var(--tc-good); }
+.af-tc-balance-delta[data-tone='bad'] { color: var(--tc-bad); }
+.af-tc-balance-delta[data-tone='muted'] { color: var(--muted); }
+.af-tc-balance-delta[data-tone='faint'] { color: var(--faint); }
+.af-tc-balance-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+.af-tc-balance-give {
+  background: var(--tc-bad);
+  opacity: 0.85;
+}
+.af-tc-balance-get {
+  background: var(--tc-good);
+  opacity: 0.85;
+}
+.af-tc-balance-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+}
+.af-tc-balance-ends [data-side='give'] { color: var(--tc-bad); }
+.af-tc-balance-ends [data-side='get'] { color: var(--tc-good); }
+
+/* ── The verdict, as the hero ───────────────────────────────────────── */
+
+.af-tc-verdict {
+  padding: 18px;
+  gap: 14px;
+  border-color: var(--accent-line);
+  border-radius: 16px;
+}
+.af-tc-verdict-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-tc-verdict-eyebrow {
+  color: var(--accent);
+}
+.af-tc-verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.af-tc-verdict-row .af-tc-spacer {
+  flex: 1 1 auto;
+}
+.af-tc-grade {
+  padding: 10px 14px 10px 10px;
+  border-radius: 12px;
+}
+.af-tc-grade-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af-tc-grade[data-letter='A'] .af-tc-grade-letter { background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.3); }
+.af-tc-grade[data-letter='B'] .af-tc-grade-letter { background: rgba(94, 234, 212, 0.12); border-color: rgba(94, 234, 212, 0.3); }
+.af-tc-grade[data-letter='C'] .af-tc-grade-letter { background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.3); }
+.af-tc-grade[data-letter='D'] .af-tc-grade-letter { background: rgba(251, 146, 60, 0.12); border-color: rgba(251, 146, 60, 0.3); }
+.af-tc-grade[data-letter='F'] .af-tc-grade-letter { background: rgba(251, 91, 120, 0.12); border-color: rgba(251, 91, 120, 0.3); }
+.af-tc-grade-for {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.af-tc-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  text-align: right;
+}
+.af-tc-score-num {
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+.af-tc-score-num small {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-tc-score-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-tc-track-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Red at the end that favours the other side, green at the viewer's. */
+.af-tc-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(251, 91, 120, 0.35), rgba(255, 255, 255, 0.06) 50%, rgba(52, 211, 153, 0.35));
+}
+.af-tc-track-mid {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 1px;
+  background: var(--line2);
+}
+.af-tc-dot {
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+}
+.af-tc-track-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
+/* ── Notes and Decision OS ──────────────────────────────────────────── */
+
+.af-tc-note-title {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-tc-note[data-tone='format'] .af-tc-note-title { color: var(--text2); }
+.af-tc-dos > .af-label:first-child {
+  color: var(--accent);
+}
+.af-tc-reads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.af-tc-read {
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+.af-tc-read p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-tc-read[data-tone='contender'] { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.06); }
+.af-tc-read[data-tone='contender'] .af-tc-pair-label { color: var(--tc-good); }
+.af-tc-read[data-tone='rebuilder'] { border-color: rgba(167, 139, 250, 0.3); background: rgba(167, 139, 250, 0.06); }
+.af-tc-read[data-tone='rebuilder'] .af-tc-pair-label { color: var(--tc-violet); }
+
+@media (max-width: 720px) {
+  .af-tc-tile {
+    flex-basis: 196px;
+  }
+  .af-tc-strip-note {
+    display: none;
+  }
+  .af-tc-verdict {
+    padding: 15px;
+  }
+  .af-tc-verdict-row {
+    gap: 12px;
+  }
+  .af-tc-score-num {
+    font-size: 32px;
+  }
+}
