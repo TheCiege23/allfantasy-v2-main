@@ -782,6 +782,28 @@ export default async function AfCorePage({
   const devySlotCount = selectedLeagueId ? await leagueDevySlotCount(selectedLeagueId).catch(() => 0) : 0
 
   /*
+   * Admin nav gate — computed every render for the same reason `hasIdpDefense` and
+   * `devySlotCount` above are: it gates a nav item, and a nav item has to be
+   * decidable before you are on the screen it links to.
+   *
+   * ⚠ THIS ANSWERS THE WARNING ON `modelAdminAllowed` BELOW RATHER THAN IGNORING IT.
+   * That comment is right that an auth read in front of every screen is a real cost
+   * to decorate one page. So this is now the SINGLE such read in the file, and
+   * `modelAdminAllowed` reuses it instead of issuing a second. A rail entry, unlike
+   * a per-segment panel, cannot be resolved lazily — it is drawn on every screen.
+   *
+   * ⚠ IT IS `getAdminAccessState`, THE PREDICATE /admin ITSELF ENFORCES, not a second
+   * email check written here. The two would drift, and the failure is silent in the
+   * worse direction: a rail offering a door the page then refuses to open.
+   *
+   * Degrades to false: an errored gate hides the entry rather than surfacing a dead
+   * one, and denies rather than admits.
+   */
+  const isAdmin = await getAdminAccessState()
+    .then((state) => state.status === 'admin')
+    .catch(() => false)
+
+  /*
    * Devy data is loaded only on the devy screens — it is several queries across the whole
    * prospect pool and no other screen reads it.
    */
@@ -806,19 +828,19 @@ export default async function AfCorePage({
    * slate the sender was looking at; the client takes over from there.
    */
   /*
-   * ⚠ EVALUATED ONLY ON ITS OWN SEGMENT. `getAdminAccessState` reads cookies and
-   * the session; running it on every /core render would put an extra auth read
-   * in front of every screen in the product to decorate one admin page.
+   * ⚠ THIS NO LONGER ISSUES ITS OWN AUTH READ, AND THE ORIGINAL REASON IS WHY.
+   * This gate used to call `getAdminAccessState()` lazily on its own segment,
+   * because running it on every /core render would put an extra auth read in
+   * front of every screen to decorate one admin page. That reasoning still
+   * holds — but the rail's Admin entry now needs the same answer on EVERY
+   * render and cannot be resolved lazily, so `isAdmin` above pays for it once
+   * and this reuses it. One read per render, not two: strictly cheaper than
+   * the segment-scoped version was on the model-admin segment itself.
    *
-   * Defaults to FALSE — an errored gate denies rather than admits. This is the
-   * AllFantasy admin allowlist, not league commissionership.
+   * Still defaults to FALSE — an errored gate denies rather than admits. This
+   * is the AllFantasy admin allowlist, not league commissionership.
    */
-  const modelAdminAllowed =
-    segment === 'model-admin'
-      ? await getAdminAccessState()
-          .then((s) => s.status === 'admin')
-          .catch(() => false)
-      : false
+  const modelAdminAllowed = segment === 'model-admin' && isAdmin
 
   const liveScores =
     activeKey === 'live'
@@ -1453,6 +1475,7 @@ export default async function AfCorePage({
       selectedLeagueId={selectedLeagueId}
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}
+      isAdmin={isAdmin}
       weekLabel={dash34?.weekLabel ?? null}
       plan={plan}
       commissionerCount={commissionerCount}

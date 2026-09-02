@@ -111,6 +111,17 @@ export type CoreNavKey =
    * which is the "not built yet" panel problem this rail already learned once.
    */
   | 'defense-hub'
+  /*
+   * The admin command center at /admin. A full page OUTSIDE /core, like
+   * `settings` and `my-leagues` above, so it is an exit and never the active item.
+   *
+   * ⚠ CONDITIONAL, AND THE GATE IS THE PREDICATE /admin ITSELF ENFORCES.
+   * `navItems` omits it unless `isAdmin`, which the page resolves with
+   * `getAdminAccessState()` — the same function /admin's own guard calls. Deriving
+   * this from a second, hand-rolled email rule is how a rail comes to offer a door
+   * that the page behind it then refuses to open.
+   */
+  | 'admin'
 
 type NavItem = {
   key: CoreNavKey
@@ -190,6 +201,13 @@ export type AfCoreShellProps = {
    * none and loses them until it does. The tabs return on their own.
    */
   leagueHasScoredWeek?: boolean | null
+  /**
+   * Gates the Admin nav entry. Server-resolved with `getAdminAccessState()`, the
+   * same check `/admin` runs, so the entry appears exactly when the page behind it
+   * will grant access. Optional and defaulting to hidden on purpose: an absent prop
+   * must never reveal an admin door.
+   */
+  isAdmin?: boolean
   /**
    * Feeds the communications drawer (23a/23b) and the support modal (25b), both
    * mounted once here so every screen inherits them. Omitted on surfaces that
@@ -556,6 +574,10 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // glyph, and two identical marks in one nav was exactly the mistake the
     // Career entry above had to fix.
     { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings?tab=preferences' },
+    /* Admins only — see the CoreNavKey note. Another full page outside /core. */
+    ...(props.isAdmin
+      ? [{ key: 'admin' as const, label: 'Admin', glyph: '⬢', href: '/admin' }]
+      : []),
   ]
 }
 
@@ -586,7 +608,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
      * used to sit beside is retired — see the rail note above — so this is now
      * the only sync entry, and it answers a per-league question only.
      */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'tools'],
+    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'tools', 'admin'],
   },
 ]
 
