@@ -858,9 +858,11 @@
   color: var(--muted);
 }
 
-/* The one call to action a signed-out visitor gets. */
+/* The one call to action a signed-out visitor gets. `align-self` because the
+   block it sits in is a flex column, which otherwise stretches it edge to edge. */
 .af-core .af-pf-signin {
   margin-top: 10px;
+  align-self: flex-start;
   text-decoration: none;
 }
 
@@ -987,4 +989,593 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2a·2 — three views, one DOM: core (cross-league), league (held league
+   on top), mobile (≤720px, the shell's tab-bar breakpoint).
+
+   ⚠ APPENDED AT TOP LEVEL, NEVER INSIDE AN EXISTING @media. A block added
+   inside another query closes it early and silently moves every rule below
+   the insertion into the narrower band — see CLAUDE.md, af-matchup.css.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Visibility utilities. `d-only` hides on the phone; `m-only` shows only there. */
+.af-pf-m-only {
+  display: none;
+}
+
+/* ── Section headings — Archivo, per the handoff, not the mono label ── */
+.af-core .af-pf-h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-core .af-pf-block-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-block-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Readiness chip beside the name ─────────────────────────────────── */
+.af-core .af-pf-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-ready {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-core .af-pf-ready[data-tone='good'] {
+  background: var(--good-soft);
+  border-color: var(--good);
+  color: var(--good);
+}
+.af-core .af-pf-ready[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-ready[data-tone='bad'] {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* ── Tiles: coloured value + the `?` beside the label ────────────────── */
+.af-core .af-pf-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.af-core .af-pf-tile[data-tone='good'] .af-pf-tile-value {
+  color: var(--good);
+}
+.af-core .af-pf-tile[data-tone='warn'] .af-pf-tile-value {
+  color: var(--warn);
+}
+
+/* ── Help dot — own prefix because /players/{slug} never loads the shell ── */
+.af-pf-help {
+  position: relative;
+  display: inline-flex;
+}
+.af-pf-help-dot {
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 10px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+  cursor: help;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.af-pf-help-dot:hover,
+.af-pf-help-dot[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.af-pf-help-body {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -10px;
+  z-index: 40;
+  width: 252px;
+  padding: 12px 13px;
+  border-radius: 11px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text2);
+  font: 400 12px/1.5 var(--font-archivo, 'Archivo', sans-serif);
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.af-pf-help-body b {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* ── Slot / status / projection cells ────────────────────────────────── */
+.af-core .af-pf-slot {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.af-core .af-pf-slot[data-tone='good'] {
+  background: var(--good-soft);
+  border-color: var(--good);
+  color: var(--good);
+}
+.af-core .af-pf-slot[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-slot[data-tone='bad'] {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.af-core .af-pf-status {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-core .af-pf-status[data-tone='good'] {
+  color: var(--good);
+}
+.af-core .af-pf-status[data-tone='warn'] {
+  color: var(--warn);
+}
+.af-core .af-pf-status[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-core .af-pf-proj {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-nothing {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.af-core .af-pf-owner {
+  color: var(--text2);
+  font-weight: 600;
+}
+.af-core a.af-pf-league-name {
+  color: var(--text);
+  text-decoration: none;
+}
+.af-core a.af-pf-league-name:hover {
+  color: var(--accent);
+}
+
+/*
+ * Row tone. Slot truth beats projection: a wrong slot is a red row, IR is an
+ * amber one, and a league where someone else has him is dashed — context for
+ * a trade, not a lineup to fix.
+ */
+.af-core .af-pf-table tr[data-tone='bad'] td {
+  background: var(--bad-soft);
+}
+.af-core .af-pf-table tr[data-tone='bad'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+.af-core .af-pf-table tr[data-tone='warn'] td {
+  background: var(--warn-soft);
+}
+.af-core .af-pf-table tr[data-tone='warn'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.af-core .af-pf-table tr[data-tone='other'] td {
+  border-bottom-style: dashed;
+}
+.af-core .af-pf-table tr[data-tone='other'] .af-pf-league-name {
+  color: var(--text2);
+}
+.af-core .af-pf-table tr[data-held='true'] td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.af-core .af-pf-table td:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+.af-core .af-pf-table td:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* ── Recommended moves — the tone-barred cards ───────────────────────── */
+.af-core .af-pf-move-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-core .af-pf-move {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-left-width: 4px;
+}
+.af-core .af-pf-move[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+.af-core .af-pf-move[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+.af-core .af-pf-move[data-tone='good'] {
+  border-left-color: var(--good);
+}
+.af-core .af-pf-move-text {
+  min-width: 0;
+}
+.af-core .af-pf-move-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text);
+}
+.af-core .af-pf-move-path {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-core .af-pf-move-note {
+  color: var(--faint);
+}
+/* A delta is a GAIN from making the move, so it is green whatever the row's urgency. */
+.af-core .af-pf-move-delta {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--good);
+  white-space: nowrap;
+}
+.af-core .af-pf-move-delta--none {
+  color: var(--faint);
+  font-weight: 500;
+}
+.af-core .af-pf-move-btn {
+  min-height: 40px;
+  text-decoration: none;
+}
+
+/* ── League-in-context card ──────────────────────────────────────────── */
+.af-core .af-pf-lv {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-color: var(--accent-line);
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface) 60%);
+}
+.af-core .af-pf-lv[data-kind='other'] {
+  border-style: dashed;
+}
+.af-core .af-pf-lv-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-core a.af-pf-lv-league {
+  color: var(--text);
+  text-decoration: none;
+}
+.af-core a.af-pf-lv-league:hover {
+  color: var(--accent);
+}
+.af-core .af-pf-lv-format {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.af-core .af-pf-lv-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-lv-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.af-core .af-pf-lv-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-core .af-pf-lv-avatar--letter {
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 16px;
+  color: var(--text2);
+}
+.af-core .af-pf-lv-who-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-core .af-pf-lv-who-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-lv-who-meta {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-core .af-pf-lv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-lv-proj {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 34ch;
+}
+.af-core .af-pf-lv-proj-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--good);
+}
+.af-core .af-pf-lv-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-lv-btn {
+  min-height: 40px;
+  text-decoration: none;
+}
+
+/* ── "Also matched" chip row (phone only) ────────────────────────────── */
+.af-core .af-pf-others {
+  display: none;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-core .af-pf-other {
+  min-height: 36px;
+  text-decoration: none;
+  color: var(--text2);
+}
+.af-core .af-pf-other-pos {
+  margin-left: 6px;
+  font-size: 9.5px;
+  color: var(--faint);
+}
+
+/* ── Verdict: the total and the phone's Open-in buttons ──────────────── */
+.af-core .af-pf-verdict-total {
+  margin-left: auto;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--good);
+}
+.af-core .af-pf-verdict-opens {
+  display: none;
+  gap: 8px;
+}
+.af-core .af-pf-verdict-open {
+  flex: 1 1 0;
+  min-height: 44px;
+  text-decoration: none;
+}
+.af-core .af-pf-verdict-opens .af-pf-verdict-open + .af-pf-verdict-open {
+  background: transparent;
+  color: var(--text2);
+  border-color: var(--line2);
+}
+
+/* ── Mobile — the phone view proper ──────────────────────────────────── */
+/*
+ * 720px is the shell's own phone breakpoint (the bottom tab bar appears
+ * there), so "mobile" means the same width on every /core screen. The
+ * ≤860px rules above already stack the grid; this is the phone design on
+ * top: search, player card, the league list, the verdict with its buttons.
+ */
+@media (max-width: 720px) {
+  .af-pf-d-only {
+    display: none !important;
+  }
+  .af-pf-m-only {
+    display: block;
+  }
+  .af-core .af-pf-others {
+    display: flex;
+  }
+  .af-core .af-pf-verdict-opens {
+    display: flex;
+  }
+
+  /* Clears the shell's fixed tab bar so the last card is reachable. */
+  .af-core.af-pf--2a {
+    padding-bottom: 84px;
+    min-height: 0;
+  }
+
+  .af-core .af-pf-rail {
+    gap: 10px;
+    padding: 14px 16px 10px;
+    border-bottom: 0;
+    background: transparent;
+  }
+  .af-core .af-pf-h1 {
+    font-size: 28px;
+  }
+  .af-core .af-pf-search {
+    height: 48px;
+    max-width: none;
+  }
+  .af-core .af-pf-search-note {
+    display: none;
+  }
+
+  .af-core .af-pf-main {
+    padding: 0 16px;
+    gap: 12px;
+  }
+  .af-core .af-pf-side {
+    padding: 12px 16px 0;
+  }
+
+  .af-core .af-pf-detail {
+    padding: 14px;
+    gap: 12px;
+  }
+  .af-core .af-pf-headshot {
+    width: 58px;
+    height: 58px;
+    border-radius: 12px;
+  }
+  .af-core .af-pf-headshot--none {
+    font-size: 22px;
+  }
+  .af-core .af-pf-name {
+    font-size: 22px;
+  }
+  .af-core .af-pf-detail-head .af-sync {
+    display: none;
+  }
+  .af-core .af-pf-leagues {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  /* The table becomes the handoff's grouped list: league + platform · format, slot chip. */
+  .af-core .af-pf-table thead {
+    display: none;
+  }
+  .af-core .af-pf-table,
+  .af-core .af-pf-table tbody {
+    display: block;
+  }
+  .af-core .af-pf-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'league slot'
+      'action action';
+    align-items: center;
+    gap: 4px 10px;
+    min-height: 44px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .af-core .af-pf-table tr:last-child {
+    border-bottom: 0;
+  }
+  .af-core .af-pf-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .af-core .af-pf-table td.af-pf-col-league {
+    grid-area: league;
+  }
+  .af-core .af-pf-table td.af-pf-col-slot {
+    grid-area: slot;
+    text-align: right;
+  }
+  .af-core .af-pf-table td.af-pf-col-status,
+  .af-core .af-pf-table td.af-pf-col-proj {
+    display: none;
+  }
+  .af-core .af-pf-table td.af-pf-table-action {
+    grid-area: action;
+    text-align: left;
+  }
+  .af-core .af-pf-table td.af-pf-table-action:empty {
+    display: none;
+  }
+  .af-core .af-pf-table tr[data-tone='bad'],
+  .af-core .af-pf-table tr[data-tone='warn'],
+  .af-core .af-pf-table tr[data-held='true'] {
+    padding-left: 10px;
+  }
+  .af-core .af-pf-table tr[data-tone='bad'] {
+    box-shadow: inset 3px 0 0 var(--bad);
+  }
+  .af-core .af-pf-table tr[data-tone='warn'] {
+    box-shadow: inset 3px 0 0 var(--warn);
+  }
+  .af-core .af-pf-table tr[data-held='true'] {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+
+  .af-core .af-pf-lv {
+    padding: 14px;
+  }
+  .af-core .af-pf-lv-actions {
+    width: 100%;
+  }
+  .af-core .af-pf-lv-btn {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+  .af-core .af-pf-verdict {
+    padding: 16px;
+  }
+  .af-core .af-pf-verdict-headline {
+    font-size: 20px;
+  }
 }

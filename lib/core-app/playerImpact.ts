@@ -9,6 +9,8 @@ import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/loadIdpProjections'
 import { startingSlots, slotForStarterIndex, canFillSlot, shareAnySlot } from './slotEligibility'
 import { leagueDisplayName } from './leagueHome'
+import { pickStartOver, type StartOver } from './startOver'
+export type { StartOver } from './startOver'
 
 /**
  * "This player just got downgraded — what do I do, in every league I have him?"
@@ -48,6 +50,12 @@ export type LeagueImpact = {
   leagueId: string
   leagueName: string
   platform: string
+  /**
+   * The provider's own league id and season, so the screen can build an
+   * "Open in <platform>" link without a second read. Null for native leagues.
+   */
+  platformLeagueId: string | null
+  season: number | null
   /** STARTER / BENCH / IR SLOT / TAXI — where this player sits in this league. */
   slot: string
   /**
@@ -74,6 +82,14 @@ export type LeagueImpact = {
     scoredKeys: number
   }>
   replacements: SectionState<ReplacementOption[]>
+  /**
+   * The inverse question, for a player who is NOT starting: the weakest
+   * starter he is eligible to replace, and what starting him instead gains
+   * under this league's scoring. Null when he is starting, when either side
+   * cannot be priced, or when no starter's slot accepts his position. See
+   * ./startOver.ts.
+   */
+  startOver: StartOver | null
 }
 
 type PlayerRow = {
@@ -165,7 +181,9 @@ export async function getPlayerImpact(
       leagueId: true,
       platformUserId: true,
       externalId: true,
-      league: { select: { id: true, name: true, platform: true, settings: true } },
+      league: {
+        select: { id: true, name: true, platform: true, settings: true, platformLeagueId: true, season: true },
+      },
     },
   })
   if (teams.length === 0) return []
@@ -319,6 +337,22 @@ export async function getPlayerImpact(
     const injured = playerById.get(playerSleeperId)
 
     /*
+     * For a player on the bench, IR or taxi: who would he take over from, and
+     * for how many points, under this league's scoring. Null for a starter —
+     * there is nobody to displace — and null whenever either side is unpriced,
+     * because a delta with an invented half is not a delta.
+     */
+    const startOver = placed.starting
+      ? null
+      : pickStartOver({
+          benched: { position: injured?.position ?? null, afPoints: mine?.points ?? null },
+          starters: asIds(pd.starters),
+          slots,
+          playerById: (id) => playerById.get(id),
+          priceOf: (id) => priceOf(id)?.points ?? null,
+        })
+
+    /*
      * Candidates are drawn from bench, IR and taxi — never from the current
      * starters. Suggesting a swap with someone already starting does not fill the
      * hole, it moves it.
@@ -386,6 +420,8 @@ export async function getPlayerImpact(
       leagueId: t.leagueId,
       leagueName: leagueDisplayName(t.league?.name ?? null),
       platform: String(t.league?.platform ?? 'manual').toLowerCase(),
+      platformLeagueId: t.league?.platformLeagueId ?? null,
+      season: t.league?.season ?? null,
       slot: placed.slot,
       exactSlot,
       slotConfirmed: Boolean(exactSlot) || !placed.starting,
@@ -411,6 +447,7 @@ export async function getPlayerImpact(
                   : `nobody on your bench can fill a ${normalizePosition(injured.position)} slot`
                 : 'we could not resolve this player’s position, so we cannot tell who could replace him',
             },
+      startOver,
     })
   }
 

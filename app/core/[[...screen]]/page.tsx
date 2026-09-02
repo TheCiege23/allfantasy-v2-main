@@ -40,6 +40,7 @@ import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
+import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
@@ -682,6 +683,19 @@ export default async function AfCorePage({
           playedLeagues.map((l) => l.id),
           userId
         ).catch(() => null)
+      : null
+
+  /*
+   * 2a, league in context: who has him in THIS league — you, a named manager,
+   * or nobody. Only when a league is held AND the player resolved to a
+   * platform id; without the id there is no roster to look him up on, and the
+   * detail's own impact section already says so.
+   */
+  const playerLeagueView =
+    activeKey === 'players' && selectedLeagueId && playerDetail?.player.sleeperId
+      ? await getPlayerLeagueView(selectedLeagueId, playerDetail.player.sleeperId, userId, {
+          position: playerDetail.player.position,
+        }).catch(() => null)
       : null
 
   /*
@@ -1856,6 +1870,7 @@ export default async function AfCorePage({
           detail={playerDetail}
           leagueCount={playedLeagues.length}
           selectedLeagueId={selectedLeagueId}
+          leagueView={playerLeagueView}
         />
       ) : activeKey === 'week' ? (
         /*

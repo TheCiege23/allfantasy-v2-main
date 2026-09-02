@@ -70,9 +70,18 @@ export type LeagueSlot = {
   leagueName: string
   platform: string
   format: string | null
-  /** STARTER / BENCH / IR / TAXI / NOT YOURS */
+  /** The provider's league id and season, for "Open in <platform>" links. */
+  platformLeagueId: string | null
+  season: number | null
+  /** STARTER / BENCH / IR SLOT / TAXI / NOT YOURS */
   slot: string
   isYours: boolean
+  /**
+   * Who has him when it is not you — the manager's team, from `LeagueTeam`.
+   * Null when he is yours, and null when he is on a roster we hold no team row
+   * for (the row then reads "another manager" rather than inventing a name).
+   */
+  owner: { teamName: string; ownerName: string; avatarUrl: string | null } | null
 }
 
 /**
@@ -322,7 +331,12 @@ async function resolveLeagueSlots(
     where: { claimedByUserId: userId, leagueId: { in: leagueIds } },
     select: { leagueId: true, platformUserId: true, externalId: true },
   })
-  if (teams.length === 0) return []
+  /*
+   * ⚠ NO EARLY RETURN ON ZERO CLAIMED TEAMS. This used to `return []` here,
+   * which was right when the only rows were YOURS. Now a league where you have
+   * no claimed team can still tell you who DOES have him — the second pass
+   * below — so an empty claim set just means the first pass finds nothing.
+   */
 
   const candidatesByLeague = new Map<string, Set<string>>()
   for (const t of teams) {
@@ -333,16 +347,21 @@ async function resolveLeagueSlots(
   const claimedLeagueIds = [...candidatesByLeague.keys()]
   const allCandidates = [...new Set([...candidatesByLeague.values()].flatMap((s) => [...s]))]
 
+  // Every league you play, not only the claimed ones: the second pass names
+  // leagues where someone else has him, and those need a name and a platform too.
   const leagues = await prisma.league.findMany({
-    where: { id: { in: claimedLeagueIds } },
-    select: { id: true, name: true, platform: true, leagueType: true },
+    where: { id: { in: leagueIds } },
+    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true, season: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
 
-  const rosters = await prisma.roster.findMany({
-    where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
-    select: { leagueId: true, platformUserId: true, playerData: true },
-  })
+  const rosters =
+    claimedLeagueIds.length > 0 && allCandidates.length > 0
+      ? await prisma.roster.findMany({
+          where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
+          select: { leagueId: true, platformUserId: true, playerData: true },
+        })
+      : []
 
   const out: LeagueSlot[] = []
   const claimed = new Set<string>()
@@ -365,11 +384,120 @@ async function resolveLeagueSlots(
         leagueName: league?.name ?? 'League',
         platform: String(league?.platform ?? 'manual').toLowerCase(),
         format: league?.leagueType ?? null,
+        platformLeagueId: league?.platformLeagueId ?? null,
+        season: league?.season ?? null,
         slot: slotLabel(key),
         isYours: true,
+        owner: null,
       })
       claimed.add(r.leagueId)
       break
+    }
+  }
+
+  /*
+   * ── Second pass: leagues where he is NOT on your roster ─────────────────
+   *
+   * "Every platform, every league" was only ever "every league where YOU have
+   * him". The handoff's table carries a fourth kind of row — `NOT YOURS ·
+   * rostered by @tashaR · Trade for him →` — and the trade half of the screen
+   * cannot exist without it: you cannot pitch a trade for a player without
+   * knowing who to pitch it to.
+   *
+   * ⚠ SCANNED IN MEMORY, NOT THROUGH A JSON PATH FILTER, ON PURPOSE. A
+   * `playerData` path filter that matched the wrong id vocabulary (string
+   * against number, or a different key) would return nothing and this pass
+   * would quietly report him unrostered everywhere — indistinguishable from
+   * the truth. Reading the arrays through the same `String()` fold the first
+   * pass and `getPlayerImpact` use means all three agree on what "on a roster"
+   * means, and a miss is a real miss.
+   *
+   * The cost is one roster read per league scanned. A typical account is a
+   * dozen leagues of twelve rosters; the largest production account is ~65
+   * played leagues, and `getPlayerImpact` already runs three queries per league
+   * on this page, so this is not the expensive part.
+   */
+  const unclaimed = leagueIds.filter((id) => !claimed.has(id))
+  if (unclaimed.length > 0) {
+    const everyRoster = await prisma.roster
+      .findMany({
+        where: { leagueId: { in: unclaimed } },
+        select: { leagueId: true, platformUserId: true, playerData: true },
+      })
+      .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>)
+
+    const held = new Map<string, { platformUserId: string; slot: string }>()
+    for (const r of everyRoster) {
+      if (held.has(r.leagueId)) continue
+      const pd = (r.playerData ?? {}) as Record<string, unknown>
+      for (const key of SLOT_ORDER) {
+        const arr = pd[key]
+        if (!Array.isArray(arr)) continue
+        if (!arr.map(String).includes(sleeperId)) continue
+        held.set(r.leagueId, { platformUserId: r.platformUserId, slot: slotLabel(key) })
+        break
+      }
+    }
+
+    if (held.size > 0) {
+      const owners = await prisma.leagueTeam
+        .findMany({
+          where: { leagueId: { in: [...held.keys()] } },
+          select: {
+            leagueId: true,
+            externalId: true,
+            platformUserId: true,
+            ownerName: true,
+            teamName: true,
+            avatarUrl: true,
+          },
+        })
+        .catch(
+          () =>
+            [] as Array<{
+              leagueId: string
+              externalId: string
+              platformUserId: string | null
+              ownerName: string
+              teamName: string
+              avatarUrl: string | null
+            }>
+        )
+
+      for (const [leagueId, h] of held) {
+        const league = byId.get(leagueId)
+        const base = {
+          leagueId,
+          leagueName: league?.name ?? 'League',
+          platform: String(league?.platform ?? 'manual').toLowerCase(),
+          format: league?.leagueType ?? null,
+          platformLeagueId: league?.platformLeagueId ?? null,
+          season: league?.season ?? null,
+        }
+        /*
+         * If the holder is one of YOUR candidate ids after all — the first pass
+         * can miss a roster the claim predicate did not reach — it is yours,
+         * with the real slot, not "NOT YOURS" wearing your own team name.
+         */
+        if (candidatesByLeague.get(leagueId)?.has(h.platformUserId)) {
+          out.push({ ...base, slot: h.slot, isYours: true, owner: null })
+          continue
+        }
+        // Joined on the owner id, then on the platform roster id — both are
+        // how the importers key a team, depending on the platform.
+        const team =
+          owners.find((t) => t.leagueId === leagueId && t.platformUserId === h.platformUserId) ??
+          owners.find((t) => t.leagueId === leagueId && t.externalId === h.platformUserId) ??
+          null
+        out.push({
+          ...base,
+          slot: 'NOT YOURS',
+          isYours: false,
+          owner: team
+            ? { teamName: team.teamName, ownerName: team.ownerName, avatarUrl: team.avatarUrl }
+            : null,
+        })
+      }
     }
   }
 
@@ -667,7 +795,9 @@ export async function getPlayerDetail(
   const MOVE_LEAGUE_CAP = 4
   const moveLeagues =
     userId && row.sleeperId && leagues.available
-      ? [...leagues.data]
+      ? leagues.data
+          // Only leagues where he is on YOUR roster have a hole for a pickup to fill.
+          .filter((l) => l.isYours)
           .sort((a, b) => Number(b.slot === 'STARTER') - Number(a.slot === 'STARTER'))
           .slice(0, MOVE_LEAGUE_CAP)
       : []
@@ -703,7 +833,7 @@ export async function getPlayerDetail(
             ? 'sign in to see pickup options for your own leagues'
             : !row.sleeperId
               ? 'we hold no Sleeper id for this player, so we cannot weigh him against your rosters'
-              : !leagues.available || leagues.data.length === 0
+              : !leagues.available || leagues.data.every((l) => !l.isYours)
                 ? 'he is not on any of your rosters, so there is no lineup hole to fill'
                 : 'no unrostered player we can price would fill his slot in the leagues we checked',
         }
@@ -777,8 +907,12 @@ export async function getPlayerDetail(
       team: row.team,
       imageUrl: row.imageUrl,
       number: row.number,
-      rosteredIn: leagues.available ? leagues.data.length : null,
-      platforms: leagues.available ? [...new Set(leagues.data.map((l) => l.platform))] : [],
+      // YOUR rosters only — a league where another manager has him is not one
+      // you roster him in, and the header line says "on N of your leagues".
+      rosteredIn: leagues.available ? leagues.data.filter((l) => l.isYours).length : null,
+      platforms: leagues.available
+        ? [...new Set(leagues.data.filter((l) => l.isYours).map((l) => l.platform))]
+        : [],
     },
     identityResolved,
     bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
