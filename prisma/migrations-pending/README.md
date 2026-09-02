@@ -70,6 +70,39 @@ was called, and isolates nothing. That is the failure `TENANCY.md` §3.1 names,
 reached from an angle the document does not: not "app and migrations share a
 role", but "the app's role is a MEMBER of the migration role".
 
+## ⚠ A THIRD CASE: applied to production, but NOT through Prisma
+
+### `20260901220000_domain_os_facts`
+
+**Applied to production 2026-09-01 by the owner, as raw SQL in a console.** So it
+is neither "pending approval" nor recorded in `_prisma_migrations` — it is a
+**backfill of the migration history** for a table that already exists.
+
+The distinction matters on the next `migrate deploy`:
+
+| | seven Commissioner OS migrations | this one |
+|---|---|---|
+| applied via | `prisma migrate` | raw SQL |
+| `_prisma_migrations` row | ✅ present, real sha256 | ❌ **absent** |
+| next `migrate deploy` | matches and **skips** | **RUNS it** |
+
+That is safe only because every statement in it is `IF NOT EXISTS`: the run is a
+no-op that succeeds and finally writes the missing `_prisma_migrations` row.
+**Self-healing by construction — and it is the guards, not luck, that make it so.**
+Without them the first `migrate deploy` against production fails, writes a
+`finished_at IS NULL` row, and every later migration aborts with P3009 until
+someone resolves it by hand — the exact failure this directory exists to prevent.
+
+🛑 **Why it was ever needed.** `model DomainOsFacts` went into `schema.prisma`
+with `f539b4016` (#580) and no migration. Reads degraded correctly to live
+derivation, so nothing looked broken — but **writes threw P2021, were swallowed
+twice, and `/api/cron/domain-os-refresh` reported `written: N` every 30 minutes
+for rows it never wrote.** The Prisma *delegate* exists whenever the model is in
+the schema, so the `if (!delegate)` guard never fired. Fixed on the code side in
+the same change that staged this file (`OsStore.write` now returns `boolean`;
+`refresh` reports `'write_failed'`), and that fix is **required independently** —
+creating the table fixes today, not the next drift.
+
 ## Currently parked
 
 ### `20260831120000_commissioner_os_t101`

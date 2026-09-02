@@ -39,11 +39,30 @@ export interface OsFeedOutcome {
   sampleSize: number | null
 }
 
+/**
+ * What one `refresh()` actually achieved.
+ *
+ * 🛑 THREE OUTCOMES, NOT TWO, AND THE THIRD IS THE ONE THAT WAS MISSING.
+ *
+ *   written       the fact was derived AND stored
+ *   unavailable   the SOURCE had nothing — a provider outage, an empty league, a cold window
+ *   write_failed  the fact was derived and the STORE would not take it
+ *
+ * ⚠ `write_failed` IS NOT A FLAVOUR OF `unavailable`. They need opposite responses: one is
+ * upstream and usually self-healing, the other is a schema, permissions or capacity problem that
+ * will not fix itself. Collapsing them is the same mistake the grounding packet avoided by giving
+ * a killed feed its own `disabled` reason rather than letting it look like a cold cache.
+ *
+ * Measured 2026-09-01: with `domain_os_facts` absent from production, every refresh in this
+ * codebase was a `write_failed` and every one of them reported `written`.
+ */
+export type OsRefreshOutcome = 'written' | 'unavailable' | 'write_failed'
+
 export interface OsFeed {
   /** Read one fact family, preferring maintained state. Never throws. */
   get<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<TFacts | null>
   /** Populate one fact family without reading. This is the "gathering" half; it needs a scheduler. */
-  refresh<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<'written' | 'unavailable'>
+  refresh<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs): Promise<OsRefreshOutcome>
   /** How each family was sourced on this pass — for telemetry and for judging whether the feed earns its keep. */
   drainOutcomes(): Record<string, OsFeedOutcome>
 }
@@ -52,9 +71,21 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
   const store = deps.store ?? createOsStore()
   const outcomes: Record<string, OsFeedOutcome> = {}
 
-  async function put<TArgs, TFacts>(source: OsFactSource<TArgs, TFacts>, args: TArgs, facts: TFacts) {
+  /**
+   * Store one derived fact, and report BOTH what was measured and whether it landed.
+   *
+   * ⚠ The two callers want different halves. `get` needs `measured` for its outcome telemetry and
+   * does not care whether the cache write landed — it already holds the fact. `refresh` needs
+   * `persisted`, because storing IS its job and a silent failure there is indistinguishable from
+   * success. Returning only the measurement is what made that indistinguishable for weeks.
+   */
+  async function put<TArgs, TFacts>(
+    source: OsFactSource<TArgs, TFacts>,
+    args: TArgs,
+    facts: TFacts,
+  ): Promise<{ measured: { confidence?: number | null; sampleSize?: number | null }; persisted: boolean }> {
     const m = source.measure?.(facts) ?? {}
-    await safeWrite(store, {
+    const persisted = await safeWrite(store, {
       domain,
       kind: source.kind,
       level: source.level,
@@ -64,7 +95,7 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
       confidence: m.confidence ?? null,
       sampleSize: m.sampleSize ?? null,
     })
-    return m
+    return { measured: m, persisted }
   }
 
   return {
@@ -91,10 +122,13 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
         return null
       }
 
-      const m = await put(source, args, live)
+      // ⚠ `persisted` is deliberately IGNORED here. The caller asked for a fact and has one; a
+      // cache write that failed is an accelerator problem, not an answer problem, and reporting
+      // it as `unavailable` would deny a fact we are holding. `refresh` is where it matters.
+      const { measured } = await put(source, args, live)
       outcomes[source.kind] = {
         servedFrom: 'live', level: source.level, ageMs: 0,
-        confidence: m.confidence ?? null, sampleSize: m.sampleSize ?? null,
+        confidence: measured.confidence ?? null, sampleSize: measured.sampleSize ?? null,
       }
       return live
     },
@@ -102,8 +136,10 @@ export function createOsFeed(domain: OsDomain, deps: { store?: OsStore } = {}): 
     async refresh(source, args) {
       const live = await source.derive(args).catch(() => null)
       if (!live) return 'unavailable'
-      await put(source, args, live)
-      return 'written'
+      const { persisted } = await put(source, args, live)
+      // Storing is the entire job of this method, so a write that did not land is a failure of
+      // the call — never `written`, and never `unavailable` (which would blame the source).
+      return persisted ? 'written' : 'write_failed'
     },
 
     drainOutcomes() {

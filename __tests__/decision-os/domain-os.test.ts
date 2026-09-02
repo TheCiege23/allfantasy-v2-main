@@ -35,6 +35,10 @@ function memoryStore(seed: Array<{ key: string; facts: unknown; ageMs: number }>
         const arg = a as unknown as { domain: string; kind: string; level: string; scopeKey: string; facts: unknown; confidence: number | null; sampleSize: number | null }
         writes.push({ key: k(arg), confidence: arg.confidence, sampleSize: arg.sampleSize })
         rows.set(k(arg), { facts: arg.facts, capturedAt: new Date(), confidence: arg.confidence, sampleSize: arg.sampleSize })
+        // ⚠ MUST affirm. `safeWrite` reads anything other than `true` as a failure, on purpose —
+        // a double that forgets this reports write_failed, which is how a real store that forgot
+        // it would be caught too.
+        return true
       },
     } as never,
   }
@@ -156,6 +160,76 @@ describe('safe before the migration is applied', () => {
   it('reports no cached facts when the delegate is absent', async () => {
     const s = createOsStore({} as never)
     await expect(s.read({ domain: 'lineup', kind: 'k', level: 'league', scopeKey: 'L1', ttlMs: 1000 })).resolves.toBeNull()
-    await expect(s.write({ domain: 'lineup', kind: 'k', level: 'league', scopeKey: 'L1', sport: 'NFL', facts: {} })).resolves.toBeUndefined()
+    // Reports FALSE, not undefined: "I did not persist this" is an answer the caller can act on.
+    // Undefined was indistinguishable from success — see the suite below.
+    await expect(s.write({ domain: 'lineup', kind: 'k', level: 'league', scopeKey: 'L1', sport: 'NFL', facts: {} })).resolves.toBe(false)
+  })
+})
+
+/**
+ * ── 🛑 A WRITE THAT FAILS MUST NOT BE REPORTED AS WORK DONE ─────────────────────────────────
+ *
+ * Measured on production 2026-09-01: `domain_os_facts` did not exist, yet
+ * `/api/cron/domain-os-refresh` had been running every 30 minutes reporting `written: N`.
+ *
+ * The mechanism was two stacked swallows. `createOsStore().write` catches its own failure
+ * ("populating the cache must never fail the caller"), `safeWrite` catches again, and `refresh`
+ * then returned the literal `'written'` because nothing it could see had gone wrong. The Prisma
+ * delegate EXISTS whenever the model is in `schema.prisma`, so the `if (!delegate)` guard never
+ * fired — the upsert ran, threw P2021, and was swallowed.
+ *
+ * ⚠ THE MISSING TABLE WAS THE TRIGGER, NOT THE BUG. Creating it fixes today; it does not stop the
+ * next permissions change or schema drift being reported as healthy work. What is under test here
+ * is that a failed write is OBSERVABLE.
+ *
+ * ⚠ AND `get()` MUST NOT CHANGE. On the read path a failed cache write is genuinely opportunistic:
+ * the caller already holds the live value and must still receive it. Only `refresh`, whose entire
+ * job is to write, may report the failure. Same swallow, two correct behaviours — the last test
+ * here pins that so a later "tidy-up" cannot collapse them into one.
+ */
+describe('a failed write is reported, not counted as success', () => {
+  it('refresh() reports write_failed when the store THROWS', async () => {
+    const hostile = {
+      read: async () => null,
+      write: async () => { throw new Error('relation "domain_os_facts" does not exist') },
+    } as never
+    const feed = createOsFeed('lineup', { store: hostile })
+    await expect(feed.refresh(src(), { id: 'L1' })).resolves.toBe('write_failed')
+  })
+
+  it('refresh() reports write_failed when the store DECLINES without throwing', async () => {
+    // This is the production shape: createOsStore swallows P2021 internally and returns normally.
+    // A store that reports failure by returning false must be heard as clearly as one that throws.
+    const silent = { read: async () => null, write: async () => false } as never
+    const feed = createOsFeed('lineup', { store: silent })
+    await expect(feed.refresh(src(), { id: 'L1' })).resolves.toBe('write_failed')
+  })
+
+  it('still reports written when the store actually persists', async () => {
+    const m = memoryStore()
+    const feed = createOsFeed('lineup', { store: m.store })
+    await expect(feed.refresh(src(), { id: 'L1' })).resolves.toBe('written')
+    expect(m.writes).toHaveLength(1)
+  })
+
+  it('keeps unavailable meaning "the SOURCE had nothing", distinct from a write failure', async () => {
+    // Collapsing these loses the only signal that separates a provider outage from a store
+    // outage — which need opposite responses. Same reason the grounding packet gave `disabled`
+    // its own gap reason rather than reusing `not_computed`.
+    const m = memoryStore()
+    const feed = createOsFeed('lineup', { store: m.store })
+    await expect(feed.refresh(src({ derive: async () => null }), { id: 'L1' })).resolves.toBe('unavailable')
+    expect(m.writes).toHaveLength(0)
+  })
+
+  it('get() STILL returns the live value when the cache write fails', async () => {
+    const hostile = {
+      read: async () => null,
+      write: async () => { throw new Error('db down') },
+    } as never
+    const feed = createOsFeed('lineup', { store: hostile })
+    await expect(feed.get(src(), { id: 'L1' })).resolves.toEqual(FACTS)
+    // And it is reported as served LIVE, not as unavailable: the fact was derived and handed over.
+    expect(feed.drainOutcomes().k).toMatchObject({ servedFrom: 'live' })
   })
 })
