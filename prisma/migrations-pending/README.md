@@ -31,7 +31,14 @@ never has to fire.
 
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
-Only `t101b` below is still parked. Everything else in this directory has been
+Of the seven, `t101b` below is still parked, as are two of the three added
+2026-09-02 — `draft_fact_metadata` and `fact_table_uniqueness`, verified against
+production 2026-09-04 as never applied anywhere. The third,
+`yahoo_connection_identity`, **WAS applied to production on 2026-09-04** and is
+recorded in `_prisma_migrations` by hand with the real `sha256` of its
+`migration.sql` (`4b82763b…`), so a later `migrate deploy` matches and skips.
+Its directory deliberately stays here rather than moving to `prisma/migrations/`,
+per the note on that migration below. Everything else in this directory has been
 applied and recorded in `_prisma_migrations` with the real `sha256` of its
 `migration.sql`, so a later `migrate deploy` matches and skips rather than
 re-running:
@@ -218,3 +225,65 @@ not a general rule about Int→Text migrations.** No MFL writer exists yet, so
 nothing is writing a zero-padded `rosterId` under the old (Int-typed) client. A
 future change that adds a `where`/upsert on `rosterId`, or a writer producing a
 non-plain-digit value, would need this re-checked, not assumed to still hold.
+* `dw_draft_facts` — the writer dedupes in memory on `sourceDraftId` and then
+  **strips that column before persisting**, because none exists. A key without
+  it is not merely weaker but wrong: a league with a startup *and* a rookie
+  draft in one season has two legitimate rows at the same
+  `(leagueId, season, round, pickNumber)`.
+* `dw_transaction_facts` — has no source transaction id at all, so a duplicate
+  is indistinguishable from a manager adding the same player twice in different
+  weeks.
+
+So it adds the missing discriminator columns first, and their indexes are
+**partial** (`WHERE … IS NOT NULL`). Legacy rows are never touched — the ids
+cannot be backfilled because they were never stored — and only rows written
+after the writers populate them are protected. The constraint is therefore inert
+until that writer change ships, which is the safe order.
+
+⚠ **One statement removes data**: the `dw_matchup_facts` dedupe, which is the
+only table with a complete natural key. Run the counting query in the migration's
+header first — zero means the dedupe is a no-op, and a large number is itself the
+evidence for the defect.
+
+⚠ **`schema.prisma` is deliberately NOT updated by either file.** Adding these
+columns there makes the generated client include them in its DEFAULT SELECT for
+every read of those models; against a database that lacks them that is P2022 on
+`findMany`, not confined to code that wants the new fields. The order is: apply,
+then update `schema.prisma`, then ship writers.
+
+### `20260902020000_yahoo_connection_identity`
+
+🛑 **PARKED. NEVER APPLIED ANYWHERE.**
+
+Demotes `YahooConnection` from a rival CREDENTIAL store to an identity record:
+its three token columns become nullable, and it gains the `userId` link to
+`app_users` it has never had. No `DELETE`, no `DROP` — six idempotent statements.
+
+**Why there are two stores and only one of them can ever be written.** Yahoo has
+exactly one registered redirect URI, `https://www.allfantasy.ai/api/league/yahoo/callback`,
+and both entry points now resolve through `getYahooRedirectUri` — so every flow
+lands on that one callback, which writes `league_auths`. `/api/auth/yahoo/callback`
+therefore never executes, and it is the sole writer of `YahooConnection` and the
+sole setter of the two cookies `/api/yahoo/leagues` requires. Production counts
+agree: `YahooLeague` 0, `YahooConnection` 0, `league_auths` yahoo row 1.
+
+⚠ **The obvious fix is the wrong one.** Having the live callback write BOTH stores
+puts two copies of a *rotating* credential in play, each with its own refresh path
+(`YahooLeagueFetchService` → `league_auths`, `/api/yahoo/leagues` → `YahooConnection`).
+Yahoo rotates the refresh token on use, so whichever refreshed first would kill the
+other copy, and `clearDeadYahooCredentials` would then correctly wipe it and force a
+reconnect — breaking the one Yahoo path that works today to revive one that does not.
+
+⚠ **No backfill is possible, which is why `userId` is nullable.** Nothing maps
+`yahooUserId` to `app_users.id`; the only link that ever existed was a browser
+cookie. Postgres allows many NULLs under a unique index, so one-connection-per-user
+is still enforced for every row that has one.
+
+⚠ **The columns are relaxed, not dropped.** Production holds 0 rows but a developer
+database may hold real ones, and `DROP COLUMN` is irreversible. Relaxing achieves
+the goal at no cost.
+
+**The follow-up is a separate change and the ORDER matters**: the reachable callback
+must be able to write the row before any reader depends on it. Pointing
+`/api/yahoo/leagues` at a table nothing populates is the `ingestCFBDStats` failure —
+worse than the live call it replaces, because it fails silently and looks correct.
