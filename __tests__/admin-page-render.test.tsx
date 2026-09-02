@@ -90,6 +90,17 @@ function metricsFixture() {
       lastSendAt: null,
       lastError: null,
       audiences: [{ id: "all", label: "All signed-up users", description: "All users." }],
+      /*
+       * The curated SEGMENT_PANEL_AUDIENCES subset, not the full audience list.
+       * EmailSegmentsPanel seeds its selected audience from `segments[0]`, so an
+       * absent key throws on first render exactly the way `waitlist` did.
+       */
+      segments: [
+        { id: "world_cup_unfinalized", label: "Unfinalized World Cup brackets", description: "Incomplete entries.", count: 3 },
+        { id: "world_cup_pool_creators", label: "World Cup pool creators", description: "Created a pool.", count: 2 },
+        { id: "paying", label: "Paying users", description: "Subscription or payment.", count: 1 },
+        { id: "win_back", label: "Win-back — lapsed free users", description: "No recent login.", count: 0 },
+      ],
     },
     sportsOperatingSystem: {
       generatedAt: "2026-06-04T12:00:00.000Z",
@@ -357,6 +368,55 @@ function metricsFixture() {
         tokenBalance: 1000,
       },
     ],
+    /*
+     * Populated rather than zeroed: an empty summary satisfies the type while
+     * taking only the "no signups yet" and "No waitlist signups recorded."
+     * branches, leaving the month chips, the source breakdowns and the row
+     * table — the parts the panel exists to show — unrendered and so untested.
+     * Two rows against a total of 4 also renders the "most recent of N"
+     * footer, and one confirmed plus one bare row covers both badge branches
+     * and the name/source/campaign fallbacks.
+     */
+    waitlist: {
+      total: 4,
+      confirmed: 2,
+      unconfirmed: 2,
+      firstAt: "2026-05-18T14:05:00.000Z",
+      lastAt: "2026-06-02T09:30:00.000Z",
+      last30Days: 1,
+      bySource: [
+        { source: "landing", count: 3 },
+        { source: "referral", count: 1 },
+      ],
+      byUtmSource: [
+        { source: "newsletter", count: 2 },
+        { source: "(none)", count: 2 },
+      ],
+      byMonth: [
+        { month: "2026-05", count: 3 },
+        { month: "2026-06", count: 1 },
+      ],
+      recent: [
+        {
+          email: "dynasty-fan@example.com",
+          name: "Dynasty Fan",
+          createdAt: "2026-06-02T09:30:00.000Z",
+          confirmed: true,
+          source: "landing",
+          utmSource: "newsletter",
+          utmCampaign: "june-beta",
+        },
+        {
+          email: "quiet-signup@example.com",
+          name: null,
+          createdAt: "2026-05-18T14:05:00.000Z",
+          confirmed: false,
+          source: null,
+          utmSource: null,
+          utmCampaign: null,
+        },
+      ],
+    },
     recentSubscriptions: [],
     recentPayments: [],
     recentTokenActivity: [],
@@ -404,7 +464,11 @@ describe("/admin page render states", () => {
 
     expect(screen.getByRole("heading", { name: /command center/i })).toBeInTheDocument()
     expect(screen.getByTestId("admin-exit-button")).toHaveAttribute("href", "/dashboard")
-    expect(screen.getByText("Total accounts")).toBeInTheDocument()
+    // Plural since the 29a overview strip: buildPeerGroups repeats the users,
+    // traffic, subscriptions, tokens, morning, health and integrity metrics
+    // above the sections that also render them, so a users label is on the
+    // page twice. "World Cup pools" below is in no peer group and stays singular.
+    expect(screen.getAllByText("Total accounts").length).toBeGreaterThan(0)
     expect(screen.getByText("World Cup pools")).toBeInTheDocument()
     expect(screen.getAllByText(/Provider Health/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Production Env/i).length).toBeGreaterThan(0)
@@ -416,6 +480,11 @@ describe("/admin page render states", () => {
     expect(screen.getAllByText("Sleeper").length).toBeGreaterThan(0)
     expect(screen.getByText(/Integrity \/ Fraud/i)).toBeInTheDocument()
     expect(screen.getByText("API-Football / API-Sports World Cup")).toBeInTheDocument()
+    // The panel whose fixture gap made every assertion below it dead. Asserting
+    // a row, not just the heading, so a fixture that empties `recent` and falls
+    // back to "No waitlist signups recorded." still fails here.
+    expect(screen.getByText(/Early-access waitlist/i)).toBeInTheDocument()
+    expect(screen.getByText("dynasty-fan@example.com")).toBeInTheDocument()
     expect(screen.getByText(/Recent Users/i)).toBeInTheDocument()
     // P0-1: the Closed-Beta Invitations panel renders on the healthy admin page.
     expect(screen.getByText(/Closed-Beta Invitations/i)).toBeInTheDocument()
