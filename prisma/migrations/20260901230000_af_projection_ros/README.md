@@ -1,6 +1,14 @@
 # `af_projection_ros` — rest-of-season projection columns
 
-**Status: PARKED.** Not in the deploy path. Nothing reads these columns yet.
+**Status: APPLIED.** In the live `prisma/migrations/` directory. Both columns were verified
+present in production on 2026-09-02 via `information_schema` — `rosProjection` double precision
+nullable, `rosWeeksRemaining` integer nullable — and the code in this commit reads them.
+
+⚠ This line previously read **"Status: PARKED. Not in the deploy path. Nothing reads these columns
+yet."** All three claims were false by the time they were committed. Recorded rather than silently
+replaced, because it reproduced the trap called out below about `20260831_tournament_grants`: a
+header asserting a migration's state is a claim about the DATABASE, and only the database settles
+it.
 
 ## What it does
 
@@ -59,16 +67,28 @@ Inside `model AFProjectionSnapshot`, after `afProjection`:
   rosWeeksRemaining  Int?
 ```
 
-## To apply
+## Applying it — already done, and what remains
+
+The columns exist in production. Nothing needs running for this migration's EFFECT.
+
+What may still be outstanding is Prisma's own bookkeeping: if the columns were added by hand rather
+than through `migrate deploy`, `_prisma_migrations` holds no row for this directory. That is why
+the SQL is `ADD COLUMN IF NOT EXISTS` — a later `migrate deploy` then records it cleanly instead of
+failing with "column already exists", which would write a `finished_at IS NULL` row and block
+**every** subsequent deploy with P3009.
 
 ```bash
 ALLOW_PROD_MIGRATION=1 npm run db:migrate:deploy:prod
 ```
 
 🛑 **Before running that, check what else is in `prisma/migrations/`.** That command applies
-**every** pending migration in the directory, not just this one. As of writing,
-`prisma/migrations/20260831_tournament_grants/` is sitting there — untracked, and its own header
-says it was meant to be parked here. Confirm you intend to apply that too, or move it, first.
+**every** pending migration in the directory, not just this one.
+
+⚠ **And do not trust a migration's own header about whether it was applied.**
+`prisma/migrations/20260831_tournament_grants/` sits in that directory carrying a "PARKED, NOT
+APPLIED" header while `_prisma_migrations` records it applied **2026-08-31 17:26:39**. It was
+briefly moved out of the deploy path on the strength of that comment and put straight back when the
+query contradicted it. Query `_prisma_migrations`; do not read a comment.
 
 ## Rollback
 

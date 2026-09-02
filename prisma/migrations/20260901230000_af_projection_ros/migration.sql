@@ -1,9 +1,23 @@
 -- Rest-of-season projection on AFProjectionSnapshot.
 --
--- 🛑 PARKED, NOT APPLIED. `prisma migrate deploy` reads a DIRECTORY rather than git, so anything
--- sitting in prisma/migrations/ rides along on the next person's deploy. This lives in
--- migrations-pending/ until you decide to apply it, and the code that reads these columns must not
--- ship before they exist — a generated client that knows a column production lacks raises P2022.
+-- ✅ APPLIED, AND IN THE LIVE DIRECTORY. Both columns were verified present in production on
+-- 2026-09-02 via information_schema: `rosProjection` double precision nullable,
+-- `rosWeeksRemaining` integer nullable. This file sits in prisma/migrations/ deliberately, because
+-- that is where an applied migration belongs.
+--
+-- ⚠ AN EARLIER VERSION OF THIS HEADER SAID "PARKED, NOT APPLIED … lives in migrations-pending/".
+-- That was written before the columns were checked and was false by the time it was committed. It
+-- is called out rather than quietly deleted because it reproduced, in this very file, the exact
+-- trap flagged one directory over: `prisma/migrations/20260831_tournament_grants/` carries a
+-- "PARKED, NOT APPLIED" header while `_prisma_migrations` records it applied 2026-08-31 17:26:39.
+-- A header asserting a migration's state is a claim about the DATABASE, and the database is the
+-- only thing that can settle it. Reading one and acting on it — as very nearly happened when that
+-- other migration was briefly moved out of the deploy path — is how an applied migration gets
+-- unfiled.
+--
+-- ⚠ STILL TRUE, AND THE REASON THE ORDER MATTERS: the code reading these columns must not ship
+-- before they exist. A generated client that knows a column production lacks raises P2022. Keep
+-- prisma/schema.prisma, this migration, and the consuming code in one commit.
 --
 -- ── WHY IT IS NEEDED ────────────────────────────────────────────────────────────────────────
 -- `afProjection` is PER GAME. `normalizedPlayerValue` expects a REST-OF-SEASON total. Wiring one
