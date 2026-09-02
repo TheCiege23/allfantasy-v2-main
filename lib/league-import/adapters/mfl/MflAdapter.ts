@@ -234,6 +234,26 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
       rosters,
       scoring,
       schedule,
+      /*
+       * ⚠ ONLY THE PICKS THAT ACTUALLY MOVED. MFL's export lists every future pick a
+       * franchise holds, its own included — the opposite of Sleeper's `/traded_picks`,
+       * which contains a row only once a pick has left its original roster. That
+       * difference is load-bearing: `persistTradedPicks` writes `traded: true`
+       * unconditionally, so passing MFL's full list through would mark every untraded
+       * pick in the league as traded, and a league that has never made a pick trade
+       * would import with a full board of them.
+       *
+       * Franchise ids are the same identity `source_team_id` uses, so these join to
+       * `league_teams.externalId` exactly as Sleeper's roster ids do.
+       */
+      traded_picks: (raw.futureDraftPicks ?? [])
+        .filter((pick) => pick.originalFranchiseId !== pick.currentOwnerFranchiseId)
+        .map((pick) => ({
+          season: pick.season,
+          round: pick.round,
+          original_roster_id: pick.originalFranchiseId,
+          current_owner_roster_id: pick.currentOwnerFranchiseId,
+        })),
       draft_picks: draftPicks,
       transactions,
       standings,

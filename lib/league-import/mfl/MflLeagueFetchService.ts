@@ -962,6 +962,82 @@ export function parseMflScoringRules(raw: unknown): MflScoringRuleRaw[] {
   return out
 }
 
+/** One future draft pick, as MFL states ownership of it. */
+export interface MflFutureDraftPickRaw {
+  /** Franchise that HOLDS the pick now. */
+  currentOwnerFranchiseId: string
+  /** Franchise whose pick it originally is. */
+  originalFranchiseId: string
+  season: number
+  round: number
+}
+
+/**
+ * Parse `TYPE=futureDraftPicks` into pick ownership.
+ *
+ * 🛑 MFL LISTS EVERY FUTURE PICK A FRANCHISE HOLDS — NOT ONLY TRADED ONES, WHICH IS THE
+ * OPPOSITE OF SLEEPER'S ENDPOINT AND THE ONE WAY THIS MAPPING GOES BADLY WRONG.
+ * Sleeper's `/traded_picks` contains a row only once a pick has moved off its original
+ * roster, which is why `persistTradedPicks` writes `traded: true` unconditionally. MFL's
+ * export includes a franchise's OWN untouched picks alongside the ones it acquired. Passing
+ * all of them through would mark every untraded pick in the league as traded — a league of
+ * twelve managers who have never made a pick trade would import with a full board of them.
+ *
+ * The caller filters on `originalFranchiseId !== currentOwnerFranchiseId`; this parser
+ * reports what MFL said and does not editorialise, so that rule lives in exactly one place
+ * and is testable on its own.
+ *
+ * ⚠ SHAPE-AGNOSTIC, for the same reason `parseMflScoringRules` is: MFL has no committed
+ * contract under `contracts/` and probing a vendor to learn a response shape is forbidden
+ * here. Unreadable entries yield nothing rather than a half-built pick.
+ */
+export function parseMflFutureDraftPicks(raw: unknown): MflFutureDraftPickRaw[] {
+  if (!raw || typeof raw !== 'object') return []
+  const root = raw as Record<string, unknown>
+  const container = (root.futureDraftPicks ?? root) as Record<string, unknown>
+  const franchises = mflList(container?.franchise ?? container?.franchises)
+
+  const out: MflFutureDraftPickRaw[] = []
+  for (const f of franchises) {
+    if (!f || typeof f !== 'object') continue
+    const franchise = f as Record<string, unknown>
+    const currentOwner = mflText(franchise.id ?? franchise.franchiseId).trim()
+    if (!currentOwner) continue
+
+    for (const p of mflList(franchise.futureDraftPick ?? franchise.futureDraftPicks)) {
+      if (!p || typeof p !== 'object') continue
+      const pick = p as Record<string, unknown>
+      /*
+       * ⚠ `Number('') === 0`, AND 0 IS FINITE. Checking `Number.isFinite` alone accepted a
+       * pick whose year or round MFL left blank and silently gave it season 0 / round 0 —
+       * a pick that exists, persists, and belongs to no draft. Caught by its own test.
+       * The emptiness has to be rejected before the coercion, not after.
+       */
+      const seasonText = mflText(pick.year ?? pick.season).trim()
+      const roundText = mflText(pick.round).trim()
+      if (!seasonText || !roundText) continue
+      const season = Number(seasonText)
+      const round = Number(roundText)
+      if (!Number.isFinite(season) || !Number.isFinite(round)) continue
+
+      /* `originalPickFor` names whose pick it is. Absent means the holder's own pick —
+         which is exactly the untraded case, and is preserved rather than dropped so the
+         caller's filter (not this parser) decides. */
+      const original =
+        mflText(pick.originalPickFor ?? pick.original_pick_for ?? pick.originalFranchise).trim() ||
+        currentOwner
+
+      out.push({
+        currentOwnerFranchiseId: currentOwner,
+        originalFranchiseId: original,
+        season: Math.trunc(season),
+        round: Math.trunc(round),
+      })
+    }
+  }
+  return out
+}
+
 export async function fetchMflLeagueForImport(
   userId: string,
   sourceInput: string,
@@ -1008,6 +1084,13 @@ export async function fetchMflLeagueForImport(
      * it simply reports scoring as missing rather than inventing a format.
      */
     fetchMflEndpoint({ ...source, type: 'rules', apiKey: auth.apiKey }),
+    /*
+     * Future draft picks — the dynasty asset MFL publishes and this importer never asked
+     * for. Sleeper was the ONLY provider emitting `traded_picks`, and the canonical types
+     * call these "the single most valuable dynasty asset outside of players themselves".
+     * Optional like its neighbours: a redraft league returns nothing and imports fine.
+     */
+    fetchMflEndpoint({ ...source, type: 'futureDraftPicks', apiKey: auth.apiKey }),
   ])
 
   const standingsRaw = optionalResults[0].status === 'fulfilled' ? optionalResults[0].value : null
@@ -1015,6 +1098,7 @@ export async function fetchMflLeagueForImport(
   const transactionsRaw = optionalResults[2].status === 'fulfilled' ? optionalResults[2].value : null
   const draftRaw = optionalResults[3].status === 'fulfilled' ? optionalResults[3].value : null
   const rulesRaw = optionalResults[4].status === 'fulfilled' ? optionalResults[4].value : null
+  const futurePicksRaw = optionalResults[5].status === 'fulfilled' ? optionalResults[5].value : null
 
   const settings = parseMflSettings(leagueRaw)
   const league = parseMflLeague(leagueRaw, source, settings)
@@ -1072,5 +1156,6 @@ export async function fetchMflLeagueForImport(
     previousSeasons,
     /* Real rules, or an empty list when the key could not read them — never a guess. */
     scoringRules: parseMflScoringRules(rulesRaw),
+    futureDraftPicks: parseMflFutureDraftPicks(futurePicksRaw),
   }
 }
