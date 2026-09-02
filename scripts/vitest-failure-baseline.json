@@ -1,6 +1,6 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 92,
+  "count": 91,
   "failingFiles": [
     "__tests__/active-nav-state-resolver.test.ts",
     "__tests__/admin-page-render.test.tsx",
@@ -77,7 +77,6 @@
     "__tests__/token-pricing-matrix-policy.test.ts",
     "__tests__/trade-league-analyze-api.test.ts",
     "__tests__/user-contact-email-route-contract.test.ts",
-    "__tests__/user-notifications-test-route-contract.test.ts",
     "__tests__/user-os/userOsContext.test.ts",
     "__tests__/vercel-build-admin-routes.test.ts",
     "__tests__/waiver-leagues-api.test.ts",
