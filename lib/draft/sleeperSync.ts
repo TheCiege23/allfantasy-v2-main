@@ -176,23 +176,60 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
   const timer = typeof settings.pick_timer === 'number' ? settings.pick_timer : 120
 
   const slotOrder = buildSlotOrder(draft, usersById)
-  /*
-   * ⚠ AN EMPTY ORDER NEVER OVERWRITES A GOOD ONE, for exactly the reason the picks fetch
-   * above fails closed rather than writing `[]`. Sleeper leaves `draft_order` null until the
-   * commissioner sets it, and can briefly answer without `slot_to_roster_id`; writing the
-   * empty result would blank the order on a board someone is watching, once a minute, and
-   * look like the mirror working. Stale beats empty here too.
-   */
-  const slotOrderPatch = slotOrder.length > 0 ? { slotOrder } : {}
   /* 3 is Sleeper's third-round reversal. Absent/0 means a plain snake. */
   const thirdRoundReversal = settings.reversal_round === 3
 
   await prisma.$transaction(async (tx) => {
+    /*
+     * 🛑 THE MIRROR SEEDS THE ORDER. IT NEVER FIGHTS A HUMAN FOR IT.
+     *
+     * Two other writers put an order on this same row, and both key on `leagueId`, which is
+     * `@unique` — so they are the row this function updates by `id`:
+     *   /api/leagues/[id]/draft/lottery/run   (finalize) — a weighted lottery result
+     *   /api/leagues/[id]/draft/order         (POST)     — a commissioner setting it by hand
+     * BOTH refuse unless `status === 'pre_draft'`, which is exactly the window this mirror
+     * polls once a minute. Writing unconditionally would replace a commissioner's lottery
+     * result within 60 seconds, with no error, no marker and nothing in any log.
+     *
+     * So: write only into an empty order. `slotOrder` is `Json @default("[]")`, so "nobody has
+     * set one" is a genuinely empty array rather than null.
+     *
+     * ⚠ THE COST, STATED RATHER THAN HIDDEN: if Sleeper's order changes after we have seeded
+     * it, we keep the first one. Closing that needs provenance — a column recording who wrote
+     * the order — and a column is a migration, which is not this change. Comparing roster-id
+     * sets was considered as a cheap substitute and rejected: it tracks a Sleeper re-randomise
+     * correctly but still clobbers the hand-set order, which is the most deliberate act of the
+     * three.
+     *
+     * ⚠ AND AN EMPTY ORDER NEVER OVERWRITES A GOOD ONE EITHER, for the reason the picks fetch
+     * above fails closed rather than writing `[]`: Sleeper leaves `draft_order` null until the
+     * commissioner sets it and can answer without `slot_to_roster_id`. Both guards are in the
+     * one condition — write only a non-empty order, and only over an empty one.
+     */
+    const existing = await tx.draftSession.findUnique({
+      where: { id: internalDraftId },
+      select: { slotOrder: true },
+    })
+    const existingOrder = existing?.slotOrder
+    const hasLocalOrder = Array.isArray(existingOrder) && existingOrder.length > 0
+    const slotOrderPatch = slotOrder.length > 0 && !hasLocalOrder ? { slotOrder } : {}
+
     const session = await tx.draftSession.update({
       where: { id: internalDraftId },
       data: {
         sleeperDraftId,
         status: mapSleeperStatus(draft.status),
+        /*
+         * ⚠ THESE TWO DO OVERWRITE A LOCAL SETTING, DELIBERATELY, UNLIKE slotOrder ABOVE.
+         * `/draft/settings` lets a commissioner toggle `thirdRoundReversal` here — but this
+         * draft is happening on Sleeper, so a local toggle cannot change how it actually runs;
+         * it only makes our pick-order maths (the trade builder's pick inventory, autopick's
+         * owner resolution) disagree with the real board. An upstream FACT wins over a local
+         * preference about that fact. A lottery result is not a fact about Sleeper's draft —
+         * it is an independent artifact a human made here, which is why it is protected and
+         * these are not. This is also what the function has always done with `rounds`,
+         * `teamCount`, `timerSeconds` and `status`, every one of which is equally a "setting".
+         */
         draftType: mapSleeperDraftType(draft.type),
         thirdRoundReversal,
         ...slotOrderPatch,
