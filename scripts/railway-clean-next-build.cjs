@@ -11,12 +11,12 @@ const isRailway = !!(
   process.env.RAILWAY_DEPLOYMENT_ID ||
   process.env.RAILWAY_GIT_COMMIT_SHA
 )
+const hasExplicitDistDir = Boolean(process.env.AF_NEXT_DIST_DIR)
 const railwayDistDir = process.env.RAILWAY_GIT_COMMIT_SHA
   ? `.next-railway-${process.env.RAILWAY_GIT_COMMIT_SHA}`
   : '.next-railway'
 const distDirName = process.env.AF_NEXT_DIST_DIR || (isRailway ? railwayDistDir : '.next')
 const nextDir = path.join(repoRoot, distDirName)
-const legacyNextDir = path.join(repoRoot, '.next')
 const maxAttempts = 4
 const retryDelayMs = 1000
 
@@ -80,13 +80,16 @@ function removePath(targetPath) {
       return
     } catch (err) {
       const code = err?.code
-      if (code !== 'EBUSY' && code !== 'EPERM') {
-        console.warn(`[railway-clean] could not remove ${label}: ${code ?? err.message}`)
-        process.exitCode = 1
+
+      if (attempt >= maxAttempts) {
+        console.warn(
+          `[railway-clean] ${label} could not be removed after ${maxAttempts} attempts; attempting quarantine`,
+        )
+        tryQuarantineBusyPath(targetPath, label)
         return
       }
 
-      if (attempt < maxAttempts) {
+      if (code === 'EBUSY' || code === 'EPERM') {
         console.warn(
           `[railway-clean] ${label} is locked (${code}, attempt ${attempt}/${maxAttempts}); retrying in ${retryDelayMs}ms`,
         )
@@ -99,23 +102,33 @@ function removePath(targetPath) {
       }
 
       console.warn(
-        `[railway-clean] ${label} is still locked (${code}) after ${maxAttempts} attempts`,
+        `[railway-clean] ${label} removal failed (attempt ${attempt}/${maxAttempts}); retrying`,
       )
-      tryQuarantineBusyPath(targetPath, label)
+      sleep(retryDelayMs)
+      if (!fs.existsSync(targetPath)) {
+        console.log(`[railway-clean] removed ${label}`)
+        return
+      }
     }
   }
 }
 
+// Only clean the Railway-specific next dist directory on Railway
+// Skip the legacy .next cleanup on Railway as it causes permission issues
 if (fs.existsSync(nextDir)) {
   removePath(nextDir)
 } else {
   console.log(`[railway-clean] skip: ${distDirName} is missing`)
 }
 
-if (legacyNextDir !== nextDir) {
+// An explicit dist directory is isolated from the legacy .next cache too.
+if (!isRailway && !hasExplicitDistDir) {
+  const legacyNextDir = path.join(repoRoot, '.next')
   if (fs.existsSync(legacyNextDir)) {
     removePath(legacyNextDir)
   } else {
     console.log('[railway-clean] skip: .next is missing')
   }
+} else {
+  console.log('[railway-clean] skip: legacy .next cleanup on isolated build')
 }
