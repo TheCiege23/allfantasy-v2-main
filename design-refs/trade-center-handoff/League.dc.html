@@ -92,42 +92,58 @@ a{color:var(--accent)} a:hover{color:#67e4f7}
           <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">Offers waiting on you, and reviews waiting on the commissioner</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px">
-          <sc-for list="{{ v.actions }}" as="ac" hint-placeholder-count="3">
-            <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid {{ ac.border }};border-radius:14px;background:var(--surface)">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                <div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ ac.roleColor }};background:{{ ac.roleSoft }};padding:5px 7px;border-radius:5px">{{ ac.role }}</div>
-                <div style="font:400 10.5px/1 'Archivo',sans-serif;color:var(--faint)">{{ ac.when }}</div>
+          <sc-for list="{{ v.actions }}" as="c" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid {{ c.border }};border-radius:14px;background:var(--surface)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                  <div style="flex:none;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"></path><path d="M3 7h18"></path><path d="M7 21l-4-4 4-4"></path><path d="M21 17H3"></path></svg>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                    <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ c.headline }}</div>
+                    <div style="font:400 10.5px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ c.sub }}</div>
+                  </div>
+                </div>
+                <div style="flex:none;font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ c.roleColor }};background:{{ c.roleSoft }};padding:5px 7px;border-radius:5px;white-space:nowrap">{{ c.role }}</div>
               </div>
-              <div style="display:flex;flex-direction:column;gap:2px">
-                <div style="font:800 14px/1.2 'Archivo',sans-serif;color:var(--text)">{{ ac.title }}</div>
-                <div style="font:400 11px/1.4 'Archivo',sans-serif;color:var(--muted)">{{ ac.subtitle }}</div>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:8px">
-                <div style="display:flex;flex-direction:column;gap:4px;padding:8px 9px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)">
-                  <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--bad)">{{ ac.leftLabel }}</div>
-                  <sc-for list="{{ ac.left }}" as="x" hint-placeholder-count="2">
-                    <div style="font:600 11.5px/1.35 'Archivo',sans-serif;color:var(--text2)">{{ x }}</div>
+              <sc-for list="{{ c.managers }}" as="m" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div style="flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">{{ m.initials }}</div>
+                    <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ m.name }}</div>
+                    <sc-if value="{{ m.you }}" hint-placeholder-val="{{ false }}"><div style="padding:2px 5px;border-radius:4px;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.08em">YOU</div></sc-if>
+                    <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">SENDS</div>
+                    <div style="flex:1"></div>
+                    <sc-if value="{{ m.grade }}" hint-placeholder-val="{{ false }}"><div style="width:24px;height:24px;border-radius:7px;background:{{ m.grade.soft }};border:1px solid {{ m.grade.line }};display:flex;align-items:center;justify-content:center;font:900 12px/1 'Archivo',sans-serif;color:{{ m.grade.color }}">{{ m.grade.letter }}</div></sc-if>
+                    <sc-if value="{{ m.total }}" hint-placeholder-val="{{ false }}"><div style="font:700 11px/1 'JetBrains Mono',monospace;color:var(--text2)">{{ m.total }}</div></sc-if>
+                  </div>
+                  <sc-for list="{{ m.assets }}" as="a" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface2);border:1px solid var(--line)">
+                      <div style="flex:none;width:32px;height:32px;border-radius:{{ a.badgeRadius }};background:{{ a.badgeBg }};color:{{ a.badgeColor }};display:flex;align-items:center;justify-content:center;font:900 {{ a.badgeSize }}/1 'JetBrains Mono',monospace;letter-spacing:.04em">{{ a.badge }}</div>
+                      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                        <div style="font:700 12.5px/1.2 'Archivo',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</div>
+                        <sc-if value="{{ a.meta }}" hint-placeholder-val="{{ false }}"><div style="font:500 10px/1.2 'JetBrains Mono',monospace;color:var(--muted)">{{ a.meta }}</div></sc-if>
+                      </div>
+                      <div style="flex:none;font:700 11.5px/1 'JetBrains Mono',monospace;color:{{ a.valueColor }}">{{ a.value }}</div>
+                    </div>
                   </sc-for>
                 </div>
-                <div style="display:flex;flex-direction:column;gap:4px;padding:8px 9px;border-radius:9px;background:var(--surface2);border:1px solid var(--line)">
-                  <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--good)">{{ ac.rightLabel }}</div>
-                  <sc-for list="{{ ac.right }}" as="x" hint-placeholder-count="2">
-                    <div style="font:600 11.5px/1.35 'Archivo',sans-serif;color:var(--text2)">{{ x }}</div>
-                  </sc-for>
+              </sc-for>
+              <div style="display:flex;flex-direction:column;gap:5px;padding:9px 11px;border-radius:11px;background:var(--accent-soft);border:1px solid var(--accent-line)">
+                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                  <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--accent)">AF READ</div>
+                  <div style="font:{{ c.read.labelFont }};color:{{ c.read.labelColor }}">{{ c.read.label }}</div>
+                  <sc-if value="{{ c.read.score }}" hint-placeholder-val="{{ false }}"><div style="font:800 11px/1 'JetBrains Mono',monospace;color:var(--accent)">{{ c.read.score }}</div></sc-if>
+                  <sc-if value="{{ c.read.confidence }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px/1 'Archivo',sans-serif;color:var(--muted)">{{ c.read.confidence }}</div></sc-if>
                 </div>
+                <sc-if value="{{ c.read.note }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px/1.45 'Archivo',sans-serif;color:{{ c.read.noteColor }}">{{ c.read.note }}</div></sc-if>
               </div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <div style="display:flex;gap:5px">
-                  <sc-for list="{{ ac.grades }}" as="g" hint-placeholder-count="2">
-                    <div style="width:26px;height:26px;border-radius:7px;background:{{ g.soft }};border:1px solid {{ g.line }};display:flex;align-items:center;justify-content:center;font:900 13px/1 'Archivo',sans-serif;color:{{ g.color }}">{{ g.letter }}</div>
-                  </sc-for>
-                </div>
-                <div style="font:400 10.5px/1.4 'Archivo',sans-serif;color:var(--muted)">{{ ac.gradeNote }}</div>
-              </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:2px">
-                <sc-for list="{{ ac.buttons }}" as="b" hint-placeholder-count="2">
-                  <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 13px;border-radius:9px;font:800 12px/1 'Archivo',sans-serif;color:{{ b.color }};background:{{ b.bg }};border:1px solid {{ b.border }}">{{ b.label }}</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ c.buttons }}" as="b" hint-placeholder-count="2">
+                  <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border-radius:9px;font:800 11.5px/1 'Archivo',sans-serif;color:{{ b.color }};background:{{ b.bg }};border:1px solid {{ b.border }}">{{ b.label }}</div>
                 </sc-for>
+                <div style="flex:1"></div>
+                <div style="cursor:pointer;font:700 11px/1 'Archivo',sans-serif;color:var(--accent)">Open in Trade Center →</div>
               </div>
             </div>
           </sc-for>
@@ -144,6 +160,66 @@ a{color:var(--accent)} a:hover{color:#67e4f7}
           <div style="flex:1;height:1px;background:var(--line)"></div>
           <div style="font:400 10px/1 'Archivo',sans-serif;color:var(--faint)">{{ v.yourHint }}</div>
         </div>
+        <sc-if value="{{ v.yourIsActive }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px">
+            <sc-for list="{{ v.yourActiveCards }}" as="c" hint-placeholder-count="2">
+              <div style="display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid {{ c.border }};border-radius:14px;background:var(--surface)">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                    <div style="flex:none;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"></path><path d="M3 7h18"></path><path d="M7 21l-4-4 4-4"></path><path d="M21 17H3"></path></svg>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                      <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ c.headline }}</div>
+                      <div style="font:400 10.5px/1.3 'Archivo',sans-serif;color:var(--faint)">{{ c.sub }}</div>
+                    </div>
+                  </div>
+                  <div style="flex:none;font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ c.roleColor }};background:{{ c.roleSoft }};padding:5px 7px;border-radius:5px;white-space:nowrap">{{ c.role }}</div>
+                </div>
+                <sc-for list="{{ c.managers }}" as="m" hint-placeholder-count="2">
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">{{ m.initials }}</div>
+                      <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">{{ m.name }}</div>
+                      <sc-if value="{{ m.you }}" hint-placeholder-val="{{ false }}"><div style="padding:2px 5px;border-radius:4px;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent);font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.08em">YOU</div></sc-if>
+                      <div style="font:700 8.5px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">SENDS</div>
+                      <div style="flex:1"></div>
+                      <sc-if value="{{ m.grade }}" hint-placeholder-val="{{ false }}"><div style="width:24px;height:24px;border-radius:7px;background:{{ m.grade.soft }};border:1px solid {{ m.grade.line }};display:flex;align-items:center;justify-content:center;font:900 12px/1 'Archivo',sans-serif;color:{{ m.grade.color }}">{{ m.grade.letter }}</div></sc-if>
+                      <sc-if value="{{ m.total }}" hint-placeholder-val="{{ false }}"><div style="font:700 11px/1 'JetBrains Mono',monospace;color:var(--text2)">{{ m.total }}</div></sc-if>
+                    </div>
+                    <sc-for list="{{ m.assets }}" as="a" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface2);border:1px solid var(--line)">
+                        <div style="flex:none;width:32px;height:32px;border-radius:{{ a.badgeRadius }};background:{{ a.badgeBg }};color:{{ a.badgeColor }};display:flex;align-items:center;justify-content:center;font:900 {{ a.badgeSize }}/1 'JetBrains Mono',monospace;letter-spacing:.04em">{{ a.badge }}</div>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                          <div style="font:700 12.5px/1.2 'Archivo',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</div>
+                          <sc-if value="{{ a.meta }}" hint-placeholder-val="{{ false }}"><div style="font:500 10px/1.2 'JetBrains Mono',monospace;color:var(--muted)">{{ a.meta }}</div></sc-if>
+                        </div>
+                        <div style="flex:none;font:700 11.5px/1 'JetBrains Mono',monospace;color:{{ a.valueColor }}">{{ a.value }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <div style="display:flex;flex-direction:column;gap:5px;padding:9px 11px;border-radius:11px;background:var(--accent-soft);border:1px solid var(--accent-line)">
+                  <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                    <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--accent)">AF READ</div>
+                    <div style="font:{{ c.read.labelFont }};color:{{ c.read.labelColor }}">{{ c.read.label }}</div>
+                    <sc-if value="{{ c.read.score }}" hint-placeholder-val="{{ false }}"><div style="font:800 11px/1 'JetBrains Mono',monospace;color:var(--accent)">{{ c.read.score }}</div></sc-if>
+                    <sc-if value="{{ c.read.confidence }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px/1 'Archivo',sans-serif;color:var(--muted)">{{ c.read.confidence }}</div></sc-if>
+                  </div>
+                  <sc-if value="{{ c.read.note }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px/1.45 'Archivo',sans-serif;color:{{ c.read.noteColor }}">{{ c.read.note }}</div></sc-if>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ c.buttons }}" as="b" hint-placeholder-count="2">
+                    <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 12px;border-radius:9px;font:800 11.5px/1 'Archivo',sans-serif;color:{{ b.color }};background:{{ b.bg }};border:1px solid {{ b.border }}">{{ b.label }}</div>
+                  </sc-for>
+                  <div style="flex:1"></div>
+                  <div style="cursor:pointer;font:700 11px/1 'Archivo',sans-serif;color:var(--accent)">Open in Trade Center →</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ v.yourIsCompleted }}" hint-placeholder-val="{{ false }}">
         <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden">
           <sc-for list="{{ v.yourRows }}" as="r" hint-placeholder-count="3">
             <div style="display:grid;grid-template-columns:118px 1fr 1fr 150px 128px;gap:14px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)">
@@ -167,6 +243,7 @@ a{color:var(--accent)} a:hover{color:#67e4f7}
             </div>
           </sc-for>
         </div>
+        </sc-if>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -257,7 +334,7 @@ a{color:var(--accent)} a:hover{color:#67e4f7}
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2900}}'>
 const GRADE = {
   A: { color: '#34d399', soft: 'rgba(52,211,153,.12)', line: 'rgba(52,211,153,.3)' },
   B: { color: '#5eead4', soft: 'rgba(94,234,212,.12)', line: 'rgba(94,234,212,.3)' },
@@ -297,42 +374,100 @@ const LOG = [
   { id: 't11', week: 'WK 1', a: 'Thunderbolts', b: 'Your Team', you: 'b', aSends: '2026 2nd (Thunderbolts)', bSends: 'Brian Thomas Jr.', ga: 'C', gb: 'B', status: 'accepted', when: 'Wk 1', gradeWhy: null, gradeNote: 'Realized · +52 net per season' },
 ];
 
-const ACTIONS = [
+/* Pending trades as the card draws them: proposer first, each manager's assets stacked under
+   their name, then the AllFantasy read. `read.kind` documents every state the card has. */
+const ROLE = {
+  offer: { role: 'OFFER TO YOU', roleColor: '#fbbf24', roleSoft: 'rgba(251,191,36,.12)', border: 'rgba(251,191,36,.4)' },
+  sleeper: { role: 'ON SLEEPER · READ-ONLY', roleColor: '#9fd4ff', roleSoft: '#1f2a4d', border: 'rgba(255,255,255,.13)' },
+  review: { role: 'COMMISSIONER REVIEW', roleColor: '#a78bfa', roleSoft: 'rgba(167,139,250,.12)', border: 'rgba(167,139,250,.35)' },
+  yours: { role: 'YOUR OFFER', roleColor: '#c3c9e6', roleSoft: 'rgba(255,255,255,.06)', border: 'rgba(255,255,255,.13)' },
+};
+const BTN = {
+  accept: { label: 'Accept', color: '#34d399', bg: 'transparent', border: 'rgba(52,211,153,.4)' },
+  reject: { label: 'Reject', color: '#fb5b78', bg: 'transparent', border: 'rgba(251,91,120,.4)' },
+  approve: { label: 'Approve', color: '#34d399', bg: 'transparent', border: 'rgba(52,211,153,.4)' },
+  veto: { label: 'Veto', color: '#fb5b78', bg: 'transparent', border: 'rgba(251,91,120,.4)' },
+  cancel: { label: 'Cancel offer', color: '#c3c9e6', bg: 'transparent', border: 'rgba(255,255,255,.2)' },
+  sleeper: { label: 'Act on it in Sleeper', color: '#22d3ee', bg: 'rgba(34,211,238,.09)', border: 'rgba(34,211,238,.3)' },
+  builder: { label: 'Load into builder', color: '#c3c9e6', bg: 'transparent', border: 'rgba(255,255,255,.13)' },
+};
+const player = (name, meta, value) => ({ kind: 'player', name, meta, value });
+const pick = (name) => ({ kind: 'pick', name, meta: null, value: null });
+const faab = (name) => ({ kind: 'faab', name, meta: 'FAAB', value: null });
+const manager = (name, you, assets, grade, total) => ({ name, you, assets, grade, total });
+
+const CARDS = [
   {
-    role: 'OFFER TO YOU', roleColor: '#fbbf24', roleSoft: 'rgba(251,191,36,.12)', border: 'rgba(251,191,36,.4)', when: '1 day ago',
-    title: 'Cold Takes FC', subtitle: '@kingbuffalo · 6-5 · expires in 2 days',
-    leftLabel: 'YOU SEND', left: ['CeeDee Lamb', 'Christian Watson', '2027 3rd · $40 FAAB'],
-    rightLabel: 'YOU GET', right: ['Bijan Robinson', 'Justin Tucker', 'Fred Warner'],
-    grades: ['C', 'B'], gradeNote: 'Projected · tilts toward Cold Takes FC',
-    buttons: [
-      { label: 'Accept', color: '#34d399', bg: 'transparent', border: 'rgba(52,211,153,.4)' },
-      { label: 'Reject', color: '#fb5b78', bg: 'transparent', border: 'rgba(251,91,120,.4)' },
-      { label: 'Load into builder', color: '#c3c9e6', bg: 'transparent', border: 'rgba(255,255,255,.13)' },
+    id: 't1', ...ROLE.offer, needsAction: true, mine: true,
+    headline: 'Cold Takes FC has proposed a trade', sub: '1 day ago · expires in 2 days',
+    managers: [
+      manager('Cold Takes FC', false, [player('Bijan Robinson', 'RB - ATL', '7,900'), player('Justin Tucker', 'K - BAL', null), player('Fred Warner', 'LB - SF', null)], 'B', '7,900'),
+      manager('You', true, [player('CeeDee Lamb', 'WR - DAL', '8,200'), player('Christian Watson', 'WR - GB', '1,850'), pick('2027 3rd (yours)'), faab('$40 FAAB')], 'C', '10,470'),
     ],
+    read: { kind: 'ok', label: 'Tilts toward Cold Takes FC', score: '41/100', confidence: 'Moderate confidence — two unpriced assets', note: null },
+    buttons: [BTN.accept, BTN.reject],
   },
   {
-    role: 'ON SLEEPER · READ-ONLY', roleColor: '#9fd4ff', roleSoft: '#1f2a4d', border: 'rgba(255,255,255,.13)', when: '4 hours ago',
-    title: 'Thunderbolts', subtitle: '@dre · proposed in Sleeper, not here',
-    leftLabel: 'YOU SEND', left: ['Christian Watson', '2027 4th'],
-    rightLabel: 'YOU GET', right: ['Rashee Rice'],
-    grades: ['B', 'C'], gradeNote: 'Projected · Rice priced 14% above Watson + pick',
-    buttons: [
-      { label: 'Act on it in Sleeper', color: '#22d3ee', bg: 'rgba(34,211,238,.09)', border: 'rgba(34,211,238,.3)' },
-      { label: 'Load into builder', color: '#c3c9e6', bg: 'transparent', border: 'rgba(255,255,255,.13)' },
+    id: 't0', ...ROLE.sleeper, needsAction: true, mine: true,
+    headline: 'Thunderbolts has proposed a trade', sub: '4 hours ago · proposed in Sleeper, not here',
+    managers: [
+      manager('Thunderbolts', false, [player('Rashee Rice', 'WR - KC', null)], null, null),
+      manager('You', true, [player('Christian Watson', 'WR - GB', null), pick('2027 4th (yours)')], null, null),
     ],
+    read: { kind: 'loading', label: 'Pricing this deal…', score: null, confidence: null, note: null },
+    buttons: [BTN.sleeper, BTN.builder],
   },
   {
-    role: 'COMMISSIONER REVIEW', roleColor: '#a78bfa', roleSoft: 'rgba(167,139,250,.12)', border: 'rgba(167,139,250,.35)', when: '3 days ago',
-    title: 'Night Owls ⇄ Glass Cannons', subtitle: 'Review window closes in 20h · 2 of 10 votes to veto',
-    leftLabel: 'NIGHT OWLS SEND', left: ['Puka Nacua'],
-    rightLabel: 'GLASS CANNONS SEND', right: ['2026 1st', '2027 2nd'],
-    grades: ['B', 'C'], gradeNote: 'Projected · a rebuilder selling to a contender',
-    buttons: [
-      { label: 'Approve', color: '#34d399', bg: 'transparent', border: 'rgba(52,211,153,.4)' },
-      { label: 'Veto', color: '#fb5b78', bg: 'transparent', border: 'rgba(251,91,120,.4)' },
+    id: 't3', ...ROLE.review, needsAction: true, mine: false,
+    headline: 'Night Owls has proposed a trade', sub: '3 days ago · awaiting the commissioner · 2 of 10 votes to veto',
+    managers: [
+      manager('Night Owls', false, [player('Puka Nacua', 'WR - LAR', '6,900')], 'B', '6,900'),
+      manager('Glass Cannons', false, [pick('2026 1st (Glass Cannons)'), pick('2027 2nd (Glass Cannons)')], 'C', '3,300'),
     ],
+    read: { kind: 'ok', label: 'Tilts toward Glass Cannons', score: '38/100', confidence: 'Low — picks priced on projected slot', note: 'Priced without 2027 2nd (Glass Cannons) — could not be read as a pick or player, so the read is short that piece.' },
+    buttons: [BTN.approve, BTN.veto],
+  },
+  {
+    id: 't2', ...ROLE.yours, needsAction: false, mine: true,
+    headline: 'You proposed a trade to Thunderbolts', sub: '2 days ago · waiting on Thunderbolts',
+    managers: [
+      manager('You', true, [player('Tank Dell', 'WR - HOU', '1,900')], 'B', '1,900'),
+      manager('Thunderbolts', false, [pick('2027 1st (Thunderbolts)')], 'C', '2,400'),
+    ],
+    read: { kind: 'ok', label: 'Tilts toward you', score: '57/100', confidence: 'Moderate — the pick is priced on a projected slot', note: null },
+    buttons: [BTN.cancel],
   },
 ];
+
+function badgeFor(a) {
+  if (a.kind === 'pick') return { badge: 'PICK', badgeBg: 'rgba(143,151,189,.2)', badgeColor: '#c3c9e6', badgeRadius: '8px', badgeSize: '8px' };
+  if (a.kind === 'faab') return { badge: '$', badgeBg: 'rgba(52,211,153,.15)', badgeColor: '#34d399', badgeRadius: '8px', badgeSize: '12px' };
+  return { badge: initials(a.name), badgeBg: 'var(--chip)', badgeColor: 'var(--text2)', badgeRadius: '50%', badgeSize: '10px' };
+}
+
+function cardView(c) {
+  const priced = c.read.kind === 'ok';
+  return {
+    ...c,
+    managers: c.managers.map((m) => ({
+      ...m,
+      initials: m.you ? 'ME' : initials(m.name),
+      grade: priced && m.grade ? grade(m.grade) : null,
+      total: priced ? m.total : null,
+      assets: m.assets.map((a) => ({
+        ...a, ...badgeFor(a),
+        value: priced ? (a.value ?? '—') : '',
+        valueColor: a.value ? 'var(--text2)' : 'var(--faint)',
+      })),
+    })),
+    read: {
+      ...c.read,
+      labelFont: c.read.kind === 'ok' ? "700 12.5px/1.3 'Archivo',sans-serif" : "400 11.5px/1.3 'Archivo',sans-serif",
+      labelColor: c.read.kind === 'ok' ? 'var(--text)' : 'var(--muted)',
+      noteColor: c.read.kind === 'degraded' ? '#ffd7de' : 'var(--muted)',
+    },
+  };
+}
 
 const BLOCK = [
   { name: 'Tee Higgins', pos: 'WR', team: 'CIN', owner: 'Thunderbolts', value: '5,100' },
@@ -373,8 +508,7 @@ class Component extends DCLogic {
     const mineAll = LOG.filter((t) => t.you);
     const yourActive = mineAll.filter((t) => t.status === 'pending' || t.status === 'on_sleeper' || t.status === 'awaiting_commissioner');
     const yourCompleted = mineAll.filter((t) => t.status === 'accepted');
-    const yourList = this.state.yourTab === 'active' ? yourActive : yourCompleted;
-    const yourRows = yourList.map((t) => {
+    const yourRows = yourCompleted.map((t) => {
       const s = STATUS[t.status];
       const youAreA = t.you === 'a';
       const dir = t.status === 'accepted' ? 'DONE' : t.role === 'incoming' ? 'INCOMING' : 'OUTGOING';
@@ -430,9 +564,11 @@ class Component extends DCLogic {
         isMain: view === 'main', isEmpty: view === 'empty', isLoading: view === 'loading',
         tabBg, tabColor,
         counts: `${completed} completed · ${pending} pending · ${vetoed} vetoed`,
-        actions: ACTIONS.map((a) => ({ ...a, grades: a.grades.map(grade) })),
+        actions: CARDS.filter((c) => c.needsAction).map(cardView),
+        yourActiveCards: CARDS.filter((c) => c.mine).map(cardView),
+        yourIsActive: this.state.yourTab === 'active', yourIsCompleted: this.state.yourTab === 'completed',
         yourTabBg, yourTabColor, yourActiveCount: yourActive.length, yourCompletedCount: yourCompleted.length,
-        yourHint: this.state.yourTab === 'active' ? 'Accept, reject and counter live here for AllFantasy proposals' : 'Realized grades — scored on what each side has actually produced since',
+        yourHint: this.state.yourTab === 'active' ? 'Every open offer with your name on it, priced' : 'Realized grades — scored on what each side has actually produced since',
         yourRows,
         filters,
         mine: { color: mine ? 'var(--accent)' : 'var(--muted)', trackBg: mine ? 'var(--accent)' : 'var(--chip)', trackLine: mine ? 'var(--accent)' : 'var(--chip-line)', knob: mine ? 'var(--accent-ink)' : 'var(--muted)', knobLeft: mine ? 14 : 2 },
