@@ -8,6 +8,7 @@ import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
 import { LeagueOwnershipCard } from '@/components/core-app/player-finder/LeagueOwnershipCard'
+import { TradeVisual } from '@/components/core-app/player-finder/TradeVisual'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
@@ -15,6 +16,7 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import type { LeagueSlot, PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
+import type { PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import type { RecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 
@@ -85,6 +87,11 @@ export type PlayerFinderProps = {
   leagueView?: PlayerLeagueView | null
   /** The account's recent searches for the rail, newest first. Empty when signed out. */
   recent?: RecentPlayerSearch[]
+  /**
+   * "Trade for him", as a visual: loaded by the page only when the held
+   * league's card says another manager has him. Null otherwise.
+   */
+  tradeVisual?: SectionState<PlayerTradeVisual> | null
   /**
    * False on the public `/players/{slug}` surface when nobody is signed in.
    *
@@ -251,6 +258,7 @@ export function PlayerFinder({
   selectedLeagueId = null,
   leagueView = null,
   recent = [],
+  tradeVisual = null,
   signedIn = true,
 }: PlayerFinderProps) {
   /*
@@ -468,6 +476,10 @@ export function PlayerFinder({
       <main className="af-pf-main">
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
+        {/* The trade visual, under the ownership card, when someone else has him here. */}
+        {detail && leagueView?.ownership.kind === 'other' && tradeVisual ? (
+          <TradeVisual state={tradeVisual} playerName={detail.player.name} />
+        ) : null}
 
         {/* ── Detail ────────────────────────────────────────────────── */}
         {detail ? (

@@ -41,6 +41,7 @@ import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
+import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
@@ -715,6 +716,16 @@ export default async function AfCorePage({
           selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id),
           userId
         ).catch(() => null)
+      : null
+
+  /*
+   * "Trade for him" as a visual (Guap, 2026-09-02): only when the held league's
+   * card says another manager has him. Values, packages and the engine grade
+   * all come from existing services; a miss is reported, never invented.
+   */
+  const playerTradeVisual =
+    playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
+      ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId).catch(() => null)
       : null
 
   /*
@@ -1931,6 +1942,7 @@ export default async function AfCorePage({
           selectedLeagueId={selectedLeagueId}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
+          tradeVisual={playerTradeVisual}
         />
       ) : activeKey === 'week' ? (
         /*

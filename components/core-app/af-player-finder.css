@@ -1634,3 +1634,209 @@
   background: var(--warn-soft);
   color: var(--text2);
 }
+
+/* ── Trade visual — give ⇄ get, fairness, engine verdict, hand-off ─────── */
+.af-core .af-pf-tv {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.af-core .af-pf-tv[data-fairness='lopsided'] {
+  border-color: var(--bad);
+}
+.af-core .af-pf-tv-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-core .af-pf-tv-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.af-core .af-pf-tv-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  min-width: 0;
+}
+.af-core .af-pf-tv-side[data-side='get'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-tv-arrow {
+  align-self: center;
+  font-size: 22px;
+  color: var(--faint);
+}
+.af-core .af-pf-tv-assets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-core .af-pf-tv-asset {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.af-core .af-pf-tv-asset-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-pf-tv-asset-meta {
+  font-size: 10px;
+  color: var(--faint);
+}
+.af-core .af-pf-tv-asset-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-core .af-pf-tv-total {
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-tv-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+.af-core .af-pf-tv-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-tv-fairness,
+.af-core .af-pf-tv-engine {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-core .af-pf-tv-fairness[data-tone='good'],
+.af-core .af-pf-tv-engine[data-tone='good'] {
+  background: var(--good-soft);
+  border-color: var(--good);
+  color: var(--good);
+}
+.af-core .af-pf-tv-fairness[data-tone='warn'],
+.af-core .af-pf-tv-engine[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-tv-fairness[data-tone='bad'],
+.af-core .af-pf-tv-engine[data-tone='bad'] {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.af-core .af-pf-tv-delta,
+.af-core .af-pf-tv-lineup,
+.af-core .af-pf-tv-accept {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-core .af-pf-tv-delta[data-tone='good'],
+.af-core .af-pf-tv-lineup[data-tone='good'] {
+  color: var(--good);
+}
+.af-core .af-pf-tv-delta[data-tone='warn'] {
+  color: var(--warn);
+}
+.af-core .af-pf-tv-lineup[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-core .af-pf-tv-reasons {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-core .af-pf-tv-others {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-tv-other-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-core .af-pf-tv-other {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.af-core .af-pf-tv-other-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-core .af-pf-tv-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-tv-btn {
+  min-height: 40px;
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-tv {
+    padding: 14px;
+  }
+  .af-core .af-pf-tv-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /*
+   * ⚠ SHRINK-WRAP BEFORE ROTATING. As a grid item the arrow stretched to the
+   * full column, and rotating a 340px-wide box about its centre carried the
+   * glyph — sitting at the box's left edge — 150px up, over the header line.
+   * Measured, not assumed: the glyph landed on the partner's stance word.
+   */
+  .af-core .af-pf-tv-arrow {
+    justify-self: center;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    transform: rotate(90deg);
+    line-height: 1;
+  }
+  /* Stacked, full width: "Open Trade Center" does not fit half of 343px. */
+  .af-core .af-pf-tv-btn {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+}
