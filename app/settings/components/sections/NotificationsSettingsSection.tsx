@@ -16,6 +16,7 @@ import {
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
+import { LeagueNotificationOverridesCard } from "@/components/notification-settings/LeagueNotificationOverridesCard"
 import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 
@@ -371,6 +372,28 @@ export function NotificationsSettingsSection({
           </div>
         ) : null}
       </div>
+
+      {/*
+        PER-LEAGUE OVERRIDES (spec item 15). Sits under quiet hours because it is the same
+        kind of control — a narrowing of the global answer — and because the ask was
+        explicitly "global by default, but let users pick by league".
+
+        ⚠ Placed HERE rather than in league settings, which is what the request suggested.
+        The league Settings tab is commissioner-only on the NFL redraft path
+        (LeagueShell.tsx pushes it `if (isCommissioner)` and then filters it out of the tab
+        row because it is modal-driven), so a personal preference parked there would be
+        unreachable for most of a league. See the card's own header for the full reasoning.
+      */}
+      <LeagueNotificationOverridesCard
+        prefs={prefs}
+        categoryIds={VISIBLE_CATEGORY_IDS}
+        categoryLabels={NOTIFICATION_CATEGORY_LABELS}
+        onChange={(next) => {
+          setDirty(true)
+          setSaveError(null)
+          setPrefs(next)
+        }}
+      />
 
       {/*
         Per-DEVICE browser push, distinct from the category toggles below.

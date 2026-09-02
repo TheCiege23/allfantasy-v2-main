@@ -478,8 +478,57 @@ matches documentation of the rule is not a guard.**
 - [x] Dispatcher honours both. Quiet hours suppress **push and SMS only**; the in-app row
       is a log and still gets written, or the user wakes to no record and the unread badge
       under-reports their night.
-- [ ] Per-league override UI inside league settings. Resolver, storage and enforcement are
-      done and tested; only the surface is missing. `customisedLeagueIds` exists for it.
+- [x] **Per-league override UI — SHIPPED, but NOT in league settings, and that is a
+      deliberate departure from the ask.** `components/notification-settings/LeagueNotificationOverridesCard.tsx`,
+      mounted in Settings -> Notifications directly under quiet hours.
+
+      **Why not league settings, which is what spec 15 suggested.** `LeagueShell.tsx`
+      builds the tab list two different ways: the general/imported path appends
+      `{ id: 'settings' }` unconditionally, but the NFL redraft core path pushes it only
+      `if (isCommissioner)` and then **filters it back out** of the tab row because it is
+      modal-driven. So in a 12-team redraft league, eleven managers would have had a
+      *personal* preference they could not open. That is the Phase 4 defect exactly — a
+      complete pipeline behind an unreachable control — and a preference nobody can reach
+      is indistinguishable from one that does not exist.
+
+**🛑 A SILENT REVERT CAUGHT BEFORE IT SHIPPED, AND THE OBVIOUS IMPLEMENTATION WAS THE BUG.**
+"Follow my settings" naturally reads as *delete this league's entry*. That never reaches
+the database. The save goes to `/api/user/profile`, whose `mergeNotificationPreferences`
+merges **one level deep** — it must, because the column co-locates `aiSettings`,
+`chimmyAlertPreferences`, `dashboardToggles` and world-cup prefs, and each caller sends only
+its own slice. So the server computes `leagues = { ...stored, ...incoming }` and restores
+any key the client removed. The row flips in the UI, the request returns ok, and the mute is
+back on the next load: no error, no failed request, nothing to see.
+
+The fix is to send `{}`. The merge stops after one level, so the value **at the league id**
+is replaced wholesale, and `lib/notifications/leagueOverrides.ts` already treats `{}` as
+inherit — its docstring names `undefined`, `{}` and a field-less entry together for exactly
+this reason. That sentence turned out to be load-bearing rather than decorative.
+
+⚠ **The one-level merge is load-bearing in BOTH directions and only one is documented.**
+It protects sibling sub-keys, which is why it exists; it also makes removal impossible by
+omission. Any future UI needing "no opinion" must SEND a neutral value, never drop the key.
+Noted on `mergeNotificationPreferences`, which moved to
+`lib/notification-settings/mergeNotificationPreferences.ts` so the round-trip test drives the
+**real** merge — a test that reimplements it proves only that two copies agree today.
+
+⚠ **AND ONE OF MY OWN COMMENTS WAS OVERSTATED, FOUND BY MUTATION.** I wrote the same "`{}`
+not `delete`" rationale on `toggleCategory`. Mutating it green-lights: replacing that branch
+with plain `{ ...current, mutedCategories }` leaves the suite **passing**, because
+`{ mutedCategories: [] }` and `{}` are indistinguishable to both the resolver and
+`customisedLeagueIds`. Only `followGlobal`'s `{}` is a guard; the other is tidiness. The
+comment now says so. A claim that a branch is protected, when no test would notice its
+removal, is worse than no comment.
+
+  **Measured:** `__tests__/league-notification-overrides.test.ts` — 13 tests, every
+  assertion routed through the real server merge. Controls: `followGlobal` -> `delete` turns
+  it **red**; the `toggleCategory` mutation stays green and is documented as cosmetic
+  rather than quietly left looking like a guard.
+
+  ⚠ **Pre-existing and NOT mine:** `__tests__/user-notifications-test-route-contract.test.ts`
+  fails 2 tests — `No "getTwilioRuntimeStatus" export is defined on the "@/lib/twilio-client"
+  mock`. Confirmed pre-existing by reverting my two tracked files and re-running: identical
+  2 failures either way. Classic mock rot; flagged separately, deliberately not fixed here.
 
 **🛑 A LIVE BUG FOUND AND FIXED ON THE WAY: `quietHours.timezone` WAS ACCEPTED AND NEVER
 READ.** `lib/chimmy-alerts/types.ts` declares it, `app/api/ai/alerts/preferences`

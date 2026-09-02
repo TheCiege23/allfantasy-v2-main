@@ -7,6 +7,7 @@ import {
   saveSettingsOrchestrated,
 } from "@/lib/user-settings"
 import { ensureUserProfileForUserId } from "@/lib/user-profile/ensureUserProfileForUserId"
+import { mergeNotificationPreferences } from "@/lib/notification-settings/mergeNotificationPreferences"
 import type { PreferredLanguage, ThemePreference } from "@/lib/user-settings"
 import type { ProfileUpdatePayload } from "@/lib/user-settings/types"
 import { resolveLanguage } from "@/lib/i18n/constants"
@@ -99,39 +100,6 @@ type ProfileBody = {
   sessionIdleTimeoutMinutes?: number | null
   /** ElevenLabs voice id for Chimmy TTS; null clears stored preference. */
   chimmyTtsVoiceId?: string | null
-}
-
-/**
- * Merge an incoming notificationPreferences payload over the stored JSON without
- * dropping keys the caller does not know about. The column co-locates settings
- * owned by other features (aiSettings, chimmyAlertPreferences, dashboardToggles,
- * world-cup prefs, accentColor, fantasyPreferences); each caller sends only the
- * slice it manages. Incoming top-level keys win; when both sides hold plain
- * objects they merge one level deep so a partial nested payload cannot erase
- * sibling sub-keys either.
- */
-function mergeNotificationPreferences(
-  prev: Record<string, unknown>,
-  incoming: Record<string, unknown>
-): Record<string, unknown> {
-  const merged: Record<string, unknown> = { ...prev }
-  for (const [key, value] of Object.entries(incoming)) {
-    const prevValue = merged[key]
-    const bothPlainObjects =
-      value !== null &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      prevValue != null &&
-      typeof prevValue === "object" &&
-      !Array.isArray(prevValue)
-    merged[key] = bothPlainObjects
-      ? {
-          ...(prevValue as Record<string, unknown>),
-          ...(value as Record<string, unknown>),
-        }
-      : value
-  }
-  return merged
 }
 
 async function handleProfileWrite(req: Request, userId: string) {
