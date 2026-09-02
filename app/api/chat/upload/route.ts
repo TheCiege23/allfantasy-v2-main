@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { prisma } from '@/lib/prisma'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { requireAuth } from '@/lib/auth-guard'
 import { getBlobReadWriteToken } from '@/lib/blob/readWriteToken'
 
 export const dynamic = 'force-dynamic'
@@ -50,8 +50,27 @@ async function canAccessLeague(leagueId: string, userId: string) {
   return league.teams.some((team) => team.claimedByUserId === userId)
 }
 
+/**
+ * 🛑 THE GATE IS A SESSION PLUS MEMBERSHIP, NOT AGE CONFIRMATION.
+ *
+ * This used `requireVerifiedUser`, which demands `ageConfirmedAt` as well as a verified
+ * email or phone. `lib/auth.ts` never writes `ageConfirmedAt` on an OAuth sign-in, so every
+ * Google account that had not separately confirmed its age got a 403 `AGE_REQUIRED` trying
+ * to attach an image in a league chat — the same defect that stopped those accounts setting
+ * a profile picture, on a different surface.
+ *
+ * ⚠ THE REAL AUTHORIZATION IS `canAccessLeague` / `canAccessThread` BELOW, and neither is
+ * weakened here: the caller must still prove they are IN the league or the thread they are
+ * uploading to. Age confirmation added nothing to that — it gates bracket entry and the
+ * legal panel, which are the surfaces that genuinely need it.
+ *
+ * This route was also the odd one out. Its two siblings, `app/api/shared/chat/upload` and
+ * `app/api/bracket/chat-upload`, are both session-only. Three chat upload routes with three
+ * different answers to "who may attach a file" is how one of them ends up wrong without
+ * anybody noticing.
+ */
 export async function POST(req: NextRequest) {
-  const auth = await requireVerifiedUser()
+  const auth = await requireAuth()
   if (!auth.ok) return auth.response
   const userId = auth.userId
 
@@ -67,12 +86,22 @@ export async function POST(req: NextRequest) {
   const file = formData.get('file')
   const type = toStringValue(formData.get('type')).trim() as 'image' | 'video' | 'voice'
   const leagueId = toStringValue(formData.get('leagueId')).trim()
-  const purpose = toStringValue(formData.get('purpose')).trim()
 
   const threadId = toStringValue(formData.get('threadId')).trim()
-  const isProfileAvatarUpload = !leagueId && !threadId && purpose === 'profile' && type === 'image'
 
-  if (!leagueId && !threadId && !isProfileAvatarUpload) {
+  /*
+   * 🛑 THE `purpose=profile` BYPASS IS GONE, AND REMOVING IT TIGHTENS THIS ROUTE.
+   *
+   * It existed so the settings page could upload an avatar here, and it worked by skipping
+   * the leagueId/threadId requirement entirely — the one check that proves the caller
+   * belongs anywhere. Avatars now go to `/api/user/profile/avatar`, so nothing sends
+   * `purpose=profile` any more: the only remaining references were inside this file.
+   *
+   * Left in place it would be an unauthenticated-by-membership write path with no
+   * legitimate caller, which is exactly the kind of thing that gets found later by someone
+   * who is not us. Every upload now has to name a league or a thread and prove access to it.
+   */
+  if (!leagueId && !threadId) {
     return NextResponse.json({ error: 'leagueId or threadId required' }, { status: 400 })
   }
   if (leagueId && !(await canAccessLeague(leagueId, userId))) {
@@ -120,11 +149,11 @@ export async function POST(req: NextRequest) {
       ? (file as File).name.replace(/[^a-zA-Z0-9._-]/g, '_')
       : 'upload.bin'
 
-  const key = isProfileAvatarUpload
-    ? `profile/${userId}/image/${Date.now()}-${filename}`
-    : leagueId
-      ? `chat/${leagueId}/${type}/${Date.now()}-${filename}`
-      : `chat/thread/${threadId}/${type}/${Date.now()}-${filename}`
+  // Every upload is now league- or thread-scoped; the `profile/` prefix went with the
+  // bypass above, since avatars are written by /api/user/profile/avatar under `avatars/`.
+  const key = leagueId
+    ? `chat/${leagueId}/${type}/${Date.now()}-${filename}`
+    : `chat/thread/${threadId}/${type}/${Date.now()}-${filename}`
 
   try {
     // Public access so chat UI can render images / audio / video inline via direct HTTPS URLs.

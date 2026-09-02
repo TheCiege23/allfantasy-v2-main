@@ -82,6 +82,41 @@ unverified reviewer account still unable to set a picture. The user's "do not
 narrow" instruction is what makes the fix cover both — it was load-bearing, not a
 preference. Any future re-gating of this route must survive **both** rows.
 
+### 2.1b The SAME bug was live on chat attachments, and was fixed later
+
+Fixing the avatar path moved avatars off `/api/chat/upload` but left that route alone, so
+`requireVerifiedUser` — and therefore the `ageConfirmedAt` demand no OAuth sign-in
+satisfies — still blocked **image attachments in league chat** for exactly the same
+population. Reported by the user only after avatars were working.
+
+Two things changed there, in opposite directions:
+
+- **Loosened:** `requireVerifiedUser` → `requireAuth`. The route was the odd one out —
+  `app/api/shared/chat/upload` and `app/api/bracket/chat-upload` are both session-only.
+  Three chat upload routes with three answers to "who may attach a file" is how one ends
+  up wrong unnoticed.
+- **Tightened:** the `purpose=profile` branch is deleted. It let an upload skip the
+  leagueId/threadId requirement entirely — the one check proving the caller belongs
+  anywhere — and it existed solely for the settings page, which no longer uses this route.
+  A membership-free write path with no legitimate caller is worth removing while you are in
+  there.
+
+⚠ **The real authorization was never the verification gate.** `canAccessLeague` /
+`canAccessThread` prove the caller is IN the league or thread, and both are untouched.
+Age confirmation gates bracket entry and the legal panel; it added nothing here.
+
+⚠ **AND THE FIRST VERSION OF THE TEST FOR THIS PASSED WITH THE AUTHORIZATION DELETED.** It
+asserted `toContain('canAccessLeague(')`, which still matches
+`async function canAccessLeague(` after the CALL SITE is removed — the definition of a
+check nobody runs. Only mutation caught it: deleting the guard left all six tests green.
+It now matches the awaited, negated call. **When asserting that a check exists, match the
+call, never the name.**
+
+⚠ Updating this route also rotted an existing suite's mock —
+`__tests__/chat-upload-thread-access.test.ts` mocked `requireVerifiedUser` and stopped
+intercepting. Its four tests are all about membership, so nothing became vacuous, but that
+is luck rather than design: grep the test tree for mocks of any guard you swap.
+
 ### 2.2 Avatar — three routes, three limits, two auth models
 
 | Route | Callers | Limit | Auth |
