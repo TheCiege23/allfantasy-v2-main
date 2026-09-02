@@ -430,14 +430,61 @@ call in `LeftChatPanel`, and a `{/* … */}` JSX comment. Prefix heuristics caug
 two and missed the third. It now strips block comments statefully. **A guard that
 matches documentation of the rule is not a guard.**
 
-### Phase 5 — Notification preferences (spec items 14, 15, 16)
+### Phase 5 — Notification preferences ✅ CORE DONE (uncommitted at time of writing)
 
-- [ ] Global on/off (exists) + **per-league override in league settings**.
-- [ ] Category toggles: injuries, trades, waivers, mentions; draft on-the-clock
-      staged for later.
-- [ ] **Quiet hours** in the main settings menu, with copy telling users it exists.
-- [ ] Server must honour all three (global, per-league, quiet hours) in
-      `NotificationDispatcher` / `outboxRelay` — not just in the UI.
+- [x] Category toggles **already existed and were already honoured** by the dispatcher
+      (`catPrefs.enabled` / `.inApp` / `.email` / `.sms`). Nothing to do.
+- [x] **Quiet hours** — `lib/notifications/quietHours.ts`, evaluated in the user's
+      timezone, surfaced in Settings → Notifications directly under the global switch
+      (spec 16 asked that people be told the option exists).
+- [x] **Per-league overrides** — `lib/notifications/leagueOverrides.ts`, stored in the
+      existing `UserProfile.notificationPreferences` JSON. **No migration**, deliberately:
+      a schema change is not pushable work here and belongs to the account owner.
+- [x] Dispatcher honours both. Quiet hours suppress **push and SMS only**; the in-app row
+      is a log and still gets written, or the user wakes to no record and the unread badge
+      under-reports their night.
+- [ ] Per-league override UI inside league settings. Resolver, storage and enforcement are
+      done and tested; only the surface is missing. `customisedLeagueIds` exists for it.
+
+**🛑 A LIVE BUG FOUND AND FIXED ON THE WAY: `quietHours.timezone` WAS ACCEPTED AND NEVER
+READ.** `lib/chimmy-alerts/types.ts` declares it, `app/api/ai/alerts/preferences`
+validates and stores it, and the only consumer —
+`ChimmyAlertDeliveryRouter.isWithinQuietHours` — calls `now.getHours()`, the SERVER hour,
+which is UTC on Vercel. It does not fail loudly; it silences **the wrong half of the
+day**: a US Eastern user setting 22:00–07:00 gets it applied 17:00–02:00 local. Evening
+goes quiet, 3am does not.
+
+**🛑 AND THE FEATURE WAS DEAD ON ARRIVAL UNTIL A ROUND-TRIP TEST CAUGHT IT.**
+`resolveNotificationPreferences` used to `return { globalEnabled, categories }` —
+rebuilding a fresh object and discarding every other key. The dispatcher reads
+`prefs.quietHours` and `prefs.leagues` off *that* return value, so both would have been
+permanently `undefined` regardless of what the user saved. Nothing else could see it: the
+write path merges correctly so the column really held the data, the pure functions were
+all correct, and the source-level check that the dispatcher calls the right helpers
+passed. **Only putting a preference in one end and looking at the other shows it.**
+⚠ Any new key on `NotificationPreferences` must be added to that passthrough.
+
+**Two invariants worth keeping, both tested:**
+- **Absence inherits.** Every stored row predates `leagues`, so treating a missing entry
+  as a decision would have silenced every league in the product on deploy — silently,
+  because an unsent notification raises nothing.
+- **The master switch is not overridable upward.** A stale per-league `enabled: true` must
+  not resurrect a globally-off account, or the global control becomes a suggestion.
+
+**Measured:** 23 tests. Typecheck 145 against a 145 baseline, **zero appeared, zero
+disappeared** normalized to `file:line:code`, none in any Phase 5 file.
+
+⚠ **Positive controls — and two of them failed as first written:**
+1. The timezone regression test asserted `hourInZone(now, 'America/New_York') === 21`. It
+   **passed against the bug**, because this machine is US Eastern so the buggy server-hour
+   path returns 21 too. Rewritten to compare UTC against Asia/Tokyo — nine hours apart, no
+   DST, so a server can coincide with at most one and a timezone-blind implementation must
+   return equal values for both. **When a fixture's constants can accidentally match the
+   environment, the test proves nothing there.**
+2. The resolver mutation used `perl -0pi` with a `\n` pattern and **silently matched
+   nothing** on CRLF sources — the exact no-op mutation this repo already documents. The
+   suite stayed green and meant nothing. Redone line-based; the round-trip test then went
+   red as intended.
 
 ### Phase 6 — Verification (spec item 20: all of the below)
 

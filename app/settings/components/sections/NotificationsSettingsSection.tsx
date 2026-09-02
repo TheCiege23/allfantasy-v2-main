@@ -271,6 +271,108 @@ export function NotificationsSettingsSection({
       </div>
 
       {/*
+        QUIET HOURS (spec item 16). Sits directly under the global switch because the
+        user asked that people be TOLD the option exists — buried three sections down it
+        may as well not.
+
+        ⚠ THE COPY STATES WHAT IT DOES *NOT* SILENCE, DELIBERATELY. Quiet hours suppress
+        push and SMS only; the in-app row is still written, because it is a log and
+        because the unread badge counts stored rows. A user who believed this silenced
+        everything would read a quiet night as the app having failed.
+
+        Evaluated server-side in the user's timezone by lib/notifications/quietHours.ts.
+        The zone comes from the account profile rather than a field here: a separate
+        timezone control is how the previous implementation ended up storing one nobody
+        read.
+      */}
+      <div
+        className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4"
+        data-testid="notifications-quiet-hours-card"
+      >
+        <label className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium text-[var(--text)]">Quiet hours</span>
+          <input
+            type="checkbox"
+            checked={prefs.quietHours?.enabled === true}
+            onChange={(e) => {
+              setDirty(true)
+              setSaveError(null)
+              setPrefs((p) => ({
+                ...p,
+                quietHours: {
+                  startHour: p.quietHours?.startHour ?? 22,
+                  endHour: p.quietHours?.endHour ?? 7,
+                  allowCritical: p.quietHours?.allowCritical ?? true,
+                  ...p.quietHours,
+                  enabled: e.target.checked,
+                },
+              }))
+            }}
+            className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
+            data-testid="quiet-hours-toggle"
+          />
+        </label>
+        <p className="text-xs text-[var(--muted)]">
+          Hold back phone alerts overnight. Anything that arrives still shows up in
+          Notifications — this only stops it buzzing.
+        </p>
+        {prefs.quietHours?.enabled ? (
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            {(["startHour", "endHour"] as const).map((field) => (
+              <label key={field} className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                {field === "startHour" ? "From" : "Until"}
+                <select
+                  value={prefs.quietHours?.[field] ?? (field === "startHour" ? 22 : 7)}
+                  onChange={(e) => {
+                    setDirty(true)
+                    setPrefs((p) => ({
+                      ...p,
+                      quietHours: {
+                        startHour: p.quietHours?.startHour ?? 22,
+                        endHour: p.quietHours?.endHour ?? 7,
+                        ...p.quietHours,
+                        enabled: true,
+                        [field]: Number(e.target.value),
+                      },
+                    }))
+                  }}
+                  className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--text)]"
+                  data-testid={`quiet-hours-${field}`}
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}:00
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              <input
+                type="checkbox"
+                checked={prefs.quietHours?.allowCritical !== false}
+                onChange={(e) => {
+                  setDirty(true)
+                  setPrefs((p) => ({
+                    ...p,
+                    quietHours: {
+                      startHour: p.quietHours?.startHour ?? 22,
+                      endHour: p.quietHours?.endHour ?? 7,
+                      ...p.quietHours,
+                      enabled: true,
+                      allowCritical: e.target.checked,
+                    },
+                  }))
+                }}
+                className="h-3.5 w-3.5 rounded accent-[var(--accent-cyan)]"
+              />
+              Still allow urgent alerts
+            </label>
+          </div>
+        ) : null}
+      </div>
+
+      {/*
         Per-DEVICE browser push, distinct from the category toggles below.
         Those are account preferences; this is a subscription held by this
         browser, and it is what the injured-starter sweep actually delivers
