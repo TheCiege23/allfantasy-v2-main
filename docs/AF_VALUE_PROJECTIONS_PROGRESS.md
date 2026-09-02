@@ -581,7 +581,61 @@ looks exactly like "the engine has not computed these players yet". So:
 Different diagnoses, different warnings, both tested. **This is what the census would have told us
 up front** — and now the code says it at runtime instead.
 
-### ⚠ Typecheck NOT verified for this phase — and the failure looked like a pass
+### ✅ TYPECHECK MEASURED — 145 vs 145, zero delta (2026-09-02)
+
+Sixth attempt, first to actually run.
+
+| check | result |
+|---|---|
+| Sentinel | `SENTINEL_DONE=2` — exit 2 is tsc's "errors exist", normal on this baseline |
+| Output size | **59,402 bytes** (the false runs were 0 and 16 bytes) |
+| `error TS` lines | **145** vs a **145** baseline — **zero delta** |
+| Crash / `Cannot find module` / fork-failure tells | **0** |
+| Errors in files I touched | **none** |
+| Compile set | **12,772 files**, and **all 14 of my touched files confirmed present** |
+
+The last row matters as much as the count. `--listFilesOnly` (exit 0, 12,772 lines, no crash) is the
+only check that proves a file was actually compiled, and CLAUDE.md records a case where a
+thorough-looking config compiled 506 files while silently excluding the one under test.
+
+⚠ **`__tests__` is excluded from tsconfig**, so my 44 new test files are NOT type-checked by this
+run. Vitest transpiles them without full checking. That is pre-existing repo configuration, not a
+gap I introduced, but it means "145, zero delta" describes the `lib/` and `app/` changes only.
+
+⚠ **This 145 was measured in the SHARED CHECKOUT**, which holds other sessions' uncommitted work,
+so per CLAUDE.md it describes a tree nobody will build. Peer `-70` reports the batch tip at
+`857edb30b` measured **145 detached with a sentinel** — that is a real baseline anchored to a real
+commit. When there is a SHA to hand over, the honest measurement is a detached worktree at its
+parent, not a reuse of this number.
+
+### How the earlier attempts failed — and how a broken check lied twice
+
+Five runs lost before this one. Two distinct false-clean shapes, both worth recognising:
+
+```
+tsc-ros.txt     0 bytes,  no sentinel                    ← killed before writing
+tsc-final.txt  16 bytes,  SENTINEL_DONE=4,  0 error TS   ← fork failure, reads as a PASS
+```
+
+Exit 4 is the Cygwin fork failure. Note the second: a sentinel **is** present, so a "did it finish"
+check passes, and the count reads **0 against a 145 baseline**.
+
+🛑 **My own wait loop caused part of it.** `until grep -q SENTINEL_DONE "$f"; do sleep 20; done`
+forks a subshell every 20 seconds — ~30 extra forks per ten-minute wait, on top of the compile. The
+fix is `run_in_background` plus the completion notification. Polling cost process handles and helped
+kill the run it was watching.
+
+🛑 **And two of my own verification checks produced confident wrong answers**, which is the point of
+the rule about positive controls:
+
+1. A hand-rolled glob matcher reported all three new files as **NOT in the compile set**. The bug
+   was mine: replacing `*` with `[^/]*` after replacing `**` with `.*` corrupts the `.*` it just
+   wrote. It printed a plausible, alarming, wrong answer.
+2. `--listFilesOnly` at `--max-old-space-size=4096` **OOMed** (exit 134, SIGABRT) and emitted 26
+   lines of crash dump. Grepping those for filenames returned zero matches for every file — a
+   perfect false negative. At 8192 it exits 0 with 12,772 lines and finds all fourteen.
+
+Both had the same shape: **a broken tool and a true negative print identically.**
 
 Four attempts, none usable. Three died on Cygwin fork exhaustion (exit 4); the fourth I killed
 myself when a peer reported **four concurrent `tsc.js` processes on this machine, ~11.8GB combined**.

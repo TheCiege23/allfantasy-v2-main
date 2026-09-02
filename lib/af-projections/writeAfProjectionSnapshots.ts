@@ -60,6 +60,19 @@ export interface WriteSnapshotsResult {
   mirroredProjections: number
   /** Weekly rows not mirrored because no sleeperId is mapped for the player. */
   mirrorSkippedNoSleeperId: number
+  /**
+   * True when a season OLDER than `sourceSeason` exists in `fantasy_stat_lines`.
+   *
+   * 🛑 THIS IS WHAT MAKES THE ROUTE'S OFFSEASON CARVE-OUT HONEST. That carve-out treats a run that
+   * refuses every player with `no_games_played` as healthy, because in a true preseason that is the
+   * calendar rather than a fault. But "the NEWEST season has no games" and "NO season has games"
+   * are different claims, and only the second justifies the exemption. Without this flag the
+   * carve-out cannot tell them apart — and on 2026-08-20 it stopped telling them apart for NFL,
+   * marking thirteen consecutive zero-write runs as successes.
+   */
+  olderSeasonAvailable: boolean
+  /** Set when the source season was rolled back after a total `no_games_played` refusal. */
+  sourceSeasonFallback: { from: number; to: number; reason: string } | null
   errors: string[]
 }
 
@@ -92,7 +105,11 @@ function snapshotKey(playerId: string, season: number, week: number | null, even
   return `${playerId}|${season}|${week ?? 'w'}|${eventId ?? 'none'}`
 }
 
-export async function writeAfProjectionSnapshots(
+/**
+ * One pass at ONE source season. Exported for tests; production callers use
+ * {@link writeAfProjectionSnapshots}, which adds the fallback described there.
+ */
+export async function writeAfProjectionSnapshotsForSeason(
   opts: WriteSnapshotsOptions = {},
 ): Promise<WriteSnapshotsResult> {
   const sport = (opts.sport ?? 'NFL').toUpperCase()
@@ -111,6 +128,18 @@ export async function writeAfProjectionSnapshots(
   if (!Number.isFinite(sourceSeason)) {
     throw new Error(`no fantasy_stat_lines found for sport=${sport}; run import-stat-lines first`)
   }
+
+  /*
+   * Is there anything OLDER to fall back to? Read once here so both the fallback in
+   * `writeAfProjectionSnapshots` and the route's carve-out can ask the same question of the same
+   * data, rather than each forming its own opinion.
+   */
+  const older = await prisma.fantasyStatLine.findFirst({
+    where: { sport, season: { lt: String(sourceSeason) } },
+    orderBy: { season: 'desc' },
+    select: { season: true },
+  })
+  const olderSeasonAvailable = older != null
   /*
    * Current-week resolution (Sleeper season state). The Sleeper forward look and the weekly
    * snapshot rows must track the week actually being played — previously targetWeek was
@@ -306,6 +335,8 @@ export async function writeAfProjectionSnapshots(
     weeklySkippedReason,
     mirroredProjections: 0,
     mirrorSkippedNoSleeperId: 0,
+    olderSeasonAvailable,
+    sourceSeasonFallback: null,
     errors,
   }
 
@@ -601,4 +632,80 @@ export async function writeAfProjectionSnapshots(
 function bumpRefusal(result: WriteSnapshotsResult, reason: string): void {
   result.refused++
   result.refusalsByReason[reason] = (result.refusalsByReason[reason] ?? 0) + 1
+}
+
+/**
+ * Only refusals that mean "this season has not been played yet". A run refusing exclusively for
+ * this reason has found rows for a season with no production in them.
+ */
+const NO_PRODUCTION_REFUSAL = 'no_games_played'
+
+/**
+ * Compute and persist projections, rolling back one season when the newest one has not been played.
+ *
+ * ── 🛑 THE BUG THIS FIXES, MEASURED ─────────────────────────────────────────────────────────
+ * `sourceSeason` defaults to the NEWEST season present in `fantasy_stat_lines`, whether or not a
+ * single game of it has been played. When `import-players` began writing NFL 2026 roster rows on
+ * 2026-08-20, the source flipped 2025 -> 2026 and every player started refusing:
+ *
+ *     rows_read 1120 · rows_written 0 · refusalRate 1 · {"no_games_played": 1120}
+ *
+ * NFL 2025 sat right there with 1,938 complete rows — the very data that had produced 1,576
+ * projections the day before. Ten consecutive runs wrote nothing, and every one reported SUCCESS
+ * because the route's offseason carve-out cannot distinguish "the newest season has no games" from
+ * "no season has games". Thirteen days of silence in the middle of draft season.
+ *
+ * ── WHY A FALLBACK RATHER THAN A SMARTER SEASON QUERY ───────────────────────────────────────
+ * The root-cause fix is to pick the newest season that actually HAS production, but `games_played`
+ * lives inside `stats.regular_season`, so that is a JSON predicate over every row rather than a
+ * column filter. This achieves the same outcome using the extraction logic that already exists and
+ * has already told us the answer: if a full pass refuses every player for exactly that reason, the
+ * season is empty, and the next one down is the one to use.
+ *
+ * ⚠ IT RETRIES ONCE, NOT IN A LOOP. Two empty seasons in a row is a data problem, not something to
+ * paper over by walking backwards until something sticks — and each attempt is a full table read.
+ *
+ * ⚠ AN EXPLICIT `sourceSeason` IS NEVER OVERRIDDEN. A caller naming a season means it; a backfill
+ * asking for an empty season should get an honest empty answer, not a different season's numbers.
+ */
+export async function writeAfProjectionSnapshots(
+  opts: WriteSnapshotsOptions = {},
+): Promise<WriteSnapshotsResult> {
+  const first = await writeAfProjectionSnapshotsForSeason(opts)
+
+  if (opts.sourceSeason != null) return first
+  if (first.written > 0 || first.refused === 0) return first
+  if (!first.olderSeasonAvailable) return first
+
+  const reasons = Object.keys(first.refusalsByReason)
+  if (reasons.length !== 1 || reasons[0] !== NO_PRODUCTION_REFUSAL) return first
+
+  const fallbackSeason = first.sourceSeason - 1
+  const retry = await writeAfProjectionSnapshotsForSeason({ ...opts, sourceSeason: fallbackSeason })
+
+  /*
+   * Recorded, never silent. A projection built from a season older than the newest one available is
+   * a different claim from one built on current data, and the telemetry has to say so — otherwise
+   * this fix becomes its own quiet fiction, which is the failure it exists to end.
+   */
+  retry.sourceSeasonFallback = {
+    from: first.sourceSeason,
+    to: fallbackSeason,
+    reason:
+      `Season ${first.sourceSeason} had ${first.statLinesRead} stat lines and no games played in any ` +
+      `of them; rolled back to ${fallbackSeason}.`,
+  }
+  /*
+   * ⚠ AND IF THE ROLLBACK ALSO PRODUCED NOTHING, THE FIRST ATTEMPT IS THE HONEST ANSWER. Returning
+   * the retry would report the OLDER season as the source of an empty run, which misdescribes what
+   * happened and points anyone debugging it at the wrong season.
+   */
+  if (retry.written === 0) {
+    first.sourceSeasonFallback = {
+      ...retry.sourceSeasonFallback,
+      reason: retry.sourceSeasonFallback.reason + ` That season produced nothing either.`,
+    }
+    return first
+  }
+  return retry
 }
