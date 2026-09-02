@@ -15,6 +15,7 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import type { LeagueSlot, PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
+import type { RecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 
 /**
@@ -67,13 +68,13 @@ export type PlayerFinderProps = {
   detail: PlayerDetail | null
   leagueCount: number
   /**
-   * The league held in the rail, when there is one (38a·4).
+   * The league held in the rail, when there is one.
    *
-   * ⚠ IT PROMOTES AND MARKS, IT DOES NOT FILTER. The handoff scopes this screen
-   * to "in THIS league", but a player's whole value on a Sunday is that you can
-   * see every league he is in at once — hiding the other eight to honour the
-   * scoping would remove the reason the screen exists. So the held league sorts
-   * to the top and is labelled; the rest stay below it.
+   * ⚠ IT FILTERS. Guap's decision, 2026-09-02, reversing the 38a·4 rule this
+   * screen shipped with (promote and mark, never filter): with a league in
+   * context the table, the moves, the verdict and the header numbers are that
+   * league's alone, and "All leagues →" is the way out. Without one, the
+   * cross-league view is unchanged.
    */
   selectedLeagueId?: string | null
   /**
@@ -82,6 +83,8 @@ export type PlayerFinderProps = {
    * platform id; null otherwise, and the screen renders no card.
    */
   leagueView?: PlayerLeagueView | null
+  /** The account's recent searches for the rail, newest first. Empty when signed out. */
+  recent?: RecentPlayerSearch[]
   /**
    * False on the public `/players/{slug}` surface when nobody is signed in.
    *
@@ -247,6 +250,7 @@ export function PlayerFinder({
   leagueCount,
   selectedLeagueId = null,
   leagueView = null,
+  recent = [],
   signedIn = true,
 }: PlayerFinderProps) {
   /*
@@ -260,7 +264,20 @@ export function PlayerFinder({
   const leagueParam = selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''
 
   // ── Derived, once, from the loaders' output ──────────────────────────────
-  const impactRows: LeagueImpact[] = detail?.impact.available ? detail.impact.data : []
+  /*
+   * League mode: everything below is scoped to the held league. The page's
+   * loaders already narrowed their reads to it; this filter is what keeps the
+   * screen honest if a loader ever returns more than it was asked for.
+   */
+  const leagueMode = Boolean(signedIn && selectedLeagueId)
+  const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
+  const allLeaguesHref = detail
+    ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId))}`
+    : '/core/players'
+
+  const impactRows: LeagueImpact[] = (detail?.impact.available ? detail.impact.data : []).filter((i) =>
+    inScope(i.leagueId)
+  )
   const impactById = new Map(impactRows.map((i) => [i.leagueId, i]))
   const injuryStatus = detail?.injury.available ? detail.injury.data.status : null
   const moves: PlayerMove[] = detail
@@ -268,7 +285,9 @@ export function PlayerFinder({
         playerName: detail.player.name,
         injuryStatus,
         impact: impactRows,
-        freeAgents: detail.recommendedMoves.available ? detail.recommendedMoves.data : [],
+        freeAgents: (detail.recommendedMoves.available ? detail.recommendedMoves.data : []).filter((m) =>
+          inScope(m.leagueId)
+        ),
       })
     : []
   const moveByLeague = new Map<string, PlayerMove>()
@@ -277,6 +296,7 @@ export function PlayerFinder({
   const last = detail ? (detail.player.name.trim().split(/\s+/).slice(-1)[0] ?? detail.player.name) : ''
 
   const leagueRows: LeagueRow[] = (detail?.leagues.available ? detail.leagues.data : [])
+    .filter((slot) => inScope(slot.leagueId))
     .map((slot) => ({
       slot,
       impact: impactById.get(slot.leagueId),
@@ -294,6 +314,10 @@ export function PlayerFinder({
     })
 
   const yoursCount = leagueRows.filter((r) => r.slot.isYours).length
+  const unmatched = (detail?.rosterCoverage.unmatched ?? []).filter((u) => inScope(u.leagueId))
+  // In league mode the header's numbers are the league's own, when we have them.
+  const leagueProj = leagueMode && leagueView ? leagueView.afPoints : null
+  const leagueRank = leagueMode && leagueView ? leagueView.positionRank : null
   const otherMatches = detail
     ? matches.filter((m) => !(m.externalId === detail.player.externalId && m.sport === detail.player.sport))
     : matches
@@ -383,6 +407,37 @@ export function PlayerFinder({
           </section>
         ) : null}
 
+        {/*
+          ── Recently searched ────────────────────────────────────────
+          Per account (Guap, 2026-09-02), newest first, the player on screen
+          excluded by the loader. Empty for a new account and when signed out,
+          and then it renders nothing rather than an empty heading.
+        */}
+        {signedIn && recent.length > 0 ? (
+          <section className="af-card af-pf-recent" aria-labelledby="af-pf-recent-h">
+            <header className="af-pf-section-head">
+              <h2 className="af-label" id="af-pf-recent-h">
+                Recently searched
+              </h2>
+            </header>
+            <ul className="af-pf-match-list">
+              {recent.map((r) => (
+                <li key={`${r.sport}-${r.externalId}`}>
+                  <Link
+                    href={`/core/players?q=${encodeURIComponent(r.name)}&player=${encodeURIComponent(playerRef(r.sport, r.externalId))}${leagueParam}`}
+                    className="af-pf-match af-pf-recent-row"
+                  >
+                    <span className="af-pf-match-name">{r.name}</span>
+                    <span className="af-pf-match-meta af-num">
+                      {[r.position, r.team].filter(Boolean).join(' · ') || r.sport}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
         {detail && otherMatches.length > 0 ? (
           <div className="af-pf-m-only af-pf-others" aria-label="Other matches">
             <span className="af-label">Also matched</span>
@@ -447,7 +502,16 @@ export function PlayerFinder({
                   ]
                     .filter(Boolean)
                     .join(' · ')}
-                  {signedIn && detail.leagues.available ? (
+                  {leagueMode ? (
+                    <span className="af-pf-rostered">
+                      {' · '}
+                      {leagueView ? `in ${leagueView.leagueName}` : 'in this league'}
+                      {' · '}
+                      <Link href={allLeaguesHref} className="af-pf-all-leagues">
+                        All leagues →
+                      </Link>
+                    </span>
+                  ) : signedIn && detail.leagues.available ? (
                     <span className="af-pf-rostered">
                       {' · '}
                       {yoursCount > 0
@@ -481,38 +545,70 @@ export function PlayerFinder({
                 the same player is worth different points in each. The per-league
                 number is in the table below; this tile is the one feed number.
               */}
-              <StatTile
-                label={detail.projection.available ? `Proj wk ${detail.projection.data.week}` : 'Proj this week'}
-                state={detail.projection}
-                value={detail.projection.available ? detail.projection.data.points.toFixed(1) : null}
-                tone="good"
-                tip={{
-                  title: 'Projection',
-                  body: 'The projection feed’s standard-scoring number for this week. What he is worth in each of YOUR leagues — under that league’s own scoring — is the PROJ column in the table below.',
-                }}
-                help={
-                  detail.projection.available
-                    ? `Standard scoring · ${detail.projection.data.season}`
-                    : undefined
-                }
-              />
-              <StatTile
-                label="Pos rank"
-                state={detail.positionRank}
-                value={
-                  detail.positionRank.available
-                    ? `${detail.positionRank.data.position}${detail.positionRank.data.rank}`
-                    : null
-                }
-                tone="warn"
-                // The denominator lives here rather than in the value so the tile
-                // reads "WR12 / of 143 projected" — a rank AND its universe.
-                help={
-                  detail.positionRank.available
-                    ? `of ${detail.positionRank.data.outOf} projected ${detail.positionRank.data.position}s`
-                    : undefined
-                }
-              />
+              {/*
+                In league mode both tiles switch to the league's own scoring
+                (Guap, 2026-09-02). Standard scoring is the cross-league number.
+              */}
+              {leagueProj ? (
+                <StatTile
+                  label={leagueProj.available ? `Proj wk ${leagueProj.data.week}` : 'Proj this week'}
+                  state={leagueProj}
+                  value={leagueProj.available ? leagueProj.data.points.toFixed(1) : null}
+                  tone="good"
+                  tip={{
+                    title: 'Projection',
+                    body: 'Expected points this week under this league’s own scoring settings — not a generic ranking.',
+                  }}
+                  help={leagueProj.available ? `${leagueView?.leagueName ?? 'This league'}’s scoring` : undefined}
+                />
+              ) : (
+                <StatTile
+                  label={detail.projection.available ? `Proj wk ${detail.projection.data.week}` : 'Proj this week'}
+                  state={detail.projection}
+                  value={detail.projection.available ? detail.projection.data.points.toFixed(1) : null}
+                  tone="good"
+                  tip={{
+                    title: 'Projection',
+                    body: 'The projection feed’s standard-scoring number for this week. What he is worth in each of YOUR leagues — under that league’s own scoring — is the PROJ column in the table below.',
+                  }}
+                  help={
+                    detail.projection.available
+                      ? `Standard scoring · ${detail.projection.data.season}`
+                      : undefined
+                  }
+                />
+              )}
+              {leagueRank ? (
+                <StatTile
+                  label="Pos rank"
+                  state={leagueRank}
+                  value={leagueRank.available ? `${leagueRank.data.position}${leagueRank.data.rank}` : null}
+                  tone="warn"
+                  help={
+                    leagueRank.available
+                      ? `of ${leagueRank.data.outOf} priced ${leagueRank.data.position}s · this league’s scoring`
+                      : undefined
+                  }
+                />
+              ) : (
+                <StatTile
+                  label="Pos rank"
+                  state={detail.positionRank}
+                  value={
+                    detail.positionRank.available
+                      ? `${detail.positionRank.data.position}${detail.positionRank.data.rank}`
+                      : null
+                  }
+                  tone="warn"
+                  // The denominator lives here rather than in the value so the tile
+                  // reads "WR12 / of 143 projected" — a rank AND its universe.
+                  help={
+                    detail.positionRank.available
+                      ? `of ${detail.positionRank.data.outOf} projected ${detail.positionRank.data.position}s`
+                      : undefined
+                  }
+                />
+              )}
               <StatTile
                 label="Snap share"
                 state={detail.snapShare}
@@ -567,9 +663,20 @@ export function PlayerFinder({
             <section className="af-pf-block af-pf-leagues" aria-labelledby="af-pf-leagues-h">
               <header className="af-pf-block-head">
                 <h3 className="af-pf-h3" id="af-pf-leagues-h">
-                  Every platform, every league
+                  {leagueMode ? 'In this league' : 'Every platform, every league'}
                 </h3>
-                <p className="af-pf-block-sub">Slot and status as they stand right now</p>
+                <p className="af-pf-block-sub">
+                  {leagueMode ? (
+                    <>
+                      Slot and status here ·{' '}
+                      <Link href={allLeaguesHref} className="af-pf-all-leagues">
+                        All leagues →
+                      </Link>
+                    </>
+                  ) : (
+                    'Slot and status as they stand right now'
+                  )}
+                </p>
               </header>
               {/*
                 ⚠ SIGNED OUT, "AVAILABLE WITH ZERO ROWS" IS NOT AN ANSWER. The
@@ -589,7 +696,9 @@ export function PlayerFinder({
               ) : detail.leagues.available ? (
                 leagueRows.length === 0 ? (
                   <p className="af-pf-unavailable">
-                    He is not on any roster in the {leagueCount} {leagueCount === 1 ? 'league' : 'leagues'} you have connected.
+                    {leagueMode
+                      ? 'Not on any roster we can read in this league.'
+                      : `He is not on any roster in the ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'} you have connected.`}
                   </p>
                 ) : (
                   <table className="af-pf-table">
@@ -674,6 +783,18 @@ export function PlayerFinder({
               {signedIn && detail.leagues.available && leagueRows.some((r) => r.slot.isYours) && !detail.impact.available ? (
                 <p className="af-pf-unavailable">{detail.impact.reason}</p>
               ) : null}
+              {/*
+                Leagues whose rosters do not speak Sleeper ids are named, not
+                silently absent — their absence would otherwise read as "not
+                rostered there", which is a claim we cannot make.
+              */}
+              {signedIn && unmatched.length > 0 ? (
+                <p className="af-pf-unavailable af-pf-unmatched">
+                  Not checked: {unmatched.map((u) => u.leagueName).join(', ')} — {unmatched.length === 1 ? 'its rosters use' : 'their rosters use'}{' '}
+                  {[...new Set(unmatched.map((u) => platformLabel(u.platform)))].join(' and ')} player ids we have not matched to
+                  our player table yet.
+                </p>
+              ) : null}
             </section>
 
             {/* ── Recommended moves ─────────────────────────────────── */}
@@ -728,7 +849,12 @@ export function PlayerFinder({
       */}
       {detail && impactRows.length > 0 ? (
         <aside className="af-pf-side" aria-label="What to do">
-          <PlayerVerdict playerName={detail.player.name} impact={impactRows} moves={moves} />
+          <PlayerVerdict
+            playerName={detail.player.name}
+            impact={impactRows}
+            moves={moves}
+            scope={leagueMode ? 'league' : 'all'}
+          />
           <SwapCandidates impact={impactRows} />
         </aside>
       ) : null}

@@ -41,6 +41,7 @@ import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
+import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
@@ -702,14 +703,42 @@ export default async function AfCorePage({
    * passing them here inflated "on N of your M leagues" to the 604 count and let
    * career-import snapshots into the every-platform table.
    */
+  /*
+   * 2a. With a league in context the Player Finder FILTERS to it (Guap,
+   * 2026-09-02), so the loaders are handed that one league and do no work the
+   * screen will not show. Without one, every played league.
+   */
   const playerDetail =
     activeKey === 'players' && selectedPlayerId
       ? await getPlayerDetail(
           selectedPlayerId,
-          playedLeagues.map((l) => l.id),
+          selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id),
           userId
         ).catch(() => null)
       : null
+
+  /*
+   * "Recently searched", per account. The write is fire-and-forget by design
+   * (the module never throws), and the read excludes the player on screen.
+   */
+  if (activeKey === 'players' && playerDetail && userId) {
+    await recordRecentPlayerSearch(userId, {
+      sport: playerDetail.player.sport,
+      externalId: playerDetail.player.externalId,
+      sleeperId: playerDetail.player.sleeperId,
+      name: playerDetail.player.name,
+      position: playerDetail.player.position,
+      team: playerDetail.player.team,
+    })
+  }
+  const recentPlayerSearches =
+    activeKey === 'players' && userId
+      ? await listRecentPlayerSearches(userId, {
+          exclude: playerDetail
+            ? { sport: playerDetail.player.sport, externalId: playerDetail.player.externalId }
+            : null,
+        })
+      : []
 
   /*
    * 2a, league in context: who has him in THIS league — you, a named manager,
@@ -1901,6 +1930,7 @@ export default async function AfCorePage({
           leagueCount={playedLeagues.length}
           selectedLeagueId={selectedLeagueId}
           leagueView={playerLeagueView}
+          recent={recentPlayerSearches}
         />
       ) : activeKey === 'week' ? (
         /*

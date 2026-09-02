@@ -8,6 +8,7 @@ import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShare } from './snapShare'
+import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -111,6 +112,14 @@ export type PlayerDetail = {
   injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }>
   seasonStats: SectionState<Array<{ season: string; stats: Record<string, string> }>>
   leagues: SectionState<LeagueSlot[]>
+  /**
+   * Leagues whose rosters we could not read for this player at all — their
+   * ids do not resolve to our player table (ESPN and Yahoo imports arrive
+   * under the provider's own ids). Named so the screen can say "not checked"
+   * rather than let their absence read as "not rostered". See
+   * lib/core-app/rosterIdCoverage.ts.
+   */
+  rosterCoverage: { unmatched: Array<{ leagueId: string; leagueName: string; platform: string }> }
   /**
    * This week's projected points.
    *
@@ -320,12 +329,14 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
  * Slot precedence matters: a player listed in both `players` and `starters` is a
  * STARTER, not a bench player. `players` is the catch-all, so it is checked last.
  */
+type UnmatchedLeague = { leagueId: string; leagueName: string; platform: string }
+
 async function resolveLeagueSlots(
   sleeperId: string,
   leagueIds: string[],
   userId: string | null | undefined
-): Promise<LeagueSlot[]> {
-  if (leagueIds.length === 0 || !userId) return []
+): Promise<{ slots: LeagueSlot[]; unmatched: UnmatchedLeague[] }> {
+  if (leagueIds.length === 0 || !userId) return { slots: [], unmatched: [] }
 
   const teams = await prisma.leagueTeam.findMany({
     where: { claimedByUserId: userId, leagueId: { in: leagueIds } },
@@ -364,6 +375,7 @@ async function resolveLeagueSlots(
       : []
 
   const out: LeagueSlot[] = []
+  const unmatched: UnmatchedLeague[] = []
   const claimed = new Set<string>()
 
   for (const r of rosters) {
@@ -439,6 +451,49 @@ async function resolveLeagueSlots(
       }
     }
 
+    /*
+     * ⚠ A MISS IS ONLY A MISS ON ROSTERS THAT SPEAK SLEEPER IDS. ESPN and Yahoo
+     * rosters arrive under the provider's own ids (the ESPN importer's header
+     * says so), and a Sleeper-id scan of them finds nobody — which, left
+     * alone, reads as "not rostered anywhere in that league". A direct hit
+     * above is still a hit; it is the leagues with NO hit whose rosters are
+     * sampled against our player table, in one query, and named as unchecked
+     * when they do not resolve. See rosterIdCoverage.ts.
+     */
+    const missed = unclaimed.filter((id) => !held.has(id))
+    if (missed.length > 0) {
+      const byLeague = new Map<string, unknown[]>()
+      for (const r of everyRoster) {
+        if (held.has(r.leagueId)) continue
+        const arr = byLeague.get(r.leagueId) ?? []
+        arr.push(r.playerData)
+        byLeague.set(r.leagueId, arr)
+      }
+      const samples = new Map<string, string[]>()
+      for (const [id, pds] of byLeague) samples.set(id, sampleRosterIds(pds, 60))
+      const all = [...new Set([...samples.values()].flat())]
+      const knownRows =
+        all.length > 0
+          ? await prisma.sportsPlayer
+              .findMany({ where: { sleeperId: { in: all } }, select: { sleeperId: true }, distinct: ['sleeperId'] })
+              .catch(() => [] as Array<{ sleeperId: string | null }>)
+          : []
+      const known = new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))
+      for (const id of missed) {
+        const sample = samples.get(id) ?? []
+        // No rosters at all is a different gap (nothing imported); only a
+        // vocabulary mismatch is reported here.
+        if (sample.length === 0) continue
+        if (rosterIdCoverage(sample, known).usable) continue
+        const league = byId.get(id)
+        unmatched.push({
+          leagueId: id,
+          leagueName: league?.name ?? 'League',
+          platform: String(league?.platform ?? 'manual').toLowerCase(),
+        })
+      }
+    }
+
     if (held.size > 0) {
       const owners = await prisma.leagueTeam
         .findMany({
@@ -501,7 +556,7 @@ async function resolveLeagueSlots(
     }
   }
 
-  return out
+  return { slots: out, unmatched }
 }
 
 export async function getPlayerDetail(
@@ -554,13 +609,17 @@ export async function getPlayerDetail(
 
   const identityResolved = Boolean(row.sleeperId)
 
-  const leagues: SectionState<LeagueSlot[]> = !identityResolved
+  const resolvedSlots = identityResolved
+    ? await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId)
+    : null
+  const leagues: SectionState<LeagueSlot[]> = !resolvedSlots
     ? {
         available: false,
         reason:
           'we have no platform id for this player, so we cannot tell which of your leagues roster him',
       }
-    : { available: true, data: await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId) }
+    : { available: true, data: resolvedSlots.slots }
+  const rosterCoverage: PlayerDetail['rosterCoverage'] = { unmatched: resolvedSlots?.unmatched ?? [] }
 
   /*
    * 🛑 EVERY LOOKUP BELOW USED TO MATCH ON NAME, AND NAMES ARE NOT IDENTITIES.
@@ -770,7 +829,9 @@ export async function getPlayerDetail(
    * your teams" and must not be rendered as one.
    */
   const impactRows =
-    userId && row.sleeperId ? await getPlayerImpact(row.sleeperId, userId).catch(() => null) : null
+    userId && row.sleeperId
+      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds }).catch(() => null)
+      : null
 
   const impact: PlayerDetail['impact'] = impactRows
     ? { available: true, data: impactRows }
@@ -919,6 +980,7 @@ export async function getPlayerDetail(
     injury,
     seasonStats,
     leagues,
+    rosterCoverage,
     impact,
     projection,
     snapShare,

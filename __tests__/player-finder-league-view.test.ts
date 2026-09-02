@@ -14,13 +14,16 @@ const mockLeagueFindUnique = vi.hoisted(() => vi.fn())
 const mockTeamFindMany = vi.hoisted(() => vi.fn())
 const mockRosterFindMany = vi.hoisted(() => vi.fn())
 const mockProjFindFirst = vi.hoisted(() => vi.fn())
+const mockProjFindMany = vi.hoisted(() => vi.fn())
+const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: mockLeagueFindUnique },
     leagueTeam: { findMany: mockTeamFindMany },
     roster: { findMany: mockRosterFindMany },
-    fantasyProjection: { findFirst: mockProjFindFirst },
+    fantasyProjection: { findFirst: mockProjFindFirst, findMany: mockProjFindMany },
+    sportsPlayer: { findMany: mockSportsPlayerFindMany },
   },
 }))
 
@@ -69,11 +72,29 @@ const ME = { ...TASHA, externalId: '2', platformUserId: 'u-me', claimedByUserId:
 
 const PROJECTION = { stats: { stats: { rec: 6, rec_yd: 60, rec_td: 1 } } }
 
+/*
+ * The rosters in these fixtures speak Sleeper ids: whatever ids the loader
+ * samples, the player table knows them. The vocabulary-guard cases below
+ * override this to answer "none of these are ours".
+ */
+const KNOWS_EVERY_ID = (args: { where: { sleeperId: { in: string[] } } }) =>
+  Promise.resolve(args.where.sleeperId.in.map((id) => ({ sleeperId: id })))
+
+/* Three tight ends in the feed this week, so a league-scored rank has a field. */
+const FEED = [
+  { playerId: KINCAID, stats: { position: 'TE', stats: { rec: 6, rec_yd: 60, rec_td: 1 } } }, // 15.0
+  { playerId: '1', stats: { position: 'TE', stats: { rec: 8, rec_yd: 90, rec_td: 1 } } }, // 19.0
+  { playerId: '2', stats: { position: 'TE', stats: { rec: 3, rec_yd: 30, rec_td: 0 } } }, // 4.5
+  { playerId: '3', stats: { position: 'WR', stats: { rec: 9, rec_yd: 120, rec_td: 2 } } }, // other position
+]
+
 beforeEach(() => {
   mockLeagueFindUnique.mockReset().mockResolvedValue(LEAGUE)
   mockTeamFindMany.mockReset().mockResolvedValue([TASHA, ME])
   mockRosterFindMany.mockReset()
   mockProjFindFirst.mockReset().mockResolvedValue(PROJECTION)
+  mockProjFindMany.mockReset().mockResolvedValue(FEED)
+  mockSportsPlayerFindMany.mockReset().mockImplementation(KNOWS_EVERY_ID)
 })
 
 describe('getPlayerLeagueView', () => {
@@ -172,6 +193,46 @@ describe('getPlayerLeagueView', () => {
     const noProj = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
     expect(noProj?.afPoints.available).toBe(false)
     if (!noProj?.afPoints.available) expect(noProj?.afPoints.reason).toMatch(/does not carry this player/)
+  })
+
+  /*
+   * ⚠ THE ESPN CASE. Rosters keyed on ESPN ids resolve to nothing in our
+   * player table; a Sleeper-id miss on them is not a free agent.
+   */
+  it('refuses to call him unrostered when the rosters do not speak Sleeper ids', async () => {
+    mockRosterFindMany.mockResolvedValue([
+      { platformUserId: 'u-tasha', playerData: { players: ['3139477', '4241457'], starters: ['3139477'] } },
+      { platformUserId: 'u-me', playerData: { players: ['4362628'], starters: ['4362628'] } },
+    ])
+    mockSportsPlayerFindMany.mockResolvedValue([]) // none of those ids are ours
+    const view = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(view?.ownership.kind).toBe('unknown')
+    if (view?.ownership.kind === 'unknown') expect(view.ownership.reason).toMatch(/ESPN player ids/)
+    expect(view?.coverage).toMatchObject({ sampled: 3, matched: 0, usable: false })
+  })
+
+  it('a direct hit is still a hit, even on rosters that mostly do not resolve', async () => {
+    mockRosterFindMany.mockResolvedValue([
+      { platformUserId: 'u-tasha', playerData: { players: ['3139477', KINCAID], starters: [KINCAID] } },
+    ])
+    mockSportsPlayerFindMany.mockResolvedValue([{ sleeperId: KINCAID }])
+    const view = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(view?.ownership).toMatchObject({ kind: 'other', slot: 'STARTER' })
+  })
+
+  /* Rank under THIS league's rules: 19.0 beats him, 4.5 does not — TE2 of 3; the WR is not in the field. */
+  it('ranks him against his position priced under this league’s scoring', async () => {
+    mockRosterFindMany.mockResolvedValue([{ platformUserId: 'u-tasha', playerData: { players: [KINCAID] } }])
+    const view = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(view?.positionRank).toEqual({ available: true, data: { rank: 2, outOf: 3, position: 'TE' } })
+  })
+
+  it('does not rank a player the feed does not price in this league', async () => {
+    mockRosterFindMany.mockResolvedValue([{ platformUserId: 'u-tasha', playerData: { players: [KINCAID] } }])
+    mockProjFindFirst.mockResolvedValue(null)
+    const view = await getPlayerLeagueView('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(view?.positionRank.available).toBe(false)
+    expect(mockProjFindMany).not.toHaveBeenCalled()
   })
 
   it('returns null for a league that does not exist', async () => {

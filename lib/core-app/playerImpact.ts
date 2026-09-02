@@ -164,10 +164,20 @@ function slotOf(
  */
 export async function getPlayerImpact(
   playerSleeperId: string,
-  userId: string
+  userId: string,
+  options: {
+    /**
+     * Narrow to these leagues. The Player Finder passes the one held league when
+     * a league is in context (Guap, 2026-09-02: filter, not promote), and the
+     * played-league list otherwise, so this loader does the same work the
+     * screen will show and no more.
+     */
+    leagueIds?: readonly string[]
+  } = {}
 ): Promise<LeagueImpact[]> {
   const at = await latestProjectionWeek()
   if (!at) return []
+  if (options.leagueIds && options.leagueIds.length === 0) return []
 
   /*
    * The user's leagues, via the same claimed-team predicate My Team uses. Rosters
@@ -176,7 +186,10 @@ export async function getPlayerImpact(
    * claimed teams.
    */
   const teams = await prisma.leagueTeam.findMany({
-    where: { claimedByUserId: userId },
+    where: {
+      claimedByUserId: userId,
+      ...(options.leagueIds ? { leagueId: { in: [...options.leagueIds] } } : {}),
+    },
     select: {
       leagueId: true,
       platformUserId: true,

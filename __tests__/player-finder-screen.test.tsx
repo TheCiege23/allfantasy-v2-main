@@ -128,6 +128,7 @@ const DETAIL: PlayerDetail = {
   impact: { available: true, data: IMPACT },
   recommendedMoves: { available: true, data: [CLAIM] },
   freshness: { label: '12m ago', stale: false },
+  rosterCoverage: { unmatched: [] },
 }
 
 const LEAGUE_VIEW: PlayerLeagueView = {
@@ -143,8 +144,10 @@ const LEAGUE_VIEW: PlayerLeagueView = {
     owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, record: '4-2', isCommissioner: false },
   },
   afPoints: { available: true, data: { points: 9.8, matchedKeys: 3, scoredKeys: 12, week: 12, season: '2026' } },
+  positionRank: { available: true, data: { rank: 4, outOf: 61, position: 'TE' } },
   yourTeam: { teamName: 'Cafe Con Chimmy' },
   rosterCount: 12,
+  coverage: { sampled: 12, matched: 12, fraction: 1, usable: true },
 }
 
 function renderCore(extra: Partial<React.ComponentProps<typeof PlayerFinder>> = {}) {
@@ -158,6 +161,25 @@ describe('Player Finder — core view', () => {
     renderCore()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Player Finder')
     expect(screen.getByRole('heading', { level: 2, name: 'Dalton Kincaid' })).toBeInTheDocument()
+  })
+
+  it('lists recent searches in the rail, linking each back into the finder', () => {
+    renderCore({
+      recent: [
+        { sport: 'NFL', externalId: 'ri-9', sleeperId: '9', name: 'Isaiah Likely', position: 'TE', team: 'BAL', searchedAt: new Date() },
+      ],
+    })
+    const region = screen.getByRole('region', { name: 'Recently searched' })
+    const link = within(region).getByRole('link', { name: /Isaiah Likely/ })
+    expect(link.getAttribute('href')).toBe('/core/players?q=Isaiah%20Likely&player=NFL%3Ari-9')
+  })
+
+  it('names the leagues whose rosters could not be read instead of dropping them', () => {
+    renderCore({
+      detail: { ...DETAIL, rosterCoverage: { unmatched: [{ leagueId: 'L-espn2', leagueName: 'Office Pool', platform: 'espn' }] } },
+    })
+    expect(screen.getByText(/Not checked: Office Pool/)).toBeInTheDocument()
+    expect(screen.getByText(/ESPN player ids/)).toBeInTheDocument()
   })
 
   it('says where he is across your leagues, and that someone else has him elsewhere', () => {
@@ -234,12 +256,38 @@ describe('Player Finder — league in context', () => {
     )
   })
 
-  it('promotes the held league to the top of the table and marks it', () => {
+  /*
+   * Guap, 2026-09-02: a held league FILTERS. The other three leagues are not
+   * on the screen at all, and "All leagues →" is the way back to them.
+   */
+  it('filters the table to the held league and offers the way out', () => {
     renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
     const rows = screen.getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveAttribute('data-held', 'true')
     expect(within(rows[0]).getByText('Gridiron Gang')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('This league')).toBeInTheDocument()
+    expect(screen.queryByText('Dynasty Dragons')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'In this league' })).toBeInTheDocument()
+    const outs = screen.getAllByRole('link', { name: 'All leagues →' })
+    expect(outs.length).toBeGreaterThan(0)
+    expect(outs[0].getAttribute('href')).toBe('/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
+    expect(outs[0].getAttribute('href')).not.toContain('league=')
+  })
+
+  it('in league mode the header carries the league’s own projection and rank', () => {
+    renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
+    // 9.8 under Gridiron Gang's scoring replaces the feed's 13.8; TE4 of 61 replaces TE6 of 118.
+    expect(screen.getAllByText('9.8').length).toBeGreaterThan(0)
+    expect(screen.queryByText('13.8')).not.toBeInTheDocument()
+    expect(screen.getByText('TE4')).toBeInTheDocument()
+    expect(screen.getByText(/of 61 priced TEs/)).toBeInTheDocument()
+  })
+
+  it('in league mode the verdict names the one move instead of counting leagues', () => {
+    renderCore({ selectedLeagueId: 'L-dragons', leagueView: null })
+    expect(screen.getByText("Swap Ferguson out for Kincaid at FLEX — +2.4 under this league's scoring.")).toBeInTheDocument()
+    expect(screen.getByText('Verdict · this league')).toBeInTheDocument()
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(1)
   })
 
   it('keeps the held league in the search form and in every match link', () => {

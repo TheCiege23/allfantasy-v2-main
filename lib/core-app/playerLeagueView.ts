@@ -6,20 +6,19 @@ import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/load
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { latestProjectionWeek } from './playerProjections'
+import { normalizePosition } from './positionNormalization'
+import { coverageReason, rosterIdCoverage, sampleRosterIds, type RosterIdCoverage } from './rosterIdCoverage'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { slotForStarterIndex, startingSlots } from './slotEligibility'
 
 /**
  * Player Finder, scoped to ONE league: who has him here, and what he is worth here.
  *
- * The cross-league screen answers "where is he across everything I play". This
- * answers the question a manager asks with a league already open — "in THIS
- * league, is he mine, is he someone's, or is he free" — and it is the only path
- * on the screen that looks at every roster in a league rather than only yours.
- *
- * ⚠ IT DOES NOT REPLACE THE CROSS-LEAGUE VIEW. The 38a·4 rule stands: a held
- * league promotes and marks, it does not filter. This card sits ABOVE the
- * cross-league table when a league is in context; the table stays.
+ * Guap's call (2026-09-02): with a league in context the screen FILTERS to it.
+ * This loader is then the whole answer — the ownership card is the header, the
+ * table shows this league alone, and the projection and rank in the header are
+ * this league's numbers. Without a league in context the cross-league loaders
+ * run instead and this is not called.
  *
  * ⚠ OWNERSHIP RESOLVES FROM THE ROSTER, NOT FROM THE TEAM ROW. `LeagueTeam` is
  * the import's list of managers; `Roster.playerData` is who actually holds
@@ -27,9 +26,13 @@ import { slotForStarterIndex, startingSlots } from './slotEligibility'
  * join misses, the answer is "another manager" with the roster's slot, never a
  * guessed name and never a downgrade to "free agent".
  *
- * ⚠ FREE AGENT IS A CLAIM, AND IT IS ONLY MADE WHEN ROSTERS EXIST. A league
- * with zero imported rosters cannot tell you he is unrostered; it can only tell
- * you it has not looked. That is `kind: 'unknown'` with the reason.
+ * ⚠ FREE AGENT IS A CLAIM, AND IT IS ONLY MADE WHEN THE ROSTERS CAN BE READ.
+ * Two ways they cannot: a league with zero imported rosters, and a league whose
+ * rosters are keyed on the provider's own ids — the ESPN importer's header
+ * records that ESPN rosters arrive as bare ESPN ids, so a Sleeper-id scan of
+ * them finds nobody and would have called every player unrostered. Both are
+ * `kind: 'unknown'` with the reason. A direct hit on such a roster is still a
+ * hit; only a MISS is untrusted.
  */
 
 export type PlayerLeagueOwner = {
@@ -57,9 +60,17 @@ export type PlayerLeagueView = {
   ownership: PlayerLeagueOwnership
   /** Points under THIS league's scoring, whoever holds him. */
   afPoints: SectionState<{ points: number; matchedKeys: number; scoredKeys: number; week: number; season: string }>
+  /**
+   * His rank among projected players at his position, priced under THIS
+   * league's scoring — the header's rank when a league is in context (Guap,
+   * 2026-09-02). Standard-scoring rank is the cross-league header's job.
+   */
+  positionRank: SectionState<{ rank: number; outOf: number; position: string }>
   /** Your team in this league, when the claim predicate finds one. */
   yourTeam: { teamName: string } | null
   rosterCount: number
+  /** Whether a Sleeper-id scan of this league's rosters can be trusted. */
+  coverage: RosterIdCoverage
 }
 
 function asIds(v: unknown): string[] {
@@ -84,6 +95,13 @@ function placementOf(
 function recordOf(t: { wins: number; losses: number; ties: number }): string | null {
   if (t.wins === 0 && t.losses === 0 && t.ties === 0) return null
   return t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`
+}
+
+/** The nested component line, or null when the row carries none. */
+function statLineOf(stats: unknown): Record<string, unknown> | null {
+  const s = (stats ?? {}) as Record<string, unknown>
+  const inner = s.stats
+  return inner && typeof inner === 'object' && !Array.isArray(inner) ? (inner as Record<string, unknown>) : null
 }
 
 export async function getPlayerLeagueView(
@@ -135,6 +153,26 @@ export async function getPlayerLeagueView(
       .catch(() => []),
   ])
 
+  /*
+   * Can these rosters be searched by Sleeper id at all? One query: a sample of
+   * the ids they hold, against our player table. See rosterIdCoverage.ts.
+   */
+  const sample = sampleRosterIds(rosters.map((r) => r.playerData))
+  const knownRows =
+    sample.length > 0
+      ? await prisma.sportsPlayer
+          .findMany({
+            where: { sleeperId: { in: sample } },
+            select: { sleeperId: true },
+            distinct: ['sleeperId'],
+          })
+          .catch(() => [] as Array<{ sleeperId: string | null }>)
+      : []
+  const coverage = rosterIdCoverage(
+    sample,
+    new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x)))
+  )
+
   const yours = userId ? (teams.find((t) => t.claimedByUserId === userId) ?? null) : null
   // The same three-candidate predicate every other ownership read here uses.
   const yourIds = new Set(
@@ -151,10 +189,14 @@ export async function getPlayerLeagueView(
   }
 
   const slots = startingSlots(league.settings)
+  const platform = String(league.platform ?? 'manual').toLowerCase()
 
   let ownership: PlayerLeagueOwnership
   if (rosters.length === 0) {
     ownership = { kind: 'unknown', reason: 'no rosters have been imported for this league, so we cannot tell who has him' }
+  } else if (!holder && !coverage.usable) {
+    // A miss on rosters that do not speak Sleeper ids is not a free agent.
+    ownership = { kind: 'unknown', reason: coverageReason(platform) }
   } else if (!holder) {
     ownership = { kind: 'free-agent' }
   } else if (yourIds.has(holder.platformUserId)) {
@@ -208,12 +250,12 @@ export async function getPlayerLeagueView(
           .catch(() => null)
       : null
 
-  let statLine = ((projRow?.stats ?? {}) as Record<string, unknown>).stats as Record<string, unknown> | null | undefined
-  if (statLine && typeof statLine !== 'object') statLine = null
+  let statLine = statLineOf(projRow?.stats)
 
   // Defensive component line for an IDP league, same gate as the impact loader.
   const position = player?.position ?? null
-  if (scoring && at && hasIdpScoring(scoring) && isIdpPosition(position) && Number.isFinite(Number(at.season))) {
+  const idpLeague = Boolean(scoring && hasIdpScoring(scoring))
+  if (scoring && at && idpLeague && isIdpPosition(position) && Number.isFinite(Number(at.season))) {
     try {
       const { bySleeperId } = await loadIdpProjections({
         prisma,
@@ -253,16 +295,77 @@ export async function getPlayerLeagueView(
                 : 'this week’s projection feed does not carry this player',
         }
 
+  /*
+   * ── Rank under this league's scoring ────────────────────────────────────
+   *
+   * Every projected player at his position, priced with the same rules, and
+   * his place among them. Same feed read the standard rank uses; the pricing
+   * is what differs, and it is the whole point — a TE-premium league ranks
+   * tight ends against each other on the premium, not on the feed's number.
+   *
+   * ⚠ ONLY WHEN HE HIMSELF IS PRICED. A rank built from his absence would be
+   * "TE118 of 118" — confident and meaningless. Defenders in IDP leagues are
+   * refused rather than ranked on an offensive line that says nothing about
+   * them; the impact loader enriches one player, not a position.
+   */
+  let positionRank: PlayerLeagueView['positionRank'] = {
+    available: false,
+    reason: 'a rank needs this player priced under this league’s scoring first',
+  }
+  const pos = position ? normalizePosition(position) : null
+  if (priced && at && scoring && pos && !isIdpPosition(pos)) {
+    const rows = await prisma.fantasyProjection
+      .findMany({
+        where: { season: at.season, week: at.week, source: { not: 'allfantasy' } },
+        select: { playerId: true, stats: true },
+      })
+      .catch(() => [] as Array<{ playerId: string; stats: unknown }>)
+
+    let outOf = 0
+    let above = 0
+    let selfSeen = false
+    for (const r of rows) {
+      const meta = (r.stats ?? {}) as Record<string, unknown>
+      const rowPos = typeof meta.position === 'string' ? normalizePosition(meta.position) : null
+      if (rowPos !== pos) continue
+      const line = statLineOf(r.stats)
+      if (!line) continue
+      const p = computeLeagueProjectedPoints(line, scoring)
+      if (!p) continue
+      outOf += 1
+      if (r.playerId === playerSleeperId) {
+        selfSeen = true
+        continue
+      }
+      if (p.points > priced.points) above += 1
+    }
+    if (selfSeen && outOf > 0) {
+      positionRank = { available: true, data: { rank: above + 1, outOf, position: pos } }
+    } else if (outOf > 0) {
+      positionRank = {
+        available: false,
+        reason: 'the projection feed does not list him at this position, so he cannot be ranked in it',
+      }
+    }
+  } else if (pos && isIdpPosition(pos)) {
+    positionRank = {
+      available: false,
+      reason: 'defensive players are not ranked here — the feed’s line for the rest of the position carries no defensive scoring',
+    }
+  }
+
   return {
     leagueId: league.id,
     leagueName: leagueDisplayName(league.name),
-    platform: String(league.platform ?? 'manual').toLowerCase(),
+    platform,
     platformLeagueId: league.platformLeagueId ?? null,
     season: league.season ?? null,
     format: league.leagueType ?? null,
     ownership,
     afPoints,
+    positionRank,
     yourTeam: yours ? { teamName: yours.teamName } : null,
     rosterCount: rosters.length,
+    coverage,
   }
 }

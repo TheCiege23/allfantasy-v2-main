@@ -17935,3 +17935,23 @@ model TenantWebhook {
   // dispatch. Raw SQL in the T-101 migration.
 }
 
+
+/// Player Finder — "Recently searched", per account. Written on every signed-in
+/// player view, read for the search rail. No relation on purpose: the session's
+/// user id and the LegacyUser/AppUser ids are different id spaces, and a
+/// convenience list must never fail a page over a foreign key.
+model RecentPlayerSearch {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  sport      String   @db.VarChar(16)
+  externalId String   @map("external_id") @db.VarChar(128)
+  sleeperId  String?  @map("sleeper_id") @db.VarChar(64)
+  name       String
+  position   String?  @db.VarChar(16)
+  team       String?  @db.VarChar(16)
+  searchedAt DateTime @default(now()) @map("searched_at")
+
+  @@unique([userId, sport, externalId])
+  @@index([userId, searchedAt])
+  @@map("recent_player_searches")
+}

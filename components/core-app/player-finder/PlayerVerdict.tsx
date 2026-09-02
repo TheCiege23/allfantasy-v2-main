@@ -33,11 +33,17 @@ export function PlayerVerdict({
   playerName,
   impact,
   moves,
+  scope = 'all',
 }: {
   playerName: string
   impact: LeagueImpact[]
   /** The composed moves for this player; the league-scored ones drive the headline. */
   moves: PlayerMove[]
+  /**
+   * 'league' when the screen is filtered to one league (Guap, 2026-09-02):
+   * the headline then names the one move rather than counting leagues.
+   */
+  scope?: 'all' | 'league'
 }) {
   if (impact.length === 0) return null
 
@@ -60,7 +66,20 @@ export function PlayerVerdict({
   const best = pricedBenched[0] ?? null
 
   let headline: string
-  if (fixes.length > 0) {
+  if (scope === 'league') {
+    // One league: say the move, not the count.
+    if (fixes.length > 0) {
+      headline = `${fixes[0].title}${total != null ? ` — ${formatDelta(total)} under this league's scoring` : ''}.`
+    } else if (benched.length === 0) {
+      headline = 'He starts here. Nothing to do.'
+    } else if (benched.every((b) => b.startOver != null)) {
+      headline = "He is on your bench here, and that is the right call under this league's scoring."
+    } else if (best) {
+      headline = `He is on your bench here — worth ${fmt(best.points)} under this league's scoring.`
+    } else {
+      headline = 'He is on your bench here.'
+    }
+  } else if (fixes.length > 0) {
     const count = fixes.length === 1 ? 'One fix' : `${fixes.length} fixes`
     headline = `He is misplaced in ${fixes.length} of ${n} ${leagues}. ${count}${
       total != null ? ` for ${formatDelta(total)}` : ''
@@ -107,7 +126,7 @@ export function PlayerVerdict({
               says ship it as ASK CHIMMY to match the rest of the product. */}
           <span className="af-label">Ask Chimmy</span>
           <span className="af-pf-verdict-scope af-num">
-            Verdict · {n} {n === 1 ? 'league' : 'leagues'}
+            {scope === 'league' ? 'Verdict · this league' : `Verdict · ${n} ${n === 1 ? 'league' : 'leagues'}`}
           </span>
         </span>
         {total != null ? (
@@ -160,7 +179,15 @@ export function PlayerVerdict({
         we show you which league and which screen.
       </p>
 
-      <a className="af-btn af-pf-verdict-cta" href={`/chimmy?q=${encodeURIComponent(playerName)}`}>
+      {/*
+        The paid click (Guap, 2026-09-02). It lands in the chat, not on the
+        landing page, with the question already typed — the chat route reads
+        `prompt`, not `q`.
+      */}
+      <a
+        className="af-btn af-pf-verdict-cta"
+        href={`/chimmy/chat?prompt=${encodeURIComponent(`What should I do with ${playerName} this week?`)}`}
+      >
         Ask Chimmy about {playerName.split(' ').slice(-1)[0]}
       </a>
     </section>
