@@ -1384,7 +1384,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   await grantDailyFreeTokens(userId).catch(() => null)
 
   const requestLocale = resolveLanguage(req.cookies.get('af_lang')?.value)
-  const deterministic = await tryDeterministicAnswerDetailed(message, requestLocale)
+  /*
+   * ⚠ `leagueId` IS PASSED (BUG-1). It is resolved at line ~1159 above and was previously withheld
+   * from this call, so the FantasyCalc value path derived dynasty/superflex by regexing the user's
+   * SENTENCE and hardcoded "12-team PPR" — a dynasty league was answered with a redraft price,
+   * measured 3779 against a correct 6644. This short-circuit returns before the grounding packet
+   * is built at ~1667, so nothing downstream could have corrected it.
+   */
+  const deterministic = await tryDeterministicAnswerDetailed(message, requestLocale, leagueId)
   if (deterministic !== null) {
     /*
      * ⚠ A REFUSAL IS NOT A FINAL ANSWER — it is a statement that OUR DATABASE
