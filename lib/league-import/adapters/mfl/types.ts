@@ -77,6 +77,18 @@ export interface MflImportPayload {
   sourceInput: string
   league: MflImportLeague
   settings: MflImportSettings | null
+  /**
+   * Real scoring rules from `TYPE=rules`, empty when the key could not read them.
+   *
+   * Codes are MFL's own event abbreviations, carried through un-translated — see
+   * `parseMflScoringRules`. Optional so a payload built before this existed still types.
+   */
+  scoringRules?: Array<{
+    code: string
+    name: string | null
+    positions: string[]
+    points: number
+  }>
   teams: MflImportTeam[]
   schedule: MflImportScheduleWeek[]
   transactions: MflImportTransaction[]
