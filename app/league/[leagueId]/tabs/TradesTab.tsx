@@ -237,7 +237,8 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
       extraSides: 0,
       status: statusOf(t),
       mine: true,
-      direction: t.direction,
+      /* `viewerSide` already excludes 'complete'; the type does not know that. */
+      direction: t.direction === 'complete' ? null : t.direction,
     }
   }
   /* A commissioner's view of two other managers: proposer first. */
