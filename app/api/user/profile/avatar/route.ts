@@ -6,6 +6,7 @@ import {
   MAX_PROFILE_IMAGE_BYTES,
   persistProfileImageBytes,
 } from "@/lib/avatar/ProfileImageUploadStorageService"
+import { getBlobReadWriteToken } from "@/lib/blob/readWriteToken"
 import {
   PROFILE_IMAGE_BAD_TYPE_MESSAGE,
   PROFILE_IMAGE_TOO_LARGE_MESSAGE,
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response
   const userId = auth.userId
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!getBlobReadWriteToken()) {
     return NextResponse.json({ error: "Storage not configured" }, { status: 503 })
   }
 

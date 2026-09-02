@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 import { put } from "@vercel/blob"
 import { resolvePlatformUser } from "@/lib/platform/current-user"
+import { getBlobReadWriteToken } from "@/lib/blob/readWriteToken"
 
 const MAX_IMAGE = 5 * 1024 * 1024 // 5MB
 const MAX_FILE = 10 * 1024 * 1024 // 10MB
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!getBlobReadWriteToken()) {
     return NextResponse.json({ error: "Storage not configured" }, { status: 503 })
   }
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     const blob = await put(key, file, {
       access: "public",
       contentType: mimeType,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
+      token: getBlobReadWriteToken(),
     })
 
     return NextResponse.json({ url: blob.url })
