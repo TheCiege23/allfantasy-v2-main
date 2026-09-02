@@ -1,15 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { resolveCadence } from '@/lib/fantasy-os/sync/season'
-import { runDueSleeperLeagues, runExternalMatchupParity } from '@/lib/fantasy-os/sync/collector'
+import {
+  runDueLeagues,
+  runExternalMatchupParity,
+} from '@/lib/fantasy-os/sync/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
 
 /**
- * Fantasy OS — season-aware Sleeper read-model refresh heartbeat (durable cron entrypoint).
+ * Fantasy OS — season-aware read-model refresh heartbeat, all providers (durable cron entrypoint).
  *
  * Deploy this on a FREQUENT fixed schedule (every 30 min, per vercel.json). Each invocation enumerates
- * the canonical imported Sleeper leagues and refreshes only the ones DUE for their season-aware cadence
+ * the canonical imported leagues of every syncable provider and refreshes only the ones DUE for their
+ * season-aware cadence
  * (≈30 min in season / 4h offseason) — the fixed heartbeat runs often, but the per-league scheduler
  * decides due-ness, so refreshes never depend on a customer page view and the provider is never hammered.
  *
@@ -58,11 +62,43 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const limitRaw = Number(url.searchParams.get('limit'))
   const concRaw = Number(url.searchParams.get('concurrency'))
-  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : undefined
+  /*
+   * ⚠ `limit` IS NOW PER PROVIDER, NOT A TOTAL, and it needs a default it never had.
+   *
+   * While this was Sleeper-only, no default meant "every Sleeper league", which was fine.
+   * Across six providers an unbounded enumeration would fan out a full normalized read for
+   * every imported league on the platform inside one 300s invocation — the collector's own
+   * per-league due-check keeps most of them cheap, but the first tick after a quiet period has
+   * no such protection. A per-provider ceiling bounds the worst case without starving anyone,
+   * because the cadence check rotates which leagues are due across heartbeats.
+   */
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 25
   const concurrency = Number.isFinite(concRaw) && concRaw > 0 ? Math.min(Math.floor(concRaw), 8) : undefined
+  /*
+   * ⚠ RAISED FROM 3, WHICH WAS A HARD CEILING ON FRESHNESS NOBODY HAD COSTED.
+   *
+   * Three leagues per 30-minute tick is SIX PER HOUR, platform-wide — not per user. The
+   * seventh non-Sleeper league on the platform could not meet an hourly freshness bar no
+   * matter how often this cron fired, and raising the cron frequency would not have moved it.
+   *
+   * Still bounded, because these are full provider reads and this invocation has 300s: the
+   * parity collectors keep their own 6h per-league TTL, so this number caps a burst rather
+   * than setting a rate. Overridable per run for ops.
+   */
+  const parityRaw = Number(url.searchParams.get('parityLeagues'))
+  const parityLeagues =
+    Number.isFinite(parityRaw) && parityRaw > 0 ? Math.min(Math.floor(parityRaw), 50) : 10
 
   try {
-    const summary = await runDueSleeperLeagues({ now, limit, concurrency })
+    /*
+     * 🛑 THIS WAS `runDueSleeperLeagues`, AND THAT IS WHY ONLY ONE PLATFORM STAYED FRESH.
+     *
+     * ESPN, Yahoo and Fantrax got a weekly-matchup parity pass and nothing else — no league
+     * state, no rosters, no standings — while MFL and Fleaflicker got nothing at all. Every
+     * non-Sleeper league was a snapshot ageing from the moment it imported, which is a poor
+     * foundation for an OS that reasons about what changed.
+     */
+    const summary = await runDueLeagues({ now, limit, concurrency })
 
     // Psychological profiles are refreshed AFTER a sync lands, never at import:
     // a freshly imported league has no drafts, trades or rosters yet, so
@@ -120,14 +156,22 @@ export async function GET(req: NextRequest) {
     // materialization above.
     let externalMatchups: unknown = null
     try {
-      externalMatchups = await runExternalMatchupParity({ now, maxLeagues: 3 })
+      externalMatchups = await runExternalMatchupParity({ now, maxLeagues: parityLeagues })
     } catch (externalErr) {
       externalMatchups = {
         error: externalErr instanceof Error ? externalErr.message.slice(0, 160) : 'external matchup parity failed',
       }
     }
 
-    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles, draftSessions, externalMatchups })
+
+    return NextResponse.json({
+      ...heartbeat,
+      executed: true,
+      summary,
+      profiles,
+      draftSessions,
+      externalMatchups,
+    })
   } catch (err) {
     return NextResponse.json(
       { ...heartbeat, executed: false, error: err instanceof Error ? err.message : 'sync failed' },

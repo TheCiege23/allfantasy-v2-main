@@ -1,5 +1,5 @@
 /**
- * Fantasy OS — authorized manual refresh + sync-state inspection for a connected Sleeper league.
+ * Fantasy OS — authorized manual refresh + sync-state inspection for a connected league, any provider.
  *
  * Both entry points require a caller with real access to the connected league (owner OR a claimed team,
  * via the canonical `resolveLeagueAccess`) — another user can neither refresh nor inspect its sync state.
@@ -10,18 +10,19 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { buildRunKey } from './enumerate'
-import { syncConnectedSleeperLeague, type SyncConnectedResult } from './syncConnectedSleeperLeague'
-import type { SleeperSyncConnection } from './types'
+import { syncConnectedLeague, type SyncConnectedResult } from './syncConnectedSleeperLeague'
+import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
+import type { ImportProvider } from '@/lib/league-import/types'
 
 export type ManualRefreshResult =
   | { ok: true; leagueId: string; sync: SyncConnectedResult }
   | { ok: false; status: 400 | 403 | 404; error: string }
 
-async function authorizeSleeperConnection(
+async function authorizeConnection(
   userId: string | null | undefined,
   leagueId: string,
 ): Promise<
-  | { ok: true; connection: SleeperSyncConnection }
+  | { ok: true; connection: LeagueSyncConnection }
   | { ok: false; status: 400 | 403 | 404; error: string }
 > {
   if (!userId) return { ok: false, status: 403, error: 'Authentication required' }
@@ -34,13 +35,25 @@ async function authorizeSleeperConnection(
     select: { platform: true, platformLeagueId: true, season: true, sport: true },
   })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
-  if (league.platform !== 'sleeper' || !league.platformLeagueId) {
-    return { ok: false, status: 400, error: 'This league is not a connected Sleeper league' }
+  /*
+   * 🛑 THIS REFUSED EVERY NON-SLEEPER LEAGUE, WHICH IS WHY "SYNC NOW" DID NOT EXIST FOR THEM.
+   *
+   * The product decision is cron where we can, a manual pull where we cannot — but the manual
+   * pull was gated to one provider, so the five that most needed a fallback were exactly the
+   * five that had none. `/api/leagues/import/resync` said as much in its own comment.
+   */
+  const provider = String(league.platform ?? '').toLowerCase() as ImportProvider
+  if (!SYNCABLE_PROVIDERS.includes(provider as (typeof SYNCABLE_PROVIDERS)[number]) || !league.platformLeagueId) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'This league is not connected to a platform AllFantasy can refresh',
+    }
   }
 
-  const connection: SleeperSyncConnection = {
-    runKey: buildRunKey('sleeper', league.platformLeagueId, league.season),
-    provider: 'sleeper',
+  const connection: LeagueSyncConnection = {
+    runKey: buildRunKey(provider, league.platformLeagueId, league.season),
+    provider,
     externalLeagueId: league.platformLeagueId,
     season: league.season,
     sport: String(league.sport),
@@ -48,17 +61,17 @@ async function authorizeSleeperConnection(
   return { ok: true, connection }
 }
 
-/** Force a durable, authorized refresh of the connected Sleeper league the caller can access. */
+/** Force a durable, authorized refresh of the connected league the caller can access, any provider. */
 export async function manualRefreshConnectedSleeperLeague(input: {
   userId: string | null | undefined
   leagueId: string
   now?: Date
   fetchNormalized?: (externalLeagueId: string) => Promise<NormalizedImportResult>
 }): Promise<ManualRefreshResult> {
-  const auth = await authorizeSleeperConnection(input.userId, input.leagueId)
+  const auth = await authorizeConnection(input.userId, input.leagueId)
   if (!auth.ok) return auth
 
-  const sync = await syncConnectedSleeperLeague(auth.connection, input.now ?? new Date(), {
+  const sync = await syncConnectedLeague(auth.connection, input.now ?? new Date(), {
     force: true,
     fetchNormalized: input.fetchNormalized,
   })
@@ -89,7 +102,7 @@ export async function getConnectedLeagueSyncState(input: {
   userId: string | null | undefined
   leagueId: string
 }): Promise<SyncStateInspection> {
-  const auth = await authorizeSleeperConnection(input.userId, input.leagueId)
+  const auth = await authorizeConnection(input.userId, input.leagueId)
   if (!auth.ok) return auth
 
   const row = await prisma.leagueSyncState.findUnique({

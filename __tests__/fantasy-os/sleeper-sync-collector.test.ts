@@ -27,7 +27,11 @@ vi.mock('@/lib/automation/locks', () => ({
 }))
 vi.mock('@/lib/sleeper-client', () => ({ getAllPlayers: vi.fn(async () => ({})) }))
 
-import { enumerateConnectedSleeperLeagues, buildRunKey } from '@/lib/fantasy-os/sync/collector/enumerate'
+import {
+  enumerateConnectedLeagues,
+  enumerateConnectedSleeperLeagues,
+  buildRunKey,
+} from '@/lib/fantasy-os/sync/collector/enumerate'
 import { createAutomationSyncLock } from '@/lib/fantasy-os/sync/collector/automationSyncLock'
 import { createSleeperScopeFetcher } from '@/lib/fantasy-os/sync/collector/sleeperScopeFetcher'
 import { manualRefreshConnectedSleeperLeague, getConnectedLeagueSyncState } from '@/lib/fantasy-os/sync/collector/manualRefresh'
@@ -45,20 +49,65 @@ beforeEach(() => {
 describe('enumerateConnectedSleeperLeagues', () => {
   it('queries only platform=sleeper with a real external id (excludes AF-native + Legacy-only)', async () => {
     h.prisma.league.groupBy.mockResolvedValue([
-      { platformLeagueId: 'a', season: 2025, sport: 'NFL' },
-      { platformLeagueId: 'a', season: 2025, sport: 'NFL' }, // duplicate mirror row → dedupes
-      { platformLeagueId: '', season: 2025, sport: 'NFL' }, // empty id → skipped
-      { platformLeagueId: 'b', season: 2024, sport: 'NFL' },
+      { platform: 'sleeper', platformLeagueId: 'a', season: 2025, sport: 'NFL' },
+      { platform: 'sleeper', platformLeagueId: 'a', season: 2025, sport: 'NFL' }, // duplicate mirror row → dedupes
+      { platform: 'sleeper', platformLeagueId: '', season: 2025, sport: 'NFL' }, // empty id → skipped
+      { platform: 'sleeper', platformLeagueId: 'b', season: 2024, sport: 'NFL' },
     ])
     const conns = await enumerateConnectedSleeperLeagues()
 
-    const whereArg = h.prisma.league.groupBy.mock.calls[0][0].where
-    expect(whereArg.platform).toBe('sleeper')
-    expect(whereArg.platformLeagueId).toEqual({ not: '' })
+    const call = h.prisma.league.groupBy.mock.calls[0][0]
+    /*
+     * ⚠ `{ in: [...] }` RATHER THAN A BARE STRING SINCE THE COLLECTOR WENT MULTI-PROVIDER.
+     * Behaviourally identical for one provider; the shape changed because the same query now
+     * serves a set. Pinned so the narrowing itself cannot silently disappear — an enumeration
+     * that dropped its platform filter would sweep every league on the platform into the
+     * Sleeper collector.
+     */
+    expect(call.where.platform).toEqual({ in: ['sleeper'] })
+    expect(call.where.platformLeagueId).toEqual({ not: '' })
 
     expect(conns).toHaveLength(2)
     expect(conns.map((c) => c.runKey).sort()).toEqual(['sleeper:a:2025', 'sleeper:b:2024'])
     expect(conns.every((c) => c.provider === 'sleeper')).toBe(true)
+  })
+
+  /*
+   * 🛑 THE GROUPING MUST INCLUDE `platform`, AND IT DID NOT NEED TO WHEN THIS WAS SLEEPER-ONLY.
+   *
+   * League ids are provider-scoped namespaces. Grouping by `(platformLeagueId, season)` alone
+   * was unique across one provider and is NOT across six — an ESPN numeric id can equal a
+   * Fleaflicker one. Without `platform` in the grouping, two different leagues collapse to one
+   * run key and one gets refreshed with the other's data, silently.
+   */
+  it('groups by platform, so two providers sharing a league id stay separate', async () => {
+    h.prisma.league.groupBy.mockResolvedValue([
+      { platform: 'espn', platformLeagueId: '206154', season: 2026, sport: 'NFL' },
+      { platform: 'fleaflicker', platformLeagueId: '206154', season: 2026, sport: 'NFL' },
+    ])
+    const conns = await enumerateConnectedLeagues(['espn', 'fleaflicker'])
+
+    expect(h.prisma.league.groupBy.mock.calls[0][0].by).toContain('platform')
+    expect(conns).toHaveLength(2)
+    expect(conns.map((c) => c.runKey).sort()).toEqual([
+      'espn:206154:2026',
+      'fleaflicker:206154:2026',
+    ])
+  })
+
+  it('carries the provider of each row onto its connection', async () => {
+    h.prisma.league.groupBy.mockResolvedValue([
+      { platform: 'mfl', platformLeagueId: '11111', season: 2026, sport: 'NFL' },
+      { platform: 'fantrax', platformLeagueId: 'abc', season: 2026, sport: 'NFL' },
+    ])
+    const conns = await enumerateConnectedLeagues(['mfl', 'fantrax'])
+    expect(conns.map((c) => c.provider).sort()).toEqual(['fantrax', 'mfl'])
+  })
+
+  it('asks for nothing when given no providers', async () => {
+    const conns = await enumerateConnectedLeagues([])
+    expect(conns).toEqual([])
+    expect(h.prisma.league.groupBy).not.toHaveBeenCalled()
   })
 
   it('buildRunKey is deterministic', () => {

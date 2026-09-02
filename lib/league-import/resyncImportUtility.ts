@@ -10,10 +10,10 @@ import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersi
 import type { ImportProvider } from '@/lib/league-import/types'
 
 /**
- * Honest, sanitized outcome of the durable Sleeper read-model refresh — no provider payload,
+ * Honest, sanitized outcome of the durable read-model refresh — no provider payload,
  * credentials, or lock token. `kind:'sync'` carries the durable run outcome; `kind:'auth'` carries a
  * pre-run authorization / not-found / invalid-connection failure with its HTTP status; null = a
- * non-Sleeper provider (no durable refresh step).
+ * league whose platform the collector cannot refresh at all.
  */
 export type SleeperResyncRefresh =
   | { kind: 'sync'; status: string; advancedFreshness: boolean; executed: boolean }
@@ -31,7 +31,7 @@ export async function resyncImportedLeague(input: {
       runId: string
       warningCount: number
       reviewRequired: boolean
-      /** Honest, sanitized outcome of the durable read-model refresh (Sleeper only); null for others. */
+      /** Honest, sanitized outcome of the durable read-model refresh; null when unavailable. */
       refresh: SleeperResyncRefresh
     }
   | { ok: false; error: string }
@@ -62,8 +62,20 @@ export async function resyncImportedLeague(input: {
     // failure accounting, and certified freshness (League.lastSyncedAt advances only on completion) — over
     // the payload we already fetched (NO second Sleeper call). It keeps the same League.id, refreshes every
     // mirror, and preserves claims. The outcome is surfaced honestly, never a silently-swallowed failure.
+    /*
+     * 🛑 THIS WAS GATED TO SLEEPER, AND THE GATE IS WHAT MADE "SYNC NOW" A SLEEPER-ONLY FEATURE.
+     *
+     * The comment above already explains why the durable collector has to run here at all: a
+     * completed ImportRun short-circuits the persist, so without this step a re-sync returns the
+     * existing league untouched and reports success. That was true for every provider — but only
+     * Sleeper got the step, so an ESPN or Fantrax "Sync now" did precisely nothing and said it
+     * had worked.
+     *
+     * The collector is provider-neutral now, and the payload fetched above is reused, so this
+     * costs no additional provider call for any of them.
+     */
     let refresh: SleeperResyncRefresh = null
-    if (input.provider === 'sleeper' && persisted.league.id) {
+    if (persisted.league.id) {
       const { manualRefreshConnectedSleeperLeague } = await import('@/lib/fantasy-os/sync/collector')
       const out = await manualRefreshConnectedSleeperLeague({
         userId: input.userId,

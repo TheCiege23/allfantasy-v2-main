@@ -1,5 +1,5 @@
 /**
- * Fantasy OS — synchronize ONE connected Sleeper league through the durable runner.
+ * Fantasy OS — synchronize ONE connected league, of any provider, through the durable runner.
  *
  * Resolves the season-aware cadence, decides whether the connection is due (never hammering the
  * provider), then drives `runSync` with the Prisma store + AutomationLock + memoized Sleeper fetcher.
@@ -7,7 +7,6 @@
  * controlled fixtures without touching the live Sleeper API; production defaults to the canonical
  * `runImportedLeagueNormalizationPipeline` (a single live provider burst per run).
  */
-import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { resolveCadence, isInSeason } from '@/lib/fantasy-os/sync/season'
@@ -21,6 +20,10 @@ import {
   type SyncScope,
 } from '@/lib/fantasy-os/sync/runner'
 import { createSleeperScopeFetcher } from './sleeperScopeFetcher'
+import {
+  fetchNormalizedForConnection,
+  resolveStoredCredentialUserIds,
+} from './normalizedLoader'
 import { createPrismaSleeperSyncStore } from './prismaSyncStore'
 import { createAutomationSyncLock } from './automationSyncLock'
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
@@ -28,17 +31,30 @@ import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleep
 
 /** NFL regular season + playoffs. The cache only fetches weeks it lacks. */
 const MAX_WEEKS = 18
-import { SLEEPER_SYNC_SCOPES, type SleeperSyncConnection } from './types'
+import {
+  LEAGUE_SYNC_SCOPES,
+  providerNeedsCredential,
+  type LeagueSyncConnection,
+  type SleeperSyncConnection,
+} from './types'
 
 const realClock: Clock = { now: () => new Date() }
 const realRng: Rng = { next: () => Math.random() }
 const realSleep: Sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/** Live provider load: fetch + normalize the current Sleeper league (read-only, keyless). Throws on hard failure. */
-async function fetchNormalizedFromSleeper(externalLeagueId: string): Promise<NormalizedImportResult> {
-  const result = await runImportedLeagueNormalizationPipeline({ provider: 'sleeper', sourceId: externalLeagueId })
-  if (!result.success) throw new Error(`sleeper normalize failed: ${result.error}`)
-  return result.normalized
+/**
+ * Live provider load: fetch + normalize the current league (read-only). Throws on hard failure.
+ *
+ * ⚠ THE SIGNATURE TAKES A CONNECTION, NOT A LEAGUE ID, and that is the whole generalisation.
+ * A Sleeper id is enough to read a Sleeper league because the API is keyless; an ESPN or Yahoo
+ * or MFL id is not, because the read needs a credential belonging to one of the importing users.
+ * `normalizedLoader` resolves that. Keeping the old `(externalLeagueId)` shape would have forced
+ * every credentialed provider back through a second, parallel code path.
+ */
+async function fetchNormalizedForLeague(
+  connection: LeagueSyncConnection,
+): Promise<NormalizedImportResult> {
+  return fetchNormalizedForConnection(connection)
 }
 
 /**
@@ -83,8 +99,23 @@ export interface SyncConnectedResult {
 }
 
 export interface SyncConnectedDeps {
-  /** Injectable normalized-payload loader (controlled fixture in tests). Default = live Sleeper. */
-  fetchNormalized?: (externalLeagueId: string) => Promise<NormalizedImportResult>
+  /**
+   * Injectable normalized-payload loader (controlled fixture in tests). Default = the live
+   * provider read for this connection's platform.
+   *
+   * ⚠ IT RECEIVES THE EXTERNAL LEAGUE ID FIRST FOR BACKWARD COMPATIBILITY — every existing
+   * test passes `(externalLeagueId) => fixture`. The connection is a second argument so a
+   * provider-aware fixture can use it without breaking any of them.
+   */
+  fetchNormalized?: (
+    externalLeagueId: string,
+    connection?: LeagueSyncConnection,
+  ) => Promise<NormalizedImportResult>
+  /**
+   * Skip the stored-credential pre-flight. Only for tests that inject `fetchNormalized` and
+   * therefore never touch a real credential.
+   */
+  skipCredentialPreflight?: boolean
   /** Bypass the cadence due-check (manual refresh). Default false. */
   force?: boolean
   /** Reconcile removals from complete authoritative responses. Default true. */
@@ -100,8 +131,8 @@ export interface SyncConnectedDeps {
   runTimeoutMs?: number
 }
 
-export async function syncConnectedSleeperLeague(
-  connection: SleeperSyncConnection,
+export async function syncConnectedLeague(
+  connection: LeagueSyncConnection,
   now: Date,
   deps: SyncConnectedDeps = {},
 ): Promise<SyncConnectedResult> {
@@ -127,8 +158,37 @@ export async function syncConnectedSleeperLeague(
     return { ...base, executed: false, reason: 'not due for this season cadence' }
   }
 
+  /*
+   * ⚠ ASK THE DATABASE BEFORE ASKING THE PROVIDER.
+   *
+   * ESPN, Yahoo and MFL cannot be read without a credential belonging to one of the importing
+   * users. A league where nobody ever connected that platform is a permanent condition, so
+   * discovering it by attempting a provider read would spend one request per candidate on
+   * every heartbeat, forever, to learn something a single `SELECT` already knows.
+   *
+   * ⚠ IT IS A SKIP, NOT A FAILURE, and the distinction is load-bearing: a failure increments
+   * `consecutiveFailures` and drives retry backoff against a provider that is behaving
+   * perfectly. Nothing is wrong with ESPN — we simply have no key to the door.
+   *
+   * A stored-but-broken credential deliberately does NOT skip here; it proceeds and surfaces
+   * as a real failure, because expired ESPN cookies are something a manager can go and fix,
+   * and hiding that behind a quiet skip is how a league goes stale unnoticed.
+   */
+  if (!deps.skipCredentialPreflight && providerNeedsCredential(connection.provider)) {
+    const withCredentials = await resolveStoredCredentialUserIds(connection)
+    if (withCredentials.length === 0) {
+      return {
+        ...base,
+        executed: false,
+        reason: `no importing user has stored ${connection.provider} credentials for this league`,
+      }
+    }
+  }
+
   const loadNormalized = createMemoizedNormalizedLoader(() =>
-    (deps.fetchNormalized ?? fetchNormalizedFromSleeper)(connection.externalLeagueId),
+    deps.fetchNormalized
+      ? deps.fetchNormalized(connection.externalLeagueId, connection)
+      : fetchNormalizedForLeague(connection),
   )
   const store = createPrismaSleeperSyncStore({
     connection,
@@ -141,7 +201,7 @@ export async function syncConnectedSleeperLeague(
   const result = await runSync({
     runKey: connection.runKey,
     seasonState,
-    scopes: deps.scopes ?? (SLEEPER_SYNC_SCOPES as unknown as SyncScope[]),
+    scopes: deps.scopes ?? (LEAGUE_SYNC_SCOPES as unknown as SyncScope[]),
     immutableScopes: deps.immutableScopes ?? [],
     lock,
     store,
@@ -182,7 +242,22 @@ export async function syncConnectedSleeperLeague(
    * cost paid once per league and then never again. Failures are swallowed: a
    * matchup backfill must never fail the league sync that already succeeded.
    */
-  if (result.status !== 'locked' && isInSeason(seasonState)) {
+  /*
+   * ⚠ SLEEPER-ONLY, AND THAT IS NOT AN OVERSIGHT LEFT BY THE GENERALISATION.
+   *
+   * Both enrichments below call Sleeper's own endpoints directly:
+   * `ensureMatchupsCached` fetches `/league/{id}/matchups/{week}` and
+   * `ingestSleeperPlayerScoresForWeek` reads Sleeper player scoring. Neither has a meaning
+   * for an ESPN or Fantrax league id, and running them would either 404 in a loop or — worse
+   * — write `WeeklyMatchup` rows keyed on a non-Sleeper league id that the readers would then
+   * join against, producing scores for the wrong league.
+   *
+   * ESPN, Yahoo and Fantrax get their `WeeklyMatchup` rows from the parity collectors
+   * (`externalMatchupParity`, `fantraxMatchupParity`) which speak their own APIs. MFL and
+   * Fleaflicker have no weekly-matchup writer yet — a known gap, recorded rather than papered
+   * over by pointing a Sleeper fetcher at them.
+   */
+  if (connection.provider === 'sleeper' && result.status !== 'locked' && isInSeason(seasonState)) {
     await ensureMatchupsCached(connection.externalLeagueId, MAX_WEEKS, connection.season).catch(
       (err: unknown) => {
         console.warn(
@@ -262,4 +337,17 @@ export async function syncConnectedSleeperLeague(
     notes: store.notes,
     result,
   }
+}
+
+/**
+ * @deprecated Use `syncConnectedLeague`. Identical behaviour — the function was never
+ * Sleeper-specific past the fetch it hardcoded. Kept so existing call sites and their tests
+ * are untouched by the generalisation.
+ */
+export async function syncConnectedSleeperLeague(
+  connection: SleeperSyncConnection,
+  now: Date,
+  deps: SyncConnectedDeps = {},
+): Promise<SyncConnectedResult> {
+  return syncConnectedLeague(connection, now, deps)
 }
