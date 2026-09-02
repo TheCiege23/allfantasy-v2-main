@@ -226,6 +226,20 @@ const filesToKeep = new Set([
   //
   // UNION, not either-or: this branch added the first two and main added the third
   // independently. Keeping only one side silently re-breaks the other's cron.
+  /*
+   * 🛑 FIFTH INSTANCE OF THE #284 CLASS, AND IT REACHED PRODUCTION. Scheduled at :15/:45,
+   * shipped in its commit, present in the repo — and absent from this Set, so the build
+   * moved it aside and `/api/cron/import-backfill-sweeper` answered 404 with
+   * `x-matched-path: /_not-found` while its siblings answered 401. Nothing local can catch
+   * this: the code is correct and the DEPLOY omits it. It was found by probing the live
+   * deployment.
+   *
+   * What the route does is why the omission matters rather than merely wasting an
+   * invocation: it is the recovery path for league history whose backfill died mid-run, so
+   * a silent 404 leaves those leagues pinned at `historicalBackfillStatus: 'pending'`
+   * forever, with nothing else on the platform that would ever retry them.
+   */
+  path.join('app', 'api', 'cron', 'import-backfill-sweeper', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'draft-tick', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'live-score-tick', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'sync-player-images', 'route.ts').replace(/\\/g, '/'),
