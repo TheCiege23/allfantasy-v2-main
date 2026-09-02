@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
@@ -8,7 +8,7 @@ import { PlayerImage } from '@/app/components/PlayerImage'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
-import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { GradedTrade, TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
@@ -62,7 +62,30 @@ type PanelResponse = {
   providerPendingCount?: number
   providerLeagueUrl?: string
   pending?: { scanned: boolean; reason: string | null; platform: string; leagueUrl: string | null }
+  /** Provider offers in the shape the builder reloads — structured picks, FAAB and player ids. */
+  pendingOffers?: BuilderOffer[]
   error?: string
+}
+
+export type BuilderOfferAsset = {
+  playerId: string | null
+  name: string
+  position: string | null
+  team: string | null
+  isPick: boolean
+  pickYear: number | null
+  pickRound: number | null
+  faabAmount: number | null
+}
+
+export type BuilderOffer = {
+  transactionId: string
+  direction: 'incoming' | 'outgoing'
+  partnerName: string
+  proposedAt: string | null
+  /** From the VIEWER's side in both directions: what leaves their roster. */
+  give: BuilderOfferAsset[]
+  get: BuilderOfferAsset[]
 }
 
 type GradesResponse =
@@ -355,6 +378,405 @@ function YouPill() {
   )
 }
 
+
+/* ── Pending trade card ───────────────────────────────────────────────────
+ *
+ * Reads like the provider's own proposal card — proposer first, each
+ * manager's assets stacked under their name — with the AllFantasy read on top:
+ * what each asset is worth, the projected grade for each side, and which way
+ * the deal tilts. That read comes from the existing analyzer and is the whole
+ * reason to open this here rather than on the provider.
+ *
+ * ⚠ THE READ IS OPTIONAL, THE OFFER IS NOT. If the analyzer cannot price the
+ * deal (an IDP-only offer, a pick the label did not parse, an outage) the card
+ * still shows the trade exactly as proposed and says the read is missing. It
+ * never invents a value, and never shows a C that means "no signal".
+ */
+
+type AnalyzeAsset =
+  | { kind: 'player'; name: string }
+  | { kind: 'pick'; year: number; round: number; label: string }
+  | { kind: 'faab'; amount: number }
+
+/**
+ * Back into the analyzer's vocabulary from display strings.
+ *
+ * Structured provider offers never come through here (they carry year, round
+ * and amount). Native AllFantasy proposals reach the panel as `{ label,
+ * sublabel }`, so a pick or a FAAB line has to be read off its label — and a
+ * label that does not parse is DROPPED and named, never guessed. A deal
+ * analysed short one piece is a different deal, and the card says so.
+ */
+export function toAnalyzeAssets(
+  assets: Array<{ label: string; sublabel: string | null }>,
+): { assets: AnalyzeAsset[]; dropped: string[] } {
+  const out: AnalyzeAsset[] = []
+  const dropped: string[] = []
+  for (const a of assets) {
+    const label = a.label.trim()
+    const sub = (a.sublabel ?? '').trim().toLowerCase()
+    const faab = /(?:\$\s*(\d+))|(?:(\d+)\s*faab)/i.exec(label)
+    if (faab || sub === 'faab') {
+      const amount = Number(faab?.[1] ?? faab?.[2])
+      if (Number.isFinite(amount) && amount > 0) out.push({ kind: 'faab', amount })
+      else dropped.push(label)
+      continue
+    }
+    const year = /\b(20\d{2})\b/.exec(label)
+    const looksLikePick = Boolean(year) || sub === 'draft pick' || /\bpick\b/i.test(label)
+    if (looksLikePick) {
+      const rest = year ? label.replace(year[0], ' ') : label
+      const round =
+        /\b(\d{1,2})\s*(?:st|nd|rd|th)?\s*(?:round|rd\b)/i.exec(rest) ??
+        /\bround\s*(\d{1,2})\b/i.exec(rest) ??
+        /\bR(\d{1,2})\b/i.exec(rest) ??
+        /\b(\d{1,2})(?:st|nd|rd|th)\b/i.exec(rest)
+      const y = year ? Number(year[1]) : NaN
+      const r = round ? Number(round[1]) : NaN
+      if (Number.isFinite(y) && Number.isFinite(r) && r >= 1 && r <= 20) {
+        out.push({ kind: 'pick', year: y, round: r, label })
+      } else {
+        dropped.push(label)
+      }
+      continue
+    }
+    out.push({ kind: 'player', name: label })
+  }
+  return { assets: out, dropped }
+}
+
+function fromBuilderAssets(assets: BuilderOfferAsset[]): { assets: AnalyzeAsset[]; dropped: string[] } {
+  const out: AnalyzeAsset[] = []
+  const dropped: string[] = []
+  for (const a of assets) {
+    if (a.faabAmount != null) out.push({ kind: 'faab', amount: a.faabAmount })
+    else if (a.isPick) {
+      if (a.pickYear != null && a.pickRound != null) out.push({ kind: 'pick', year: a.pickYear, round: a.pickRound, label: a.name })
+      else dropped.push(a.name)
+    } else out.push({ kind: 'player', name: a.name })
+  }
+  return { assets: out, dropped }
+}
+
+export type PendingVerdict =
+  | { kind: 'loading' }
+  | { kind: 'failed' }
+  | { kind: 'skipped'; why: string }
+  | {
+      kind: 'ok'
+      fairnessScore: number | null
+      fairnessLabel: string
+      confidenceLabel: string | null
+      degraded: boolean
+      /** Letter for the side that SENDS `give` (the viewer, or the proposer), and its mirror. */
+      giveGrade: GradeLetter | null
+      getGrade: GradeLetter | null
+      giveTotal: number | null
+      getTotal: number | null
+      /** Market value by lower-cased player name, null when the feed could not price one. */
+      values: Record<string, number | null>
+      dropped: string[]
+    }
+
+type AnalyzeResponse = {
+  labels?: { fairnessLabel?: string; confidenceLabel?: string }
+  fairnessScore?: number
+  percentDiff?: number
+  degraded?: boolean
+  giveTotal?: number | null
+  getTotal?: number | null
+  players?: { give: Array<{ name: string; marketValue?: number | null }>; get: Array<{ name: string; marketValue?: number | null }> }
+  error?: string
+}
+
+/** One asset as the card draws it, whichever shape it arrived in. */
+type CardAsset = {
+  key: string
+  name: string
+  meta: string | null
+  kind: 'player' | 'pick' | 'faab'
+  sleeperId: string | null
+}
+
+function cardAssetsFromPanel(assets: LeagueTradeHistoryItem['sent']): CardAsset[] {
+  return assets.map((a) => {
+    const sub = (a.sublabel ?? '').trim()
+    const { assets: parsed } = toAnalyzeAssets([{ label: a.label, sublabel: a.sublabel }])
+    const kind = parsed[0]?.kind ?? 'player'
+    /* Provider rows carry the Sleeper id in front of the index; native rows carry a row id. */
+    const idHead = a.id.split(':')[0] ?? ''
+    const sleeperId = /^\d{2,}$/.test(idHead) ? idHead : null
+    return { key: a.id, name: a.label, meta: sub && sub.toLowerCase() !== 'draft pick' ? sub : null, kind, sleeperId }
+  })
+}
+
+function cardAssetsFromOffer(assets: BuilderOfferAsset[], prefix: string): CardAsset[] {
+  return assets.map((a, i) => ({
+    key: `${prefix}-${i}`,
+    name: a.name,
+    meta: a.faabAmount != null ? 'FAAB' : a.isPick ? null : [a.position, a.team].filter(Boolean).join(' - ') || null,
+    kind: a.faabAmount != null ? 'faab' : a.isPick ? 'pick' : 'player',
+    sleeperId: a.playerId,
+  }))
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return (parts[0] ?? '?').slice(0, 2).toUpperCase()
+  return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase()
+}
+
+function AssetAvatar({ a, sport }: { a: CardAsset; sport: string }) {
+  if (a.kind === 'pick') {
+    return (
+      <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#8f97bd]/20 font-mono text-[9px] font-black tracking-[0.06em] text-[#c3c9e6]">
+        PICK
+      </span>
+    )
+  }
+  if (a.kind === 'faab') {
+    return (
+      <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#34d399]/15 font-mono text-[12px] font-black text-[#34d399]">
+        $
+      </span>
+    )
+  }
+  if (a.sleeperId) {
+    return <PlayerImage sleeperId={a.sleeperId} sport={sport} name={a.name} size={32} variant="round" />
+  }
+  return (
+    <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-[10px] font-bold text-white/70">
+      {initialsOf(a.name)}
+    </span>
+  )
+}
+
+function money(v: number | null | undefined): string {
+  return typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString() : '—'
+}
+
+function ManagerBlock({
+  name,
+  isYou,
+  assets,
+  values,
+  total,
+  grade,
+  sport,
+}: {
+  name: string
+  isYou: boolean
+  assets: CardAsset[]
+  values: Record<string, number | null> | null
+  total: number | null | undefined
+  grade: GradeLetter | null | undefined
+  sport: string
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/15 text-[9px] font-black text-[#ffb8d1]">
+          {initialsOf(name)}
+        </span>
+        <span className="text-[13px] font-extrabold text-white">{name}</span>
+        {isYou ? <YouPill /> : null}
+        <span className={`${EYEBROW} text-[8.5px] text-white/35`}>sends</span>
+        <span className="flex-1" />
+        {grade ? <GradeTile letter={grade} why={null} size="sm" /> : null}
+        {values ? <span className="font-mono text-[11px] font-bold text-[#CBD5E1]">{money(total)}</span> : null}
+      </div>
+      {assets.length === 0 ? (
+        <p className="pl-8 text-[11.5px] italic text-white/35">Nothing</p>
+      ) : (
+        assets.map((a) => {
+          const v = values && a.kind === 'player' ? values[a.name.toLowerCase()] : undefined
+          return (
+            <div key={a.key} className="flex items-center gap-2.5 rounded-lg border border-[#1E2A42] bg-[#0a1228] px-2.5 py-2">
+              <AssetAvatar a={a} sport={sport} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12.5px] font-bold leading-tight text-white">{a.name}</p>
+                {a.meta ? <p className="font-mono text-[10px] text-white/45">{a.meta}</p> : null}
+              </div>
+              {values ? (
+                <span className={`font-mono text-[11.5px] font-bold ${v == null ? 'text-white/30' : 'text-[#CBD5E1]'}`}>
+                  {a.kind === 'player' ? money(v) : '—'}
+                </span>
+              ) : null}
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+export function PendingTradeCard(props: {
+  trade: LeagueTradeHistoryItem
+  offer: BuilderOffer | null
+  verdict: PendingVerdict | undefined
+  sport: string
+  tradeCenterHref: string
+  providerUrl: string | null
+  canAct: boolean
+  busy: boolean
+  onAccept: () => void
+  onReject: () => void
+  onCancel: () => void
+  onApprove: () => void
+  onVeto: () => void
+}) {
+  const { trade: t, offer, verdict } = props
+  const onSleeper = t.status === 'pending_on_sleeper'
+  const review = t.status === 'awaiting_commissioner'
+  const commissionerView = t.direction === 'complete'
+
+  /* The viewer's side is `sent`; the partner's is `received`. Proposer goes first, like the provider's card. */
+  const youAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
+  const themAssets = offer ? cardAssetsFromOffer(offer.get, 'k') : cardAssetsFromPanel(t.received)
+
+  const you = { name: commissionerView ? 'Receiving team' : 'You', isYou: !commissionerView, assets: youAssets }
+  const them = { name: t.partnerName, isYou: false, assets: themAssets }
+  const proposerFirst = t.direction === 'outgoing' ? [you, them] : [them, you]
+
+  const ok = verdict?.kind === 'ok' ? verdict : null
+  const values = ok ? ok.values : null
+  const gradeFor = (side: typeof you) => (ok ? (side === you ? ok.giveGrade : ok.getGrade) : null)
+  const totalFor = (side: typeof you) => (ok ? (side === you ? ok.giveTotal : ok.getTotal) : null)
+
+  const headline = commissionerView
+    ? `${t.partnerName} has proposed a trade`
+    : t.direction === 'outgoing'
+      ? `You proposed a trade to ${t.partnerName}`
+      : `${t.partnerName} has proposed a trade`
+
+  const role = onSleeper
+    ? { label: 'On Sleeper · read-only', cls: 'bg-[#1f2a4d] text-[#9fd4ff]' }
+    : review
+      ? { label: 'Commissioner review', cls: 'bg-violet-400/15 text-violet-200' }
+      : t.direction === 'outgoing'
+        ? { label: 'Your offer', cls: 'bg-white/[0.06] text-[#CBD5E1]' }
+        : { label: 'Offer to you', cls: 'bg-amber-400/15 text-amber-200' }
+  const border = onSleeper ? 'border-[#1E2A42]' : review ? 'border-violet-400/35' : t.direction === 'outgoing' ? 'border-[#1E2A42]' : 'border-amber-400/40'
+
+  return (
+    <article className={`flex flex-col gap-3 rounded-2xl border bg-[#131929] p-3.5 ${border}`} data-testid="pending-trade-card">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-[#ff3d81]/15 text-[#ffb8d1]" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4" /><path d="M3 7h18" /><path d="M7 21l-4-4 4-4" /><path d="M21 17H3" /></svg>
+          </span>
+          <div>
+            <p className="text-[13px] font-extrabold leading-tight text-white">{headline}</p>
+            <p className="mt-0.5 text-[10.5px] text-white/40">
+              {whenLabel(t.timestamp)}
+              {review ? ' · awaiting the commissioner' : ''}
+            </p>
+          </div>
+        </div>
+        <span className={`whitespace-nowrap rounded px-1.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] ${role.cls}`}>
+          {role.label}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {proposerFirst.map((side) => (
+          <ManagerBlock
+            key={side.name}
+            name={side.name}
+            isYou={side.isYou}
+            assets={side.assets}
+            values={values}
+            total={totalFor(side)}
+            grade={gradeFor(side)}
+            sport={props.sport}
+          />
+        ))}
+      </div>
+
+      {/* ── The AllFantasy read ──────────────────────────────────────── */}
+      <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.06] px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className={`${EYEBROW} text-[9px] text-[#67e4f7]`}>AF read</span>
+          {!verdict || verdict.kind === 'loading' ? (
+            <span className="text-[11.5px] text-white/50">Pricing this deal…</span>
+          ) : verdict.kind === 'failed' ? (
+            <span className="text-[11.5px] text-white/50">Couldn&rsquo;t price this one just now — the offer above is exactly as proposed.</span>
+          ) : verdict.kind === 'skipped' ? (
+            <span className="text-[11.5px] text-white/50">{verdict.why}</span>
+          ) : (
+            <>
+              <span className="text-[12.5px] font-bold text-white">{verdict.fairnessLabel}</span>
+              {verdict.fairnessScore != null ? (
+                <span className="font-mono text-[11px] font-bold text-[#67e4f7]">{Math.round(verdict.fairnessScore)}/100</span>
+              ) : null}
+              {verdict.confidenceLabel ? <span className="text-[11px] text-white/45">{verdict.confidenceLabel}</span> : null}
+            </>
+          )}
+        </div>
+        {ok && ok.degraded ? (
+          <p className="mt-1.5 text-[11px] leading-snug text-[#ffd7de]">
+            We could not price enough of this deal to stand behind a verdict — an even-looking read here means no signal, not a fair trade.
+          </p>
+        ) : null}
+        {ok && ok.dropped.length > 0 ? (
+          <p className="mt-1.5 text-[11px] leading-snug text-white/45">
+            Priced without {ok.dropped.join(', ')} — could not be read as a pick or player, so the read is short that piece.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {onSleeper ? (
+          <>
+            {props.providerUrl ? (
+              <a
+                href={props.providerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-[#22d3ee]/30 bg-[#22d3ee]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#67e4f7]"
+              >
+                Act on it in Sleeper
+              </a>
+            ) : null}
+            <Link href={props.tradeCenterHref} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white/70">
+              Load into builder
+            </Link>
+          </>
+        ) : props.canAct && review ? (
+          <>
+            <button type="button" disabled={props.busy} onClick={props.onApprove} className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50" data-testid="trade-action-commissioner-approve">
+              Approve
+            </button>
+            <button type="button" disabled={props.busy} onClick={props.onVeto} className="rounded-lg border border-rose-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-rose-300 disabled:opacity-50" data-testid="trade-action-commissioner-veto">
+              Veto
+            </button>
+          </>
+        ) : props.canAct && t.viewerIsReceiver && t.status === 'pending' ? (
+          <>
+            <button type="button" disabled={props.busy} onClick={props.onAccept} className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50" data-testid="trade-action-accept">
+              Accept
+            </button>
+            <button type="button" disabled={props.busy} onClick={props.onReject} className="rounded-lg border border-rose-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-rose-300 disabled:opacity-50" data-testid="trade-action-reject">
+              Reject
+            </button>
+          </>
+        ) : props.canAct && t.viewerIsProposer && t.status === 'pending' ? (
+          <button type="button" disabled={props.busy} onClick={props.onCancel} className="rounded-lg border border-white/20 px-2.5 py-1.5 text-[11px] font-semibold text-white/70 disabled:opacity-50" data-testid="trade-action-cancel">
+            Cancel offer
+          </button>
+        ) : (
+          <StatusChip status={statusOf(t)} />
+        )}
+        <Link href={props.tradeCenterHref} className="ml-auto text-[11px] font-semibold text-[#67e4f7] hover:text-[#9beefb]">
+          Open in Trade Center →
+        </Link>
+      </div>
+    </article>
+  )
+}
+
+
 export function TradesTab({ league, teams }: TradesTabProps) {
   const sport = normalizeToSupportedSport(league.sport) ?? 'NFL'
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
@@ -363,6 +785,10 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [providerPending, setProviderPending] = useState(0)
   const [providerUrl, setProviderUrl] = useState<string | null>(null)
   const [pendingScan, setPendingScan] = useState<PanelResponse['pending'] | null>(null)
+  const [pendingOffers, setPendingOffers] = useState<BuilderOffer[]>([])
+  const [verdicts, setVerdicts] = useState<Record<string, PendingVerdict>>({})
+  /* Which trades have been sent to the analyzer, so StrictMode's double effect does not double the requests. */
+  const requested = useRef<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [ledger, setLedger] = useState<LedgerState>({ kind: 'loading' })
@@ -411,6 +837,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         setProviderPending(0)
         setProviderUrl(null)
         setPendingScan(null)
+        setPendingOffers([])
         return
       }
       setTradeBlock(Array.isArray(data?.tradeBlock) ? data.tradeBlock : [])
@@ -418,6 +845,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
       setPendingScan(data?.pending && typeof data.pending === 'object' ? data.pending : null)
+      setPendingOffers(Array.isArray(data?.pendingOffers) ? data.pendingOffers : [])
     } catch {
       setErr('Could not load trades.')
       setTradeBlock([])
@@ -425,6 +853,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setProviderPending(0)
       setProviderUrl(null)
       setPendingScan(null)
+      setPendingOffers([])
     } finally {
       setLoading(false)
     }
@@ -541,6 +970,92 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     [activeTrades],
   )
 
+
+  const offerById = useMemo(() => {
+    const m = new Map<string, BuilderOffer>()
+    for (const o of pendingOffers) m.set(`sleeper:${o.transactionId}`, o)
+    return m
+  }, [pendingOffers])
+
+  /*
+   * The AllFantasy read on every pending trade the viewer can see, from the
+   * analyzer the Trade Center already posts to. Capped so a league with a
+   * pile of open offers does not turn one tab into a request storm (the
+   * route rate-limits at 20/min); the rest keep the offer without the read.
+   *
+   * ⚠ NO NEW API ROUTE. Same `/api/trade-value/analyze`, same input shape.
+   */
+  const pendingForRead = useMemo(
+    () => activeTrades.filter((t) => t.status !== 'accepted' && t.status !== 'scheduled').slice(0, 6),
+    [activeTrades],
+  )
+
+  useEffect(() => {
+    for (const t of pendingForRead) {
+      if (requested.current.has(t.id)) continue
+      requested.current.add(t.id)
+
+      const offer = offerById.get(t.id) ?? null
+      const give = offer ? fromBuilderAssets(offer.give) : toAnalyzeAssets(t.sent)
+      const get = offer ? fromBuilderAssets(offer.get) : toAnalyzeAssets(t.received)
+      const dropped = [...give.dropped, ...get.dropped]
+      if (give.assets.length === 0 && get.assets.length === 0) {
+        setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'skipped', why: 'Nothing in this offer could be priced.' } }))
+        continue
+      }
+      setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'loading' } }))
+
+      void (async () => {
+        try {
+          const r = await fetch('/api/trade-value/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sportFilter: 'ALL',
+              leagueId: league.id,
+              strategy: 'neutral',
+              teamContext: 'my_team',
+              sideGive: give.assets,
+              sideGet: get.assets,
+            }),
+          })
+          const j = (await r.json().catch(() => ({}))) as AnalyzeResponse
+          if (!r.ok) {
+            setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'failed' } }))
+            return
+          }
+          const values: Record<string, number | null> = {}
+          for (const l of [...(j.players?.give ?? []), ...(j.players?.get ?? [])]) {
+            values[l.name.toLowerCase()] = typeof l.marketValue === 'number' ? l.marketValue : null
+          }
+          const allUnpriced = Object.values(values).length > 0 && Object.values(values).every((v) => v == null)
+          const degraded = Boolean(j.degraded) || allUnpriced
+          const hasSignal = !degraded
+          const pd = typeof j.percentDiff === 'number' ? j.percentDiff : null
+          setVerdicts((prev) => ({
+            ...prev,
+            [t.id]: {
+              kind: 'ok',
+              fairnessScore: typeof j.fairnessScore === 'number' ? j.fairnessScore : null,
+              fairnessLabel: j.labels?.fairnessLabel ?? 'No verdict',
+              confidenceLabel: j.labels?.confidenceLabel ?? null,
+              degraded,
+              giveGrade: projectedLetterFor({ percentDiff: pd, hasSignal }),
+              getGrade: projectedLetterFor({ percentDiff: pd != null ? -pd : null, hasSignal }),
+              giveTotal: typeof j.giveTotal === 'number' ? j.giveTotal : null,
+              getTotal: typeof j.getTotal === 'number' ? j.getTotal : null,
+              values,
+              dropped,
+            },
+          }))
+        } catch {
+          setVerdicts((prev) => ({ ...prev, [t.id]: { kind: 'failed' } }))
+        }
+      })()
+    }
+  }, [pendingForRead, offerById, league.id])
+
+
   const completedRows = useMemo<LogRow[]>(() => {
     if (ledger.kind === 'graded') return ledger.grades.trades.map((g) => rowFromGraded(g, ledger.viewerId))
     if (ledger.kind === 'ungraded') return ledger.ledger.trades.map(rowFromImported)
@@ -556,9 +1071,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       .filter((r) => (onlyMine ? r.mine : true))
   }, [pendingRows, completedRows, logFilter, onlyMine])
 
+  const yourActiveTrades = useMemo(() => activeTrades.filter((t) => t.direction !== 'complete'), [activeTrades])
   const yourActive = useMemo(() => pendingRows.filter((r) => r.mine), [pendingRows])
   const yourCompleted = useMemo(() => completedRows.filter((r) => r.mine), [completedRows])
-  const yourRows = yourTab === 'active' ? yourActive : yourCompleted
 
   const platformKey = String(league.platform ?? '').toLowerCase()
   const platformMark = PLATFORM_MARK[platformKey] ?? (league.name?.charAt(0).toUpperCase() || '·')
@@ -716,119 +1231,28 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           </div>
           {actionErr ? <p className="text-[12px] text-rose-300">{actionErr}</p> : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {needsAction.map((t) => {
-              const onSleeper = t.status === 'pending_on_sleeper'
-              const review = t.status === 'awaiting_commissioner'
-              const role = onSleeper
-                ? { label: 'On Sleeper · read-only', cls: 'bg-[#1f2a4d] text-[#9fd4ff]' }
-                : review
-                  ? { label: 'Commissioner review', cls: 'bg-violet-400/15 text-violet-200' }
-                  : { label: 'Offer to you', cls: 'bg-amber-400/15 text-amber-200' }
-              const border = onSleeper ? 'border-[#1E2A42]' : review ? 'border-violet-400/35' : 'border-amber-400/40'
-              const busy = actionBusyId === t.id
-              return (
-                <article key={t.id} className={`flex flex-col gap-2.5 rounded-2xl border bg-[#131929] p-3.5 ${border}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`rounded px-1.5 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.08em] ${role.cls}`}>
-                      {role.label}
-                    </span>
-                    <span className="text-[10.5px] text-white/35">{whenLabel(t.timestamp)}</span>
-                  </div>
-                  <div className="text-[14px] font-extrabold text-white">{t.partnerName}</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-lg border border-[#1E2A42] bg-[#0a1228] px-2.5 py-2">
-                      <p className={`${EYEBROW} text-[8.5px] text-rose-300`}>{t.direction === 'complete' ? 'They send' : 'You send'}</p>
-                      <p className="mt-1 text-[11.5px] leading-snug text-[#CBD5E1]">{joinNames(t.sent)}</p>
-                    </div>
-                    <div className="rounded-lg border border-[#1E2A42] bg-[#0a1228] px-2.5 py-2">
-                      <p className={`${EYEBROW} text-[8.5px] text-emerald-300`}>{t.direction === 'complete' ? 'They get' : 'You get'}</p>
-                      <p className="mt-1 text-[11.5px] leading-snug text-[#CBD5E1]">{joinNames(t.received)}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                    {onSleeper ? (
-                      <>
-                        {/*
-                          Not an accept button. Sleeper's public API has no write
-                          endpoint, so the only truthful action is to send the
-                          manager where the offer lives.
-                        */}
-                        {providerUrl ? (
-                          <a
-                            href={providerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-lg border border-[#22d3ee]/30 bg-[#22d3ee]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#67e4f7]"
-                          >
-                            Act on it in Sleeper
-                          </a>
-                        ) : null}
-                        <Link
-                          href={tradeCenterHref}
-                          className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white/70"
-                        >
-                          Load into builder
-                        </Link>
-                      </>
-                    ) : nflRedraftTradesShell ? (
-                      review ? (
-                        <>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void runCommissionerDecision(t.id, 'approve')}
-                            className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50"
-                            data-testid="trade-action-commissioner-approve"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void runCommissionerDecision(t.id, 'reject')}
-                            className="rounded-lg border border-rose-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-rose-300 disabled:opacity-50"
-                            data-testid="trade-action-commissioner-veto"
-                          >
-                            Veto
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void runTradeAction(t.id, 'accept')}
-                            className="rounded-lg border border-emerald-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 disabled:opacity-50"
-                            data-testid="trade-action-accept"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void runTradeAction(t.id, 'reject')}
-                            className="rounded-lg border border-rose-400/40 px-2.5 py-1.5 text-[11px] font-semibold text-rose-300 disabled:opacity-50"
-                            data-testid="trade-action-reject"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )
-                    ) : (
-                      <span className="text-[11px] text-white/45">
-                        {review ? 'Awaiting the commissioner’s decision.' : 'Waiting on your answer.'}
-                      </span>
-                    )}
-                    <Link href={tradeCenterHref} className="ml-auto text-[11px] font-semibold text-[#67e4f7] hover:text-[#9beefb]">
-                      Price it in the Trade Center →
-                    </Link>
-                  </div>
-                </article>
-              )
-            })}
+            {needsAction.map((t) => (
+              <PendingTradeCard
+                key={t.id}
+                trade={t}
+                offer={offerById.get(t.id) ?? null}
+                verdict={verdicts[t.id]}
+                sport={sport}
+                tradeCenterHref={tradeCenterHref}
+                providerUrl={providerUrl}
+                canAct={nflRedraftTradesShell}
+                busy={actionBusyId === t.id}
+                onAccept={() => void runTradeAction(t.id, 'accept')}
+                onReject={() => void runTradeAction(t.id, 'reject')}
+                onCancel={() => void runTradeAction(t.id, 'cancel')}
+                onApprove={() => void runCommissionerDecision(t.id, 'approve')}
+                onVeto={() => void runCommissionerDecision(t.id, 'reject')}
+              />
+            ))}
           </div>
         </section>
       ) : null}
+
 
       {/* ── Provider scan honesty ────────────────────────────────────── */}
       {!loading && !err && pendingScan && !pendingScan.scanned ? (
@@ -879,40 +1303,60 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 : 'Realized grades — scored on what each side has produced since'}
             </span>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
-            {yourRows.length === 0 ? (
-              <p className="px-4 py-6 text-center text-[12px] text-white/40">
-                {yourTab === 'active'
-                  ? 'Nothing active with your name on it.'
-                  : ledger.kind === 'loading'
-                    ? 'Reading completed trades…'
-                    : ledger.kind === 'ungraded'
-                      ? `Completed trades on ${league.platform ?? 'this platform'} do not say which side was yours.`
-                      : ledger.kind === 'unsupported'
-                        ? 'Completed trades are not read for this platform yet.'
-                        : ledger.kind === 'failed'
-                          ? 'Completed trades could not be read just now.'
-                          : 'You have not completed a trade in this league.'}
+          {yourTab === 'active' ? (
+            yourActiveTrades.length === 0 ? (
+              <p className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-6 text-center text-[12px] text-white/40">
+                Nothing active with your name on it.
               </p>
             ) : (
-              yourRows.map((r) => {
+              <div className="grid gap-3 md:grid-cols-2">
+                {yourActiveTrades.map((t) => (
+                  <PendingTradeCard
+                    key={t.id}
+                    trade={t}
+                    offer={offerById.get(t.id) ?? null}
+                    verdict={verdicts[t.id]}
+                    sport={sport}
+                    tradeCenterHref={tradeCenterHref}
+                    providerUrl={providerUrl}
+                    canAct={nflRedraftTradesShell}
+                    busy={actionBusyId === t.id}
+                    onAccept={() => void runTradeAction(t.id, 'accept')}
+                    onReject={() => void runTradeAction(t.id, 'reject')}
+                    onCancel={() => void runTradeAction(t.id, 'cancel')}
+                    onApprove={() => void runCommissionerDecision(t.id, 'approve')}
+                    onVeto={() => void runCommissionerDecision(t.id, 'reject')}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
+          <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
+            {yourCompleted.length === 0 ? (
+              <p className="px-4 py-6 text-center text-[12px] text-white/40">
+                {ledger.kind === 'loading'
+                  ? 'Reading completed trades…'
+                  : ledger.kind === 'ungraded'
+                    ? `Completed trades on ${league.platform ?? 'this platform'} do not say which side was yours.`
+                    : ledger.kind === 'unsupported'
+                      ? 'Completed trades are not read for this platform yet.'
+                      : ledger.kind === 'failed'
+                        ? 'Completed trades could not be read just now.'
+                        : 'You have not completed a trade in this league.'}
+              </p>
+            ) : (
+              yourCompleted.map((r) => {
                 const youA = r.a.you
                 const you = youA ? r.a : r.b
                 const them = youA ? r.b : r.a
-                const dir =
-                  r.direction === 'incoming'
-                    ? { label: 'Incoming', cls: 'bg-emerald-400/12 text-emerald-300' }
-                    : r.direction === 'outgoing'
-                      ? { label: 'Outgoing', cls: 'bg-amber-400/12 text-amber-200' }
-                      : { label: 'Done', cls: 'bg-white/[0.06] text-[#CBD5E1]' }
                 return (
                   <div
                     key={r.id}
                     className="grid items-center gap-3 border-b border-white/[0.06] px-4 py-3 last:border-b-0 md:grid-cols-[110px_1fr_1fr_150px_130px]"
                   >
                     <div className="flex flex-col gap-1">
-                      <span className={`self-start rounded px-1.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] ${dir.cls}`}>
-                        {dir.label}
+                      <span className="self-start rounded bg-white/[0.06] px-1.5 py-1 font-mono text-[8.5px] font-bold uppercase tracking-[0.08em] text-[#CBD5E1]">
+                        Done
                       </span>
                       <span className="font-mono text-[10px] text-white/35">{r.when}</span>
                     </div>
@@ -936,6 +1380,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               })
             )}
           </div>
+          )}
         </section>
       ) : null}
 
