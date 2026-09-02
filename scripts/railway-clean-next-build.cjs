@@ -11,6 +11,7 @@ const isRailway = !!(
   process.env.RAILWAY_DEPLOYMENT_ID ||
   process.env.RAILWAY_GIT_COMMIT_SHA
 )
+const hasExplicitDistDir = Boolean(process.env.AF_NEXT_DIST_DIR)
 const railwayDistDir = process.env.RAILWAY_GIT_COMMIT_SHA
   ? `.next-railway-${process.env.RAILWAY_GIT_COMMIT_SHA}`
   : '.next-railway'
@@ -120,8 +121,8 @@ if (fs.existsSync(nextDir)) {
   console.log(`[railway-clean] skip: ${distDirName} is missing`)
 }
 
-// Only clean .next if we're NOT on Railway (i.e., local dev)
-if (!isRailway) {
+// An explicit dist directory is isolated from the legacy .next cache too.
+if (!isRailway && !hasExplicitDistDir) {
   const legacyNextDir = path.join(repoRoot, '.next')
   if (fs.existsSync(legacyNextDir)) {
     removePath(legacyNextDir)
@@ -129,5 +130,5 @@ if (!isRailway) {
     console.log('[railway-clean] skip: .next is missing')
   }
 } else {
-  console.log('[railway-clean] skip: legacy .next cleanup on Railway (using commit-specific directory)')
+  console.log('[railway-clean] skip: legacy .next cleanup on isolated build')
 }
