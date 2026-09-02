@@ -31,7 +31,9 @@ never has to fire.
 
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
-Only `t101b` below is still parked. Everything else in this directory has been
+Of the seven, only `t101b` below is still parked — plus the two import-warehouse
+migrations added 2026-09-02 (`draft_fact_metadata`, `fact_table_uniqueness`),
+which have never been applied anywhere. Everything else in this directory has been
 applied and recorded in `_prisma_migrations` with the real `sha256` of its
 `migration.sql`, so a later `migrate deploy` matches and skips rather than
 re-running:
@@ -155,3 +157,60 @@ Apply this only once the tenant-aware build is **serving traffic** — merged is
 not the same as serving. And note it does not weaken the invariant meanwhile:
 `schema.prisma` still carries no `@default`, so the generated client makes
 `tenantId` required and application code cannot omit it.
+
+### `20260902000000_draft_fact_metadata`
+
+🛑 **PARKED. NEVER APPLIED ANYWHERE.**
+
+Adds `dw_draft_facts.metadata JSONB`, nullable. Pure addition — no backfill, no
+default, every existing row stays valid.
+
+Why: `SleeperHistoricalDraftSyncService` already fetches
+`/v1/draft/{id}/traded_picks` for every draft it walks, and then `console.info`s
+the count and throws the answer away, with a comment saying why — "DraftFact
+schema has no metadata column today". The request is already paid for and the
+data is already in memory; there is simply nowhere to put it. Draft-day pick
+trades are the one dynasty asset AllFantasy currently cannot see:
+`future_draft_picks` holds picks traded BETWEEN drafts, and nothing holds picks
+that changed hands DURING one.
+
+### `20260902010000_fact_table_uniqueness`
+
+🛑 **PARKED. NEVER APPLIED ANYWHERE.**
+
+Gives the three warehouse fact tables the uniqueness they have never had.
+`dw_draft_facts`, `dw_transaction_facts` and `dw_matchup_facts` are written as
+`deleteMany` then `create` with no unique key, so two concurrent runs duplicate
+every row and a crash between the two steps leaves a league with nothing.
+`dw_season_standing_facts` already has a natural key and uses `upsert` — it is
+the worked example the other three should match.
+
+⚠ **It is not the one-line change the finding implied, and the reason is worth
+reading before applying.** Two of the three tables have no natural key to put a
+constraint on:
+
+* `dw_draft_facts` — the writer dedupes in memory on `sourceDraftId` and then
+  **strips that column before persisting**, because none exists. A key without
+  it is not merely weaker but wrong: a league with a startup *and* a rookie
+  draft in one season has two legitimate rows at the same
+  `(leagueId, season, round, pickNumber)`.
+* `dw_transaction_facts` — has no source transaction id at all, so a duplicate
+  is indistinguishable from a manager adding the same player twice in different
+  weeks.
+
+So it adds the missing discriminator columns first, and their indexes are
+**partial** (`WHERE … IS NOT NULL`). Legacy rows are never touched — the ids
+cannot be backfilled because they were never stored — and only rows written
+after the writers populate them are protected. The constraint is therefore inert
+until that writer change ships, which is the safe order.
+
+⚠ **One statement removes data**: the `dw_matchup_facts` dedupe, which is the
+only table with a complete natural key. Run the counting query in the migration's
+header first — zero means the dedupe is a no-op, and a large number is itself the
+evidence for the defect.
+
+⚠ **`schema.prisma` is deliberately NOT updated by either file.** Adding these
+columns there makes the generated client include them in its DEFAULT SELECT for
+every read of those models; against a database that lacks them that is P2022 on
+`findMany`, not confined to code that wants the new fields. The order is: apply,
+then update `schema.prisma`, then ship writers.
