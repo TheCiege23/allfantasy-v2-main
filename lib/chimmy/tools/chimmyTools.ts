@@ -6,6 +6,7 @@ import { findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
+import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -82,6 +83,25 @@ export const CHIMMY_TOOL_SPECS = [
       description:
         "Ranked players who are on NOBODY's roster in the league in scope — use for 'who can I pick up', 'who is on waivers', 'best free agent', 'who should I add'. Returns the highest AllFantasy market values among unrostered players. It does NOT know who is claimable: unrostered is not the same as on-waivers, and the block says so. Returns a sentence saying so if rosters have not synced or every ranked player is taken.",
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_player_value',
+      description:
+        "What ONE named player is worth on the AllFantasy 0-10000 value scale — use for 'what is X worth', 'is X a good trade', 'who is worth more, X or Y' (call it once per player). Works for any player, rostered or not, which is what separates it from get_available_players. Takes a NAME. Returns long-term asset value for TRADING, not a weekly points projection and not a start/sit ranking. Only a few hundred players carry a published value; it says so plainly when there is no row, and a miss is NOT evidence the player is worthless.",
+      parameters: {
+        type: 'object',
+        properties: {
+          player: {
+            type: 'string',
+            description:
+              'The player name as the user wrote it, e.g. "Ja\'Marr Chase". Do not add or drop suffixes like Jr.',
+          },
+        },
+        required: ['player'],
+      },
     },
   },
   {
@@ -295,6 +315,17 @@ export async function executeChimmyTool(
           h2h?.text ||
           'No head-to-head history is stored for this league. Say so; do not describe a rivalry you cannot see.'
         )
+      }
+
+      /*
+       * ⚠ NO LEAGUE GATE, AND THAT IS DELIBERATE. Every other league tool bails on `NO_LEAGUE`
+       * because it reads the user's own data. A published market value is a property of the
+       * player and the concept — it is the same number for every user — so requiring a selected
+       * league would refuse a question we can answer perfectly well.
+       */
+      case 'get_player_value': {
+        const asked = typeof args.player === 'string' ? args.player : ''
+        return await buildPlayerValueContext({ playerName: asked })
       }
 
       case 'get_upcoming_games': {

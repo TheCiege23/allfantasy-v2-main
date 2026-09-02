@@ -63,6 +63,13 @@ describe('tool specs', () => {
        * ranking — never a claim that a player can be added.
        */
       'get_available_players',
+      /*
+       * One player's published market value, by NAME. Reads only
+       * `allFantasyMarketPlayerValue` rows already marked published, writes
+       * nothing, and takes no league — a house value is the same number for
+       * every user, so unlike its neighbours it needs no session scope at all.
+       */
+      'get_player_value',
       'get_league_standings',
       'get_head_to_head',
       'get_upcoming_games',
