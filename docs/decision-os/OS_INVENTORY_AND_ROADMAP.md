@@ -166,6 +166,330 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.20 ✅ THE SNAPSHOT WRITER RUNS IN PRODUCTION — and it has a defect I introduced
+
+**2026-09-02, 19:19 UTC.** Baseline was 0 rows at 19:07:34. A watch caught the first write.
+
+### ✅ The production gap in R4b is closed
+
+```
+97 rows written 19:19:33.943 → 19:19:49.069   (a 16-second burst)
+8 leagues · 18 managers · 1 season · 0 rows with NULL confidence
+```
+
+Confidence is spread across all three buckets and tracks evidence volume monotonically, which is
+what it should do if the floor is working rather than rubber-stamping:
+
+```
+confidence  count  avg sampleSize
+   0.3        18        5.0
+   0.6        29        7.1
+   0.9        50        8.6
+```
+
+⚠ **The write burst was NOT the 19:30 heartbeat** — it landed at 19:19, between two fires. So the
+trigger was something other than the exec-sync cron (a manual `/run` route, or a deploy). The
+writer working is proven; *which caller proved it* is not, and the 19:30 cron path remains
+formally unconfirmed.
+
+### ⚠ Still ZERO trajectories, and that is by design not defect
+
+`count(DISTINCT season) = 1` — everything is 2026 — so **no manager has a trajectory yet** and
+`summariseTrajectory` will correctly refuse for all 97. The migration said this in advance: *"the
+clock started when this was applied."* The table is accumulating, not broken.
+
+### 🛑 R4b.3 — THE SCORE COLUMNS REPRODUCE THE EXACT BUG THE EVIDENCE FLOOR EXISTS TO PREVENT
+
+The migration reasons carefully about one column and I failed to apply that reasoning to five:
+
+```sql
+"sampleSize"  INTEGER NOT NULL DEFAULT 0,   -- zero is a real answer. Correct.
+"confidence"  DOUBLE PRECISION,             -- NULLABLE: null = below the floor. Correct.
+"aggressionScore" DOUBLE PRECISION NOT NULL DEFAULT 0,   -- 🛑 and four more like it
+```
+
+and the writer coalesces on the way in:
+
+```ts
+${input.scores.aggressionScore ?? 0}     // ProfileSeasonSnapshot.ts:82-84
+```
+
+**So an unmeasured score is stored as `0`, which reads as measured indifference** — a manager who
+was never assessed for aggression is recorded as maximally passive. That is precisely the failure
+`gateScores` was built to prevent on the live profile, reintroduced one table over.
+
+The data already shows the ambiguity and cannot resolve it:
+
+```
+rows with non-zero aggression   68 / 97
+rows carrying any label         29 / 97
+```
+
+The 29 zero-score rows are indistinguishable from genuinely-passive managers, because the
+information was destroyed at write time by `?? 0`. **No query can recover it** — the fix has to be
+a migration dropping `NOT NULL` on the five score columns plus removing the coalesce, and then the
+existing 97 rows are still unrecoverable and want re-writing.
+
+⚠ **Nothing type-checks this and no test caught it** — the tests assert the upsert shape and the
+never-throws contract, not the null-preservation property. Landed in `3c5a3a70d`.
+
+### ✅ R4b.3 FIXED — 2026-09-02, and the null died in THREE places, not one
+
+Owner applied the `DROP NOT NULL` (verified: all five report `is_nullable = YES`, `sampleSize`
+correctly still `NO`). The code fix follows it.
+
+**The defect I first reported was one third of the actual bug.** Fixing only the writer would have
+left two sites intact and the suite still green:
+
+| # | site | what it did | why it is invisible |
+|---|---|---|---|
+| 1 | `writeProfileSeasonSnapshot` | `${score ?? 0}` | the one I found |
+| 2 | `readManagerTrajectory` | `Number(r.aggressionScore)` | **`Number(null)` is `0`, not `NaN`** — the read resurrects the null the column now preserves |
+| 3 | `summariseTrajectory` | `last.aggressionScore - first.aggressionScore` | **`null - 75` is `-75`, not `NaN`** — prints a confident swing for a season nobody measured |
+
+⚠ **Site 3 is not covered by the confidence filter.** `usable` already drops seasons whose
+`confidence` is null, and it is tempting to conclude the arithmetic is therefore safe. It is not:
+clearing the evidence floor overall does **not** imply every individual score was measured, so a
+graded season can still carry a null aggression. The guard is load-bearing, not defensive.
+
+The trajectory **survives** an unmeasured score — a label change is direction on its own — so only
+the aggression clause is withheld (`'aggression not measured in both seasons'`). Refusing the whole
+summary would throw away the answer the caller asked for.
+
+**Verified by positive control, not by a green run.** Each of the three fixes was reverted in turn,
+the mutation proven to have applied (`diff` must differ — a no-op mutation is indistinguishable
+from a test that cannot fail), and each produced **exactly one** failure:
+
+```
+M1 writer  ?? 0          1 failed | 11 passed
+M2 read    Number()      1 failed | 11 passed
+M3 summary guard         1 failed | 11 passed
+file restored to the fixed version after each
+```
+
+One failure per mutation means the three tests guard three distinct sites with no overlap masking
+a gap. Suite: **12 passed**, and `__tests__/decision-os/` **194 files / 3,671 tests, 0 failures**.
+
+⚠ **A parse error caught a worse latent bug.** The first attempt put the explanation as a `/* */`
+block *inside* the `Prisma.sql` template — where it is not a comment but literal SQL text, and the
+`${score ?? 0}` in the prose became a **live interpolation**. Here it failed loudly at transform.
+The same mistake in a string that happens to parse would inject prose into a query silently.
+
+SQL and hardening in §10.4. Migration recorded at `prisma/migrations-pending/20260902193000_manager_psych_seasons_nullable_scores/`.
+
+## 0.19 ✅ R1.9 RESOLVED BY EFFECT — and a NEW gap in R4b's own guard
+
+**2026-09-02, ~19:10 UTC.**
+
+### (a) ✅ `FANTASY_OS_EXEC_SYNC_LIVE` IS genuinely `true` on the live project
+
+R1.9 asked whether the exec-sync collector is switched on. It is — **not** read off an
+env var listing, but measured by its output:
+
+```
+manager_psych_profiles   last updated  2026-09-02 18:11:50 UTC
+                         updated in last 2h   314
+                         total                1,749   (1,681 an hour earlier)
+```
+
+`refreshProfilesForExternalLeagues` is called at `app/api/cron/fantasy-os-exec-sync/route.ts:121`,
+which is **inside** the `if (!liveEnabled) return` gate at line 53. Rows are moving, so the gate
+is open. This retires the earlier "the collector is silently off" reading, which came from the
+dead Vercel scope (§0.13).
+
+⚠ **Recorded as an effect measurement, not an env read.** Nobody has seen the variable's value;
+what is proven is that the gated code path executes. That is the stronger claim anyway — an env
+var being set is not evidence the branch runs.
+
+### (b) 🛑 NEW — `ProfileRefreshService` DEFEATS R4b's "no season, no snapshot" refusal
+
+`PsychologicalProfileEngine` deliberately refuses to invent a season, and says so in a comment:
+inventing one *"would file a dynasty league's cumulative history under whatever year the cron
+happened to run, which is worse than having no history at all."*
+
+The caller one layer up does exactly that invention:
+
+```ts
+// lib/psychological-profiles/ProfileRefreshService.ts:49
+const season = input.season ?? league?.season ?? new Date().getFullYear()
+```
+
+So `input.season` is **never null** by the time the engine sees it, and the guard at
+`PsychologicalProfileEngine.ts:142` can never fire. The refusal is correct and **structurally
+unreachable from the production path**.
+
+**Blast radius is narrow but real.** The exec-sync path passes `league.season` (line 121), which
+is right. The fallback only bites a league whose own `season` is null — and for a dynasty league
+that is precisely the case where stamping the current year corrupts the trajectory the table
+exists to hold. It writes a row that looks like data.
+
+**Not fixed here, because the fix is a decision, not an edit.** Either the fallback goes (and
+seasonless leagues get no snapshot, which is what R4b argues for), or it stays and the snapshot
+writer needs to know the season was inferred rather than observed. Filed as **R4b.2**.
+
+⚠ The general lesson, and it is the third time this file has recorded a version of it: **a guard
+is only as strong as the narrowest caller that reaches it.** Checking that the refusal is written
+correctly says nothing about whether any input can trigger it.
+
+## 0.18 🛑 BUG-2 — 25% OF LEAGUE SYNCS ARE FAILING ON A READ-ONLY TRANSACTION
+
+**Filed 2026-09-02. Live, ongoing, and NOT caused by anything in this session's work.**
+Found while running the batch-3 production check.
+
+### Measured
+
+```
+runKey             sleeper:1335730625293844480:2026
+incompleteScopes   ["league_state", "teams_rosters"]
+lastError          scope "league_state" failed after 3 attempts:
+                   Invalid `prisma.league.update()` invocation:
+                   PostgresError 25006: cannot execute UPDATE in a read-only transaction
+```
+
+**46 of 184 `league_sync_state` rows carry this error — 25% of leagues.** It is 46 of 49 total
+errors, so it is effectively *the* failure mode. Intermittent, not total:
+
+| hour (UTC) | read-only failures | OK |
+|---|---|---|
+| 04:00 | **0** | 108 |
+| 05:00 | **36** | 10 |
+| 18:00 | **10** | 17 |
+
+Healthy at 04:00, broken from 05:00, still broken at 18:00 — **with successes and failures in the
+same hour**, which is what makes it intermittent rather than a global read-only state.
+
+### 🛑 THIS IS WHY CHIMMY DECLINED A TRADE QUESTION IN PRODUCTION
+
+Asked *"Should I trade Jeremiyah Love for Ashton Jeanty in King Gingerbeards SF 2026?"*, Chimmy
+answered: *"No league roster or trade data is available… so I cannot evaluate."*
+
+**That refusal was CORRECT.** `teams_rosters` never completed, the packet reported the slice
+absent, and the model declined rather than inventing a trade grade — D8 and **A7** working exactly
+as designed, on a real failure.
+
+⚠ **But it dropped the remedy.** The serializer emits *"It retries automatically on the next sync;
+a manual refresh will also pick it up"* and the model did not relay it. The refusal landed, the fix
+did not — half the contract. **R1.6** now has production evidence.
+
+### Ruled out, by measurement rather than reasoning
+
+| hypothesis | verdict |
+|---|---|
+| Neon **read replica** endpoint | ❌ **98 endpoints, all `read_write`**, zero read-only |
+| Project-wide read-only state | ❌ my connection writes fine; both outcomes in one hour |
+| Role-level `default_transaction_read_only` | ❌ `pg_db_role_setting` holds only `search_path` and `statement_timeout` |
+| Endpoint suspended or disabled | ❌ `ep-curly-block-ad0dlt9o` is `active`, `disabled: false` |
+| Code opening a read-only transaction | ❌ every "read-only" in `lib/fantasy-os/sync/*` means read-only **against Sleeper**, not Postgres |
+
+### ✅ BOTH REMAINING HYPOTHESES CHECKED VIA THE NEON API — and both are ruled out
+
+**1. "The live app uses a different `DATABASE_URL`." — NO.**
+Of 98 endpoints on project `icy-field-51189449` ("All Fantasy"), **exactly one is `active`:
+`ep-curly-block-ad0dlt9o`**, last active 18:56 UTC, `read_write`, `disabled: false`, on branch
+`br-withered-shadow-adur64u9`. That is the same endpoint `.env.local` uses and the one I write to
+successfully. **The app and I are on the same healthy primary.**
+
+**2. "A Neon compute event at 05:00 caused a read-only window." — NO.**
+The operations log shows **no Neon operation of any kind between 03:50 and 14:41 UTC today.** The
+failures begin at 05:00, squarely inside that gap. No `start_compute`, no `suspend_compute`, no
+`apply_config`, no branch operation.
+
+🛑 **SO THE ONSET HAS NO INFRASTRUCTURE CAUSE, AND THAT INVERTS THE HYPOTHESIS.** I argued
+infrastructure was likelier because 25006 is a Postgres-level error rather than an application
+one. The operations log says nothing happened on the Neon side when it broke. **The remaining
+explanation is a deploy** — and batch 1 / batch 2 landed in that window, batch 2 being another
+session's import/sync work touching `lib/fantasy-os/sync/collector/*`.
+
+⚠ **STILL A CORRELATION, NOT A PROVEN CAUSE.** What is now established is that the *infrastructure*
+alibi is gone, not that the deploy is guilty. A `grep` of `lib/fantasy-os/sync/*` for a read-only
+transaction found nothing, so if a deploy did this the mechanism is not obvious and needs finding
+rather than assuming.
+
+### 🆕 Two secondary observations from the same log
+
+- **`apply_config` ran on the PRIMARY twice today** — 16:00:24 and 16:02:26 UTC. That reconfigures
+  a live compute and could plausibly produce a brief read-only window; it may account for some of
+  the 18:00 failures, but **not the 05:00 onset**, which precedes it by eleven hours.
+- **Heavy branch churn: six branches created in ~80 minutes** (14:41, 15:12 ×2, 15:19, 15:55,
+  15:57), against 98 total endpoints and a daily `timeline_archive` cadence. Not a cause of this
+  bug, but worth someone's attention — that is a lot of accumulated state on a `scale` plan.
+
+### The one check left, and it is not one I can run
+
+**What changed in production at 05:00 UTC 2026-09-02.** Vercel's deployment list for
+`allfantasy-v2-main-a6wc` around that timestamp, cross-referenced against batch 1 / batch 2's
+contents. If a deploy lines up, the mechanism is in that diff.
+
+### 🆕 Two more real defects found on the same league
+
+- **DUPLICATE LEAGUE ROWS.** `fcde8abf…` and `3d1b9554…` are both *King Gingerbeards SF 2026!!!*
+  with the **same `platformLeagueId` 1335730625293844480**. Both have 12 rosters and 12 teams —
+  but one has **12 psychology profiles and the other has 0**. Which one a fuzzy name-match selects
+  therefore decides whether a user gets psychology data at all.
+- ⚠ **`isDynasty = false` AND `leagueType = 'redraft'` on both**, on a league the owner states is
+  dynasty. **This weakens BUG-1's headline evidence and the correction is owed:** §0.15 reported
+  *"a dynasty league answered with a redraft price, 43% low"*. The price matched what the database
+  says the league is. The fabrication bug BUG-1 fixed is real and independent — settings were
+  invented from the question text — but the wrong-price symptom used as its evidence has a
+  **different root cause**: the import is not capturing dynasty status. That is a third bug,
+  upstream of anything fixed here, and it means dynasty/redraft pricing cannot be trusted until it
+  is resolved.
+
+---
+
+## 0.17 ⏸ R4b IS BUILT, VERIFIED, AND HELD — `f09ee6684`
+
+**Owner's decision 2026-09-02: hold until a reviewer session picks it up.** Not pushed.
+
+```
+TIP    f09ee66842a9395cb48c8f5c4290f17632e28703
+BASE   54b4b4c8528b753480e77fce6948a4316d4c4d01
+```
+
+| check | result |
+|---|---|
+| typecheck pair | base **145** → tip **145**, both `TSC_DONE=2`, 59,430 bytes, 0 syntax / 0 crash / 0 missing-module |
+| normalized set | **0 appeared · 0 disappeared** |
+| errors in the 7 changed source files | **NONE** |
+| suites on the commit | **87 / 87**, 7 files, 17 new tests all red-first |
+| file set | 12 files, **0 D lines** |
+| migration | applied by the owner already; the staged file is a history backfill |
+
+### ⚠ THE RAW TEXT DIFF PRODUCED A PHANTOM DELTA — normalize before comparing
+
+Comparing full error messages reported **1 appeared / 1 disappeared**. Same file, same line, same
+`TS2322` — TypeScript printed a union's members in a different order between two runs:
+
+```
+base  … "commissioner" | "war_room" | "free" | "pro" | "supreme" …
+tip   … "commissioner" | "war_room" | "pro" | "supreme" | "free" …
+```
+
+**Union member order is not stable across runs.** Normalizing to `file:line:col:TScode` gives 0/0.
+Reported raw, this commit would have gone over as "+1 appeared" against a file it never touched.
+
+🛑 **Any gate that diffs error TEXT will manufacture deltas on commits that changed nothing.**
+Compare error *identity*, not its prose rendering.
+
+### Why it is held rather than landed
+
+The reviewer session went 33 minutes without a heartbeat and its name stopped resolving; the
+push-queue lock expires on its own. **A holder that does not resolve is not a vacancy** — claiming
+on that basis collides with a live batch — and this session hands SHAs to a gate rather than
+pushing. So it waits.
+
+Nothing is at risk: it is a real commit in a detached worktree with its attestation ready.
+
+### 🛑 The item to weigh when it does land
+
+**No production run.** The engine now writes a season snapshot on every profile refresh — **1,681
+profiles, every 30 minutes** — and that path is covered only by mocked tests. It is the
+least-exercised code in the commit and the most repeated at runtime. The blast radius is bounded
+(the writer returns `false` rather than throwing, so it cannot fail the refresh), but *"cannot
+break the refresh"* is not *"is known to work"*.
+
+---
+
 ## 0.16 ✅ R4b — PSYCHOLOGY OS IS INSIDE THE HUB (the half that needs no SQL)
 
 Built 2026-09-02. **Branch only, not pushed.**
@@ -1756,6 +2080,9 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
+| 🛑 | **BUG-2** 🆕 **25% of league syncs failing — `PostgresError 25006`, read-only transaction** | **LIVE and ongoing since 05:00 2026-09-02.** 46/184 rows; `league_state` + `teams_rosters` never complete. Read replica, role default, and code cause all RULED OUT by measurement. Next: the live app's `DATABASE_URL` host, and Neon events at 05:00. **§0.18** |
+| 🛑 | **BUG-3** 🆕 **Duplicate league rows share one `platformLeagueId`** | Two *King Gingerbeards SF 2026!!!* rows; one has 12 psych profiles, the other 0. A fuzzy name-match decides which a user gets. §0.18 |
+| 🛑 | **BUG-4** 🆕 **`isDynasty` false on a league the owner says is dynasty** | `leagueType='redraft'` too. Weakens BUG-1's headline evidence — the import is not capturing dynasty status. Dynasty/redraft pricing is untrustworthy until fixed. §0.18 |
 | ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
 | ⬜ | **R1.9** 🆕 Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | Encrypted, so "collector is off" is unverified — not proven either way. §0.13 |
 | ⬜ | **R1.3** Turn the grounding flag on (**G1**) | R1.2 |
@@ -1944,6 +2271,55 @@ Stated so nobody goes looking:
 | Identity OS | `PlayerIdentityMap` already exists. Identity OS reports on resolution quality; it stores nothing new. |
 | The R2 engine bridge | Read-only adapter over decision objects the engines already produce. |
 | Chimmy narration | **P2** — no stored prose, by design. |
+
+### 10.4 ✅ R4b.3 — score columns must allow NULL (**APPLIED BY OWNER 2026-09-02**)
+
+> ✅ **Applied.** Verified by effect: `information_schema` reports `is_nullable = YES` for all five
+> score columns and `NO` for `sampleSize`. The matching code change shipped with it — see §0.20.
+>
+> ⚠ **One hardening was NOT applied and is still open.** `DROP NOT NULL` does not drop the
+> `DEFAULT 0`, so an INSERT that *omits* one of these columns still writes `0` rather than `NULL`.
+> Nothing on the current path can hit it — our writer names all fifteen columns — but a future
+> writer that omits one silently reintroduces the whole bug. Your call:
+>
+> ```sql
+> ALTER TABLE "manager_psych_profile_seasons"
+>   ALTER COLUMN "aggressionScore"     DROP DEFAULT,
+>   ALTER COLUMN "activityScore"       DROP DEFAULT,
+>   ALTER COLUMN "tradeFrequencyScore" DROP DEFAULT,
+>   ALTER COLUMN "waiverFocusScore"    DROP DEFAULT,
+>   ALTER COLUMN "riskToleranceScore"  DROP DEFAULT;
+> ```
+>
+> `sampleSize` keeps its `DEFAULT 0` — zero observations is a real answer.
+
+**Original handover, kept for the record:**
+
+**Why**, in one line: the five score columns are `NOT NULL DEFAULT 0` and the writer coalesces
+`null → 0`, so *"never measured"* is stored as *"measured, and the answer was zero"*. That is the
+failure the evidence floor exists to prevent. See §0.20.
+
+⚠ **Do not run this alone.** It is inert — and slightly misleading — without the matching code
+change removing the `?? 0` coalesce in `ProfileSeasonSnapshot.ts`, because the writer would keep
+sending zeros into columns that now permit null. Apply the pair, or neither.
+
+```sql
+ALTER TABLE "manager_psych_profile_seasons"
+  ALTER COLUMN "aggressionScore"     DROP NOT NULL,
+  ALTER COLUMN "activityScore"       DROP NOT NULL,
+  ALTER COLUMN "tradeFrequencyScore" DROP NOT NULL,
+  ALTER COLUMN "waiverFocusScore"    DROP NOT NULL,
+  ALTER COLUMN "riskToleranceScore"  DROP NOT NULL;
+```
+
+⚠ **`sampleSize` is deliberately NOT in that list.** Zero observations is a real, measured answer;
+zero aggression is not. That asymmetry is the whole point and dropping `NOT NULL` on `sampleSize`
+too would erase it.
+
+**The 97 existing rows are not repaired by this.** Their zeros are already ambiguous and no query
+can separate the genuine from the unmeasured. They will correct themselves as each manager's next
+refresh upserts over them — no backfill needed, but until then treat any `0` score in that table
+as unreliable.
 
 ---
 

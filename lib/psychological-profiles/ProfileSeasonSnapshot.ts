@@ -71,6 +71,22 @@ export interface SeasonSnapshotInput {
 export async function writeProfileSeasonSnapshot(input: SeasonSnapshotInput): Promise<boolean> {
   try {
     const id = `${input.leagueId}:${input.managerId}:${input.season}`
+    /*
+     * 🛑 THE FIVE SCORES ARE PASSED RAW — NO `?? 0` — R4b.3. They were previously coalesced to
+     * zero on the way into NOT NULL columns, which stored "never measured" as "measured, and the
+     * answer was zero": a manager never assessed for aggression was recorded as maximally
+     * passive. Measured on the first 97 production rows, 68 carried a non-zero aggression score
+     * and nothing distinguished the other 29 from genuinely passive managers.
+     *
+     * That is the same failure the evidence floor exists to prevent, and it is already handled
+     * correctly one module over — `PsychologyProfileFact.scores` is `number | null` for exactly
+     * this reason. Null is the honest value and the columns now permit it.
+     *
+     * ⚠ DO NOT WRITE THIS EXPLANATION INSIDE THE TEMPLATE BELOW. A block comment in a tagged
+     * template is not a comment, it is literal SQL text — and any `${…}` inside it is a live
+     * interpolation. Putting this note there was a parse error, which is the cheap version of
+     * the failure; the expensive version silently injects prose into a query.
+     */
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "manager_psych_profile_seasons" (
         "id", "leagueId", "managerId", "sport", "format", "season",
@@ -79,9 +95,9 @@ export async function writeProfileSeasonSnapshot(input: SeasonSnapshotInput): Pr
       ) VALUES (
         ${id}, ${input.leagueId}, ${input.managerId}, ${input.sport}, ${input.format}, ${input.season},
         ${JSON.stringify(input.labels)}::jsonb,
-        ${input.scores.aggressionScore ?? 0}, ${input.scores.activityScore ?? 0},
-        ${input.scores.tradeFrequencyScore ?? 0}, ${input.scores.waiverFocusScore ?? 0},
-        ${input.scores.riskToleranceScore ?? 0},
+        ${input.scores.aggressionScore}, ${input.scores.activityScore},
+        ${input.scores.tradeFrequencyScore}, ${input.scores.waiverFocusScore},
+        ${input.scores.riskToleranceScore},
         ${input.sampleSize}, ${input.confidence}, NOW()
       )
       ON CONFLICT ("leagueId", "managerId", "season") DO UPDATE SET
@@ -107,7 +123,17 @@ export async function writeProfileSeasonSnapshot(input: SeasonSnapshotInput): Pr
 export interface TrajectoryPoint {
   season: number
   labels: string[]
-  aggressionScore: number
+  /**
+   * ⚠ NULLABLE, AND `Number(null)` IS `0` — R4b.3. This was typed `number` and mapped with a bare
+   * `Number(...)`, which is a SECOND, quieter place the same null died: even once the writer and
+   * the column preserved it, the read turned "unmeasured" back into "zero" on the way out.
+   *
+   * Null here means the score was never measured for that season. It is NOT a low score, and it
+   * must never be coerced into one — see `summariseTrajectory`, which refuses to compute a delta
+   * across it rather than treating it as 0 and inventing a swing.
+   */
+  aggressionScore: number | null
+  /** Observations behind the snapshot. NOT nullable — zero observations is a real answer. */
   sampleSize: number
   /** Null = that season never cleared its evidence floor. Not a low score — an absent one. */
   confidence: number | null
@@ -129,7 +155,7 @@ export async function readManagerTrajectory(args: {
       Array<{
         season: number
         profileLabels: unknown
-        aggressionScore: number
+        aggressionScore: number | null
         sampleSize: number
         confidence: number | null
       }>
@@ -142,7 +168,9 @@ export async function readManagerTrajectory(args: {
     return rows.map((r) => ({
       season: Number(r.season),
       labels: Array.isArray(r.profileLabels) ? (r.profileLabels as string[]) : [],
-      aggressionScore: Number(r.aggressionScore),
+      // ⚠ `Number(null)` is 0, not NaN — a bare Number() here silently resurrects the exact bug
+      // the column change was made to fix. Guard before converting, the same way `confidence` does.
+      aggressionScore: r.aggressionScore == null ? null : Number(r.aggressionScore),
       sampleSize: Number(r.sampleSize),
       confidence: r.confidence == null ? null : Number(r.confidence),
     }))
@@ -191,8 +219,27 @@ export function summariseTrajectory(points: TrajectoryPoint[]): TrajectorySummar
   const last = usable[usable.length - 1]
   const was = first.labels.length ? first.labels.join(', ') : 'unlabelled'
   const now = last.labels.length ? last.labels.join(', ') : 'unlabelled'
-  const delta = Math.round(last.aggressionScore - first.aggressionScore)
-  const move = delta === 0 ? 'no change in aggression' : `aggression ${delta > 0 ? '+' : ''}${delta}`
+
+  /*
+   * 🛑 A NULL END CANNOT ANCHOR A DELTA — and JavaScript will happily pretend otherwise.
+   * `null - 5` is `-5`, not NaN, so the previous `last.aggressionScore - first.aggressionScore`
+   * would have reported a confident "aggression -5" for a season whose aggression was never
+   * measured. Clearing the evidence floor (`confidence != null`) does NOT imply every individual
+   * score was measured, so this guard is load-bearing rather than defensive.
+   *
+   * ⚠ The trajectory itself SURVIVES an unmeasured score. A label change is direction on its own,
+   * so only the aggression clause is withheld — refusing the whole summary here would throw away
+   * the answer the caller actually asked for.
+   */
+  const firstAggr = first.aggressionScore
+  const lastAggr = last.aggressionScore
+  let move: string
+  if (firstAggr == null || lastAggr == null) {
+    move = 'aggression not measured in both seasons'
+  } else {
+    const delta = Math.round(lastAggr - firstAggr)
+    move = delta === 0 ? 'no change in aggression' : `aggression ${delta > 0 ? '+' : ''}${delta}`
+  }
   return {
     hasTrajectory: true,
     seasonsRecorded: points.length,

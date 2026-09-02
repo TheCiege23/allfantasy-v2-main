@@ -116,3 +116,73 @@ describe('P1 — per-season snapshots make a trajectory possible', () => {
     expect(s.hasTrajectory).toBe(false)
   })
 })
+
+/**
+ * ── 🛑 R4b.3: "NEVER MEASURED" MUST NOT BE STORED, READ, OR REPORTED AS ZERO ────────────────
+ *
+ * The five score columns were `NOT NULL DEFAULT 0` and the writer coalesced with `?? 0`, so a
+ * manager never assessed for aggression was recorded as maximally passive — the exact failure
+ * `gateScores` prevents one module over, where `PsychologyProfileFact.scores` is already
+ * `number | null` for this reason. Measured on the first 97 production rows: 68 had a non-zero
+ * aggression score and nothing separated the other 29 from genuine zeros.
+ *
+ * ⚠ THE NULL DIED IN THREE PLACES, NOT ONE, AND EACH NEEDS ITS OWN TEST. The writer coalesced it,
+ * `Number(null)` is `0` so the READ resurrected it, and `null - 5` is `-5` so the SUMMARY would
+ * have reported a confident swing for a season nobody measured. Fixing only the writer would have
+ * left two of the three intact and the suite still green.
+ */
+describe('R4b.3 — an unmeasured score stays unmeasured end to end', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('🛑 WRITE: sends NULL, never 0, for an unmeasured score', async () => {
+    executeRaw.mockResolvedValue(1)
+    await writeProfileSeasonSnapshot({
+      leagueId: 'L1', managerId: 'm1', sport: 'NFL', format: null, season: 2026,
+      labels: [],
+      scores: { aggressionScore: null, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null },
+      // Deliberately NON-zero: sampleSize is the one numeric that legitimately may be 0, so
+      // keeping it at 7 means any 0 in the parameter list can ONLY be a coalesced score.
+      sampleSize: 7,
+      confidence: null,
+    })
+    const vals = (executeRaw.mock.calls[0][0] as { values: unknown[] }).values
+    // The positive control: restore `?? 0` in the writer and five zeros appear here.
+    expect(vals).not.toContain(0)
+    expect(vals.filter((v) => v === null)).toHaveLength(7) // 5 scores + format + confidence
+  })
+
+  it('🛑 READ: a NULL column comes back null — `Number(null)` is 0, not NaN', async () => {
+    queryRaw.mockResolvedValue([
+      { season: 2026, profileLabels: [], aggressionScore: null, sampleSize: 4, confidence: 0.3 },
+    ])
+    const t = await readManagerTrajectory({ leagueId: 'L1', managerId: 'm1' })
+    // A bare `Number(r.aggressionScore)` silently yields 0 and this is the only thing that says so.
+    expect(t[0].aggressionScore).toBeNull()
+    expect(t[0].aggressionScore).not.toBe(0)
+  })
+
+  it('🛑 SUMMARY: refuses a delta when either end is unmeasured, rather than treating it as 0', () => {
+    // Both seasons clear the evidence floor, so this is NOT the confidence filter — clearing the
+    // floor overall does not imply every individual score was measured.
+    const s = summariseTrajectory([
+      { season: 2024, labels: ['patient rebuilder'], aggressionScore: null, sampleSize: 30, confidence: 0.5 },
+      { season: 2026, labels: ['win-now'], aggressionScore: 75, sampleSize: 60, confidence: 0.8 },
+    ])
+    // The label change is real direction, so the trajectory survives — only the number is withheld.
+    expect(s.hasTrajectory).toBe(true)
+    expect(s.summary).toContain('patient rebuilder')
+    expect(s.summary).toContain('win-now')
+    expect(s.summary).toMatch(/not measured/i)
+    // `null - 75` is -75 in JS, so the un-fixed code prints a confident "+75"/"-75" here.
+    expect(s.summary).not.toMatch(/aggression [+-]?\d/)
+  })
+
+  it('still reports the delta when BOTH ends were measured', () => {
+    // Guards the fix against over-correcting into refusing everything.
+    const s = summariseTrajectory([
+      { season: 2024, labels: ['patient rebuilder'], aggressionScore: 20, sampleSize: 30, confidence: 0.5 },
+      { season: 2026, labels: ['win-now'], aggressionScore: 75, sampleSize: 60, confidence: 0.8 },
+    ])
+    expect(s.summary).toContain('aggression +55')
+  })
+})
