@@ -9,6 +9,7 @@ import { buildTradeValueSnapshot, type EnrichedTradeAsset } from './snapshot'
 import { buildTeamProfile } from './teamProfile'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from './types'
 import { scoringContextFromWorld } from '@/lib/decision-os/trade/scoringContextFromWorld'
+import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
 
 type RawAsset = {
   fromRosterId: string
@@ -69,43 +70,6 @@ export async function captureRedraftTradeValueSnapshot(input: {
     .filter((a) => a.assetType === 'player' && a.playerId)
     .map((a) => a.playerId as string)
 
-  const adpByPlayer = new Map<string, number>()
-  if (playerIds.length) {
-    const rows = await prisma.adpDataRecord.findMany({
-      where: { playerId: { in: playerIds }, sport: input.sport },
-      orderBy: { createdAt: 'desc' },
-      select: { playerId: true, adp: true },
-    })
-    for (const r of rows) if (!adpByPlayer.has(r.playerId)) adpByPlayer.set(r.playerId, r.adp)
-  }
-
-  const enriched: EnrichedTradeAsset[] = input.assets.map((a) => {
-    const md = (a.metadata ?? {}) as Record<string, unknown>
-    const kind = a.assetType as EnrichedTradeAsset['kind']
-    return {
-      kind,
-      fromRosterId: a.fromRosterId,
-      toRosterId: a.toRosterId,
-      playerId: a.playerId ?? null,
-      playerName: a.playerName ?? null,
-      position: typeof md.position === 'string' ? md.position : null,
-      team: typeof md.team === 'string' ? md.team : null,
-      pickSeason: a.pickSeason ?? null,
-      pickRound: a.pickRound ?? null,
-      pickLabel: typeof md.label === 'string' ? md.label : null,
-      faabAmount: kind === 'faab' ? num(md.amount) : null,
-      sources: {
-        projectionValue: num(md.restOfSeasonProjection) ?? num(md.weeklyProjection),
-        rankingValue: null, // deferred (see docs/trade-value-grader-audit.md)
-        adpValue: a.playerId ? adpByPlayer.get(a.playerId) ?? null : null,
-        fantasyCalcValue: null, // deferred — live external API excluded from the write path
-        // Deferred on the same grounds: this write path carries no league scoring or slots,
-        // and an IDP value computed against the wrong league is worse than an absent one.
-        idpValue: null,
-      },
-    }
-  })
-
   const seasonRosterCount = await prisma.redraftRoster.count({ where: { seasonId: input.seasonId } })
   const leagueSize = seasonRosterCount || 12
 
@@ -140,6 +104,129 @@ export async function captureRedraftTradeValueSnapshot(input: {
       })
     }
   }
+
+  /*
+   * ── PHASE 2 · ONE ENRICHMENT SOURCE, NOT TWO ────────────────────────────────────────────────
+   *
+   * 🛑 THIS WRITE PATH USED TO HARDCODE THREE OF ITS FIVE VALUE SOURCES TO `null`:
+   *
+   *     rankingValue:     null   "deferred"
+   *     fantasyCalcValue: null   "live external API excluded from the write path"
+   *     idpValue:         null   "this write path carries no league scoring or slots"
+   *
+   * Every stated reason is now obsolete. `getFantasyCalcValuesDbFirst` is DB-backed, so nothing
+   * here reaches a live API; and the league's slots ARE available — the shape resolution directly
+   * below reads them. Meanwhile `resolveTradeEnrichment` already assembles exactly these sources
+   * for the Decision OS path, which is live in production.
+   *
+   * ⚠ SO THE FIX IS TO SHARE THE RESOLVER, NOT TO RE-IMPLEMENT IT HERE. Two implementations of
+   * "what is this player worth" is the defect that produced the split brain in the first place:
+   * the trade UI showed an enriched memo while the PERSISTED snapshot — the one Chimmy reads —
+   * carried projection and ADP alone. Duplicating the logic would have preserved that split
+   * behind two code paths that agree today and drift tomorrow.
+   *
+   * ⚠ IT ALSO INHERITS THE AF PROJECTION WIRING FOR FREE, including the Sleeper -> registry
+   * crosswalk. Measured on production: redraft rosters are Sleeper-keyed and match
+   * `AFProjectionSnapshot` on ZERO of 2,315 rows directly, but 77% through the registry.
+   */
+  const enrichmentResult = playerIds.length
+    ? await resolveTradeEnrichment({
+        sport: input.sport,
+        playerIds,
+        season: input.currentSeason ?? null,
+        week: null,
+        /*
+         * ⚠ BOTH OF THESE GATE A SOURCE, AND OMITTING EITHER SILENTLY RETURNS NULL FOR IT. The
+         * resolver refuses to price against a chart it was not told to use — a 1QB redraft roster
+         * valued on the superflex dynasty board produces numbers that all look plausible and are
+         * all wrong — so an absent format means no market value at all, not a defaulted one.
+         *
+         * This is redraft by construction (it is the redraft capture path), and the QB format
+         * comes from the shape resolved above rather than from a label: `superflexSlots > 0` is
+         * read off the league's real `roster_positions`, which cannot be misspelled the way a
+         * scoring string can.
+         */
+        valueFormat: {
+          format: 'REDRAFT',
+          qbFormat: (scoring?.shape?.superflexSlots ?? 0) > 0 ? 'SUPERFLEX' : 'ONE_QB',
+        },
+        /*
+         * IDP is priced from the league's OWN starting slots, so it is supplied only when those
+         * are actually known. `buildLeagueShape` refused if they were not, and a defender valued
+         * against another league's requirements is worse than one honestly left unpriced.
+         */
+        idpLeague:
+          input.leagueId && scoring?.shape
+            ? {
+                leagueId: input.leagueId,
+                starterSlots: [...scoring.shape.starterSlots],
+                numTeams: scoring.shape.teams,
+                isDynasty: false,
+              }
+            : null,
+      }).catch(() => null)
+    : null
+  const enrich = enrichmentResult?.enrichment ?? {}
+
+  /*
+   * ADP still has a local fallback. The resolver reads the same `adp_data` table, but this path
+   * previously worked without it and a resolver failure must not silently remove a source that
+   * used to be present.
+   */
+  const adpByPlayer = new Map<string, number>()
+  if (playerIds.length) {
+    const rows = await prisma.adpDataRecord.findMany({
+      where: { playerId: { in: playerIds }, sport: input.sport },
+      orderBy: { createdAt: 'desc' },
+      select: { playerId: true, adp: true },
+    })
+    for (const r of rows) if (!adpByPlayer.has(r.playerId)) adpByPlayer.set(r.playerId, r.adp)
+  }
+
+  const enriched: EnrichedTradeAsset[] = input.assets.map((a) => {
+    const md = (a.metadata ?? {}) as Record<string, unknown>
+    const kind = a.assetType as EnrichedTradeAsset['kind']
+    return {
+      kind,
+      fromRosterId: a.fromRosterId,
+      toRosterId: a.toRosterId,
+      playerId: a.playerId ?? null,
+      playerName: a.playerName ?? null,
+      position: typeof md.position === 'string' ? md.position : null,
+      team: typeof md.team === 'string' ? md.team : null,
+      pickSeason: a.pickSeason ?? null,
+      pickRound: a.pickRound ?? null,
+      pickLabel: typeof md.label === 'string' ? md.label : null,
+      faabAmount: kind === 'faab' ? num(md.amount) : null,
+      sources: {
+        /*
+         * Resolver first, client metadata second. The resolver reads `AFProjectionSnapshot` (the
+         * engine's own numbers, already rest-of-season) and falls back to the provider table;
+         * `md.restOfSeasonProjection` is whatever the CLIENT supplied, which is weaker but is what
+         * this path used before and must not be lost when the resolver has nothing.
+         */
+        projectionValue:
+          (a.playerId ? enrich.projectionByPlayerId?.[a.playerId] ?? null : null) ??
+          num(md.restOfSeasonProjection) ??
+          num(md.weeklyProjection),
+        /*
+         * ⚠ STILL NULL, AND NOW DELIBERATELY SO RATHER THAN "DEFERRED". Nothing in this codebase
+         * produces a ranking on the 0-10000 convention this field would need, and
+         * `computeConfidence` does not read it. A field that no producer fills and no consumer
+         * reads is not pending work — it is a contract line that has never been true. Left in
+         * place because removing it is a breaking change to `AssetValueSources`, and flagged here
+         * so the next reader does not go looking for the producer.
+         */
+        rankingValue: null,
+        adpValue:
+          (a.playerId ? enrich.adpByPlayerId?.[a.playerId] ?? null : null) ??
+          (a.playerId ? adpByPlayer.get(a.playerId) ?? null : null),
+        fantasyCalcValue: a.playerId ? enrich.marketValueByPlayerId?.[a.playerId] ?? null : null,
+        idpValue: a.playerId ? enrich.idpValueByPlayerId?.[a.playerId] ?? null : null,
+      },
+    }
+  })
+
   const [a, b] = await Promise.all([
     profileFor(input.proposerRosterId, input.seasonId, leagueSize),
     profileFor(input.receiverRosterId, input.seasonId, leagueSize),

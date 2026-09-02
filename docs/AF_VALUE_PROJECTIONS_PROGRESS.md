@@ -7,6 +7,122 @@ Updated as each step lands. **Nothing here is pushed to production.**
 
 ---
 
+## 📦 HAND-OFF — delivered 2026-09-02, awaiting a decision
+
+| | |
+|---|---|
+| **SHA** | `7b421e8b188a12f90ab531700abf1d7805451016` |
+| **Tag** | `handoff/ac-value-projections` (so it survives GC — it lives on a detached HEAD) |
+| **Base** | `967b95f94d1c1ea5d591f1b7554ac268cdddbb1f` |
+| **Reviewer** | peer session `-70`, verifying independently |
+| **Migration** | **YES** — carries `20260901230000_af_projection_ros`, already applied in production |
+| **Status** | NOT covered by the standing batch approval; needs an explicit yes from Guap |
+
+**Verification handed over:**
+
+| check | result |
+|---|---|
+| Typecheck — detached, on the commit, on the current base | **145 vs 145, zero delta**; sentinel `=2`; 59,401 bytes; 0 crash/module/fork tells; **none in my files** |
+| Tests — against the **committed tree**, not the working tree | **3,850 passed / 207 files, 0 failed** |
+| Fast-forward | `merge-base --is-ancestor` → **rc=0** |
+| Deletions vs base | **zero** |
+| Files | **35**, every path mine (path allowlist, not eyeballed) |
+| Mutation controls | **6**, all fired, all restored byte-identical |
+
+⚠ The commit was first built on `857edb30b` and rebased when the base moved. `patch-id`
+**`95daf80a5`** on both sides — identical change, renamed. Trees differ, as they must.
+
+⚠ The `node_modules` junction was verified `LinkType = Junction` **before** the run — a missing
+junction yields 0 errors and no crash dump, which reads as a pass — and removed with
+`cmd /c rmdir`: **696 target entries before, 696 after**, so nothing was deleted through it.
+
+**Declared NOT verified**, verbatim to the reviewer:
+
+1. `__tests__` is excluded from tsconfig — the 44 new test files are transpiled by vitest and never
+   type-checked. Pre-existing config; "zero delta" covers `lib/` and `app/` only.
+2. **The runtime path has never executed.** Every test injects its ports; nothing exercises the real
+   `AFProjectionSnapshot` read against a database.
+3. `rosProjection` is NULL on all 19,556 production rows until `compute-projections` next runs, so
+   the new wiring returns nothing until then — by design, with a warning firing meanwhile.
+4. No lint, no build, no e2e; only four test directories.
+
+---
+
+## Phase 2 — the three hardcoded nulls ✅ (2026-09-02)
+
+| Step | Status | Notes |
+|---|---|---|
+| 2.1 `fantasyCalcValue` | ✅ | From the shared resolver, not a second implementation |
+| 2.2 `idpValue` | ✅ | Same; `idpLeague` supplied from the league's own slots |
+| 2.3 `rankingValue` | ✅ **deliberately null** | See below — it was never "deferred" |
+| 2.4 Real `ScoringContext` | ✅ | Landed earlier in 1.7g |
+| 2.5 Split brain | ✅ | Closed at the root by sharing the resolver |
+| Tests | ✅ | **10 new**; suite **3,878 passed / 209 files** |
+| Mutation control | ✅ | Restoring the hardcoded nulls → **2 red**, restore byte-identical |
+
+### 🛑 A finding that qualifies Phase 1: the id spaces do not match
+
+Measured on production before writing anything:
+
+```
+redraft_roster_players.playerId    numeric SLEEPER ids   (7679 = Alim McNeill), 2,264/2,315
+AFProjectionSnapshot.playerId      registry ids          1,576/1,576, ZERO numeric
+direct join between them           0 of 2,315 rows
+```
+
+So the Phase 1.3 wiring resolved **nothing** for Sleeper-keyed callers — and a zero-row result is
+indistinguishable from "the engine has not projected these players", which is precisely what
+`af_projection_no_rows` exists to name.
+
+`loadAfProjectionRows` now crosses through `PlayerIdentityMap.sleeperId` and **re-keys results back
+to the caller's id space**, so no consumer needs to know which it holds. Measured recovery:
+
+| | |
+|---|---|
+| distinct redraft player ids | 1,125 |
+| → reach the registry | **1,065 (94.7%)** |
+| → reach an AF projection | **866 (77.0%)** |
+
+The remaining 23% are players the engine genuinely has not projected — an honest absence, not a
+broken join.
+
+### Why sharing the resolver, not re-implementing it
+
+The split brain existed because two paths answered "what is this player worth" differently. Filling
+the three nulls with parallel code in `captureSnapshot` would have preserved that split behind two
+implementations that agree today and drift tomorrow. Routing capture through
+`resolveTradeEnrichment` means one answer — and capture inherits the AF-projection wiring and the
+crosswalk for free.
+
+⚠ **Both gating arguments must be supplied or the resolver silently returns null.** `valueFormat`
+absent ⇒ no market value at all; `idpLeague` absent ⇒ no defender pricing. `qbFormat` is derived
+from `shape.superflexSlots > 0` — read off real `roster_positions`, which cannot be misspelled the
+way a scoring label can.
+
+### `rankingValue` was never deferred
+
+Nothing in the codebase produces a ranking on this 0–10000 convention, and `computeConfidence` does
+not read it. A field no producer fills and no consumer reads is not pending work — it is a contract
+line that has never been true. Left in place (removing it breaks `AssetValueSources`) and now
+labelled so the next reader does not go hunting for the producer.
+
+### ⚠ An `npx` mistake worth recording
+
+I ran `npx tsc` for a quick single-file check. `node_modules/.bin` happened to be empty at that
+moment (a peer's interrupted install), so **npm went to the registry, downloaded the unrelated
+package literally named `tsc`, and executed it.** It is a well-known typo-guard that prints a
+banner, so nothing harmful happened — but "npx silently installed and ran something nobody vetted"
+is the shape of a supply-chain problem.
+
+CLAUDE.md already documents the correct form and every other typecheck this session used it:
+`node ./node_modules/typescript/lib/tsc.js`. Never bare `npx <tool>` in this checkout.
+
+⚠ I initially reported this as having *caused* the `.bin` breakage. A peer corrected the ordering:
+npx only falls through to the registry when the local binary is **already** absent, so `.bin` was
+empty first. My command was a symptom, not the cause.
+
+---
+
 ## Standing constraints (agreed 2026-09-01)
 
 | | |

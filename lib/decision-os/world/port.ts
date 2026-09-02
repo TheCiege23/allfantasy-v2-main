@@ -1291,10 +1291,42 @@ export async function loadAfProjectionRows(
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
 
+  /*
+   * ── 🛑 THE ID SPACES DIFFER, AND WITHOUT THIS THE JOIN RETURNS NOTHING ──────────────────────
+   * `AFProjectionSnapshot.playerId` is a `PlayerIdentityMap.id` — measured on production
+   * 2026-09-02: 1,576 of 1,576 NFL rows resolve to a registry row, and ZERO are numeric.
+   * Most callers hold SLEEPER ids: `redraft_roster_players.playerId` is numeric Sleeper
+   * (`7679` = Alim McNeill), 2,264 of 2,315 rows.
+   *
+   * Joining those two directly matched **0 of 2,315 rows** — and a zero-row result is
+   * indistinguishable from "the engine has not computed these players yet", which is exactly
+   * the failure `af_projection_no_rows` exists to name rather than hide.
+   *
+   * Crossing through `PlayerIdentityMap.sleeperId` recovers most of it, measured on the same
+   * data: 1,125 distinct redraft ids -> 1,065 reach the registry (94.7%) -> **866 reach an AF
+   * projection (77.0%)**. The remaining 23% are players the engine has genuinely not projected,
+   * which is an honest absence rather than a broken join.
+   *
+   * ⚠ BOTH SPACES ARE ACCEPTED AND THE RESULT IS KEYED BACK TO WHAT THE CALLER ASKED FOR, so no
+   * consumer has to know which it holds. A caller passing registry ids is unaffected.
+   */
+  const registryRows = await prisma.playerIdentityMap
+    .findMany({
+      where: { sleeperId: { in: clean } },
+      select: { id: true, sleeperId: true },
+    })
+    .catch(() => [] as Array<{ id: string; sleeperId: string | null }>)
+
+  /** registry id -> the id the caller asked with, so rows come back in the caller's space. */
+  const backToCaller = new Map<string, string>()
+  for (const r of registryRows) if (r.sleeperId) backToCaller.set(r.id, r.sleeperId)
+
+  const lookupIds = Array.from(new Set([...clean, ...backToCaller.keys()]))
+
   const rows = await prisma.aFProjectionSnapshot
     .findMany({
       where: {
-        playerId: { in: clean },
+        playerId: { in: lookupIds },
         sport,
         season,
         // Both the week-scoped row for THIS week and the season-long baseline.
@@ -1317,5 +1349,12 @@ export async function loadAfProjectionRows(
     })
     .catch(() => [])
 
-  return rows as RawAfProjectionRow[]
+  /*
+   * Re-key to the caller's id space. A row found via the crosswalk is returned under the SLEEPER
+   * id that was asked for; a row found directly keeps its own id. Without this the caller would
+   * receive rows it cannot match to its own request and would count them as misses.
+   */
+  return (rows as RawAfProjectionRow[]).map((r) =>
+    backToCaller.has(r.playerId) ? { ...r, playerId: backToCaller.get(r.playerId)! } : r,
+  )
 }
