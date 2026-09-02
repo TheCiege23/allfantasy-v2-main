@@ -479,6 +479,33 @@ export const NO_PROBE = {
     'a query-param mode of the import-news route writing the same player_news the base job writes ' +
     'every 15 minutes, so a table probe here is satisfied by that job. Zero new rows is also ' +
     'legitimate (X may have nothing in the window). Needs a per-mode heartbeat.',
+
+  /*
+   * The backfill sweeper, added with the route in 5e0624675 / 4b7a82d1c.
+   *
+   * ⚠ THIS ONE IS UNPROBEABLE FOR A REASON THE OTHERS ARE NOT, AND IT IS THE INTERESTING ONE.
+   * Every entry above is unprobed because it SHARES a table with a job that runs more often --
+   * the shared-probe false green. This job's problem is the opposite: on a healthy platform it
+   * correctly writes NOTHING. It exists to re-drive historical backfills that died mid-run, so
+   * zero writes is the SUCCESS case and the steady state. Any output probe would therefore
+   * report it stale precisely when it is working, and green only when leagues are broken.
+   *
+   * It also has no freshness column to probe even when it does work: it stamps
+   * League.settings.historicalBackfillStatus, a JSON blob that the import path and the manual
+   * retry route both write, so a table probe would be satisfied by either of those instead --
+   * the same shared-probe shape as ?riProfiles=1 above, on top of the inversion.
+   *
+   * The fix is a heartbeat, and it must be a real one: the route does not call withSyncJobRun
+   * today, so pointing a heartbeat probe at it now would report CONFIG forever rather than
+   * measure anything. Checked before writing this rather than assumed.
+   */
+  '/api/cron/import-backfill-sweeper':
+    'a repair job whose healthy steady state is writing NOTHING -- it re-drives historical ' +
+    'backfills stuck at pending, so zero writes means every league is fine. An output probe ' +
+    'would read stale exactly when it is working and green only when leagues are broken. It ' +
+    'also stamps League.settings JSON that the import and manual-retry paths both write, so a ' +
+    'table probe would be satisfied by those. Needs a withSyncJobRun heartbeat on the route, ' +
+    'which it does not emit yet.',
 }
 
 /**
