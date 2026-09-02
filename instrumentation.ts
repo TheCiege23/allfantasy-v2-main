@@ -38,11 +38,27 @@ export async function register(): Promise<void> {
   } catch {
     // Non-fatal; do not block startup
   }
+  /*
+   * ⚠ THIS CATCH USED TO BE EMPTY, AND AN EMPTY CATCH AROUND YOUR ERROR
+   * REPORTER IS THE ONE PLACE IT COSTS MOST. If wiring up error reporting
+   * fails silently, every later failure is invisible too — you lose the
+   * incident AND the ability to see that you lost it. On 2026-09-02 a
+   * production 500 on /admin had no Sentry issue at all, and the newest
+   * server-side error in the project was 14 days old.
+   *
+   * Still non-fatal — observability must not take down the server — but it now
+   * says so. Note this catch only sees a synchronous throw from the import or
+   * the call; the interesting failures (no DSN, module missing, init throwing
+   * inside a detached async IIFE) are reported by initSentryServer itself.
+   */
   try {
     const { initSentryServer } = await import("./lib/error-tracking");
     initSentryServer();
-  } catch {
-    // Optional; do not block startup
+  } catch (err) {
+    console.error(
+      "[Sentry] server error reporting NOT active — initialisation failed at startup:",
+      err instanceof Error ? err.message : err
+    );
   }
   // NOTE: a Decision OS parity telemetry sink was registered here and has been REMOVED.
   // It never took effect. Next.js bundles instrumentation.ts separately from route handlers,
