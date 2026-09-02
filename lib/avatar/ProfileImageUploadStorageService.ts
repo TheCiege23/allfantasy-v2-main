@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { put } from "@vercel/blob"
+import { getBlobReadWriteToken } from "@/lib/blob/readWriteToken"
 import {
   ALLOWED_PROFILE_IMAGE_TYPES,
   MAX_PROFILE_IMAGE_BYTES,
@@ -61,7 +62,7 @@ export async function persistProfileImageBytes(params: {
     throw new Error(PROFILE_IMAGE_BAD_TYPE_MESSAGE)
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!getBlobReadWriteToken()) {
     throw new Error("Storage not configured")
   }
 
@@ -78,7 +79,7 @@ export async function persistProfileImageBytes(params: {
   const blob = await put(key, body, {
     access: "public",
     contentType: params.mimeType,
-    token: process.env.BLOB_READ_WRITE_TOKEN,
+    token: getBlobReadWriteToken(),
   })
 
   return { url: blob.url }

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto"
 import { put } from "@vercel/blob"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getBlobReadWriteToken } from "@/lib/blob/readWriteToken"
 
 const MAX_SIZE = 5 * 1024 * 1024
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"]
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!getBlobReadWriteToken()) {
     return NextResponse.json({ error: "Storage not configured" }, { status: 503 })
   }
 
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     const blob = await put(key, file, {
       access: "public",
       contentType: file.type || "application/octet-stream",
-      token: process.env.BLOB_READ_WRITE_TOKEN,
+      token: getBlobReadWriteToken(),
     })
 
     return NextResponse.json({ url: blob.url })

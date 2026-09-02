@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
 import { prisma } from '@/lib/prisma'
 import { requireVerifiedUser } from '@/lib/auth-guard'
+import { getBlobReadWriteToken } from '@/lib/blob/readWriteToken'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response
   const userId = auth.userId
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!getBlobReadWriteToken()) {
     return NextResponse.json({ url: null, error: 'Storage not configured' }, { status: 503 })
   }
 
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
     const blob = await put(key, file, {
       access: 'public',
       contentType: mimeType,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
+      token: getBlobReadWriteToken(),
     })
 
     return NextResponse.json({
