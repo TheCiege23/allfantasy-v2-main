@@ -1,17 +1,37 @@
 /**
- * Fantasy OS — durable Sleeper read-model sync collector (Launch Batch 2). Public surface.
+ * Fantasy OS — durable read-model sync collector. Public surface.
  *
  * The live incremental collector that runs behind the provider-neutral `runSync` runner and the
  * season-aware cron heartbeat. Reuses the canonical import fetch/normalize/persist primitives; never
- * writes upstream to Sleeper; never creates a league (only refreshes existing canonical rows).
+ * writes upstream to any provider; never creates a league (only refreshes existing canonical rows).
  */
-export { runDueSleeperLeagues, type RunDueResult } from './runDueSleeperLeagues'
-export { syncConnectedSleeperLeague, type SyncConnectedResult, type SyncConnectedDeps } from './syncConnectedSleeperLeague'
 export {
+  runDueLeagues,
+  runDueSleeperLeagues,
+  type RunDueResult,
+  type RunDueInput,
+} from './runDueSleeperLeagues'
+export {
+  syncConnectedLeague,
+  syncConnectedSleeperLeague,
+  type SyncConnectedResult,
+  type SyncConnectedDeps,
+} from './syncConnectedSleeperLeague'
+export {
+  enumerateConnectedLeagues,
   enumerateConnectedSleeperLeagues,
   resolveLeagueIdsForConnection,
   buildRunKey,
 } from './enumerate'
+/* The credential problem the generalisation created, and nothing else. */
+export {
+  fetchNormalizedForConnection,
+  resolveCredentialCandidates,
+  resolveStoredCredentialUserIds,
+  SyncCredentialsUnavailableError,
+  SyncLeagueGoneError,
+  MAX_USER_CANDIDATES,
+} from './normalizedLoader'
 export {
   manualRefreshConnectedSleeperLeague,
   getConnectedLeagueSyncState,
@@ -23,7 +43,13 @@ export { createPrismaSleeperSyncStore, type PrismaSleeperSyncStore } from './pri
 export { createSleeperScopeFetcher } from './sleeperScopeFetcher'
 export { createAutomationSyncLock } from './automationSyncLock'
 export {
+  LEAGUE_SYNC_SCOPES,
   SLEEPER_SYNC_SCOPES,
+  SYNCABLE_PROVIDERS,
+  CREDENTIALED_PROVIDERS,
+  providerNeedsCredential,
+  type LeagueSyncScope,
+  type LeagueSyncConnection,
   type SleeperSyncScope,
   type SleeperSyncConnection,
   type ApplyScopeResult,

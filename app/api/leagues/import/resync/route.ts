@@ -44,7 +44,11 @@ export async function POST(req: NextRequest) {
   }
   const refresh = out.refresh
 
-  // Non-Sleeper providers have no durable read-model refresh step — preserve existing success behavior.
+  /*
+   * `null` now means the collector could not run for this league at all — not "this provider has
+   * no refresh step", which was true when only Sleeper had one and is the line this replaces.
+   * Every syncable provider drives the durable collector; a null here is the unusual case.
+   */
   if (refresh === null) {
     return NextResponse.json({ ok: true, ...base })
   }
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Sleeper durable-refresh outcome → honest HTTP status. A non-completed refresh is NEVER reported as success.
+  // Durable-refresh outcome → honest HTTP status. A non-completed refresh is NEVER reported as success.
   const refreshResult = { status: refresh.status, advancedFreshness: refresh.advancedFreshness, executed: refresh.executed }
 
   if (refresh.status === 'completed' && refresh.advancedFreshness === true && refresh.executed === true) {
