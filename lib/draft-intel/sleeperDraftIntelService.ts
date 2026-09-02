@@ -53,7 +53,14 @@ type SleeperDraft = {
   start_time: number | null
   metadata?: { name?: string | null } | null
   settings?: Record<string, number | undefined> | null
+  /** `{ user_id: slot }` — keyed BY USER, value is the draft slot. Null until set. */
   draft_order?: Record<string, number> | null
+  /**
+   * `{ slot: roster_id }` — the half that was missing, and the reason the manager trade
+   * counts below were wrong. It rides on the same `/draft/{id}` response this file already
+   * fetches; it simply was not declared here, so nobody could use it.
+   */
+  slot_to_roster_id?: Record<string, number> | null
 }
 type SleeperPick = {
   round: number
@@ -352,22 +359,53 @@ export async function getDraftIntel(
     acquired.set(t.owner_id, (acquired.get(t.owner_id) ?? 0) + 1)
     shipped.set(t.previous_owner_id, (shipped.get(t.previous_owner_id) ?? 0) + 1)
   }
-  // roster_id ↔ user mapping isn't in the draft object for trades; report trade
-  // volume per manager only when the draft_order slot maps 1:1 (best effort by
-  // slot index); otherwise trade counts stay roster-level in recent-picks copy.
+  /*
+   * 🛑 `acquired` AND `shipped` ARE KEYED BY ROSTER ID. This used to look them up with a
+   * DRAFT SLOT, and the comment here justified it as "roster_id ↔ user mapping isn't in the
+   * draft object ... best effort by slot index".
+   *
+   * The premise was false. `slot_to_roster_id` is in the very same `/draft/{id}` response
+   * this function already fetches — it was just never declared on the wire type above, so it
+   * could not be used. Sleeper's traded-pick ids are roster ids, verified against real
+   * leagues by this repo's own fidelity audit and written down in
+   * `lib/league-import/adapters/sleeper/types.ts`: "all Sleeper integer roster IDs
+   * (1..total_rosters), NOT user IDs."
+   *
+   * ⚠ AND IT WAS NOT "BEST EFFORT", IT WAS A WRONG NUMBER THAT LOOKS RIGHT. Slots and roster
+   * ids are BOTH integers in 1..N, so the lookup never threw and never returned nothing — it
+   * returned some OTHER manager's trade counts whenever a team's slot differed from its
+   * roster id, which is every league that did not happen to draft in roster order. Silently
+   * attributing one manager's traded picks to another is worse than reporting zero.
+   *
+   * Two hops, both from data already in hand: user → slot (`draft_order`, keyed by user) →
+   * roster id (`slot_to_roster_id`).
+   */
+  const rosterIdByUserId = new Map<string, number>()
+  const slotToRoster = draft.slot_to_roster_id
+  if (draft.draft_order && slotToRoster) {
+    for (const [userId, slot] of Object.entries(draft.draft_order)) {
+      const rosterId = slotToRoster[String(slot)]
+      if (typeof rosterId === 'number' && Number.isFinite(rosterId)) {
+        rosterIdByUserId.set(userId, rosterId)
+      }
+    }
+  }
+
   const managers: DraftManagerRead[] = [...byManager.entries()]
     .map(([userId, list]) => {
       const mix: Record<string, number> = {}
       for (const p of list) mix[positionOf(p)] = (mix[positionOf(p)] ?? 0) + 1
-      const slot = draft.draft_order?.[userId]
+      /* Absent mapping still reports 0 rather than guessing, exactly as before — the change
+         is that a PRESENT mapping is now the right id space instead of a coincidence. */
+      const rosterId = rosterIdByUserId.get(userId)
       return {
         userId,
         name: nameOf(userId),
         avatar: usersById.get(userId)?.avatar ?? null,
         picksMade: list.length,
         positionMix: mix,
-        extraPicksAcquired: slot != null ? acquired.get(slot) ?? 0 : 0,
-        picksTradedAway: slot != null ? shipped.get(slot) ?? 0 : 0,
+        extraPicksAcquired: rosterId != null ? acquired.get(rosterId) ?? 0 : 0,
+        picksTradedAway: rosterId != null ? shipped.get(rosterId) ?? 0 : 0,
       }
     })
     .sort((a, b) => b.picksMade - a.picksMade)
