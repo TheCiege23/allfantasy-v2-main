@@ -18,7 +18,7 @@
  * 20% less who is in fact worth exactly the same and simply untradeable until week 18.
  */
 
-import { formatModelFor } from './registry'
+import { formatModelForLeague } from './registry'
 import type { FormatAdjustment, FormatValueInput, TradeLegality } from './types'
 import type { LeagueShape } from '../leagueShape'
 
@@ -30,7 +30,14 @@ import type { LeagueShape } from '../leagueShape'
  * change".
  */
 export interface FormatFit {
-  /** Which model spoke. Null when the league's format has no model — 16 of 16 coded formats today. */
+  /**
+   * Which model spoke. Null when the league's format has no VALUE model — every canonical format
+   * except the Four Horsemen fixture today.
+   *
+   * ⚠ "No value model" is not "unmodelled". `lib/trade-intel/` already carries per-format context
+   * and risk logic for most of these; what none of it does is move a number. See the registry
+   * header, which previously claimed the stronger thing and was wrong.
+   */
   formatId: string | null
   label: string | null
   /** The adjustment, or null when the model had nothing to say about this asset. */
@@ -42,6 +49,20 @@ export interface FormatFit {
 export interface ApplyFormatFitInput {
   /** The league's format id — `TradeValueContext.leagueType`, or a league-specific id. */
   formatId: string | null | undefined
+  /**
+   * Concept alias tags, and the reason this field exists at all.
+   *
+   * 🛑 FOUR FORMATS ARE UNREACHABLE WITHOUT IT. `normalizeConcept.ts` flattens `pirate_vampire`
+   * and `royal` onto `dynasty`, and `king_of_the_hill` and `idp` onto `redraft`, preserving the
+   * original ONLY here. So a pirate league arrives with `formatId === 'dynasty'`, and a resolver
+   * reading `formatId` alone finds a dynasty model — or nothing — for a league that is neither.
+   *
+   * Passing the tags through is what makes a future pirate model reachable rather than dead code.
+   */
+  aliasTags?: string[] | null
+  /** Fallbacks `readFormatRules` uses when neither id resolves: keeper and dynasty inference. */
+  isDynasty?: boolean | null
+  keeperCount?: number | null
   base: number
   position: string | null | undefined
   age?: number | null
@@ -59,7 +80,12 @@ export interface ApplyFormatFitInput {
  * default league, the same refusal `buildLeagueShape` itself makes.
  */
 export function applyFormatFit(input: ApplyFormatFitInput): FormatFit | null {
-  const model = formatModelFor(input.formatId)
+  const model = formatModelForLeague({
+    leagueType: input.formatId,
+    aliasTags: input.aliasTags,
+    isDynasty: input.isDynasty,
+    keeperCount: input.keeperCount,
+  })
   if (!model) return null
   if (!input.shape) return null
 

@@ -130,6 +130,27 @@ describe('what reaches the model', () => {
     expect(a.formatFit).toBeNull()
   })
 
+  it('🛑 carries aliasTags through, or four formats are unreachable from here', () => {
+    /*
+     * `normalizeConcept.ts` flattens pirate onto `dynasty` and king-of-the-hill onto `redraft`,
+     * keeping the original only in `aliasTags`. Before this was wired, `buildTradeValueSnapshot`
+     * passed `leagueType` alone — so those leagues arrived describing themselves as something
+     * they are not, and any model written for them would never have been called.
+     *
+     * Asserted through the SNAPSHOT rather than the registry on purpose: the registry resolving
+     * an alias is worth nothing if the builder never hands it one, and that gap is invisible
+     * to a registry-only test.
+     */
+    const a = firstAsset(build({
+      context: {
+        sport: 'NFL', leagueType: 'dynasty', aliasTags: ['four_horsemen'], scoring: 'ppr',
+        rosterFormat: 'standard', capturedAt: '2026-09-02T00:00:00.000Z',
+      },
+    }))
+    expect(a.formatFit).toBeTruthy()
+    expect(a.formatFit!.formatId).toBe('four_horsemen')
+  })
+
   it('no shape means no fit — the model is not asked to reason from nothing', () => {
     const a = firstAsset(build({ scoring: null }))
     expect(a.formatFit).toBeNull()

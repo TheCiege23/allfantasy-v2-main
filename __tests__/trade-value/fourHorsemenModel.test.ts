@@ -15,9 +15,12 @@ import {
   fourHorsemenModel,
 } from '@/lib/trade-value/formats/fourHorsemen'
 import {
+  ALIAS_ONLY_FORMAT_IDS,
+  CANONICAL_FORMAT_IDS,
+  formatIdsWithoutValueModel,
   formatModelFor,
+  formatModelForLeague,
   modelledFormatIds,
-  unmodelledFormatIds,
 } from '@/lib/trade-value/formats/registry'
 
 const FOUR_HORSEMEN_SLOTS = [
@@ -59,14 +62,79 @@ describe('registry', () => {
   it('reports its own coverage honestly', () => {
     expect(modelledFormatIds()).toEqual(['four_horsemen'])
     /*
-     * ⚠ 1 modelled and 16 unmodelled is CORRECT, not an off-by-one. Four Horsemen is a specific
-     * league, not one of the sixteen coded format types the census found — it appears in this repo
-     * only as a league name. So every coded format is still unmodelled, and the registry says so
-     * rather than letting one league's model imply coverage it does not have.
+     * Four Horsemen is a specific league, not a canonical format — it appears in this repo only
+     * as a league name — so every canonical format is still without a value model, and the
+     * registry says so rather than letting one league's model imply coverage it does not have.
      */
-    expect(unmodelledFormatIds().length).toBe(16)
-    expect(unmodelledFormatIds()).not.toContain('four_horsemen')
-    expect(unmodelledFormatIds()).toContain('pirate')
+    expect(formatIdsWithoutValueModel().length).toBe(
+      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length,
+    )
+    expect(formatIdsWithoutValueModel()).not.toContain('four_horsemen')
+  })
+
+  /*
+   * ⚠ THE PREVIOUS VERSION OF THIS BLOCK ASSERTED `length === 16` AND `toContain('pirate')`, AND
+   * BOTH WERE WRONG. The sixteen ids came from counting string occurrences across lib/ and app/,
+   * which found three things that are not formats at all — `idol` and `exile` are Survivor
+   * mechanics, `lottery` is `lib/draft-lottery/` — missed `c2c`, which IS a first-class format,
+   * and listed `pirate` as though a league could present it as a `leagueType`. It cannot: see the
+   * alias tests below. The list now comes from the `LeagueFormatId` definition site instead.
+   */
+  it('🛑 the canonical list matches the format-engine union, not a word count', () => {
+    expect([...CANONICAL_FORMAT_IDS].sort()).toEqual([
+      'best_ball', 'big_brother', 'c2c', 'devy', 'dynasty', 'guillotine',
+      'keeper', 'redraft', 'salary_cap', 'survivor', 'tournament', 'zombie',
+    ])
+    // Not formats. Each was in the old sixteen and none belongs.
+    for (const notAFormat of ['idol', 'exile', 'lottery']) {
+      expect(CANONICAL_FORMAT_IDS).not.toContain(notAFormat)
+      expect(ALIAS_ONLY_FORMAT_IDS).not.toContain(notAFormat)
+    }
+  })
+})
+
+describe('🛑 alias resolution — the four formats leagueType cannot express', () => {
+  /*
+   * `normalizeConcept.ts` flattens pirate_vampire and royal onto `dynasty`, and king_of_the_hill
+   * and idp onto `redraft`. So for these leagues `leagueType` is actively misleading, and a
+   * registry keyed on it resolves a dynasty model for a pirate league — or, today, nothing at all
+   * while looking exactly like a correct null.
+   *
+   * There is no pirate model yet, so this cannot assert one resolves. What it CAN assert is that
+   * the alias is consulted at all, using the one model that exists — which is the property that
+   * makes writing a pirate model worth doing.
+   */
+  it('reads the alias tag in preference to the flattened leagueType', () => {
+    const asPirateWould = formatModelForLeague({
+      leagueType: 'dynasty',
+      aliasTags: ['four_horsemen'],
+    })
+    expect(asPirateWould).toBe(fourHorsemenModel)
+  })
+
+  it('🛑 the narrow lookup is BLIND to it — which is why the wiring must not use it', () => {
+    // The exact call the pre-fix wiring made. It finds nothing, and that null is indistinguishable
+    // from an honest "this format has no model".
+    expect(formatModelFor('dynasty')).toBeNull()
+  })
+
+  it('falls back to leagueType when no alias matches', () => {
+    expect(formatModelForLeague({ leagueType: 'four_horsemen', aliasTags: ['royal'] }))
+      .toBe(fourHorsemenModel)
+    expect(formatModelForLeague({ leagueType: 'four_horsemen', aliasTags: [] }))
+      .toBe(fourHorsemenModel)
+  })
+
+  it('still returns null for a league with no model by either route', () => {
+    expect(formatModelForLeague({ leagueType: 'dynasty', aliasTags: ['pirate_vampire'] })).toBeNull()
+    expect(formatModelForLeague({ leagueType: 'redraft', aliasTags: ['king_of_the_hill'] })).toBeNull()
+    expect(formatModelForLeague(null)).toBeNull()
+    expect(formatModelForLeague({})).toBeNull()
+  })
+
+  it('survives a malformed descriptor rather than throwing', () => {
+    expect(() => formatModelForLeague({ aliasTags: [null as never, 42 as never] })).not.toThrow()
+    expect(() => formatModelForLeague({ leagueType: null, isDynasty: true })).not.toThrow()
   })
 })
 

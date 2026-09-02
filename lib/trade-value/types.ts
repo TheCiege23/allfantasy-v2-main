@@ -69,6 +69,19 @@ export interface TradeValueContext {
   scoring: string
   rosterFormat: string
   capturedAt: string
+  /**
+   * Concept alias tags from the league's `conceptRules`.
+   *
+   * ⚠ OPTIONAL, AND ABSENT MEANS "NOT SUPPLIED", NEVER "NONE". `normalizeConcept.ts` flattens
+   * `pirate_vampire` and `royal` onto `dynasty`, and `king_of_the_hill` and `idp` onto `redraft`,
+   * so for those four leagues `leagueType` is actively misleading and the alias is the only place
+   * the real format survives. A caller that has them should pass them; one that does not gets the
+   * base format's model, which is the same answer it got before this field existed.
+   */
+  aliasTags?: string[] | null
+  /** Dynasty and keeper inference, for `readFormatRules` when no id resolves. Optional. */
+  isDynasty?: boolean | null
+  keeperCount?: number | null
 }
 
 export interface SideTotals {

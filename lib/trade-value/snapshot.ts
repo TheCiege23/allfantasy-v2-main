@@ -124,6 +124,15 @@ export function buildTradeValueSnapshot(input: {
       a.kind === 'player'
         ? applyFormatFit({
             formatId: input.context.leagueType,
+            /*
+             * 🛑 WITHOUT THESE, FOUR FORMATS CAN NEVER RESOLVE. `normalizeConcept.ts` flattens
+             * pirate and king-of-the-hill onto `dynasty` and `redraft`, so `leagueType` alone
+             * describes a pirate league as a dynasty one. The alias is the only surviving record
+             * of what the league actually is.
+             */
+            aliasTags: input.context.aliasTags ?? null,
+            isDynasty: input.context.isDynasty ?? null,
+            keeperCount: input.context.keeperCount ?? null,
             base: internalValueFor(a, currentSeason, input.scoring),
             position: a.position,
             age: a.age ?? null,
