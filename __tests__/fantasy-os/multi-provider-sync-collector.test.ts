@@ -23,7 +23,7 @@ const h = vi.hoisted(() => ({
   prisma: {
     league: { findMany: vi.fn(async () => []), groupBy: vi.fn(async () => []) },
     leagueAuth: { findMany: vi.fn(async () => []) },
-    leagueSyncState: { findUnique: vi.fn(async () => null) },
+    leagueSyncState: { findUnique: vi.fn(async () => null), upsert: vi.fn(async () => ({})) },
   },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
@@ -281,5 +281,98 @@ describe('runDueLeagues accounting', () => {
 
     expect(summary.byProvider).toEqual({ espn: 2, mfl: 1 })
     expect(summary.enumerated).toBe(3)
+  })
+})
+
+describe('a skipped connection is recorded, not silent', () => {
+  /*
+   * 🛑 THE GAP THIS CLOSES. The credential pre-flight returns before `runSync`, so
+   * `recordRun` never fires and NO LeagueSyncState row was written — a reader of that table
+   * saw nothing at all, which reads as "never enumerated" rather than "enumerated, and here
+   * is why it did not sync". The reason reached the cron response and then evaporated, so by
+   * the time anyone investigated a stale league the explanation was gone.
+   */
+  it('writes a durable row naming the provider and the reason', async () => {
+    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    h.prisma.league.findMany.mockResolvedValue([{ userId: 'u1' }] as never)
+    h.prisma.leagueAuth.findMany.mockResolvedValue([] as never)
+    h.prisma.leagueSyncState.upsert.mockClear()
+
+    await runDueLeagues({
+      now: new Date('2026-10-01T12:00:00Z'),
+      connections: [
+        { runKey: 'espn:99:2026', provider: 'espn', externalLeagueId: '99', season: 2026, sport: 'NFL' },
+      ],
+      fetchNormalized: async () => {
+        throw new Error('must never reach the provider')
+      },
+    })
+
+    expect(h.prisma.leagueSyncState.upsert).toHaveBeenCalledTimes(1)
+    const arg = h.prisma.leagueSyncState.upsert.mock.calls[0][0] as {
+      where: { runKey: string }
+      create: Record<string, unknown>
+      update: Record<string, unknown>
+    }
+    expect(arg.where.runKey).toBe('espn:99:2026')
+    expect(arg.create).toMatchObject({ provider: 'espn', syncStatus: 'skipped' })
+    expect(String(arg.create.lastError)).toContain('espn')
+    expect(arg.update).toMatchObject({ syncStatus: 'skipped' })
+  })
+
+  /*
+   * ⚠ `lastAttemptedSyncAt` MUST STAY NULL. It means "a run was attempted", and none was —
+   * we declined before touching the provider. Setting it would make a freshness reader infer
+   * a silent failure from attempt-without-success, AND make `isSyncDue` hold the league off
+   * for a full cadence window, so someone who connects ESPN thirty seconds later waits half
+   * an hour. Leaving it null keeps the pre-flight running each heartbeat — two indexed reads,
+   * no provider call — so a new credential is picked up on the very next tick.
+   */
+  it('does not claim a run was attempted', async () => {
+    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    h.prisma.league.findMany.mockResolvedValue([{ userId: 'u1' }] as never)
+    h.prisma.leagueAuth.findMany.mockResolvedValue([] as never)
+    h.prisma.leagueSyncState.upsert.mockClear()
+
+    await runDueLeagues({
+      now: new Date('2026-10-01T12:00:00Z'),
+      connections: [
+        { runKey: 'mfl:5:2026', provider: 'mfl', externalLeagueId: '5', season: 2026, sport: 'NFL' },
+      ],
+      fetchNormalized: async () => NORMALIZED,
+    })
+
+    const arg = h.prisma.leagueSyncState.upsert.mock.calls[0][0] as {
+      create: Record<string, unknown>
+      update: Record<string, unknown>
+    }
+    expect(arg.create).not.toHaveProperty('lastAttemptedSyncAt')
+    expect(arg.update).not.toHaveProperty('lastAttemptedSyncAt')
+    /* A missing credential is not a provider failure — counting it as one would drive
+       backoff and alerting against a provider that is behaving perfectly. */
+    expect(arg.create).not.toHaveProperty('consecutiveFailures')
+    expect(arg.update).not.toHaveProperty('consecutiveFailures')
+    /* And it must never look fresh. */
+    expect(arg.create).not.toHaveProperty('lastSuccessfulSyncAt')
+    expect(arg.update).not.toHaveProperty('lastSuccessfulSyncAt')
+  })
+
+  /* A keyless provider never reaches the pre-flight, so it must never be recorded as skipped. */
+  it('does not record a skip for a provider that needs no credential', async () => {
+    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    h.prisma.leagueSyncState.upsert.mockClear()
+
+    await runDueLeagues({
+      now: new Date('2026-10-01T12:00:00Z'),
+      connections: [
+        { runKey: 'sleeper:7:2026', provider: 'sleeper', externalLeagueId: '7', season: 2026, sport: 'NFL' },
+      ],
+      fetchNormalized: async () => NORMALIZED,
+    })
+
+    const skipWrites = h.prisma.leagueSyncState.upsert.mock.calls.filter(
+      (c) => (c[0] as { create?: Record<string, unknown> })?.create?.syncStatus === 'skipped',
+    )
+    expect(skipWrites).toHaveLength(0)
   })
 })

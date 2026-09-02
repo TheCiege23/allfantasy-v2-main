@@ -131,6 +131,62 @@ export interface SyncConnectedDeps {
   runTimeoutMs?: number
 }
 
+/**
+ * Record that a connection was considered and deliberately not synced.
+ *
+ * 🛑 WITHOUT THIS, A SKIPPED LEAGUE IS INDISTINGUISHABLE FROM ONE NOBODY LOOKED AT.
+ * The credential pre-flight returns before `runSync`, so `recordRun` never fires and no
+ * `LeagueSyncState` row was written at all — a reader of that table saw nothing, which
+ * reads as "never enumerated" rather than "enumerated, and here is exactly why it did not
+ * sync". The skip reason did reach the cron response, but nothing durable held it, so by
+ * the time anyone investigated a stale league the explanation was gone.
+ *
+ * ⚠ `syncStatus: 'skipped'` IS NOT A NEW VOCABULARY. The column's own schema comment
+ * already lists `completed | partial | failed | locked | skipped`; this is the first thing
+ * to write the last of those. No migration.
+ *
+ * ⚠ `lastAttemptedSyncAt` IS DELIBERATELY NOT SET, AND THAT IS THE WHOLE DESIGN.
+ * It means "a run was attempted", and no run was — we declined before touching the
+ * provider. Setting it would be a small lie with two real costs: a freshness reader would
+ * see an attempt with no success and infer a silent failure, and `isSyncDue` would then
+ * consider the league not-due for a full cadence window, so a manager who connects ESPN
+ * thirty seconds later waits half an hour for a refresh nobody is charging for. Leaving it
+ * null keeps the pre-flight running every heartbeat — two indexed DB reads, no provider
+ * call — so a newly-stored credential is picked up on the very next tick.
+ *
+ * ⚠ AND `consecutiveFailures` IS UNTOUCHED. A missing credential is not a provider failure;
+ * counting it as one would drive backoff and alerting against a provider behaving perfectly.
+ *
+ * Non-fatal: the collector's job is refreshing leagues, and failing to write an explanatory
+ * row must never take down the run that produced it.
+ */
+async function recordSkippedConnection(
+  connection: LeagueSyncConnection,
+  seasonState: string,
+  reason: string,
+): Promise<void> {
+  await prisma.leagueSyncState
+    .upsert({
+      where: { runKey: connection.runKey },
+      create: {
+        runKey: connection.runKey,
+        provider: connection.provider,
+        externalLeagueId: connection.externalLeagueId,
+        season: connection.season,
+        sport: connection.sport,
+        seasonState,
+        syncStatus: 'skipped',
+        lastError: reason,
+      },
+      update: {
+        seasonState,
+        syncStatus: 'skipped',
+        lastError: reason,
+      },
+    })
+    .catch(() => undefined)
+}
+
 export async function syncConnectedLeague(
   connection: LeagueSyncConnection,
   now: Date,
@@ -177,11 +233,10 @@ export async function syncConnectedLeague(
   if (!deps.skipCredentialPreflight && providerNeedsCredential(connection.provider)) {
     const withCredentials = await resolveStoredCredentialUserIds(connection)
     if (withCredentials.length === 0) {
-      return {
-        ...base,
-        executed: false,
-        reason: `no importing user has stored ${connection.provider} credentials for this league`,
-      }
+      const reason = `no importing user has stored ${connection.provider} credentials for this league`
+      /* Durable, so the explanation outlives this cron response — see the note above. */
+      await recordSkippedConnection(connection, seasonState, reason)
+      return { ...base, executed: false, reason }
     }
   }
 
