@@ -4,6 +4,7 @@ import { createImportOsLoaders } from '../import-os'
 import { createValueOsLoaders } from '../value-os'
 import { createProjectionOsLoaders } from '../projection-os'
 import { createLeagueOsLoaders } from '../league-os'
+import { createPsychologyOsLoaders, type PsychologyProfileFact } from '../psychology-os'
 import { ChimmyContextEngine } from '@/lib/chimmy-context/ChimmyContextEngine'
 import {
   resolveCommissionerGroundingOutcome,
@@ -200,6 +201,13 @@ export interface DecisionOsGroundingPacket {
    * ⚠ `locked` becomes `not_entitled` — the SECOND real producer of that reason, which until now
    * only commissioner intelligence could raise.
    */
+  /**
+   * Manager behavioural profiles (R4b). LEAGUE-scoped: every manager in this league.
+   *
+   * ⚠ The scores inside are ALREADY EVIDENCE-GATED — null means "not enough observation to say",
+   * never zero. `gateScores` decides that, not this packet, so there is one floor rather than two.
+   */
+  managerPsychology: GroundedSlice<PsychologyProfileFact[]>
   savedAnalysis: GroundedSlice<string>
 
   /**
@@ -486,6 +494,21 @@ export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>):
 export { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
 import { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
 
+/**
+ * Date the psychology slice by its OLDEST profile, for the same reason `oldestAsOf` exists:
+ * a single `asOf` cannot express a range, and a model told the freshest date will treat the
+ * stalest profile as equally current.
+ */
+function oldestPsychAsOf(rows: ReadonlyArray<{ updatedAt?: string | null }>): string | null {
+  let oldest: string | null = null
+  for (const r of rows) {
+    const c = r?.updatedAt
+    if (typeof c !== 'string' || c.length === 0) continue
+    if (oldest === null || c < oldest) oldest = c
+  }
+  return oldest
+}
+
 export interface GroundingPacketArgs {
   leagueId?: string | null
   userId?: string | null
@@ -543,6 +566,7 @@ export async function buildDecisionOsGroundingPacket(
   const valueOs = createValueOsLoaders()
   const projectionOs = createProjectionOsLoaders()
   const leagueOs = createLeagueOsLoaders()
+  const psychologyOs = createPsychologyOsLoaders()
 
   /*
    * ⚠ `meta.durationMs` ALONE CANNOT BE ACTED ON, WHICH IS WHY THESE EXIST.
@@ -597,6 +621,7 @@ export async function buildDecisionOsGroundingPacket(
   const commishKill = killed('commissionerIntelligence')
   const leagueIntelKill = killed('leagueIntelligence')
   const portfolioKill = killed('portfolio')
+  const psychologyKill = killed('managerPsychology')
 
   const pAssertions =
     leagueId && !importKill
@@ -635,6 +660,15 @@ export async function buildDecisionOsGroundingPacket(
               : null,
           ),
         )
+      : Promise.resolve(null)
+
+  /*
+   * ⚠ Gated on `leagueId` because a profile is per (league, manager) — with no league there is
+   * nothing to look up, and firing it would spend a query to learn that.
+   */
+  const pPsychology =
+    leagueId && !psychologyKill
+      ? kick('managerPsychology', psychologyOs.loadProfiles({ leagueId, sport: args.sport }).catch(() => null))
       : Promise.resolve(null)
 
   const pDevy = want.devy && !devyKill
@@ -1010,6 +1044,52 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'It needs recorded league activity — trades, matchups, valuations — to summarise.',
       })
 
+  /*
+   * Manager psychology (R4b).
+   *
+   * ⚠ `managerBehaviour` IS THE RIGHT PROFILE AND IT ALREADY EXISTED. It requires manager identity
+   * and bounds staleness at 24h — a profile is about WHO a manager is, so an unresolved identity
+   * makes the claim meaningless, and a day-old read of years of behaviour is still current.
+   * Nothing new was added to the conclusiveness taxonomy for this.
+   *
+   * 🛑 `anySufficient` IS THE PRESENCE TEST, NOT `length > 0`. A league can hold twelve profiles
+   * that every one of them is below its evidence floor — rows exist, and there is nothing that may
+   * honestly be said. Grading that PRESENT would put twelve managers of null scores in front of a
+   * model and invite it to characterise them anyway, which is the "[] presented as available"
+   * failure §5.2 exists to prevent, reached through a non-empty array.
+   */
+  const psychologyRows = await pPsychology
+  const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
+    ? absent<PsychologyProfileFact[]>(psychologyKill)
+    : !leagueId
+    ? absent<PsychologyProfileFact[]>({
+        reason: 'not_requested',
+        detail: 'No league was in scope, and a behavioural profile is per league.',
+        remedy: 'Ask about a specific league and it is included.',
+      })
+    : hasSubstance(psychologyRows) && psychologyRows!.some((p) => p.anySufficient)
+    ? present(psychologyRows!, {
+        servedFrom: 'store',
+        conclusive: verdictFor('managerBehaviour'),
+        // Deliberately the OLDEST profile in the league, per the same rule as projections: a
+        // single asOf cannot express a range, and overstating freshness is the unrecoverable
+        // direction.
+        asOf: oldestPsychAsOf(psychologyRows!),
+      })
+    : hasSubstance(psychologyRows)
+    ? absent<PsychologyProfileFact[]>({
+        reason: 'not_computed',
+        detail:
+          `Profiles exist for ${psychologyRows!.length} manager(s) in this league, but none has ` +
+          'enough recorded activity to clear its evidence floor yet.',
+        remedy: 'They fill in as trades, drafts and waiver moves accumulate — no action needed.',
+      }, verdictFor('managerBehaviour'))
+    : absent<PsychologyProfileFact[]>({
+        reason: 'not_computed',
+        detail: 'No behavioural profiles have been built for this league yet.',
+        remedy: 'They are written by the profile refresh; one has not run for this league yet.',
+      }, verdictFor('managerBehaviour'))
+
   const portfolio: GroundedSlice<string> = portfolioKill
     ? absent<string>(portfolioKill)
     : portfolioOutcome?.status === 'ok' && hasSubstance(portfolioOutcome.text)
@@ -1086,6 +1166,7 @@ export async function buildDecisionOsGroundingPacket(
     ['leagueIntelligence', leagueIntelligence as GroundedSlice<unknown>],
     ['portfolio', portfolio as GroundedSlice<unknown>],
     ['savedAnalysis', savedAnalysis as GroundedSlice<unknown>],
+    ['managerPsychology', managerPsychology as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1110,6 +1191,7 @@ export async function buildDecisionOsGroundingPacket(
     leagueIntelligence,
     portfolio,
     savedAnalysis,
+    managerPsychology,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

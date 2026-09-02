@@ -113,6 +113,26 @@ function renderItem(item: unknown): string | null {
     return `${who}${pos} ${fmt(v.value as number)} ${String(v.unit)}${rank}`
   }
 
+  // PsychologyProfileFact — labels plus only the scores that cleared their evidence floor.
+  if (typeof o.managerId === 'string' && Array.isArray(o.labels) && o.scores && typeof o.scores === 'object') {
+    const labels = (o.labels as unknown[]).filter((l): l is string => typeof l === 'string')
+    const sc = o.scores as Record<string, unknown>
+    // ⚠ ONLY NON-NULL SCORES ARE RENDERED. A null is "not enough evidence to say", and printing
+    // it as 0 would hand the model a measured-looking number for an absence — the exact failure
+    // `gateScores` nulls it to prevent.
+    const measured = Object.entries(sc)
+      .filter(([, v]) => typeof v === 'number')
+      .map(([k, v]) => `${k.replace(/Score$/, '')} ${fmt(v as number)}`)
+    const bits: string[] = []
+    if (labels.length) bits.push(labels.join(', '))
+    if (measured.length) bits.push(measured.join(' · '))
+    const unmeasured = Array.isArray(o.unmeasuredDimensions) ? (o.unmeasuredDimensions as string[]) : []
+    // Naming what is unmeasured lets an answer decline one read without hedging the whole profile.
+    if (unmeasured.length) bits.push(`no ${unmeasured.join('/')} read yet`)
+    const n = typeof o.evidenceCount === 'number' ? ` [${o.evidenceCount} obs]` : ''
+    return bits.length ? `manager ${o.managerId}${n}: ${bits.join(' — ')}` : null
+  }
+
   // ProjectionFact
   if (typeof o.playerName === 'string' && typeof o.points === 'number') {
     const pos = o.position ? ` (${String(o.position)})` : ''
@@ -125,8 +145,18 @@ function renderItem(item: unknown): string | null {
   return null
 }
 
-function sliceLine(name: string, s: GroundedSlice<unknown>, now: number): string[] {
-  if (!s.present) return []
+function sliceLine(name: string, s: GroundedSlice<unknown> | null | undefined, now: number): string[] {
+  /*
+   * ⚠ TOLERATES A MISSING SLICE, and that is not defensive padding. This is the ONE function
+   * standing between an assembled packet and the prompt, and it is called on a fixed list of
+   * slice names — so the day a slice is added to the list before every producer of a packet
+   * carries it, a bare `s.present` throws and the model gets NOTHING rather than the fifteen
+   * slices that were fine. An absent slice is an absent slice; it is not an outage.
+   *
+   * Found exactly that way: adding `managerPsychology` to the list turned eight passing
+   * serializer tests into TypeErrors, because their fixture predated the field.
+   */
+  if (!s || !s.present) return []
   const bits: string[] = []
   const age = ageLine(s.asOf, now)
   if (age) bits.push(age)
@@ -157,6 +187,9 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
     // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
     ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
+    // R4b — manager behavioural profiles. Rendered like any other collection: bounded,
+    // with the hidden count stated.
+    ['Manager psychology', packet.managerPsychology as GroundedSlice<unknown>],
     // The eight graded context slices (4.3). Rendered alongside the rest because a reader should
     // not have to know which subsystem produced a fact to know whether it is safe to use.
     ...(packet.contextFacts

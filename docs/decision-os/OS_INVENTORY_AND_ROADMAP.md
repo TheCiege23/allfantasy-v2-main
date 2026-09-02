@@ -166,6 +166,79 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.16 ✅ R4b — PSYCHOLOGY OS IS INSIDE THE HUB (the half that needs no SQL)
+
+Built 2026-09-02. **Branch only, not pushed.**
+
+### The engine was never the missing piece
+
+`lib/psychological-profiles/` was already 16 modules, **all seven sports**, migrated tables, 15
+labels, 10 evidence types, an evidence floor, a viewer-scoped cross-league rollup, 8 API routes,
+2 user-facing pages, and a cron refresh — with **zero references anywhere in `lib/decision-os/`**.
+A complete subsystem sitting outside the hub meant to reason over it. **This is a seam, not a
+rewrite** — the lesson §2.14 and §2.16 both record about rivalling working producers.
+
+### What shipped
+
+| | |
+|---|---|
+| `'psychology'` as an `OsDomain` | **no migration** — `domain` is `VarChar(16)`, the value is 10 chars |
+| `lib/decision-os/psychology-os/` | league-level source, **12h TTL**, schedulable by the 1.1b three-part rule |
+| `managerPsychology` packet slice | graded on the **existing** `managerBehaviour` fact profile |
+| `managerPsychology` kill switch | eleventh feed, fail-open like the rest |
+| serializer rendering | labels + **only the scores that cleared the floor** |
+
+⚠ **`managerBehaviour` already existed in the conclusiveness taxonomy** — needs manager identity,
+24h staleness bound. Nothing new was invented for this; the profile anticipated the fact type.
+
+### 🛑 Three things it deliberately does NOT do
+
+1. **It does not re-derive the evidence floor.** `gateScores` already nulls any score below it and
+   says a profile written before the counts existed is *"reported as unmeasured rather than
+   assumed sufficient"*. The feed carries that decision through. A second floor would be two
+   implementations of one rule.
+2. **It does not cache the cross-league or cross-sport roll-up.** Those are **viewer-scoped** —
+   the answer covers the leagues the viewer and subject share, so it differs per viewer. A
+   per-subject cache leaks; a per-viewer cache is always cold. Derived at read (**P5**, **P7**).
+3. **It carries no trajectory.** `manager_psych_profiles` is one row per (league, manager),
+   overwritten — so *"a rebuilder in 2023, win-now since 2024"* is **unanswerable from the data as
+   stored**, not merely unimplemented. Needs §10.2's SQL (**P1**).
+
+### ⚠ `anySufficient` IS THE PRESENCE TEST, NOT `length > 0`
+
+A league can hold twelve profiles where **every one is below its floor**. Rows exist; nothing may
+honestly be said. Grading that `present` would put twelve managers of null scores in front of a
+model and invite it to characterise them — the *"`[]` presented as available"* failure §5.2 exists
+to prevent, reached through a **non-empty** array. That case gets its own `not_computed` gap
+naming how many profiles exist and why none can be used.
+
+### 🆕 A fragility this exposed, now fixed
+
+Adding the slice to the serializer's fixed list turned **eight passing tests into TypeErrors** —
+their fixture predated the field and `sliceLine` did a bare `s.present`.
+
+🛑 **In production that is worse than a test failure.** `serialize.ts` is the one function between
+an assembled packet and the prompt. A packet from an older caller, or a slice added ahead of one
+producer, would throw — and the model would receive **nothing** rather than the fifteen slices that
+were fine. Now tolerated and pinned by a test that deletes two slices and asserts the rest render.
+
+### Still needs the owner's SQL — §10.2
+
+- **(A)** `format` column → per-(sport, format) profiles (**P3**)
+- **(B)** `manager_psych_profile_seasons` → the trajectory (**P1**)
+
+Both are written out in §10.2 and **not applied**. Until (B) lands this feed reports the current
+read honestly and claims no history.
+
+### Not verified
+
+9 new tests + 78 across six suites, all green, red-first. **No typecheck yet. No production run.**
+Not wired into `/api/cron/domain-os-refresh` — that walk is NFL-only because
+`draftRulesSource.sport` is hardcoded, and this source is genuinely all-sport, so adding it needs
+that constraint lifted rather than inherited.
+
+---
+
 ## 0.15 🛑 BUG — CHIMMY REPORTS LEAGUE SETTINGS IT NEVER READ. LIVE, WRONG ANSWERS.
 
 **Filed 2026-09-02, confirmed in production by the owner. Not caused by any of this work — found

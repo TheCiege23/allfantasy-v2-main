@@ -54,6 +54,8 @@ export type DecisionOsFeed =
   | 'leagueIntelligence'
   | 'portfolio'
   | 'savedAnalysis'
+  /** Manager behavioural profiles (R4b). Killable like every other feed, fail-open. */
+  | 'managerPsychology'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -66,6 +68,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'leagueIntelligence',
   'portfolio',
   'savedAnalysis',
+  'managerPsychology',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

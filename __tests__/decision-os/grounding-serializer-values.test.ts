@@ -102,6 +102,7 @@ function packet(over: Partial<DecisionOsGroundingPacket> = {}): DecisionOsGround
     leagueIntelligence: absent('not_requested'),
     portfolio: absent('not_requested'),
     savedAnalysis: absent('not_requested'),
+    managerPsychology: absent('not_requested'),
     gaps: [],
     meta: { durationMs: 1, engineMs: null, sources: [], killedFeeds: [] },
     ...over,
@@ -191,5 +192,27 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
 
   it('emits nothing at all when nothing was requested and nothing is missing', () => {
     expect(serializeDecisionOsGroundingForPrompt(packet(), NOW)).toBe('')
+  })
+})
+
+/**
+ * ── 🛑 THE ONE FUNCTION BETWEEN AN ASSEMBLED PACKET AND THE PROMPT MUST NOT THROW ────────────
+ *
+ * `serializeDecisionOsGroundingForPrompt` walks a FIXED list of slice names. Adding
+ * `managerPsychology` to that list turned eight passing tests into TypeErrors, because their
+ * fixture predated the field and `sliceLine` did a bare `s.present`.
+ *
+ * In production that is worse than a test failure: a packet built by an older caller, or a slice
+ * added ahead of one producer, throws — and the model receives NOTHING rather than the fifteen
+ * slices that were fine. An absent slice is an absent slice, not an outage.
+ */
+describe('a missing slice degrades, it does not throw', () => {
+  it('renders every other slice when one is absent from the packet entirely', () => {
+    const p = packet({ marketValues: present([marketValue('Malik Nabers', 6420, 12)]) })
+    delete (p as Record<string, unknown>).managerPsychology
+    delete (p as Record<string, unknown>).savedAnalysis
+    const text = serializeDecisionOsGroundingForPrompt(p, NOW)
+    expect(text).toContain('Malik Nabers')   // the surviving slices still render
+    expect(text).toContain('6420')
   })
 })

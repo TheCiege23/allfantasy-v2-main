@@ -7,7 +7,24 @@ import { aggregateBehaviorSignals } from './BehaviorSignalAggregator'
 import { resolveProfileLabels, resolveScores } from './ProfileLabelResolver'
 import { buildEvidenceFromSignals } from './ProfileEvidenceBuilder'
 import { normalizeSportForPsych, isSupportedPsychSport } from './SportBehaviorResolver'
+import { writeProfileSeasonSnapshot } from './ProfileSeasonSnapshot'
+import { summarizeEvidence } from './ProfileEvidenceFloor'
 import type { ProfileLabel } from './types'
+
+/**
+ * The three evidence-floor categories as numbers, for the season snapshot's numeric column.
+ *
+ * ⚠ A STATED CONVENTION, NOT A MEASUREMENT. `summarizeEvidence` expresses confidence as
+ * 'high' | 'moderate' | 'low' because that is what the evidence counts support; these values
+ * exist only so seasons can be ordered and thresholded. Do not present them to a user as a
+ * probability, and do not tune them — if a genuine numeric confidence appears upstream, replace
+ * this map rather than adjusting the constants under it.
+ */
+const CONFIDENCE_BY_CATEGORY: Record<'high' | 'moderate' | 'low', number> = {
+  high: 0.9,
+  moderate: 0.6,
+  low: 0.3,
+}
 
 export interface PsychEngineInput {
   leagueId: string
@@ -103,6 +120,48 @@ export async function runPsychologicalProfileEngine(
         ...(ev.createdAt ? { createdAt: ev.createdAt } : {}),
         profileId,
       })),
+    })
+  }
+
+  /*
+   * ── P1: RECORD THIS SEASON ALONGSIDE THE LIVE PROFILE ─────────────────────────────────────
+   *
+   * The row above is `@@unique([leagueId, managerId])` and was just overwritten, so without this
+   * the previous reading is gone — "he was a rebuilder in 2023 and win-now since 2024" is not
+   * unimplemented, it is unanswerable, and every refresh makes it more so.
+   *
+   * ⚠ AWAITED BUT NEVER FATAL. The snapshot is history, the profile is the product; a failure to
+   * record the past must not fail the run that produced the present. `writeProfileSeasonSnapshot`
+   * returns false rather than throwing, and that outcome is deliberately visible to a caller who
+   * wants it rather than swallowed — the lesson from a cron that reported 400 writes it never made.
+   *
+   * ⚠ NO SEASON, NO SNAPSHOT. `input.season` is optional, and inventing one — `new Date()
+   * .getFullYear()` is the tempting line — would file a dynasty league's cumulative history under
+   * whatever year the cron happened to run, which is worse than having no history at all.
+   */
+  if (input.season != null) {
+    const floor = summarizeEvidence(signals)
+    await writeProfileSeasonSnapshot({
+      leagueId: input.leagueId,
+      managerId: input.managerId,
+      sport: sportNorm ?? input.sport,
+      // Not yet resolved — the format column is populated by R4b.1's backfill. Null is honest.
+      format: null,
+      season: input.season,
+      labels,
+      scores,
+      sampleSize: evidencePayloads.length,
+      /*
+       * Null when nothing clears the floor: that season is recorded as HAPPENED but not as
+       * MEASURED, which is what stops `summariseTrajectory` resting a change claim on it.
+       *
+       * ⚠ `overallConfidence` IS A CATEGORY ('high' | 'moderate' | 'low'), NOT A PROBABILITY, and
+       * the column is numeric. The mapping below is a coarse, stated convention — three buckets
+       * rendered as three numbers — NOT a measurement, and it must not be read as one. It exists
+       * so the trajectory can order and threshold seasons; if a real numeric confidence ever
+       * appears upstream, replace this rather than tuning the constants.
+       */
+      confidence: floor.anySufficient ? CONFIDENCE_BY_CATEGORY[floor.overallConfidence ?? 'low'] : null,
     })
   }
 

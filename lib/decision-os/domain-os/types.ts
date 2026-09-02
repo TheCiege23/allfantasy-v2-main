@@ -55,6 +55,16 @@ export type OsScopeLevel = (typeof OS_SCOPE_LEVELS)[number]
 export type OsDomain =
   | 'lineup' | 'waiver' | 'trade' | 'draft'
   | 'league' | 'value' | 'projection' | 'import'
+  /**
+   * ⚠ The third non-decision domain, and the one whose PRODUCER already existed in full.
+   * `lib/psychological-profiles/` is 16 modules across all seven sports with its own evidence
+   * floor, and had zero references anywhere in `lib/decision-os/` — a complete subsystem outside
+   * the hub meant to reason over it. Psychology OS is the seam, not a reimplementation.
+   *
+   * League level: a profile is per (league, manager), and the roll-ups across leagues and sports
+   * are VIEWER-SCOPED, so they are derived at read and never stored here.
+   */
+  | 'psychology'
 
 export interface OsFactEnvelope<T> {
   facts: T
