@@ -47,6 +47,8 @@ Sections, top to bottom:
 ### 2. Mobile (`Mobile.dc.html`) — 390 × 844
 Fixed-height frame: header (eyebrow, 26px title, compact A/D/B/M/X switcher), scrolling body, sticky action row (Analyze · Save · Chimmy icon, all 44px), then the `/core` tab bar (Home · My team · Matchup · Trades · Waivers · More; Trades active). Body order matches Core with these differences: offers strip, legend and partner chips scroll horizontally (bleed to the edges); grade tiles show YOU / partner name in a compact row; note groups stack; finder cards scroll horizontally.
 
+**Offers waiting on you** sits between the legend and the builder — where the real page's inbox lives — and renders the **pending trade card** (see the League section for its anatomy and required states) at phone size: single column, 30px asset avatars, 44px asset rows, full-width 44px action buttons, "Open in Trade Center →" centred beneath. The other preview states show the honest lines instead of cards: "Nothing waiting on you in {league}" for a league that was read, "Not read — ESPN offers aren't ingested yet" for one that was not, and a note that a linked deal is paired rather than offered.
+
 ### 3. League (`League.dc.html`) — 1440 × 2140
 Header: eyebrow "{LEAGUE NAME} · TRADES", title, lede; a Populated / Empty / Loading switcher.
 - **League context bar**: platform mark, name, format, season counts ("7 completed · 3 pending · 1 vetoed"), review-policy chip (violet, from `commissionerTradeReviewType` + `tradeReviewHours`), deadline chip.

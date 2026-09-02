@@ -6,7 +6,7 @@
   ],
   "annotations": [
     { "id": "core-note", "x": 0, "y": -150, "w": 560, "text": "CORE — cross-league Trade Center as seen from /core. The PREVIEW STATE switcher (Analyzed / Degraded data / Format blocked / Multi-team / Cross-platform) is for review only; in the product those are situations the same page falls into on its own. Multi-team and cross-platform have no backing schema yet." },
-    { "id": "mobile-note", "x": 1560, "y": -150, "w": 390, "text": "MOBILE — the same page at 390px. No fake status bar: the phone draws its own. The action row sticks above the real /core tab bar; every tap target clears 44px." },
+    { "id": "mobile-note", "x": 1560, "y": -150, "w": 390, "text": "MOBILE — the same page at 390px. No fake status bar: the phone draws its own. The action row sticks above the real /core tab bar; every tap target clears 44px. OFFERS WAITING ON YOU sits above the builder where the inbox lives: the pending trade card, phone-sized — proposer first, stacked assets with badges and values, the AF READ strip, full-width 44px actions — plus the honest empty and not-read lines in the other states." },
     { "id": "league-note", "x": 2070, "y": -150, "w": 560, "text": "LEAGUE — the Trades tab inside one league. Needs-your-action first, then your own trades (active / completed), then every trade in the league with both sides' realized grades, then the trade block. Pending trades use the proposal card: proposer first, each manager's assets stacked with headshot, PICK or $ badges and market values, then the AF READ strip (projected grades per side, fairness label and score, confidence) in its ok / pricing / short states. A letter is withheld (—) with the reason whenever an asset could not be priced." }
   ],
   "launch": { "view": "canvas" }
