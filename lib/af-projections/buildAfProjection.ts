@@ -16,12 +16,18 @@ import {
 } from './core'
 import { extractIdpComponents, isIdpEligiblePosition, scoreIdpComponents } from './idpScoring'
 import {
+  extractKickerComponents,
+  isKickerPosition,
+  scoreKickerComponents,
+} from './kickerScoring'
+import {
   componentsForCategoryScoring,
   getCategoryScoringRules,
   scoreCategoryComponents,
 } from './categoryScoring'
 import type {
   IdpScoringBreakdown,
+  KickerScoringBreakdown,
   ProjectionOutcome,
   ScoringFormat,
   SeasonAggregate,
@@ -136,6 +142,14 @@ export interface BuildProjectionInput {
    */
   idpRules?: Record<string, number> | null
   /**
+   * The league's own kicker rules (`fgm`, `fgmiss`, `xpm`, `xpmiss`, and any distance buckets).
+   *
+   * ⚠ Distance buckets are ACCEPTED and reported as unscoreable rather than rejected at the door —
+   * the league really does set them, and the projection must say it could not honour them rather
+   * than pretend they were not there. See `kickerScoring.ts`.
+   */
+  kickerRules?: Record<string, number> | null
+  /**
    * Authoritative position, overriding whatever the season aggregate carries. Callers
    * should pass Sleeper's position when available: RI's is unreliable (it lists a Jaguars
    * WR as DE), and this value decides IDP eligibility.
@@ -201,6 +215,37 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   // points falls through to IDP scoring and gets projected on defensive production.
   const effectivePosition = input.position ?? aggregate.position
   const idpRules = isIdpEligiblePosition(effectivePosition) ? input.idpRules ?? null : null
+
+  /*
+   * Kicker components, gated on position for the same reason IDP is: a stat map can carry
+   * `extra_points_made` for a position player who kicked one in a blowout, and scoring him as a
+   * kicker would be the mirror of the quarterback-on-IDP bug this ladder already guards against.
+   */
+  const kickerRules = isKickerPosition(effectivePosition) ? input.kickerRules ?? null : null
+  let kickerSeason: { points: number; breakdown: KickerScoringBreakdown } | null = null
+  let kickerSleeper: { points: number; breakdown: KickerScoringBreakdown } | null = null
+  if (kickerRules) {
+    const seasonComponents = extractKickerComponents(aggregate.components, 'ri_season')
+    const seasonScored = scoreKickerComponents({ components: seasonComponents, rules: kickerRules })
+    if (seasonScored && seasonScored.points !== 0) {
+      /*
+       * Per game, and the componentAmounts divided too — the unit discipline the IDP path had to
+       * learn the hard way (Kamren Curl, 6.34/game stored, 211.44 on rescore, a ~17x inflation
+       * caused by dividing the points but not the amounts). Everything persisted shares one unit.
+       */
+      const perGame = (n: number) => Math.round((n / aggregate.gamesPlayed) * 1000) / 1000
+      const componentAmounts: Record<string, number> = {}
+      for (const [k, v] of Object.entries(seasonScored.componentAmounts)) componentAmounts[k] = perGame(v)
+      kickerSeason = {
+        points: seasonScored.points / aggregate.gamesPlayed,
+        breakdown: {
+          ...seasonScored,
+          points: Math.round((seasonScored.points / aggregate.gamesPlayed) * 100) / 100,
+          componentAmounts,
+        },
+      }
+    }
+  }
   let idpWeekly: { points: number; weeksUsed: number; breakdown: IdpScoringBreakdown } | null = null
   let idpSeason: { points: number; breakdown: IdpScoringBreakdown } | null = null
 
@@ -265,6 +310,12 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   const proj = input.sleeperProjection ?? null
   const projFormatPoints = proj ? finite(proj[`pts_${input.scoringFormat}`]) : null
 
+  if (proj && kickerRules) {
+    const extracted = extractKickerComponents(proj, 'sleeper_weekly')
+    const scored = scoreKickerComponents({ components: extracted, rules: kickerRules })
+    if (scored && scored.points !== 0) kickerSleeper = { points: scored.points, breakdown: scored }
+  }
+
   let sleeperIdp: { points: number; breakdown: IdpScoringBreakdown } | null = null
   if (proj && idpRules) {
     const extracted = extractIdpComponents(proj, 'sleeper_weekly')
@@ -288,9 +339,20 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   let basis: ProjectionOutcomeBasis
   let weeklyWeeksUsed = 0
   let idpBreakdown: IdpScoringBreakdown | null = null
+  let kickerBreakdown: KickerScoringBreakdown | null = null
   let categoryBreakdown: Record<string, number> | null = null
 
-  if (sleeperIdp) {
+  if (kickerSleeper) {
+    /*
+     * ⚠ ABOVE `pts_{format}` FOR THE SAME REASON THE IDP BRANCH IS. Sleeper's points column is
+     * computed under ITS defaults, not this league's — a league scoring `fgm: 5` gets a materially
+     * different number from one scoring 3, and the points column knows nothing about either.
+     * Components scored under the league's own rules beat a precomputed total.
+     */
+    baselineProjection = kickerSleeper.points
+    basis = 'sleeper_weekly_kicker_projection'
+    kickerBreakdown = kickerSleeper.breakdown
+  } else if (sleeperIdp) {
     baselineProjection = sleeperIdp.points
     basis = 'sleeper_weekly_idp_projection'
     idpBreakdown = sleeperIdp.breakdown
@@ -317,6 +379,10 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     baselineProjection = idpSeason.points
     basis = 'season_idp_components'
     idpBreakdown = idpSeason.breakdown
+  } else if (kickerSeason) {
+    baselineProjection = kickerSeason.points
+    basis = 'season_kicker_components'
+    kickerBreakdown = kickerSeason.breakdown
   } else if (categorySeason) {
     /*
      * LAST in the chain, deliberately.
@@ -367,6 +433,10 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   }
 
   const notes: string[] = []
+  if (kickerBreakdown?.approximations.length) {
+    // A league's distance rules going unhonoured must reach the reader, not sit in a log.
+    notes.push(...kickerBreakdown.approximations)
+  }
   if (idpBreakdown?.approximations.length) {
     // An estimated tackle split must reach the reader, not stay buried in the breakdown.
     notes.push(...idpBreakdown.approximations)
@@ -397,6 +467,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     adjustmentReason: adjustmentsApplied.length ? adjustmentsApplied.join('; ') : null,
     weeklyWeeksUsed,
     idp: idpBreakdown,
+    kicker: kickerBreakdown,
   }
 }
 

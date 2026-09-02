@@ -52,6 +52,8 @@ export type AfProjectionBasis =
    * season total carries no within-season role change — and its tackle split may be estimated.
    */
   | 'season_idp_components'
+    | 'season_kicker_components'
+    | 'sleeper_weekly_kicker_projection'
   /**
    * Season category totals scored per game under per-sport rules — MLB / NBA / NHL.
    * LAST in the resolution chain: every football basis outranks it, so this can only be
@@ -177,6 +179,33 @@ export interface ProjectionResult {
   weeklyWeeksUsed: number
   /** Present only when the basis was IDP component scoring. */
   idp?: IdpScoringBreakdown | null
+  /**
+   * Present only when the basis was kicker component scoring.
+   *
+   * ⚠ Check `kicker.distanceRulesIgnored` before presenting the number as complete: the stat
+   * source carries FG totals but no per-distance breakdown, so a league scoring `fgm_40_49`
+   * received a projection that could not honour its most distinctive rule.
+   */
+  kicker?: KickerScoringBreakdown | null
 }
 
 export type ProjectionOutcome = ProjectionResult | ProjectionRefusal
+
+/** Where a kicker's component amounts were read from. */
+export type KickerSourceKind = 'sleeper_weekly' | 'ri_season'
+
+/**
+ * A kicker projection's component breakdown, in the same shape as {@link IdpScoringBreakdown}.
+ *
+ * ⚠ `distanceRulesIgnored` is the field that matters. The stat source carries FG totals but no
+ * per-distance breakdown, so a league scoring `fgm_40_49` gets a projection that skipped its most
+ * distinctive rule. That must reach the reader rather than sit in a log.
+ */
+export interface KickerScoringBreakdown {
+  points: number
+  componentAmounts: Record<string, number>
+  scoredComponents: string[]
+  unscoredComponents: string[]
+  approximations: string[]
+  distanceRulesIgnored: boolean
+}

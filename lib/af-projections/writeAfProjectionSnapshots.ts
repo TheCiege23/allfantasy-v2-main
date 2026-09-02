@@ -28,6 +28,7 @@ import {
 } from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRates, toWeeklyObservation } from './core'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
+import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import type { ProjectionOutcome, ScoringFormat, WeeklyObservation } from './types'
 
 export interface WriteSnapshotsResult {
@@ -375,6 +376,11 @@ export async function writeAfProjectionSnapshotsForSeason(
       scoringFormat,
       basisIsPriorSeason: sourceSeason < targetSeason,
       idpRules,
+      /*
+       * The canonical kicker baseline. One stored snapshot serves every league; the league's own
+       * rules are applied at READ time via `rescoreKickerForLeague`, exactly as IDP does.
+       */
+      kickerRules: KICKER_CANONICAL_RULES as Record<string, number>,
     }
     const outcome: ProjectionOutcome = buildAfProjection(buildInput)
 
