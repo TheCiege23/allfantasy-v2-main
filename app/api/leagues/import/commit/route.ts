@@ -152,6 +152,20 @@ export async function POST(req: NextRequest) {
       historicalBackfill: persisted.historicalBackfill,
       importRunId: runId,
       existed: persisted.existed === true,
+      /*
+       * ⚠ WHAT DID NOT FINISH, SO "Imported" STOPS BEING AN UNQUALIFIED CLAIM.
+       *
+       * Every post-create bootstrap step is deliberately non-fatal — failing a whole import
+       * because a playoff default could not be written would throw away a league that is
+       * otherwise fine. But the swallow used to be total: a run where
+       * `bootstrapLeagueFromImport` threw still answered 200 with a league id, and the user
+       * got an empty league with no rosters and no explanation.
+       *
+       * Empty array = every step completed. Non-empty is NOT a failed import — the league is
+       * real and the affected step is cheap to re-run — it is the statement of what is
+       * missing that this response could not previously make.
+       */
+      incompleteSteps: persisted.incompleteSteps ?? [],
       /* Whether this request actually re-read the provider, or matched a completed run
          and returned it untouched. `existed` cannot answer that — see the persistence
          service. */
