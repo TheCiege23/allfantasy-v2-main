@@ -21,6 +21,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/import-backfill-sweeper",
+      "schedule": "15,45 * * * *"
+    },
+    {
       "path": "/api/cron/domain-os-refresh",
       "schedule": "*/30 * * * *"
     },
