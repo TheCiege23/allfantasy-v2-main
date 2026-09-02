@@ -650,3 +650,107 @@ describe('push — a supplied refspec is verified against the sha it names', () 
     expect(res.status).toBe(0)
   })
 })
+
+describe('push-queue — a live lock must not advertise a dead address', () => {
+  /**
+   * 🛑 THE DEFECT THIS CLOSES, AND WHY THE PREVIOUS FIX DID NOT COVER IT.
+   *
+   * b3b05199d stopped peers RELEASING a live lock whose recorded name had stopped
+   * resolving: liveness became something measured (a heartbeat) rather than inferred
+   * from whether a name still appears in ListAgents. Correct, and it held.
+   *
+   * It left the ADDRESS alone. `name`/`ref` are written once at --claim and carried
+   * forward verbatim by every heartbeat, so a holder who is renamed keeps advertising
+   * the name they claimed under — forever. On 2026-09-02 three sessions in a row read
+   * `reach them at allfantasy-v2-main-b8`, had SendMessage refused, and had nowhere to
+   * go: the holder was alive and pushing, so the self-clearing valve correctly never
+   * fired and there was nothing to wait for.
+   *
+   * ⚠ THAT IS STRICTLY WORSE THAN THE BUG THAT WAS FIXED. A stale lock resolves itself.
+   * A stale address on a LIVE lock has no expiry, because the thing that would expire
+   * is exactly the thing that is healthy.
+   */
+  const claimAt = (over: Record<string, unknown> = {}) =>
+    writeFileSync(
+      join(queueDir, 'pusher.json'),
+      JSON.stringify({
+        name: 'session-b8',
+        ref: 'allfantasy-v2-main-b8',
+        token: 'tok-123',
+        since: Date.now(),
+        heartbeatAt: Date.now(),
+        nameAt: Date.now(),
+        ...over,
+      }),
+    )
+  const pusherFile = () => JSON.parse(readFileSync(join(queueDir, 'pusher.json'), 'utf8')) as Record<string, unknown>
+
+  it('stamps nameAt on --claim, so the address has an age at all', () => {
+    const res = run(['pusher', '--claim', 'session-aaa', '--ref', 'session-aaa'], '')
+    expect(res.status).toBe(0)
+    expect(typeof pusherFile().nameAt).toBe('number')
+  })
+
+  it('lets the TOKEN HOLDER re-advertise after a rename', () => {
+    claimAt()
+    const res = run(['pusher', '--heartbeat', '--as', 'session-36'], '', { AF_PUSH_TOKEN: 'tok-123' })
+    expect(res.status).toBe(0)
+    expect(pusherFile().name).toBe('session-36')
+    expect(pusherFile().ref).toBe('session-36')
+  })
+
+  /*
+   * 🛑 THE SECURITY PROPERTY. If anyone could re-advertise, a session could point the
+   * address at itself and harvest every blocked peer's handover. The token is the
+   * identity here; the name is only a hint for humans.
+   */
+  it('refuses a rename from a session that does not hold the token', () => {
+    claimAt()
+    const res = run(['pusher', '--heartbeat', '--as', 'session-intruder'], '')
+    expect(res.stdout).toContain('not your lock')
+    expect(pusherFile().name).toBe('session-b8')
+  })
+
+  it('re-advertises automatically on the holder’s own gated push, via AF_PUSH_NAME', () => {
+    // Self-healing is the point: a working pusher pushes, so the address a blocked
+    // peer reads is at most one push old without anyone remembering a command.
+    claimAt()
+    check(SHA_A, { AF_PUSH_TOKEN: 'tok-123', AF_PUSH_NAME: 'session-36' })
+    expect(pusherFile().name).toBe('session-36')
+  })
+
+  it('does NOT let a blocked non-holder rewrite the address with AF_PUSH_NAME', () => {
+    claimAt()
+    const res = check(SHA_A, { AF_PUSH_NAME: 'session-intruder' })
+    expect(res.status).toBe(1)
+    expect(pusherFile().name).toBe('session-b8')
+  })
+
+  /*
+   * The positive control for the whole change: a LIVE heartbeat with an OLD address is
+   * exactly the state three sessions were stuck in, and it previously produced a
+   * confident "reach them at <dead name>" with nothing to distinguish it from a good one.
+   */
+  it('warns when the address is old even though the heartbeat is fresh', () => {
+    claimAt({ heartbeatAt: Date.now(), nameAt: Date.now() - 30 * 60 * 1000 })
+    const res = run(['pusher'], '')
+    expect(res.stdout).toContain('address confirmed 30 min ago')
+    expect(res.stdout).toContain('MAY NO LONGER RESOLVE')
+    // The step that was missing: what to DO, not only what not to conclude.
+    expect(res.stdout).toContain('--heartbeat --as')
+    expect(res.stdout).toContain('Do NOT')
+  })
+
+  it('stays quiet when the address is fresh, so the warning keeps its meaning', () => {
+    claimAt()
+    expect(run(['pusher'], '').stdout).not.toContain('MAY NO LONGER RESOLVE')
+  })
+
+  /* A lock claimed before nameAt existed must not crash or read as brand new. */
+  it('falls back to `since` for a lock written before nameAt existed', () => {
+    claimAt({ since: Date.now() - 8 * 60 * 1000, nameAt: undefined })
+    const res = run(['pusher'], '')
+    expect(res.status).toBe(0)
+    expect(res.stdout).toContain('address confirmed 8 min ago')
+  })
+})

@@ -214,15 +214,100 @@ function readPusher(dir) {
  * for PUSHER_TTL_MS is stale and clears itself. That removes the judgement call
  * about someone else's existence, which is the thing that went wrong.
  */
+/**
+ * How old an advertised address may get before it is called out as possibly stale.
+ *
+ * 20 min, deliberately well under PUSHER_TTL_MS (45): the address is refreshed by
+ * every gated push AND by an explicit heartbeat, so a working pusher renews it far
+ * more often than this. Setting it equal to the TTL would mean the warning only
+ * ever appeared on a lock that was about to clear itself anyway -- which is the one
+ * case that already resolves without anybody reading a warning.
+ */
+const PUSHER_ADDRESS_WARN_MS = 20 * 60 * 1000
+
 const pusherAge = (p) => now() - (Number(p?.heartbeatAt) || Number(p?.since) || 0)
 const pusherIsStale = (p) => pusherAge(p) > PUSHER_TTL_MS
 const holdsPusherToken = (p) => Boolean(p) && process.env.AF_PUSH_TOKEN === p.token
 
-/** Refresh the lock's heartbeat. Only ever called for the token holder. */
-function touchPusher(dir, p) {
+/**
+ * How long ago the lock's ADVERTISED ADDRESS was last confirmed by its holder.
+ *
+ * 🛑 A DIFFERENT NUMBER FROM THE HEARTBEAT, AND THE DIFFERENCE IS THE DEFECT.
+ * The heartbeat says the holder is ALIVE. It says nothing about whether the name
+ * printed as "reach them at" is still the name they answer to, and those two come
+ * apart the moment a session is renamed -- which happens routinely in this room.
+ *
+ * The 2026-08-30 fix stopped peers RELEASING a live lock whose recorded name had
+ * died. It did not stop the lock ADVERTISING that dead name. So on 2026-09-02
+ * three sessions in a row read `reach them at allfantasy-v2-main-b8`, had
+ * SendMessage refused, and had nothing to do about it: the holder was genuinely
+ * alive and pushing, so the self-clearing valve correctly never fired and there
+ * was nothing to wait for.
+ *
+ * 🛑 THAT IS STRICTLY WORSE THAN THE BUG THAT WAS FIXED. A stale lock resolves
+ * itself. A stale ADDRESS on a live lock has no expiry, because the thing that
+ * would expire is exactly the thing that is healthy.
+ *
+ * `nameAt` falls back to `since`, so a lock claimed before this existed reports
+ * its address as being as old as the claim -- which is precisely what it is.
+ */
+const pusherAddressAge = (p) => now() - (Number(p?.nameAt) || Number(p?.since) || 0)
+
+/** Old enough that a rename could plausibly have happened since. */
+const pusherAddressIsStale = (p) => pusherAddressAge(p) > PUSHER_ADDRESS_WARN_MS
+
+/**
+ * Refresh the lock's heartbeat, and optionally the address its holder answers to.
+ * Only ever called for the token holder.
+ *
+ * ⚠ `advertise` CARRIES A NAME THE HOLDER SUPPLIED ABOUT ITSELF, and it is never
+ * inferred from anywhere. A session is the only thing that knows its own current
+ * name; guessing one would put a confidently WRONG address in front of every
+ * blocked peer, which is worse than an old one -- an old address at least looks
+ * suspect once its age is printed beside it.
+ */
+function touchPusher(dir, p, advertise) {
   try {
-    writeFileSync(join(dir, 'pusher.json'), `${JSON.stringify({ ...p, heartbeatAt: now() }, null, 2)}\n`)
+    const next = { ...p, heartbeatAt: now() }
+    const name = typeof advertise?.name === 'string' ? advertise.name.trim() : ''
+    if (name) {
+      const ref = typeof advertise?.ref === 'string' && advertise.ref.trim() ? advertise.ref.trim() : name
+      next.name = name
+      next.ref = ref
+      /* Stamped even when the name is UNCHANGED. "Still called this, confirmed a
+         minute ago" is the useful signal for a blocked peer -- not merely that it
+         changed, but that somebody vouched for it recently. */
+      next.nameAt = now()
+    }
+    writeFileSync(join(dir, 'pusher.json'), `${JSON.stringify(next, null, 2)}\n`)
   } catch {}
+}
+
+/** The address, with the one fact that tells a reader whether to trust it: its age. */
+function pusherAddress(p) {
+  return `${p.ref || p.name}  (SendMessage, address confirmed ${Math.round(pusherAddressAge(p) / 60000)} min ago)`
+}
+
+/**
+ * What to do when that address does not resolve -- the step that was missing.
+ *
+ * Every message here already said "a name that no longer resolves is not evidence
+ * the session ended". True, and on 2026-09-02 three sessions read it, agreed with
+ * it, and still had nowhere to go: it says what NOT to conclude and nothing about
+ * what to DO. An instruction that only forbids is why careful people stall.
+ */
+function pusherAddressHelp(p) {
+  if (!pusherAddressIsStale(p)) return ''
+  return (
+    `\n  ⚠ THAT ADDRESS IS ${Math.round(pusherAddressAge(p) / 60000)} MIN OLD AND MAY NO LONGER RESOLVE.` +
+    ` Sessions are renamed here,` + `\n    and the lock records the name held at claim time.` +
+    `\n\n    If SendMessage bounces, the holder has almost certainly been renamed. Do NOT` +
+    `\n    release or claim the role on that basis -- a live heartbeat means a live holder,` +
+    `\n    and releasing one mid-batch is the failure this lock exists to prevent.` +
+    `\n\n    Post your handover where a human can route it, and ask the room. The holder` +
+    `\n    can re-advertise in one command:  npm run push:pusher -- --heartbeat --as <name>` +
+    `\n\n`
+  )
 }
 
 /**
@@ -573,13 +658,22 @@ function cmdCheck() {
   // The pusher gate runs BEFORE a ticket is taken: a session that is not
   // pushing today should not be occupying a place in the line either.
   const pusher = livePusher(dir)
-  if (pusher && holdsPusherToken(pusher)) touchPusher(dir, pusher)
+  /*
+   * The holder's own push refreshes BOTH the heartbeat and, when AF_PUSH_NAME is
+   * set, the address. That is what makes this self-healing rather than a chore:
+   * a working pusher pushes, so the address a blocked peer reads is at most one
+   * push old. Nothing breaks when AF_PUSH_NAME is unset -- the address simply
+   * keeps its previous value and reports its true age.
+   */
+  if (pusher && holdsPusherToken(pusher)) {
+    touchPusher(dir, pusher, { name: process.env.AF_PUSH_NAME, ref: process.env.AF_PUSH_NAME })
+  }
   if (pusher && !holdsPusherToken(pusher)) {
     process.stderr.write(
       `\n  ✋ push blocked: ${pusher.name} is the designated pusher right now.\n\n` +
         `     holding since  ${new Date(pusher.since).toLocaleString()}\n` +
         `     last heartbeat ${Math.round(pusherAge(pusher) / 60000)} min ago (expires at ${PUSHER_TTL_MS / 60000})\n` +
-        `     reach them at  ${pusher.ref || pusher.name}  (SendMessage)\n\n` +
+        `     reach them at  ${pusherAddress(pusher)}${pusherAddressHelp(pusher)}\n\n` +
         `  One session batches and pushes, so several sessions' work rides one\n` +
         `  build instead of one build each. Ordering pushes does not save the\n` +
         `  money — batching them does.\n\n` +
@@ -753,8 +847,16 @@ function cmdPusher(argv) {
         `push-queue: not your lock — ${held.name} holds it. Only the token holder can refresh it.\n`,
       )
     }
-    touchPusher(dir, held)
-    return process.stdout.write(`push-queue: heartbeat refreshed for ${held.name}.\n`)
+    /*
+     * `--as` is how a RENAMED holder re-advertises. There is no way to detect the
+     * rename from here -- the script cannot see ListAgents, and a name is not
+     * derivable from a token -- so the holder has to say it. This is the manual
+     * path; AF_PUSH_NAME on the push itself is the automatic one.
+     */
+    const as = argFor(argv, '--as')
+    touchPusher(dir, held, as ? { name: as, ref: argFor(argv, '--ref') || as } : undefined)
+    const after = readPusher(dir) || held
+    return process.stdout.write(`push-queue: heartbeat refreshed for ${after.name}.\n`)
   }
 
   if (argv.includes('--release')) {
@@ -780,7 +882,7 @@ function cmdPusher(argv) {
         `\n  ✋ push-queue: ${held.name} holds the pusher role and the lock is LIVE.\n\n` +
           `     last heartbeat  ${Math.round(pusherAge(held) / 60000)} min ago\n` +
           `     expires after   ${PUSHER_TTL_MS / 60000} min without one\n` +
-          `     reach them at   ${held.ref || held.name}  (SendMessage)\n\n` +
+          `     reach them at   ${pusherAddress(held)}${pusherAddressHelp(held)}\n\n` +
           `  A quiet pusher is not an absent one — they may be verifying a tip or\n` +
           `  waiting on a ratchet, which is exactly when the lock matters most. A\n` +
           `  name that no longer resolves is NOT evidence the session ended: names\n` +
@@ -821,13 +923,25 @@ function cmdPusher(argv) {
     }
     writeFileSync(
       file,
-      `${JSON.stringify({ name: claim, ref, token, since: Date.now(), heartbeatAt: Date.now() }, null, 2)}\n`,
+      `${JSON.stringify({ name: claim, ref, token, since: Date.now(), heartbeatAt: Date.now(), nameAt: Date.now() }, null, 2)}\n`,
     )
     journal(dir, { event: 'pusher-claimed', name: claim, ref })
     process.stdout.write(
       `push-queue: ${claim} now holds the pusher role.\n\n` +
         `  Push with the token so the gate lets you through:\n\n` +
-        `     AF_PUSH_TOKEN=${token} npm run push:main\n\n` +
+        `     AF_PUSH_TOKEN=${token} AF_PUSH_NAME=${claim} npm run push:main\n\n` +
+        `  ⚠ Your NAME is how blocked sessions reach you, and names are reassigned
+` +
+        `    here. AF_PUSH_NAME re-advertises it on every push, so the address
+` +
+        `    stays current without you remembering. If you are renamed between
+` +
+        `    pushes, say so explicitly:
+
+` +
+        `     npm run push:pusher -- --heartbeat --as <your-new-name>
+
+` +
         `  ⚠ Announce it (ListAgents + SendMessage) and hand it over before you\n` +
         `    finish — a pusher who vanishes silently blocks everyone.\n` +
         `     npm run push:pusher -- --release\n`,
@@ -845,7 +959,8 @@ function cmdPusher(argv) {
   process.stdout.write(
     `push-queue: ${held.name} holds the pusher role since ${new Date(held.since).toLocaleString()}.\n` +
       `  last heartbeat  ${age} min ago — expires in ${expiresIn} min without one\n` +
-      `  reach them at   ${held.ref || held.name} (SendMessage) — hand over your SHA and attestation\n` +
+      `  reach them at   ${pusherAddress(held)}\n` +
+      `  hand over your SHA and your attestation${pusherAddressHelp(held)}\n` +
       `${holdsPusherToken(held) ? '  (this session holds the token)\n' : ''}` +
       `\n  ⚠ A quiet holder is not an absent one, and a name that no longer resolves\n` +
       `    is not evidence a session ended — names are reassigned here. The lock\n` +
