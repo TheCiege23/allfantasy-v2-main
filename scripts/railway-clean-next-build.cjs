@@ -17,6 +17,7 @@ const railwayDistDir = process.env.RAILWAY_GIT_COMMIT_SHA
 const distDirName = process.env.AF_NEXT_DIST_DIR || (isRailway ? railwayDistDir : '.next')
 const nextDir = path.join(repoRoot, distDirName)
 const legacyNextDir = path.join(repoRoot, '.next')
+const hasExplicitDistDir = Boolean(process.env.AF_NEXT_DIST_DIR)
 const maxAttempts = 4
 const retryDelayMs = 1000
 
@@ -112,7 +113,10 @@ if (fs.existsSync(nextDir)) {
   console.log(`[railway-clean] skip: ${distDirName} is missing`)
 }
 
-if (legacyNextDir !== nextDir) {
+// A custom dist directory is isolated from the legacy .next cache. Railway
+// can mount that cache read-only, so touching it would fail a build that never
+// uses it.
+if (!hasExplicitDistDir && legacyNextDir !== nextDir) {
   if (fs.existsSync(legacyNextDir)) {
     removePath(legacyNextDir)
   } else {
