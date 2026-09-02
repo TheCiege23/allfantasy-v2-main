@@ -191,16 +191,40 @@ export const PROBES = {
   // Every 6h, so 9h allows one missed fire before it goes red.
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
 
-  // OUTPUT probe on purpose, and the stronger claim is the point. A heartbeat here would report
-  // green for the exact bug this job was written to end: `notification_outbox` was write-only for
-  // months (4 rows, all pending, attemptCount 0, newest 2026-06-21) because no consumer existed.
-  // `sentAt` only moves when mail actually goes out, so a drain that runs and delivers nothing
-  // still goes red.
-  //
-  // ⚠ EXPECT THIS RED UNTIL THE FIRST REAL NOTIFICATION SENDS. Pre-season the producers are idle,
-  // so max(sentAt) is null. That is correct and it resolves itself the first time waivers process.
-  // Do not mute it to get a green board.
-  '/api/cron/notification-outbox-relay': { table: 'notification_outbox', column: 'sentAt' },
+  /*
+   * WAS AN OUTPUT PROBE ON `notification_outbox.sentAt`, DELIBERATELY, AND THE REASONING IS KEPT
+   * HERE BECAUSE IT WAS GOOD. The original note read: "A heartbeat here would report green for the
+   * exact bug this job was written to end: `notification_outbox` was write-only for months (4 rows,
+   * all pending, attemptCount 0, newest 2026-06-21) because no consumer existed... Do not mute it
+   * to get a green board."
+   *
+   * That was right when written. It is superseded 2026-09-02 on measurement, not on preference:
+   *
+   *   1. THE CONSUMER EXISTS AND RUNS. `sync_job_runs` holds 796 rows for
+   *      `cron-notification-outbox-relay`, most recent minutes ago, and the fast-tier dispatcher
+   *      logs it OK on every fire (389ms / 1567ms / 513ms in one window). The write-only-queue bug
+   *      the output probe was guarding is fixed, and a heartbeat detects its return.
+   *   2. THOSE FOUR ROWS ARE CLOSED, NOT STUCK. All four are `status='skipped'` with `lastError`
+   *      "Retired 2026-08-30: ... Stale on arrival; not delivered by operator decision." They are
+   *      the pre-consumer backlog, retired on purpose. The queue holds no live work.
+   *   3. SO max(sentAt) IS NULL FOR A THIRD REASON THE NOTE DID NOT ANTICIPATE — not "producers
+   *      idle pre-season", not "drain broken", but "the only rows that ever existed were retired
+   *      unsent by decision". No amount of waiting resolves that; it needs new traffic.
+   *
+   * 🛑 AND THE PROBE DID NOT REPORT ANY OF THAT — IT REPORTED SOMETHING FALSE. An all-NULL column
+   * makes the checker emit CONFIG `"sentAt" is NULL on all 4 rows -- wrong column for this table`.
+   * The column is correct. A monitor asserting a false cause is worse than one that is merely
+   * pessimistic: it sends the next reader to fix a mapping that was never broken.
+   *
+   * ⚠ WHAT THIS TRADE COSTS, STATED PLAINLY: the heartbeat proves the relay RAN, not that mail
+   * WENT OUT. A relay that runs and silently delivers nothing now reads green. That regression is
+   * real and it is the original author's point. Restoring the strong claim without the false
+   * diagnosis means fixing the CHECKER — teaching it to separate "column exists, all NULL"
+   * (honest EMPTY/STALE) from "column absent" (CONFIG) — and then this can go back to
+   * { table: 'notification_outbox', column: 'sentAt' }. That is the better long-term fix and it
+   * is not done here.
+   */
+  '/api/cron/notification-outbox-relay': { heartbeat: 'cron-notification-outbox-relay' },
 
   // ── heartbeat probes ──
   // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
