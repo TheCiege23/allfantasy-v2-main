@@ -508,13 +508,52 @@ LAST command's**, so the thing being tested never decides the result. Use
   all read clean. The only check that works is confirming the file under test is in
   the compile set: `--listFiles | grep <yourfile>`.
 
-  ⚠ **AND NOTE WHAT THIS DOES TO THE RULE DIRECTLY BELOW.** Inject-a-known-error
+  ⚠ **AND NOTE WHAT THIS DOES TO THE POSITIVE-CONTROL RULE THAT CLOSES THIS LIST.**
+  Inject-a-known-error
   DID fire — it reported the run as blind. It did not say why; the first mechanism
   offered was wrong (the inherited `exclude` alone, which is the LOUD case); and a
   wrong explanation with a working fix attached is what nearly shipped. **A positive
   control tells you a check is broken. It does not diagnose it, and it does not
   license the first mechanism you think of.** Found by one session, reproduced
   independently by another, and the first causal story died on that second run.
+
+- 🛑 **AND A FIFTH WAY: CONCURRENT `tsc` RUNS KILL EACH OTHER, AND THE CORPSE READS
+  AS A PASS.** Nothing about your command is wrong — the machine simply runs out of
+  memory and something dies. Measured 2026-09-02, when **five** `tsc.js` processes
+  were live at once (`--max-old-space-size=8192` each, ~11.8 GB combined at one
+  reading, 0.4 GB free at another). Seven runs were lost across four sessions in one
+  evening. Two of mine:
+
+  ```
+  tc.txt   120 bytes   sentinel DONE=4   0 `error TS` lines   no crash dump   no "Cannot find module"
+  tc2.txt  113 bytes   NO sentinel                            killed mid-run
+  ```
+
+  ⚠ **IT DEFEATS EVERY TELL ABOVE.** Not the OOM crash dump (there is none — the
+  V8 dump belongs to the process that *exhausts its own heap*, not to one killed
+  under system pressure). Not `Cannot find module`. Not `TS18003`. And the sentinel
+  is **present**, so "missing sentinel means still running" passes it through — but
+  it reads `4`, and **a status that is neither 0 nor 1 is not a verdict**, the same
+  rule this file already applies to `timeout`'s 124 and a missing `pgrep`'s 127.
+
+  **The only signal left is the baseline.** This repo carries ~145 errors, so a run
+  reporting **zero** is not a clean typecheck, it is a run that measured nothing.
+  *Cleaner than the baseline is the tell* — which is why the baseline has to be a
+  number you actually hold, not a number you hope for.
+
+  **Two habits, and the second is the cheap one:**
+
+  1. **Check the machine before starting a full run.** `Get-CimInstance Win32_Process
+     -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*tsc.js*' }`
+     lists them with working-set sizes. If others are running, wait or say so — with
+     ~9 sessions sharing one box, "I will just start mine" is what produced the five.
+  2. **Prefer a per-file scoped check with a same-artifact baseline.** Compile
+     `origin/main`'s version of the file under the identical standalone config, then
+     yours, and compare the two counts. It takes under a minute, cannot be starved by
+     a peer, and answers the question a repo total does not: *did I change this?*
+     ⚠ It does NOT replace a repo total — a type widening surfaces in a **consumer's**
+     file, never in yours — so say which one you ran and hand the cross-file question
+     to whoever runs the batch smoke.
 
 🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
 POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
