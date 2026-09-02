@@ -52,7 +52,12 @@ describe('registry', () => {
      * what the census measured: all 16 formats priced identically at 6552 because no format-
      * specific opinion could travel through ScoringContext at all.
      */
-    for (const id of ['pirate', 'guillotine', 'zombie', 'big_brother', 'redraft']) {
+    /*
+     * ⚠ `guillotine` WAS IN THIS LIST AND HAD TO COME OUT when it gained a model — the test went
+     * red, which is the behaviour wanted. Every id here must be one with genuinely no model, or
+     * this stops testing the fallback and starts testing a stale inventory.
+     */
+    for (const id of ['pirate', 'zombie', 'big_brother', 'redraft']) {
       expect(formatModelFor(id)).toBeNull()
     }
     expect(formatModelFor(null)).toBeNull()
@@ -60,16 +65,19 @@ describe('registry', () => {
   })
 
   it('reports its own coverage honestly', () => {
-    expect(modelledFormatIds()).toEqual(['four_horsemen'])
+    expect(modelledFormatIds()).toEqual(['four_horsemen', 'guillotine'])
     /*
-     * Four Horsemen is a specific league, not a canonical format — it appears in this repo only
-     * as a league name — so every canonical format is still without a value model, and the
-     * registry says so rather than letting one league's model imply coverage it does not have.
+     * ⚠ THE ARITHMETIC IS DELIBERATELY EXPLICIT: guillotine IS a canonical format and now has a
+     * model, so it leaves the gap list; Four Horsemen is a specific league that was never in it.
+     * Two models, but only ONE of them reduces the count — writing that out is what stops the
+     * next model being scored against a number nobody can reconstruct.
      */
     expect(formatIdsWithoutValueModel().length).toBe(
-      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length,
+      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length - 1,
     )
     expect(formatIdsWithoutValueModel()).not.toContain('four_horsemen')
+    expect(formatIdsWithoutValueModel()).not.toContain('guillotine')
+    expect(formatIdsWithoutValueModel()).toContain('tournament')
   })
 
   /*

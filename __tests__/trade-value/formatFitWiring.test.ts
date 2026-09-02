@@ -121,9 +121,10 @@ describe('🛑 the base price is untouched', () => {
 
 describe('what reaches the model', () => {
   it('an unmodelled format yields null, not a default', () => {
+    // ⚠ Was `guillotine` until guillotine gained a model. Must name a format with none.
     const a = firstAsset(build({
       context: {
-        sport: 'NFL', leagueType: 'guillotine', scoring: 'ppr',
+        sport: 'NFL', leagueType: 'zombie', scoring: 'ppr',
         rosterFormat: 'standard', capturedAt: '2026-09-02T00:00:00.000Z',
       },
     }))

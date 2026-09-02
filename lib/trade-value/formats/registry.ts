@@ -43,6 +43,7 @@
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import type { FormatValueModel } from './types'
 import { fourHorsemenModel } from './fourHorsemen'
+import { guillotineModel } from './guillotine'
 
 /**
  * The canonical format ids, copied from the `LeagueFormatId` union in
@@ -78,7 +79,7 @@ export const KNOWN_FORMAT_IDS = [
   ...ALIAS_ONLY_FORMAT_IDS,
 ] as const
 
-const MODELS: readonly FormatValueModel[] = [fourHorsemenModel]
+const MODELS: readonly FormatValueModel[] = [fourHorsemenModel, guillotineModel]
 
 const BY_ID = new Map<string, FormatValueModel>(MODELS.map((m) => [m.formatId, m]))
 
