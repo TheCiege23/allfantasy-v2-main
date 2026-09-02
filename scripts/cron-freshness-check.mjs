@@ -250,6 +250,69 @@ export const PROBES = {
   },
 
   /*
+   * A HEARTBEAT because there is no single output table that means "this ran". The orchestrator
+   * rotates <=25 leagues per fire and fans out across drafts, matchups, season state and
+   * TransactionFact; every one of those tables is also written by another job, so a table probe
+   * here would be satisfied by that other job and report this one healthy while it did nothing --
+   * the same masking already recorded under the sync-player-images and import-news variants.
+   *
+   * Its gates are also season-aware by design, so a correct run out of season writes no rows at
+   * all. An output probe would be red for months and train everyone to ignore the board.
+   *
+   * ⚠ CONTEXT WORTH KEEPING: until this probe was added the job was invisible in BOTH directions
+   * -- `20 STAR/4 * * *` was declared in cron-schedule.json but absent from cron-slow-tier.yml, so
+   * nothing fired it, and no probe watched it. It had never run on the Actions scheduler at all.
+   * The missing trigger was added in the same change as this entry; landing either one alone
+   * leaves a job that runs unwatched, or a probe that reports a job nothing is running.
+   */
+  '/api/cron/sleeper-historical-refresh': { heartbeat: 'cron-sleeper-historical-refresh' },
+
+  /*
+   * Already instrumented before it was probed -- the route has recorded
+   * `cron-domain-os-refresh` via withSyncJobRun all along, and nothing was reading it. A
+   * heartbeat rather than an output probe because the refresh is a no-op whenever no domain
+   * has gone stale, which is the ordinary outcome between events.
+   */
+  '/api/cron/domain-os-refresh': { heartbeat: 'cron-domain-os-refresh' },
+
+  /*
+   * Both tournament jobs are CONDITIONAL in the strongest sense: the announcement sweep posts
+   * only rows whose `scheduledFor` has arrived, and most hours none have. An output probe on
+   * `TournamentAnnouncement.postedAt` would therefore sit red between broadcasts and teach
+   * everyone to ignore the board -- the failure this monitor exists to prevent.
+   *
+   * ⚠ NEITHER ROUTE RECORDED A HEARTBEAT UNTIL THIS CHANGE. The instrumentation was added in the
+   * same commit; a probe naming a job_name nothing writes reports CONFIG forever. Dry runs stay
+   * unrecorded on purpose -- the probe matches on job_name alone, so a hand-issued smoke test
+   * would be indistinguishable from a scheduled fire and could hide a dead scheduler.
+   */
+  '/api/cron/tournament-announcements': { heartbeat: 'cron-tournament-announcements' },
+
+  /*
+   * Keyed on the `?auto=1` path because that is the only form the scheduler calls, and it is
+   * also the only form that records: an explicit season/week call is a human backfilling, and
+   * letting that refresh the heartbeat would mask a scheduler that had stopped.
+   */
+  '/api/cron/tournament-weekly-scores?auto=1': { heartbeat: 'cron-tournament-weekly-scores' },
+
+  /*
+   * The last user-facing blind spot, and the one with the highest cost of silence: this sweep's
+   * product of record is a push notification about an injured starter, which is the most
+   * time-critical thing the platform knows. It could have stopped delivering entirely and no
+   * monitor would have said a word.
+   *
+   * ⚠ NOT A TABLE PROBE, AND `SportsInjury` IS THE TRAP. The route's game-window fold does write
+   * that table, so it looks probeable -- but `/api/cron/import-injuries` writes the same
+   * `SportsInjury.fetchedAt` every 30 minutes and is already probed on it. A table probe here
+   * would be satisfied by THAT job and report this one healthy while it sent nothing, which is
+   * the same masking recorded under the sync-player-images and import-news variants.
+   *
+   * It moved out of NO_PROBE in the commit that instrumented the handler; the old entry said
+   * "only a heartbeat could ever cover it, and the handler does not record one yet". It does now.
+   */
+  '/api/cron/alert-sweep': { heartbeat: 'cron-alert-sweep' },
+
+  /*
    * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
    * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
    * season a suppressed output probe would have left it completely unwatched for seven months --
@@ -365,7 +428,6 @@ export const NO_PROBE = {
   // two-thirds of the season and trains everyone to ignore the alarm.
 
   // ── NO DURABLE OUTPUT AT ALL ──
-  '/api/cron/alert-sweep': 'WRITES NOTHING -- reads webPushSubscription and sends push notifications. There is no table to probe; only a heartbeat could ever cover it, and the handler does not record one yet.',
   '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
 
   // ── HAS NEVER PRODUCED ANYTHING ──
