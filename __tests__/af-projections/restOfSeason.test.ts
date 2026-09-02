@@ -84,12 +84,34 @@ describe('rosFromPerGame — the 17x trap', () => {
   it('returns NULL, never 0, for unusable input', () => {
     // 🛑 A 0 would enter the value engine as "this player will score nothing", which is a real
     // claim. "We could not compute this" must not be able to impersonate it.
-    for (const p of [null, undefined, NaN, -1]) {
+    for (const p of [null, undefined, NaN]) {
       expect(rosFromPerGame(p as number, 17)).toBeNull()
     }
     for (const w of [null, undefined, NaN, -1]) {
       expect(rosFromPerGame(19.5, w as number)).toBeNull()
     }
+  })
+
+  /**
+   * REGRESSION GUARD, found in production. This function originally refused a negative `perGame`
+   * alongside null and NaN, treating "negative" as "invalid". Measured after that shipped: 28 NFL
+   * rows had a `rosWeeksRemaining` but no `rosProjection`, and ALL 28 had a negative
+   * `afProjection` — punters and return men who genuinely lose points. Same 1:1 correlation in
+   * MLB (54), NCAAB (7) and NHL (1).
+   *
+   * Worse than losing the number, it made `af_projection_rows_without_ros` fire for rows that were
+   * current and perfectly convertible — a diagnostic pointing at a migration problem that did not
+   * exist.
+   */
+  it('converts a NEGATIVE rate — it is a real projection, not a missing one', () => {
+    // Braden Mann, P, -3.40/game over 17 weeks.
+    expect(rosFromPerGame(-3.4, 17)).toBeCloseTo(-57.8, 1)
+    expect(rosFromPerGame(-2, 17)).toBeCloseTo(-34, 1)
+    expect(rosFromPerGame(-0.03, 17)).toBeCloseTo(-0.51, 2)
+  })
+
+  it('still refuses a NEGATIVE horizon — that is nonsense, not information', () => {
+    expect(rosFromPerGame(19.5, -1)).toBeNull()
   })
 
   it('distinguishes a genuine zero rate from a refusal', () => {

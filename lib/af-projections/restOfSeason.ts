@@ -95,7 +95,31 @@ export function rosFromPerGame(
   perGame: number | null | undefined,
   weeks: number | null | undefined,
 ): number | null {
-  if (perGame == null || !Number.isFinite(perGame) || perGame < 0) return null
+  /*
+   * ⚠ A NEGATIVE RATE IS A REAL PROJECTION, NOT A MISSING ONE, AND THIS ONCE REFUSED THEM.
+   *
+   * The first version guarded `perGame < 0` alongside the null and non-finite checks, conflating
+   * "negative" with "invalid". Measured on production after the fix shipped: 28 NFL rows carried a
+   * `rosWeeksRemaining` but no `rosProjection`, and ALL 28 had a negative `afProjection` — min
+   * -3.40, max -0.03, zero positives. Same perfect correlation in every other sport (MLB 54/54,
+   * NCAAB 7/7, NHL 1/1).
+   *
+   * They are genuine: Braden Mann (P, -3.40), Mecole Hardman (WR, -2.00), Jamie Gillan (P, -1.25)
+   * — punters and return men who lose more points than they gain under the scoring in use. "This
+   * player will cost you ~58 points over the rest of the season" is information, and discarding it
+   * at the storage layer threw it away.
+   *
+   * 🛑 AND THE REFUSAL MADE A DIAGNOSTIC LIE. `af_projection_rows_without_ros` means "rows exist
+   * but predate the ROS columns". These rows are current and perfectly ROS-able; firing that
+   * warning for them points the next reader at a migration problem that does not exist.
+   *
+   * Safe downstream, checked rather than assumed: `normalizedPlayerValue` gates on
+   * `projection > 0` for `hasProjection`, so a negative falls through to the market-value branch,
+   * and `base` is `Math.max(0, projection)`, so it can never produce a negative price.
+   *
+   * NEGATIVE WEEKS ARE STILL REFUSED — a negative horizon is nonsense rather than information.
+   */
+  if (perGame == null || !Number.isFinite(perGame)) return null
   if (weeks == null || !Number.isFinite(weeks) || weeks < 0) return null
   return Math.round(perGame * weeks * 100) / 100
 }
