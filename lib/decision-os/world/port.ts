@@ -1245,3 +1245,77 @@ export async function loadLeagueReputation(leagueId: string): Promise<RawLeagueR
     lastComputedAt: row.lastComputedAt,
   }
 }
+
+/** One `AFProjectionSnapshot` row, narrowed to what the trade seam consumes. */
+export interface RawAfProjectionRow {
+  playerId: string
+  sport: string
+  season: number
+  /** Null on the season-long baseline row; a number on a week-scoped row. */
+  week: number | null
+  /** ⚠ PER GAME. Not comparable with `RawProjectionRow.projectedPoints`, which is per week. */
+  afProjection: number
+  /** Rest-of-season total. NULL on rows written before the ROS columns existed. */
+  rosProjection: number | null
+  /** Weeks `rosProjection` covers. Needed to re-project onto a shorter league season. */
+  rosWeeksRemaining: number | null
+  confidenceLevel: string
+  computedAt: Date
+}
+
+/**
+ * READ-ONLY: the AllFantasy projection engine's own output, from `AFProjectionSnapshot`.
+ *
+ * ── 🛑 WHY THIS EXISTS: THE ENGINE'S OUTPUT WAS UNREACHABLE FROM VALUATION ──────────────────
+ * `lib/af-projections/` computes these rows on a daily cron. Nothing in the trade-value chain read
+ * them. The chain read `fantasy_projections` instead — a DIFFERENT table — and
+ * {@link loadProjectionRows} explicitly filters `source: { not: 'allfantasy' }`, so even the mirror
+ * rows the writer copies there are excluded by design. The calculator was shut out twice over.
+ *
+ * ── PRECEDENCE: WEEK-SCOPED BEATS SEASON-LONG ───────────────────────────────────────────────
+ * The writer emits a season-long baseline (`week = null`) and, in the regular season, a week-scoped
+ * row carrying the opponent-history adjustment. The week row is strictly better informed, so it
+ * wins; the season row is the fallback. Both are returned and ordered so the caller can see which
+ * it got rather than being handed one silently.
+ *
+ * ⚠ `season` IS AN INTEGER HERE AND A STRING IN `fantasy_projections`. Passing the wrong one does
+ * not throw — Prisma rejects the type at compile time for a literal, but a `String(season)` threaded
+ * through from the other port would. The parameter is typed `number` deliberately.
+ */
+export async function loadAfProjectionRows(
+  sport: string,
+  ids: string[],
+  season: number,
+  week: number | null,
+): Promise<RawAfProjectionRow[]> {
+  const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
+  if (clean.length === 0) return []
+
+  const rows = await prisma.aFProjectionSnapshot
+    .findMany({
+      where: {
+        playerId: { in: clean },
+        sport,
+        season,
+        // Both the week-scoped row for THIS week and the season-long baseline.
+        ...(week != null ? { OR: [{ week }, { week: null }] } : { week: null }),
+      },
+      // Week-scoped first (nulls last), then freshest — so the caller's first hit per player is
+      // the best-informed row available.
+      orderBy: [{ week: 'desc' }, { computedAt: 'desc' }],
+      select: {
+        playerId: true,
+        sport: true,
+        season: true,
+        week: true,
+        afProjection: true,
+        rosProjection: true,
+        rosWeeksRemaining: true,
+        confidenceLevel: true,
+        computedAt: true,
+      },
+    })
+    .catch(() => [])
+
+  return rows as RawAfProjectionRow[]
+}

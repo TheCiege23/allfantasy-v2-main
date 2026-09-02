@@ -20,6 +20,7 @@ import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import type { CanonicalAsset, CanonicalAssetType } from '@/lib/decision-os/world/assets'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-value/snapshot'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
+import { scoringContextFromCanonicalWorld } from './scoringContextFromWorld'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from '@/lib/trade-value/types'
 // Type-only — the runtime edge is tradeWorld.ts → canonicalMemo.ts (it imports the leaf helpers). This
 // reverse type import is erased at compile, so the approved flow CanonicalWorld → TradeWorldResolver →
@@ -336,6 +337,13 @@ export function buildCanonicalTradeMemo(input: BuildCanonicalTradeMemoInput): Ca
     context,
     currentSeason,
     profiles,
+    /*
+     * ⚠ THIS ARGUMENT EXISTED SINCE SLICE 16 AND WAS NEVER PASSED. Without it every league —
+     * superflex, TE-premium, 4-team, 32-team — was priced as standard 1-QB redraft by the path
+     * that is LIVE in production. Null when the world knows nothing, which degrades to exactly
+     * the previous behaviour rather than to a guess.
+     */
+    scoring: scoringContextFromCanonicalWorld(input.world),
   })
 
   const uncertainty = dedupe([
@@ -408,6 +416,8 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
     context,
     currentSeason: tradeWorld.leagueContext.currentSeason,
     profiles,
+    // Same wire as the E.2 path above; a byte-identity test pins the two together.
+    scoring: tradeWorld.scoringContext,
   })
 
   // Reproduce the E.2 uncertainty composition EXACTLY (same sources, same order). `positionsResolved`

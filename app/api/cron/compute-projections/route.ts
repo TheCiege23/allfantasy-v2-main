@@ -54,7 +54,14 @@ const JOB = 'cron-compute-projections'
  * The run’s verdict, derived in ONE place so the HTTP response and the sync_job_runs row can
  * never disagree about whether the run was healthy.
  */
-function assess(r: WriteSnapshotsResult) {
+/**
+ * Exported so tests exercise THIS predicate rather than a copy of it.
+ *
+ * ⚠ A TEST THAT RE-IMPLEMENTS THE RULE IT IS CHECKING CANNOT FAIL WHEN THE RULE CHANGES. The first
+ * version of the carve-out tests did exactly that, and a mutation deliberately restoring the old
+ * wide condition left them green — they were testing my restatement of the logic, not the logic.
+ */
+export function assess(r: WriteSnapshotsResult) {
   const considered = r.written + r.refused
   const refusalRate = considered > 0 ? r.refused / considered : 1
   const zeroRows = r.written === 0
@@ -77,8 +84,25 @@ function assess(r: WriteSnapshotsResult) {
    * still fails. So does a mix, because a mix means some players DID have games.
    */
   const reasons = Object.keys(r.refusalsByReason ?? {})
+  /*
+   * 🛑 `!r.olderSeasonAvailable` IS LOAD-BEARING AND WAS MISSING. Without it this carve-out asks
+   * "does the NEWEST season have games?" when the question it means to ask is "does ANY season have
+   * games?". Those diverge the moment roster rows for an unplayed season land, and on 2026-08-20
+   * they diverged for NFL: the source flipped 2025 -> 2026, all 1,120 players refused
+   * `no_games_played`, and this branch marked ten consecutive zero-write runs HEALTHY. A complete
+   * 2025 season was sitting there the whole time.
+   *
+   * The exemption is legitimate only when there is genuinely nothing to project from. If an older
+   * season exists, a zero-write run is a fault and must be loud — `writeAfProjectionSnapshots` will
+   * normally have rolled back to it before we ever get here, so reaching this point WITH an older
+   * season available means the fallback also came back empty, which is a real problem.
+   */
   const noSourceSeasonYet =
-    zeroRows && r.refused > 0 && reasons.length === 1 && reasons[0] === 'no_games_played'
+    zeroRows &&
+    r.refused > 0 &&
+    reasons.length === 1 &&
+    reasons[0] === 'no_games_played' &&
+    !r.olderSeasonAvailable
 
   const failed = (zeroRows || tooManyRefusals) && !noSourceSeasonYet
   return { refusalRate, zeroRows, tooManyRefusals, noSourceSeasonYet, failed }
@@ -183,6 +207,9 @@ async function runOneSport(
             errors: result.errors.slice(0, 10),
             metadata: {
               sourceSeason: result.sourceSeason,
+              // Non-null when the source season was rolled back — a projection built from an older
+              // season is a different claim and the telemetry must say so.
+              sourceSeasonFallback: result.sourceSeasonFallback,
               targetSeason: result.targetSeason,
               refusalRate: Number(v.refusalRate.toFixed(4)),
               refusalsByReason: result.refusalsByReason,
@@ -213,6 +240,7 @@ async function runOneSport(
          */
         ...(weekIgnoredReason ? { weekIgnored: weekIgnoredReason } : {}),
         sourceSeason: r.sourceSeason,
+        sourceSeasonFallback: r.sourceSeasonFallback,
         targetSeason: r.targetSeason,
         scoringFormat: r.scoringFormat,
         idpPreset: r.idpPreset,

@@ -29,9 +29,16 @@
 import type { CanonicalMemoEnrichment } from './canonicalMemo'
 import { loadAdpRecords, type AdpRecordRow } from './loader'
 import { resolvePlayerMetadata, type PlayerMetadataResult } from '@/lib/decision-os/world'
-import { loadIdpValueRows, loadPlayerValueRows, loadProjectionRows } from '@/lib/decision-os/world/port'
+import {
+  loadAfProjectionRows,
+  loadIdpValueRows,
+  loadPlayerValueRows,
+  loadProjectionRows,
+} from '@/lib/decision-os/world/port'
+import { reprojectRos } from '@/lib/af-projections/restOfSeason'
 import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnrichedWorld'
 import type { RawIdpValueRow, RawPlayerValueRow, RawProjectionRow } from '@/lib/decision-os/world/facts'
+import type { RawAfProjectionRow } from '@/lib/decision-os/world/port'
 
 /**
  * Below this share of trades-per-day a price is thin: the market has rarely been asked to
@@ -58,6 +65,15 @@ export interface TradeEnrichmentPort {
    * playerId-keyed — the provider-id-keyed source the D.1 audit predated). NEVER calls a live API.
    */
   loadProjections: (sport: string, playerIds: string[], season: string, week: number) => Promise<RawProjectionRow[]>
+  /**
+   * READ-ONLY: the AllFantasy engine's own projections (`AFProjectionSnapshot`).
+   *
+   * 🛑 PREFERRED OVER `loadProjections`. `lib/af-projections/` scores a player under the league's
+   * own rules — including IDP components, which no provider feed carries — and its output was
+   * unreachable from valuation until now: the value chain read `fantasy_projections`, a different
+   * table, and that reader excludes AF's own mirror rows by design.
+   */
+  loadAfProjections: (sport: string, playerIds: string[], season: number, week: number | null) => Promise<RawAfProjectionRow[]>
   /**
    * READ-ONLY: persisted FantasyCalc valuations, matched to the league's own
    * format and QB format.
@@ -95,6 +111,7 @@ export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
   loadAdp: (sport, ids) => loadAdpRecords(sport, ids),
   resolveMetadata: (sport, ids) => resolvePlayerMetadata(sport, ids),
   loadProjections: (sport, ids, season, week) => loadProjectionRows(sport, ids, season, week),
+  loadAfProjections: (sport, ids, season, week) => loadAfProjectionRows(sport, ids, season, week),
   loadMarketValue: (ids, format, qbFormat) => loadPlayerValueRows(ids, format, qbFormat),
   loadIdpValue: (args) => loadIdpValueRows(args),
 }
@@ -148,6 +165,15 @@ export async function resolveTradeEnrichment(
     week?: number | null
     /** League scoring preset for the projection match tier (null ⇒ any_scoring + mismatch note). */
     scoringPresetId?: string | null
+    /**
+     * Games left in THIS league's season, when known.
+     *
+     * ⚠ ABSENT ⇒ THE STORED HORIZON STANDS, WHICH IS THE HONEST DEFAULT. The writer stores a
+     * rest-of-season total against a 17-week assumption. A league whose championship is week 14
+     * should re-project onto its own horizon rather than inherit that; a league that cannot say
+     * what its horizon is should inherit it rather than have one invented.
+     */
+    weeksRemaining?: number | null
     /**
      * The league's own value market.
      *
@@ -222,6 +248,60 @@ export async function resolveTradeEnrichment(
   // Projection — F2.5 wiring: persisted `FantasyProjection` rows via the world port, anchored to the
   // canonical world's season/week. Absent anchor or empty store ⇒ honest gap, surfaced not fabricated.
   let projectionResolved = 0
+
+  /*
+   * ── AF PROJECTIONS FIRST ────────────────────────────────────────────────────────────────────
+   * The AllFantasy engine scores a player under real league rules — including IDP components, which
+   * no provider feed carries at all. Its output lives in `AFProjectionSnapshot` and was unreachable
+   * from here: this seam read `fantasy_projections`, a DIFFERENT table, and that reader excludes
+   * AF's own mirror rows by design (`source: { not: 'allfantasy' }`). Shut out twice over.
+   *
+   * 🛑 THE UNIT DIFFERS AND THAT IS THE WHOLE RISK. `afProjection` is PER GAME; the value engine
+   * wants a REST-OF-SEASON total. `rosProjection` is that total, computed once at write time. Using
+   * `afProjection` here would understate every player by ~17x, silently, with every wrong value
+   * still a plausible price. Only `rosProjection` is read, and a row without one is SKIPPED rather
+   * than converted here against a guessed horizon.
+   */
+  let afProjectionResolved = 0
+  if (args.season != null) {
+    try {
+      const afRows = await port.loadAfProjections(args.sport, ids, args.season, args.week ?? null)
+      const seenAf = new Set<string>()
+      for (const row of afRows) {
+        // Rows arrive week-scoped first, then freshest — so the FIRST per player is best-informed.
+        if (!row.playerId || seenAf.has(row.playerId)) continue
+        if (row.rosProjection == null) continue
+        seenAf.add(row.playerId)
+
+        const target = args.weeksRemaining
+        const value = target != null
+          ? reprojectRos({
+              storedRos: row.rosProjection,
+              storedWeeks: row.rosWeeksRemaining,
+              targetWeeks: target,
+            })
+          : row.rosProjection
+        if (value == null) continue
+
+        projectionByPlayerId[row.playerId] = value
+        projectionResolved += 1
+        afProjectionResolved += 1
+      }
+      if (afProjectionResolved > 0) contributing.push('af_projection_snapshot')
+      /*
+       * ⚠ ASKED AND GOT NOTHING IS A FINDING, NOT A NO-OP. `AFProjectionSnapshot.playerId` and the
+       * ids passed in here are different id spaces unless the registry resolved them, and a join
+       * across mismatched spaces returns zero rows while looking exactly like "the engine has not
+       * computed these players yet". Named so it cannot hide behind an empty result.
+       */
+      if (afRows.length === 0) warnings.push('af_projection_no_rows')
+      else if (afProjectionResolved === 0) warnings.push('af_projection_rows_without_ros')
+    } catch {
+      warnings.push('af_projection_source_unavailable')
+    }
+  }
+
+  // Provider projections — now the FALLBACK, filling only players AF did not cover.
   if (args.season != null && args.week != null && args.week > 0) {
     try {
       const rows = await port.loadProjections(args.sport, ids, String(args.season), args.week)
@@ -234,6 +314,8 @@ export async function resolveTradeEnrichment(
       const now = new Date()
       let scoringMismatch = false
       for (const id of ids) {
+        // AF already answered for this player; a provider row must not overwrite it.
+        if (projectionByPlayerId[id] != null) continue
         const ctx = projectProjectionContext(rowsByPlayer.get(id) ?? [], args.scoringPresetId ?? null, now)
         if (ctx.projectedPoints == null) continue
         projectionByPlayerId[id] = ctx.projectedPoints

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { gradeTrade } from '@/lib/trade-value/grader'
 import { normalizedPlayerValue, type ScoringContext } from '@/lib/trade-value/valueEngine'
 import type { AssetValueSnapshot, SideTotals } from '@/lib/trade-value/types'
+import { scoringContextFromWorld } from '@/lib/decision-os/trade/scoringContextFromWorld'
 
 /**
  * "IS CHASE FOR GIBBS FAIR?" — grading a trade the user DESCRIBES.
@@ -81,10 +82,63 @@ function splitSides(message: string): { left: string; right: string } | null {
   return null
 }
 
-function scoringContextFor(league: {
+export interface DescribedTradeLeague {
   scoring: string | null
   leagueVariant: string | null
-}): ScoringContext {
+  /** `roster_positions`. When present the real shape is used and the label is not consulted. */
+  starters?: unknown
+  settings?: unknown
+  rosterSize?: number | null
+  irSlots?: number | null
+  taxiSlots?: number | null
+  teamCount?: number | null
+}
+
+/**
+ * The league's scarcity context, from ROSTER SLOTS when they exist and from the scoring LABEL only
+ * when they do not.
+ *
+ * 🛑 THE LABEL PATH IS A FALLBACK, NOT THE DESIGN, AND IT IS MEASURABLY LOSSY. It asked
+ * `s.includes('2qb')`, so a league became 2QB if and only if somebody had typed that exact
+ * substring. Measured against eleven plausible spellings it missed five — "Two QB Dynasty",
+ * "TWO-QB", "QB2 Required", "2-QB", "startTwoQb" — and each miss priced that league's quarterbacks
+ * at the 1-QB multiplier (0.85) instead of ~1.53. Roster slots cannot be misspelled.
+ *
+ * ⚠ AND THE LABEL PATH CANNOT SEE A 4-QB LEAGUE AT ALL. `is2QB` is a boolean; the shape carries the
+ * count. That is why the fallback is kept narrow rather than improved.
+ */
+export function scoringContextFor(league: DescribedTradeLeague): ScoringContext {
+  const starterSlots = Array.isArray(league.starters)
+    ? (league.starters as unknown[]).filter((x): x is string => typeof x === 'string')
+    : null
+
+  if (starterSlots && starterSlots.length > 0 && league.teamCount && league.teamCount >= 2) {
+    const fromShape = scoringContextFromWorld({
+      teams: league.teamCount,
+      starterSlots,
+      rosterSize: league.rosterSize ?? null,
+      irSlots: league.irSlots ?? null,
+      taxiSlots: league.taxiSlots ?? null,
+      scoringSettings: league.settings,
+    })
+    if (fromShape?.shape) {
+      /*
+       * The label still supplies scoring facts the settings blob may not carry — a league imported
+       * without `scoring_settings` can still be named "…PPR TEP". Shape wins for structure; the
+       * label fills only what the settings left null.
+       */
+      const s = (league.scoring ?? '').toLowerCase()
+      return {
+        ...fromShape,
+        scoringFormat:
+          fromShape.scoringFormat ??
+          (s.includes('half') ? 'half_ppr' : s.includes('ppr') ? 'ppr' : null),
+        tePremium:
+          fromShape.tePremium ?? (s.includes('te_premium') || s.includes('tep') ? 0.5 : null),
+      }
+    }
+  }
+
   const s = (league.scoring ?? '').toLowerCase()
   return {
     isSuperflex: s.includes('superflex') || s.includes('sflex'),
@@ -144,11 +198,26 @@ export async function buildDescribedTradeContext(args: {
   // One name and no separator is a player question, not a trade.
   if (!sides && candidates.length < 2) return null
 
-  let league: { scoring: string | null; leagueVariant: string | null } | null = null
+  let league: DescribedTradeLeague | null = null
   if (leagueId) {
-    league = await prisma.league
-      .findUnique({ where: { id: leagueId }, select: { scoring: true, leagueVariant: true } })
+    const row = await prisma.league
+      .findUnique({
+        where: { id: leagueId },
+        select: {
+          scoring: true, leagueVariant: true,
+          starters: true, settings: true, rosterSize: true, irSlots: true, taxiSlots: true,
+          _count: { select: { teams: true } },
+        },
+      })
       .catch(() => null)
+    if (row) {
+      league = {
+        scoring: row.scoring, leagueVariant: row.leagueVariant,
+        starters: row.starters, settings: row.settings, rosterSize: row.rosterSize,
+        irSlots: row.irSlots, taxiSlots: row.taxiSlots,
+        teamCount: row._count?.teams ?? null,
+      }
+    }
   }
 
   let rows: AdpRow[] = []
