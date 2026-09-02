@@ -90,6 +90,31 @@ describe('item 0 — a throttled provider is not reported as a missing league', 
     expect(fetchService).toMatch(/throw new SleeperImportUnavailableError/)
   })
 
+  /*
+   * Explaining a throttle is worth doing; not causing it is worth more. The per-league
+   * fan-out (18 tx weeks + 18 matchup weeks) was bounded and the league concurrency
+   * (pLimit(8) in the bulk route) was bounded, and nobody bounded the product — ~288
+   * simultaneous requests, which is the shape that produces the throttle in the first place.
+   */
+  it('caps how many Sleeper requests are in flight at once', () => {
+    expect(fetchService).toMatch(/pLimit\(\d+\)/)
+    expect(fetchService).toMatch(/sleeperRequestLimit\(/)
+  })
+
+  /*
+   * 🛑 THE SUBTLE ONE. If the AbortController is created OUTSIDE the limiter, the 12s
+   * timeout starts while the request is still queued — so under the very burst the
+   * limiter exists to smooth, the queue aborts requests that were never sent. That turns
+   * the fix into a worse bug than the one it replaces, and it looks identical in the
+   * logs (timeouts). The budget must cover the request, not the wait for a slot.
+   */
+  it('starts the request timeout inside the queue slot, not before it', () => {
+    const slot = /sleeperRequestLimit\(async \(\) => \{[\s\S]*?\}\)/.exec(fetchService)
+    expect(slot).not.toBeNull()
+    expect(slot![0]).toContain('new AbortController()')
+    expect(slot![0]).toContain('FETCH_TIMEOUT_MS')
+  })
+
   it('says what to do about a rate limit', () => {
     expect(fetchService).toMatch(/429/)
     expect(fetchService).toMatch(/rate-limiting/i)
