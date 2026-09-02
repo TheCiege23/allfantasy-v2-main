@@ -39,10 +39,29 @@ ALTER TABLE "manager_psych_profile_seasons"
   ALTER COLUMN "waiverFocusScore"    DROP NOT NULL,
   ALTER COLUMN "riskToleranceScore"  DROP NOT NULL;
 
--- ⚠ NOT INCLUDED, AND NOT AN OVERSIGHT: the columns still carry `DEFAULT 0`. Dropping NOT NULL
--- does not drop the default, so an INSERT that OMITS one of these columns still writes 0 rather
--- than NULL. Our writer names all fifteen columns explicitly, so nothing on the current path can
--- hit it — but a future writer that omits one would silently reintroduce exactly the bug above.
--- The hardening is `ALTER COLUMN "<col>" DROP DEFAULT` for the same five. It is handed to the
--- owner in §10.3 rather than applied here, because it is a schema change nobody has approved and
--- W4 says those are the owner's call.
+-- ── 🛑 AND THE DEFAULT MUST GO TOO — DROPPING NOT NULL IS ONLY HALF THE FIX ─────────────────
+--
+-- `DROP NOT NULL` does not drop the default. So after the statement above the columns permitted
+-- NULL but still carried `DEFAULT 0`, and an INSERT that OMITS one of them wrote 0 rather than
+-- NULL — the original bug, still fully armed, just waiting for a writer that names fourteen
+-- columns instead of fifteen. Our current writer names all fifteen, which is exactly what makes
+-- this the kind of trap that survives review: nothing on the live path can trigger it today.
+--
+-- ✅ APPLIED TO PRODUCTION 2026-09-02 on the owner's instruction, immediately after the statement
+-- above. Verified three ways rather than by reading the ALTER's own success:
+--   * `information_schema` reports column_default = NULL for all five, and still `0` for sampleSize
+--   * row count 97 before and 97 after — DDL touched no data
+--   * a behavioural probe, which is the only one that proves the CHANGE rather than the catalog:
+--       BEGIN; INSERT … (id, leagueId, managerId, sport, season, sampleSize)  -- aggressionScore OMITTED
+--       SELECT "aggressionScore"  ->  NULL          (was 0 before this statement); ROLLBACK;
+--
+-- ⚠ `sampleSize` KEEPS ITS `DEFAULT 0`, deliberately, for the same reason it kept NOT NULL: zero
+-- observations is a real, measured answer. Dropping its default would make an omitted sampleSize
+-- indistinguishable from an unmeasured one, which is the very confusion this file exists to end.
+
+ALTER TABLE "manager_psych_profile_seasons"
+  ALTER COLUMN "aggressionScore"     DROP DEFAULT,
+  ALTER COLUMN "activityScore"       DROP DEFAULT,
+  ALTER COLUMN "tradeFrequencyScore" DROP DEFAULT,
+  ALTER COLUMN "waiverFocusScore"    DROP DEFAULT,
+  ALTER COLUMN "riskToleranceScore"  DROP DEFAULT;

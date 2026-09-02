@@ -2277,10 +2277,30 @@ Stated so nobody goes looking:
 > ✅ **Applied.** Verified by effect: `information_schema` reports `is_nullable = YES` for all five
 > score columns and `NO` for `sampleSize`. The matching code change shipped with it — see §0.20.
 >
-> ⚠ **One hardening was NOT applied and is still open.** `DROP NOT NULL` does not drop the
-> `DEFAULT 0`, so an INSERT that *omits* one of these columns still writes `0` rather than `NULL`.
-> Nothing on the current path can hit it — our writer names all fifteen columns — but a future
-> writer that omits one silently reintroduces the whole bug. Your call:
+> ✅ **The `DEFAULT 0` hardening is ALSO applied** — 2026-09-02, on the owner's instruction.
+>
+> 🛑 **`DROP NOT NULL` does not drop the default, and that gap was the whole bug still armed.**
+> After the first statement the columns permitted NULL but still carried `DEFAULT 0`, so an INSERT
+> that *omitted* one wrote `0` rather than `NULL`. Nothing on the live path could reach it — our
+> writer names all fifteen columns — which is precisely what makes it the kind of trap that
+> survives review: it is invisible until the day someone writes fourteen.
+>
+> **Verified by behaviour, not by the ALTER's own success:**
+>
+> ```
+> information_schema   column_default = (none) for all five; still 0 for sampleSize
+> rows                 97 before, 97 after — DDL touched no data
+> probe (rolled back)  INSERT omitting aggressionScore  ->  reads NULL   (was 0)
+> ```
+>
+> The probe is the only one of the three that demonstrates the *change* rather than the catalog —
+> reading `information_schema` confirms the DDL was recorded, not that an omitted column now
+> behaves differently.
+>
+> ⚠ **`sampleSize` keeps both its `NOT NULL` and its `DEFAULT 0`**, for the one reason this whole
+> section turns on: zero observations is a real, measured answer, and zero aggression is not.
+>
+> The SQL as applied:
 >
 > ```sql
 > ALTER TABLE "manager_psych_profile_seasons"
