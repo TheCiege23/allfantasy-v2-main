@@ -931,4 +931,88 @@ See §8 of the audit doc. Order: 3.1 kickers → 7.1/7.2 Chimmy tools → the re
 | [`scripts/probe-value-parity.ts`](../scripts/probe-value-parity.ts) | Pure offline parity probe, 4 positive controls |
 | `.claude/launch.json` | Added `next-dev-value-engine` (own dist dir, per repo convention) |
 
-**Nothing is committed.** All changes are working-tree only.
+⚠ The line that stood here said **"Nothing is committed. All changes are working-tree only."**
+That was true when written and false by the time anyone read it — five commits exist
+(`205e8bceb`, `28c9b6078`, `688623d74`, `abef9c466`, `adfd7cde5`), three of them landed on
+`main`. Recorded rather than deleted, because a status line that ages into a lie is the failure
+mode this document is most exposed to.
+
+---
+
+## Census, 2026-09-02 — 🛑 `lib/trade-intel/` ALREADY MODELS MOST OF THESE FORMATS
+
+**This reframes Phase 4 and the "16 per-format value models" item, and it was found by accident.**
+While blocked on a typecheck box, a read-only census of what the repo knows about each format
+turned up a ~12,000-line subsystem nobody in this plan had mentioned.
+
+### What exists
+
+| Module | Lines | What it does |
+|---|---|---|
+| `lib/trade-intel/leagueFormatRules.ts` | 413 | Concept resolution **including alias flattening**; keeper surplus; impossible-pick warnings |
+| `lib/trade-intel/tradeContextNotes.ts` | 1488 | The consumer — reached from `/api/trade-value/analyze` |
+| `pirate.ts` · `zombie.ts` · `kingOfTheHill.ts` | 207·262·144 | Steal exposure, weapon/bomb/serum value, crown value |
+| `survivor.ts` · `tournament.ts` · `guillotine.ts` | 207·192·194 | Tribe relation, bracket compression, field-shrink decay |
+| `salaryCap.ts` · `devyOutlook.ts` · `devyTradeValue.ts` | 242·339·320 | Cap maths, college asset recognition |
+| `rosterNeed.ts` · `positionScarcity.ts` · `contention.ts` · `situation.ts` · `trajectory.ts` · `managerPremium.ts` | 463·137·178·273·341·370 | The context axes the original audit asked about |
+
+### What it does NOT do
+
+**None of it reaches `normalizedPlayerValue`.** It produces prose, risk descriptions and some
+point-based maths for an analyze route. No format opinion can move a trade value.
+
+So the gap is real and `lib/trade-value/formats/` is the right shape for it — but the framing
+"sixteen unmodelled formats" was wrong, and acting on it would have built a second implementation
+of work that already exists.
+
+### 🛑 The defect this found in already-written code
+
+`formats/registry.ts` resolved models from `TradeValueContext.leagueType`.
+`lib/league-creation/canonical/normalizeConcept.ts` flattens four concepts onto base formats:
+
+    pirate_vampire → dynasty        king_of_the_hill → redraft
+    royal          → dynasty        idp              → redraft
+
+A pirate league's `leagueType` is the literal string `dynasty`. **Any pirate or
+king-of-the-hill model would have been unreachable from the day it landed**, returning a null
+indistinguishable from an honest "no model". Fixed in `adfd7cde5` by resolving through
+`readFormatRules`, which already handled this.
+
+The sixteen-id list was also wrong three ways — it counted string occurrences, so it caught
+`idol` and `exile` (Survivor mechanics) and `lottery` (`lib/draft-lottery/`), missed `c2c`, and
+listed alias-only ids as `leagueType` values.
+
+### What this changes about the plan
+
+1. **Do not write 16 models from scratch.** For pirate, zombie, KOTH, survivor, tournament,
+   guillotine, salary cap and devy/c2c, the rules are already encoded — the work is a *value
+   adapter* over `lib/trade-intel/`, not new domain logic.
+2. **`lib/league-concepts/*Defaults.ts` is a second rule source**, machine-readable, covering
+   redraft, dynasty, best ball, keeper, guillotine, tournament, survivor, devy, salary cap, c2c.
+   Guillotine alone carries `eliminationStartWeek`, `eliminationsPerPeriod`, `endgame`,
+   `faabBudgetPerTeam`, `dangerMarginPoints`.
+3. **Only a few formats genuinely lack encoded rules** — `big_brother` and `zombie` have large
+   engine directories but no settings snapshot; Four Horsemen needed a PDF from the user. Those
+   are where a rulebook is still required.
+4. ⚠ **`lib/trade-value/captureSnapshot.ts:237` hardcodes `leagueType: 'redraft'` and
+   `isDynasty: false`.** Believed correct — it is the redraft capture path writing
+   `redraft_trade_value_snapshots` — but **not proven**. If anything routes a dynasty trade
+   through it, that trade is priced as redraft silently.
+
+### Method note — and a correction inside it
+
+The finding came from checking whether a module already existed **before** writing one, which is
+this repo's standing rule and was skipped when the registry was first written.
+
+⚠ **The first version of this note gave a wrong reason, and the wrong reason is worth keeping.**
+It said a name-grep found zero callers because the per-format functions "are used via re-export".
+They are not. `tradeContextNotes.ts` imports them with **relative paths** — `from './pirate'`,
+`from './zombie'`, `from './kingOfTheHill'` — so the grep that missed them was searching for
+`trade-intel/pirate`, which a relative import never contains. That is precisely the
+four-import-form trap CLAUDE.md records, hit **while writing about it**, and the invented
+explanation had a plausible mechanism attached. Verified by reading the import block.
+
+**`lib/trade-intel/salaryCap.ts` (242 lines) is genuinely orphaned** — censused across all four
+import forms, its only importer is `__tests__/salary-cap-trade.test.ts`. Every one of its five
+exports has exactly one caller, the test. It is the one module in the subsystem that reaches no
+production path, so a salary-cap value adapter has no existing consumer to hang off.
