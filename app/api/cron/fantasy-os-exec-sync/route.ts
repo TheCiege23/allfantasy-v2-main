@@ -4,6 +4,7 @@ import { resolveCadence } from '@/lib/fantasy-os/sync/season'
 import {
   runDueLeagues,
   runExternalMatchupParity,
+  runFantraxMatchupParity,
 } from '@/lib/fantasy-os/sync/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
@@ -163,6 +164,28 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    /*
+     * 🛑 THE WRITER IS THE HALF THAT IS EASY TO SKIP AND FATAL TO SKIP. A
+     * collector with no scheduled caller keeps its table empty in production
+     * while every local test of it passes — the same failure `ingestCFBDStats`
+     * shipped for months. Fantrax leagues had no WeeklyMatchup writer at all,
+     * which is why their league home reports "we cannot tell which week this
+     * league is in yet" and "no week has been scored yet".
+     *
+     * Bounded (one request per PLAYED period per league, three leagues a tick)
+     * and swallowed, same contract as the collectors above.
+     */
+    let fantraxMatchups: unknown = null
+    try {
+      fantraxMatchups = await runFantraxMatchupParity({ now, maxLeagues: parityLeagues })
+    } catch (fantraxErr) {
+      fantraxMatchups = {
+        error:
+          fantraxErr instanceof Error
+            ? fantraxErr.message.slice(0, 160)
+            : 'fantrax matchup parity failed',
+      }
+    }
 
     return NextResponse.json({
       ...heartbeat,
@@ -171,6 +194,7 @@ export async function GET(req: NextRequest) {
       profiles,
       draftSessions,
       externalMatchups,
+      fantraxMatchups,
     })
   } catch (err) {
     return NextResponse.json(

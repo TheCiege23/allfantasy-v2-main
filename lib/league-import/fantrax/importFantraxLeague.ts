@@ -14,7 +14,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
 import {
-  flattenFantraxSchedule,
+  fetchFantraxScheduleWithScores,
   getFantraxLeagueInfo,
   getFantraxPlayerIds,
   getFantraxStandings,
@@ -40,6 +40,20 @@ export type FantraxImportOutcome =
        */
       scoringRules: FantraxScoringRule[]
       scoringGaps: string[]
+      /**
+       * Where the league sits in its own calendar, and how much of it was
+       * actually read.
+       *
+       * ⚠ `scoredPeriodsRead: 0` IS NOT A FAILURE ON A PRESEASON LEAGUE — it is
+       * the correct cost of a season that has not started. Separating it from
+       * `scoredPeriodsFailed` is what lets a caller tell "nothing to read yet"
+       * from "the results endpoint would not answer", which otherwise present
+       * identically as a league with no scores.
+       */
+      seasonState: 'preseason' | 'in_progress' | 'complete' | null
+      currentPeriod: number | null
+      scoredPeriodsRead: number
+      scoredPeriodsFailed: number
     }
   | { ok: false; error: string; teams?: string[] }
 
@@ -65,11 +79,22 @@ export async function importFantraxLeague(args: {
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message }
 
-  const [rosters, standings, cfb, nfl] = await Promise.all([
+  /*
+   * ⚠ THE SCHEDULE READ IS NOW TWO ENDPOINTS, NOT ONE. `getLeagueInfo` carries
+   * the fixtures; the results live on `getMatchupScores?period=N`, which nothing
+   * in this repo had ever called. Without it every imported Fantrax league had a
+   * full fixture list and no score anywhere on it, so no week could be scored,
+   * no current week could be derived, and every record read 0-0.
+   *
+   * The extra cost is bounded by the league's own calendar — a preseason league
+   * spends zero additional requests. See `fetchFantraxScheduleWithScores`.
+   */
+  const [rosters, standings, cfb, nfl, schedule] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
+    fetchFantraxScheduleWithScores(args.leagueId, info.data),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message }
   /* Only one map has to load. A league is one sport, so failing the whole
@@ -167,6 +192,16 @@ export async function importFantraxLeague(args: {
 
   const payload = {
     appUserId: args.appUserId,
+    /*
+     * The id this import was handed, kept so the snapshot can be refreshed.
+     *
+     * It was previously used and discarded: `FantraxLeague.id` is a local uuid,
+     * `League.platformLeagueId` is set to THAT uuid, and no column held Fantrax's
+     * own id — so every snapshot was write-once and the scheduled refresh had
+     * nothing to re-fetch with. Both the fixtures and the results live behind
+     * this id.
+     */
+    sourceLeagueId: args.leagueId,
     sport: best.sport,
     teamCount: resolved.length,
     userTeam: mine.teamName,
@@ -193,8 +228,13 @@ export async function importFantraxLeague(args: {
      * carries every period's fixtures and the real playoff boundary, so every
      * imported Fantrax league arrived with no schedule and no playoff structure
      * while the data sat in the same object.
+     *
+     * ⚠ AND THE FIXTURES CARRY RESULTS NOW. An unplayed period keeps null
+     * scores rather than 0-0 — the reader in `FantraxLeagueFetchService` already
+     * distinguishes the two (`asNumber(matchup.awayScore, null) ?? undefined`),
+     * so a null week arrives as "no score on file" instead of a scoreless tie.
      */
-    matchups: flattenFantraxSchedule(info.data) as unknown as object,
+    matchups: schedule.rows as unknown as object,
   }
 
   const row = await prisma.fantraxLeague.upsert({
@@ -220,6 +260,10 @@ export async function importFantraxLeague(args: {
     total: mine.total,
     scoringRules: scoring.rules,
     scoringGaps: scoring.gaps,
+    seasonState: schedule.position?.state ?? null,
+    currentPeriod: schedule.position?.period ?? null,
+    scoredPeriodsRead: schedule.periodsRead,
+    scoredPeriodsFailed: schedule.periodsFailed,
   }
 }
 

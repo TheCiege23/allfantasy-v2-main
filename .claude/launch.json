@@ -60,6 +60,36 @@
       }
     },
     {
+      "// next-dev-connect-league": "6a Connect-your-league visual pass. Its own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-connect-league",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-connect-league",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-matchup": "core/matchup visual pass. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-matchup",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-matchup",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
       "name": "next-start",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -119,6 +149,141 @@
       "autoPort": true,
       "env": {
         "AF_NEXT_DIST_DIR": ".next-dev-visuals-b2",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-my-team": "core/my-team visual pass. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-my-team",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-my-team",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-passing": "CFBD passing profile preview (/dev/passing-preview). Own dist dir: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at 'Starting...' forever, so it must not share one with a concurrent session.",
+      "name": "next-dev-passing",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-passing",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-notifications": "/core/notifications renderer investigation. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-notifications",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-notifications",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-core-rail": "core rail/nav sticky-layout measurement. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-core-rail",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-core-rail",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-tournament-hub": "Tournament commissioner hub visual pass (/dev/tournament-hub-preview). Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-tournament-hub",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-tournament-hub",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-value-engine": "Trade-value + AF-projections audit and rebuild. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-value-engine",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-value-engine",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-pwa": "PWA store-screenshot capture. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-pwa",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-pwa",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-decision-os": "R0.3 — re-measure buildDecisionOsGroundingPacket via /api/admin/decision-os/grounding-proof now that domain_os_facts exists and the feeds are warm. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-decision-os",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-decision-os",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-admin": "Admin Command Center (29a) visual pass. Own dist dir for the reason every other entry here has one: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever rather than reporting the lock.",
+      "name": "next-dev-admin",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-admin",
         "NODE_OPTIONS": "--max-old-space-size=6144"
       }
     }

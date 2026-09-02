@@ -102,6 +102,28 @@ export interface CanonicalValue {
   /** Present only when `scope === 'league'`. A league value with no league is not addressable. */
   leagueId?: string | null
 
+  /**
+   * Display name and position — for a surface that must NAME the player rather than address them.
+   *
+   * 🛑 ADDED BECAUSE THIS CONTRACT WAS ANONYMOUS AND THAT MADE IT UNUSABLE IN A PROMPT.
+   * Everything above identifies a player to the SYSTEM: `playerId` is the registry spine,
+   * `idSpace`/`sourceId` keep a join auditable. None of it identifies them to a READER. A model
+   * handed `pid-3d9f8a2c … 6420 market_units` cannot answer "what is Nabers worth", and the
+   * grounding packet's whole job is to let it.
+   *
+   * ⚠ THE NAME WAS ALREADY IN HAND IN ALL THREE ADAPTERS AND WAS BEING DISCARDED.
+   * `marketAdapter` selects `name` and passes it as the resolver's `nameHint`, then drops it one
+   * line later; `idpKickerAdapter` does the same; `devyAdapter`'s `sourceId` is literally
+   * `name@school`. This costs no new query anywhere.
+   *
+   * ⚠ DISPLAY-ONLY, AND DELIBERATELY OPTIONAL. It is not part of identity, never a join key, and
+   * `isCoherentValue` does not look at it — a value with no name is still a valid value, and a
+   * producer that has none must not be forced to invent one. Never use it to match a player;
+   * `7beaa8811` measured 4,925 of 7,248 colliding names on the college side.
+   */
+  playerName?: string | null
+  position?: string | null
+
   positionRank?: number | null
   overallRank?: number | null
 

@@ -15039,6 +15039,15 @@ model AFProjectionSnapshot {
   baselineProjection Float
   weatherAdjustment  Float     @default(0)
   afProjection       Float
+  /// Rest-of-season projected points. NULL = not computed — readers MUST fall back, never treat
+  /// as 0, because 0 is a real claim ("will score nothing") the value engine acts on.
+  /// ⚠ DIFFERENT UNIT FROM `afProjection`, WHICH IS PER GAME. Confusing the two understates a
+  /// player by roughly the number of weeks remaining, silently. See lib/af-projections/restOfSeason.ts.
+  rosProjection      Float?
+  /// Weeks `rosProjection` covers, as known at `computedAt`. Without this the total cannot be
+  /// re-projected onto a league whose season ends earlier, and a LOW total is indistinguishable
+  /// from a LATE-SEASON one.
+  rosWeeksRemaining  Int?
   weatherCacheId     String?
   adjustmentFactors  Json?
   adjustmentReason   String?

@@ -27,6 +27,7 @@ import {
   computeOpponentAdjustment,
 } from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRates, toWeeklyObservation } from './core'
+import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import type { ProjectionOutcome, ScoringFormat, WeeklyObservation } from './types'
 
 export interface WriteSnapshotsResult {
@@ -206,6 +207,22 @@ export async function writeAfProjectionSnapshots(
   // FOR the week being played outranks anything inferred from completed games, so this is
   // the strongest input the engine has; failure is non-fatal and falls back to history.
   const targetWeek = opts.targetWeek ?? inRegularSeason?.week ?? 1
+
+  /*
+   * Games left in the season, computed ONCE here so every row this run writes shares one horizon.
+   *
+   * 🛑 THE ROS TOTAL IS A DIFFERENT UNIT FROM `afProjection`, WHICH IS PER GAME. Feeding a per-game
+   * rate where a rest-of-season total is expected understates a player by roughly this number,
+   * silently — every wrong value is still a plausible price. `rosFromPerGame` is the only place
+   * that multiplication is allowed to happen; see ./restOfSeason.ts.
+   *
+   * ⚠ NO BYE-WEEK ADJUSTMENT HERE, AND THAT IS AN OMISSION, NOT A DECISION. `weeksRemaining`
+   * accepts a `byeWeek` and subtracts one still ahead — worth ~7.7% over a 13-week window, applied
+   * to exactly the players whose bye has not yet passed, so it does not cancel out across the
+   * league. This writer has no bye data on hand. `rosWeeksRemaining` is persisted precisely so a
+   * consumer that DOES know the bye can re-project rather than inherit this approximation.
+   */
+  const rosWeeks = weeksRemaining({ currentWeek: targetWeek })
   let weekBoard: Record<
     string,
     { stats: Record<string, number>; position: string | null; opponent?: string | null }
@@ -391,6 +408,10 @@ export async function writeAfProjectionSnapshots(
         // consistent with adjustmentReason staying null — not a stand-in for unknown weather.
         weatherAdjustment: 0,
         afProjection: outcome.afProjection,
+        // Null when the horizon is unknown — NEVER 0, which the value engine would read as
+        // "this player will score nothing" rather than "not computed".
+        rosProjection: rosFromPerGame(outcome.afProjection, rosWeeks),
+        rosWeeksRemaining: rosWeeks,
         adjustmentFactors: adjustmentFactorsJson,
         adjustmentReason: outcome.adjustmentReason,
         confidenceLevel: outcome.confidence.level,
@@ -498,6 +519,8 @@ export async function writeAfProjectionSnapshots(
             baselineProjection: weeklyOutcome.baselineProjection,
             weatherAdjustment: 0,
             afProjection: weeklyOutcome.afProjection,
+            rosProjection: rosFromPerGame(weeklyOutcome.afProjection, rosWeeks),
+            rosWeeksRemaining: rosWeeks,
             adjustmentFactors: weeklyFactors,
             adjustmentReason: weeklyOutcome.adjustmentReason,
             confidenceLevel: weeklyOutcome.confidence.level,

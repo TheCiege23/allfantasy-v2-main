@@ -4,6 +4,11 @@ import { provisionTournamentLeagueWithManagers } from '@/lib/tournament/setupEng
 import { generateLeagueNamesForConference, recordName, slugify } from '@/lib/tournament/namingEngine'
 import { applyRoundRosterRules } from '@/lib/tournament/rosterRules'
 import { scheduleRoundDraft } from '@/lib/tournament/scheduleRoundDraft'
+import {
+  matchParticipantsToRecords,
+  readImportedLeagueRecords,
+} from '@/lib/tournament/importedStandingsSource'
+import { composeBubble } from '@/lib/tournament/bubbleComposition'
 
 export type StandingRow = {
   tournamentLeagueParticipantId: string
@@ -31,7 +36,15 @@ export type AdvancementResult = {
 /** After opening, consolidate into leagues of this size when possible. */
 const POST_OPENING_LEAGUE_SLOT_TARGET = 8
 
-function compareStandings(
+/**
+ * The tiebreak, exported so a read-only view cannot invent a second one.
+ *
+ * ⚠ W/L THEN POINTS-FOR IS WHO ADVANCES. A screen that sorts "the same way"
+ * with its own copy will eventually disagree with the engine by a hundredth of
+ * a point, and the manager it shows in 64th is not the one the engine advances.
+ * One comparator, used by both.
+ */
+export function compareStandings(
   a: { wins: number; pointsFor: number; pointsAgainst: number },
   b: { wins: number; pointsFor: number; pointsAgainst: number },
   tiebreakerMode: string,
@@ -89,6 +102,42 @@ export async function calculateLeagueStandings(tournamentLeagueId: string): Prom
     where: { tournamentLeagueId },
     include: { participant: true },
   })
+
+  /*
+   * 🛑 AN IMPORTED LEAGUE HAS NO `RedraftSeason`, AND WITHOUT THIS THE FALLBACK
+   * BELOW RECOMPUTES FROM THE PARTICIPANT'S OWN STORED COPY.
+   *
+   * Nothing refreshes that copy for an imported league, so the engine read its
+   * own last answer, sorted it, and reported no movement — indistinguishable
+   * from a week nobody played, and the reason a commissioner recomputes 240
+   * managers by hand every week while this function sits here.
+   *
+   * `LeagueTeam` is where the Sleeper importer actually puts the record, so that
+   * is what an imported league is scored from. Native leagues are untouched:
+   * `season` still wins, and this only fills users that branch did not.
+   */
+  if (rosterByUser.size === 0) {
+    const imported = await readImportedLeagueRecords(tl.leagueId)
+    if (imported.rows.length > 0) {
+      const matches = matchParticipantsToRecords(
+        participants.map((lp) => ({
+          userId: lp.userId,
+          displayName: lp.participant?.displayName ?? null,
+        })),
+        imported.rows,
+      )
+      for (const m of matches) {
+        if (!m.record) continue
+        rosterByUser.set(m.participant.userId, {
+          wins: m.record.wins,
+          losses: m.record.losses,
+          ties: m.record.ties,
+          pf: m.record.pointsFor,
+          pa: m.record.pointsAgainst,
+        })
+      }
+    }
+  }
 
   const rows: StandingRow[] = []
   for (const lp of participants) {
@@ -290,8 +339,11 @@ export async function identifyQualifiers(
 
     const wc = shell.wildcardCount
     const wcPids: string[] = []
+    /* Kept because the bubble is composed from the bottom of THIS group. */
+    const wcRows: typeof nonQual = []
     for (let i = 0; i < wc && i < nonQual.length; i++) {
       const row = nonQual[i]!
+      wcRows.push(row)
       wcPids.push(row.participantId)
       wildcards.push(row.participantId)
       await prisma.tournamentLeagueParticipant.update({
@@ -316,20 +368,41 @@ export async function identifyQualifiers(
 
     const rest = nonQual.slice(wc)
     if (shell.bubbleEnabled && isOpeningRound) {
-      const half = Math.min(shell.bubbleSize, rest.length)
+      /*
+       * 🛑 THE BUBBLE IS NOT A WINDOW BELOW THE CUT. This used to take the next
+       * `bubbleSize` managers by RANK and leave everyone inside the cut safe.
+       * The rule these tournaments actually run puts the BOTTOM of the cut at
+       * risk and fills the other half with the top SCORERS below the line — who
+       * are usually not the next names by rank, because rank is wins-first.
+       *
+       * `composeBubble` is shared with the standings board precisely so a
+       * manager is never shown as safe here and eliminated there.
+       */
+      const composition = composeBubble(
+        /* The bubble is decided across the wildcards and everyone under them —
+           direct league qualifiers keep the place they won outright. */
+        [...wcRows, ...rest],
+        {
+          cut: wcRows.length,
+          bubbleSize: shell.bubbleSize,
+          enabled: true,
+          pointsOf: (row) => row.pointsFor,
+        },
+      )
+
       const bubblePids: string[] = []
-      for (let i = 0; i < half; i++) {
-        const row = rest[i]!
+      for (const row of [...composition.atRisk, ...composition.challengers]) {
         bubblePids.push(row.participantId)
         bubble.push(row.participantId)
+        /* ⚠ An at-risk manager was marked `wildcard_eligible` moments ago. This
+           demotes them to `bubble`: they have not advanced, they are defending. */
         await prisma.tournamentLeagueParticipant.update({
           where: { id: row.id },
           data: { advancementStatus: 'bubble' },
         })
       }
       const elimAfterBubble: string[] = []
-      for (let i = half; i < rest.length; i++) {
-        const row = rest[i]!
+      for (const row of composition.eliminated) {
         elimAfterBubble.push(row.participantId)
         eliminated.push(row.participantId)
         await prisma.tournamentLeagueParticipant.update({

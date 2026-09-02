@@ -1,5 +1,5 @@
 import type { AdminCommandCenterMetrics, AdminMetric } from '@/lib/admin-dashboard/AdminCommandCenterService'
-import { buildAdminVerdict, buildPeerGroups } from '@/lib/admin-dashboard/adminVerdict'
+import { buildAdminVerdict, buildPeerGroups, type AdminPeerGroup } from '@/lib/admin-dashboard/adminVerdict'
 
 /**
  * 29a — the Command Center overview: a verdict, then three peer groups.
@@ -18,29 +18,58 @@ import { buildAdminVerdict, buildPeerGroups } from '@/lib/admin-dashboard/adminV
  * ⚠ EVERY ISSUE LINKS SOMEWHERE THAT EXISTS. The anchors here (#providers,
  * #crons, #env) are rendered by the admin page below. A verdict that names a
  * problem and then strands the reader is worse than no verdict.
+ *
+ * Styling comes from `app/admin/command-center.css`, whose tokens are scoped to
+ * `.af-cc` rather than `:root` — see that file's header for why copying the
+ * handoff's `tokens.css` verbatim into the document root would repaint the
+ * whole app.
  */
 
-function MetricRow({ item }: { item: AdminMetric }) {
+/**
+ * The scope label in each card's header. The handoff fixes this copy per group
+ * ("ALL TIME" / "STRIPE" / "LIVE"), so it is a mapping rather than data —
+ * `AdminPeerGroup.hint` is a sentence and reads badly as a header chip. The
+ * hint is not discarded: it becomes each card's accessible name below.
+ */
+const GROUP_SCOPE: Record<AdminPeerGroup['id'], string> = {
+  people: 'All time',
+  money: 'Stripe',
+  now: 'Live',
+}
+
+function MetricRow({ item, lead, group }: { item: AdminMetric; lead: boolean; group: AdminPeerGroup['id'] }) {
+  /*
+   * ⚠ THE UNTRACKED BRANCH MUST NOT RENDER `item.value`. An unmeasured metric
+   * has no number to show, and printing one — even a zero — is exactly the
+   * confusion this shape exists to prevent.
+   */
   if (!item.tracked) {
     return (
-      <div className="rounded-xl border border-dashed border-amber-300/25 bg-amber-200/[0.04] px-3 py-2.5">
-        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-100/50">
-          {item.label}
+      <div className="af-cc-untracked">
+        <div className="af-cc-untracked-text">
+          <div className="af-cc-untracked-label">{item.label}</div>
+          {item.note ? <div className="af-cc-untracked-reason">{item.note}</div> : null}
         </div>
-        <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-200/80">
-          Not tracked
-        </div>
-        {item.note ? <div className="mt-0.5 text-[11px] text-white/35">{item.note}</div> : null}
+        <div className="af-cc-untracked-chip">Not tracked</div>
       </div>
     )
   }
+
+  const valueClass = [
+    'af-cc-metric-value',
+    lead ? 'af-cc-metric-value--lead' : '',
+    lead && group === 'now' ? 'af-cc-metric-value--good' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
-      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/55">
-        {item.label}
+    <div className="af-cc-metric">
+      <div className="af-cc-stack af-cc-metric-label">
+        <span>{item.label}</span>
+        {item.note ? <span className="af-cc-cell-faint">{item.note}</span> : null}
       </div>
-      <div className="mt-1 text-lg font-black leading-tight text-white">{item.value}</div>
-      {item.note ? <div className="mt-0.5 text-[11px] text-white/40">{item.note}</div> : null}
+      <div className={valueClass}>{item.value}</div>
     </div>
   )
 }
@@ -49,111 +78,115 @@ export function AdminCommandCenterOverview({ metrics }: { metrics: AdminCommandC
   const verdict = buildAdminVerdict(metrics)
   const groups = buildPeerGroups(metrics)
   const untrackedMoney = groups.find((g) => g.id === 'money')?.metrics.filter((m) => !m.tracked).length ?? 0
+  const others = verdict.issues.slice(1)
+  const criticalCount = verdict.issues.filter((i) => i.severity === 'critical').length
+  const warnCount = verdict.issues.length - criticalCount
 
   return (
-    <section aria-label="Command Center overview" className="mb-8 space-y-5">
+    <section aria-label="Command Center overview" className="af-cc-stack" style={{ gap: 16 }}>
       {/* ── The verdict ─────────────────────────────────────────────────── */}
-      <div
-        className={
-          verdict.ok
-            ? 'rounded-2xl border border-emerald-300/25 bg-emerald-400/[0.07] p-5'
-            : 'rounded-2xl border border-rose-300/30 bg-rose-500/[0.08] p-5'
-        }
-      >
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span
-            className={
-              verdict.ok
-                ? 'text-2xl font-black tracking-tight text-emerald-200'
-                : 'text-2xl font-black tracking-tight text-rose-200'
-            }
-          >
-            {verdict.headline}
-          </span>
-          <span className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-            checked {new Date(metrics.generatedAt).toLocaleTimeString()}
-          </span>
+      <div className="af-cc-verdict">
+        <div className={verdict.ok ? 'af-cc-verdict-main' : 'af-cc-verdict-main af-cc-verdict-main--bad'}>
+          <span className="af-cc-dot" aria-hidden="true" />
+          <div className="af-cc-verdict-text">
+            <div className="af-cc-verdict-head">{verdict.headline}</div>
+            <div className="af-cc-verdict-evidence">
+              {verdict.ok
+                ? 'Every configured provider is reporting · every scheduled job is wired · no critical environment variable is missing'
+                : [
+                    criticalCount ? `${criticalCount} critical` : '',
+                    warnCount ? `${warnCount} warning${warnCount === 1 ? '' : 's'}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+            </div>
+          </div>
         </div>
 
+        {/*
+          The handoff's right-hand panel. It exists only when something is
+          actually wrong — an empty "0 things need you" box is chrome, and 29a's
+          whole argument is that this strip answers a question rather than
+          decorating one.
+        */}
         {verdict.lead ? (
           <a
             href={verdict.lead.anchor}
-            className="mt-3 block rounded-xl border border-white/10 bg-black/25 px-4 py-3 transition hover:border-white/25"
+            className={
+              verdict.lead.severity === 'critical' ? 'af-cc-needs af-cc-needs--critical' : 'af-cc-needs'
+            }
           >
-            <div className="flex items-center gap-2">
-              <span
-                className={
-                  verdict.lead.severity === 'critical'
-                    ? 'rounded bg-rose-400 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-rose-950'
-                    : 'rounded bg-amber-300 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-amber-950'
-                }
-              >
-                {verdict.lead.severity === 'critical' ? 'Critical' : 'Warning'}
-              </span>
-              <span className="text-sm font-bold text-white">{verdict.lead.title}</span>
-            </div>
-            <div className="mt-1 text-xs text-white/55">{verdict.lead.consequence}</div>
+            <span className="af-cc-needs-mark" aria-hidden="true">
+              {verdict.lead.severity === 'critical' ? '!' : '⚠'}
+            </span>
+            {/*
+              ⚠ THE COUNT LIVES ON THE LEFT, NOT HERE. `verdict.headline` is
+              already "N things need you"; repeating it here spends the one
+              panel that can name the actual problem on saying the same thing
+              twice. So this side carries the lead issue's title and its
+              consequence — which is the blast radius, not a restatement.
+            */}
+            <span className="af-cc-verdict-text">
+              <span className="af-cc-needs-title">{verdict.lead.title}</span>
+              <span className="af-cc-needs-detail">{verdict.lead.consequence}</span>
+            </span>
           </a>
-        ) : (
-          <p className="mt-2 text-xs text-white/50">
-            Every configured provider is reporting, every scheduled job is wired, and no critical
-            environment variable is missing.
-          </p>
-        )}
-
-        {verdict.issues.length > 1 ? (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
-              The other {verdict.issues.length - 1}
-            </summary>
-            <ul className="mt-2 space-y-1.5">
-              {verdict.issues.slice(1).map((issue) => (
-                <li key={issue.id}>
-                  <a href={issue.anchor} className="block text-xs text-white/65 hover:text-white">
-                    <span
-                      className={
-                        issue.severity === 'critical'
-                          ? 'mr-2 font-black text-rose-300'
-                          : 'mr-2 font-black text-amber-300'
-                      }
-                    >
-                      ·
-                    </span>
-                    <span className="font-semibold">{issue.title}</span>{' '}
-                    <span className="text-white/40">{issue.consequence}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
         ) : null}
       </div>
 
+      {others.length ? (
+        <details className="af-cc-more">
+          <summary className="af-cc-more-summary">The other {others.length}</summary>
+          <ul className="af-cc-more-list">
+            {others.map((issue) => (
+              <li key={issue.id}>
+                <a href={issue.anchor} className="af-cc-more-link">
+                  <span
+                    className={
+                      issue.severity === 'critical'
+                        ? 'af-cc-more-bullet af-cc-more-bullet--critical'
+                        : 'af-cc-more-bullet'
+                    }
+                    aria-hidden="true"
+                  >
+                    ·
+                  </span>
+                  <b>{issue.title}</b> {issue.consequence}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {/* ── Three peer groups ───────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="af-cc-grid3">
         {groups.map((group) => (
-          <div key={group.id} className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-            <div className="mb-1 text-[11px] font-black uppercase tracking-[0.18em] text-white/70">
-              {group.label}
+          <section key={group.id} className="af-cc-card" aria-label={`${group.label} — ${group.hint}`}>
+            <div className="af-cc-card-head">
+              <div className="af-cc-card-title">{group.label}</div>
+              <div className={group.id === 'now' ? 'af-cc-card-scope af-cc-card-scope--live' : 'af-cc-card-scope'}>
+                {GROUP_SCOPE[group.id]}
+              </div>
             </div>
-            <div className="mb-3 text-[11px] text-white/35">{group.hint}</div>
-            <div className="space-y-2">
+            <div className="af-cc-card-body">
               {group.metrics.length ? (
-                group.metrics.map((item, i) => <MetricRow key={`${group.id}-${item.label}-${i}`} item={item} />)
+                group.metrics.map((item, i) => (
+                  <MetricRow key={`${group.id}-${item.label}-${i}`} item={item} lead={i === 0} group={group.id} />
+                ))
               ) : (
-                <div className="rounded-xl border border-dashed border-white/12 px-3 py-3 text-[11px] text-white/35">
-                  Nothing reported in this group.
-                </div>
+                <div className="af-cc-empty">Nothing reported in this group.</div>
               )}
+
+              {group.id === 'money' && untrackedMoney > 0 ? (
+                <p className="af-cc-footnote">
+                  {untrackedMoney} of these are not instrumented. They are shown as NOT TRACKED rather than as a
+                  zero on purpose — an unmeasured number and a real zero are different readings and must not look
+                  alike.
+                </p>
+              ) : null}
             </div>
-            {group.id === 'money' && untrackedMoney > 0 ? (
-              <p className="mt-3 text-[11px] leading-relaxed text-amber-100/50">
-                {untrackedMoney} of these are not instrumented. They are shown as NOT TRACKED rather
-                than as a zero on purpose — an unmeasured number and a real zero are different
-                readings and must not look alike.
-              </p>
-            ) : null}
-          </div>
+          </section>
         ))}
       </div>
     </section>

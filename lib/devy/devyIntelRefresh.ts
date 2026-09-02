@@ -163,9 +163,26 @@ const PHASES: Array<{
     },
   },
   {
+    /*
+     * ⚠ HEAD COACHES LIVE HERE RATHER THAN IN A SIXTH PHASE, AND THE ROTATION
+     * ARITHMETIC BELOW IS WHY. This list is already oversubscribed — 5.14 slots
+     * of demand against 4 of supply — and the passing phase's own note records
+     * that a sixth entry would push `recruiting` and `teamContext` back toward
+     * the zero they were just rescued from. Pass locations were folded into the
+     * passing phase for exactly this reason; coaching is folded here for the
+     * same one.
+     *
+     * It is also the right home on the merits, not only on budget. A head coach
+     * is school-level context that cannot move more than once a season, which is
+     * the identical grain and cadence as SP+ and returning production, and it is
+     * written to the same rows in the same loop. The two extra provider calls
+     * (this season and the prior one, needed because "did the staff change" is a
+     * comparison rather than a reading) sit against a 75,000/month allowance on
+     * a phase whose real cost has always been the DB write loop.
+     */
     key: 'teamContext',
     everyMs: 24 * HOUR_MS,
-    why: 'SP+ and returning production are near-constant in season',
+    why: 'SP+, returning production and the head coach are near-constant in season',
     run: (season) => ingestCFBDTeamContext(season),
   },
   {

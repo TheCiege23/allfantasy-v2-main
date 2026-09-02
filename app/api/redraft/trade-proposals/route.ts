@@ -203,6 +203,13 @@ export async function POST(req: NextRequest) {
       await captureRedraftTradeValueSnapshot({
         proposalId: created.id,
         seasonId,
+        /*
+         * ⚠ WITHOUT THIS THE SNAPSHOT IS PRICED AS A STANDARD 12-TEAM 1-QB LEAGUE. The `scoring`
+         * string two lines below is a LABEL for the context record and is hardcoded; the real
+         * scarcity settings (slots, team count, PPR, TE premium) are read from the league inside
+         * `captureRedraftTradeValueSnapshot`, and only when this id is supplied.
+         */
+        leagueId,
         proposerRosterId,
         receiverRosterId,
         sport: season.sport,

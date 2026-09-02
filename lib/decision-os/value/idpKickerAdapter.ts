@@ -165,6 +165,10 @@ export async function loadIdpKickerValues(args: IdpKickerAdapterArgs): Promise<V
       basis: basisFor(row.position),
       scope: 'league',
       leagueId: args.leagueId,
+      // Already loaded and already used as `nameHint` a few lines up. Position matters more here
+      // than in the market adapter: an IDP value is meaningless without knowing it is an LB.
+      playerName: row.name ?? null,
+      position: row.position ?? null,
       positionRank: null,
       overallRank: null,
       /*

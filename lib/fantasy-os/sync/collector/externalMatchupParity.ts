@@ -120,7 +120,7 @@ function toRosterId(provider: ExternalMatchupProvider, sourceTeamId: string): nu
   return Number.isInteger(n) && n >= 0 ? n : null
 }
 
-type ScheduleWeekInput = {
+export type ScheduleWeekInput = {
   week: number
   season: number
   matchups: Array<{ teamId1: string; teamId2: string; points1?: number; points2?: number }>
@@ -133,8 +133,18 @@ type ScheduleWeekInput = {
  * a changed week is replaced whole (delete + createMany), mirroring
  * `refreshWeekCache`.
  */
-async function applySchedule(
-  provider: ExternalMatchupProvider,
+/**
+ * ⚠ EXPORTED, AND TAKES A RESOLVER RATHER THAN A PROVIDER NAME.
+ *
+ * `provider` was only ever used to pick a `toRosterId`, and a second writer
+ * (`fantraxMatchupParity`) needs the identical row semantics with a different
+ * id mapping. Copying this function would put two definitions of "what a
+ * WeeklyMatchup row means" in the tree, and the two drifting is invisible: both
+ * write rows, both look right, and the surfaces that read them disagree about
+ * who won. One definition, one resolver argument.
+ */
+export async function applySchedule(
+  toRoster: (sourceTeamId: string) => number | null,
   externalLeagueId: string,
   schedule: ScheduleWeekInput[]
 ): Promise<{ weeksWritten: number; weeksUnchanged: number }> {
@@ -150,8 +160,8 @@ async function applySchedule(
       win: number
     }> = []
     weekEntry.matchups.forEach((m, index) => {
-      const roster1 = toRosterId(provider, m.teamId1)
-      const roster2 = toRosterId(provider, m.teamId2)
+      const roster1 = toRoster(m.teamId1)
+      const roster2 = toRoster(m.teamId2)
       if (roster1 == null || roster2 == null) return
       const p1 = typeof m.points1 === 'number' && Number.isFinite(m.points1) ? m.points1 : 0
       const p2 = typeof m.points2 === 'number' && Number.isFinite(m.points2) ? m.points2 : 0
@@ -326,7 +336,7 @@ export async function runExternalMatchupParity(input?: {
         continue
       }
       const { weeksWritten, weeksUnchanged } = await applySchedule(
-        connection.provider,
+        (id) => toRosterId(connection.provider, id),
         connection.externalLeagueId,
         fetched.schedule
       )

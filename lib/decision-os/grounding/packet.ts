@@ -18,6 +18,9 @@ import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } fro
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
 import { stampLineupSlots, starterSlotsFromRules } from './stampLineupSlots'
+// Reused rather than reimplemented: the trade shadow already derives the market's QB bucket from
+// starting slots with this exact function, and two copies would eventually disagree.
+import { detectQbFormat } from '@/lib/core-app/slotEligibility'
 import type { ImportAssertions } from '../import/assertions'
 import type { ProjectionFact } from '../projection/facts'
 import type { ValueLookup } from '../value/contract'
@@ -446,6 +449,97 @@ export function collectGaps(
     .map(([slice, s]) => ({ slice, ...(s.gap as GroundingGap) }))
 }
 
+/**
+ * Date a COLLECTION by its oldest member.
+ *
+ * 🛑 THIS REPLACED `facts[0]?.computedAt`, WHICH DATED 1,576 PROJECTIONS BY WHICHEVER ROW HAPPENED
+ * TO LAND FIRST. Measured on production 2026-09-02: the packet announced "Projections: available
+ * (13 days old)" while the newest `AFProjectionSnapshot` had been written the previous morning.
+ * The rows span three weeks, they arrive in no guaranteed order, and an arbitrary element's
+ * timestamp was being presented as the freshness of the whole slice.
+ *
+ * ⚠ OLDEST, NOT NEWEST — a single `asOf` cannot express a range, so the only real question is
+ * which way to be wrong. This codebase already answered it: `ImportAssertions` carries BOTH
+ * `lastAttemptedSyncAt` and `lastSuccessfulSyncAt` precisely so a surface cannot show the
+ * flattering one and tell a user their league synced two minutes ago when it has been failing for
+ * four days. Overstating age makes a model hedge more than it must; understating it makes a model
+ * assert stale numbers as current. Only the first is recoverable.
+ *
+ * ⚠ Lexicographic comparison is correct AND intentional here: every `computedAt` in this codebase
+ * is an ISO-8601 UTC string, which sorts chronologically as text. `Date.parse` would introduce a
+ * `NaN` path for a malformed value that silently wins every comparison.
+ */
+export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>): string | null {
+  let oldest: string | null = null
+  for (const r of rows) {
+    const c = r?.computedAt
+    if (typeof c !== 'string' || c.length === 0) continue
+    if (oldest === null || c < oldest) oldest = c
+  }
+  return oldest
+}
+
+/**
+ * The market format this league prices against, read off the rules the packet ALREADY loaded.
+ *
+ * ── 🛑 R1.2. THE CALLER USED TO HAVE TO SUPPLY THIS, AND THE ONE CALLER THAT MATTERS DID NOT ──
+ * `/api/chat/chimmy` passed no `valueFormat`, and the market slice was gated on
+ * `want.values && args.valueFormat` — so the entire offence/market valuation lane was absent from
+ * every answer, and setting `want.values: true` alone would have bought nothing. The proof
+ * surface had the same hole.
+ *
+ * ⚠ DERIVED HERE RATHER THAN DEMANDED FROM CALLERS, for the reason `OsFactSource.scopeKey`
+ * exists: two call sites computing the same key eventually disagree. The rules are already in
+ * hand, so this costs no query.
+ *
+ * ⚠ KEEPER MAPS TO DYNASTY. `PlayerValueSnapshot` holds exactly four combinations — measured on
+ * production: DYNASTY/REDRAFT × SUPERFLEX/ONE_QB — so every league must land on one of them. A
+ * keeper league carries assets across seasons, which is what the dynasty market prices; calling it
+ * REDRAFT would price a held asset as a rental.
+ */
+export function deriveValueFormat(rules: unknown): { format: string; qbFormat: string } | null {
+  if (!rules || typeof rules !== 'object') return null
+  const r = rules as { general?: { format?: unknown }; roster?: { starters?: unknown } }
+  const raw = typeof r.general?.format === 'string' ? r.general.format : null
+  if (!raw) return null
+  return {
+    format: /dynasty|keeper/i.test(raw) ? 'DYNASTY' : 'REDRAFT',
+    // Shared with the trade shadow's own derivation rather than reimplemented — it reads
+    // SUPER_FLEX/SF slots and a second QB slot, both of which mean the same thing to the market.
+    qbFormat: detectQbFormat(r.roster?.starters),
+  }
+}
+
+/**
+ * This league's scoring, as the `statKey → points` map `rescoreIdpForLeague` expects.
+ *
+ * 🛑 WITHOUT IT EVERY PROJECTION IS THE *BALANCED* IDP PRESET, NOT A NEUTRAL ONE. Measured on
+ * production 2026-09-02: a superflex dynasty league rostering Khalil Mack (LB) and Jonas Sanker
+ * (DB) was shown `canonical preset, NOT this league` on every row. `projection-os` warns about
+ * exactly this — the stored number is materially wrong for a tackle-heavy league, and nothing
+ * about it looks wrong.
+ *
+ * ⚠ ALL ACTIVE RULES ARE PASSED, NOT A FILTERED "IDP" SUBSET. `rescoreIdpForLeague` iterates the
+ * PROJECTION's component amounts and looks each one up in this map, so a non-IDP key is never
+ * read. Filtering on `category` here would instead risk dropping a real IDP rule whose category
+ * is spelled differently by one importer — a silent under-scoring rather than a harmless extra key.
+ */
+export function deriveIdpRules(rules: unknown): Record<string, number> | null {
+  if (!rules || typeof rules !== 'object') return null
+  const active = (rules as { scoring?: { activeRules?: unknown } }).scoring?.activeRules
+  if (!Array.isArray(active)) return null
+  const out: Record<string, number> = {}
+  for (const row of active) {
+    if (!row || typeof row !== 'object') continue
+    const k = (row as { statKey?: unknown }).statKey
+    const v = (row as { pointsValue?: unknown }).pointsValue
+    if (typeof k === 'string' && k.length > 0 && typeof v === 'number' && Number.isFinite(v)) out[k] = v
+  }
+  // Null rather than `{}` — an empty map would rescore every projection to zero and report
+  // `rescored: true`, which is the confident-wrong-number failure this packet exists to prevent.
+  return Object.keys(out).length > 0 ? out : null
+}
+
 export interface GroundingPacketArgs {
   leagueId?: string | null
   userId?: string | null
@@ -568,17 +662,32 @@ export async function buildDecisionOsGroundingPacket(
       ? kick('leagueRules', leagueOs.loadRules(leagueId).catch(() => null))
       : Promise.resolve(null)
 
+  /*
+   * ⚠ THE ONE DELIBERATE DEPENDENCY IN AN OTHERWISE FLAT ASSEMBLY (R1.2).
+   *
+   * Everything else here starts together because nothing consumes another's result. These two do:
+   * the market format and this league's IDP scoring are both READ OFF the rules. That costs one
+   * hop — and `leagueRules` is served from the store in ~765ms against ~1250ms of measured
+   * headroom (R0.10), so it fits.
+   *
+   * An explicit argument still wins and stays fully parallel, which is why the resolution is a
+   * promise rather than an await: a caller that already knows the format pays nothing for this.
+   */
+  const pValueFormat: Promise<{ format: string; qbFormat: string } | null> = args.valueFormat
+    ? Promise.resolve(args.valueFormat)
+    : pRules.then(deriveValueFormat).catch(() => null)
+
   const pMarket =
-    want.values && args.valueFormat && !marketKill
+    want.values && !marketKill
       ? kick(
           'marketValues',
-          valueOs
-            .loadMarket({
-              sport: args.sport,
-              format: args.valueFormat.format,
-              qbFormat: args.valueFormat.qbFormat,
-            })
-            .catch(() => null),
+          pValueFormat.then((vf) =>
+            vf
+              ? valueOs
+                  .loadMarket({ sport: args.sport, format: vf.format, qbFormat: vf.qbFormat })
+                  .catch(() => null)
+              : null,
+          ),
         )
       : Promise.resolve(null)
 
@@ -589,15 +698,26 @@ export async function buildDecisionOsGroundingPacket(
       )
     : Promise.resolve(null)
 
+  /*
+   * ⚠ `undefined` AND `null` MEAN DIFFERENT THINGS HERE, AND THE DISTINCTION IS LOAD-BEARING.
+   * `null` is a caller saying "give me the canonical value" — legitimate, and `ProjectionFact.
+   * rescored: false` reports it honestly. `undefined` is a caller with no opinion, which is every
+   * caller today, and is what this derivation is for. Collapsing them with `??` would make an
+   * explicit request for canonical numbers silently return league-scored ones.
+   */
+  const pIdpRules: Promise<Record<string, number> | null> =
+    args.leagueIdpRules !== undefined
+      ? Promise.resolve(args.leagueIdpRules)
+      : pRules.then(deriveIdpRules).catch(() => null)
+
   const pProjections = want.projections && !projectionKill
     ? kick(
         'projections',
-        projectionOs
-          .loadFor(
-            { sport: args.sport, season: args.season, week: args.week ?? null },
-            args.leagueIdpRules ?? null,
-          )
-          .catch(() => null),
+        pIdpRules.then((idp) =>
+          projectionOs
+            .loadFor({ sport: args.sport, season: args.season, week: args.week ?? null }, idp)
+            .catch(() => null),
+        ),
       )
     : Promise.resolve(null)
 
@@ -687,17 +807,29 @@ export async function buildDecisionOsGroundingPacket(
 
   // ── Market values ─────────────────────────────────────────────────────────────────────────
   let marketValues: GroundedSlice<ValueLookup[]> = absent(NOT_REQUESTED)
-  if (want.values && args.valueFormat && marketKill) marketValues = absent(marketKill)
-  else if (want.values && args.valueFormat) {
+  if (want.values && marketKill) marketValues = absent(marketKill)
+  else if (want.values) {
     const v = verdictFor('globalPlayerValue') // global — no league import can block it
+    const vf = await pValueFormat
     const rows = await pMarket
-    marketValues = hasSubstance(rows)
-      ? present(rows, { servedFrom: 'store', conclusive: v })
-      : absent({
-          reason: 'not_computed',
-          detail: `No market values are held for ${args.sport} in this format.`,
-          remedy: 'They refresh daily; a cold cache fills on the next run.',
-        }, v)
+    if (!vf) {
+      // ⚠ A DISTINCT REASON FROM "no values held". The market is fine; we could not work out
+      // which of its four format buckets to read, which is a LEAGUE-side gap with a different
+      // remedy. Collapsing it into `not_computed` would send someone to look at the wrong system.
+      marketValues = absent({
+        reason: 'not_computed',
+        detail: "This league's format could not be resolved, so no market bucket could be chosen.",
+        remedy: 'Re-import the league so its settings and starting slots are rebuilt.',
+      }, v)
+    } else {
+      marketValues = hasSubstance(rows)
+        ? present(rows, { servedFrom: 'store', conclusive: v })
+        : absent({
+            reason: 'not_computed',
+            detail: `No market values are held for ${args.sport} in ${vf.format}/${vf.qbFormat}.`,
+            remedy: 'They refresh daily; a cold cache fills on the next run.',
+          }, v)
+    }
   }
 
   // ── Devy values ───────────────────────────────────────────────────────────────────────────
@@ -736,7 +868,7 @@ export async function buildDecisionOsGroundingPacket(
     } else {
       // ⚠ Present but possibly INCONCLUSIVE: we have the numbers, the league may be too stale to
       // act on them. The verdict travels with the slice rather than gating its presence.
-      const slice = present(facts, { asOf: facts[0]?.computedAt ?? null, servedFrom: 'store', conclusive: v })
+      const slice = present(facts, { asOf: oldestAsOf(facts), servedFrom: 'store', conclusive: v })
       projections = v.ok ? slice : { ...slice, gap: gapFromVerdict(v) }
     }
   }

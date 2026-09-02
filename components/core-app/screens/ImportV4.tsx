@@ -1963,6 +1963,20 @@ export function ImportV4({
             </a>
           </p>
         ) : null}
+
+        {/*
+          ⚠ THE C2C / DEVY PAIRING HAD NO ENTRY POINT ANYWHERE IN THE APP.
+          `FranchiseLink` has modelled a two-league franchise all along and
+          `/api/legacy/franchise` has served it, with zero callers. This flow is
+          about leagues that are ALREADY imported, which is why it sits at the
+          foot of the import screen rather than inside a provider step: you
+          reach it after importing both halves, not while importing one.
+        */}
+        <p className="af-im-fx-link af-im-fx-link--foot">
+          <a href="/core/connect-leagues">
+            Run a college league alongside a pro one? Connect them →
+          </a>
+        </p>
       </section>
       )}
 

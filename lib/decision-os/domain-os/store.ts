@@ -32,6 +32,20 @@ export interface OsStore {
     ttlMs: number
   }): Promise<OsFactEnvelope<T> | null>
 
+  /**
+   * Persist one fact. Resolves TRUE only when the row was actually stored.
+   *
+   * 🛑 THE RETURN IS THE WHOLE POINT, AND IT WAS ADDED AFTER THIS LIED IN PRODUCTION FOR WEEKS.
+   * This used to resolve `void`, so "stored" and "silently dropped" were the same observable
+   * outcome. Measured 2026-09-01: `domain_os_facts` did not exist, every upsert threw P2021, every
+   * throw was swallowed here, and `/api/cron/domain-os-refresh` reported `written: N` every 30
+   * minutes for work that never happened.
+   *
+   * ⚠ A STORE MUST AFFIRM SUCCESS — anything other than `true` is read as failure by
+   * {@link safeWrite}. Silence is not consent: an implementation that forgets to return is
+   * reporting that it did not persist, which is the safe direction and the direction that made
+   * this bug findable.
+   */
   write(args: {
     domain: OsDomain
     kind: string
@@ -41,7 +55,7 @@ export interface OsStore {
     facts: unknown
     confidence?: number | null
     sampleSize?: number | null
-  }): Promise<void>
+  }): Promise<boolean>
 }
 
 function delegateOf(db: PrismaLike) {
@@ -90,7 +104,11 @@ export function createOsStore(db: PrismaLike = defaultPrisma): OsStore {
 
     async write({ domain, kind, level, scopeKey, sport, facts, confidence, sampleSize }) {
       const delegate = delegateOf(db)
-      if (!delegate) return
+      // Absent only when the generated client has no such model at all. ⚠ NOT the same as the
+      // table being missing: the delegate exists whenever the model is in schema.prisma, so a
+      // missing TABLE reaches the upsert below and throws P2021 — which is exactly how this went
+      // unnoticed. Verified 2026-09-01, 24 `domainOsFacts` references in the generated client.
+      if (!delegate) return false
       try {
         const data = {
           sport,
@@ -104,8 +122,13 @@ export function createOsStore(db: PrismaLike = defaultPrisma): OsStore {
           create: { domain, kind, level, scopeKey, ...data },
           update: data,
         })
+        return true
       } catch {
-        // Populating the cache must never fail the caller that produced the facts.
+        // Still swallowed — populating the cache must never fail the caller that produced the
+        // facts. But it is now REPORTED rather than merely survived, so a caller whose entire job
+        // is writing (OsFeed.refresh) can tell the difference. Callers that only wanted the fact
+        // (OsFeed.get) ignore this and are unaffected.
+        return false
       }
     },
   }
@@ -123,10 +146,24 @@ export async function safeRead<T>(
   }
 }
 
-export async function safeWrite(store: OsStore, args: Parameters<OsStore['write']>[0]): Promise<void> {
+/**
+ * Guarded write. Resolves TRUE only when the store affirmed it persisted the row.
+ *
+ * ⚠ `=== true` IS DELIBERATE AND IS NOT DEFENSIVE PEDANTRY. A store that resolves `undefined` —
+ * an older implementation, a test double written before this contract, one that simply forgot to
+ * return — is reported as a FAILURE, not as a success. Treating `undefined` as "probably fine" is
+ * the precise shape of the bug this function now exists to prevent, and it would let the next
+ * unmigrated store go quiet in exactly the same way.
+ *
+ * A throwing store and a declining store are the same answer here: not persisted.
+ */
+export async function safeWrite(
+  store: OsStore,
+  args: Parameters<OsStore['write']>[0],
+): Promise<boolean> {
   try {
-    await store.write(args)
+    return (await store.write(args)) === true
   } catch {
-    // opportunistic
+    return false
   }
 }

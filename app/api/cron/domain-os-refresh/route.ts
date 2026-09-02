@@ -127,6 +127,15 @@ type RefreshCounts = {
   due: number
   written: number
   unavailable: number
+  /**
+   * Derived fine, the store would not take it.
+   *
+   * ⚠ REPORTED SEPARATELY BECAUSE IT NEEDS A DIFFERENT RESPONSE. `unavailable` is upstream and
+   * usually transient; a non-zero `writeFailed` is a schema, permissions or capacity problem that
+   * will not resolve on its own — and while this field did not exist, every one of them was
+   * counted as `written`.
+   */
+  writeFailed: number
   failed: number
   skippedForTime: number
   errors: string[]
@@ -142,13 +151,25 @@ export async function GET(req: NextRequest) {
   const result = await withSyncJobRun(
     { jobName: 'cron-domain-os-refresh', sport: 'NFL', trigger: 'cron' },
     () => run(),
+    /*
+     * 🛑 THE COUNT AND THE STATUS BOTH HAVE TO MOVE, OR THE FIX IS HALF DONE.
+     *
+     * Counting `writeFailed` in `run()` while this block still reported `success` would leave the
+     * signal in a field nobody reads — the same "seam with no consumer" shape that let the
+     * original bug live. A run in which EVERY write failed used to satisfy `r.failed === 0` and
+     * report `status: 'success'` with `rowsWritten: N`.
+     *
+     * ⚠ `writeFailed` is NOT folded into `rowsSkipped`. Skipped means "we chose not to do this";
+     * a rejected write means "we tried and the store refused". Filing one as the other is how a
+     * schema problem reads as a budget decision.
+     */
     (r) => ({
       rowsRead: r.considered,
       rowsWritten: r.written,
       rowsSkipped: r.skippedForTime + r.unavailable,
       errors: r.errors,
-      status: r.failed > 0 ? 'partial' : 'success',
-      metadata: { due: r.due, unavailable: r.unavailable, failed: r.failed },
+      status: r.failed > 0 || r.writeFailed > 0 ? 'partial' : 'success',
+      metadata: { due: r.due, unavailable: r.unavailable, writeFailed: r.writeFailed, failed: r.failed },
     }),
   )
 
@@ -182,7 +203,7 @@ function target<TFacts>(
 async function run(): Promise<RefreshCounts> {
   const budget = createRunBudget()
   const counts: RefreshCounts = {
-    considered: 0, due: 0, written: 0, unavailable: 0, failed: 0, skippedForTime: 0, errors: [],
+    considered: 0, due: 0, written: 0, unavailable: 0, writeFailed: 0, failed: 0, skippedForTime: 0, errors: [],
   }
 
   const leagues = await prisma.league
@@ -252,12 +273,21 @@ async function run(): Promise<RefreshCounts> {
 
     counts.due += 1
 
-    // Per-league isolation: one league that cannot resolve must not end the walk. `refresh`
-    // already swallows a derive rejection into 'unavailable'; this catch covers a store write
-    // failing, which it does not.
+    /*
+     * Per-league isolation: one league that cannot resolve must not end the walk. `refresh`
+     * swallows a derive rejection into 'unavailable' and a store rejection into 'write_failed',
+     * so this catch is for anything neither of those covers.
+     *
+     * 🛑 THIS COMMENT USED TO CLAIM THE CATCH COVERED A FAILING STORE WRITE. It never could —
+     * `safeWrite` swallowed the throw two layers below, so nothing reached here and `refresh`
+     * returned the literal 'written'. Between that and a `domain_os_facts` table which did not
+     * exist in production (confirmed 2026-09-01), this walk reported `written: N` every 30
+     * minutes for rows it never wrote. The fix is the outcome, not the catch.
+     */
     try {
       const outcome = await t.refresh(args)
       if (outcome === 'written') counts.written += 1
+      else if (outcome === 'write_failed') counts.writeFailed += 1
       else counts.unavailable += 1
     } catch (e) {
       counts.failed += 1

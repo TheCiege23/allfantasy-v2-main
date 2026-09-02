@@ -132,21 +132,35 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
                 : null,
           }
         })(),
-        currentSchedule: {
-          state: schedule.length > 0 ? 'partial' : 'missing',
-          count: schedule.length,
-          /*
-           * ⚠ WAS "depends on uploaded standings/matchup exports", WHICH IS NO
-           * LONGER THE ONLY SOURCE. A live import reads every period's fixtures
-           * from the league API. What it does NOT read is results: getLeagueInfo
-           * carries the pairings and not the scores, which live on
-           * getMatchupScores?period=N, one request per period.
-           */
-          note:
-            schedule.length > 0
-              ? 'Fixtures come from the league schedule; scores are present only where a CSV export supplied them.'
-              : 'No Fantrax matchup data was available for this league.',
-        },
+        /*
+         * ⚠ WAS "depends on uploaded standings/matchup exports", THEN "fixtures
+         * but no results". Both are now out of date: `getMatchupScores?period=N`
+         * is implemented and called, so a live import carries results for every
+         * period that has been played.
+         *
+         * ⚠ AND "SOME ROWS HAVE SCORES" IS NOT THE SAME AS "THE SCHEDULE IS
+         * FULL". A season half played has half its fixtures legitimately
+         * unscored, and calling that partial would report a healthy league as
+         * incomplete every week until January. What is reported instead is how
+         * many weeks carry results — a count the reader can check against the
+         * calendar, rather than a state that conflates "not played yet" with
+         * "not imported".
+         */
+        currentSchedule: (() => {
+          const scoredWeeks = schedule.filter((week) =>
+            week.matchups.some((m) => m.points_1 != null || m.points_2 != null),
+          ).length
+          return {
+            state: schedule.length > 0 ? ('partial' as const) : ('missing' as const),
+            count: schedule.length,
+            note:
+              schedule.length === 0
+                ? 'No Fantrax matchup data was available for this league.'
+                : scoredWeeks > 0
+                  ? `Fixtures and results come from the league itself; ${scoredWeeks} of ${schedule.length} weeks have been scored.`
+                  : 'Fixtures come from the league schedule. No week has been played yet, so no scores are on file.',
+          }
+        })(),
         draftHistory: {
           state: history.draft_picks.length > 0 ? 'partial' : 'missing',
           count: history.draft_picks.length,

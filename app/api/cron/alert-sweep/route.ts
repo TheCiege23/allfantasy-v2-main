@@ -33,10 +33,26 @@ import { detectInjuredStarterAlerts } from '@/lib/chimmy-alerts/ChimmyAlertDetec
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
+import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+/**
+ * Heartbeat identity in `sync_job_runs`. Must stay in step with PROBES in
+ * scripts/cron-freshness-check.mjs — renaming it here without renaming it there makes the
+ * freshness monitor report CONFIG ("no rows for job_name") forever.
+ *
+ * ⚠ THIS IS THE ONLY THING THAT CAN WATCH THIS JOB, WHICH IS WHY IT IS HERE.
+ * The sweep's product of record is a push notification, not a row: it reads `webPushSubscription`
+ * and sends. The one table it does touch — `SportsInjury`, via the game-window fold — is written
+ * far more often by `/api/cron/import-injuries`, which is already probed on
+ * `SportsInjury.fetchedAt`, so a table probe here would be satisfied by THAT job and report this
+ * one healthy while it sent nothing. Until this heartbeat existed, alert-sweep could have stopped
+ * delivering injured-starter alerts entirely and no monitor would have said a word.
+ */
+const JOB = 'cron-alert-sweep'
 
 /**
  * Game-window Sleeper status fold.
@@ -155,7 +171,7 @@ async function handle(req: NextRequest) {
     process.env.VAPID_PUBLIC_KEY?.trim() && process.env.VAPID_PRIVATE_KEY?.trim(),
   )
 
-  try {
+  const runSweep = async () => {
     // Game-window fold FIRST, so this very sweep evaluates against the fresh
     // statuses. Error-swallowed and time-boxed: Sleeper being slow or down must
     // never stop the sweep itself (the race leaves a late fold to finish in the
@@ -295,9 +311,9 @@ async function handle(req: NextRequest) {
 
     const withErrors = results.filter((r) => r.errors.length > 0)
 
-    return NextResponse.json({
+    return {
       // Zero alerts is a legitimate outcome (off-season, healthy rosters) and must not fail.
-      ok: true,
+      ok: true as const,
       dryRun,
       pushConfigured,
       usersScanned: results.length,
@@ -308,7 +324,33 @@ async function handle(req: NextRequest) {
       errors: withErrors.slice(0, 10).map((r) => ({ userId: r.userId, errors: r.errors })),
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
-    })
+    }
+  }
+
+  try {
+    /*
+     * A dry run and a single-user call record NOTHING, deliberately. The probe matches on
+     * job_name alone, so a row written by a hand-issued verification (`?userId=…`, which this
+     * route's own docs describe as exactly that) would be indistinguishable from a scheduled
+     * fire and could hide a dead scheduler. Same reasoning as cron/notification-outbox-relay.
+     */
+    const payload =
+      dryRun || singleUser
+        ? await runSweep()
+        : await withSyncJobRun({ jobName: JOB, sport: 'NFL', trigger: 'cron' }, runSweep, (r) => ({
+            rowsRead: r.usersScanned,
+            rowsWritten: r.pushesSent,
+            rowsSkipped: r.usersWithErrors,
+            /*
+             * ⚠ ZERO PUSHES IS NOT A FAILURE and must never be recorded as one — on a Tuesday in
+             * the off-season it is the correct outcome, and a job that reports failure for being
+             * right is one nobody reads. What IS reported is push being unconfigured, because
+             * that silently converts every alert into nothing at all.
+             */
+            status: !r.pushConfigured || r.usersWithErrors > 0 ? ('partial' as const) : ('success' as const),
+          }))
+
+    return NextResponse.json(payload)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[cron/alert-sweep] failed:', message)

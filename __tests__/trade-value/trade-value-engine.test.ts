@@ -26,11 +26,27 @@ describe('valueEngine', () => {
     expect(rb).toBeGreaterThan(qb)
   })
 
-  it('gives a small premium for lower ADP and clamps to 0..10000', () => {
+  /**
+   * ⚠ UPDATED BY 1.7f. This previously asserted `toBe(10000)` for an absurd 9,999-point
+   * projection, which pinned the HARD CLAMP — the behaviour that made four different elite
+   * superflex quarterbacks all price at exactly 10000. The stated requirement, in this test's own
+   * name, is that values stay inside 0..10000, and the soft knee still satisfies it (9992).
+   *
+   * So the bound is kept and STRENGTHENED: two absurd projections must now remain ORDERED, which
+   * the hard clamp could not do at all. This test is harder to pass than it was, not easier.
+   */
+  it('gives a small premium for lower ADP and stays within 0..10000', () => {
     const early = normalizedPlayerValue({ projection: 150, adp: 5, position: 'WR' })
     const late = normalizedPlayerValue({ projection: 150, adp: 200, position: 'WR' })
     expect(early).toBeGreaterThan(late)
-    expect(normalizedPlayerValue({ projection: 9999, position: 'RB' })).toBe(10000)
+
+    const huge = normalizedPlayerValue({ projection: 9999, position: 'RB' })
+    expect(huge).toBeLessThanOrEqual(10000)
+    expect(huge).toBeGreaterThan(9900)
+
+    // The property the hard clamp destroyed: bigger is still bigger, even above the ceiling.
+    expect(normalizedPlayerValue({ projection: 19999, position: 'RB' })).toBeGreaterThan(huge)
+
     expect(normalizedPlayerValue({ projection: 0, position: 'WR' })).toBeGreaterThanOrEqual(0)
   })
 

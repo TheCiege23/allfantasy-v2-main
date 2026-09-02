@@ -35,7 +35,8 @@
  * world and the legacy one is retired.
  */
 import type { CanonicalWorld, WorldProvenance } from '@/lib/decision-os/world/facts'
-import { POSITION_SCARCITY } from '@/lib/trade-value/valueEngine'
+import { POSITION_SCARCITY, type ScoringContext } from '@/lib/trade-value/valueEngine'
+import { scoringContextFromCanonicalWorld } from './scoringContextFromWorld'
 import type { TeamProfile } from '@/lib/trade-value/types'
 import {
   profileForRoster,
@@ -118,6 +119,17 @@ export interface TradeWorld {
   /** rosterId → resolved deterministic profile. Absent key ⇒ no matching team (honest degrade). */
   teamProfiles: Record<string, TeamProfile>
   leagueContext: TradeLeagueContext
+  /**
+   * The league's real SCARCITY context — team count, starting slots, PPR and TE premium.
+   *
+   * ⚠ SEPARATE FROM `leagueContext.scoring`, WHICH IS A LABEL. That field is a preset id like
+   * `"ppr"` carried for provenance and display; this one is the structured input the value engine
+   * actually prices with. Conflating them is how a superflex league got graded as 1-QB.
+   *
+   * Null when the world knows neither slots nor scoring settings — the engine then behaves
+   * exactly as it did before this was wired, rather than guessing a shape.
+   */
+  scoringContext: ScoringContext | null
   marketContext: MarketContext
   constraints: TradeConstraints
   warnings: string[]
@@ -211,6 +223,12 @@ export function resolveTradeWorld(input: ResolveTradeWorldInput): TradeWorld {
     capturedAt: input.context?.capturedAt ?? world.provenance.assembledAt,
   }
 
+  /*
+   * Resolved HERE rather than in `buildTradeMemo`, because the resolver is the only layer holding
+   * the raw `CanonicalWorld` — carrying facts verbatim into the TradeWorld is exactly its job.
+   */
+  const scoringContext = scoringContextFromCanonicalWorld(world)
+
   const marketContext = buildMarketContext(input.movements, enrich)
 
   const constraints: TradeConstraints = {
@@ -243,6 +261,7 @@ export function resolveTradeWorld(input: ResolveTradeWorldInput): TradeWorld {
     assets: input.movements,
     teamProfiles,
     leagueContext,
+    scoringContext,
     marketContext,
     constraints,
     warnings: [],

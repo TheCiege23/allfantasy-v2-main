@@ -19,7 +19,8 @@
  *   value = amount × FAAB_VALUE_PER_DOLLAR
  */
 
-import { pickRoundTable } from '@/lib/pick-curve'
+import { pickRoundTable, pickValueByOverall } from '@/lib/pick-curve'
+import { demandMultiplier, type LeagueShape } from './leagueShape'
 
 export const PROJ_TO_VALUE = 26
 export const ADP_PIVOT = 120
@@ -65,6 +66,22 @@ export interface ScoringContext {
   /** Points per reception for TEs above the base rate (e.g. 0.5, 1). */
   tePremium?: number | null
   scoringFormat?: 'standard' | 'half_ppr' | 'ppr' | null
+  /**
+   * The league's real structural shape — team count and starting slots.
+   *
+   * 🛑 WHEN PRESENT THIS SUPERSEDES `isSuperflex` / `is2QB` FOR POSITIONAL DEMAND, AND MUST, OR
+   * THE TWO WOULD MULTIPLY. Both answer the same question — how much does this league want at
+   * this position — and the shape answers it from counts rather than from a two-state flag.
+   *
+   * The booleans could only say "one QB or more than one". Measured against real leagues here,
+   * that collapsed 2QB, 3QB, 4QB (Four Horsemen) and 6QB into a single multiplier, and it made
+   * a 4-team league indistinguishable from a 32-team one. `demandMultiplier` is exactly 1.0 for
+   * the reference 12-team shape, so supplying a standard league changes nothing.
+   *
+   * `tePremium` and `scoringFormat` still apply on top: those are SCORING facts, not roster
+   * facts, and the shape says nothing about them.
+   */
+  shape?: LeagueShape | null
 }
 
 /**
@@ -79,7 +96,13 @@ export function scoringScarcityMultiplier(
   const pos = position.toUpperCase()
   let multiplier = 1.0
 
-  if (pos === 'QB') {
+  if (scoring.shape) {
+    /*
+     * Shape wins outright. It covers every position, not just QB, so a 6-WR / 10-FLEX league
+     * gets its receiver demand priced too — something the booleans had no way to express.
+     */
+    multiplier *= demandMultiplier(scoring.shape, pos)
+  } else if (pos === 'QB') {
     // 2QB is the stronger requirement and wins when both are set.
     if (scoring.is2QB) multiplier *= TWO_QB_MULTIPLIER
     else if (scoring.isSuperflex) multiplier *= SUPERFLEX_QB_MULTIPLIER
@@ -119,6 +142,58 @@ export const PICK_ROUND_BASE: Record<number, number> = pickRoundTable(2500)
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))
+}
+
+/**
+ * ── 1.7f · THE SOFT KNEE ─────────────────────────────────────────────────────────────────────
+ *
+ * 🛑 A HARD CLAMP DOES NOT CAP A VALUE, IT DELETES AN ORDERING. Measured before this landed, in
+ * a superflex league:
+ *
+ *     340 pts → 10000     380 pts → 10000     420 pts → 10000     460 pts → 10000
+ *
+ * Four quarterbacks, four different players, one number. The uncapped value at 460 pts is 16,266
+ * — 1.63× the ceiling — so the engine HAD the information and the clamp threw it away. And it did
+ * so precisely in superflex/2QB/4QB, the formats where QB separation is the whole point.
+ *
+ * Below {@link SOFT_KNEE} nothing changes. Above it the excess is compressed onto the remaining
+ * headroom by `headroom × excess / (excess + headroom)`, which:
+ *   - is continuous AND smooth at the knee (its derivative there is exactly 1), so there is no
+ *     visible kink at the boundary;
+ *   - is strictly increasing, so ordering is preserved;
+ *   - approaches 10000 asymptotically and never reaches it, so the ceiling still holds.
+ *
+ * ⚠ IT IS RATIONAL, NOT EXPONENTIAL, AND THE FIRST VERSION WAS EXPONENTIAL. `1 − e^(−x/h)`
+ * satisfies every property above ON PAPER and fails one of them in float64: `Math.exp` underflows
+ * to exactly 0 around x/h ≈ 745, so `softCap` returned exactly 10000 and the ordering it exists to
+ * protect was lost again. Worse, after `Math.round` the exponential form saturated at a raw value
+ * of only ~20,500 — and a 6-QB league can produce ~24,900, so the collapse was still reachable by
+ * a real league.
+ *
+ * The rational form decays polynomially instead, and keeps distinct integers up to a raw value of
+ * ~4.5 MILLION — roughly 180× anything the formula can produce. A test asserting the asymptote is
+ * what caught this; the property was correct and the implementation of it was not.
+ *
+ * ⚠ THIS IS A SAFETY NET, NOT THE REAL FIX. The formula only overshoots because `PROJ_TO_VALUE`
+ * = 26 is calibrated for season-long PPR points and is too hot once positional and format
+ * multipliers stack. Recalibrating it (plan step 1.5) is the actual repair; this guarantees that
+ * when it does overshoot, no information is lost.
+ *
+ * ⚠ AND IT IS NOT FREE: values in [SOFT_KNEE, 10000) SHIFT DOWN. A raw 8600 moves ~3 points
+ * (0.03%); a raw 9828 moves ~447 (4.5%). That is the unavoidable cost — fitting an unbounded
+ * range into a bounded one while preserving order requires compressing somewhere, and the top
+ * decile is the least damaging place. Stated here rather than discovered later.
+ */
+export const SOFT_KNEE = 8500
+export const VALUE_CEILING = 10000
+
+export function softCap(raw: number): number {
+  if (!Number.isFinite(raw)) return 0
+  if (raw <= 0) return 0
+  if (raw <= SOFT_KNEE) return raw
+  const headroom = VALUE_CEILING - SOFT_KNEE
+  const excess = raw - SOFT_KNEE
+  return SOFT_KNEE + (headroom * excess) / (excess + headroom)
 }
 
 export function scarcityFor(position: string | null | undefined): number {
@@ -189,17 +264,41 @@ export function normalizedPlayerValue(input: {
 
   const base = Number.isFinite(input.projection as number) ? Math.max(0, input.projection as number) : 0
   const scarcity = scarcityFor(input.position) * scoringScarcityMultiplier(input.position, input.scoring)
-  return clamp(Math.round(base * PROJ_TO_VALUE * scarcity + adpPremium), 0, 10000)
+  // 1.7f: soft knee instead of a hard clamp, so two elite players never collapse to one number.
+  return clamp(Math.round(softCap(base * PROJ_TO_VALUE * scarcity + adpPremium)), 0, VALUE_CEILING)
 }
 
 export function normalizedPickValue(input: {
   round: number | null | undefined
   pickSeason?: number | null
   currentSeason?: number | null
+  /**
+   * Teams in the league. Omit ⇒ 12, i.e. byte-identical to the pre-shape behaviour.
+   *
+   * 🛑 A ROUND IS NOT AN ASSET; AN OVERALL PICK NUMBER IS. Keyed on round alone this function
+   * assumed every league had 12 teams. Measured against real leagues here, that was wrong in
+   * both directions — a Four Horsemen (4-team) 3rd is overall #9 and was priced at 600 when the
+   * league's own rulebook puts it in the 1.9-1.12 range (~2000); a KBFL (32-team) 2nd is overall
+   * #33 and was priced as a 12-team 2nd when it is really a 12-team 3rd.
+   */
+  teams?: number | null
+  /** Pick within the round, 1-indexed. Omit ⇒ the round's mid slot. */
+  slot?: number | null
 }): number {
   const round = Number.isFinite(input.round as number) ? Math.max(1, Math.round(input.round as number)) : 5
-  const roundBase = PICK_ROUND_BASE[round] ?? 100
-  let value = roundBase
+  /*
+   * ⚠ THIS ALSO RETIRES THE `?? 100` FLOOR, WHICH WAS A SECOND BUG. `PICK_ROUND_BASE` holds five
+   * entries, so every round past the fifth fell to a flat 100 — in a 10-round rookie draft
+   * (Four Horsemen) that priced rounds 6 through 10 IDENTICALLY. `pick-curve.ts` already had the
+   * right policy for this and valueEngine simply was not using it: hold the last OBSERVED share
+   * rather than inventing a decay past where the data ran out.
+   */
+  let value = pickValueByOverall({
+    round,
+    teams: input.teams,
+    slot: input.slot,
+    firstRoundValue: PICK_ROUND_BASE[1],
+  })
   if (input.pickSeason != null && input.currentSeason != null && input.pickSeason > input.currentSeason) {
     const yearsOut = input.pickSeason - input.currentSeason
     value = Math.round(value * Math.pow(1 - PICK_FUTURE_DISCOUNT, yearsOut))

@@ -118,7 +118,17 @@ export async function GET(request: NextRequest) {
     season: Number.isFinite(seasonRaw) && seasonRaw > 0 ? seasonRaw : new Date().getFullYear(),
     week: Number.isFinite(weekRaw) && weekRaw > 0 ? weekRaw : null,
     question,
-    want: { projections: true, leagueRules: true },
+    /*
+     * ⚠ MIRRORS `/api/chat/chimmy` EXACTLY (R1.2), because a proof surface that assembles a
+     * DIFFERENT packet from the live route proves nothing about the live route. `valueFormat` and
+     * `leagueIdpRules` are derived inside the packet from the rules it already loads.
+     */
+    want: {
+      values: true,
+      devy: sport.toUpperCase() === 'NCAAF',
+      projections: true,
+      leagueRules: true,
+    },
   }).catch((e: unknown) => {
     // Surface the failure rather than returning an empty packet that reads as "nothing to see".
     return { __error: e instanceof Error ? e.message : String(e) } as const

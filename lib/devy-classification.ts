@@ -7,6 +7,7 @@ import {
   getCFBPlayerUsage, getCFBPlayerPPA, getCFBSPRatings,
   getCFBPlayerWEPAPassing, getCFBPlayerWEPARushing,
   getCFBPassingPlayerSeason, getCFBPassingTeamSeason, getCFBPassingPlays,
+  getCFBCoaches, primaryCoachBySchool,
   type CFBPlayer, type CFBPlayerStats, type CFBDraftPick,
   type CFBRecruit, type CFBTransferPortalEntry, type CFBReturningProduction,
   type CFBPlayerUsage, type CFBPlayerPPA, type CFBTeamSPRating, type CFBPlayerWEPA,
@@ -908,6 +909,19 @@ export async function ingestCFBDUsageAndPPA(season?: number): Promise<{ updated:
             if (p.averagePPAAll != null) updateData.ppaTotal = p.averagePPAAll
             if (p.averagePPAPass != null) updateData.ppaPass = p.averagePPAPass
             if (p.averagePPARush != null) updateData.ppaRush = p.averagePPARush
+
+            /*
+             * ⚠ THE SEASON TOTAL IS A DIFFERENT QUANTITY FROM `ppaTotal` ABOVE,
+             * WHICH HOLDS THE PER-PLAY AVERAGE DESPITE ITS NAME. Already fetched
+             * and parsed by getCFBPlayerPPA; it was simply never written, so no
+             * provider call is added by this line.
+             *
+             * It is the signal the devy draft-rate calibration keys on: measured
+             * across eight recruit classes, the season total separates drafted
+             * from undrafted by 22-176x where the per-play average manages
+             * 0.88-2.19x and inverts for WR and TE.
+             */
+            if (p.totalPPAAll != null) updateData.ppaSeasonTotal = p.totalPPAAll
           }
 
           if (wp && wp.weightedEPA != null) {
@@ -1367,9 +1381,22 @@ export async function ingestCFBDTeamContext(season?: number): Promise<{ updated:
   const errors: string[] = []
 
   try {
-    const [returningProd, spRatings] = await Promise.all([
+    /*
+     * ⚠ THE COACH FEED IS FETCHED FOR TWO SEASONS, AND BOTH ARE REQUIRED TO SAY
+     * ANYTHING. "Did the staff change" is a comparison, not a reading: the
+     * current season alone can name a coach but cannot say whether he is new.
+     * If the prior season fails to load, `headCoachChanged` stays null rather
+     * than defaulting to false — see the migration note on why those are
+     * different answers.
+     *
+     * Two extra provider calls against a 75,000/month allowance, on a phase that
+     * already fetches season-wide and whose real cost is the write loop.
+     */
+    const [returningProd, spRatings, coachesNow, coachesPrior] = await Promise.all([
       getCFBReturningProduction(year),
       getCFBSPRatings(year > 2024 ? year - 1 : year),
+      getCFBCoaches(year),
+      getCFBCoaches(year - 1),
     ])
 
     const rpMap = new Map<string, CFBReturningProduction>()
@@ -1382,10 +1409,15 @@ export async function ingestCFBDTeamContext(season?: number): Promise<{ updated:
       if (s.team) spMap.set(s.team, s)
     }
 
+    const coachNow = primaryCoachBySchool(coachesNow, year)
+    const coachPrior = primaryCoachBySchool(coachesPrior, year - 1)
+
     for (const team of TOP_CFB_TEAMS) {
       const rp = rpMap.get(team)
       const sp = spMap.get(team)
-      if (!rp && !sp) continue
+      const now = coachNow.get(team)
+      const prior = coachPrior.get(team)
+      if (!rp && !sp && !now) continue
 
       try {
         const updateData: any = { lastSyncedAt: new Date() }
@@ -1396,6 +1428,28 @@ export async function ingestCFBDTeamContext(season?: number): Promise<{ updated:
 
         if (sp && sp.rating != null) {
           updateData.teamSpRating = sp.rating
+        }
+
+        /*
+         * ⚠ ALREADY FETCHED, NEVER WRITTEN. `getCFBSPRatings` has parsed
+         * `offenseRating` off the response since it was written; this phase just
+         * dropped it. No new provider call is involved in this line.
+         */
+        if (sp && sp.offenseRating != null) {
+          updateData.teamSpOffense = sp.offenseRating
+        }
+
+        if (now) {
+          updateData.headCoachSeason = year
+          updateData.headCoachName = now.name.slice(0, 96)
+          updateData.headCoachHireDate = now.hireDate ? new Date(now.hireDate) : null
+
+          /*
+           * Only a real comparison sets this. No primary coach last season — an
+           * even mid-season split, or a school the feed did not carry — leaves
+           * it null, because "we cannot tell" is not "nothing changed".
+           */
+          updateData.headCoachChanged = prior ? prior.name !== now.name : null
         }
 
         const teamPlayers = await prisma.devyPlayer.findMany({

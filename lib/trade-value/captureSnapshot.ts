@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from './snapshot'
 import { buildTeamProfile } from './teamProfile'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from './types'
+import { scoringContextFromWorld } from '@/lib/decision-os/trade/scoringContextFromWorld'
 
 type RawAsset = {
   fromRosterId: string
@@ -48,6 +49,14 @@ async function profileFor(rosterId: string, seasonId: string, leagueSize: number
 export async function captureRedraftTradeValueSnapshot(input: {
   proposalId: string
   seasonId: string
+  /**
+   * The league, so the real scarcity context can be read.
+   *
+   * ⚠ OPTIONAL ON PURPOSE. Omit it and every value is byte-identical to before — which is the
+   * honest degrade, because the alternative (guessing 12 teams and standard scoring) is what put
+   * superflex and 32-team leagues on the wrong market in the first place.
+   */
+  leagueId?: string | null
   proposerRosterId: string
   receiverRosterId: string
   sport: string
@@ -99,6 +108,38 @@ export async function captureRedraftTradeValueSnapshot(input: {
 
   const seasonRosterCount = await prisma.redraftRoster.count({ where: { seasonId: input.seasonId } })
   const leagueSize = seasonRosterCount || 12
+
+  /*
+   * The league's REAL shape — team count, starting slots, PPR, TE premium.
+   *
+   * 🛑 THIS PATH USED TO PRICE EVERY LEAGUE AS STANDARD 1-QB REDRAFT, and the route made it worse
+   * by hardcoding `scoring: season.sport === 'NCAAF' ? 'standard' : 'ppr'`. Superflex, 2QB, TE
+   * premium and league size all reach the engine from here now.
+   *
+   * `seasonRosterCount` is the truthful team count when it is non-zero; the `|| 12` fallback above
+   * is kept for `leagueSize` (existing behaviour) but deliberately NOT used for the shape, because
+   * `buildLeagueShape` refusing is better than a 12-team guess for a 4- or 32-team league.
+   */
+  let scoring = null as ReturnType<typeof scoringContextFromWorld>
+  if (input.leagueId) {
+    const league = await prisma.league.findUnique({
+      where: { id: input.leagueId },
+      select: { starters: true, settings: true, rosterSize: true, irSlots: true, taxiSlots: true },
+    })
+    if (league) {
+      const starterSlots = Array.isArray(league.starters)
+        ? (league.starters as unknown[]).filter((x): x is string => typeof x === 'string')
+        : null
+      scoring = scoringContextFromWorld({
+        teams: seasonRosterCount,
+        starterSlots,
+        rosterSize: league.rosterSize,
+        irSlots: league.irSlots,
+        taxiSlots: league.taxiSlots,
+        scoringSettings: league.settings,
+      })
+    }
+  }
   const [a, b] = await Promise.all([
     profileFor(input.proposerRosterId, input.seasonId, leagueSize),
     profileFor(input.receiverRosterId, input.seasonId, leagueSize),
@@ -119,6 +160,7 @@ export async function captureRedraftTradeValueSnapshot(input: {
     context,
     currentSeason: input.currentSeason,
     profiles: { a, b },
+    scoring,
   })
 
   // Honesty pass: `grade`/`fairnessScore` can now be null when NOTHING on

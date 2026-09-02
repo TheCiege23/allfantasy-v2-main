@@ -161,6 +161,11 @@ export async function loadDevyValues(args: DevyAdapterArgs): Promise<ValueLookup
       idSpace: 'name+team',
       sourceId: `${entry.name}@${entry.school ?? 'unknown'}`,
       sport,
+      // ⚠ The name is already the JOIN KEY here (`sourceId` is `name@school`), so carrying it as a
+      // display field costs nothing. Keeping the two separate still matters: `sourceId` is how the
+      // row was matched and must stay verbatim; `playerName` is what a reader is shown.
+      playerName: entry.name ?? null,
+      position: null,
       value: entry.value.value!,
       unit: 'devy_points',
       basis: 'devy_model',

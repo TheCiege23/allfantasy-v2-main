@@ -1,0 +1,61 @@
+-- The Fantrax league id a snapshot was imported from, so it can be refreshed.
+--
+-- WHY THIS COLUMN EXISTS
+-- A Fantrax import is handed a league id (`v2kzedypmm8jp61b`), fetches everything
+-- it needs behind it, and then throws the id away. Nothing in the schema kept it:
+--
+--   FantraxLeague.id           a local uuid, generated here
+--   League.platformLeagueId    set to THAT uuid, not to Fantrax's id
+--   FantraxLeague.<any column> no field held the source id at all
+--
+-- So every Fantrax snapshot was write-once. A scheduled refresh had no id to
+-- re-fetch with, which is what "Fantrax > Sync - never read" reports on the
+-- league home, and it is why a Fantrax league's fixtures and results could never
+-- move after the first import. Both live behind that id
+-- (`getLeagueInfo?leagueId=` and `getMatchupScores?leagueId=&period=`).
+--
+-- NULLABLE, AND PERMANENTLY SO FOR SOME ROWS
+-- Fantrax was a CSV upload before it was an API client, and a CSV-era row was
+-- never given a league id by anyone. Those rows cannot acquire one by backfill —
+-- there is nothing to backfill FROM. NULL here therefore means "snapshot only,
+-- not refreshable", which is a real and permanent state rather than missing data,
+-- and any refresh enumeration must treat it as a skip rather than an error.
+--
+-- DELIBERATELY NOT UNIQUE
+-- The row key is (userId, leagueName, season), so two AllFantasy accounts that
+-- both import the same Fantrax league correctly produce two rows carrying the
+-- same source id. A UNIQUE constraint would turn the second person's import into
+-- a write error — the same shape of failure the ownership guard in
+-- `importFantraxLeague` already had to be repaired for on 2026-08-27.
+--
+-- INDEXED because the refresh enumerates by it: "every snapshot that names a
+-- Fantrax league" is the collector's driving query, not a per-row lookup.
+--
+-- ⚠ THIS MIGRATION MUST BE APPLIED BEFORE THE CODE THAT WRITES THE COLUMN DEPLOYS.
+-- `importFantraxLeague` writes `sourceLeagueId` on every import, and a generated
+-- client that knows about a column production lacks raises P2022 — it does not
+-- degrade quietly. Applying the schema change is a decision for the repo owner
+-- rather than the author.
+--
+-- ⚠ AND IT IS NOT APPLIED FOR YOU BY THE DEPLOY. An earlier revision of this
+-- comment claimed a push to main applies it, because `build:vercel` is
+-- `db:migrate:deploy && vercel-build`. That was wrong, and wrong in the way that
+-- matters — it said the code and the schema were inseparable when they are not.
+-- Measured 2026-08-30:
+--
+--   vercel-build   -> node scripts/vercel-next-build.cjs   (0 `prisma migrate` refs)
+--   build:vercel   -> db:migrate:deploy && vercel-build     (referenced NOWHERE)
+--
+-- `vercel.json` sets no `buildCommand`, so Vercel resolves the `vercel-build` npm
+-- hook, and `build:vercel` has exactly one occurrence in the repo: its own
+-- definition in package.json. Nothing invokes it.
+--
+-- ⚠ THE ONE THING NOT CHECKABLE FROM THE REPO is a Build Command override set in
+-- the Vercel dashboard, which takes precedence over both. `docs/release-readiness/
+-- PHASE_0_RELEASE_BASELINE.md` already flags that exact gap: "confirm Vercel build
+-- command = vercel-build". Treat this as verified on the repo evidence and unverified
+-- on the dashboard.
+
+ALTER TABLE "FantraxLeague" ADD COLUMN "sourceLeagueId" TEXT;
+
+CREATE INDEX "FantraxLeague_sourceLeagueId_idx" ON "FantraxLeague"("sourceLeagueId");

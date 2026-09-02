@@ -102,11 +102,17 @@ export type LeagueStandingsData = {
  * A completed season, as the import recorded it.
  *
  * ⚠ NOT A `StandingRow`, AND THAT IS THE POINT. `StandingRow.rosterId` is a NUMBER,
- * which is a Sleeper roster id; a Fantrax team key is `fantrax-team:ciege82` and an
- * ESPN one need not be numeric either. Forcing season history through that shape
- * would coerce those to NaN and quietly drop every non-Sleeper league — so history
- * carries the provider's own string key and is ranked by what was recorded, not by
- * the week-by-week maths this module does for the live season.
+ * which is a Sleeper roster id, and an ESPN or MFL team key need not be numeric.
+ * Forcing season history through that shape would coerce those to NaN and quietly
+ * drop those leagues — so history carries the provider's own string key and is
+ * ranked by what was recorded, not by the week-by-week maths this module does for
+ * the live season.
+ *
+ * ⚠ FANTRAX USED TO BE THE HEADLINE EXAMPLE HERE and no longer is: its team keys
+ * were `fantrax-team:ciege82` until `lib/league-import/fantrax/fantraxTeamIds.ts`
+ * made them numeric, precisely because `NaN` was silently emptying the scoreboard.
+ * The reasoning above still holds for the providers that remain, which is why this
+ * shape is unchanged — but do not cite Fantrax for it.
  */
 export type SeasonHistoryRow = {
   season: number

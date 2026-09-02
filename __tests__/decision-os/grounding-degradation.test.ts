@@ -404,6 +404,97 @@ describe('5.3 — a killed feed is SAID, not merely stopped', () => {
     expect(loadContext).not.toHaveBeenCalled()
   })
 
+  it('🛑 R1.2 — DERIVES valueFormat from the rules it already loaded', async () => {
+    /*
+     * The chat route passed no `valueFormat`, and `packet.ts` gated the whole market slice on it
+     * (`want.values && args.valueFormat`) — so setting `want.values: true` alone bought nothing
+     * and the entire offence/market valuation lane was silently absent from every answer.
+     *
+     * ⚠ DERIVED IN THE PACKET, NOT DEMANDED FROM THE CALLER. The packet already loads
+     * `leagueRules`; the format is `general.format` and `roster.starters` inside them. Making
+     * each caller compute it means a second read of data already in hand, and two call sites that
+     * can disagree — the exact drift `OsFactSource.scopeKey` exists to prevent.
+     */
+    loadRules.mockResolvedValue({
+      general: { format: 'dynasty' },
+      roster: { starters: ['QB', 'RB', 'WR', 'SUPER_FLEX'] },
+      scoring: { activeRules: [] },
+    })
+    await buildDecisionOsGroundingPacket({ ...ARGS, valueFormat: undefined })
+    expect(loadMarket).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'DYNASTY', qbFormat: 'SUPERFLEX' }),
+    )
+  })
+
+  it('R1.2 — an explicit valueFormat still WINS over the derived one', async () => {
+    loadRules.mockResolvedValue({
+      general: { format: 'dynasty' },
+      roster: { starters: ['QB', 'SUPER_FLEX'] },
+      scoring: { activeRules: [] },
+    })
+    await buildDecisionOsGroundingPacket({
+      ...ARGS,
+      valueFormat: { format: 'REDRAFT', qbFormat: 'ONE_QB' },
+    })
+    expect(loadMarket).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'REDRAFT', qbFormat: 'ONE_QB' }),
+    )
+  })
+
+  it('🛑 R1.2 — DERIVES leagueIdpRules, so projections arrive scored for THIS league', async () => {
+    /*
+     * Measured on production 2026-09-02: every projection rendered "canonical preset, NOT this
+     * league" on a superflex dynasty league carrying Khalil Mack (LB) and Jonas Sanker (DB).
+     * `projection-os` warns that the canonical value is *balanced*-IDP, not neutral — materially
+     * wrong for a tackle-heavy league, and presented as if it were that league's number.
+     */
+    loadRules.mockResolvedValue({
+      general: { format: 'dynasty' },
+      roster: { starters: ['QB'] },
+      scoring: { activeRules: [{ statKey: 'idp_tkl_solo', pointsValue: 2, category: 'idp', isOverridden: false }] },
+    })
+    await buildDecisionOsGroundingPacket({ ...ARGS, leagueIdpRules: undefined })
+    expect(loadFor).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ idp_tkl_solo: 2 }))
+  })
+
+  it('R1.2 — an explicit NULL leagueIdpRules is honoured, not overwritten', async () => {
+    // ⚠ `null` is a real choice meaning "give me the canonical value", and `ProjectionFact.rescored`
+    // reports it honestly. Only `undefined` means "you decide".
+    loadRules.mockResolvedValue({
+      general: { format: 'dynasty' },
+      roster: { starters: ['QB'] },
+      scoring: { activeRules: [{ statKey: 'idp_tkl_solo', pointsValue: 2, category: 'idp', isOverridden: false }] },
+    })
+    await buildDecisionOsGroundingPacket({ ...ARGS, leagueIdpRules: null })
+    expect(loadFor).toHaveBeenCalledWith(expect.anything(), null)
+  })
+
+  it('🛑 dates a COLLECTION by its OLDEST member, never an arbitrary one', async () => {
+    /*
+     * Measured on production 2026-09-02: the packet reported projections as "13 days old" while
+     * the newest `AFProjectionSnapshot` row was written the previous morning. The slice took
+     * `asOf: facts[0]?.computedAt` — whichever row happened to land first — and presented one
+     * arbitrary element's age as the freshness of all 1,576.
+     *
+     * ⚠ OLDEST, NOT NEWEST, AND THAT IS THE WHOLE POINT. A single `asOf` cannot describe a range,
+     * so the only question is which way to be wrong. `ImportAssertions` already settled this for
+     * this codebase: it carries `lastAttemptedSyncAt` AND `lastSuccessfulSyncAt` because "a
+     * surface that shows the first one tells a user their league synced two minutes ago when it
+     * has actually been failing for four days". Overstating age makes a model hedge more than it
+     * needs to; understating it makes a model assert stale numbers as current. Only one of those
+     * is recoverable.
+     */
+    const OLDEST = new Date(NOW - 300 * HOUR).toISOString()
+    loadFor.mockResolvedValue([
+      { playerId: 'p1', computedAt: new Date(NOW - 2 * HOUR).toISOString() },
+      { playerId: 'p2', computedAt: OLDEST },
+      { playerId: 'p3', computedAt: new Date(NOW - 1 * HOUR).toISOString() },
+    ])
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.projections.present).toBe(true)
+    expect(p.projections.asOf).toBe(OLDEST)
+  })
+
   it('⚠ records the kill on meta even when the question never wanted that feed', async () => {
     // A feed killed but not wanted produces NO gap — correctly, it would be noise on every
     // answer. But an operator asking "why is this thin" still has to be able to see the switch.

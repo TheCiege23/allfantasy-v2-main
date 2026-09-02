@@ -1671,7 +1671,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           sport: normalizeToSupportedSport(sport),
           season: season ?? new Date().getFullYear(),
           question: message,
-          want: { projections: true, leagueRules: true },
+          /*
+           * ⚠ `values` WAS MISSING, AND THAT SILENTLY REMOVED THE WHOLE VALUATION LANE (R1.2).
+           * The packet's own default is `{ values, projections, leagueRules }` — this call site
+           * was NARROWER than the default and dropped the one feed the product is built around.
+           *
+           * `valueFormat` and `leagueIdpRules` are deliberately NOT passed: the packet derives
+           * both from the league rules it already loads, so there is no second read here and no
+           * second derivation to drift.
+           *
+           * ⚠ `devy` IS SCOPED TO NCAAF ON PURPOSE. The board is college-football only, so asking
+           * for it on an NFL league returns a `no_producer` gap — true, unfixable, and printed
+           * into every NFL answer. An unrequested slice raises no gap at all, which is the honest
+           * shape for "this question could never have wanted it".
+           * ⚠ Known follow-up: a C2C / devy-slot NFL dynasty league DOES want the board, and this
+           * test does not find it. Tracked as R1.5 rather than guessed at here.
+           */
+          want: {
+            values: true,
+            devy: normalizeToSupportedSport(sport) === 'NCAAF',
+            projections: true,
+            leagueRules: true,
+          },
         })
           .then((packet) => {
             grounding.buildMs = packet.meta.durationMs
