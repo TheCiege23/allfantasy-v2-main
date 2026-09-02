@@ -3,11 +3,38 @@
  * Used by import preview and by league creation from import.
  */
 
+import pLimit from 'p-limit'
+
 import { getAllPlayers } from '@/lib/sleeper-client'
 import type { SleeperImportPayload } from '../adapters/sleeper/types'
 
 const FETCH_RETRIES = 3
 const FETCH_TIMEOUT_MS = 12000
+
+/**
+ * A ceiling on how many Sleeper requests this process has in flight at once.
+ *
+ * 🛑 WITHOUT THIS, A BULK IMPORT IS A BURST OF ~288 SIMULTANEOUS REQUESTS.
+ * `fetchSleeperLeagueForImport` fans out 18 transaction weeks and 18 matchup weeks
+ * through `Promise.all` — ~40 requests for one league, past 70 for a ten-year dynasty
+ * chain. `/api/import-sleeper` then runs 8 leagues concurrently (`pLimit(8)`), so the
+ * two multiply: the per-league fan-out was bounded and the number of leagues was
+ * bounded, and nobody bounded the product.
+ *
+ * That is the shape that produces the bug this file's `SleeperImportUnavailableError`
+ * exists to report: one league in an otherwise clean run of thirty gets throttled, and
+ * the user is told a league they just picked off a Sleeper-supplied list does not exist.
+ * Explaining the throttle is worth doing; not causing it is worth more.
+ *
+ * ⚠ MODULE-LEVEL ON PURPOSE — the cap is per process, not per league. A per-call
+ * limiter would bound one league's fan-out and leave the multiplication untouched,
+ * which is the state this replaces.
+ *
+ * ⚠ IT DOES NOT REPLACE THE RETRY. A cap makes a 429 unlikely, not impossible: other
+ * instances share the same quota and Sleeper's limit is account-wide, not ours to see.
+ * Backoff stays.
+ */
+const sleeperRequestLimit = pLimit(10)
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -102,11 +129,27 @@ async function fetchSleeperJson<T>(
   ctx?: SleeperFetchContext,
 ): Promise<T | null> {
   for (let attempt = 0; attempt < FETCH_RETRIES; attempt++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     try {
-      const res = await fetch(url, { signal: controller.signal })
-      clearTimeout(timer)
+      /*
+       * Queued, not fired — the limiter above bounds how many of these are in flight.
+       *
+       * ⚠ THE TIMEOUT STARTS INSIDE THE QUEUE SLOT, NOT BEFORE IT, and that is the whole
+       * reason this block is shaped this way. Creating the AbortController outside the
+       * limiter would start a 12s clock while the request is still waiting its turn, so
+       * under a burst the queue itself would abort requests that had never been sent —
+       * turning a working import into a wave of spurious timeouts, and turning the
+       * limiter from a fix into a new bug. The budget must cover the request, not the
+       * wait for a slot.
+       */
+      const res = await sleeperRequestLimit(async () => {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+        try {
+          return await fetch(url, { signal: controller.signal })
+        } finally {
+          clearTimeout(timer)
+        }
+      })
       if (res.status === 404) return null // legitimate no-data
       if (!res.ok) {
         if (attempt < FETCH_RETRIES - 1) {
@@ -125,7 +168,6 @@ async function fetchSleeperJson<T>(
       }
       return (await res.json()) as T
     } catch (err) {
-      clearTimeout(timer)
       if (attempt < FETCH_RETRIES - 1) {
         await delay(300 * 2 ** attempt)
         continue
