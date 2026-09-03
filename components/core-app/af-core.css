@@ -32,12 +32,21 @@
  * generic monospace) on every .af-core surface. No test could catch it: every
  * declaration was present and valid, only the font was missing.
  *
- * layout.tsx now defines both variables via `next/font/google` (`Archivo`,
- * `JetBrains_Mono`, `variable: '--font-archivo' / '--font-jetbrains-mono'`,
- * applied to `<html>`'s className). That self-hosts the font files — no
- * fonts.googleapis.com round trip — and next/font guarantees the variable is
- * defined before first paint, which a route-bundled `@import` cannot: see the
- * warning below on why `@import` in this file is dropped outright.
+ * layout.tsx now renders a real `<link rel="stylesheet" href="fonts.googleapis
+ * .com/css2?family=Archivo…&family=JetBrains+Mono…">` (Next's App Router hoists
+ * it into <head> on its own). Neither `--font-archivo` nor `--font-jetbrains-
+ * mono` is ever defined as a CSS variable — the `var(…, 'Archivo', …)` fallback
+ * resolves straight to the literal family name, which now matches a real
+ * @font-face the browser loaded.
+ *
+ * ⚠ NOT `next/font/google`. That was tried first and reverted: it silently
+ * broke `__tests__/root-language-provider-layout.test.tsx`, which asserts the
+ * root document has no build-time Google Fonts dependency — this repo's builds
+ * have failed for unrelated network/heap reasons before, and a font fetch must
+ * not become a new way for the build to break. A runtime `<link>` has no
+ * build-time cost: if fonts.googleapis.com is unreachable at request time, the
+ * fallback chain (system-ui, generic monospace) carries the design instead of
+ * failing the build.
  *
  * ⚠ DO NOT "FIX" THIS BY PUTTING @import BACK AT THE TOP OF THIS FILE. That was
  * the first attempt and it does not work, for a reason that is invisible in the
@@ -49,9 +58,9 @@
  * document.styleSheets contained no import rule at all. Bundle order is not
  * something this file can control, so the load belongs where order is certain.
  *
- * The same trap applies to the @import in
+ * The same trap applied to the @import in
  * components/dashboard/adaptive/adaptive-dashboard.css, which is where this
- * approach was copied from and which still carries the broken @import.
+ * approach was copied from — fixed the same way, folded into the same <link>.
  */
 
 .af-core {

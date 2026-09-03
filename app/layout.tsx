@@ -3,7 +3,6 @@ import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
 import { cookies } from 'next/headers';
-import { Archivo, JetBrains_Mono } from 'next/font/google';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
@@ -16,28 +15,6 @@ import { buildSeoMeta } from '@/lib/seo';
 import { resolveEffectiveDataMode } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import './globals.css';
-
-/*
- * The .af-core design handoff's two typefaces (dashboard, Player Finder, my
- * team, matchup, trades, waivers, Draft HQ, War Room — see af-core.css line 1).
- * Every .af-core rule reads `var(--font-archivo, 'Archivo', …)` and
- * `var(--font-jetbrains-mono, 'JetBrains Mono', …)`; next/font defines those
- * variables and self-hosts the font files, so there is no external round trip
- * to fonts.googleapis.com and no render-blocking <link>. `display: 'swap'`
- * keeps text visible with the fallback while the real font streams in.
- */
-const archivo = Archivo({
-  subsets: ['latin'],
-  weight: ['400', '600', '700', '800', '900'],
-  variable: '--font-archivo',
-  display: 'swap',
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '700', '800'],
-  variable: '--font-jetbrains-mono',
-  display: 'swap',
-});
 
 export const viewport = {
   width: 'device-width',
@@ -165,9 +142,42 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-lang={htmlLang}
       dir={htmlDir}
       data-mode={htmlMode}
-      className={`scroll-smooth ${archivo.variable} ${jetbrainsMono.variable}`}
+      className="scroll-smooth"
       suppressHydrationWarning
     >
+      {/*
+        Deliberately a runtime <link>, not Next's build-time Google-fonts font
+        loader: this repo's build has failed for unrelated network/heap reasons
+        before, and __tests__/root-language-provider-layout.test.tsx asserts
+        the root document does not depend on a build-time Google Fonts fetch
+        (it greps this file's source for that loader's import path, so this
+        comment deliberately doesn't spell it out either). Rendering a <link>
+        here (rather than inside a manual <head>) is enough — Next's App
+        Router hoists it into the document <head> on its own.
+
+        Covers two design systems that were both silently falling back to
+        system fonts because each one's CSS assumed a <link> existed elsewhere
+        and none ever did:
+          - .af-core (af-core.css): dashboard, Player Finder, my team, matchup,
+            trades, waivers, Draft HQ, War Room, and the homepage (LandingV4
+            imports af-core.css directly) — wants Archivo + JetBrains Mono.
+          - .af-adaptive (adaptive-dashboard.css): wants Bebas Neue + Outfit.
+            That file's own `@import` is dead code — Next concatenates it into
+            a route bundle after af-geo.css, and CSS silently drops an
+            `@import` that doesn't lead every rule in its file (see the comment
+            at the top of af-core.css for the measured trap).
+
+        Both files read the family by name with a full fallback chain
+        (e.g. `font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif`),
+        so this <link> is the only thing needed — no CSS variable to define.
+        Global, but inert for every page that doesn't render matching text: the
+        browser fetches this one small stylesheet and downloads a font file
+        only when it's actually needed.
+      */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+      />
       <body
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
