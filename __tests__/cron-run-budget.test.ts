@@ -97,3 +97,77 @@ describe('rotateForFairness', () => {
     expect([...sports]).toEqual(original)
   })
 })
+
+/**
+ * Weighted lead share — a unit too large to finish unless it leads.
+ *
+ * 🛑 THE FAILURE THIS ADDRESSES, MEASURED. Plain rotation is fair by COUNT and unfair by COST: it
+ * hands every unit the lead once per cycle, so a unit big enough to consume the whole budget is
+ * refreshed once per cycle however often the job runs. On 2026-09-03, NCAAF held 10,189
+ * AFProjectionSnapshot rows against NFL's 3,154, and every NCAAF row dated from its previous turn
+ * at the front, exactly 7 days earlier — while every other sport had written within two days.
+ */
+describe('rotateForFairness — weighted lead share', () => {
+  const sports = ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
+  const weighted = new Map<string, number>([['NCAAF', 2]])
+  const period = 1000
+
+  const leadAt = (i: number, w?: Map<string, number>) =>
+    rotateForFairness(sports, period, fakeClock(i * period).now, w)[0]
+
+  it('🛑 unweighted behaviour is BYTE-IDENTICAL when no share is given', () => {
+    // The weight is opt-in. Every existing caller must be unaffected, so this pins the default.
+    for (let i = 0; i < 14; i += 1) {
+      const c1 = fakeClock(i * period)
+      const c2 = fakeClock(i * period)
+      expect(rotateForFairness(sports, period, c1.now)).toEqual(
+        rotateForFairness(sports, period, c2.now, new Map()),
+      )
+    }
+  })
+
+  it('leads the weighted unit twice per 8 periods instead of once per 7', () => {
+    const plain = Array.from({ length: 56 }, (_, i) => leadAt(i)).filter((s) => s === 'NCAAF').length
+    const withW = Array.from({ length: 56 }, (_, i) => leadAt(i, weighted)).filter((s) => s === 'NCAAF').length
+    expect(plain).toBe(8) // 56 / 7
+    expect(withW).toBe(14) // 56 / 8 * 2
+    expect(withW).toBeGreaterThan(plain)
+  })
+
+  it('🛑 still gives EVERY unit the lead within a cycle — the tail is not starved', () => {
+    /*
+     * The whole reason rotation exists. Weighting one unit must not cost another its turn, or this
+     * re-creates the starvation from the other direction: `sports-data-importer` had NBA, NHL, MLB
+     * and SOCCER frozen at 2026-04-26 while NFL, first in a fixed list, kept updating.
+     */
+    const leaders = new Set(Array.from({ length: 8 }, (_, i) => leadAt(i, weighted)))
+    expect(leaders).toEqual(new Set(sports))
+  })
+
+  it('🛑 returns each unit EXACTLY ONCE — a duplicate would redo work and starve the tail', () => {
+    for (let i = 0; i < 8; i += 1) {
+      const out = rotateForFairness(sports, period, fakeClock(i * period).now, weighted)
+      expect(out).toHaveLength(sports.length)
+      expect(new Set(out).size).toBe(sports.length)
+    }
+  })
+
+  it('improves the weighted unit\'s AVERAGE position, not just its lead count', () => {
+    const avg = (w?: Map<string, number>) => {
+      let total = 0
+      for (let i = 0; i < 56; i += 1) {
+        total += rotateForFairness(sports, period, fakeClock(i * period).now, w).indexOf('NCAAF')
+      }
+      return total / 56
+    }
+    expect(avg(weighted)).toBeLessThan(avg())
+  })
+
+  it('ignores a nonsensical share rather than corrupting the rotation', () => {
+    for (const bad of [0, -3, 0.4, NaN]) {
+      const out = rotateForFairness(sports, period, fakeClock(0).now, new Map([['NCAAF', bad]]))
+      expect(out).toHaveLength(sports.length)
+      expect(new Set(out).size).toBe(sports.length)
+    }
+  })
+})

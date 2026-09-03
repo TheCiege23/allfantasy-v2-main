@@ -326,6 +326,35 @@ async function runOneSport(
  * An explicit `?sport=` still runs exactly that one and returns the original single-sport
  * response, because admin and manual callers pass it.
  */
+/**
+ * Extra rotation slots for sports too large to finish unless they lead.
+ *
+ * 🛑 THE PROBLEM THIS FIXES, MEASURED ON 2026-09-03 AGAINST A BRANCH OF PRODUCTION.
+ * `AFProjectionSnapshot` held 10,189 NCAAF rows against NFL's 3,154 — and **every** NCAAF row was
+ * written 2026-08-31, its previous turn at the front of a 7-sport rotation, exactly 7 days earlier.
+ * Every other sport had written within two days:
+ *
+ *     NCAAF  10,186 rows @ 2026-08-31   0 with rest-of-season
+ *     NCAAB   4,497 rows @ 2026-09-02   4,490 with rest-of-season
+ *     NFL     3,152 rows @ 2026-09-03   3,152 with rest-of-season
+ *
+ * ⚠ NOTHING WAS BROKEN, WHICH IS WHY IT WENT UNNOTICED. Plain rotation is fair by COUNT and unfair
+ * by COST: it hands every sport the lead once per cycle, and a sport big enough to consume the
+ * whole 240s budget only ever completes on the day it leads. So the largest sport got the slowest
+ * refresh. The one NCAAF row written after its turn (2026-09-02) DOES carry a rest-of-season value,
+ * which is what proves the conversion itself was never the fault.
+ *
+ * The cost of that cadence was concrete: the value engine reads `rosProjection` only, so 10,186
+ * college players priced at nothing for six days out of every seven.
+ *
+ * ⚠ THE WEIGHT IS 2, NOT 3, THOUGH THE ROW RATIO IS ~3.2×. Two slots move NCAAF from leading once
+ * per 7 days to twice per 8 (~every 4) and improve its average position on the other days too.
+ * Three would give it a third of all lead days and push five smaller sports further down for a
+ * refresh they do not need — the tail starvation `rotateForFairness` exists to prevent, re-created
+ * from the other direction. Revisit if the row counts move, and re-measure rather than re-guess.
+ */
+const SPORT_LEAD_SHARE: ReadonlyMap<string, number> = new Map([['NCAAF', 2]])
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const explicit = url.searchParams.get('sport')
@@ -344,7 +373,12 @@ async function handle(req: NextRequest) {
   const results: Array<{ body: Record<string, unknown>; failed: boolean }> = []
   const deferred: string[] = []
 
-  for (const sport of rotateForFairness(SUPPORTED_SPORTS.map((s) => String(s)))) {
+  for (const sport of rotateForFairness(
+    SUPPORTED_SPORTS.map((s) => String(s)),
+    undefined,
+    undefined,
+    SPORT_LEAD_SHARE,
+  )) {
     if (budget.exhausted()) {
       deferred.push(sport)
       continue

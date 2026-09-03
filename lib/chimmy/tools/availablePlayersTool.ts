@@ -344,12 +344,19 @@ export async function buildAvailablePlayersContext(
   /*
    * ⚠ ONE PLAYER CAN HOLD SEVERAL ROWS. The unique key is
    * [sport, leagueConcept, playerId], so a player valued under both redraft and
-   * dynasty appears twice. Only `redraft` is populated today, so this changes
+   * dynasty appears twice. Only ONE concept is populated today, so this changes
    * nothing yet and prevents a duplicated pickup list the day it does.
    * Rows arrive highest-value first, so the first one seen is the one kept.
    */
   /*
-   * ⚠ EVERY PUBLISHED ROW IS `dynasty` TODAY. A dynasty value is what a player
+   * ⚠ EVERY PUBLISHED ROW IS `dynasty` TODAY — MEASURED, not assumed. On 2026-09-03, against a
+   * branch of production: `select "leagueConcept", count(*) from allfantasy_market_player_values
+   * where published = true group by 1` returns exactly one row, `dynasty` / 165.
+   *
+   * 🛑 THE COMMENT ~40 LINES ABOVE USED TO SAY "Only `redraft` is populated today". The two
+   * contradicted each other and one of them was wrong for months; nothing in the codebase could
+   * settle it, because neither had been checked against the data. It now says "only ONE concept"
+   * and this block names which. A dynasty value is what a player
    * is worth for years, and offering that as a pickup ranking in a REDRAFT
    * league promotes rookies over producers — so the basis is named in the block
    * rather than assumed. Read from the rows so it stays true when redraft values
