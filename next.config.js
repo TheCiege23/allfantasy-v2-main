@@ -258,11 +258,25 @@ const nextConfig = {
     // path imports so a route ships only the icons/helpers it actually uses
     // instead of the whole package. Only list packages this repo imports from —
     // verified via `grep -rl "from '<pkg>'" app components lib` before adding.
+    //
+    // 🛑 `recharts` and `framer-motion` are deliberately NOT listed, and that is
+    // not an oversight. Both are already present in Next's own built-in default
+    // optimizePackageImports list as of 14.2+, so listing them again here is a
+    // no-op for the safe cases — but `framer-motion` in particular ships internal
+    // React Context modules (MotionConfigContext etc.) through re-exports that the
+    // barrel-import transform does not always preserve as a single module
+    // instance. When it splits, every consumer's `useContext` call resolves
+    // against the WRONG module copy and reads null — which is exactly what #673
+    // did here: every single app-router page failed static generation with an
+    // identical `TypeError: Cannot read properties of null (reading 'useContext')`
+    // in the same shared chunk, because framer-motion is common enough to land in
+    // a shared/vendor chunk every route pulls in, not just the pages that render
+    // an animation. `lucide-react` and `date-fns` are unaffected — Next's own
+    // default list already covers them, so keeping them here is redundant but
+    // harmless, not the source of this failure.
     optimizePackageImports: [
       'lucide-react',
       'date-fns',
-      'recharts',
-      'framer-motion',
     ],
   },
 
