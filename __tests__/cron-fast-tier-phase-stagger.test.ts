@@ -9,6 +9,7 @@ import {
   nextBoundary,
   assignPhases,
   seedCatchupDueTimes,
+  avoidCrossGroupCollision,
 } from '../scripts/cron-fast-tier-loop.mjs'
 import { readVercelCrons, classifyCrons } from '../scripts/cron-tier.mjs'
 
@@ -250,6 +251,121 @@ describe('seedCatchupDueTimes', () => {
   })
 })
 
+describe('avoidCrossGroupCollision', () => {
+  it('THE SECOND INCIDENT: a solo job that evenly divides the dangerous group is shifted off phase 0', () => {
+    // Real shape: five */30 jobs (already phased by assignPhases) plus one genuinely solo */10
+    // job with no sibling at its own interval -- assignPhases has "nothing to spread it from" and
+    // correctly leaves it at phase 0, the same phase domain-os-refresh sits at.
+    const thirty = [
+      '/api/cron/fantasy-os-exec-sync',
+      '/api/cron/domain-os-refresh',
+      '/api/cron/import-injuries',
+      '/api/cron/draft-pool-prewarm',
+      '/api/cron/trade-grade-notify',
+    ].map((path) => ({ path, intervalMs: 1_800_000, phaseMs: 0 }))
+    assignPhases(thirty)
+    const solo = { path: '/api/cron/decision-os-intelligence-maintenance', intervalMs: 600_000, phaseMs: 0 }
+    const jobs = [...thirty, solo]
+
+    avoidCrossGroupCollision(jobs)
+
+    // Half of 10 minutes: exactly the real fix, not a loose bound.
+    expect(solo.phaseMs).toBe(300_000)
+
+    // The property that actually matters: none of the solo job's three recurring points in a
+    // 30-minute cycle land on any of the five */30 phases.
+    const soloPoints = [0, 1, 2].map((n) => (solo.phaseMs + n * solo.intervalMs) % 1_800_000)
+    const dangerPoints = thirty.map((j) => j.phaseMs)
+    for (const p of soloPoints) expect(dangerPoints).not.toContain(p)
+  })
+
+  it('does not move a job that has siblings at its own interval -- assignPhases already placed it', () => {
+    // alert-sweep/import-news shape: a 2-member 15-minute group. import-news already moved;
+    // alert-sweep is the group's own phase-0 anchor and must be left alone, even though 15
+    // divides the 30-minute danger interval exactly as cleanly as the solo 10-minute case does.
+    const thirty = [
+      '/api/cron/fantasy-os-exec-sync',
+      '/api/cron/domain-os-refresh',
+      '/api/cron/import-injuries',
+      '/api/cron/draft-pool-prewarm',
+      '/api/cron/trade-grade-notify',
+    ].map((path) => ({ path, intervalMs: 1_800_000, phaseMs: 0 }))
+    assignPhases(thirty)
+    const fifteen = [
+      { path: '/api/cron/alert-sweep', intervalMs: 900_000, phaseMs: 0 },
+      { path: '/api/cron/import-news', intervalMs: 900_000, phaseMs: 0 },
+    ]
+    assignPhases(fifteen)
+    const jobs = [...thirty, ...fifteen]
+
+    avoidCrossGroupCollision(jobs)
+
+    const alertSweep = jobs.find((j) => j.path === '/api/cron/alert-sweep')
+    expect(alertSweep?.phaseMs).toBe(0)
+  })
+
+  it('does not touch a solo job whose interval does not evenly divide the dangerous interval', () => {
+    const thirty = [
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/fantasy-os-exec-sync', intervalMs: 1_800_000, phaseMs: 0 },
+    ]
+    assignPhases(thirty)
+    // 7 minutes does not divide 30 minutes evenly.
+    const solo = { path: '/api/cron/odd-interval', intervalMs: 420_000, phaseMs: 0 }
+    const jobs = [...thirty, solo]
+
+    avoidCrossGroupCollision(jobs)
+
+    expect(solo.phaseMs).toBe(0)
+  })
+
+  it('does not touch a solo job at or above the dangerous interval -- preserves the original assignPhases case', () => {
+    // Same scenario the "leaves a lone job on a shared-capable cadence at phase 0" assignPhases
+    // test already covers: a lone job AT the 30-minute interval is not something to shift relative
+    // to itself.
+    const thirty = [
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/fantasy-os-exec-sync', intervalMs: 1_800_000, phaseMs: 0 },
+    ]
+    assignPhases(thirty)
+    const solo = { path: '/api/cron/only-thirty', intervalMs: 1_800_000, phaseMs: 0 }
+    const jobs = [...thirty, solo]
+
+    avoidCrossGroupCollision(jobs)
+
+    expect(solo.phaseMs).toBe(0)
+  })
+
+  it('leaves every-minute jobs untouched, same as assignPhases', () => {
+    const thirty = [
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/fantasy-os-exec-sync', intervalMs: 1_800_000, phaseMs: 0 },
+    ]
+    assignPhases(thirty)
+    const everyMinute = { path: '/api/cron/draft-tick', intervalMs: 60_000, phaseMs: 0 }
+    const jobs = [...thirty, everyMinute]
+
+    avoidCrossGroupCollision(jobs)
+
+    expect(everyMinute.phaseMs).toBe(0)
+  })
+
+  it('is a no-op when no multi-member group exists at all', () => {
+    const jobs = [
+      { path: '/api/cron/only-thirty', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/only-ten', intervalMs: 600_000, phaseMs: 0 },
+    ]
+    avoidCrossGroupCollision(jobs)
+    expect(jobs.every((j) => j.phaseMs === 0)).toBe(true)
+  })
+
+  it('never touches a job already given a non-zero phase', () => {
+    const jobs = [{ path: '/api/cron/pre-phased', intervalMs: 600_000, phaseMs: 123_456 }]
+    avoidCrossGroupCollision(jobs)
+    expect(jobs[0].phaseMs).toBe(123_456)
+  })
+})
+
 describe('the real cron schedule, after this fix', () => {
   it('no two fast-tier jobs sharing an interval > 1 minute share a phase', () => {
     // The regression test for the actual incident: run the real classifier and the real
@@ -342,5 +458,35 @@ describe('the real cron schedule, after this fix', () => {
     for (let i = 1; i < times.length; i += 1) {
       expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(360_000)
     }
+  })
+
+  it('THE SECOND INCIDENT, against the real schedule: no solo job still shares a phase with a */30 job', () => {
+    // classifyCrons -> assignPhases -> avoidCrossGroupCollision, exactly the sequence main() runs.
+    // Regression for the 18:02:05Z incident: decision-os-intelligence-maintenance must no longer
+    // land on any of the five */30 phase points.
+    const { fast } = classifyCrons(readVercelCrons())
+    const jobs: { path: string; intervalMs: number; phaseMs: number }[] = fast
+      .map((c: { path: string; schedule: string }) => ({
+        path: c.path,
+        intervalMs: intervalMsForSchedule(c.schedule) as number | null,
+        phaseMs: 0,
+      }))
+      .filter((j: { intervalMs: number | null }): j is { path: string; intervalMs: number; phaseMs: number } =>
+        j.intervalMs != null,
+      )
+
+    assignPhases(jobs)
+    avoidCrossGroupCollision(jobs)
+
+    const thirtyMinPhases = jobs.filter((j) => j.intervalMs === 1_800_000).map((j) => j.phaseMs)
+    expect(thirtyMinPhases.length, 'the five */30 jobs must still be on the fast tier').toBe(5)
+
+    const decisionOs = jobs.find((j) => j.path === '/api/cron/decision-os-intelligence-maintenance')
+    expect(decisionOs, 'the incident job must still be on the fast tier').toBeTruthy()
+    expect(decisionOs!.phaseMs).not.toBe(0) // must have actually moved
+
+    const cycleMs = 1_800_000
+    const points = [0, 1, 2].map((n) => (decisionOs!.phaseMs + n * decisionOs!.intervalMs) % cycleMs)
+    for (const p of points) expect(thirtyMinPhases, `decision-os point ${p / 60_000}min`).not.toContain(p)
   })
 })

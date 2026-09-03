@@ -326,6 +326,72 @@ export function seedCatchupDueTimes(jobs, startedAt) {
 }
 
 /**
+ * A job left at phase 0 because it has no sibling at its own interval can still permanently
+ * collide with a DIFFERENT, longer group's phase-0 member -- assignPhases only separates jobs
+ * that share an interval; it has no way to know a shorter, unrelated interval divides evenly into
+ * a longer one and will hit every one of that longer group's ticks.
+ *
+ * MEASURED IN PRODUCTION 2026-09-03, 18:02:05Z, AFTER d57e868e3 (the multi-job *\/30 fix) WAS
+ * ALREADY LIVE: decision-os-intelligence-maintenance (*\/10) has no sibling at 10 minutes, so
+ * assignPhases correctly left it at phase 0 by its own "nothing to spread it from" rule -- the
+ * same phase domain-os-refresh (the *\/30 group's phase-0 member) sits at. Since 10 divides 30,
+ * decision-os-intelligence-maintenance is due at :00 and :30 every time domain-os-refresh is.
+ * This time it was one isolated 499 (domain-os-refresh itself finished at 111.5s, under its own
+ * ceiling) rather than a site-wide pileup -- a smaller blast radius than the incident d57e868e3
+ * fixed, but the identical root shape one level down.
+ *
+ * ⚠ NOT EVERY PHASE-0 JOB NEEDS THIS. alert-sweep, import-scores and notification-outbox-relay
+ * are ALSO left at phase 0 -- each is the phase-0 member of its OWN 2-3-job group, not a solo job
+ * -- and they ALSO collide with domain-os-refresh at :00/:30. They are left alone deliberately:
+ * moving a group's own phase-0 anchor would require re-coordinating it with its siblings too, and
+ * these three are individually cheap (sub-second to low-single-digit seconds normally), the same
+ * "a burst of fast jobs is fine" profile the every-minute jobs already have by design. Only a
+ * genuinely SOLO job -- no siblings to coordinate with -- is safe to move unilaterally, and it is
+ * worth moving because nothing here can tell a future-slow job apart from a currently-fast one.
+ *
+ * Shifted by HALF the job's own interval, which is enough to clear this schedule's actual danger
+ * points (0/6/12/18/24 min) for the one real case today (a 10-minute job lands on 5/15/25) --
+ * verified directly against the real schedule in the test suite, not assumed to generalize to
+ * every possible future interval combination.
+ *
+ * ⚠ THIS TRADES ONE COLLISION FOR A SMALLER ONE, NOT A PERFECT FIX. Halving a 10-minute interval
+ * lands on the odd minutes, which is exactly live-score-tick's own phase (every 2 minutes from
+ * :01) -- live-score-tick occupies literally every odd minute, so no shift of an evenly-dividing
+ * job can dodge both it and the *\/30 danger points at once from a 10-minute cadence, and this
+ * accepts that overlap rather than pretending it away. The trade is still a clear improvement:
+ * domain-os-refresh collides EVERY cycle, guaranteed (p99 430s, confirmed twice in production);
+ * live-score-tick is fast 73%+ of its runs (p50 117ms) and only slow during live games (p90
+ * 94,744ms) -- see effectiveConcurrency above for the same measured bimodal split. A probabilistic
+ * overlap with a mostly-fast job beats a guaranteed one with an always-slow job.
+ *
+ * Pure and exported so it is tested directly, the same way assignPhases and seedCatchupDueTimes are.
+ */
+export function avoidCrossGroupCollision(jobs) {
+  const groupSizes = new Map()
+  for (const j of jobs) groupSizes.set(j.intervalMs, (groupSizes.get(j.intervalMs) ?? 0) + 1)
+
+  // The largest interval with 2+ members is what assignPhases actually spread -- that is the
+  // reference whose phase points are worth a solo job avoiding. Nothing shorter-period than a
+  // spread group can be "dangerous" in this sense, so only the longest spread group matters.
+  let dangerousIntervalMs = 0
+  for (const [intervalMs, size] of groupSizes) {
+    if (size >= 2 && intervalMs > dangerousIntervalMs) dangerousIntervalMs = intervalMs
+  }
+  if (dangerousIntervalMs === 0) return jobs // no multi-member group exists to collide into
+
+  for (const job of jobs) {
+    if (job.phaseMs !== 0) continue
+    if (job.intervalMs <= 60_000) continue // every-minute jobs: same as assignPhases, untouched
+    if (job.intervalMs >= dangerousIntervalMs) continue // nothing longer for it to divide into
+    if (dangerousIntervalMs % job.intervalMs !== 0) continue // would not hit every dangerous tick
+    if ((groupSizes.get(job.intervalMs) ?? 0) >= 2) continue // has siblings -- not solo, assignPhases already placed it
+    job.phaseMs = job.intervalMs / 2
+  }
+
+  return jobs
+}
+
+/**
  * Order due jobs so the one most overdue RELATIVE TO ITS OWN CADENCE goes first.
  *
  * ⚠ FIXED ARRAY ORDER STARVED EXACTLY THE JOBS THIS LOOP EXISTS FOR. `classifyCrons` returns
@@ -548,6 +614,7 @@ async function main() {
   }
 
   assignPhases(jobs)
+  avoidCrossGroupCollision(jobs)
 
   console.log(`Fast-tier loop: ${jobs.length} job(s), window ${args.windowMinutes}m`)
   for (const j of jobs) {
