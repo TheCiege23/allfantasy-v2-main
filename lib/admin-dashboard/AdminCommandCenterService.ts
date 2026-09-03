@@ -870,9 +870,15 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Brackets last 7h", wcEntries7h, "WC entries created last 7h"),
       metric("Pools today", worldCupPoolsToday, "UTC day"),
       metric("Brackets today", worldCupEntriesToday, "UTC day"),
-      metric("Revenue last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Rolling 7h"),
-      metric("Revenue today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day"),
-      metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`),
+      /*
+       * ⚠ SAME bracketPayment SCOPE AS THE MONEY CARD — and this is the card an
+       * operator reads first, so the label matters more here, not less. These
+       * three are the same three sums; a scope note on one card and not the other
+       * is how a figure gets quoted out of the wrong one.
+       */
+      metric("Revenue last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments · rolling 7h"),
+      metric("Revenue today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments · UTC day"),
+      metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments only"),
       metric("Invite acceptance", inviteAcceptancePct, `${inviteAccepts} accepted / ${worldCupInvites} sent`),
       notTracked("AI cost yesterday", "No unified AI cost ledger is tracked yet"),
       metric("API health", `${providerConfiguredCount}/${providerHealth.length} configured`, `${providerGapCount} gaps`),
@@ -976,17 +982,48 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     traffic: [
       metric("Analytics events today", analyticsEventsToday, "Server/client tracked events"),
       metric("Analytics events 7 days", analyticsEvents7Days),
-      metric("Unique sessions today", uniqueSessionsToday.length || "Not tracked yet", "Requires sessionId on analytics events"),
-      metric("Unique sessions 7 days", uniqueSessions7Days.length || "Not tracked yet"),
-      metric("Approx unique IPs today", visitorLocationsToday || "Not tracked yet", "Uses aggregate VisitorLocation rows only"),
-      metric("Approx unique IPs 7 days", visitorLocations7Days || "Not tracked yet"),
+      /*
+       * 🛑 `count || "Not tracked yet"` DESTROYS A REAL ZERO, AND MARKS THE LIE AS TRACKED.
+       * These four read `X || "Not tracked yet"`. `0` is falsy, so a genuinely
+       * quiet day produced `metric(label, "Not tracked yet")` — which sets
+       * `tracked: true` on a value that says the opposite. Both halves are wrong:
+       * a real measurement of zero was reported as missing instrumentation, and a
+       * missing-instrumentation string was flagged as a live metric, so it does
+       * not get the not-tracked styling either.
+       *
+       * The Overview component states the rule this broke: "$0" and "NOT TRACKED"
+       * render differently, DELIBERATELY — zero traffic and no telemetry are
+       * different facts and an operator must be able to tell them apart. That is
+       * also the ingestCFBDStats failure mode this repo already records: a dead
+       * writer and an idle period look identical if you only ever show a count.
+       *
+       * So the two cases are separated using evidence already in scope. Analytics
+       * events are the discriminator: if events landed but none carried the field,
+       * the field is not being written; if no events landed at all, zero is the
+       * honest answer.
+       */
+      analyticsEventsToday > 0 && uniqueSessionsToday.length === 0
+        ? notTracked("Unique sessions today", "Analytics events exist today but none carry a sessionId")
+        : metric("Unique sessions today", uniqueSessionsToday.length, "Distinct sessionId on analytics events"),
+      analyticsEvents7Days > 0 && uniqueSessions7Days.length === 0
+        ? notTracked("Unique sessions 7 days", "Analytics events exist this week but none carry a sessionId")
+        : metric("Unique sessions 7 days", uniqueSessions7Days.length),
+      analyticsEventsToday > 0 && visitorLocationsToday === 0
+        ? notTracked("Approx unique IPs today", "Traffic today wrote no VisitorLocation rows — the writer may be down")
+        : metric("Approx unique IPs today", visitorLocationsToday, "Uses aggregate VisitorLocation rows only"),
+      analyticsEvents7Days > 0 && visitorLocations7Days === 0
+        ? notTracked("Approx unique IPs 7 days", "Traffic this week wrote no VisitorLocation rows — the writer may be down")
+        : metric("Approx unique IPs 7 days", visitorLocations7Days),
       metric("World Cup visitor events", worldCupVisitors7Days, "7-day paths containing world-cup/brackets"),
       metric(
         "Top referrers",
         topReferrers.length,
         topReferrers
           .map((row) => `${row.referrer ?? "unknown"} (${row._count._all})`)
-          .join(", ") || "Not tracked yet"
+          // "No referrers recorded", not "Not tracked yet": the value beside this
+          // is an honest 0, so claiming the instrumentation is missing would be
+          // the same conflation the sessions metrics above just had fixed.
+          .join(", ") || "No referrer values recorded"
       ),
     ],
     integrity: [

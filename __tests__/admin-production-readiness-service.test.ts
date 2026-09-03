@@ -41,12 +41,26 @@ describe("AdminProductionReadinessService", () => {
     expect(JSON.stringify(result)).not.toContain("super-secret")
   })
 
-  it("reads World Cup cron coverage from vercel.json", async () => {
+  /*
+   * ⚠ RENAMED AND RE-AIMED. This asserted a literal `job=live` entry and read the
+   * real cron-schedule.json from disk, so it broke when the schedule consolidated
+   * to a single `job=all` — and it was RIGHT to break: the service was reporting a
+   * false CRITICAL for the same reason. But the old assertion pinned the SHAPE of
+   * the schedule (four separate entries) when what matters is the PROPERTY (live
+   * sync is covered). `job=all` covers it, per the route's `|| job === "all"`
+   * branches, so the property holds and the shape assertion was the stale half.
+   *
+   * It still reads the real file on purpose: that is what makes it notice when the
+   * schedule and the readiness matchers drift apart, which is exactly what happened.
+   */
+  it("treats the consolidated job=all entry as covering live sync", async () => {
     const { getAdminProductionReadiness } = await import("@/lib/admin-dashboard/AdminProductionReadinessService")
     const result = await getAdminProductionReadiness()
     const worldCup = result.crons.find((row) => row.id === "world-cup-official")
 
     expect(worldCup?.status).toBe("configured")
-    expect(worldCup?.configuredPaths.some((row) => row.includes("job=live"))).toBe(true)
+    expect(worldCup?.missing).toEqual([])
+    // Either a dedicated job=live entry or the job=all entry satisfies this.
+    expect(worldCup?.configuredPaths.some((row) => /job=(live|all)\b/.test(row))).toBe(true)
   })
 })

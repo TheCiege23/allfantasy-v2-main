@@ -316,13 +316,39 @@ export async function getAdminProductionReadiness(): Promise<AdminProductionRead
         id: "world-cup-official",
         category: "World Cup",
         label: "Official teams/fixtures/standings/live sync",
+        /*
+         * 🛑 `job=all` SATISFIES ALL FOUR, AND MATCHING ONLY THE NAMED JOBS RAISED A
+         * FALSE CRITICAL. The schedule consolidated to one entry —
+         * `/api/brackets/world-cup/cron/sync?job=all&provider=apifootball&recalculate=true`
+         * at `0 8 * * *` — but these matchers still looked for four separate
+         * `job=<name>` strings. `job=all` contains none of them, so the Command
+         * Center's top card reported "Official teams/fixtures/standings/live sync is
+         * not scheduled" as its one CRITICAL item while that sync was scheduled.
+         *
+         * The route is the authority, and it branches on `|| job === "all"` for every
+         * one of these (app/api/brackets/world-cup/cron/sync/route.ts):
+         *
+         *     if (job === "teams"       || job === "all") -> syncWorldCupTeams
+         *     if (job === "fixtures"    || job === "all") -> fixtures
+         *     if (job === "live"        || job === "all") -> syncWorldCupLiveScoresBatch
+         *     if (job === "standings"   || job === "all") -> standings
+         *     if (job === "recalculate" || job === "all") -> recalculate
+         *
+         * ⚠ A FALSE CRITICAL IS NOT COSMETIC. This card is what an operator reads
+         * first, and a permanent red that everyone learns to ignore is worse than no
+         * card — the next real outage then arrives in a channel already trained to
+         * look away.
+         *
+         * `\b` after the alternation so `job=all` matches while a hypothetical
+         * `job=allocate` would not.
+         */
         requiredMatchers: [
-          /\/api\/brackets\/world-cup\/cron\/sync\?job=teams/,
-          /\/api\/brackets\/world-cup\/cron\/sync\?job=fixtures/,
-          /\/api\/brackets\/world-cup\/cron\/sync\?job=standings/,
-          /\/api\/brackets\/world-cup\/cron\/sync\?job=live/,
+          /\/api\/brackets\/world-cup\/cron\/sync\?job=(teams|all)\b/,
+          /\/api\/brackets\/world-cup\/cron\/sync\?job=(fixtures|all)\b/,
+          /\/api\/brackets\/world-cup\/cron\/sync\?job=(standings|all)\b/,
+          /\/api\/brackets\/world-cup\/cron\/sync\?job=(live|all)\b/,
         ],
-        optionalMatchers: [/\/api\/brackets\/world-cup\/cron\/sync\?job=recalculate/],
+        optionalMatchers: [/\/api\/brackets\/world-cup\/cron\/sync\?job=(recalculate|all)\b/],
         recommended: "Teams/fixtures daily; standings every 30m during tournament; live every 5m during active windows.",
         crons,
         note: "World Cup official sync exists when these scheduled routes are present and cron secret/env are configured.",
