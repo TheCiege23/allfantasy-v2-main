@@ -719,16 +719,6 @@ export default async function AfCorePage({
       : null
 
   /*
-   * "Trade for him" as a visual (Guap, 2026-09-02): only when the held league's
-   * card says another manager has him. Values, packages and the engine grade
-   * all come from existing services; a miss is reported, never invented.
-   */
-  const playerTradeVisual =
-    playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
-      ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId).catch(() => null)
-      : null
-
-  /*
    * "Recently searched", per account. The write is fire-and-forget by design
    * (the module never throws), and the read excludes the player on screen.
    */
@@ -762,6 +752,20 @@ export default async function AfCorePage({
       ? await getPlayerLeagueView(selectedLeagueId, playerDetail.player.sleeperId, userId, {
           position: playerDetail.player.position,
         }).catch(() => null)
+      : null
+
+  /*
+   * "Trade for him" as a visual (Guap, 2026-09-02): only when the held league's
+   * card says another manager has him. Values, packages and the engine grade
+   * all come from existing services; a miss is reported, never invented.
+   *
+   * ⚠ BELOW `playerLeagueView`, WHICH IT READS. A first cut sat above it, and
+   * the detached typecheck caught the temporal dead zone (TS2448 at this
+   * line) that would have thrown on every signed-in Player Finder view.
+   */
+  const playerTradeVisual =
+    playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
+      ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId).catch(() => null)
       : null
 
   /*
