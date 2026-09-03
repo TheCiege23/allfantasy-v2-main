@@ -2964,7 +2964,6 @@ Updated **in the same change that does the work** (**W4**).
 | ⏸ | **R0.11** Two round-trip cuts | **Deprioritised.** Justified by a latency problem that does not exist in production; would buy ~50 ms against 1250 ms of headroom. §0.8 |
 | ⬜ | **R0.12** Bound the unbounded `findMany` in `loadImportedActivityEvidence` | Not a latency issue (188 rows here) but 42 leagues share 6,436 rows. §0.7 |
 | ⬜ | **R0.13** 🆕 `savedAnalysis` returns `not_computed` | Now a **data** question (no run for current evidence), not latency. 1113 ms. §0.8 |
-| ⬜ | **R0.9** 🆕 Four context providers timing out at exactly 1500 ms | `matchup` · `roster` · `rankings` · `devy` — half the graded context, failing every build. §0.6 |
 | ⬜ | **R0.4** 🆕 Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Gates Import OS.** 5 min. §0.3 |
 | ⬜ | **R0.5** 🆕 Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | May already be the non-prod target for **W2** |
 | ✅ | **R1.1** Render slice values (**G11**) | **Done 2026-09-02.** Proved red→green, 48/48. Also added `playerName` to the anonymous value contract, and fixed an arbitrary-element `asOf`. Typecheck blocked by a peer's mid-edit file. §0.9 |
@@ -2975,16 +2974,16 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
-| 🛑 | **BUG-2** 🆕 **25% of league syncs failing — `PostgresError 25006`, read-only transaction** | **LIVE and ongoing since 05:00 2026-09-02.** 46/184 rows; `league_state` + `teams_rosters` never complete. Read replica, role default, and code cause all RULED OUT by measurement. Next: the live app's `DATABASE_URL` host, and Neon events at 05:00. **§0.18** |
+| ⚠ | **BUG-2** **25% of league syncs failing — `PostgresError 25006`** — **INCIDENT CLOSED, AFTERMATH OPEN** | **NOT live.** A 17-minute incident: 2026-09-02 05:00:21 → 05:17:47, zero since (~39 h). The open half is the AFTERMATH — no league in `partial`/`failed` has EVER been retried (0 of 37, ~78 missed cycles), so 20% of the portfolio serves data frozen at 09-02 04:01 while the serializer promises an automatic retry. **§0.30** supersedes §0.18. |
 | 🛑 | **BUG-3** 🆕 **Duplicate league rows share one `platformLeagueId`** | Two *King Gingerbeards SF 2026!!!* rows; one has 12 psych profiles, the other 0. A fuzzy name-match decides which a user gets. §0.18 |
-| 🛑 | **BUG-4** 🆕 **`isDynasty` false on a league the owner says is dynasty** | `leagueType='redraft'` too. Weakens BUG-1's headline evidence — the import is not capturing dynasty status. Dynasty/redraft pricing is untrustworthy until fixed. §0.18 |
+| ⚠ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it is a KEEPER bug** | Sleeper reports the example league as `settings.type = 1` = **KEEPER**, so `isDynasty=false` was CORRECT and dynasty capture is fine — `leagueType`/`isDynasty` agree on all 225 leagues (110 dynasty). The real defect was that KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues. **Fixed; §0.29** supersedes this row's original claim. |
 | ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
 | ⬜ | **R1.9** 🆕 Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | Encrypted, so "collector is off" is unverified — not proven either way. §0.13 |
 | ⬜ | **R1.3** Turn the grounding flag on (**G1**) | R1.2 |
-| ⬜ | **R2** Bridge the 4 live engines into the packet | R1 |
-| ⬜ | **R3** Finish Player Value OS | R1 |
-| ⬜ | **R4** Identity OS | R1 |
-| ⬜ | **R4b** Manager Psychology OS into the hub | R1, R2 |
+| ✅ | **R2** Bridge the 4 live engines into the packet | **Done 2026-09-03.** lineupDecision + commissionerHealthDecision producers, opt-in, wired end to end. §0.21 |
+| ✅ | **R3** Finish Player Value OS | **Done 2026-09-03.** R3.1 idpKicker (§0.22), R3.3 rosterValueGrade + the other two value questions (§0.23). |
+| ✅ | **R4** Identity OS | **Done 2026-09-03.** `playerIdentityCoverage` assertion + `minIdentityResolution` gating on lineupDecision. §0.24 |
+| ✅ | **R4b** Manager Psychology OS into the hub | **Done 2026-09-03 — all of R4b.1–R4b.7.** §0.25, §0.26, §0.27. |
 | ⬜ | **R5** Commissioner OS transport decision | Owner |
 | ⬜ | **R6** Rename pass | R1–R4 |
 | ⬜ | **R7** Proactive alerts | R1, R2 |
