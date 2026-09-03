@@ -166,7 +166,85 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
-## 0.23 R3.3 — THE OTHER THREE VALUE QUESTIONS, IN PROGRESS
+## 0.24 R4 — IDENTITY OS: THE MEASURE THE TRAP ALREADY NEEDED
+
+**2026-09-03.** Scoped as R4.1 (re-run the audit) / R4.2 (one source, one
+assertion, one packet slice) / R4.3 (give `unresolved_identity` a producer).
+All three land together — they are one change, not three.
+
+### R4.1 — fresh figures, `scripts/audit-player-identity-coverage.ts`
+
+Registry coverage (Table A): every sport now reports `NO ROUTE: none` — every
+row is reachable by SOME path (an external id or name+team). NCAAF alone grew
+to 62,505 rows since the 2026-08-31 measurement (was ~20,030).
+
+Roster-referenced coverage (Table B, the number that matters — see the
+script's own header on why): NFL 60.8% (758/1247, sample of 25 leagues),
+NCAAF 24.1% (118/490, 1 league) — essentially unchanged from NCAAF's
+2026-08-31 figure. NBA and SOCCER still have leagues with zero rosters,
+unmeasurable.
+
+⚠ **NFL's figure moved from 80.4% to 60.8%, and that is NOT a reported
+regression** — `orderBy: { updatedAt: 'desc' }` samples the 25 MOST RECENTLY
+UPDATED leagues, which is a different league SET each run, not a fixed
+population re-measured. Two samples three days apart are not directly
+comparable; flagging the methodology rather than the number, the same
+distinction §2.12 in `HUB_BUILD_PLAN.md` already drew for NCAAF's own two
+measurements.
+
+### R4.2 — one assertion, landed on the slice that already exists
+
+`ImportAssertions` had four categories per its own D7 header, and "Identity"
+among them was **entirely about MANAGERS** (`managerIdentityCoverage` — does
+a roster's owner map to a real account). Nothing anywhere measured whether
+the PLAYERS on a roster resolve to a real `PlayerIdentityMap` row — a
+completely different, unrelated question that happened to share a section
+title.
+
+Added a fifth section: `playerIdentityCoverage` / `playersResolved` /
+`playersTotal`, computed live in `loadImportAssertions()` (the same
+in-memory-ratio-over-already-fetched-rows shape `managerIdentityCoverage`
+already used — not a new sync, a derived measure). Ids are pulled via
+`getNormalizedLineupSections`, the SAME parser `RosterContextProvider`
+already reads `Roster.playerData` through — not a second implementation —
+then checked against `PlayerIdentityMap` via a provider→column map
+(`sleeper→sleeperId`, `fantrax→fantraxId`, ...). An unmapped provider
+(native/manual — no external ids at all) reports `null`, never a measured
+zero, the same null-vs-zero distinction `rosterCoverage` already draws.
+
+🛑 **"ONE PACKET SLICE" DID NOT MEAN A NEW ONE.** `ImportAssertions` already
+flows through the packet as `importAssertions: GroundedSlice<ImportAssertions>`
+end to end, kill-switch and all. Adding fields to the type is the whole
+change — zero new packet.ts wiring, zero new flags.ts entries. Reusing what
+already renders beats adding a slice that would render the identical fields
+twice.
+
+### R4.3 — `unresolved_identity` gets a producer, via the general mechanism
+
+`FactDependency` gained `minIdentityResolution: number | null`, wired into
+`isConclusive()` next to the existing `minCoverage` check, sharing
+`assertion: 'identity'` with the manager-identity blocker (by design — both
+really are identity failures) but with a distinguishable `detail` string.
+
+⚠ **SET TO 0.15, NOT `minCoverage`'s 0.9.** R4.1's own fresh numbers are why:
+a normal NFL sample resolves ~61%, NCAAF ~24% — the ORDINARY case, not a
+defect. A threshold near `minCoverage`'s would block most real leagues from
+ever getting a lineup decision. 0.15 is a floor against the MEASURED trap (a
+roster where every one of 27 players came back as
+`{ playerId: '6804', name: '6804' }`, 0% resolved, and still graded itself
+`conclusive: ok`) — not a quality bar against resolution nothing in
+production has yet. Only `lineupDecision` carries the threshold;
+`standings`/`leagueRules`/`managerBehaviour`/`globalPlayerValue` do not name
+players to make their core claim.
+
+19 tests across `conclusive.test.ts` and a new `identity-os-coverage.test.ts`.
+Two things mutation-verified: the blocking condition itself (disabling it
+fails exactly the two tests that assert blocking, none of the five that
+assert non-blocking), and the unmapped-provider null guard (removing it
+sends `where: { undefined: { in: [...] } }` to Prisma — the exact silent
+failure the guard exists to prevent).
+
+## 0.23 R3.3 — THE OTHER THREE VALUE QUESTIONS, RESOLVED
 
 **2026-09-03.** OS_FEED_STATE's own M2 table names three sub-questions (2.1
 trade grade · 2.2 roster holes · 2.3 cross-league exposure) and one of its
@@ -2302,12 +2380,14 @@ The audit's three cuts. **Nothing else matters until these land.**
 - **R3.3** The other three value questions: trade grade · roster holes ·
   cross-league exposure (**A8**).
 
-### R4 — Identity OS · new → 80%
+### R4 — Identity OS · new → 80% · ✅ 2026-09-03, see §0.24
 
-- **R4.1** Re-run the coverage audit for current figures.
-- **R4.2** One source, one assertion, one packet slice.
-- **R4.3** Give `unresolved_identity` a producer. Fix the
-  `{ playerId: '6804', name: '6804' }` roster grading itself `ok`.
+- **R4.1** ✅ Re-run the coverage audit for current figures.
+- **R4.2** ✅ One source, one assertion, one packet slice — landed as a fifth
+  field on the EXISTING `ImportAssertions`/`importAssertions` slice rather than
+  a new one, since it already flows through the packet unmodified.
+- **R4.3** ✅ Give `unresolved_identity` a producer. `minIdentityResolution` on
+  `lineupDecision`'s `FactDependency`, wired into `isConclusive()`.
 
 ### R4b — Manager Psychology OS into the hub · 65% → 92%
 
