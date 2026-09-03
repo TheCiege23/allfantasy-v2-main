@@ -98,7 +98,8 @@ describe('buildLeagueHealthBreakdown (Phase V2.1)', () => {
     expect(model.items).toHaveLength(4)
     expect(model.items[0].key).toBe('engagement') // 45 is lowest
     expect(model.items.every((i) => i.max === 100)).toBe(true)
-    expect(model.headline).toContain('Engagement')
+    // Label reads 'Activity' since the 6.1 relabel (commit 68613818); key stays 'engagement'.
+    expect(model.headline).toContain('Activity')
   })
 })
 
