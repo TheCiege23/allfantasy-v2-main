@@ -350,6 +350,56 @@ function sliceLine(name: string, s: GroundedSlice<unknown> | null | undefined, n
   return [`- ${name}: available${meta}${blocked}`, ...renderValue(name, s.value)]
 }
 
+/**
+ * Collapse gaps that share ONE cause into a single line, naming every fact they block.
+ *
+ * 🛑 EIGHT IDENTICAL LINES, MEASURED. A live packet carried ten gap lines of which eight read
+ * exactly `teams_rosters did not finish syncing` — one per context slice that depends on it.
+ * Every line was correct; the repetition is the defect. A prompt that says the same sentence
+ * eight times teaches a reader to skim the gap block, which is precisely how the one gap that
+ * matters gets missed, and it spends context on redundancy the model cannot use.
+ *
+ * ⚠ GROUPED ON THE WHOLE CAUSE — reason, detail AND remedy — not on `detail` alone. Two slices
+ * blocked for genuinely different reasons can phrase `detail` identically, and merging those
+ * would attach one slice's remedy to another slice's problem: a confidently wrong fix, which is
+ * worse than a repetitive right one.
+ *
+ * ⚠ NOTHING IS DROPPED. Every slice name survives into the collapsed line, because the model
+ * needs to know WHICH facts it must decline on — that is the whole job of this block. This
+ * shortens the prompt without removing anything from it.
+ *
+ * ⚠ AND IT COLLAPSES ONLY THE RENDERING. `packet.gaps` stays one entry per slice: it is a data
+ * structure other consumers read (`groundingToEvidence` builds `missingInformation` from it),
+ * and flattening it there would change what those callers see. Presentation is the right layer
+ * for a presentation problem.
+ *
+ * First-occurrence order is preserved so the same packet always renders the same text.
+ * PURE, and exported for tests.
+ */
+export function collapseGapsByCause(
+  gaps: ReadonlyArray<{ slice: string; reason: string; detail: string; remedy: string }>,
+): Array<{ slices: string[]; reason: string; detail: string; remedy: string }> {
+  const byCause = new Map<string, { slices: string[]; reason: string; detail: string; remedy: string }>()
+  const order: string[] = []
+  for (const g of gaps) {
+    /*
+     * JSON.stringify rather than a joined string: a separator character can appear inside a
+     * detail or remedy and silently merge two different causes into one line.
+     */
+    const key = JSON.stringify([g.reason, g.detail, g.remedy])
+    const existing = byCause.get(key)
+    if (existing) {
+      // A slice appearing twice under one cause would be a packet bug, but printing it twice
+      // would look like this function's bug — so keep the list distinct either way.
+      if (!existing.slices.includes(g.slice)) existing.slices.push(g.slice)
+      continue
+    }
+    byCause.set(key, { slices: [g.slice], reason: g.reason, detail: g.detail, remedy: g.remedy })
+    order.push(key)
+  }
+  return order.map((k) => byCause.get(k) as { slices: string[]; reason: string; detail: string; remedy: string })
+}
+
 export function serializeDecisionOsGroundingForPrompt(
   packet: DecisionOsGroundingPacket,
   now: number = Date.now(),
@@ -425,8 +475,12 @@ export function serializeDecisionOsGroundingForPrompt(
   if (packet.gaps.length > 0) {
     lines.push('')
     lines.push('WHAT IS MISSING, AND WHY:')
-    for (const g of packet.gaps) {
-      lines.push(`- ${g.slice}: ${g.detail} Fix: ${g.remedy}`)
+    for (const g of collapseGapsByCause(packet.gaps)) {
+      lines.push(
+        g.slices.length === 1
+          ? `- ${g.slices[0]}: ${g.detail} Fix: ${g.remedy}`
+          : `- ${g.detail} Affects ${g.slices.length} facts: ${g.slices.join(', ')}. Fix: ${g.remedy}`,
+      )
     }
     lines.push('')
     /*
