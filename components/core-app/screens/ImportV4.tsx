@@ -326,15 +326,25 @@ function emptyDiscoveryMessage(provider: ImportProvider): string {
 /**
  * Per-league outcome of a bulk run, in the user's terms. "Already imported" is a
  * success state, not a failure — the league is present and was not overwritten.
+ *
+ * ⚠ 'not-found' AND 'provider-unavailable' USED TO BOTH BE 'failed'. A league that
+ * genuinely does not exist and a league Sleeper is rate-limiting us on right now are
+ * not the same problem — one never resolves on retry, the other reliably does once
+ * the pacing backoff below has let the provider cool down — and collapsing both into
+ * one "Failed" badge told the user nothing about which retry was worth making. See
+ * `mapGateFailureStatus` in app/api/leagues/import/commit/route.ts, which is what
+ * makes `res.status` carry this distinction now instead of a flat 403.
  */
 const BULK_STATUS_LABEL: Record<
-  'importing' | 'done' | 'exists' | 'needs-attestation' | 'failed',
+  'importing' | 'done' | 'exists' | 'needs-attestation' | 'not-found' | 'provider-unavailable' | 'failed',
   string
 > = {
   importing: 'Importing…',
   done: 'Imported',
   exists: 'Already imported',
   'needs-attestation': 'Needs your confirmation',
+  'not-found': 'League not found',
+  'provider-unavailable': 'Provider unavailable — retry',
   failed: 'Failed',
 }
 
@@ -967,7 +977,52 @@ export function ImportV4({
    * overwritten -- reporting it as failed would push people to re-import leagues
    * that are already fine.
    */
-  type BulkStatus = 'importing' | 'done' | 'exists' | 'needs-attestation' | 'failed'
+  type BulkStatus =
+    | 'importing'
+    | 'done'
+    | 'exists'
+    | 'needs-attestation'
+    | 'not-found'
+    | 'provider-unavailable'
+    | 'failed'
+
+  /**
+   * The structured per-league outcome `importOneLeague`/`runBulkImport` hand back.
+   * `leagueId` here is the PROVIDER's (source) league id being processed — the only
+   * per-league identifier that exists before a commit succeeds, and what this whole
+   * bulk loop is already keyed by as `sourceId`. It is NOT this app's own League.id;
+   * that only exists once `status` is 'done' or 'exists', and is already available on
+   * a successful response as `data.league.id` for whoever needs it there.
+   */
+  interface BulkLeagueResult {
+    leagueId: string
+    status: BulkStatus
+    reason: string | null
+  }
+
+  /**
+   * ── Bulk pacing ──────────────────────────────────────────────────────────────
+   *
+   * Before this, the loop fired the next commit the instant the previous one
+   * resolved — no gap at all. `BULK_IMPORT_PACING_MS` puts a small floor under
+   * every iteration; `BULK_IMPORT_PROVIDER_BACKOFF_MS` replaces that floor with a
+   * longer one specifically after a 'provider-unavailable' result (429 or 5xx),
+   * since that is the one outcome pacing can actually fix — the provider told us
+   * to slow down, and pressing on immediately just spends the next league's
+   * attempt on the same rate limit.
+   *
+   * ⚠ NOT SLEEPER'S OWN ~60s ADVICE (`describeSleeperUnavailable` in
+   * SleeperLeagueFetchService.ts). That guidance is for a person reading one error
+   * and deciding when to press retry by hand. This loop is driven by a screen
+   * someone is actively watching mid-run; a full minute of dead air per
+   * rate-limited league in a 55-league bulk import reads as hung, not polite. A
+   * few seconds is still a real, directionally-correct slowdown without turning an
+   * interactive import into an unattended one.
+   */
+  const BULK_IMPORT_PACING_MS = 350
+  const BULK_IMPORT_PROVIDER_BACKOFF_MS = 4_000
+  const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
   const [bulkRunning, setBulkRunning] = useState(false)
   const [bulkDone, setBulkDone] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<Record<string, BulkStatus>>({})
@@ -1023,7 +1078,7 @@ export function ImportV4({
    * check below exists to prevent. One function, so they cannot drift.
    */
   const importOneLeague = useCallback(
-    async (sourceId: string): Promise<BulkStatus> => {
+    async (sourceId: string): Promise<BulkLeagueResult> => {
       setBulkStatus((prev) => ({ ...prev, [sourceId]: 'importing' }))
       const res = await submitImportCreation(provider, sourceId, '')
       /*
@@ -1039,6 +1094,16 @@ export function ImportV4({
        * league that has never completed a run. A production bulk run over 55
        * leagues reported "33 imported" while importing exactly none of them.
        */
+      /*
+       * ⚠ 404 vs 429/503, NOT ONE "FAILED" BUCKET. Keyed on `res.status` rather than
+       * `res.code` because `res.status` is the one signal BOTH server-side failure
+       * paths set correctly today — the commissioner gate and the normalization
+       * pipeline (see mapGateFailureStatus / mapImportCommitErrorStatus in
+       * app/api/leagues/import/commit/route.ts) — while `code` is only populated on
+       * the gate path so far. A 404 means this league id does not exist and never
+       * will; a 429/503 means the provider itself is unavailable right now and a
+       * retry — especially after the backoff below — is expected to work.
+       */
       const status: BulkStatus = res.ok
         ? res.existed
           ? 'exists'
@@ -1047,7 +1112,11 @@ export function ImportV4({
           ? 'exists'
           : res.requiresAttestation
             ? 'needs-attestation'
-            : 'failed'
+            : res.status === 404
+              ? 'not-found'
+              : res.status === 429 || res.status === 503
+                ? 'provider-unavailable'
+                : 'failed'
       const message = res.ok ? null : res.error || null
       setBulkMessage((prev) => {
         // Cleared on success so a retry that works does not leave the previous
@@ -1061,7 +1130,7 @@ export function ImportV4({
         return { ...prev, [sourceId]: message }
       })
       setBulkStatus((prev) => ({ ...prev, [sourceId]: status }))
-      return status
+      return { leagueId: sourceId, status, reason: message }
     },
     [provider]
   )
@@ -1073,11 +1142,20 @@ export function ImportV4({
     setBulkStatus({})
     setBulkMessage({})
     setError(null)
-    for (const league of selectedLeagues) {
-      await importOneLeague(league.sourceId)
+    const results: BulkLeagueResult[] = []
+    for (let i = 0; i < selectedLeagues.length; i++) {
+      const result = await importOneLeague(selectedLeagues[i].sourceId)
+      results.push(result)
+      const isLast = i === selectedLeagues.length - 1
+      if (!isLast) {
+        await delay(
+          result.status === 'provider-unavailable' ? BULK_IMPORT_PROVIDER_BACKOFF_MS : BULK_IMPORT_PACING_MS
+        )
+      }
     }
     setBulkRunning(false)
     setBulkDone(true)
+    return results
   }, [bulkRunning, selectedLeagues, importOneLeague])
 
   /**
@@ -1099,11 +1177,23 @@ export function ImportV4({
 
   const bulkCounts = (() => {
     const v = Object.values(bulkStatus)
+    const notFound = v.filter((s) => s === 'not-found').length
+    const providerUnavailable = v.filter((s) => s === 'provider-unavailable').length
+    const otherFailed = v.filter((s) => s === 'failed').length
     return {
       done: v.filter((s) => s === 'done').length,
       exists: v.filter((s) => s === 'exists').length,
       needsAttestation: v.filter((s) => s === 'needs-attestation').length,
-      failed: v.filter((s) => s === 'failed').length,
+      notFound,
+      providerUnavailable,
+      /*
+       * Rolls up every terminal non-success, non-attestation outcome so the
+       * existing summary strings ("X failed", "X did not import") keep meaning
+       * what they said before 'not-found' and 'provider-unavailable' were split
+       * out of the old single 'failed' bucket — see BULK_STATUS_LABEL's note.
+       * The per-row badge still shows the specific one via `bulkStatus` directly.
+       */
+      failed: notFound + providerUnavailable + otherFailed,
       processed: v.filter((s) => s !== 'importing').length,
     }
   })()
@@ -2130,7 +2220,10 @@ export function ImportV4({
                       Only rendered for `failed`: the `needs-attestation` reason is the
                       attestation panel's job and would be duplicated here.
                     */}
-                    {bulkStatus[l.sourceId] === 'failed' && bulkMessage[l.sourceId] ? (
+                    {(bulkStatus[l.sourceId] === 'failed' ||
+                      bulkStatus[l.sourceId] === 'not-found' ||
+                      bulkStatus[l.sourceId] === 'provider-unavailable') &&
+                    bulkMessage[l.sourceId] ? (
                       <span className="af-im-league-reason">{bulkMessage[l.sourceId]}</span>
                     ) : null}
                   </span>
@@ -2179,7 +2272,9 @@ export function ImportV4({
                         that hit a transient provider error midway through a long run was
                         to reload and re-discover. Retries in place instead.
                       */}
-                      {bulkStatus[l.sourceId] === 'failed' ? (
+                      {bulkStatus[l.sourceId] === 'failed' ||
+                      bulkStatus[l.sourceId] === 'not-found' ||
+                      bulkStatus[l.sourceId] === 'provider-unavailable' ? (
                         <button
                           type="button"
                           className="af-btn af-btn--ghost af-im-league-btn"

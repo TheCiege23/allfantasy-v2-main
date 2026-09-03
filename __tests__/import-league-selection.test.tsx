@@ -138,3 +138,91 @@ describe('handoff 4d — choosing which discovered leagues to import', () => {
     expect(submitted).not.toContain('l4')
   })
 })
+
+/**
+ * Per-league failure reasons + bulk pacing.
+ *
+ * Before this, every non-ok, non-409, non-attestation commit result collapsed into
+ * one 'failed' bucket regardless of WHY — a league that will never exist and a
+ * league Sleeper is rate-limiting us on right now both rendered as a plain
+ * "Failed" badge, so "Retry" was a coin flip. `res.status` (already plumbed by
+ * LeagueCreationImportSubmissionService) now drives a specific bucket per outcome.
+ */
+describe('bulk import — per-league failure reasons + pacing', () => {
+  beforeEach(() => {
+    discoverProviderLeagues.mockReset()
+    submitImportCreation.mockReset()
+    fetchImportPreview.mockReset()
+  })
+
+  /** Ticks only the first league, so the bulk run is a single iteration with no
+   *  pacing delay to wait out — isolates the classification from the pacing. */
+  async function tickOnlyFirstLeague() {
+    const boxes = screen.getAllByRole('checkbox')
+    fireEvent.click(boxes[1])
+    fireEvent.click(boxes[2])
+    fireEvent.click(boxes[3])
+    fireEvent.click(screen.getByRole('button', { name: /Import 1 league$/i }))
+  }
+
+  it('shows "League not found" for a 404, not a generic "Failed"', async () => {
+    await renderWithLeagues()
+    submitImportCreation.mockResolvedValue({
+      ok: false,
+      status: 404,
+      error: 'Sleeper league l1 does not exist.',
+    })
+
+    await tickOnlyFirstLeague()
+
+    await waitFor(() => expect(screen.getByText('League not found')).toBeInTheDocument())
+    expect(screen.queryByText('Failed')).not.toBeInTheDocument()
+    expect(screen.getByText('Sleeper league l1 does not exist.')).toBeInTheDocument()
+  })
+
+  it('shows "Provider unavailable" for a 429, not a generic "Failed" — the exact distinction a bulk run needs to pace itself', async () => {
+    await renderWithLeagues()
+    submitImportCreation.mockResolvedValue({
+      ok: false,
+      status: 429,
+      error: 'Sleeper is rate-limiting us right now — this league is fine. Wait about a minute and retry.',
+    })
+
+    await tickOnlyFirstLeague()
+
+    await waitFor(() => expect(screen.getByText(/Provider unavailable/)).toBeInTheDocument())
+    expect(screen.queryByText('Failed')).not.toBeInTheDocument()
+    expect(screen.getByText(/rate-limiting/i)).toBeInTheDocument()
+  })
+
+  it('backs off longer after a provider-unavailable result than the base pacing between ordinary leagues', async () => {
+    await renderWithLeagues()
+    vi.useFakeTimers()
+    try {
+      submitImportCreation
+        .mockResolvedValueOnce({ ok: false, status: 429, error: 'Rate-limited.' })
+        .mockResolvedValueOnce({ ok: true, data: { league: { id: 'x', name: 'x', sport: 'NFL' } } })
+        .mockResolvedValueOnce({ ok: true, data: { league: { id: 'x', name: 'x', sport: 'NFL' } } })
+        .mockResolvedValueOnce({ ok: true, data: { league: { id: 'x', name: 'x', sport: 'NFL' } } })
+
+      fireEvent.click(screen.getByRole('button', { name: /Import 4 leagues/i }))
+      // The first league's request fires synchronously off the click; nothing
+      // paces entry into the loop.
+      expect(submitImportCreation).toHaveBeenCalledTimes(1)
+
+      // Long enough to clear the ordinary base pacing (350ms) many times over, but
+      // one tick short of the provider-unavailable backoff (4s) — the second call
+      // must still be held back.
+      await vi.advanceTimersByTimeAsync(3999)
+      expect(submitImportCreation).toHaveBeenCalledTimes(1)
+
+      // Crossing the exact backoff threshold releases exactly the next league —
+      // not a flood of the remaining three, which is what a too-generous advance
+      // would also let through and defeat the point of this assertion.
+      await vi.advanceTimersByTimeAsync(1)
+      expect(submitImportCreation).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

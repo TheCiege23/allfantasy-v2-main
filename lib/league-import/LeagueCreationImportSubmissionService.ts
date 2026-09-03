@@ -46,6 +46,17 @@ export interface SubmitImportResult {
   status?: number;
   requiresAttestation?: boolean;
   /**
+   * The server's own classification of a failure — 'LEAGUE_NOT_FOUND',
+   * 'PROVIDER_UNAVAILABLE', 'ATTESTATION_REQUIRED', 'NOT_COMMISSIONER',
+   * 'UNAUTHORIZED', 'CONNECTION_REQUIRED' — from `mapImportCommitErrorStatus` /
+   * `mapGateFailureStatus` in the commit route. Read THIS, not `status`, to decide
+   * what a failure means: `status` is the HTTP number (429 today; may be 503 for a
+   * provider 5xx), and re-deriving "which numbers mean provider-unavailable" on the
+   * client would be a second copy of a rule the server already owns — exactly the
+   * two-implementations-of-one-rule shape this repo has been bitten by before.
+   */
+  code?: string;
+  /**
    * True when the commit was an idempotent replay — the league was already
    * imported and nothing was written. Distinct from `ok: false, status: 409`,
    * which only fires for a league that has never completed an import run.
@@ -220,6 +231,7 @@ export async function submitImportCreation(
         error: getImportApiErrorMessage(data, 'Failed to create league'),
         status: res.status,
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean })?.requiresAttestation),
+        code: (data as { code?: string })?.code,
       };
     }
     /*

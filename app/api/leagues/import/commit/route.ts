@@ -29,6 +29,34 @@ function mapImportCommitErrorStatus(code: string): number {
   return 500
 }
 
+/**
+ * The gate's own failure, mapped to a real HTTP status instead of the flat 403 every
+ * `!gate.ok` used to get.
+ *
+ * 🛑 `CommissionerGateResult.notFound`'S OWN DOC COMMENT ALREADY SAID "maps to 404, not
+ * 403" — nothing ever read it here. Every gate rejection answered 403 regardless of
+ * cause, so a league that does not exist, a league Sleeper is rate-limiting us on right
+ * now, and a genuine "you are not this league's commissioner" all produced the identical
+ * response shape. A bulk run over many leagues needs exactly this distinction: a 429 on
+ * one league is a signal to slow the whole run down, a 404 never resolves on retry, and
+ * neither is the caller lacking permission.
+ *
+ * Mirrors the two lines directly above for the SAME reasoning, applied to the gate's
+ * result instead of the normalization pipeline's `code` — 404 for "does not exist", 503
+ * for "the provider itself is unavailable" (5xx is bucketed with 429 here: both mean
+ * "their side, retry later", and REST convention reserves 429 for the rate-limit case
+ * specifically, so it passes through as its own number rather than being folded into
+ * 503). Everything else this function has never had a status for (not-linked, not-a-
+ * member, attestation-required) keeps the 403 it already had — this only corrects the
+ * two cases that were provably wrong, not every judgement call in the file.
+ */
+function mapGateFailureStatus(gate: { notFound?: boolean; status?: number | null }): number {
+  if (gate.notFound) return 404
+  if (gate.status === 429) return 429
+  if (gate.status != null && gate.status >= 500) return 503
+  return 403
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireVerifiedUser()
   if (!auth.ok) {
@@ -82,10 +110,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: gate.reason ?? 'Commissioner verification failed.',
-        code: gate.requiresAttestation ? 'ATTESTATION_REQUIRED' : 'NOT_COMMISSIONER',
+        code: gate.requiresAttestation
+          ? 'ATTESTATION_REQUIRED'
+          : gate.notFound
+            ? 'LEAGUE_NOT_FOUND'
+            : gate.status === 429 || (gate.status != null && gate.status >= 500)
+              ? 'PROVIDER_UNAVAILABLE'
+              : 'NOT_COMMISSIONER',
         requiresAttestation: gate.requiresAttestation ?? false,
       },
-      { status: 403 },
+      { status: mapGateFailureStatus(gate) },
     )
   }
 

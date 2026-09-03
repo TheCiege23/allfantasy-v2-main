@@ -482,9 +482,31 @@ describe('assertImportCommissioner — Sleeper commissioner gate (Phase 2.2)', (
     })
     expect(result.ok).toBe(false)
     expect(result.notFound).toBe(true)
+    // The route's status mapping reads THIS, not notFound alone (see commit/route.ts).
+    expect(result.status).toBe(404)
   })
 
-  it('does not set notFound for a reachability failure that is not a 404', async () => {
+  it('distinguishes a 429 (Sleeper rate-limiting us, retry works) from a 404 via `status` — both used to be the same "not reachable" result', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    ;(prisma.userProfile.findFirst as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      sleeperUserId: SLEEPER_UID,
+      sleeperUsername: 'theciege24',
+    })
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 429 }) as unknown as typeof fetch
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'u1',
+      provider: 'sleeper',
+      sourceLeagueId: LEAGUE_ID,
+      requireCommissioner: true,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.notFound).toBeFalsy()
+    expect(result.status).toBe(429)
+    expect(result.reason).toMatch(/rate-limiting/i)
+  })
+
+  it('does not set notFound for a reachability failure that is not a 404, and reports the 5xx via `status`', async () => {
     const { prisma } = await import('@/lib/prisma')
     ;(prisma.userProfile.findFirst as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       sleeperUserId: SLEEPER_UID,
@@ -500,6 +522,8 @@ describe('assertImportCommissioner — Sleeper commissioner gate (Phase 2.2)', (
     })
     expect(result.ok).toBe(false)
     expect(result.notFound).toBeFalsy()
+    expect(result.status).toBe(503)
+    expect(result.reason).toMatch(/having trouble/i)
   })
 })
 
