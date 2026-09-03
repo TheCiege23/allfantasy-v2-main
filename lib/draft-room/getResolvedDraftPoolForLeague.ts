@@ -143,8 +143,16 @@ export type GetResolvedDraftPoolResult = {
   rosterConfigurationIncomplete: boolean
   projectionDiagnostics?: ProjectionFallbackDiagnostics
   poolType?: PoolType
-  devyConfig?: { enabled: true; devyRounds: number[] }
-  c2cConfig?: { enabled: true; collegeRounds: number[] }
+  /*
+   * ⚠ `enabled: boolean`, NOT `enabled: true`. The literal type encoded a bug: a
+   * disabled league sent NO config at all, so every consumer lost the distinction
+   * between "this league has no devy/C2C concept" and "it has one, currently off".
+   * The commissioner control center gates its enable toggle on this object, so the
+   * toggle that turns the feature ON was unreachable whenever it was off — a one-way
+   * switch. See the emission site below.
+   */
+  devyConfig?: { enabled: boolean; devyRounds: number[] }
+  c2cConfig?: { enabled: boolean; collegeRounds: number[] }
   isIdp?: boolean
 }
 
@@ -1937,8 +1945,28 @@ export async function getResolvedDraftPoolForLeague(
     rosterConfigurationIncomplete: false,
     projectionDiagnostics,
     poolType: strictPoolSeparation ? poolType ?? undefined : undefined,
-    devyConfig: devyEnabled ? { enabled: true, devyRounds: rawDevyConfig?.devyRounds ?? [] } : undefined,
-    c2cConfig: c2cEnabled ? { enabled: true, collegeRounds: rawC2cConfig?.collegeRounds ?? [] } : undefined,
+    /*
+     * ⚠ EMITTED WHENEVER A CONFIG EXISTS — not only when it is enabled.
+     *
+     * These used to be `enabled ? {...} : undefined`, which discarded a stored config
+     * the moment someone switched the feature off. `draftSession.devyConfig` still held
+     * `{ enabled: false, devyRounds: [...] }` in the database; the API simply refused to
+     * report it. The commissioner control center renders its enable toggle only when it
+     * receives this object (CommissionerControlCenterModal.tsx:171), so turning devy or
+     * C2C off removed the only control that could turn it back on.
+     *
+     * `devyEnabled` / `c2cEnabled` are unchanged and still drive pool merging above —
+     * only the REPORTED shape changes, so behaviour for enabled leagues is identical.
+     * C2C also emits when `isC2C` is set by league type, which is where c2cEnabled can
+     * come from without a stored config row.
+     */
+    devyConfig: rawDevyConfig
+      ? { enabled: devyEnabled, devyRounds: rawDevyConfig.devyRounds ?? [] }
+      : undefined,
+    c2cConfig:
+      rawC2cConfig || isC2C
+        ? { enabled: c2cEnabled, collegeRounds: rawC2cConfig?.collegeRounds ?? [] }
+        : undefined,
     isIdp: effectiveLeagueTemplate.idpEnabled || undefined,
   }
 }

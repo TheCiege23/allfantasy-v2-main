@@ -115,7 +115,24 @@ async function mockC2CDraftRoomApis(
       },
       timer: { status: 'running', remainingSeconds: 90, timerEndAt: new Date(Date.now() + 90_000).toISOString() },
       updatedAt: state.updatedAt,
-      currentUserRosterId: 'roster-1',
+      /*
+       * ⚠ FOLLOWS THE CURRENT SLOT, RATHER THAN BEING PINNED TO roster-1.
+       *
+       * This league has TWO teams and a linear draft, so the turn alternates on every
+       * accepted pick. Pinned to roster-1, the user got exactly one turn: pick 1
+       * (Campus Ace) succeeded, then pick 2 belonged to roster-2 and the Draft button
+       * rendered `disabled title="Not your turn"` (PlayerPanel.tsx:333). Playwright
+       * waited 195 times for it to become enabled and burned the whole test budget —
+       * reported as a click timeout, which reads as a dead button rather than as a
+       * turn that had moved on.
+       *
+       * What this spec actually asserts is the C2C ROUND RULES — college-only rejects a
+       * pro pick, pro-only rejects a college pick, and the board marks the mixed pool.
+       * It needs four accepted picks in a row to walk through those rounds, and turn
+       * ROTATION is not one of its assertions. So the harness makes it always the
+       * caller's turn; the rules under test are unaffected.
+       */
+      currentUserRosterId: owner.rosterId,
       orphanRosterIds: [],
       aiManagerEnabled: false,
       orphanDrafterMode: 'cpu',
@@ -175,7 +192,7 @@ async function mockC2CDraftRoomApis(
         entries: poolEntries,
         sport: 'NFL',
         count: poolEntries.length,
-        c2cConfig: c2cConfigState.enabled ? { enabled: true, collegeRounds: c2cConfigState.collegeRounds } : undefined,
+        c2cConfig: { enabled: c2cConfigState.enabled, collegeRounds: c2cConfigState.collegeRounds },
       }),
     })
   })
@@ -357,6 +374,23 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-player-panel')).toBeVisible()
     await expect(desktop).toContainText(/College round \(C2C\)/i)
 
+    /*
+     * ⚠ NFL RENDERS THE SLEEPER TABLE, AND EVERY `draft-player-button-N` BELOW LIVES
+     * ONLY ON A CARD.
+     *
+     * PlayerPanel picks its layout from `poolLayout === 'auto' && sport === 'NFL'`
+     * (PlayerPanel.tsx:939/954), so this spec's own `sport=NFL` navigation gets the
+     * table. The indexed ids — draft-player-button-N, draft-nominate-player-N,
+     * draft-queue-add-N, draft-player-card-N — are emitted only by the virtualized
+     * CARD list, so they matched nothing while the pool itself had loaded correctly
+     * and the filter assertions above passed.
+     *
+     * That is why this failed as a missing testid rather than as an empty pool.
+     * `draft-pool-view-cards` is the real user control for the switch, and this is
+     * the same fix already carried by auction-draft-room and draft-asset-pipeline.
+     */
+    await clickHydrated(desktop.getByTestId('draft-pool-view-cards'))
+
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Campus Ace')
     await expect(desktop).toContainText('Campus Ace')
@@ -369,8 +403,20 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop).toContainText('Pro')
 
     // College-only round rejects pro pick.
+    /*
+     * DRAFTING A PLAYER HAS NO CONFIRMATION STEP - THAT UI BELONGS TO AUCTIONS.
+     *
+     * `draft-player-button-N` calls onDraftRequest(p) directly (PlayerPanel.tsx:341).
+     * The confirmation panel and its confirm button are gated on `pendingNomination`,
+     * which only ever gets set by onNominateRequest - i.e. the auction nomination
+     * flow. There is no equivalent state for a pick, and no window.confirm either.
+     *
+     * So the confirm click that used to sit after each draft below was waiting on a
+     * button that cannot exist on this path. It reported as "element(s) not found",
+     * which reads as a broken draft button rather than as a step that was never
+     * there. auction-draft-room keeps its confirm click, correctly: it nominates.
+     */
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(page.getByText(/college-only \(C2C\)/i)).toBeVisible()
 
     // Draft two college picks to move into pro round.
@@ -378,7 +424,6 @@ test.describe('@c2c-draft-room click audit', () => {
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Campus Ace')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('Campus Ace')
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('C')
 
@@ -386,7 +431,6 @@ test.describe('@c2c-draft-room click audit', () => {
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Future Route')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
 
     await expect(desktop).toContainText(/Pro round \(C2C\)/i)
 
@@ -395,7 +439,6 @@ test.describe('@c2c-draft-room click audit', () => {
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Pipeline Runner')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(page.getByText(/pro-only \(C2C\)/i)).toBeVisible()
 
     // Pro pick accepted and board shows mixed pool marker.
@@ -403,7 +446,6 @@ test.describe('@c2c-draft-room click audit', () => {
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Immediate Impact')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-3')).toContainText('Immediate Impact')
     await expect(desktop.getByTestId('draft-board-cell-3')).toContainText('P')
 
@@ -428,8 +470,26 @@ test.describe('@c2c-draft-room click audit', () => {
 
     await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
-    await expect(modal).toBeVisible()
+    /*
+     * CommissionerControlCenterModal is a `dynamic()` import (DraftRoomPageClient.tsx:54),
+     * so opening it starts a webpack compile under `next dev` before any of its content
+     * exists. openCommissionerControls returns as soon as the dialog SHELL is visible —
+     * its isControlsVisible accepts the role=dialog fallback — so the inner testid can
+     * still be minutes of compile away. The 5s expect default then reports
+     * "element(s) not found", which reads as a missing modal rather than one still
+     * building. Same cause and same allowance as slow-draft-room-click-audit.
+     */
+    await expect(modal).toBeVisible({ timeout: 60_000 })
 
+    /*
+     * This exercises a path the product used to make unreachable: the section holding
+     * the ENABLE toggle only rendered once the feature was already enabled, so turning
+     * devy/C2C off removed the only control that could turn it back on. Fixed in
+     * getResolvedDraftPoolForLeague.ts (a stored config is now reported whichever way
+     * it is set) and CommissionerControlCenterModal.tsx (the section keys off the
+     * config's PRESENCE, with `enabled` saying whether it is currently on). The mock
+     * above mirrors that same shape.
+     */
     await clickHydrated(modal.getByTestId('draft-commissioner-toggle-c2c-enabled'))
     await modal.getByTestId('draft-commissioner-input-c2c-rounds').fill('1, 3, 99')
     await clickHydrated(modal.getByTestId('draft-commissioner-save-c2c-config'))

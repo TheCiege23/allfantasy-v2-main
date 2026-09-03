@@ -168,8 +168,17 @@ export function CommissionerControlCenterModal({
   const isInProgress = draftStatus === 'in_progress'
   const isPaused = draftStatus === 'paused'
   const isAuctionDraft = String(draftType ?? '').toLowerCase() === 'auction'
-  const hasDevyDraftConfig = Boolean(devyConfig?.enabled || (devyConfig?.devyRounds?.length ?? 0) > 0)
-  const hasC2CDraftConfig = Boolean(c2cConfig?.enabled || (c2cConfig?.collegeRounds?.length ?? 0) > 0)
+  /*
+   * ⚠ PRESENCE, NOT ENABLED-NESS. These previously read
+   * `enabled || rounds.length > 0`, which meant the section holding the ENABLE toggle
+   * only rendered once the feature was already enabled — so a commissioner who turned
+   * devy or C2C off could never turn it back on. The pool API now reports a stored
+   * config whichever way it is set (getResolvedDraftPoolForLeague.ts), so the object's
+   * presence is what says "this league has the concept" and `enabled` says whether it
+   * is currently on. A league with neither still sends no object and stays hidden.
+   */
+  const hasDevyDraftConfig = devyConfig != null
+  const hasC2CDraftConfig = c2cConfig != null
   const pauseControlsEnabled = ui.commissionerPauseControlsEnabled ?? true
   const poolReadinessLabel = poolReadiness?.ready
     ? `Draft pool ready: ${poolReadiness.entryCount} players`

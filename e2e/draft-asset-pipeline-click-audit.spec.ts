@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { clickHydrated } from './helpers/hydration'
+import { clickHydrated, waitForHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -340,6 +340,34 @@ async function openDraftRoomHarness(page: Page) {
 test.describe('@draft-asset-pipeline click audit', () => {
   test('player cards handle open, queue, drafted update, and image fallback', async ({ page }) => {
     const leagueId = `e2e-draft-assets-${Date.now()}`
+
+    /*
+     * SURFACE THIS PAGE'S OWN ERRORS — it renders an error boundary on a throw, and
+     * without this the only evidence is a missing testid.
+     *
+     * Observed on 2026-09-03: this spec hit "Something went wrong / We couldn't load
+     * this page" with a dev overlay reporting 4 errors, and the reported failure was a
+     * bare `draft-queue-add-0` not found. A crash and a renamed testid are
+     * indistinguishable from that, and they need opposite fixes.
+     *
+     * Logged rather than asserted, matching draft-room-click-audit.spec.ts: an
+     * assertion here would turn any unrelated console noise into a failure, while the
+     * log makes the next crash self-describing.
+     */
+    const pageErrors: string[] = []
+    page.on('pageerror', (err) => {
+      pageErrors.push(err.message)
+      // The stack is the whole point: the message alone ("Cannot read properties of
+      // undefined") names no file, and this page renders an error boundary on a throw.
+      // eslint-disable-next-line no-console
+      console.log('[draft-asset-pipeline][pageerror]', err.message, '\n', err.stack ?? '(no stack)')
+    })
+    page.on('console', (msg) => {
+      if (msg.type() !== 'error') return
+      // eslint-disable-next-line no-console
+      console.log('[draft-asset-pipeline][console.error]', msg.text())
+    })
+
     await mockDraftAssetApis(page, leagueId)
 
     await page.goto(`/e2e/draft-room?leagueId=${leagueId}&sport=NFL`)
@@ -360,7 +388,25 @@ test.describe('@draft-asset-pipeline click audit', () => {
     await clickHydrated(desktop.getByTestId('draft-pool-view-cards'))
 
     await desktop.getByTestId('draft-player-search-input').fill('Broken Image Back')
-    await clickHydrated(desktop.getByTestId('draft-player-card-0'))
+    /*
+     * ⚠ ENTER, NOT A CLICK — THE CARD'S CENTRE IS COVERED BY ITS OWN ACTION BUTTONS.
+     *
+     * The card root carries `onClick={onSelect}`, `role="button"` and `tabIndex={0}`
+     * (DraftPlayerCard.tsx:301-306), but it also contains the compare, queue and
+     * draft/nominate buttons. Playwright clicks the CENTRE of the resolved element, and
+     * on this card that centre lands on the action row — so the click was consumed by a
+     * child and `setSelectedPlayer` never ran. The card resolved and the click
+     * succeeded, which is why this failed further down on a modal that had no reason to
+     * be open rather than here.
+     *
+     * The same element handles Enter (`onKeyDown` -> onSelect at :304), so pressing it
+     * exercises the identical handler through a real keyboard interaction and cannot be
+     * swallowed by a child.
+     */
+    const firstCard = desktop.getByTestId('draft-player-card-0')
+    await expect(firstCard).toBeVisible()
+    await waitForHydrated(firstCard)
+    await firstCard.press('Enter')
     /*
      * ⚠ RE-POINTED, NOT DELETED: the selected-player panel became a modal.
      *
@@ -378,7 +424,10 @@ test.describe('@draft-asset-pipeline click audit', () => {
      * None of this was reachable until two upstream bugs were fixed: the bootstrap
      * starved the pool fetch, and NFL renders the Sleeper table instead of cards.
      */
-    await expect(desktop.getByTestId('player-detail-modal')).toBeVisible({ timeout: 15_000 })
+    await expect(
+      desktop.getByTestId('player-detail-modal'),
+      pageErrors.length ? `page threw before this assertion: ${pageErrors.join(' | ')}` : undefined,
+    ).toBeVisible({ timeout: 15_000 })
     await page.keyboard.press('Escape')
     await expect(desktop.getByTestId('player-detail-modal')).toHaveCount(0)
 

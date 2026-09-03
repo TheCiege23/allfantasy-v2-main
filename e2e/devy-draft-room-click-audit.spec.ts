@@ -180,7 +180,7 @@ async function mockDevyDraftRoomApis(
         entries: poolEntries,
         sport: 'NFL',
         count: poolEntries.length,
-        devyConfig: devyConfigState.enabled ? { enabled: true, devyRounds: devyConfigState.devyRounds } : undefined,
+        devyConfig: { enabled: devyConfigState.enabled, devyRounds: devyConfigState.devyRounds },
       }),
     })
   })
@@ -369,6 +369,25 @@ test.describe('@devy-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-player-panel')).toBeVisible()
     await expect(desktop).toContainText(/Devy round/i)
 
+    /*
+     * ⚠ NFL RENDERS THE SLEEPER TABLE, AND THIS SPEC NEEDS THE CARD LIST FOR TWO
+     * SEPARATE REASONS.
+     *
+     * PlayerPanel picks its layout from `poolLayout === 'auto' && sport === 'NFL'`
+     * (PlayerPanel.tsx:939/954), so this spec's own `sport=NFL` navigation gets the
+     * table. That costs it both:
+     *   - `draft-player-button-N`, emitted only by the virtualized CARD list, and
+     *   - the "Promoted" badge, which lives in DraftPlayerCard.tsx (:345) and has no
+     *     table equivalent — so the promotion-marker assertion below could never pass
+     *     in table view even though the player itself rendered.
+     *
+     * The pool had loaded correctly in both cases; only the surface was wrong, which
+     * is why this read as a missing testid and a missing string rather than as a
+     * broken pool. Same fix already carried by auction-draft-room and
+     * draft-asset-pipeline.
+     */
+    await clickHydrated(desktop.getByTestId('draft-pool-view-cards'))
+
     // Devy filters work and render devy card badges/details.
     await desktop.getByTestId('draft-pool-filter').selectOption('Devy')
     await desktop.getByTestId('draft-player-search-input').fill('Future Star')
@@ -385,8 +404,20 @@ test.describe('@devy-draft-room click audit', () => {
     await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Atlas Runner')
+    /*
+     * DRAFTING A PLAYER HAS NO CONFIRMATION STEP - THAT UI BELONGS TO AUCTIONS.
+     *
+     * `draft-player-button-N` calls onDraftRequest(p) directly (PlayerPanel.tsx:341).
+     * The confirmation panel and its confirm button are gated on `pendingNomination`,
+     * which only ever gets set by onNominateRequest - i.e. the auction nomination
+     * flow. There is no equivalent state for a pick, and no window.confirm either.
+     *
+     * So the confirm click that used to sit after each draft below was waiting on a
+     * button that cannot exist on this path. It reported as "element(s) not found",
+     * which reads as a broken draft button rather than as a step that was never
+     * there. auction-draft-room keeps its confirm click, correctly: it nominates.
+     */
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(page.getByText(/devy-only/i)).toBeVisible()
 
     // Devy slot drafting works in devy round.
@@ -394,7 +425,6 @@ test.describe('@devy-draft-room click audit', () => {
     await desktop.getByTestId('draft-pool-filter').selectOption('Devy')
     await desktop.getByTestId('draft-player-search-input').fill('Future Star')
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('Future Star')
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('D')
 
@@ -420,8 +450,26 @@ test.describe('@devy-draft-room click audit', () => {
 
     await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
-    await expect(modal).toBeVisible()
+    /*
+     * CommissionerControlCenterModal is a `dynamic()` import (DraftRoomPageClient.tsx:54),
+     * so opening it starts a webpack compile under `next dev` before any of its content
+     * exists. openCommissionerControls returns as soon as the dialog SHELL is visible —
+     * its isControlsVisible accepts the role=dialog fallback — so the inner testid can
+     * still be minutes of compile away. The 5s expect default then reports
+     * "element(s) not found", which reads as a missing modal rather than one still
+     * building. Same cause and same allowance as slow-draft-room-click-audit.
+     */
+    await expect(modal).toBeVisible({ timeout: 60_000 })
 
+    /*
+     * This exercises a path the product used to make unreachable: the section holding
+     * the ENABLE toggle only rendered once the feature was already enabled, so turning
+     * devy/C2C off removed the only control that could turn it back on. Fixed in
+     * getResolvedDraftPoolForLeague.ts (a stored config is now reported whichever way
+     * it is set) and CommissionerControlCenterModal.tsx (the section keys off the
+     * config's PRESENCE, with `enabled` saying whether it is currently on). The mock
+     * above mirrors that same shape.
+     */
     await clickHydrated(modal.getByTestId('draft-commissioner-toggle-devy-enabled'))
     await modal.getByTestId('draft-commissioner-input-devy-rounds').fill('2, 4, 10')
     await clickHydrated(modal.getByTestId('draft-commissioner-save-devy-config'))

@@ -493,6 +493,19 @@ test.describe('@slow-draft-room click audit', () => {
     const desktop = page.getByTestId('draft-desktop-layout')
     await expect(desktop.getByTestId('draft-board')).toBeVisible()
 
+    /*
+     * ⚠ NFL RENDERS THE SLEEPER TABLE, AND `draft-player-button-0` BELOW ONLY EXISTS ON
+     * A CARD.
+     *
+     * PlayerPanel picks its layout from `poolLayout === 'auto' && sport === 'NFL'`
+     * (PlayerPanel.tsx:939/954), and this spec navigates `sport=NFL`. The indexed ids
+     * are emitted only by the virtualized card list, so the pick further down matched
+     * nothing while the pool itself had loaded correctly — reported as a missing
+     * testid rather than as the wrong view. Same cause and same fix already carried by
+     * auction, c2c, devy and draft-asset-pipeline.
+     */
+    await clickHydrated(desktop.getByTestId('draft-pool-view-cards'))
+
     // Long timer behavior is present and changes on resync.
     const resyncCountBefore = mocks.getResyncHits().length
     const timerBefore = await page.getByTestId('draft-topbar-timer-value').first().innerText()
@@ -516,16 +529,34 @@ test.describe('@slow-draft-room click audit', () => {
     // Pause window behavior via overnight mode + slow automation tick.
     await openCommissionerControls(page)
     const commissionerModal = page.getByTestId('draft-commissioner-modal')
-    await expect(commissionerModal).toBeVisible()
+    /*
+     * CommissionerControlCenterModal IS A `dynamic()` IMPORT (DraftRoomPageClient.tsx:54),
+     * so opening it starts a webpack compile under `next dev` before any of its content
+     * exists. The helper above returns as soon as the dialog SHELL is visible — its
+     * `isControlsVisible` accepts the role=dialog fallback — and the failure DOM shows
+     * precisely that split: `dialog "Commissioner control center"` present, and EMPTY.
+     *
+     * The 5s expect default then times out on the inner testid and reports
+     * "element(s) not found", which reads as a missing modal rather than one still
+     * compiling. Both assertions below get the same allowance for the same reason.
+     */
+    await expect(commissionerModal).toBeVisible({ timeout: 60_000 })
     await commissionerModal.getByTestId('draft-commissioner-select-timer-mode').selectOption('overnight_pause')
     await clickHydrated(commissionerModal.getByTestId('draft-commissioner-slow-tick'))
     await clickHydrated(commissionerModal.getByTestId('draft-commissioner-close'))
     await expect(page.getByTestId('draft-topbar-timer-value').first()).toContainText(/h|m:/i)
-    await expect(page.locator('header')).toContainText('paused')
+    /*
+     * `.first()` because two <header> elements are on the page and bare `locator('header')`
+     * is a strict-mode violation: DraftTopBar's root (DraftTopBar.tsx:557) and a second one
+     * inside `results-roster-panel`. The draft top bar is the one that carries the timer
+     * state, and this spec already scopes `draft-topbar-timer-value` with `.first()` for
+     * the same reason.
+     */
+    await expect(page.locator('header').first()).toContainText('paused')
 
     // Return to active mode, force expiry, then submit from queue.
     await openCommissionerControls(page)
-    await expect(commissionerModal).toBeVisible()
+    await expect(commissionerModal).toBeVisible({ timeout: 60_000 })
     await commissionerModal.getByTestId('draft-commissioner-select-timer-mode').selectOption('per_pick')
     await clickHydrated(commissionerModal.getByTestId('draft-commissioner-slow-tick'))
     await clickHydrated(commissionerModal.getByTestId('draft-commissioner-close'))

@@ -497,7 +497,21 @@ test.describe('@keeper-draft-room click audit', () => {
     const mobile = page.getByTestId('draft-mobile-layout')
 
     await page.getByTestId('draft-mobile-tab-keepers').click()
-    await expect(mobile.getByTestId('draft-keeper-add-submit')).toBeVisible()
+    /*
+     * ⚠ KeeperPanel IS A `dynamic()` IMPORT, SO THIS IS A CHUNK COMPILE, NOT A RENDER.
+     *
+     * DraftRoomPageClient.tsx:60 lazy-loads it with `{ ssr: false }`, so switching to
+     * the Keepers tab starts a webpack compile under `next dev` and only then fetches
+     * `/draft/keepers`. Playwright's expect default is 5s, which is a bet that the
+     * chunk is already built — true on a warm server, false on a cold one.
+     *
+     * The failure DOM shows exactly that: the Keepers tab is `[active] [pressed]` with
+     * no panel beneath it. Reported as "element(s) not found", which reads as a keeper
+     * form that does not exist rather than one that had not arrived. Every gate on the
+     * form was satisfied — the mock returns `config.maxKeepers: 1`, `pre_draft`, and
+     * `deadlineLocked: false`, so `canEdit` (KeeperPanel.tsx:212) is true.
+     */
+    await expect(mobile.getByTestId('draft-keeper-add-submit')).toBeVisible({ timeout: 60_000 })
     await mobile.getByTestId('draft-keeper-select-roster').selectOption('roster-1')
 
     await mobile.getByTestId('draft-keeper-config-max-keepers').fill('1')

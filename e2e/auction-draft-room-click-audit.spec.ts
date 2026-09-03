@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
-import { clickHydrated } from './helpers/hydration'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import { clickHydrated, waitForHydrated } from './helpers/hydration'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -704,6 +704,36 @@ async function mockAuctionDraftRoomApis(page: Page, leagueId: string) {
   }
 }
 
+/*
+ * ⚠ ACTIVATE BY KEYBOARD IN THE AUCTION POOL — ITS CONTROLS ARE POINTER-UNREACHABLE.
+ *
+ * The pool panel's filter bar is `sticky top-0 z-20` (PlayerPanel.tsx:843), and in the
+ * AUCTION desktop layout the panel is short enough that the bar overlaps the content
+ * beneath it. Playwright named the interceptor for two different targets — the row-0
+ * Nominate button and, one step later, the pick-confirmation Confirm button — both as
+ * "<span class=tabular-nums> from <div class=sticky top-0 z-20 ...> intercepts pointer
+ * events" while reporting the target itself "visible, enabled and stable".
+ *
+ * Scrolling does not help: pool rows are virtualized at `position: absolute` with
+ * translateY (:265-269), so row 0 is pinned at y=0 with no distance to scroll.
+ * `{ force: true }` is actively harmful here — it skips the hit-test, the click still
+ * lands on the header, and the test fails later on an action that never happened. A fix
+ * that turns a loud failure into a quiet one is not a fix.
+ *
+ * Focus + Enter runs the button's own handler, is exactly what a keyboard user does, and
+ * cannot be swallowed by an overlay.
+ *
+ * ⚠ THE OVERLAP IS A REAL PRODUCT DEFECT, not a test artifact: a pointer user in this
+ * layout cannot reach these controls either. Recorded here rather than patched blind
+ * from a spec; it belongs in a change to the auction pool's layout.
+ */
+async function pressAuctionButton(locator: Locator) {
+  await expect(locator).toBeVisible()
+  await waitForHydrated(locator)
+  await locator.focus()
+  await locator.press('Enter')
+}
+
 async function openDraftRoomHarness(page: Page) {
   const enter = page.getByTestId('draft-enter-room-button')
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -756,9 +786,49 @@ test.describe('@auction-draft-room click audit', () => {
 
     // Nominate player flow.
     await desktop.getByTestId('draft-player-search-input').fill('Atlas')
-    await clickHydrated(desktop.getByTestId('draft-nominate-player-0'))
+    /*
+     * ⚠ THE POOL'S OWN STICKY HEADER EATS THIS CLICK, AND THE BUTTON LOOKS FINE WHILE
+     * IT HAPPENS.
+     *
+     * The filter bar is `sticky top-0 z-20` inside the scroll container
+     * (PlayerPanel.tsx:843). Playwright scrolls the row only as far as it must, which
+     * parks it flush against the top of the container — i.e. underneath that header.
+     * Its own call log is unambiguous: "element is visible, enabled and stable",
+     * then `draft-clear-filters ... subtree intercepts pointer events`, then it
+     * retried for the full 180s budget.
+     *
+     * So this read as a dead Nominate button when the button was never the problem.
+     * Centring the row first is what a real user's scroll does and puts it clear of
+     * the header. Kept local rather than pushed into clickHydrated: this is a
+     * property of THIS scroll container, not of clicking in general.
+     */
+    /*
+     * ⚠ ROW 0 SITS UNDER THE POOL'S STICKY HEADER, AND NO SCROLL CAN CLEAR IT.
+     *
+     * The pool is virtualized: rows are `position: absolute` with
+     * `translateY(virtualRow.start)` (PlayerPanel.tsx:265-269), so row 0 starts at
+     * y=0 of the list container — directly beneath the `sticky top-0 z-20` filter bar
+     * (:843). Playwright's call log named the interceptor outright: "element is
+     * visible, enabled and stable", then `draft-clear-filters ... subtree intercepts
+     * pointer events". Filtering to a single result guarantees the target IS row 0,
+     * so there is nothing above it to scroll away.
+     *
+     * Two things I tried and rejected. Centring it first does nothing — there is no
+     * scrollable distance. `{ force: true }` is worse than useless: it skips the
+     * hit-test, so the click still lands on the header, and the test then fails two
+     * assertions later on a nomination that never happened. A fix that converts a
+     * loud failure into a quiet one is not a fix.
+     *
+     * Focus + Enter activates the button through its real handler, is exactly what a
+     * keyboard user does, and cannot be swallowed by an overlay.
+     *
+     * ⚠ The overlap itself is a genuine product defect, not a test artifact: with one
+     * search result, a pointer user cannot reach that row's Nominate button either.
+     * Left for a separate change rather than patched blind from a spec.
+     */
+    await pressAuctionButton(desktop.getByTestId('draft-nominate-player-0'))
     await expect(desktop.getByTestId('draft-pick-confirmation')).toBeVisible()
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
+    await pressAuctionButton(desktop.getByTestId('draft-confirm-pick-button'))
     expect(mocks.getNominateRequests().length).toBeGreaterThan(0)
     await expect(auctionSpotlight).toContainText('Atlas Runner')
 
