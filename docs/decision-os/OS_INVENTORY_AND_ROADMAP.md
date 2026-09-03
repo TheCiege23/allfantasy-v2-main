@@ -166,6 +166,77 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.27 R4b.7 — FRAMING ONLY, AND ALL OF R4b IS NOW DONE
+
+**2026-09-03.** P4: "Explanation and framing only. The deterministic engine's
+recommendation is never changed by a behavioural inference." Two additions,
+both conditional instructions rather than data plumbing — there is nothing to
+join, since a decision and a psychology fact are already independent slices
+in the same context by the time either reaches a prompt.
+
+### One general rule, not one per engine
+
+`serializeDecisionOsGroundingForPrompt` gains a single instruction, appended
+only when a decision (`lineupDecision`/`waiverDecision`/
+`commissionerHealthDecision`) AND `managerPsychology` are BOTH present:
+psychology may explain a decision, never re-argue it. 🛑 **Deliberately ONE
+rule at the one place every decision and every psychology fact are already
+combined, not wired per-engine.** `decisionBridge.ts`'s own header already
+forbids touching the four live engines ("if a change here appears to need an
+engine change, that is the signal to stop and re-scope"); a rule stated once
+here covers all three today and whatever is bridged next without editing any
+of them. Conditional, not standing — mutation-verified in both directions:
+forced off fails exactly the one test asserting it appears; forced always-on
+fails exactly the two tests asserting it does NOT pad an irrelevant prompt.
+
+`pendingTradeDecisionGrounding.ts` gets the same policy restated in its own
+existing RULES line, because — stated in its own file header — that block is
+composed into the chat prompt SEPARATELY from the packet. A rule in one
+surface does not reach a turn built from the other.
+
+### ⚠ Correct, and immediately inert, for two independent reasons
+
+Same honesty this session has applied to every finding today: neither
+surface this connects psychology to currently fires with real data for a
+real user.
+
+- The packet's three decision slices are `want`-gated off in the one live
+  chat route (§0.26's finding) — R2's own recommendations don't reach a
+  prompt today, so there is nothing for this instruction to attach to there
+  yet.
+- `pendingTradeDecisionGrounding.ts` DOES reach the live route unconditionally
+  — but its data source, `redraft_trade_proposals`, has zero rows in
+  production (§0.23's R3.3 finding — real trades happen on Sleeper, not
+  through this app's native trade builder).
+
+Built anyway, for the same reason R3.3/R4b.5's opt-in slices were: correct
+now means nothing to rebuild later, once either gap above is closed by
+whoever scopes that separately.
+
+### 🛑 A third, more severe gap found investigating this one — fixed same session, not deferred
+
+Checking where `rosterValueGrade`/`psychologyConsistency` would need to sit
+alongside a decision for R4b.7 to matter at all surfaced that
+`serializeDecisionOsGroundingForPrompt` has its OWN local `slices` array,
+separate from `packet.ts`'s array of the same name that feeds `packet.gaps`.
+`idpKickerValues` (R3.1), `rosterValueGrade` (R3.3) and
+`psychologyConsistency` (R4b.5) were never added to THIS one — so a present
+reading with real data silently never rendered, while an absent one
+correctly showed up as a gap. Backwards, unnoticed by three separate rounds
+of mutation-verified producer tests (each tested its own producer in
+isolation, never a full packet through this exact function), and — unlike
+everything else recorded as "found, not fixed" today — **fixed immediately
+and shipped as its own standalone commit**, because R3.3 was already live on
+`main` at the time this was found, making it a real production gap rather
+than queued work. See the commit itself
+(`fix(decision-os): three slices never reached the prompt, only their gaps
+did`) for the full account; not duplicated here.
+
+24 tests across two files. Two things mutation-verified (in addition to the
+serializer fix's own control): the conditional framing instruction in both
+directions, and the trade-grounding rule addition (reverting it fails
+exactly the one test that checks for it).
+
 ## 0.26 R4b.6 — CHIMMY NARRATES FROM THE FACTS, AND A SIGNIFICANT GAP FOUND ALONG THE WAY
 
 **2026-09-03.** P2's requirement — structured facts in, Chimmy narrates at
@@ -2577,7 +2648,7 @@ seam.
 | **R4b.4** | `managerPsychology` packet slice, graded, refusing below the floor (**P6**) | — |
 | **R4b.5** | Trajectory + cross-league + cross-sport reads, **derived not cached** (**P1/P5/P7**) | ✅ 2026-09-03, see §0.25 |
 | **R4b.6** | Chimmy narrates from the facts — **no stored prose** (**P2**) | ✅ 2026-09-03, see §0.26. Also surfaced a significant, cross-cutting gap — see the same section. |
-| **R4b.7** | Wire into recommendations as **framing only** (**P4**) | — |
+| **R4b.7** | Wire into recommendations as **framing only** (**P4**) | ✅ 2026-09-03, see §0.27. **All of R4b (R4b.1–7) is now done.** |
 
 ⚠ **R4b.2 writes a snapshot going forward; it does not invent history.** The
 first season of trajectory data appears after the first refresh that runs with
