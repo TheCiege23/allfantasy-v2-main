@@ -452,6 +452,36 @@ export function serializeDecisionOsGroundingForPrompt(
     )
   }
 
+  /*
+   * R4b.7 (P4) — psychology frames a decision's explanation; it never changes the decision.
+   *
+   * ⚠ CONDITIONAL, NOT A STANDING RULE. Padding every prompt with an instruction about an
+   * interaction that is not even in play is the same mistake the gaps block above already avoids
+   * by checking `packet.gaps.length > 0` first. This only appears when BOTH a decision (from one
+   * of the three live engines this packet can carry) AND manager psychology are actually present
+   * — the one situation the rule exists to govern.
+   *
+   * ⚠ ONE GENERAL RULE, NOT ONE PER ENGINE. `decisionBridge.ts`'s own header already states why
+   * the four live engines are never touched by this session's work: "if a change here appears to
+   * need an engine change, that is the signal to stop and re-scope." Wiring framing into each
+   * engine's own text would mean editing the engines, or hand-writing a rule per decision type
+   * that needs updating every time one is added. A rule stated once, here, at the one place every
+   * decision and every psychology fact are already combined into one prompt, covers all three
+   * today and whatever is bridged next without touching any of them.
+   */
+  const hasDecision = [packet.lineupDecision, packet.waiverDecision, packet.commissionerHealthDecision].some(
+    (d) => d?.present,
+  )
+  if (hasDecision && packet.managerPsychology.present) {
+    lines.push('')
+    lines.push(
+      'Manager psychology may inform how you EXPLAIN a decision above — framing, not authority. ' +
+        'A decision\'s four answers, grade, and legality are already final; a behavioural label or ' +
+        'trajectory may motivate why a manager might make a move, never justify a different verdict ' +
+        'than the decision itself gives.',
+    )
+  }
+
   if (available.length === 0 && packet.gaps.length === 0) {
     // Neither available nor missing: nothing was requested. Say so rather than emitting a header
     // with no body, which reads to a model as an empty-but-authoritative source.

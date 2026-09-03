@@ -113,6 +113,23 @@ describe('buildPendingTradeDecisionContext', () => {
     expect(out).toContain('data completeness 90/100')
   })
 
+  /**
+   * R4b.7 (P4) — this block is composed into the chat prompt separately from the packet (see
+   * the file's own header), so a framing-only rule stated ONLY in the packet's serializer would
+   * never reach a turn built from this surface. Restated here for the same reason it exists there.
+   */
+  it('🛑 states the psychology framing-only rule, every time — this surface never runs through the packet serializer', async () => {
+    mocks.proposalFindMany.mockResolvedValue([makeProposal()])
+    mocks.runTradeShadowForProposal.mockResolvedValue({
+      ran: true,
+      proposalId: 'prop-1',
+      result: { decision: makeDecision(90) },
+    })
+
+    const out = await buildPendingTradeDecisionContext('lg1', 'user-1')
+    expect(out).toContain('never to argue the grade above should be different than it is')
+  })
+
   /*
    * The known way this surface lies: a letter produced from almost nothing,
    * which reads as a considered verdict.

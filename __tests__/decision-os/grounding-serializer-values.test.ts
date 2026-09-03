@@ -235,6 +235,55 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     expect(text).toContain('crossLeagueConsistentLabels: aggressive')
   })
 
+  /**
+   * ── R4b.7 (P4) — psychology frames a decision's explanation, never changes it ───────────────
+   * One general instruction at the point every decision and every psychology fact are already
+   * combined into one prompt, rather than wiring framing into each engine (which R2's own
+   * decisionBridge.ts explicitly forbids touching) or hand-writing a rule per decision type.
+   */
+  it('🛑 the framing instruction appears when a decision AND psychology are BOTH present', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        lineupDecision: present({
+          decisionType: 'lineup', whatHappened: 'Start Nabers', whyItMatters: 'better matchup',
+          whatToDo: 'start him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
+          dataCompleteness: 100, weakestSource: null, weakestTrust: null,
+        } as never),
+        managerPsychology: present([
+          { managerId: 'm1', sport: 'NFL', labels: ['aggressive'], scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null }, evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z', trajectory: { hasTrajectory: false, summary: '', seasonsRecorded: 0 } },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).toContain('framing, not authority')
+  })
+
+  it('does NOT pad the prompt with the framing instruction when there is no decision to frame', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        managerPsychology: present([
+          { managerId: 'm1', sport: 'NFL', labels: ['aggressive'], scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null }, evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z', trajectory: { hasTrajectory: false, summary: '', seasonsRecorded: 0 } },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).not.toContain('framing, not authority')
+  })
+
+  it('does NOT pad the prompt with the framing instruction when there is a decision but no psychology', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        lineupDecision: present({
+          decisionType: 'lineup', whatHappened: 'Start Nabers', whyItMatters: 'better matchup',
+          whatToDo: 'start him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
+          dataCompleteness: 100, weakestSource: null, weakestTrust: null,
+        } as never),
+      }),
+      NOW,
+    )
+    expect(text).not.toContain('framing, not authority')
+  })
+
   it('renders the value of a PRESENT-BUT-INCONCLUSIVE slice, and keeps the warning', () => {
     // 🛑 Dropping true information to punish a stale import is the failure the packet's own roster
     // comment warns about. The number is real; the caveat travels with it.

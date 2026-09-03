@@ -236,7 +236,14 @@ export async function buildPendingTradeDecisionContext(
   }
 
   lines.push(
-    'RULES: AllFantasy never accepts, rejects, counters or vetoes a trade. Explain the evaluation and point the user to their platform to act. Never present a grade as a decision made on their behalf.'
+    'RULES: AllFantasy never accepts, rejects, counters or vetoes a trade. Explain the evaluation and point the user to their platform to act. Never present a grade as a decision made on their behalf. ' +
+      /*
+       * R4b.7 (P4) — same policy the packet's own serializer states for lineup/commissioner-health
+       * decisions, restated here because this block is composed into the chat prompt separately
+       * from the packet (see the file header) rather than through it — a rule stated only in one
+       * surface does not reach a turn built from the other.
+       */
+      'If manager psychology is available elsewhere in this context, you may use it to explain WHY a manager might want this trade — never to argue the grade above should be different than it is.'
   )
 
   return lines.join('\n')
