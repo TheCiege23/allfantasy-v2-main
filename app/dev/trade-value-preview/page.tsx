@@ -14,9 +14,19 @@
  * ⚠ EVERY NUMBER BELOW IS INVENTED AND THIS FILE IS UNREACHABLE IN PRODUCTION. If you are
  * copying a shape out of here into product code, you are about to ship a fabricated valuation.
  *
- * 🛑 AND IT MUST NEVER IMPORT PRISMA, DIRECTLY OR TRANSITIVELY. The whole point is a page that
- * cannot touch the production database. `TradeValueBreakdown` is a pure client component over
- * types; keep it that way.
+ * 🛑 AND IT MUST NEVER IMPORT PRISMA, DIRECTLY OR TRANSITIVELY. `TradeValueBreakdown` is a pure
+ * client component over types; keep it that way.
+ *
+ * 🛑 THAT IS NARROWER THAN IT FIRST APPEARS, AND THIS COMMENT USED TO OVERSTATE IT. The page
+ * running no query is not the page VIEW running no query: the app layout calls
+ * `/api/user/profile` and `/api/user/time-context` on load, and both run
+ * `ensureUserProfileForUserId` — prisma — whenever there is a session. Measured on
+ * `/dev/projections-preview`: they returned 200 rather than 401, so they reached the database this
+ * checkout points at, which is production.
+ *
+ * ⚠ AND "NO PRISMA LINES IN THE SERVER LOG" IS NOT EVIDENCE. `lib/prisma.ts` logs
+ * `["warn","error"]` in development, never `"query"`, so a successful query prints nothing.
+ * Reading that silence as proof was a check that could not fail.
  */
 
 import { notFound } from 'next/navigation'
@@ -131,7 +141,8 @@ export default function TradeValuePreviewPage() {
       <header>
         <h1 className="text-[16px] font-bold">Trade value — the derivation panel</h1>
         <p className="mt-1 text-[11px] text-amber-200/80">
-          ⚠ Dev-only. Every player, number and team below is invented — this page never queries a database.
+          ⚠ Dev-only. Every player, number and team below is invented. This page runs no query of its
+          own — though the surrounding app layout still calls profile and session endpoints that do.
         </p>
       </header>
 

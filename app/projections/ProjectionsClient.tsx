@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Search } from 'lucide-react'
 import { ProjectionRow } from '@/components/sports/ProjectionCard'
 import { useProjectionsList } from '@/hooks/useProjections'
+import { AfProjectionRow, type AfProjectionView } from '@/components/projections/AfProjectionRow'
 
 type SportFilter = 'NFL' | 'NBA' | 'MLB' | 'NHL'
 const SPORTS: SportFilter[] = ['NFL', 'NBA', 'MLB', 'NHL']
@@ -15,13 +16,72 @@ const POSITIONS: Record<SportFilter, string[]> = {
   NHL: ['All', 'C', 'LW', 'RW', 'D', 'G'],
 }
 
+/**
+ * ⚠ TWO GENUINELY DIFFERENT SOURCES, AND THE TOGGLE IS NOT A PREFERENCE.
+ *
+ * `af` is `AFProjectionSnapshot` — our own engine, carrying a baseline, a weather adjustment, a
+ * confidence and a reason, and covering the sports the compute cron runs for. `market` is the
+ * existing `/api/player-valuations` list, which reaches every sport but is a single number with no
+ * derivation.
+ *
+ * They are NOT interchangeable and must never be merged into one list: the AF number is per game
+ * with a separate rest-of-season total, and the market number is neither. Interleaving them would
+ * put two units in one column, which is the error this whole phase exists to stop.
+ */
+type Source = 'af' | 'market'
+
 export function ProjectionsClient() {
   const [sport, setSport] = useState<SportFilter>('NFL')
   const [position, setPosition] = useState('All')
   const [search, setSearch] = useState('')
+  const [source, setSource] = useState<Source>('af')
 
   const posFilter = position === 'All' ? undefined : position
   const { data, loading } = useProjectionsList(sport, { position: posFilter, limit: 100 })
+
+  /* ── The AllFantasy engine's own rows ──────────────────────────────────────────────────── */
+  const [afRows, setAfRows] = useState<AfProjectionView[] | null>(null)
+  const [afSeason, setAfSeason] = useState<number | null>(null)
+  const [afLoading, setAfLoading] = useState(false)
+  const [afFailed, setAfFailed] = useState(false)
+
+  useEffect(() => {
+    if (source !== 'af') return
+    const ac = new AbortController()
+    setAfLoading(true)
+    setAfFailed(false)
+    const params = new URLSearchParams({ sport, limit: '100' })
+    if (posFilter) params.set('position', posFilter)
+
+    fetch(`/api/projections/af?${params.toString()}`, { signal: ac.signal, cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => {
+        if (ac.signal.aborted) return
+        setAfRows(Array.isArray(j?.rows) ? j.rows : [])
+        setAfSeason(typeof j?.season === 'number' ? j.season : null)
+      })
+      .catch(() => {
+        if (ac.signal.aborted) return
+        /*
+         * ⚠ A FAILED FETCH IS NOT AN EMPTY LIST. Setting `[]` here would render "no players
+         * projected", which is a claim about the data rather than about the request.
+         */
+        setAfRows(null)
+        setAfFailed(true)
+      })
+      .finally(() => { if (!ac.signal.aborted) setAfLoading(false) })
+
+    return () => ac.abort()
+  }, [source, sport, posFilter])
+
+  const afFiltered = useMemo(() => {
+    if (!afRows) return null
+    if (!search.trim()) return afRows
+    const q = search.toLowerCase()
+    return afRows.filter(
+      (p) => p.playerName.toLowerCase().includes(q) || (p.position ?? '').toLowerCase().includes(q),
+    )
+  }, [afRows, search])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return data
@@ -81,6 +141,22 @@ export function ProjectionsClient() {
             ))}
           </div>
 
+          {/* Source — see the Source type: these are different data, not a display preference. */}
+          <div className="flex rounded-xl border border-white/[0.08] bg-white/[0.03]" data-testid="proj-source">
+            {([['af', 'AF engine'], ['market', 'Market']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSource(id)}
+                className={`px-3 py-1.5 text-[11px] font-semibold transition ${
+                  source === id ? 'bg-emerald-500/15 text-emerald-300' : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Search */}
           <div className="relative flex-1 sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/25" />
@@ -94,6 +170,59 @@ export function ProjectionsClient() {
           </div>
         </div>
 
+        {/* ── AF engine ─────────────────────────────────────────────────────────────────── */}
+        {source === 'af' ? (
+          <>
+            <div className="mb-2 flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wide text-white/20">
+              <span className="flex-1">
+                Player{afSeason != null ? <span className="ml-1.5 normal-case text-white/25">{afSeason} season</span> : null}
+              </span>
+              {/* The units are in the header as well as the row — one column each, never merged. */}
+              <span className="w-16 text-right">Per game</span>
+              <span className="w-20 text-right">Rest of season</span>
+            </div>
+
+            {afLoading && afRows === null ? (
+              <div className="space-y-1">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="h-12 animate-pulse rounded-lg bg-white/[0.03]" />
+                ))}
+              </div>
+            ) : afFailed ? (
+              /*
+               * ⚠ THREE DIFFERENT EMPTY STATES, AND COLLAPSING THEM WOULD BE THE BUG. "We could
+               * not read", "we hold nothing for this sport" and "this filter matched nobody" are
+               * different facts, and only the middle one is a statement about our data coverage.
+               */
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 py-10 text-center" data-testid="af-error">
+                <p className="text-sm text-amber-200/80">Could not read the AllFantasy projections.</p>
+                <p className="mt-1 text-xs text-white/30">This is a problem loading them, not a finding that none exist.</p>
+              </div>
+            ) : afSeason === null ? (
+              <div className="py-14 text-center" data-testid="af-no-season">
+                <p className="text-sm text-white/40">The AllFantasy engine has no {sport} projections stored.</p>
+                <p className="mt-1 text-xs text-white/25">
+                  It computes them for the sports the projection cron runs. Try the Market source for this one.
+                </p>
+              </div>
+            ) : (afFiltered?.length ?? 0) === 0 ? (
+              <div className="py-14 text-center" data-testid="af-no-match">
+                <p className="text-sm text-white/40">
+                  No {sport} players match{position !== 'All' ? ` ${position}` : ''}
+                  {search.trim() ? ` “${search.trim()}”` : ''}.
+                </p>
+                <p className="mt-1 text-xs text-white/25">We hold {afSeason} projections for this sport — just none matching.</p>
+              </div>
+            ) : (
+              <ul className="space-y-1" data-testid="af-list">
+                {afFiltered!.map((p) => (
+                  <AfProjectionRow key={p.playerId} p={p} />
+                ))}
+              </ul>
+            )}
+          </>
+        ) : (
+        <>
         {/* Column header */}
         <div className="mb-2 flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wide text-white/20">
           <span className="flex-1">Player</span>
@@ -131,6 +260,8 @@ export function ProjectionsClient() {
               </Link>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>
