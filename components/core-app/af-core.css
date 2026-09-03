@@ -26,11 +26,18 @@
  * ⚠ THE HANDOFF'S TWO TYPEFACES ARE LOADED FROM app/layout.tsx, NOT FROM HERE.
  *
  * Every rule in this folder asks for `var(--font-archivo, 'Archivo', …)` and
- * `var(--font-jetbrains-mono, 'JetBrains Mono', …)`, but neither variable was
- * ever defined and nothing pulled the families in — so all of it silently
- * resolved to the tail of the fallback chain, system-ui and generic monospace.
- * The surface rendered in the wrong type from the day it shipped. No test could
- * catch it: every declaration is present and valid, only the font was missing.
+ * `var(--font-jetbrains-mono, 'JetBrains Mono', …)`. A prior version of this
+ * comment claimed a `<link>` in app/layout.tsx defined those variables; no such
+ * `<link>` ever existed, so both fell through to the fallback chain (system-ui,
+ * generic monospace) on every .af-core surface. No test could catch it: every
+ * declaration was present and valid, only the font was missing.
+ *
+ * layout.tsx now defines both variables via `next/font/google` (`Archivo`,
+ * `JetBrains_Mono`, `variable: '--font-archivo' / '--font-jetbrains-mono'`,
+ * applied to `<html>`'s className). That self-hosts the font files — no
+ * fonts.googleapis.com round trip — and next/font guarantees the variable is
+ * defined before first paint, which a route-bundled `@import` cannot: see the
+ * warning below on why `@import` in this file is dropped outright.
  *
  * ⚠ DO NOT "FIX" THIS BY PUTTING @import BACK AT THE TOP OF THIS FILE. That was
  * the first attempt and it does not work, for a reason that is invisible in the
@@ -44,7 +51,7 @@
  *
  * The same trap applies to the @import in
  * components/dashboard/adaptive/adaptive-dashboard.css, which is where this
- * approach was copied from.
+ * approach was copied from and which still carries the broken @import.
  */
 
 .af-core {

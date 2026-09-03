@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import type { Session } from 'next-auth';
 import Script from 'next/script';
 import { cookies } from 'next/headers';
+import { Archivo, JetBrains_Mono } from 'next/font/google';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
@@ -15,6 +16,28 @@ import { buildSeoMeta } from '@/lib/seo';
 import { resolveEffectiveDataMode } from '@/lib/theme';
 import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import './globals.css';
+
+/*
+ * The .af-core design handoff's two typefaces (dashboard, Player Finder, my
+ * team, matchup, trades, waivers, Draft HQ, War Room — see af-core.css line 1).
+ * Every .af-core rule reads `var(--font-archivo, 'Archivo', …)` and
+ * `var(--font-jetbrains-mono, 'JetBrains Mono', …)`; next/font defines those
+ * variables and self-hosts the font files, so there is no external round trip
+ * to fonts.googleapis.com and no render-blocking <link>. `display: 'swap'`
+ * keeps text visible with the fallback while the real font streams in.
+ */
+const archivo = Archivo({
+  subsets: ['latin'],
+  weight: ['400', '600', '700', '800', '900'],
+  variable: '--font-archivo',
+  display: 'swap',
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '700', '800'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
 
 export const viewport = {
   width: 'device-width',
@@ -142,31 +165,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-lang={htmlLang}
       dir={htmlDir}
       data-mode={htmlMode}
-      className="scroll-smooth"
+      className={`scroll-smooth ${archivo.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <body
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
-
-        {/*
-          The core-app design handoff's two typefaces. Every .af-core surface
-          asks for Archivo and JetBrains Mono by name, and nothing was loading
-          them, so all of it fell through to system-ui and generic monospace —
-          the display headings and the mono labels are most of that design's
-          character, and none of it was reaching a user.
-
-          Loaded here rather than from af-core.css because an @import inside a
-          route-bundled CSS file is dropped whenever another af-*.css is
-          concatenated ahead of it (measured: af-geo.css was). A <link> here is
-          the one place stylesheet ordering is guaranteed.
-
-          Global, but inert for every page that does not name these families:
-          the browser fetches the small stylesheet and downloads a font file
-          only when matching text is actually rendered. Weights are exactly the
-          handoff's — Archivo 400/600/700/800/900, JetBrains Mono 400/500/700/800.
-        */}
 
         {metaPixelId ? (
           <script

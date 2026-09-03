@@ -254,6 +254,16 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "/api/**": ["./data/**"],
     },
+    // Rewrites barrel imports (`import { Icon } from 'lucide-react'`) into direct
+    // path imports so a route ships only the icons/helpers it actually uses
+    // instead of the whole package. Only list packages this repo imports from —
+    // verified via `grep -rl "from '<pkg>'" app components lib` before adding.
+    optimizePackageImports: [
+      'lucide-react',
+      'date-fns',
+      'recharts',
+      'framer-motion',
+    ],
   },
 
   images: {
