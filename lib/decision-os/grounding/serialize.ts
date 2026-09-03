@@ -380,6 +380,22 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Lineup decision', packet.lineupDecision as GroundedSlice<unknown>],
     ['Waiver decision', packet.waiverDecision as GroundedSlice<unknown>],
     ['Commissioner health decision', packet.commissionerHealthDecision as GroundedSlice<unknown>],
+    /*
+     * 🛑 THREE SLICES ADDED TO THE PACKET AND NEVER TO THIS LIST — G11 REPRODUCED, ONE LEVEL
+     * REMOVED. `idpKickerValues` (R3.1), `rosterValueGrade` (R3.3) and `psychologyConsistency`
+     * (R4b.5) were each added to `DecisionOsGroundingPacket`, to `packet.ts`'s OWN separate
+     * `slices` list that feeds `collectGaps()`, and to `flags.ts` — every wiring point this
+     * session's own established checklist named, except THIS one. The two `slices` arrays share a
+     * name and a shape and are otherwise unrelated: packet.ts's drives `packet.gaps` ("WHAT IS
+     * MISSING"), this one drives "WHAT IS AVAILABLE" — so an ABSENT reading correctly appeared as
+     * a gap while a PRESENT one, with real data, silently never rendered at all. The failure case
+     * was visible; the success case was not — backwards, and unnoticed because every producer-level
+     * test this session wrote (mutation-verified and all) exercised the producer in isolation, never
+     * a full packet through this exact function.
+     */
+    ['IDP/kicker values', packet.idpKickerValues as GroundedSlice<unknown>],
+    ['Roster value grade', packet.rosterValueGrade as GroundedSlice<unknown>],
+    ['Psychology consistency (cross-league/cross-sport)', packet.psychologyConsistency as GroundedSlice<unknown>],
     // R4b — manager behavioural profiles. Rendered like any other collection: bounded,
     // with the hidden count stated.
     ['Manager psychology', packet.managerPsychology as GroundedSlice<unknown>],

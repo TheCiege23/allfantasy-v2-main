@@ -196,6 +196,45 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     expect(text).not.toContain('trajectory:')
   })
 
+  /**
+   * ── 🛑 A SLICE ADDED TO THE PACKET AND NEVER TO THIS FUNCTION'S OWN `slices` LIST ──────────
+   *
+   * `idpKickerValues` (R3.1), `rosterValueGrade` (R3.3) and `psychologyConsistency` (R4b.5) were
+   * each added to `DecisionOsGroundingPacket`, to `flags.ts`, and to `packet.ts`'s SEPARATE
+   * `slices` list that drives `packet.gaps` — every wiring point this session's own checklist
+   * named, except the one THIS FILE tests. `serializeDecisionOsGroundingForPrompt` has its own,
+   * differently-scoped `slices` const that actually drives "WHAT IS AVAILABLE", and none of the
+   * three were ever added to it — so an absent reading correctly showed up as a gap while a
+   * present one, with real data, silently never rendered. G11 in miniature, a third time today,
+   * and the reason it survived every mutation-verified producer test this session wrote: each one
+   * tested its OWN producer in isolation, never a full packet through this exact function.
+   */
+  it('🛑 idpKickerValues, rosterValueGrade and psychologyConsistency all reach "WHAT IS AVAILABLE"', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        idpKickerValues: present([
+          {
+            status: 'ok',
+            value: { playerId: 'p1', playerName: 'Micah Parsons', position: 'LB', value: 42, unit: 'market_units' },
+          },
+        ] as unknown as ValueLookup[]),
+        rosterValueGrade: present({
+          rank: 3, outOf: 12, value: 45000, median: 38000, pricedPlayers: 14, totalPlayers: 16,
+          leagueScored: true, weakestPosition: 'RB', weakestValue: 4200, weakestRank: 11, weakestOutOf: 12,
+          strongestPosition: 'WR', strongestValue: 18000, strongestRank: 1, strongestOutOf: 12,
+        } as never),
+        psychologyConsistency: present({
+          crossLeagueObserved: 3, crossLeagueWithoutProfile: 0, crossLeagueConsistentLabels: ['aggressive'], crossLeagueCaveat: null,
+          crossSportObserved: 2, crossSportWithoutProfile: 0, crossSportConsistentLabels: ['trade-heavy'], crossSportSpecificLabels: ['patient'], crossSportCaveat: null,
+        } as never),
+      }),
+      NOW,
+    )
+    expect(text).toContain('Micah Parsons')
+    expect(text).toContain('weakestPosition: RB')
+    expect(text).toContain('crossLeagueConsistentLabels: aggressive')
+  })
+
   it('renders the value of a PRESENT-BUT-INCONCLUSIVE slice, and keeps the warning', () => {
     // 🛑 Dropping true information to punish a stale import is the failure the packet's own roster
     // comment warns about. The number is real; the caveat travels with it.
