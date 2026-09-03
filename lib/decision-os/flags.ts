@@ -66,6 +66,15 @@ export type DecisionOsFeed =
    * for everyone.
    */
   | 'lineupDecision'
+  /**
+   * The commissioner health decision bridged from Pipeline A (R2.3).
+   *
+   * ⚠ ITS OWN SWITCH, SEPARATE FROM `lineupDecision`, BECAUSE THEY COST DIFFERENT THINGS. The
+   * lineup bridge is one loader call; this one runs TEN parallel queries through
+   * `getCommissionerHubHealthForUser`. An operator shedding load needs to drop the expensive one
+   * without losing the cheap one, and a single "decisions" switch would make that impossible.
+   */
+  | 'commissionerHealthDecision'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -80,6 +89,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'savedAnalysis',
   'managerPsychology',
   'lineupDecision',
+  'commissionerHealthDecision',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

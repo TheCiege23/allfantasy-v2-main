@@ -21,7 +21,7 @@ import {
  * cycle exists only in the type graph, where it is legal and inert.
  */
 import type { DecisionFact } from './decisionToSlice'
-import { loadLineupDecisionSlice } from './decisionBridge'
+import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice } from './decisionBridge'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -564,6 +564,13 @@ export interface GroundingPacketArgs {
      * about a lineup.
      */
     lineupDecision?: boolean
+    /**
+     * R2.3 — run the live commissioner-health engine (default OFF, and the most expensive slice
+     * here). `getCommissionerHubHealthForUser` is TEN parallel queries, and the decision is only
+     * meaningful to a commissioner, so it is opt-in twice over: the caller must ask, and the user
+     * must actually commission the league.
+     */
+    commissionerHealthDecision?: boolean
   }
 }
 
@@ -660,6 +667,7 @@ export async function buildDecisionOsGroundingPacket(
   const portfolioKill = killed('portfolio')
   const psychologyKill = killed('managerPsychology')
   const lineupDecisionKill = killed('lineupDecision')
+  const commishHealthKill = killed('commissionerHealthDecision')
 
   const pAssertions =
     leagueId && !importKill
@@ -724,6 +732,18 @@ export async function buildDecisionOsGroundingPacket(
   const pLineupDecision =
     want.lineupDecision && !lineupDecisionKill
       ? kick('lineupDecision', loadLineupDecisionSlice({ userId: args.userId, leagueId }))
+      : Promise.resolve(null)
+
+  /*
+   * R2.3 — the commissioner health decision. Same wave, same rules as the lineup bridge.
+   *
+   * ⚠ THE PERMISSION CHECK LIVES IN THE BRIDGE, NOT HERE, and deliberately so: it is the same
+   * `assertLeagueCommissioner` the commissionerIntelligence slice already uses, and duplicating a
+   * permission rule in two places is how the two copies drift apart.
+   */
+  const pCommishHealth =
+    want.commissionerHealthDecision && !commishHealthKill
+      ? kick('commissionerHealthDecision', loadCommissionerHealthDecisionSlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   const pDevy = want.devy && !devyKill
@@ -1131,6 +1151,15 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Ask about your lineup and the deterministic engine runs.',
       })
 
+  const commissionerHealthDecision: GroundedSlice<DecisionFact> = commishHealthKill
+    ? absent<DecisionFact>(commishHealthKill)
+    : (await pCommishHealth) ??
+      absent<DecisionFact>({
+        reason: 'not_requested',
+        detail: 'This question did not call for a league health decision.',
+        remedy: 'Ask about your league’s health and the deterministic engine runs.',
+      })
+
   const psychologyRows = await pPsychology
   const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
     ? absent<PsychologyProfileFact[]>(psychologyKill)
@@ -1241,6 +1270,7 @@ export async function buildDecisionOsGroundingPacket(
     ['savedAnalysis', savedAnalysis as GroundedSlice<unknown>],
     ['managerPsychology', managerPsychology as GroundedSlice<unknown>],
     ['lineupDecision', lineupDecision as GroundedSlice<unknown>],
+    ['commissionerHealthDecision', commissionerHealthDecision as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1267,6 +1297,7 @@ export async function buildDecisionOsGroundingPacket(
     savedAnalysis,
     managerPsychology,
     lineupDecision,
+    commissionerHealthDecision,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

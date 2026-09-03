@@ -252,7 +252,7 @@ claiming four and shipping a stub.
 |---|---|---|
 | **R2.1** | `decisionToSlice()` — one generic `Decision<T>` → `GroundedSlice<DecisionFact>` adapter, pure, no I/O. Mirror of `toEvidencePacket.ts`. | ✅ |
 | **R2.2** | Serializer support: render a decision slice as its four answers + verdicts, never `JSON.stringify`. | ✅ |
-| **R2.3** | Wire **commissioner-health** — ⚠ REVISED, see below. | ⏸ |
+| **R2.3** | Wire **commissioner-health** — permissioned, and it needed a guard carried by hand. | ✅ |
 | **R2.4** | Wire **lineup** — reuses the roster + rules the packet already loads. | ✅ |
 | **R2.5** | Wire **waiver** — 🛑 REVISED: request-scoped, like trade. | ⛔ |
 | **R2.6** | **Trade: documented, not wired.** Record why, and point at the proposal-scoped path. | ✅ |
@@ -316,7 +316,45 @@ point.** The others gate a READ; this gates running a decision engine inside the
 latency ceiling. Charging every turn a lineup decision — including the ones asking about trade
 values — is how the packet went 5.4s over that ceiling before R0.8.
 
-### 🛑 R2.5 AND R2.3 CHANGED ON CONTACT WITH THE CODE
+### ✅ R2.3 DONE — commissioner health is bridged, and it is the PERMISSIONED one
+
+`decisionBridge.ts` (`loadCommissionerHealthDecisionSlice`) · `packet.ts` · `flags.ts`
+(`commissionerHealthDecision` kill switch) ·
+`__tests__/decision-os/decision-bridge-commissioner.test.ts` (6)
+
+**Suite: 198 files / 3,697 tests / 0 failures.**
+
+Every other slice answers *what do we know*. This one also answers *who may see it*, and it is the
+only bridge where getting the order wrong leaks rather than merely misinforms.
+
+- **The permission check is REUSED, not reinvented.** `assertLeagueCommissioner` is the same check
+  `resolveCommissionerGroundingOutcome` already uses for the commissionerIntelligence slice. Two
+  implementations of one permission rule is the bug, and the packet already has `not_entitled` as a
+  first-class gap reason so a permission absence never reads as a missing fact.
+- **It runs BEFORE the loader, and the order IS the safeguard.** `getCommissionerHubHealthForUser`
+  is handed `isCommissioner: true` and filters on it — so asserting that flag without having
+  verified it would hand a non-commissioner a commissioner's view of a league they merely play in.
+- **Its own kill switch**, separate from `lineupDecision`, because they cost different things: one
+  loader call versus **ten parallel queries**. A single "decisions" switch would make it impossible
+  to shed the expensive one and keep the cheap one.
+
+🛑 **A GUARD HAD TO BE CARRIED ACROSS BY HAND, AND MISSING IT WOULD HAVE BEEN SILENT.**
+`runCommissionerHealthShadow` refuses a `dashboard-fallback` snapshot — *"skip the
+non-authoritative fallback path (no live roster reads)"* — but that guard lives in the SHADOW
+wrapper, not in `runCommissionerHealthDecision`. This bridge calls the decider directly and walks
+straight past it. A fallback snapshot is assembled from dashboard fields rather than live rosters,
+so deciding on one produces a confident league-health verdict from data the live path itself
+considers unfit to decide on. Refused explicitly, and pinned by a test.
+
+⚠ **AND THE KILL SWITCH WAS SILENTLY INERT FOR ONE EDIT.** The first pass added
+`commissionerHealthDecision` to the `DecisionOsFeed` union but NOT to `DECISION_OS_FEEDS` — a CRLF
+file defeated a replacement pattern containing a newline. A feed absent from that array is never
+iterated by `resolveDecisionOsFeedFlags`, so `killed()` would always return null and the switch
+would do nothing, forever, with nothing failing and no error to notice. Caught by counting
+occurrences rather than trusting the edit; union and array now both read 13 with no member missing.
+**Verify a mechanical edit by measuring its effect, not by the absence of an error.**
+
+### 🛑 R2.5 CHANGED ON CONTACT WITH THE CODE
 
 **R2.5 — waiver is REQUEST-scoped, exactly like trade.** `RunWaiverClaimInput` requires
 `engineInput: WaiverAIServiceInput`, and the live route supplies it from the **request body**:

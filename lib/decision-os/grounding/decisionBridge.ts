@@ -1,9 +1,15 @@
 import 'server-only'
 
+import type { UserLeague } from '@/app/dashboard/types'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
+import { assertLeagueCommissioner } from '@/lib/league/league-access'
+import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { loadLineupSetInputs } from '../lineup/loader'
 import { runLineupSetDecision } from '../lineup'
 import { productionLineupWorldDeps, productionLineupDecisionDeps } from '../lineup/deps'
+import { runCommissionerHealthDecision } from '../commissioner-health'
+import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
+import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice, GroundingGap } from './packet'
 
@@ -140,5 +146,160 @@ export async function loadLineupDecisionSlice(args: DecisionBridgeArgs): Promise
     }, { describeAction: describeLineupAction })
   } catch (err) {
     return failed('lineup', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
+  }
+}
+
+/**
+ * One health assessment, in one line.
+ *
+ * 🛑 THE ACTION TYPE HERE IS `CommissionerHealthAssessment`, NOT `CommissionerActionSuggestion`,
+ * and getting that wrong is how this function was first written. `decideCommissionerHealth` returns
+ * `Decision<CommissionerHealthAssessment>`, so each "recommended action" is a whole assessment that
+ * CONTAINS suggestions, rather than being one.
+ *
+ * ⚠ THE TESTS DID NOT CATCH IT AND STRUCTURALLY COULD NOT. The mock asserted a
+ * `{ key, label, href, tone }` shape the engine never produces, and `tsconfig` excludes
+ * `__tests__`, so that fabricated shape was never checked against the real contract. The
+ * same-artifact typecheck pair caught it — one error appeared that was not in the base — which is
+ * the entire argument for running the pair rather than trusting a green suite.
+ */
+function describeCommissionerAssessment(a: CommissionerHealthAssessment): string | null {
+  if (!a) return null
+  const parts: string[] = []
+  if (a.overallStatus) parts.push(String(a.overallStatus))
+  if (typeof a.healthScore === 'number') parts.push(`health ${a.healthScore}`)
+  // The alerts are the substance a commissioner acts on; bounded, because a struggling league can
+  // carry a lot of them and this line ends up in a prompt.
+  const alerts = Array.isArray(a.topAlerts) ? a.topAlerts.filter((x) => typeof x === 'string') : []
+  if (alerts.length > 0) parts.push(`alerts: ${alerts.slice(0, 3).join('; ')}`)
+  const suggestions = Array.isArray(a.suggestedActions)
+    ? a.suggestedActions.map((s: CommissionerActionSuggestion) => s?.label).filter((l): l is string => Boolean(l))
+    : []
+  if (suggestions.length > 0) parts.push(`suggested: ${suggestions.slice(0, 3).join(', ')}`)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+/** A slice that is absent because this user may not see it. Distinct from "we could not compute it". */
+function notEntitled(): GroundedSlice<DecisionFact> {
+  return {
+    present: false,
+    value: null,
+    asOf: null,
+    servedFrom: null,
+    confidence: null,
+    conclusive: { ok: true },
+    gap: {
+      reason: 'not_entitled',
+      detail: 'League health is a commissioner view, and you do not commission this league.',
+      remedy: 'Nothing to fix — ask your commissioner, who can see it.',
+    },
+  }
+}
+
+/**
+ * R2.3 — the commissioner health decision for this league.
+ *
+ * ── 🛑 THE PERMISSION CHECK IS FIRST AND IS NOT MINE ────────────────────────────────────────
+ * `assertLeagueCommissioner` is the same check `resolveCommissionerGroundingOutcome` already uses
+ * for the commissionerIntelligence slice. Reusing it matters: two implementations of one
+ * permission rule is the bug, and the packet already has `not_entitled` as a first-class gap
+ * reason precisely so a permission absence never reads as a missing fact.
+ *
+ * ⚠ IT RUNS BEFORE THE LOADER, NOT ALONGSIDE IT. The loader below is handed
+ * `isCommissioner: true`, which it trusts and filters on — so asserting that without having
+ * verified it would hand a non-commissioner a commissioner's view. The check is what earns the
+ * right to set that flag.
+ *
+ * ── ⚠ THE LOADER IS REUSED RATHER THAN NARROWED, AND THAT IS A DELIBERATE TRADE ─────────────
+ * `getCommissionerHubHealthForUser` runs TEN parallel queries and returns snapshots for every
+ * league the user commissions. A single-league version would be cheaper and would duplicate all
+ * ten — a rival to working code, which is the mistake this codebase records twice. So the cost is
+ * accepted and paid for by the flag instead: `want.commissionerHealthDecision` defaults OFF.
+ */
+export async function loadCommissionerHealthDecisionSlice(
+  args: DecisionBridgeArgs,
+): Promise<GroundedSlice<DecisionFact>> {
+  const userId = args.userId ?? null
+  const leagueId = args.leagueId ?? null
+  if (!userId || !leagueId) {
+    return {
+      present: false,
+      value: null,
+      asOf: null,
+      servedFrom: null,
+      confidence: null,
+      conclusive: { ok: true },
+      gap: {
+        reason: 'not_requested',
+        detail: 'League health needs both a signed-in user and a league.',
+        remedy: 'Ask about a specific league while signed in.',
+      },
+    }
+  }
+
+  try {
+    const access = await assertLeagueCommissioner(leagueId, userId)
+    if (!access?.ok) return notEntitled()
+
+    // Safe to assert: the line above verified it. The loader filters on this flag.
+    const minimal = [{ id: leagueId, isCommissioner: true } as unknown as UserLeague]
+    const snapshots = await getCommissionerHubHealthForUser(userId, minimal)
+    const snapshot = snapshots.find((s) => s?.leagueId === leagueId) ?? null
+
+    if (!snapshot) {
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_computed',
+          detail: 'No health snapshot could be assembled for this league.',
+          remedy: 'It fills once the league has rosters and recent activity to measure.',
+        },
+      }
+    }
+
+    /*
+     * 🛑 A `dashboard-fallback` SNAPSHOT IS REFUSED, AND THIS GUARD HAD TO BE CARRIED HERE BY HAND.
+     *
+     * `runCommissionerHealthShadow` declines exactly this case — "skip the non-authoritative
+     * fallback path (no live roster reads)" — but that guard lives in the SHADOW wrapper, not in
+     * `runCommissionerHealthDecision`. Calling the decider directly, as this bridge does, walks
+     * straight past it. A fallback snapshot is assembled from dashboard fields rather than live
+     * rosters, so deciding on one would produce a confident league-health verdict from data the
+     * live path considers unfit to decide on.
+     */
+    if (snapshot.source === 'dashboard-fallback') {
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_synced',
+          detail: 'Only a dashboard fallback snapshot exists, which is not built from live rosters.',
+          remedy: 'Re-sync the league so health is measured from real roster data.',
+        },
+      }
+    }
+
+    const result = await runCommissionerHealthDecision(
+      { snapshot, userId },
+      { decision: buildProductionCommissionerHealthDecisionDeps(snapshot) },
+      // No `shadow` — see the header.
+    )
+
+    return decisionToSlice(result.decision, {
+      reason: 'not_computed',
+      detail: 'The commissioner health engine returned no decision.',
+      remedy: 'It runs again on the next request.',
+    }, { describeAction: describeCommissionerAssessment })
+  } catch (err) {
+    return failed('commissioner health', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
   }
 }
