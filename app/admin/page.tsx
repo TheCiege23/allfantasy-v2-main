@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
+import dynamic from "next/dynamic"
 import "./command-center.css"
 import { getAdminAccessState } from "@/lib/adminAuth"
 import {
@@ -9,7 +10,12 @@ import {
 } from "@/lib/admin-dashboard/AdminCommandCenterService"
 import { AdminCommandCenterOverview } from "@/components/admin/AdminCommandCenterOverview"
 import { GrowthSeriesPanel } from "@/components/admin/GrowthSeriesPanel"
-import { VisitorAnalyticsPanel } from "@/components/admin/VisitorAnalyticsPanel"
+// This file is a Server Component, so `ssr: false` isn't allowed here (Next.js
+// restricts that option to Client Components) — plain dynamic() still splits
+// the recharts-heavy panel into its own chunk instead of the main page bundle.
+const VisitorAnalyticsPanel = dynamic(() =>
+  import("@/components/admin/VisitorAnalyticsPanel").then((m) => m.VisitorAnalyticsPanel)
+)
 import { getAdminGrowthSeries } from "@/lib/admin-dashboard/AdminGrowthSeriesService"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"

@@ -1,13 +1,17 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { Play, RotateCcw, Loader2 } from 'lucide-react'
 import { MockDraftSetup, MockDraftRecap } from '@/components/mock-draft'
 import { MockDraftInviteLink } from '@/components/mock-draft/MockDraftInviteLink'
 import { MockDraftChatPanel } from '@/components/mock-draft/MockDraftChatPanel'
 import { MockDraftSessionBoard } from '@/components/mock-draft/MockDraftSessionBoard'
-import MockDraftSimulatorClient from '@/components/MockDraftSimulatorClient'
 import type { MockDraftConfig } from '@/lib/mock-draft/types'
+
+// Deferred: does not render until `showSetup` is false (after the user starts a
+// draft), pulls in recharts and framer-motion.
+const MockDraftSimulatorClient = dynamic(() => import('@/components/MockDraftSimulatorClient'), { ssr: false })
 
 interface DraftPick {
   round: number

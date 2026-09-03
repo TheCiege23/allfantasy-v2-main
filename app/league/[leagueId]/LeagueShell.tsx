@@ -13,6 +13,7 @@ import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import Image from 'next/image'
+import dynamic from 'next/dynamic'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -96,7 +97,8 @@ import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
 import { AICoachingTab } from './tabs/AICoachingTab'
-import { HistoryTab } from './tabs/HistoryTab'
+// Deferred: tab content behind the "history" switch case below, pulls in recharts.
+const HistoryTab = dynamic(() => import('./tabs/HistoryTab').then((m) => m.HistoryTab), { ssr: false })
 import { StandingsTab } from './tabs/StandingsTab'
 import { FixturesTab } from './tabs/FixturesTab'
 import { TransfersTab } from './tabs/TransfersTab'
@@ -106,7 +108,12 @@ import { MyPicksTab } from './tabs/MyPicksTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
 import { LeagueTabPlaceholder } from './tabs/LeagueTabPlaceholder'
 import { PlayerStatCard } from './components/PlayerStatCard'
-import { LeagueSettingsModal } from './components/LeagueSettingsModal'
+// Deferred: only rendered once `settingsOpen` is true (AnimatePresence-gated inside),
+// and carries LeagueSettingsControlCenter's whole commissioner-settings tree with it.
+const LeagueSettingsModal = dynamic(
+  () => import('./components/LeagueSettingsModal').then((m) => m.LeagueSettingsModal),
+  { ssr: false }
+)
 import { CommissionerSettingsModal } from './components/CommissionerSettingsModal'
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
 import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
