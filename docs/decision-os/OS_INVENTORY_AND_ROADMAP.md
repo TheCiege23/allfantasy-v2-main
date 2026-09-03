@@ -298,6 +298,48 @@ did`) for the full account; not duplicated here.
 serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
+## 0.34 ✅ R1.4 — THE BOUNDED ROWS ARE THE ASKER'S PLAYERS
+
+**2026-09-03.** §0.9 measured it on a live packet: *"the 8 rendered rows are arbitrary —
+first-8, not the user's roster and not top-ranked. Bounding is correct; ordering is not
+solved. For 'what is my WR worth' the right 8 are the asker's players."*
+
+A value feed carries hundreds of players. `slice(0, 8)` answers a question nobody asked, and
+the asker's own players were reaching the prompt only by luck.
+
+### Fixed
+
+- `rosterPlayerKeys` reads the packet's OWN `roster` slice — **starters and bench**, because a
+  bench player is still the asker's — into match keys. Ids compare as-is; names are lowercased
+  and stripped of punctuation, so `T.J. Hockenson` matches `TJ Hockenson`.
+- `orderByRosterRelevance` puts those rows first.
+
+⚠ **A STABLE PARTITION, NOT A SORT.** The producer's relative order survives inside each
+group, so a feed already emitting by descending value keeps that ordering among the promoted
+rows — and the same packet always renders the same text, which a comparator on floats would
+not guarantee.
+
+⚠ **NOTHING IS DROPPED OR DEDUPED.** Every element survives and only the order changes, so
+the caller's `hidden` count stays exact.
+
+⚠ **A NO-OP WHEN IT CANNOT HELP.** No roster, an empty roster, or a list whose rows carry no
+recognisable player key all return the input untouched — a slice this cannot reason about
+renders exactly as it did before.
+
+🛑 **AND THE PROMPT NOW SAYS WHICH EIGHT THESE ARE.** Showing the asker's own players without
+saying so invites *"the top players are …"* — a roster-scoped sample read as a ranked one,
+which is a worse failure than the arbitrary ordering it replaces. The hidden-count line gains
+`your own players are listed first, NOT the highest-valued` only when a promotion actually
+happened; the unordered case keeps its original wording verbatim.
+
+11 tests, mutation-verified: making the reorder a passthrough fails exactly the 3
+promotion/ordering tests and leaves the other 8 passing, including every no-op guard and the
+never-drops check.
+
+⚠ **WHAT THIS DOES NOT DO.** It does not rank by VALUE. "Top 8 by market value" is a
+different question from "my 8", and answering it would need the producer's own ordering
+contract rather than a roster lookup. Recorded rather than assumed — today the promoted rows
+keep whatever order the producer emitted.
 
 ## 0.33 ✅ R1.6 — EIGHT IDENTICAL GAP LINES BECOME ONE
 
@@ -3151,7 +3193,7 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R0.4** 🆕 Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Gates Import OS.** 5 min. §0.3 |
 | ⬜ | **R0.5** 🆕 Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | May already be the non-prod target for **W2** |
 | ✅ | **R1.1** Render slice values (**G11**) | **Done 2026-09-02.** Proved red→green, 48/48. Also added `playerName` to the anonymous value contract, and fixed an arbitrary-element `asOf`. Typecheck blocked by a peer's mid-edit file. §0.9 |
-| ⬜ | **R1.4** 🆕 Order the bounded rows by relevance | Bounding works; ordering is first-8. For "what is my WR worth" the right 8 are the asker's players. §0.9 |
+| ✅ | **R1.4** Order the bounded rows by relevance | **Done 2026-09-03.** `orderByRosterRelevance` promotes the asker's own players (starters + bench, punctuation-normalised names) as a stable partition; no-op without a roster, nothing dropped, and the hidden-count line says the rows are roster-scoped rather than top-valued. 11 tests, mutation-verified. §0.34 |
 | ✅ | **R1.2** Ask for the value lane (**G2**) | **Done 2026-09-02.** Gate was double-locked; packet now derives `valueFormat` + `leagueIdpRules` from rules it already loads. Red→green, 63/63. Typecheck deferred — machine contention. §0.10 |
 | ⬜ | **R1.5** 🆕 Devy for C2C / devy-slot NFL dynasty leagues | The NCAAF sport test will not find them. §0.10 |
 | ✅ | **R1.6** Collapse gaps that share one cause | **Done 2026-09-03.** `collapseGapsByCause` groups on reason+detail+remedy and names every affected fact in one line; presentation only, `packet.gaps` unchanged. 10 tests, mutation-verified. §0.33 |
