@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { rescoreIdpForLeague, type StoredProjectionFactors } from '@/lib/af-projections/rescoreForLeague'
+import { rescoreKickerForLeague, type StoredKickerFactors } from '@/lib/af-projections/kickerScoring'
 
 /**
  * AF Projections → Decision OS facts (3.1).
@@ -62,6 +63,16 @@ export interface ProjectionFact {
    * it ignored it, because the alternative is a quietly lower number with no explanation.
    */
   unscoredComponents: string[]
+  /**
+   * True when this league sets distance-based field-goal rules that the stored components cannot
+   * honour exactly.
+   *
+   * ⚠ IT MEANS "RESCORED, BUT APPROXIMATED", which is a third state between `rescored: true` and
+   * `rescored: false`. The projection stores makes and misses, not the yardage of each kick, so a
+   * league paying 5 for 50+ and 3 for under is scored at its flat rate with this flag raised. A
+   * reader that ignores it will present an approximation as exact.
+   */
+  kickerDistanceRulesIgnored: boolean
 
   /** The writer's own qualitative confidence. Deliberately NOT coerced to a number here. */
   confidenceLevel: string
@@ -91,6 +102,17 @@ export interface ProjectionFactsArgs {
    * from "rescore against nothing" and must not be collapsed into an empty object.
    */
   leagueIdpRules?: Record<string, number> | null
+  /**
+   * This league's KICKER rules. Same contract as `leagueIdpRules`: absent means "do not rescore".
+   *
+   * 🛑 THIS ARGUMENT IS WHY EVERY KICKER WAS PRICED WITH THE WRONG RULES. The writer stores kicker
+   * components and a `kickerRules` blob on every snapshot and carries a comment saying they are
+   * "applied at READ time via `rescoreKickerForLeague`, exactly as IDP does". They were not:
+   * `rescoreKickerForLeague` had ZERO consumers repo-wide, so the canonical 3 / −1 / 1 / −1 stood
+   * in every league regardless of its own scoring. A league paying 5 for a 50-yarder got a number
+   * computed as though it paid 3, silently and with a comment asserting otherwise.
+   */
+  leagueKickerRules?: Record<string, number> | null
   playerIds?: string[]
   limit?: number
 }
@@ -125,10 +147,28 @@ export async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<Pr
 
   return rows.map((row) => {
     const stored = row.afProjection
-    const rescore = rescoreIdpForLeague(
-      (row.adjustmentFactors ?? null) as StoredProjectionFactors | null,
-      args.leagueIdpRules ?? null,
-    )
+    const factors = (row.adjustmentFactors ?? null) as StoredProjectionFactors | null
+
+    /*
+     * ⚠ AT MOST ONE OF THESE EVER FIRES, and it is the stored components that decide which — not
+     * the position string. A row carries `idp.componentAmounts` or `kicker.componentAmounts`,
+     * never both, so each rescorer returns null on the other's rows. Branching on `position`
+     * instead would have to keep its own list of which strings are kickers and which are
+     * defenders, and that list is exactly the kind that goes stale against the data.
+     */
+    const idpRescore = rescoreIdpForLeague(factors, args.leagueIdpRules ?? null)
+    /*
+     * ⚠ ONLY ASKED WHEN IDP DECLINED, so a row can never be scored twice. The two rescorers key on
+     * different stored blobs — `idp.componentAmounts` and `kicker.componentAmounts` — and a row
+     * carries at most one, so each returns null on the other's rows.
+     */
+    const kickerRescore = idpRescore
+      ? null
+      : rescoreKickerForLeague(
+          factors as unknown as StoredKickerFactors | null,
+          args.leagueKickerRules ?? null,
+        )
+    const rescore = idpRescore ?? kickerRescore
 
     return {
       playerId: row.playerId,
@@ -141,8 +181,21 @@ export async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<Pr
       points: rescore ? rescore.points : stored,
       storedPoints: stored,
       rescored: rescore != null,
-      storedPreset: rescore?.storedPreset ?? null,
+      /*
+       * ⚠ ONLY THE IDP SHAPE CARRIES A PRESET. `KickerScoringBreakdown` has no `storedPreset` —
+       * the kicker writer uses one fixed canonical rule set, not a named preset — so reading it
+       * off the union would be a type error and inventing one would name a preset that does not
+       * exist.
+       */
+      storedPreset: idpRescore?.storedPreset ?? null,
       unscoredComponents: rescore?.unscoredComponents ?? [],
+      /*
+       * ⚠ SURFACED RATHER THAN DROPPED. A league with distance-based field-goal rules cannot be
+       * scored exactly from stored components — the projection knows makes and misses, not the
+       * yardage of each — so `rescoreKickerForLeague` honours what it can and reports the rest.
+       * Swallowing this would present an approximation as an exact rescore.
+       */
+      kickerDistanceRulesIgnored: kickerRescore?.distanceRulesIgnored ?? false,
       confidenceLevel: row.confidenceLevel,
       computedAt: row.computedAt.toISOString(),
       validUntil: row.validUntil ? row.validUntil.toISOString() : null,
@@ -158,9 +211,17 @@ export async function loadProjectionFacts(args: ProjectionFactsArgs): Promise<Pr
  * path; this is the storable one, and the split is deliberate rather than a convenience wrapper.
  */
 export function loadCanonicalProjectionFacts(
-  args: Omit<ProjectionFactsArgs, 'leagueIdpRules'>,
+  /*
+   * 🛑 BOTH RULE ARGUMENTS ARE OMITTED, AND THE SECOND WAS NEARLY MISSED. This omit is what makes
+   * the result safe to cache across leagues: a caller physically cannot ask this function for
+   * league-scored points. When `leagueKickerRules` was added, omitting only `leagueIdpRules` would
+   * have left a door open to league-score a CACHED object — one league's kicker points served to
+   * everybody, which is precisely the defect this split exists to prevent and the one the module
+   * header describes 1.1b unpicking in Waiver OS and Trade OS.
+   */
+  args: Omit<ProjectionFactsArgs, 'leagueIdpRules' | 'leagueKickerRules'>,
 ): Promise<ProjectionFact[]> {
-  return loadProjectionFacts({ ...args, leagueIdpRules: null })
+  return loadProjectionFacts({ ...args, leagueIdpRules: null, leagueKickerRules: null })
 }
 
 /**
@@ -177,13 +238,48 @@ export function rescoreProjectionFacts(
   if (!leagueIdpRules) return [...facts]
   return facts.map((f) => {
     const r = rescoreIdpForLeague(f.factors, leagueIdpRules)
-    if (!r) return f
+    if (r) {
+      return {
+        ...f,
+        points: r.points,
+        rescored: true,
+        storedPreset: r.storedPreset,
+        unscoredComponents: r.unscoredComponents,
+      }
+    }
+
+    /*
+     * 🛑 KICKERS, ON THE SAME MAP — AND THIS IS THE PATH THAT ACTUALLY REACHES A USER.
+     *
+     * `rescoreKickerForLeague` had ZERO consumers repo-wide while `writeAfProjectionSnapshots`
+     * carried a comment saying kicker rules "are applied at READ time via
+     * `rescoreKickerForLeague`, exactly as IDP does". They were not. Every kicker in every league
+     * was scored with the canonical 3 / −1 / 1 / −1, so a league paying 5 for a made field goal
+     * got a number computed as though it paid 3 — silently, with a comment asserting otherwise.
+     *
+     * ⚠ THE SAME `leagueIdpRules` MAP IS CORRECT HERE, MISLEADING NAME NOTWITHSTANDING.
+     * `deriveIdpRules` returns ALL of a league's active rules rather than an IDP-filtered subset —
+     * it says so in its own header, and deliberately, because filtering by category risked
+     * dropping a real rule an importer spelled differently. So the kicker keys are already in this
+     * map, and `COMPONENT_RULE_KEYS` handles the spellings (`fgm` / `kick_fgm` /
+     * `field_goal_made`). Deriving a second map would be a second implementation of "what does
+     * this league score".
+     *
+     * ⚠ ASKED ONLY WHEN IDP DECLINED, so a row is never scored twice. The two rescorers key on
+     * different stored blobs and a row carries at most one.
+     */
+    const k = rescoreKickerForLeague(
+      f.factors as unknown as StoredKickerFactors | null,
+      leagueIdpRules,
+    )
+    if (!k) return f
     return {
       ...f,
-      points: r.points,
+      points: k.points,
       rescored: true,
-      storedPreset: r.storedPreset,
-      unscoredComponents: r.unscoredComponents,
+      // No preset: the kicker writer uses one fixed canonical rule set, not a named preset.
+      unscoredComponents: k.unscoredComponents,
+      kickerDistanceRulesIgnored: k.distanceRulesIgnored,
     }
   })
 }

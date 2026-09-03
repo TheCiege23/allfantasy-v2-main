@@ -28,6 +28,7 @@ const base: ProjectionFact = {
   rescored: false,
   storedPreset: null,
   unscoredComponents: [],
+  kickerDistanceRulesIgnored: false,
   confidenceLevel: 'medium',
   computedAt: '2026-08-31T07:50:00.000Z',
   validUntil: null,
@@ -76,5 +77,95 @@ describe('rescoreProjectionFacts — one cached fact, many leagues', () => {
     const out = rescoreProjectionFacts([base], { idp_tkl_solo: 1, idp_tkl_ast: 0.5 })[0]!
     expect(out.rescored).toBe(true)
     expect(out.unscoredComponents).toContain('sack')
+  })
+})
+
+/**
+ * Kickers, on the same rescore path — Phase 1.4's real gap.
+ *
+ * 🛑 WHY THESE EXIST. `rescoreKickerForLeague` had ZERO consumers repo-wide while
+ * `writeAfProjectionSnapshots` carried a comment saying kicker rules "are applied at READ time via
+ * `rescoreKickerForLeague`, exactly as IDP does". They were not. Every kicker in every league was
+ * scored with the canonical 3 / -1 / 1 / -1, so a league paying 5 for a made field goal received a
+ * number computed as though it paid 3 — silently, with a comment asserting the opposite.
+ */
+const kickerBase: ProjectionFact = {
+  ...base,
+  playerId: 'k1',
+  playerName: 'Test Kicker',
+  position: 'K',
+  points: 8,
+  storedPoints: 8,
+  factors: {
+    kicker: { componentAmounts: { fieldGoalMade: 2, fieldGoalMissed: 1, extraPointMade: 3 } },
+  } as unknown as ProjectionFact['factors'],
+}
+
+describe('rescoreProjectionFacts — kickers', () => {
+  it('🛑 gives two leagues DIFFERENT kicker points from the SAME cached object', () => {
+    // 2 made, 1 missed, 3 XP.  A: 2*3 + 1*-1 + 3*1 = 8.   B: 2*5 + 1*-2 + 3*2 = 14.
+    const leagueA = { fgm: 3, fgmiss: -1, xpm: 1 }
+    const leagueB = { fgm: 5, fgmiss: -2, xpm: 2 }
+
+    const a = rescoreProjectionFacts([kickerBase], leagueA)[0]
+    const b = rescoreProjectionFacts([kickerBase], leagueB)[0]
+
+    expect(a.points).toBe(8)
+    expect(b.points).toBe(14)
+    expect(a.rescored).toBe(true)
+    expect(b.rescored).toBe(true)
+    // The cached object is untouched by either read.
+    expect(kickerBase.points).toBe(8)
+  })
+
+  it('accepts the alternate rule spellings an importer may produce', () => {
+    /*
+     * `COMPONENT_RULE_KEYS` carries aliases precisely because leagues arrive from different
+     * importers. Passing the league's full active-rules map is only safe if the lookup finds
+     * whichever spelling that importer used.
+     */
+    const underscored = { kick_fgm: 5, kick_fgmiss: -2, kick_xpm: 2 }
+    expect(rescoreProjectionFacts([kickerBase], underscored)[0].points).toBe(14)
+
+    const longform = { field_goal_made: 5, field_goal_missed: -2, extra_point_made: 2 }
+    expect(rescoreProjectionFacts([kickerBase], longform)[0].points).toBe(14)
+  })
+
+  it('🛑 the SAME map rescores an IDP row and a kicker row, each on its own components', () => {
+    /*
+     * `deriveIdpRules` returns ALL of a league's active rules, not an IDP subset — so one map
+     * legitimately carries both. Each rescorer keys on its own stored blob, so a row is never
+     * scored twice and neither steals the other's rules.
+     */
+    const combined = { idp_tkl_solo: 2, idp_tkl_ast: 1.5, idp_sack: 2, fgm: 5, fgmiss: -2, xpm: 2 }
+    const [idpFact, kickerFact] = rescoreProjectionFacts([base, kickerBase], combined)
+
+    expect(idpFact.points).toBe(2 * 6 + 1.5 * 3 + 2 * 0.5) // 17.5
+    expect(kickerFact.points).toBe(14)
+  })
+
+  it('leaves a kicker alone when the league sets no kicker rules', () => {
+    // IDP-only rules: nothing here scores a field goal, so the stored value must stand.
+    const idpOnly = { idp_tkl_solo: 2, idp_tkl_ast: 1.5 }
+    const out = rescoreProjectionFacts([kickerBase], idpOnly)[0]
+    expect(out.points).toBe(8)
+    expect(out.rescored).toBe(false)
+  })
+
+  it('🛑 flags a distance rule it cannot honour rather than silently approximating', () => {
+    /*
+     * The projection stores makes and misses, not the yardage of each kick, so a distance bucket
+     * cannot be honoured exactly. Scoring at the flat rate and saying nothing would present an
+     * approximation as exact.
+     */
+    const withDistance = { fgm: 3, fgmiss: -1, xpm: 1, fgm_50p: 5 }
+    const out = rescoreProjectionFacts([kickerBase], withDistance)[0]
+    expect(out.rescored).toBe(true)
+    expect(out.kickerDistanceRulesIgnored).toBe(true)
+  })
+
+  it('does not flag distance rules when the league sets none', () => {
+    const out = rescoreProjectionFacts([kickerBase], { fgm: 3, fgmiss: -1, xpm: 1 })[0]
+    expect(out.kickerDistanceRulesIgnored).toBe(false)
   })
 })
