@@ -22,6 +22,7 @@ import {
  */
 import type { DecisionFact } from './decisionToSlice'
 import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice } from './decisionBridge'
+import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -236,6 +237,15 @@ export interface DecisionOsGroundingPacket {
   lineupDecision?: GroundedSlice<DecisionFact>
   waiverDecision?: GroundedSlice<DecisionFact>
   commissionerHealthDecision?: GroundedSlice<DecisionFact>
+
+  /**
+   * R3.1 — IDP and kicker values, priced for this roster under this league's rules.
+   *
+   * ⚠ ROSTER-SCOPED, so unlike `marketValues` and `devyValues` it has no feed source and never
+   * will: a linebacker is worth ~9 points under `balanced` scoring and roughly double under a
+   * tackle-heavy setup, so these cannot be cached sport+format the way a market board can.
+   */
+  idpKickerValues?: GroundedSlice<ValueLookup[]>
 
   /**
    * Every gap on the packet, flattened.
@@ -519,7 +529,7 @@ export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>):
  * One implementation, two callers, no second copy to drift.
  */
 export { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
-import { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
+import { deriveValueFormat, deriveIdpRules, deriveLeagueSizeAndPpr } from './leagueValueFormat'
 
 /**
  * Date the psychology slice by its OLDEST profile, for the same reason `oldestAsOf` exists:
@@ -571,6 +581,16 @@ export interface GroundingPacketArgs {
      * must actually commission the league.
      */
     commissionerHealthDecision?: boolean
+    /**
+     * R3.1 — IDP and kicker values for THIS roster (default OFF).
+     *
+     * 🛑 THE ONLY SLICE THAT CANNOT JOIN THE CONCURRENT WAVE. Every other producer takes `args`,
+     * `leagueId` or `userId` — all known before assembly starts — so they all fire together. This
+     * one needs the ROSTER, which means it cannot begin until the context engine has returned. It
+     * is a serialized second hop by construction, which is why it is opt-in and why the cheap exit
+     * in `loadIdpKickerValueSlice` matters: four leagues in five stop before any query.
+     */
+    idpKicker?: boolean
   }
 }
 
@@ -668,6 +688,7 @@ export async function buildDecisionOsGroundingPacket(
   const psychologyKill = killed('managerPsychology')
   const lineupDecisionKill = killed('lineupDecision')
   const commishHealthKill = killed('commissionerHealthDecision')
+  const idpKickerKill = killed('idpKickerValues')
 
   const pAssertions =
     leagueId && !importKill
@@ -1262,6 +1283,66 @@ export async function buildDecisionOsGroundingPacket(
     savedAnalysis = absent(killed('savedAnalysis') ?? NOT_REQUESTED)
   }
 
+  /*
+   * ── R3.1 — IDP + KICKER VALUES. THE ONE SERIALISED PRODUCER. ────────────────────────────────
+   *
+   * 🛑 IT STARTS HERE, NOT IN THE CONCURRENT WAVE, AND THAT IS NOT AN OVERSIGHT. Every producer
+   * above takes `args`, `leagueId` or `userId` — all known before assembly begins — so they fire
+   * together and each `await` merely collects. This one needs the ROSTER, which does not exist
+   * until the context engine has returned. It cannot be hoisted without hoisting the engine, and
+   * the engine is the single most expensive thing in the packet.
+   *
+   * So it is opt-in (`want.idpKicker`, default off), separately killable, and its own cheap exit
+   * does the real work: 10 of 94 NFL leagues roster IDP slots and 19 roster a kicker, so four
+   * leagues in five return before a single query runs.
+   */
+  let idpKickerValues: GroundedSlice<ValueLookup[]> = absent<ValueLookup[]>(NOT_REQUESTED)
+  if (want.idpKicker && idpKickerKill) idpKickerValues = absent<ValueLookup[]>(idpKickerKill)
+  else if (want.idpKicker && leagueId && !contextFacts) {
+    /*
+     * 🛑 THE ENGINE IS DOWN, AND THAT IS NOT THE SAME AS AN UNSYNCED LEAGUE. `contextFacts` is
+     * null only when the context engine threw — the catch above turns eight facts into null at
+     * once. Reading `contextFacts.roster` here would throw and take the WHOLE packet build down
+     * for every other slice in the turn, which is the one thing every producer in this file is
+     * written to avoid.
+     *
+     * ⚠ AND IT MUST NOT FALL THROUGH TO THE SLICE'S OWN "no rostered players" GAP. That reason
+     * tells the user to re-sync a league that may be perfectly synced; the roster is missing
+     * because our engine failed, not because their data is absent. Different cause, different
+     * remedy, so it gets its own.
+     */
+    idpKickerValues = absent<ValueLookup[]>({
+      reason: 'not_computed',
+      detail: 'The context engine did not return a roster, so IDP and kicker values could not be priced.',
+      remedy: 'It retries on the next request; nothing on your side needs changing.',
+    })
+  } else if (want.idpKicker && leagueId) {
+    const rulesValue = leagueRules.present ? leagueRules.value : null
+    const fmt = deriveValueFormat(rulesValue)
+    const size = deriveLeagueSizeAndPpr(rulesValue)
+    idpKickerValues = await kick(
+      'idpKickerValues',
+      loadIdpKickerValueSlice({
+        sport: args.sport,
+        leagueId,
+        // Optional-chained rather than relying on narrowing: the guard above tests a COMPOUND
+        // condition, so TypeScript cannot conclude `contextFacts` is non-null here from its
+        // negation alone. `rosterSleeperIdsFrom` returns [] for anything unusable.
+        rosterPlayerIds: rosterSleeperIdsFrom(contextFacts?.roster?.value ?? null),
+        rosterPositions: rosterPositionsFrom(rulesValue),
+        /*
+         * ⚠ 12 IS A STATED FALLBACK, NOT A MEASUREMENT, and it is confined to replacement level.
+         * `buildIdpValuations` refuses outright without a team count — "replacement level is
+         * meaningless without it" — so the alternative to a default is no IDP values at all for a
+         * league whose size we failed to read. `resolveLeagueKickerValue` already defaults the
+         * same way internally.
+         */
+        numTeams: size.numTeams ?? 12,
+        isDynasty: fmt?.format === 'DYNASTY',
+      }),
+    )
+  }
+
   const slices: Array<[string, GroundedSlice<unknown>]> = [
     ['importAssertions', importSlice as GroundedSlice<unknown>],
     ['commissionerIntelligence', commissionerIntelligence as GroundedSlice<unknown>],
@@ -1271,6 +1352,7 @@ export async function buildDecisionOsGroundingPacket(
     ['managerPsychology', managerPsychology as GroundedSlice<unknown>],
     ['lineupDecision', lineupDecision as GroundedSlice<unknown>],
     ['commissionerHealthDecision', commissionerHealthDecision as GroundedSlice<unknown>],
+    ['idpKickerValues', idpKickerValues as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1298,6 +1380,7 @@ export async function buildDecisionOsGroundingPacket(
     managerPsychology,
     lineupDecision,
     commissionerHealthDecision,
+    idpKickerValues,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

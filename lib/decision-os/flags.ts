@@ -75,6 +75,14 @@ export type DecisionOsFeed =
    * without losing the cheap one, and a single "decisions" switch would make that impossible.
    */
   | 'commissionerHealthDecision'
+  /**
+   * IDP + kicker roster values (R3.1).
+   *
+   * ⚠ Its own switch because it is the one slice that SERIALISES behind the context engine — it
+   * needs the roster, so it cannot start with the others. If the packet ever runs hot, this is the
+   * first thing an operator should be able to shed without losing the concurrent producers.
+   */
+  | 'idpKickerValues'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -90,6 +98,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'managerPsychology',
   'lineupDecision',
   'commissionerHealthDecision',
+  'idpKickerValues',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

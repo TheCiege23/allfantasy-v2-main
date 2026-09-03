@@ -166,6 +166,70 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.22 R3.1 — THE IDP/KICKER SLICE, AND THE PRODUCER NOBODY BUILT
+
+**2026-09-03.** Player Value OS sat at 48% because "IDP and kicker have a built adapter and no feed
+source and no packet slice". The adapter turned out to be the finished part.
+
+### 🛑 THE ADAPTER WAS COMPLETE. ITS INPUT HAD NO PRODUCER.
+
+`loadIdpKickerValues` takes an `IdpLeagueValuationContext`. A grep for that type across the repo
+finds **only the adapter and its own definition** — nothing ever built one. Passing `null` compiles,
+yields an empty value map, and the adapter honestly reports `not_computed`. Forever. For every
+league.
+
+Wiring it that way would have been `ingestCFBDStats` a third time: a surface pointed at a producer
+nothing feeds, failing silently and looking correct. **The missing piece was never the slice — it
+was the context.**
+
+`lib/decision-os/grounding/idpKickerSlice.ts` builds it, from the same two pure functions that
+`waiver-intelligence`, `idpChimmy` and `league-rankings-v2` already compose. A fourth caller of an
+established composition, not a rival to it.
+
+### ✅ THE CHEAP EXIT IS THE DESIGN, NOT AN OPTIMISATION
+
+**10 of 94 NFL leagues carry real IDP roster slots; 19 carry a kicker.** So four leagues in five
+must pay nothing, and `detectIdpLeague`/`detectKickerLeague` are checked on ROSTER SLOTS before any
+query runs.
+
+⚠ **Never infer an IDP league from its scoring settings.** `availablePlayersTool` records an earlier
+note there claiming 70 of 94, from a grep that matched the scoring block — every Sleeper league
+ships `sack`/`int`/`ff` keys whether or not it rosters a defender. The strict predicates exist
+because that grep is wrong.
+
+### ⚠ TWO TRAPS CARRIED FORWARD FROM THE PRODUCERS
+
+1. **An EMPTY vorp map must be passed as `undefined`, not as an empty `Map`.** The three existing
+   callers all guard this. An empty Map reads to the adapter as "this league prices IDP and every
+   defender is worth nothing"; `undefined` reads as "not priced here", which omits them instead.
+2. **The adapter's own `pickValue()` must not be inlined away.** `buildIdpKickerValueMap` writes the
+   real number into `value` OR `redraftValue` by format and a literal `0` into the other, so reading
+   `.value` unconditionally prices every IDP and kicker in every redraft league at zero — and zero
+   is a number `isCoherentValue` accepts.
+
+### ⚠ ROSTER-SCOPED, SO DELIBERATELY NOT A FEED SOURCE
+
+`marketValueSource` and `devyValueSource` are keyed sport+format and live in the domain-os store.
+These cannot: they derive from ONE league's scoring and price ONE roster. A linebacker is worth ~9
+points under `balanced` scoring and roughly double under a tackle-heavy setup. The scorecard's "no
+feed source" is therefore **correct and should stay that way** — only the packet slice was missing.
+
+### Status
+
+| # | Step | |
+|---|---|---|
+| **R3.1a** | `loadIdpKickerValueSlice` — builds the context, cheap exit, honest gaps. 6 tests, both guards mutation-verified. | ✅ |
+| **R3.1b** | Wired into the packet: `want.idpKicker` (default OFF), an `idpKickerValues` kill switch, and the producer placed AFTER `contextFacts` because it is the only slice that needs the roster. The extractors carry the id-space knowledge and are tested. | ✅ |
+| **R3.2** | Schedule the app-level value + projection sources (a second cron walk, keyed sport+format). | ☐ |
+| **R3.3** | The other three value questions: trade grade · roster holes · cross-league exposure. | ☐ |
+
+Suite after R3.1: **199 files / 3,707 tests / 0 failures.**
+
+⚠ **AND THE COUNT-DIDN’T-MOVE CHECK EARNED ITS KEEP A SECOND TIME.** After wiring the packet the
+suite read 3,703 — unchanged — meaning nothing exercised the new path. Same signal as R2.4, caught
+the same way: by watching the number rather than reading the diff. Tests for the extractors moved it
+to 3,707.
+
 ## 0.21 R2 — BRIDGE PIPELINE A INTO THE PACKET · plan, and what the survey changed
 
 **2026-09-03.** R2's one-line spec said: *"a **read-only** adapter: the four live engines'
