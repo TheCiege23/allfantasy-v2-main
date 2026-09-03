@@ -105,9 +105,20 @@ function makeCtx(opts: { status?: string; idolsPlayed?: IdolPlay[]; lateVotesAll
       phase: 'pre_merge',
       status: opts.status ?? 'closed',
       attendingTribeId: 'tribe-a',
-      votingOpensAt: new Date('2026-09-01T00:00:00Z'),
-      votingDeadline: new Date('2026-09-02T00:00:00Z'),
-      voteDeadlineAt: new Date('2026-09-02T00:00:00Z'),
+      /*
+       * ⚠ RELATIVE TO NOW, NOT FIXED DATES — THIS FILE WAS A TIME BOMB AND IT WENT OFF.
+       * These were hard-coded 2026-09-01/2026-09-02. `submitVote` computes
+       * `past = now > voteDeadlineAt`, so from 2026-09-03 onward every ballot in this file
+       * was LATE, `doesNotCount` became true, and `locked: firstValidLocks && !doesNotCount`
+       * silently flipped to false. "accepts a valid first ballot and reports it locked"
+       * started failing on a date, with no commit touching either the test or the service.
+       *
+       * Anchoring the window to Date.now() states what these tests actually mean — the council
+       * is open right now — instead of encoding a week when that happened to be true.
+       */
+      votingOpensAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      votingDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      voteDeadlineAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       closedAt: null,
       isRevealed: false,
       doesNotCountVoteIds: [],
