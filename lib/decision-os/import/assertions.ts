@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 
 /**
  * Import OS → the four assertions Decision OS needs to call a league CONCLUSIVE (3.2, D7).
@@ -22,6 +23,14 @@ import { prisma } from '@/lib/prisma'
  *
  * ⚠ NOTHING HERE COMPUTES A SYNC. It reads what the collectors already recorded. A second
  * implementation of freshness would be the three-health-scorers shape in a new place.
+ *
+ * ── A FIFTH, ADDED LATER (R4 — Identity OS) ────────────────────────────────────────────────
+ * `managerIdentityCoverage` above answers "do we know who owns this roster." Nothing answered
+ * "do we know who is ON it" — `PlayerIdentityMap` resolution was silently depended on by every
+ * other read and reported on by none of them. `playerIdentityCoverage` is that missing measure.
+ * It IS a live, in-memory ratio over rows this function already fetches (matching
+ * `managerIdentityCoverage`'s own precedent below), not a sync — the "nothing here computes a
+ * sync" rule is about not re-running a collector, not about never deriving a ratio.
  */
 
 /** The scopes a Sleeper sync fills. Mirrors `SLEEPER_SYNC_SCOPES` — kept as data, not imported,
@@ -76,7 +85,7 @@ export interface ImportAssertions {
   rostersHeld: number
   rostersExpected: number | null
 
-  // ── 4. Identity ───────────────────────────────────────────────────────────────────────────
+  // ── 4. Identity (manager) ─────────────────────────────────────────────────────────────────
   /**
    * Fraction of rosters whose manager maps to a real account.
    *
@@ -87,6 +96,38 @@ export interface ImportAssertions {
   managerIdentityCoverage: number | null
   managersMapped: number
   managersTotal: number
+
+  // ── 5. Identity (player) — R4, Identity OS ───────────────────────────────────────────────────
+  /**
+   * Fraction of this league's ROSTERED PLAYERS that resolve to a real `PlayerIdentityMap` row.
+   * A completely different question from `managerIdentityCoverage` above — that is about the
+   * roster's OWNER, this is about the PLAYERS ON IT — and answers the gap the audit found: a
+   * roster where every player came back as `{ playerId: '6804', name: '6804' }` still graded
+   * itself `conclusive: ok`, because nothing measured player resolution at all.
+   *
+   * Null when the league's provider has no known id-space mapping (a native/manual league has
+   * no external ids to check) — distinct from a measured LOW rate, the same null-vs-zero
+   * distinction `rosterCoverage` already draws above.
+   */
+  playerIdentityCoverage: number | null
+  playersResolved: number
+  playersTotal: number
+}
+
+/**
+ * Which `PlayerIdentityMap` column a roster's stored ids belong to, keyed by `League.platform`.
+ *
+ * ⚠ `Roster.playerData` stores the PROVIDER's ids, deliberately (see the schema note on
+ * `PlayerIdentityMap.fantraxId`) — so checking a Sleeper roster's ids against `fantraxId` would
+ * measure nothing and silently report near-zero coverage for a perfectly healthy league. This
+ * mapping is the one place that pairing is declared; do not re-derive it elsewhere.
+ */
+const IDENTITY_COLUMN_BY_PLATFORM: Record<string, string> = {
+  sleeper: 'sleeperId',
+  espn: 'espnId',
+  fantrax: 'fantraxId',
+  mfl: 'mflId',
+  fleaflicker: 'fleaflickerId',
 }
 
 /**
@@ -134,8 +175,8 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
   const [state, rosters] = await Promise.all([
     prisma.leagueSyncState.findUnique({ where: { runKey } }).catch(() => null),
     prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true } })
-      .catch(() => [] as { platformUserId: string | null }[]),
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
+      .catch(() => [] as { platformUserId: string | null; playerData: unknown }[]),
   ])
 
   const completed = asArray(state?.completedScopes)
@@ -160,6 +201,36 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
   const managersMapped = rosters.filter((r) => typeof r.platformUserId === 'string' && r.platformUserId.length > 0).length
   const managerIdentityCoverage = rostersHeld > 0 ? managersMapped / rostersHeld : null
 
+  /*
+   * ⚠ THE SAME PARSER PRODUCTION CODE USES, NOT A SECOND ONE. `getNormalizedLineupSections` is
+   * what `RosterContextProvider` already reads `Roster.playerData` through — reusing it here means
+   * this measurement can never disagree with what a roster slice actually shows a user, the same
+   * failure mode CLAUDE.md already records for a SQL copy of a JS name-normalizer.
+   */
+  const rosteredIds = new Set<string>()
+  for (const r of rosters) {
+    const sections = getNormalizedLineupSections(r.playerData)
+    for (const items of Object.values(sections)) {
+      for (const item of items) {
+        const id = typeof item.id === 'string' ? item.id : null
+        if (id) rosteredIds.add(id)
+      }
+    }
+  }
+
+  const identityColumn = IDENTITY_COLUMN_BY_PLATFORM[provider]
+  const playersTotal = rosteredIds.size
+  let playersResolved = 0
+  // No known id-space for this provider (native/manual leagues carry no external ids at all) —
+  // there is nothing to check against, so this stays null rather than reading as a measured zero.
+  let playerIdentityCoverage: number | null = null
+  if (identityColumn && playersTotal > 0) {
+    playersResolved = await prisma.playerIdentityMap
+      .count({ where: { [identityColumn]: { in: [...rosteredIds] } } as never })
+      .catch(() => 0)
+    playerIdentityCoverage = Math.min(1, playersResolved / playersTotal)
+  }
+
   return {
     leagueId,
     provider,
@@ -181,5 +252,8 @@ export async function loadImportAssertions(leagueId: string): Promise<ImportAsse
     managerIdentityCoverage,
     managersMapped,
     managersTotal: rostersHeld,
+    playerIdentityCoverage,
+    playersResolved,
+    playersTotal,
   }
 }

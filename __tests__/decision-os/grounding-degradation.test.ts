@@ -105,6 +105,9 @@ function assertions(over: Partial<ImportAssertions> = {}): ImportAssertions {
     managerIdentityCoverage: 1,
     managersMapped: 12,
     managersTotal: 12,
+    playerIdentityCoverage: 1,
+    playersResolved: 200,
+    playersTotal: 200,
     ...over,
   }
 }

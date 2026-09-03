@@ -56,6 +56,20 @@ export interface FactDependency {
   maxStaleMs: number | null
   /** Minimum roster coverage this claim needs, 0..1. Null = does not depend on completeness. */
   minCoverage: number | null
+  /**
+   * Minimum PLAYER identity resolution this claim needs, 0..1 (R4 — Identity OS). Distinct from
+   * `needsManagerIdentity`: that is "does the roster's OWNER map to a real account", this is "do
+   * the PLAYERS on the roster resolve to a real `PlayerIdentityMap` row". Null = does not depend on
+   * player identity at all.
+   *
+   * ⚠ SET LOW, DELIBERATELY. Measured 2026-09-03: a normal, healthy NFL sample resolves at ~61%
+   * and NCAAF at ~24% (`scripts/audit-player-identity-coverage.ts`) — those are the ORDINARY case,
+   * not a defect, and a threshold anywhere near `minCoverage`'s 0.9 would block most real leagues
+   * from ever getting a lineup decision. The threshold exists to catch the measured trap — a
+   * roster where EVERY player came back as `{ playerId: '6804', name: '6804' }` and still graded
+   * itself `conclusive: ok` — not to demand resolution quality nothing in production has yet.
+   */
+  minIdentityResolution: number | null
 }
 
 const MINUTES = 60_000
@@ -80,6 +94,10 @@ export const FACT_PROFILES = {
     needsParity: true,
     maxStaleMs: 2 * HOURS,
     minCoverage: 0.9,
+    // 0.15, not 0.9 like minCoverage — see the field's own comment. This is a floor against the
+    // measured trap (0% resolved), not a quality bar against the measured normal (~61% NFL,
+    // ~24% NCAAF).
+    minIdentityResolution: 0.15,
   },
 
   /**
@@ -95,6 +113,7 @@ export const FACT_PROFILES = {
     needsParity: false,
     maxStaleMs: null,
     minCoverage: null,
+    minIdentityResolution: null,
   },
 
   /** "How is my team doing?" — standings and records. Tolerates more lag than a lineup call. */
@@ -104,6 +123,8 @@ export const FACT_PROFILES = {
     needsParity: true,
     maxStaleMs: 12 * HOURS,
     minCoverage: 0.75,
+    // Records and win/loss are about TEAMS, not named players. No player identity dependency.
+    minIdentityResolution: null,
   },
 
   /** "What is manager X like?" — a claim ABOUT a person, so an unmapped owner is disqualifying. */
@@ -113,6 +134,8 @@ export const FACT_PROFILES = {
     needsParity: false,
     maxStaleMs: 24 * HOURS,
     minCoverage: null,
+    // The claim is about the MANAGER's pattern of actions, not about naming the players involved.
+    minIdentityResolution: null,
   },
 
   /**
@@ -125,6 +148,7 @@ export const FACT_PROFILES = {
     needsParity: false,
     maxStaleMs: null,
     minCoverage: null,
+    minIdentityResolution: null,
   },
 } as const satisfies Record<string, FactDependency>
 
@@ -210,13 +234,27 @@ export function isConclusive(
     })
   }
 
-  // ── identity ────────────────────────────────────────────────────────────────────────────────
+  // ── identity (manager) ─────────────────────────────────────────────────────────────────────
   if (dep.needsManagerIdentity && assertions.managerIdentityCoverage != null && assertions.managerIdentityCoverage < 1) {
     const unmapped = assertions.managersTotal - assertions.managersMapped
     blockedBy.push({
       assertion: 'identity',
       detail: `${unmapped} of ${assertions.managersTotal} teams have an owner we cannot match to an account.`,
       remedy: 'Those managers joining AllFantasy, or being linked by the commissioner, closes the gap.',
+    })
+  }
+
+  // ── identity (player) — R4, Identity OS ────────────────────────────────────────────────────
+  if (
+    dep.minIdentityResolution != null &&
+    assertions.playerIdentityCoverage != null &&
+    assertions.playerIdentityCoverage < dep.minIdentityResolution
+  ) {
+    const unresolved = assertions.playersTotal - assertions.playersResolved
+    blockedBy.push({
+      assertion: 'identity',
+      detail: `${unresolved} of ${assertions.playersTotal} rostered players do not resolve to a known player — this reads as counts, not names.`,
+      remedy: 'A league re-sync usually resolves it; a persistently low rate means this provider needs a wider identity bridge.',
     })
   }
 
