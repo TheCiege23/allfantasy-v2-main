@@ -1,0 +1,29 @@
+{
+  "//": [
+    "Typechecks the test tree, which `tsconfig.json` deliberately excludes.",
+    "",
+    "WHY THIS EXISTS. The base config excludes __tests__ and **/*.test.ts, so 916 test files are",
+    "never typechecked. A mock is therefore free to disagree with the contract it stands for and the",
+    "suite stays green, because the test and the mock are the same author's invention checked against",
+    "each other. That bit on 2026-09-03: six passing tests mocked `recommended_actions` as",
+    "{ key, label, href, tone }, a shape the engine never produces, and the describer read `label` off",
+    "an object that has none. Only a same-artifact typecheck pair saw it, and only because it happened",
+    "to compile the SOURCE file. Nothing checks the mock itself.",
+    "",
+    "🛑 `exclude` IS OVERRIDDEN, NOT INHERITED, AND THAT IS THE WHOLE POINT. `extends` inherits",
+    "`exclude`, and an inherited `exclude` silently drops matching entries from `include` — so a config",
+    "that extended the base without this override would compile ZERO test files and report clean.",
+    "CLAUDE.md records that exact failure. Verify with `--listFiles`, never by reading the error count."
+  ],
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "types/**/*.d.ts",
+    "__tests__/**/*.ts",
+    "__tests__/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

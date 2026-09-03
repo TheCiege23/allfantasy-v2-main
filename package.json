@@ -40,6 +40,7 @@
     "postinstall": "node scripts/prisma-generate-postinstall.cjs && node scripts/patch-manifest-race.cjs",
     "prisma:generate": "node scripts/prisma-generate-postinstall.cjs",
     "typecheck": "node --max-old-space-size=8192 ./node_modules/typescript/lib/tsc.js --noEmit",
+    "typecheck:tests": "node --max-old-space-size=8192 ./node_modules/typescript/lib/tsc.js -p tsconfig.tests.json --noEmit",
     "ts:ratchet": "node scripts/ts-error-ratchet.mjs",
     "test:ratchet": "node scripts/vitest-ratchet.mjs",
     "test:ratchet:update": "node scripts/vitest-ratchet.mjs --update",
