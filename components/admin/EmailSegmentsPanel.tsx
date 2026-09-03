@@ -95,24 +95,38 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
   return (
     <div className="space-y-4">
       {/* ── Live segment counts ──────────────────────────────────────────── */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/*
+        29a §5 draws segments as stacked rows — label + description on the
+        left, count on the right — rather than a 4-up tile grid. They stay
+        <button>s: the handoff's "segment rows open the compose view with that
+        segment pre-selected" is behaviour this panel already had, and turning
+        them into static rows to match a picture would remove it.
+      */}
+      <div className="af-cc-stack" style={{ gap: 9 }}>
         {status.segments.map((segment) => (
           <button
             key={segment.id}
             type="button"
             onClick={() => setAudience(segment.id)}
             aria-pressed={audience === segment.id}
-            className={`rounded-2xl border p-3 text-left transition ${
+            className="af-cc-seg"
+            style={
               audience === segment.id
-                ? "border-cyan-300/40 bg-cyan-300/10"
-                : "border-white/10 bg-white/[0.04] hover:border-white/25"
-            }`}
+                ? { border: "1px solid var(--accent-line)", background: "var(--accent-soft)", textAlign: "left" }
+                : { border: "1px solid transparent", textAlign: "left" }
+            }
           >
-            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/60">
-              {segment.label}
-            </div>
-            <div className="mt-1 text-2xl font-black text-white">{formatCount(segment.count)}</div>
-            <div className="mt-1 text-[11px] leading-4 text-white/45">{segment.description}</div>
+            <span className="af-cc-stack" style={{ flex: 1 }}>
+              <span className="af-cc-job-name">{segment.label}</span>
+              <span className="af-cc-job-cadence">{segment.description}</span>
+            </span>
+            <span
+              className={
+                audience === segment.id ? "af-cc-seg-count af-cc-seg-count--accent" : "af-cc-seg-count"
+              }
+            >
+              {formatCount(segment.count)}
+            </span>
           </button>
         ))}
       </div>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import type { ReactNode } from "react"
+import "./command-center.css"
 import { getAdminAccessState } from "@/lib/adminAuth"
 import {
   getAdminCommandCenterMetrics,
@@ -7,6 +8,9 @@ import {
   type AdminMetric,
 } from "@/lib/admin-dashboard/AdminCommandCenterService"
 import { AdminCommandCenterOverview } from "@/components/admin/AdminCommandCenterOverview"
+import { GrowthSeriesPanel } from "@/components/admin/GrowthSeriesPanel"
+import { VisitorAnalyticsPanel } from "@/components/admin/VisitorAnalyticsPanel"
+import { getAdminGrowthSeries } from "@/lib/admin-dashboard/AdminGrowthSeriesService"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
@@ -394,16 +398,21 @@ function providerStatusLabel(status: AdminProviderHealthStatus) {
   }
 }
 
+/*
+ * Status chips use the handoff's token-driven classes rather than fixed
+ * Tailwind palettes, so a mode change moves them with everything else. The
+ * status→severity mapping is unchanged — only the paint is.
+ */
 function providerStatusClass(status: AdminProviderHealthStatus) {
-  if (status === "configured") return "border-emerald-300/35 bg-emerald-300/10 text-emerald-100"
-  if (status === "public_fallback") return "border-cyan-300/35 bg-cyan-300/10 text-cyan-100"
+  if (status === "configured") return "af-cc-chip af-cc-chip--ok"
+  if (status === "public_fallback") return "af-cc-chip af-cc-chip--accent"
   if (status === "scaffold_only" || status === "not_production_ready") {
-    return "border-amber-300/35 bg-amber-300/10 text-amber-100"
+    return "af-cc-chip af-cc-chip--warn"
   }
   if (status === "missing_env" || status === "configured_failing") {
-    return "border-rose-300/35 bg-rose-300/10 text-rose-100"
+    return "af-cc-chip af-cc-chip--bad"
   }
-  return "border-white/15 bg-white/[0.06] text-white/70"
+  return "af-cc-chip"
 }
 
 function joinList(values: string[], fallback = "Not tracked yet") {
@@ -511,25 +520,51 @@ function ProductionReadinessPanel({ data }: { data: AdminProductionReadiness }) 
             </tbody>
           </table>
         </div>
-        <div className="space-y-3">
-          {data.crons.map((row) => (
-            <div key={row.id} className="rounded-2xl border border-white/10 bg-black/25 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-black text-white">{row.label}</div>
-                  <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-cyan-100/45">{row.category}</div>
-                </div>
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-black ${statusPillClass(row.status)}`}>
-                  {cronStatusLabel(row.status)}
-                </span>
-              </div>
-              <div className="mt-3 text-[11px] leading-5 text-white/55">{row.note}</div>
-              <div className="mt-2 text-[11px] text-amber-100/80">Recommended: {row.recommended}</div>
-              <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.04] p-3 font-mono text-[10px] leading-4 text-cyan-100/70">
-                {row.configuredPaths.length ? row.configuredPaths.join("\n") : "No matching Vercel cron found"}
-              </div>
+        {/*
+          29a §4 — cron readiness as a compact list rather than a stack of
+          cards. The tick carries the status, so the pill is redundant; the
+          cadence line is `recommended`, which is exactly what the handoff's
+          "daily" / "every 30m during the tournament" line shows. The note and
+          the resolved Vercel paths stay — they are what an operator reads once
+          a row is not green, and dropping them to match a mockup would trade
+          working diagnosis for tidiness.
+        */}
+        <div className="af-cc-card">
+          <div className="af-cc-card-head">
+            <div className="af-cc-card-title">Cron readiness</div>
+            <div className="af-cc-card-scope">
+              {data.crons.filter((row) => row.status === "configured").length} of {data.crons.length} set
             </div>
-          ))}
+          </div>
+          <div className="af-cc-joblist">
+            {data.crons.map((row) => (
+              <div
+                key={row.id}
+                className={
+                  row.status === "configured"
+                    ? "af-cc-job"
+                    : row.status === "partial"
+                      ? "af-cc-job af-cc-job--warn"
+                      : "af-cc-job af-cc-job--bad"
+                }
+              >
+                <span className="af-cc-job-tick" aria-hidden="true">
+                  {row.status === "configured" ? "✓" : "·"}
+                </span>
+                <div className="af-cc-stack" style={{ flex: 1 }}>
+                  <div className="af-cc-job-name">{row.label}</div>
+                  <div className="af-cc-job-cadence">
+                    {row.recommended}
+                    {row.status === "configured" ? "" : ` · ${cronStatusLabel(row.status).toLowerCase()}`}
+                  </div>
+                  <div className="af-cc-job-cadence">{row.note}</div>
+                  <div className="af-cc-cell-time">
+                    {row.configuredPaths.length ? row.configuredPaths.join(" · ") : "No matching Vercel cron found"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </AccordionSection>
@@ -571,7 +606,15 @@ function TrafficGeoPanel({ data, metrics }: { data: AdminProductionReadiness; me
 
 function EmailCenterPanel({ status }: { status: AdminEmailStatus }) {
   return (
-    <AccordionSection title="Email Notifications" eyebrow="admin broadcast safety" defaultOpen={false}>
+    /*
+     * ⚠ OPEN BY DEFAULT, DELIBERATELY. This panel is the mass-email tool — 11
+     * audiences, compose, test-send, confirm-to-send — and it sat collapsed
+     * behind the words "Email Notifications", which read like a settings
+     * toggle. It was fully built and effectively undiscoverable, which is the
+     * 93KB single-scroll problem 29a exists to fix. The title says what it does
+     * now, and it opens.
+     */
+    <AccordionSection title="Email Center — send a broadcast" eyebrow="mass email · 11 audiences" defaultOpen>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard item={{ label: "Email provider", value: status.configured ? "Configured" : "Missing env", tracked: status.configured, note: status.missingEnv.join(", ") || "Resend ready" }} />
         <MetricCard item={{ label: "Users with email", value: status.totalUsersWithEmail, tracked: true }} />
@@ -1072,32 +1115,38 @@ function ProviderTeamReconciliationPanel({
 
 function ProviderHealthPanel({ rows }: { rows: AdminProviderHealthRow[] }) {
   return (
-    <section className="rounded-3xl border border-cyan-300/15 bg-white/[0.04] p-4 shadow-[0_24px_80px_-54px_rgba(34,211,238,0.75)] sm:p-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">
-            Provider Health & Cost Guards
-          </h2>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-white/48">
-            Env readiness, stored data, request telemetry, sync state, and call-limit protection. This view does not call paid providers.
-          </p>
-        </div>
-        <span className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] px-3 py-2 text-xs font-black text-amber-100">
-          {rows.length} providers
-        </span>
+    /*
+      29a §3 shows providers as four columns — provider, consumed by, last OK,
+      status. That is the OVERVIEW reading of this data. The seven columns below
+      are the diagnostic reading, and they are what an operator actually uses
+      once a row goes amber: env vars, storage, request telemetry, sync state,
+      cost guards. So this panel takes the handoff's chrome and typography and
+      keeps its columns — collapsing to four would make the page match a mockup
+      by deleting the information the mockup exists to lead you to.
+    */
+    <section className="af-cc-card">
+      <div className="af-cc-card-head">
+        <div className="af-cc-card-title">Providers</div>
+        <div className="af-cc-card-scope">What breaks if it stops</div>
+        <div className="af-cc-chip">{rows.length} providers</div>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
+      <p className="af-cc-cell-sub" style={{ padding: "10px 16px 0" }}>
+        Env readiness, stored data, request telemetry, sync state, and call-limit protection. This view does not call
+        paid providers.
+      </p>
+
+      <div className="mt-4 af-cc-tablescroll" style={{ padding: "0 16px 16px" }}>
         <table className="w-full min-w-[1180px] text-left text-xs">
-          <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+          <thead>
             <tr>
-              <th className="py-2 pr-3">Provider</th>
-              <th className="py-2 pr-3">Status</th>
-              <th className="py-2 pr-3">Data / Consumers</th>
-              <th className="py-2 pr-3">Storage</th>
-              <th className="py-2 pr-3">Requests</th>
-              <th className="py-2 pr-3">Sync</th>
-              <th className="py-2 pr-3">Cost Protection</th>
+              <th className="af-cc-colhead py-2 pr-3">Provider</th>
+              <th className="af-cc-colhead py-2 pr-3">Status</th>
+              <th className="af-cc-colhead py-2 pr-3">Data / Consumers</th>
+              <th className="af-cc-colhead py-2 pr-3">Storage</th>
+              <th className="af-cc-colhead py-2 pr-3">Requests</th>
+              <th className="af-cc-colhead py-2 pr-3">Sync</th>
+              <th className="af-cc-colhead py-2 pr-3">Cost Protection</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10">
@@ -1113,7 +1162,7 @@ function ProviderHealthPanel({ rows }: { rows: AdminProviderHealthRow[] }) {
                   </div>
                 </td>
                 <td className="py-4 pr-3">
-                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${providerStatusClass(row.status)}`}>
+                  <span className={providerStatusClass(row.status)}>
                     {providerStatusLabel(row.status)}
                   </span>
                   <div className="mt-2 max-w-[210px] text-[11px] leading-4 text-white/45">
@@ -1497,35 +1546,118 @@ export default async function AdminPage({
     return <AdminPageLoadFailure message={message} />
   }
 
+  /*
+   * ⚠ GROWTH IS SUPPLEMENTARY AND MUST NOT BE ABLE TO HOLD THE PAGE. The metrics
+   * fetch above owns /admin — if it dies there is nothing to show. This one must
+   * not inherit that power: an operator opening /admin during an incident needs
+   * the verdict and the provider table far more than a chart.
+   *
+   * 🛑 A try/catch IS NOT ENOUGH, AND SHIPPING ONE HERE TOOK /admin DOWN.
+   * The first version of this block caught errors and called that "fails soft".
+   * Slowness is not an error. A query that takes ninety seconds throws nothing —
+   * it just blocks the await, and the whole console spins with no error anywhere
+   * to explain why. Reported from production on 2026-09-02: /admin "keeps
+   * spinning" while /api/health answered in 0.16s, because the page was waiting
+   * on this call and nothing bounded it.
+   *
+   * So the bound is a RACE, not a catch. Whichever finishes first wins; if the
+   * timer wins the card is omitted and every other panel still renders.
+   */
+  const GROWTH_BUDGET_MS = 4000
+  /*
+   * ⚠ THE .catch() IS ON THE WORK, NOT ON THE RACE, AND THAT PLACEMENT MATTERS.
+   * If the timer wins and the query rejects a minute later, a rejection settled
+   * against a promise nobody is awaiting any more is an UNHANDLED rejection —
+   * which in a Node server is a process-level event, not a caught error. Catching
+   * on the inner promise means it is always handled, whoever wins the race.
+   */
+  const growthWork = getAdminGrowthSeries().catch(() => null)
+  const growthBudget = new Promise<null>((resolve) => setTimeout(() => resolve(null), GROWTH_BUDGET_MS))
+  const growth: Awaited<ReturnType<typeof getAdminGrowthSeries>> | null = await Promise.race([
+    growthWork,
+    growthBudget,
+  ])
+
   return (
-    <main className="min-h-dvh bg-[#020817] text-white">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.20),transparent_34%),radial-gradient(circle_at_85%_8%,rgba(251,191,36,0.14),transparent_30%),linear-gradient(180deg,#020817_0%,#06111f_46%,#020817_100%)]" />
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="rounded-3xl border border-cyan-300/15 bg-black/35 p-5 shadow-[0_28px_90px_-54px_rgba(34,211,238,0.85)] backdrop-blur-xl sm:p-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">AllFantasy Admin</p>
-                <DeploymentMarker />
-              </div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-5xl">
-                Command Center
-              </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/62">
-                Production metrics from existing AllFantasy tables. Unavailable metrics are labeled instead of estimated.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">
-              <a
-                href="/dashboard"
-                data-testid="admin-exit-button"
-                className="inline-flex min-h-11 items-center justify-center rounded-full border border-cyan-200/35 bg-gradient-to-r from-cyan-300 to-sky-300 px-4 py-2 text-sm font-black text-slate-950 shadow-[0_12px_34px_-18px_rgba(34,211,238,0.95)] transition hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+    <main className="af-cc min-h-dvh">
+      <div className="relative mx-auto flex w-full max-w-[1320px] flex-col gap-8 px-4 py-6 sm:px-6">
+        {/*
+          29a's frame: a 56px bar carrying identity, the ADMIN chip, section
+          tabs and the refresh stamp. The tabs are anchors into sections that
+          already exist further down the page — the handoff shows a tabbed
+          frame, but this surface stays a single scroll, so they scroll rather
+          than swap panels. An anchor that points at nothing is the one failure
+          mode worth avoiding here, so each href matches a rendered id.
+        */}
+        <header className="af-cc-frame">
+          <div className="af-cc-bar">
+            <svg
+              viewBox="0 0 100 106"
+              width="22"
+              height="23"
+              role="img"
+              aria-label="AllFantasy"
+              style={{ display: "block", overflow: "visible", flex: "none" }}
+            >
+              <path
+                d="M50 4 L94 16 V60 L50 102 L6 60 V16 Z"
+                style={{
+                  fill: "var(--accent-soft)",
+                  stroke: "var(--accent)",
+                  strokeWidth: 7,
+                  strokeLinejoin: "round",
+                }}
+              />
+              <text
+                x="50"
+                y="66"
+                textAnchor="middle"
+                style={{ font: "900 44px var(--af-cc-sans)", fill: "var(--text)" }}
               >
-                Exit Admin / Back to App
+                AF
+              </text>
+            </svg>
+            {/*
+              ⚠ AN <h1>, NOT A STYLED <div>. The handoff draws this as a 14px
+              bar title, and rendering it as a div is how the page silently lost
+              its only heading — no document outline, and nothing for a screen
+              reader to navigate to. The visual is identical either way; the
+              semantics are not. Caught by admin-page-render's
+              getByRole("heading", …) once great-dubinsky repaired the fixture
+              that had been masking that test.
+            */}
+            <h1 className="af-cc-bar-title">Command Center</h1>
+            <div className="af-cc-admin-chip">Admin</div>
+            <DeploymentMarker />
+            <div className="af-cc-spacer" />
+            <nav className="af-cc-tabs" aria-label="Command Center sections">
+              <a className="af-cc-tab af-cc-tab--on" href="#overview">
+                Overview
               </a>
-              <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.08] px-4 py-3 text-sm font-bold text-amber-100">
-                Generated {new Date(data.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York" })}
-              </div>
+              <a className="af-cc-tab" href="#providers">
+                Providers
+              </a>
+              <a className="af-cc-tab" href="#production-readiness">
+                Readiness
+              </a>
+              <a className="af-cc-tab" href="#user-search">
+                Users
+              </a>
+              <a className="af-cc-tab" href="#email-center">
+                Email
+              </a>
+            </nav>
+            <a href="/dashboard" data-testid="admin-exit-button" className="af-cc-tab">
+              Exit Admin
+            </a>
+            <div className="af-cc-stamp">
+              refreshed{" "}
+              {new Date(data.generatedAt).toLocaleTimeString("en-US", {
+                timeZone: "America/New_York",
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
             </div>
           </div>
         </header>
@@ -1537,6 +1669,29 @@ export default async function AdminPage({
           this below anything undoes the fix.
         */}
         <AdminCommandCenterOverview metrics={data} />
+
+        {/*
+          Growth sits directly under the verdict and the metric groups: those
+          answer "is anything wrong" and "what are the totals", and the next
+          question an operator actually asks is "which way is it moving".
+          Signups, entries, pools, active users and paid conversions, switchable
+          day / week / month without a reload.
+        */}
+        <div id="growth">{growth ? <GrowthSeriesPanel series={growth} /> : null}</div>
+
+        {/*
+          ⚠ THE VISITOR PANEL WAS BUILT AND NEVER MOUNTED HERE. VisitorAnalyticsService
+          has done 6h→12mo bucketing all along, and VisitorAnalyticsPanel renders it,
+          but /admin never imported either — the panel only existed on /core. It is
+          anonymous traffic, which is why it sits beside GrowthSeriesPanel (signed-in
+          people) rather than merged into it: they count different populations and
+          stacking them in one chart would invite exactly the wrong comparison.
+        */}
+        <div id="traffic">
+          <AccordionSection title="Visitors & Traffic" eyebrow="6h → 12 months" defaultOpen={false}>
+            <VisitorAnalyticsPanel />
+          </AccordionSection>
+        </div>
 
         <AdminOverviewDeck data={data} accessSource={gate.source} />
 
@@ -1563,7 +1718,9 @@ export default async function AdminPage({
             <BetaInvitePanel />
           </AccordionSection>
         </div>
-        <EmailCenterPanel status={data.emailStatus} />
+        <div id="email-center">
+          <EmailCenterPanel status={data.emailStatus} />
+        </div>
         <div id="sports-os">
           <SportsOperatingSystemPanel audit={data.sportsOperatingSystem} />
         </div>
@@ -1605,23 +1762,34 @@ export default async function AdminPage({
         </AccordionSection>
 
         <section id="user-search" className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.75fr)]">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">User Search</h2>
-                <p className="mt-1 text-xs text-white/45">Masked email, subscription, token balance, and World Cup activity.</p>
-              </div>
-              <form action="/admin" className="flex min-w-0 gap-2">
-                <input
-                  name="q"
-                  defaultValue={q}
-                  placeholder="Search username or email"
-                  className="min-h-11 min-w-0 rounded-2xl border border-white/10 bg-black/35 px-4 text-sm font-semibold text-white outline-none placeholder:text-white/35 focus:border-cyan-300/60"
-                />
-                <button className="min-h-11 rounded-2xl bg-cyan-300 px-4 text-sm font-black text-black">
+          {/*
+            29a §5 — "Find a user". The handoff draws the search as a compact
+            190px field in the card header rather than a full-width bar; the
+            form stays a real GET to /admin so search keeps working without JS.
+          */}
+          <div className="af-cc-card">
+            <div className="af-cc-card-head">
+              <div className="af-cc-card-title">Find a user</div>
+              <form action="/admin" className="flex min-w-0 items-center gap-2">
+                <label className="af-cc-search">
+                  <span className="af-cc-search-ring" aria-hidden="true" />
+                  <input
+                    name="q"
+                    defaultValue={q}
+                    placeholder="email or username"
+                    aria-label="Search users by email or username"
+                    className="af-cc-search-input"
+                  />
+                </label>
+                <button className="af-cc-tab af-cc-tab--on" style={{ cursor: "pointer" }}>
                   Search
                 </button>
               </form>
+            </div>
+            <div style={{ padding: "10px 16px 0" }}>
+              <p className="af-cc-cell-sub">
+                Masked email, subscription, token balance, and World Cup activity.
+              </p>
             </div>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[860px] text-left text-sm">
