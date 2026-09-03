@@ -30,6 +30,9 @@ function assertions(over: Partial<ImportAssertions> = {}): ImportAssertions {
     managerIdentityCoverage: 1,
     managersMapped: 12,
     managersTotal: 12,
+    playerIdentityCoverage: 1,
+    playersResolved: 200,
+    playersTotal: 200,
     ...over,
   }
 }
@@ -107,6 +110,50 @@ describe('isConclusive — per fact, not per league', () => {
     })
     // Market values are global. No import assertion can bear on them, however broken the league is.
     expect(isConclusiveFor('globalPlayerValue', wrecked, NOW).ok).toBe(true)
+  })
+
+  it('🛑 R4 — blocks a lineup decision when player identity resolution is near zero, the measured trap', () => {
+    // The trap this exists for: a roster where every player came back as
+    // { playerId: '6804', name: '6804' } and still graded itself conclusive: ok.
+    const unresolved = assertions({ playerIdentityCoverage: 0, playersResolved: 0, playersTotal: 27 })
+    const v = isConclusiveFor('lineupDecision', unresolved, NOW)
+    expect(v.ok).toBe(false)
+    if (v.ok) return
+    const identityBlockers = v.blockedBy.filter((b) => b.assertion === 'identity')
+    expect(identityBlockers.some((b) => /27.*do not resolve/i.test(b.detail))).toBe(true)
+  })
+
+  it('does NOT block a lineup decision at a normal, measured resolution rate (~61% NFL is healthy, not a defect)', () => {
+    // minIdentityResolution is 0.15 precisely so the ordinary case sails through — see the
+    // field's own comment for the 2026-09-03 measurement this threshold is anchored to.
+    const normal = assertions({ playerIdentityCoverage: 0.61, playersResolved: 178, playersTotal: 292 })
+    expect(isConclusiveFor('lineupDecision', normal, NOW).ok).toBe(true)
+  })
+
+  it('a null playerIdentityCoverage (no id-space for this provider) never blocks — cannot measure ≠ measured bad', () => {
+    const unmappedProvider = assertions({ playerIdentityCoverage: null, playersResolved: 0, playersTotal: 0 })
+    expect(isConclusiveFor('lineupDecision', unmappedProvider, NOW).ok).toBe(true)
+  })
+
+  it('a fact with no minIdentityResolution (e.g. standings) is never blocked by player identity, however bad', () => {
+    const catastrophic = assertions({ playerIdentityCoverage: 0, playersResolved: 0, playersTotal: 27 })
+    expect(isConclusiveFor('standings', catastrophic, NOW).ok).toBe(true)
+  })
+
+  it('player-identity and manager-identity blockers are DISTINGUISHABLE, not conflated under one detail', () => {
+    // Both failures share assertion: 'identity' by design (see the field's own comment on why),
+    // so the only thing separating "wrong reason" from "right reason" is the detail text.
+    const bothBroken = assertions({
+      managerIdentityCoverage: 0, managersMapped: 0, managersTotal: 12,
+      playerIdentityCoverage: 0, playersResolved: 0, playersTotal: 150,
+    })
+    const v = isConclusiveFor('lineupDecision', bothBroken, NOW)
+    expect(v.ok).toBe(false)
+    if (v.ok) return
+    const identityBlockers = v.blockedBy.filter((b) => b.assertion === 'identity')
+    expect(identityBlockers).toHaveLength(2)
+    expect(identityBlockers.some((b) => /owner we cannot match/i.test(b.detail))).toBe(true)
+    expect(identityBlockers.some((b) => /do not resolve to a known player/i.test(b.detail))).toBe(true)
   })
 
   it('reports an incomplete scope even when the league is otherwise fresh', () => {

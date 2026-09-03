@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import { lookupProjections } from './playerProjections'
+import { buildRosterIdMap } from './rosterIdMatch'
 
 /**
  * Every game in the league this week, not just yours.
@@ -177,7 +178,13 @@ export async function getLeagueScoreboard(args: {
     })
     .catch(() => [])
 
-  const teamBy = new Map(teams.map((t) => [t.externalId, t]))
+  /*
+   * `buildRosterIdMap`, not a raw `new Map(teams.map(...))` — MFL's zero-padded
+   * franchise ids ("0001") lose their leading zeros the moment they are written
+   * into `WeeklyMatchup.rosterId` (an Int column), so a lookup keyed only on the
+   * raw `externalId` string never matches an MFL team again. See rosterIdMatch.ts.
+   */
+  const teamBy = buildRosterIdMap(teams, (t) => t.externalId)
 
   const rosters = await prisma.roster
     .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })

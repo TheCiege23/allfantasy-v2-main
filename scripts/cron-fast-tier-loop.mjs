@@ -208,14 +208,84 @@ export function intervalMsForSchedule(schedule) {
 }
 
 /**
- * Next wall-clock boundary at or after `now` for a given interval.
+ * Next wall-clock boundary at or after `now` for a given interval, optionally shifted by a fixed
+ * `phaseMs` within that interval.
  *
- * Aligned to the epoch rather than to process start, so a job keeps the same slots a real cron
- * would use and two overlapping runs of this workflow choose the SAME instants instead of
- * interleaving into double the intended rate.
+ * `phaseMs` defaults to 0, which reproduces the original formula exactly -- every existing caller
+ * that does not pass a phase keeps its prior behaviour unchanged.
+ *
+ * Aligned to the epoch (offset by phaseMs) rather than to process start, so a job keeps the same
+ * slots a real cron would use and two overlapping runs of this workflow choose the SAME instants
+ * instead of interleaving into double the intended rate.
  */
-export function nextBoundary(now, intervalMs) {
-  return Math.ceil((now + 1) / intervalMs) * intervalMs
+export function nextBoundary(now, intervalMs, phaseMs = 0) {
+  return phaseMs + Math.ceil((now + 1 - phaseMs) / intervalMs) * intervalMs
+}
+
+/**
+ * Spreads jobs that SHARE A CADENCE across their own period, so they do not all become due in the
+ * same scheduler tick forever.
+ *
+ * 🛑 WHY THIS EXISTS. `nextBoundary` aligns every job to the epoch, so two jobs declaring the same
+ * every-30-minutes cadence land on the EXACT SAME instant, unconditionally, by construction --
+ * there was no phase concept before this. MEASURED IN PRODUCTION 2026-09-03: five every-30-minute
+ * jobs -- fantasy-os-exec-sync, domain-os-refresh, import-injuries, draft-pool-prewarm,
+ * trade-grade-notify -- all became due in the same tick TWICE, 14:32:08Z and 15:02:05Z, 29m57s
+ * apart (as close to exactly
+ * half an hour as clock resolution shows), with no deploy running either time. Confirmed against
+ * two different deployments independently: one had a build in progress and the collision still
+ * happened; a different build's entire window was clean with no collision nearby. Not deploy-
+ * correlated -- a scheduling collision, recurring on the crons' own cadence.
+ *
+ * The adaptive concurrency backoff (effectiveConcurrency, see above) could not see this coming.
+ * It reacts to RECENT call latency, and the sample window right before each collision was full of
+ * fast every-minute-job durations -- there is no history for a job before its first call, so all
+ * five were admitted while the pool still looked healthy. At least two of them are independently
+ * slow enough that this was never survivable once admitted together: domain-os-refresh measures
+ * p99 430s and trade-grade-notify measures p99 359s, BOTH already over their own 300s maxDuration
+ * running alone. Five genuinely slow jobs on one event loop is what produced the site-wide 499s
+ * (root, health, even unrelated fast-tier jobs caught in the same starved tick) both times.
+ *
+ * ⚠ EVERY-MINUTE JOBS ARE DELIBERATELY LEFT AT PHASE 0, UNTOUCHED. They have collided with each
+ * other at every tick since this loop existed, and that collision has never been the problem --
+ * each is individually cheap, and the concurrency pool already handles a burst of fast jobs fine
+ * (that is the case STARTUP_STAGGER_MS and effectiveConcurrency's earned-capacity model already
+ * protect). Only intervals longer than a minute are spread, because sparser cadences are where an
+ * UNTESTED, RARE collision of individually-heavy jobs can occur -- which is exactly what happened.
+ *
+ * ⚠ EVENLY SPACED BY DIVISION, NOT HASHED. A hash of the job path would usually spread jobs apart
+ * but could still land two within the same tick by chance, silently reproducing the exact defect
+ * this exists to fix -- the fast-tier loop already exists because "usually fine" scheduling put
+ * this repo through more than one production incident tonight. Dividing the interval into
+ * `groupSize` equal slices guarantees a minimum separation for every pair in the group; nothing
+ * here depends on luck.
+ *
+ * Mutates `job.phaseMs` on each element of `jobs` in place (default 0, matching `nextBoundary`'s
+ * own default), so a caller that never calls this function keeps every job at phase 0 -- the
+ * original behaviour.
+ */
+export function assignPhases(jobs) {
+  for (const j of jobs) if (j.phaseMs == null) j.phaseMs = 0
+
+  const groups = new Map()
+  for (const j of jobs) {
+    if (j.intervalMs <= 60_000) continue // every-minute jobs: untouched, phase stays 0
+    if (!groups.has(j.intervalMs)) groups.set(j.intervalMs, [])
+    groups.get(j.intervalMs).push(j)
+  }
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue // nothing to spread a single job apart from
+    // Sorted by path so the assignment is deterministic across restarts and across every session
+    // that runs this loop -- the same property `nextBoundary`'s epoch alignment already relies on.
+    group.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    const slice = Math.floor(group[0].intervalMs / group.length)
+    group.forEach((j, i) => {
+      j.phaseMs = i * slice
+    })
+  }
+
+  return jobs
 }
 
 /**
@@ -431,6 +501,7 @@ async function main() {
       // An explicit --timeout still wins, for smoke tests; otherwise each job gets its own.
       timeoutMs: args.timeoutMs === DEFAULT_TIMEOUT_MS ? timeoutForJob(maxDurationMs) : args.timeoutMs,
       maxDurationMs,
+      phaseMs: 0, // overwritten below for any cadence shared by more than one job
     })
   }
 
@@ -439,12 +510,15 @@ async function main() {
     return 0
   }
 
+  assignPhases(jobs)
+
   console.log(`Fast-tier loop: ${jobs.length} job(s), window ${args.windowMinutes}m`)
   for (const j of jobs) {
     const budget = j.maxDurationMs == null ? 'no maxDuration' : `maxDuration ${j.maxDurationMs / 1000}s`
+    const phase = j.phaseMs > 0 ? ` +${j.phaseMs / 1000}s phase` : ''
     console.log(
       `  ${j.schedule.padEnd(14)} every ${String(j.intervalMs / 1000).padStart(4)}s` +
-        `  timeout ${String(j.timeoutMs / 1000).padStart(3)}s (${budget})  ${j.path}`,
+        `  timeout ${String(j.timeoutMs / 1000).padStart(3)}s (${budget})${phase}  ${j.path}`,
     )
   }
   if (excluded?.length) console.log(`  (${excluded.length} cron(s) excluded by cron-tier.mjs — not handled here)`)
@@ -536,7 +610,7 @@ async function main() {
       if (inFlight.has(job.path)) {
         // Still running from last time. Skip this slot; do not queue.
         stats.get(job.path).skipped += 1
-        nextDueAt.set(job.path, nextBoundary(now, job.intervalMs))
+        nextDueAt.set(job.path, nextBoundary(now, job.intervalMs, job.phaseMs))
         continue
       }
       due.push({ ...job, dueAt })
@@ -556,7 +630,7 @@ async function main() {
       // tick, so a job that has been waiting longest keeps climbing rather than losing its place.
       if (concurrency >= capNow) break
       fire(job)
-      nextDueAt.set(job.path, nextBoundary(now, job.intervalMs))
+      nextDueAt.set(job.path, nextBoundary(now, job.intervalMs, job.phaseMs))
     }
 
     if (args.once) break

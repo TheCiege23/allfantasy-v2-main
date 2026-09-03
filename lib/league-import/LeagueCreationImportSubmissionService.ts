@@ -46,11 +46,29 @@ export interface SubmitImportResult {
   status?: number;
   requiresAttestation?: boolean;
   /**
+   * The server's own classification of a failure — 'LEAGUE_NOT_FOUND',
+   * 'PROVIDER_UNAVAILABLE', 'ATTESTATION_REQUIRED', 'NOT_COMMISSIONER',
+   * 'UNAUTHORIZED', 'CONNECTION_REQUIRED' — from `mapImportCommitErrorStatus` /
+   * `mapGateFailureStatus` in the commit route. Read THIS, not `status`, to decide
+   * what a failure means: `status` is the HTTP number (429 today; may be 503 for a
+   * provider 5xx), and re-deriving "which numbers mean provider-unavailable" on the
+   * client would be a second copy of a rule the server already owns — exactly the
+   * two-implementations-of-one-rule shape this repo has been bitten by before.
+   */
+  code?: string;
+  /**
    * True when the commit was an idempotent replay — the league was already
    * imported and nothing was written. Distinct from `ok: false, status: 409`,
    * which only fires for a league that has never completed an import run.
    */
   existed?: boolean;
+  /**
+   * True when this request attached the caller to a league ANOTHER account already
+   * imported, rather than creating a new one. See `claimExistingLeagueForMember` in
+   * ImportedLeagueCommitService. Distinct from `existed`, which means THIS account
+   * already ran this exact import.
+   */
+  joinedExisting?: boolean;
 }
 
 export interface DiscoverProviderLeaguesResult {
@@ -213,6 +231,7 @@ export async function submitImportCreation(
         error: getImportApiErrorMessage(data, 'Failed to create league'),
         status: res.status,
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean })?.requiresAttestation),
+        code: (data as { code?: string })?.code,
       };
     }
     /*
@@ -220,7 +239,12 @@ export async function submitImportCreation(
      * route 200s for both — see its own note — so without this the bulk importer
      * reports "Imported" for leagues where nothing happened.
      */
-    return { ok: true, data, existed: Boolean((data as { existed?: boolean })?.existed) };
+    return {
+      ok: true,
+      data,
+      existed: Boolean((data as { existed?: boolean })?.existed),
+      joinedExisting: Boolean((data as { joinedExisting?: boolean })?.joinedExisting),
+    };
   } catch (e) {
     const message = importRequestErrorMessage(e);
     return { ok: false, error: message };

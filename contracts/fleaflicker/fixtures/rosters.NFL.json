@@ -1,0 +1,39 @@
+{
+  "rosters": [
+    {
+      "team": {
+        "id": 1840747,
+        "name": "Jetz",
+        "recordOverall": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "formatted": "0-0"
+        },
+        "recordDivision": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "formatted": "0-0"
+        },
+        "recordPostseason": {
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "formatted": "0-0"
+        },
+        "pointsFor": {
+          "formatted": "0"
+        },
+        "pointsAgainst": {
+          "formatted": "0"
+        },
+        "streak": {
+          "formatted": "-"
+        },
+        "draftPosition": 2,
+        "initials": "J"
+      }
+    }
+  ]
+}

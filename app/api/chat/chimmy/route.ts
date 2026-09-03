@@ -133,6 +133,7 @@ import {
   classifyChimmyIntent,
   parseOrchestrationResponseSections,
 } from '@/lib/chimmy-orchestration'
+import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
 
 type ConversationTurn = {
   role: 'user' | 'assistant'
@@ -1670,6 +1671,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ),
     ])
 
+  /*
+   * ⚠ THE INTENT ROUTER GAP — R2/R3.1/R3.3/R4b.5's opt-in slices were built, tested, wired into
+   * the packet, and never requested here. `want` below was hardcoded to four always-on flags;
+   * nothing decided, per question, whether a lineup/commissioner-health/psychology-consistency/
+   * roster-value read was worth its cost. This is the fix: a SECOND, early call to the intent
+   * classifier already used later in this route (line ~1789, with full conversation history) —
+   * using only `message`, which is available this early, rather than reordering existing working
+   * code to share one call. `classifyChimmyIntent` is pure and synchronous (regex matching, no
+   * I/O), so calling it twice costs microseconds, not a second network hop. The intent -> want
+   * mapping itself lives in `lib/decision-os/grounding/intentToWant.ts` — see its own header for
+   * why only four of the seven opt-in slices are mapped.
+   */
+  const earlyWant = deriveWantFromIntent(classifyChimmyIntent(message).intent)
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
@@ -1699,6 +1713,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             devy: normalizeToSupportedSport(sport) === 'NCAAF',
             projections: true,
             leagueRules: true,
+            // The intent router's four low-risk mappings — see the comment above this block.
+            ...earlyWant,
           },
         })
           .then((packet) => {

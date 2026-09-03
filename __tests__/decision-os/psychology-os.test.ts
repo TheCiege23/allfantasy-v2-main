@@ -2,10 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-const { listProfilesByLeague } = vi.hoisted(() => ({ listProfilesByLeague: vi.fn() }))
+const { listProfilesByLeague, readLeagueTrajectories, summariseTrajectory } = vi.hoisted(() => ({
+  listProfilesByLeague: vi.fn(),
+  readLeagueTrajectories: vi.fn(),
+  summariseTrajectory: vi.fn(),
+}))
 vi.mock('@/lib/psychological-profiles/ManagerBehaviorQueryService', () => ({ listProfilesByLeague }))
+vi.mock('@/lib/psychological-profiles/ProfileSeasonSnapshot', () => ({ readLeagueTrajectories, summariseTrajectory }))
 
 import { psychologyProfileSource, createPsychologyOsLoaders } from '@/lib/decision-os/psychology-os'
+
+const NO_TRAJECTORY = { hasTrajectory: false, summary: 'No season history has been recorded for this manager yet.', seasonsRecorded: 0 }
 import { OS_SCOPE_LEVELS, HOURS } from '@/lib/decision-os/domain-os/types'
 
 /**
@@ -57,7 +64,11 @@ const view = (over: Record<string, unknown> = {}) => ({
 })
 
 describe('Psychology OS — the feed', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readLeagueTrajectories.mockResolvedValue(new Map())
+    summariseTrajectory.mockReturnValue(NO_TRAJECTORY)
+  })
 
   it('is LEAGUE level, keyed on the league alone, so the refresh cron can warm it', () => {
     // The three-part rule 1.1b had to retrofit onto Waiver OS and Trade OS: a source is only
@@ -117,6 +128,33 @@ describe('Psychology OS — the feed', () => {
       { managerId: 'm1', evidenceCount: 1, anySufficient: false } as never,
     ])
     expect(m?.confidence).toBeNull()
+  })
+
+  /**
+   * ── R4b.5 — trajectory joins the feed, ONE query for the whole league ──────────────────────
+   * `psychology-os/index.ts`'s own header used to say "IT DOES NOT CARRY A TRAJECTORY YET" —
+   * these tests pin that it now does, and that the batching (readLeagueTrajectories once, not
+   * readManagerTrajectory per row) is real, not just documented.
+   */
+  it('🛑 fetches trajectories ONCE for the whole league, not once per manager', async () => {
+    listProfilesByLeague.mockResolvedValue([view({ managerId: 'm1' }), view({ managerId: 'm2' })])
+    await psychologyProfileSource.derive({ leagueId: 'L1', sport: 'NFL' })
+    expect(readLeagueTrajectories).toHaveBeenCalledTimes(1)
+    expect(readLeagueTrajectories).toHaveBeenCalledWith('L1')
+  })
+
+  it('attaches each manager\'s OWN trajectory, not the same one to everybody', async () => {
+    listProfilesByLeague.mockResolvedValue([view({ managerId: 'm1' }), view({ managerId: 'm2' })])
+    const m1Points = [{ season: 2026, labels: [], aggressionScore: null, sampleSize: 1, confidence: 0.5 }]
+    readLeagueTrajectories.mockResolvedValue(new Map([['m1', m1Points]]))
+    summariseTrajectory.mockImplementation((points: unknown[]) =>
+      points.length > 0 ? { hasTrajectory: true, summary: 'm1 has history', seasonsRecorded: 1 } : NO_TRAJECTORY,
+    )
+    const out = await psychologyProfileSource.derive({ leagueId: 'L1', sport: 'NFL' })
+    expect(out?.find((f) => f.managerId === 'm1')?.trajectory.hasTrajectory).toBe(true)
+    expect(out?.find((f) => f.managerId === 'm2')?.trajectory.hasTrajectory).toBe(false)
+    // The manager with no rows in the map gets an empty array, not undefined passed to the summariser.
+    expect(summariseTrajectory).toHaveBeenCalledWith([])
   })
 
   it('exposes a read-through loader', () => {

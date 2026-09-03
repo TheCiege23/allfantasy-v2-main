@@ -104,6 +104,9 @@ export async function persistImportWithCanonicalAudit(input: {
           league: { id: league.id, name: league.name ?? '', sport: String(league.sport) },
           historicalBackfill: null,
           existed: true,
+          /* This is the SAME account's own prior run, short-circuited by idempotency key —
+             not the cross-account join `claimExistingLeagueForMember` performs. */
+          joinedExisting: false,
           /* Nothing ran, so nothing can be incomplete. Distinct from "every step succeeded"
              only in that `skipped: true` accompanies it — see this function's own note. */
           incompleteSteps: [],

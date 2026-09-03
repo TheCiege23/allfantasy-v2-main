@@ -166,6 +166,725 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.28 THE INTENT ROUTER — R2/R3.1/R3.3/R4b.5's OPT-IN SLICES NOW GET ASKED FOR
+
+**2026-09-03.** Closes the gap §0.26 found: the live chat route hardcoded
+`want` to four always-on flags, so `lineupDecision`/`commissionerHealthDecision`
+(R2), `idpKicker` (R3.1), `rosterValueGrade` (R3.3) and `psychologyConsistency`
+(R4b.5) — all built, tested, wired into the packet — never reached a real
+chat turn.
+
+### Reused, not built: two intent classifiers already exist, one already runs in this exact route
+
+`lib/chimmy-context/intent/IntentClassifier.ts` and `lib/chimmy-orchestration/
+intent-classifier.ts` both export a function named `classifyChimmyIntent`,
+with different vocabularies, for different purposes. Census: the
+`chimmy-context` one has **zero real callers** anywhere in the tree. The
+`chimmy-orchestration` one is **already called inside
+`app/api/chat/chimmy/route.ts`** (line ~1789, for labelling the turn for
+orchestration — an unrelated, pre-existing purpose) and its vocabulary
+already includes `manager_psychology` and `player_value`, which the other
+classifier's does not.
+
+🛑 **THAT CALL HAPPENS AFTER THE PACKET IS ALREADY BUILT** (line ~1675 vs.
+~1789), and reordering a 1800-line live route to share one call was more risk
+than the fix needed. Solution: a SECOND, EARLY call to the same pure,
+synchronous, no-I/O function, using only `message` — available since line
+640 — rather than the fuller `recentUserSnippet` the later call also has.
+Calling a regex-matching function twice costs microseconds; reordering
+working code in a route this size does not need to be risked for that.
+
+### One pure function, not inline conditionals in the route
+
+`lib/decision-os/grounding/intentToWant.ts` — `deriveWantFromIntent(intent)`
+— maps FOUR of the fourteen possible intents to the four low-risk opt-in
+flags:
+
+| Intent | Flag |
+|---|---|
+| `start_sit` | `lineupDecision` |
+| `commissioner` | `commissionerHealthDecision` |
+| `manager_psychology` | `psychologyConsistency` |
+| `player_value` | `rosterValueGrade` |
+
+⚠ **NOT SEVEN.** `waiver` maps to nothing — `waiverDecision` has no producer
+anywhere in `packet.ts` (a type field only, matching R2.6's own "documented,
+not wired" note for waiver alongside trade). `idpKicker` is deliberately
+excluded despite being a real, wired producer: its own doc comment names it
+"the one slice that cannot join the concurrent wave" — a serialized second
+hop with its own cost profile — and turning it on for every player_value
+question is a real latency decision needing its own measurement, not a rider
+on this fix.
+
+Extracted as its OWN pure function (no packet/route knowledge, just intent
+in, four booleans out) specifically so it is unit-testable without mocking a
+1800-line route handler — the route itself now does one thing:
+`deriveWantFromIntent(classifyChimmyIntent(message).intent)`, spread into
+the existing `want` object.
+
+7 tests. One thing mutation-verified: swapping the `start_sit` mapping to
+`waiver` fails exactly the two tests that check either intent's mapping,
+none of the other five — including a structural guard asserting every
+intent maps to at most one true flag, so a future accidental OR of two
+conditions would be caught even without a test naming that exact pair.
+
+## 0.27 R4b.7 — FRAMING ONLY, AND ALL OF R4b IS NOW DONE
+
+**2026-09-03.** P4: "Explanation and framing only. The deterministic engine's
+recommendation is never changed by a behavioural inference." Two additions,
+both conditional instructions rather than data plumbing — there is nothing to
+join, since a decision and a psychology fact are already independent slices
+in the same context by the time either reaches a prompt.
+
+### One general rule, not one per engine
+
+`serializeDecisionOsGroundingForPrompt` gains a single instruction, appended
+only when a decision (`lineupDecision`/`waiverDecision`/
+`commissionerHealthDecision`) AND `managerPsychology` are BOTH present:
+psychology may explain a decision, never re-argue it. 🛑 **Deliberately ONE
+rule at the one place every decision and every psychology fact are already
+combined, not wired per-engine.** `decisionBridge.ts`'s own header already
+forbids touching the four live engines ("if a change here appears to need an
+engine change, that is the signal to stop and re-scope"); a rule stated once
+here covers all three today and whatever is bridged next without editing any
+of them. Conditional, not standing — mutation-verified in both directions:
+forced off fails exactly the one test asserting it appears; forced always-on
+fails exactly the two tests asserting it does NOT pad an irrelevant prompt.
+
+`pendingTradeDecisionGrounding.ts` gets the same policy restated in its own
+existing RULES line, because — stated in its own file header — that block is
+composed into the chat prompt SEPARATELY from the packet. A rule in one
+surface does not reach a turn built from the other.
+
+### ⚠ Correct, and immediately inert, for two independent reasons
+
+Same honesty this session has applied to every finding today: neither
+surface this connects psychology to currently fires with real data for a
+real user.
+
+- The packet's three decision slices are `want`-gated off in the one live
+  chat route (§0.26's finding) — R2's own recommendations don't reach a
+  prompt today, so there is nothing for this instruction to attach to there
+  yet.
+- `pendingTradeDecisionGrounding.ts` DOES reach the live route unconditionally
+  — but its data source, `redraft_trade_proposals`, has zero rows in
+  production (§0.23's R3.3 finding — real trades happen on Sleeper, not
+  through this app's native trade builder).
+
+Built anyway, for the same reason R3.3/R4b.5's opt-in slices were: correct
+now means nothing to rebuild later, once either gap above is closed by
+whoever scopes that separately.
+
+### 🛑 A third, more severe gap found investigating this one — fixed same session, not deferred
+
+Checking where `rosterValueGrade`/`psychologyConsistency` would need to sit
+alongside a decision for R4b.7 to matter at all surfaced that
+`serializeDecisionOsGroundingForPrompt` has its OWN local `slices` array,
+separate from `packet.ts`'s array of the same name that feeds `packet.gaps`.
+`idpKickerValues` (R3.1), `rosterValueGrade` (R3.3) and
+`psychologyConsistency` (R4b.5) were never added to THIS one — so a present
+reading with real data silently never rendered, while an absent one
+correctly showed up as a gap. Backwards, unnoticed by three separate rounds
+of mutation-verified producer tests (each tested its own producer in
+isolation, never a full packet through this exact function), and — unlike
+everything else recorded as "found, not fixed" today — **fixed immediately
+and shipped as its own standalone commit**, because R3.3 was already live on
+`main` at the time this was found, making it a real production gap rather
+than queued work. See the commit itself
+(`fix(decision-os): three slices never reached the prompt, only their gaps
+did`) for the full account; not duplicated here.
+
+24 tests across two files. Two things mutation-verified (in addition to the
+serializer fix's own control): the conditional framing instruction in both
+directions, and the trade-grounding rule addition (reverting it fails
+exactly the one test that checks for it).
+
+## 0.31 🛑 87% OF THE PORTFOLIO WAS NEVER ENUMERATED — `take: 25` ON A FIXED SORT
+
+**2026-09-03.** The real cause behind §0.30, found by asking why a league 39 hours stale was
+not "due". It was due. It was never **asked about**.
+
+### Measured
+
+`app/api/cron/fantasy-os-exec-sync` defaults to `limit = 25` **per provider**, and
+`enumerateConnectedLeagues` applied that as `take: 25` **inside the Prisma query**, under a
+fixed `[season desc, platform asc, platformLeagueId asc]` sort. Same 25 rows, every tick,
+forever:
+
+| enumeration band | leagues | synced in 24 h |
+|---|---|---|
+| first 25 by that sort | 25 | **25 — 100%** |
+| rank 26+ | 170 | **2 — 1.2%** |
+
+The two in the tail are manual refreshes, which bypass enumeration entirely.
+
+🛑 **THE OLD COMMENT ON THAT `orderBy` NAMED THIS EXACT FAILURE AND ASSERTED IT COULD NOT
+HAPPEN** — *"a fixed order would refresh the head of the list forever and never reach the
+tail … The cadence check is what rotates the portfolio."* It cannot. `take` runs in the
+DATABASE, so the per-league cadence check only ever saw the already-truncated 25: it could
+skip members of a fixed set, never change the set. Meanwhile the heartbeat reported a
+healthy 25/25 every tick — a green check measuring a fifth of the thing it claimed to
+cover.
+
+### Fixed — a reorder, not a bigger batch
+
+`take` is gone from the query; `selectStalestFirst` picks the batch **after** enumeration:
+never-attempted leagues first, then oldest `lastAttemptedSyncAt`, ties broken by the old
+stable order so the result stays deterministic.
+
+⚠ **PROVIDER LOAD IS UNCHANGED.** The same `limit` leagues are fetched per tick — they are
+simply the ones that need it. A ~195-league portfolio now cycles completely in ~8 ticks
+instead of never reaching league 26. Raising `limit` is a separate decision this does not
+require.
+
+Two deliberate choices, both recorded in the code:
+
+- **Orders on `lastAttemptedSyncAt`, never `lastSuccessfulSyncAt`.** Ordering by success
+  would pin a permanently failing league to the head of every tick forever — the same
+  starvation with a different victim. Attempt time advances whether or not the sync
+  succeeds, so a failing league yields its slot after one try.
+- **Never consults `syncStatus`.** A league in `partial`/`failed` is precisely the one that
+  most needs re-attempting.
+
+10 tests, mutation-verified: bypassing the sort (slice in base order = the old behaviour)
+fails exactly the 5 ordering tests — including "the whole portfolio is reachable across
+successive ticks", which is the 87% bug stated directly — while limit-capping, the two
+unbounded paths, dedup and tie-stability correctly keep passing.
+
+⚠ The bounded path costs one extra indexed `leagueSyncState.findMany`. The unbounded path
+and the case where the portfolio already fits inside `limit` short-circuit before it, so
+existing callers issue no additional query.
+
+## 0.30 🛑 BUG-2 IS OVER. THE DAMAGE IS NOT — 37 LEAGUES HAVE BEEN FROZEN FOR 39 HOURS
+
+**2026-09-03, measured read-only against production.** §0.18 calls BUG-2 *"LIVE and
+ongoing since 05:00 2026-09-02"*. It is not live. It was a **17-minute incident**, and
+what it left behind is a different and still-open bug.
+
+### The incident is closed
+
+```
+first read-only error   2026-09-02 05:00:21
+last  read-only error   2026-09-02 05:17:47      <- 17m 26s, and nothing since
+newest sync row         2026-09-03 20:14:43      <- the collector is running normally
+```
+
+Zero read-only failures in the ~39 hours since. §0.18's "46 of 184" now reads 35.
+
+⚠ **READ TIMESTAMPS AS TEXT WHEN MEASURING THIS TABLE.** `scripts/db-readonly-probe.mjs`
+serializes a timestamp through a JS `Date`, and this machine is EDT, so every ISO string
+it prints is **+4 hours**. That is how a first read of this data put the incident at
+09:00 and made the newest row look 3.5 hours in the FUTURE. `to_char(...)` removes it and
+restores agreement with §0.18's 05:00 onset. Aggregates computed in SQL
+(`now() - "updatedAt"`) were never affected — only the displayed strings.
+
+### What is still broken: a league that fails once is never retried
+
+| `syncStatus` | rows | synced in last 24h |
+|---|---|---|
+| `completed` | 144 | 27 |
+| `partial` | 33 | **0** |
+| `failed` | 4 | **0** |
+
+**Not one league in `partial` or `failed` has been re-attempted** — in either half of the
+enumeration order, with `consecutiveFailures = 1` and `lastAttemptedSyncAt` frozen at
+`2026-09-02 05:01`. At the documented 30-minute cadence that is roughly **78 consecutive
+missed opportunities**, so it is a rule, not a coincidence.
+
+⚠ **THE ROOT CAUSE NAMED BELOW IS SUPERSEDED BY §0.31, AND THE CORRECTION MATTERS.** This
+section reads the correlation as "a failed league is never retried" — status-gated. It is
+not. `syncConnectedLeague` never consults `syncStatus` at all; it compares
+`lastAttemptedSyncAt` against the cadence, and 39 hours is due under any cadence. The 37
+frozen leagues were simply never **enumerated**: they sit past the `take: 25` cutoff, which
+is a portfolio-wide starvation affecting **170 leagues**, not a retry rule affecting 37.
+`syncStatus` correlated only because the incident struck leagues that were already in the
+starved tail.
+
+Ruled out by measurement, not by reasoning:
+
+| hypothesis | verdict |
+|---|---|
+| Orphaned sync rows (no League to enumerate) | ❌ **0 orphaned** — all 35 join to a live League row |
+| Enumeration order starvation (`take` on a fixed sort) | ❌ the stuck ids **interleave** the healthy range; the 27 synced span ranks 1–109 of 181 |
+| Season-state gating | ❌ **every** league is `preseason` — uniform, explains nothing |
+| A wedged lock | ❌ all 20 lock rows are **expired**, and the lock steals expired leases |
+
+The discriminator is `syncStatus` and nothing else.
+
+### 🆕 20 orphaned lock rows, and they date the incident exactly
+
+`automation_locks` holds **20 rows, all sleeper, all expired, none cleaned up in 39
+hours** — `createdAt` **09-02 05:00**, the incident minute; newest expiry 05:23. The
+release path never ran, which is what a read-only transaction rejecting the DELETE looks
+like. They are harmless (expired leases are stolen) but they are a permanent fingerprint
+of the incident and nothing prunes them.
+
+### 🛑 The product tells those users something false
+
+§0.18 already records that the serializer emits *"It retries automatically on the next
+sync; a manual refresh will also pick it up"*. The first clause is **not true** for a
+league in `partial` or `failed` — it has not retried in 39 hours and there is no evidence
+it ever will. `lib/fantasy-os/sync/collector/manualRefresh.ts` exists specifically to
+"bypass the cadence gate", so the second clause is the only working remedy.
+
+Either the scheduler should retry these or the message should stop promising it does.
+**Deliberately not fixed here:** changing retry semantics for 37 leagues at once is a
+provider-load decision (Sleeper rate limits) and an owner call, not a unilateral one.
+
+### What this changes
+
+- BUG-2 should be **re-triaged from "live, ongoing, top priority" to "closed incident,
+  open aftermath"**. The investigation §0.18 asks for — what deployed at 05:00 — is now
+  forensic rather than urgent.
+- The urgent item is the **retry gap**, which is not platform-specific and would freeze
+  leagues again after any future transient failure.
+- **20% of the imported portfolio is serving data frozen at 2026-09-02 04:01.**
+
+## 0.29 🛑 BUG-4 IS NOT A DYNASTY BUG — IT IS A KEEPER BUG, AND THE FILED PREMISE IS WRONG
+
+**2026-09-03.** BUG-4 reads *"`isDynasty` false on a league the owner says is dynasty …
+the import is not capturing dynasty status … dynasty/redraft pricing is untrustworthy
+until fixed."* Measured against production, **every clause of that is wrong except the
+observation that `isDynasty` is false.**
+
+### What the data says
+
+Sleeper's own payload for the league BUG-4 was filed against
+(`1335730625293844480`, *King Gingerbeards SF 2026!!!*):
+
+```
+settings.type      1      (0 = redraft, 1 = KEEPER, 2 = dynasty)
+max_keepers        2
+taxi_slots         0
+```
+
+**It is a keeper league, not a dynasty league.** `isDynasty: false` is the CORRECT value,
+and the import computed it correctly from `type === 2`.
+
+**Dynasty capture is not broken.** Across all 225 imported Sleeper leagues:
+
+| `leagueType` | rows | `isDynasty = true` |
+|---|---|---|
+| dynasty | 110 | **110** |
+| redraft | 100 | 0 |
+| guillotine | 12 | 0 |
+| zombie | 2 | 0 |
+| survivor | 1 | 0 |
+
+The two fields agree on **every single row**. There is no league with
+`leagueType='redraft'` and `isDynasty=true`.
+
+⚠ **THAT ALSO RETIRES A HAZARD `lib/league-runtime/leagueFormat.ts` DOCUMENTS IN ITS OWN
+HEADER**, which cites BUG-4 and warns that such leagues "resolve to `'redraft'` with
+`isDynasty` silently discarded". Zero rows are in that state. The comment describes a
+reachable code path, not an occurring one, and should say so.
+
+### The real defect, which nobody had filed
+
+**A keeper league is indistinguishable from a redraft league, end to end.**
+
+`settings.type` is the only signal that separates them, and it **reaches the database
+nowhere** — absent from the stored settings blob on **225/225** rows, because the blob is
+rebuilt from the import mapper's output rather than from Sleeper's raw payload.
+
+Consequence, and it is the G11 shape again: `isKeeper` in
+`lib/ai/leagueSportsGroundingPacket.ts` tested only
+`String(league.leagueType ?? "").includes("keeper")`. `leagueType` holds exactly the five
+values in the table above. **None contains "keeper", so `isKeeper` was false for 100% of
+leagues in production** — a flag that could never be true, reading a column that could
+never hold the value.
+
+🛑 **AND THE OBVIOUS FIX IS WRONG, WHICH IS WHY IT WAS MEASURED FIRST.** `max_keepers`
+looks like the natural signal. It is `>= 1` on **225/225** leagues — dynasty, guillotine
+and survivor included — as is the `League.keeperCount` column derived from it. Deriving
+keeper status from either would have marked **every league in the database** a keeper
+league. The check that killed it is in the test file as a permanent guard.
+
+### Fixed
+
+- `SleeperLeagueMapper` derives `is_keeper` from `type === 1` and emits it. It reaches the
+  settings blob for free: `buildImportedLeagueSettings` spreads `normalized.league`, which
+  is exactly how `isDynasty` already gets there.
+- `leagueSportsGroundingPacket` reads that flag, keeping the substring as a fallback so a
+  human-confirmed keeper type still resolves.
+- Writer and reader in ONE change, deliberately — a reader without its writer points a
+  surface at data nothing populates, which this repo already paid for once with
+  `ingestCFBDStats`.
+
+10 tests, both halves mutation-verified: dropping the mapper emission fails exactly the 5
+mapper tests; restoring the old substring-only reader fails exactly the 3 tests that
+depend on the new signal, and correctly leaves the other 2 passing.
+
+### Still open, and deliberately not fixed here
+
+- ⚠ **Three subsystems disagree on whether keeper counts as dynasty.** The replay framework
+  says YES (`type === 2 || type === 1`, in `ingestSleeperTradesForLeague`,
+  `lineupSleeperNormalizer`, `sleeperTradeNormalizer`); the import says NO; and
+  `sleeperCohortClient` / `app/api/league/transfer` treat it as its own third format. That
+  is one rule with three implementations and wants an owner decision, not a unilateral pick.
+- **`leagueType` is never written by any import path** — only by
+  `lib/career/leagueTypeConfirmation.ts` on human confirmation. Writing `'keeper'` there
+  from vendor data would change 100 production rows and is a data decision, not a code one.
+- 🆕 **BUG-3 undercounts: there are THREE duplicate rows for this league**
+  (`17739ade…`, `fcde8abf…`, `3d1b9554…`), not two.
+
+## 0.26 R4b.6 — CHIMMY NARRATES FROM THE FACTS, AND A SIGNIFICANT GAP FOUND ALONG THE WAY
+
+**2026-09-03.** P2's requirement — structured facts in, Chimmy narrates at
+ask-time, nothing stored — already had a complete, working implementation:
+`app/api/leagues/[leagueId]/psychological-profiles/explain/route.ts`. Built
+before today, unrelated to this session's work, and doing exactly what P2
+asks: a `deterministicPayload` of raw facts, an AI orchestration call with an
+explicit "stay deterministic-first" instruction, a fact-guard validation pass
+(`validateToolOutput`) that catches the model claiming something the payload
+doesn't contain, and a non-AI `fallbackNarrative` if the call fails. Fresh
+prose every request, nothing persisted.
+
+**What it did not know about: trajectory, cross-league, cross-sport** —
+because none of them existed until R4b.5, a few hours earlier today. R4b.6 is
+that route learning about them:
+
+- Trajectory (`readManagerTrajectory` + `summariseTrajectory`) is fetched for
+  ANY profile the caller can already see — not self-gated, matching
+  `psychology-os/index.ts`'s own reasoning that a manager's history reads the
+  same for every viewer.
+- Cross-league/cross-sport (`loadPsychologyConsistencySlice`, reused directly
+  rather than re-derived a third time) is fetched ONLY when the profile being
+  explained is the CALLER'S OWN. 🛑 **Deliberately a DIFFERENT gate from
+  `canSeeOpponents`** — `resolveProfileAccess`'s entitlement check answers "may
+  this caller READ this profile at all" (a subscription question); whether the
+  explanation may include the SUBJECT's cross-league/cross-sport data is a
+  separate question, and `loadPsychologyConsistencySlice` already restricts
+  that to the account it's called with, by design. Explaining a paid-for
+  opponent view therefore still never includes their cross-league reading —
+  mutation-verified: forcing `isSelf = true` unconditionally fails exactly the
+  one test asserting that gate, none of the other six.
+- Every new field is `null`, never a fabricated absence-as-negative, and the
+  model is explicitly told a null field means "not measured," not "no." Same
+  discipline P2/P4 already required of the existing fields.
+
+### 🛑 THE BIGGER FINDING: MOST OF WHAT R2/R3.3/R4b.5 BUILT NEVER REACHES THE LIVE CHAT ROUTE
+
+Investigating where `explain`'s narration fits alongside the AMBIENT chat path
+surfaced something bigger. `app/api/chat/chimmy/route.ts` — the one live
+chat route — calls `buildDecisionOsGroundingPacket` with a **hardcoded**
+`want: { values: true, devy: <NCAAF check>, projections: true, leagueRules:
+true }`. Every opt-in slice built this session is `want`-gated and defaults
+OFF:
+
+| Slice | Roadmap item | Reaches the live chat route? |
+|---|---|---|
+| `lineupDecision` | R2 | ❌ never — `want.lineupDecision` is never set |
+| `commissionerHealthDecision` | R2 | ❌ never |
+| `idpKicker` | R3.1 | ❌ never |
+| `rosterValueGrade` | R3.3 | ❌ never |
+| `psychologyConsistency` (cross-league/cross-sport) | R4b.5 | ❌ never |
+| `managerPsychology` (incl. trajectory) | R4b.4/R4b.5 | ✅ always — gated only by the kill switch, not `want` |
+| `savedAnalysis` | earlier | ❌ never |
+
+**Not a defect in any of those items individually** — each is correctly
+built, wired into the packet, and tested against what it claims to do. The
+gap is a layer none of them owned: nothing decides, per question, which
+opt-in slices a chat turn should ask for. This is the same shape as M4's own
+"intent router" milestone in `OS_FEED_STATE_2026-09-01.md` — genuinely a
+separate, larger piece of work (deciding from a user's question whether it's
+about a lineup, a trade, a roster weakness, a cross-league pattern), not
+something to fold into R4b.6 as a side effect.
+
+**Recorded here rather than fixed here.** Fixing it changes several already-
+"done" items' real-world status at once and deserves its own scoped pass, not
+a quiet patch riding on a psychology-narration commit. The `managerPsychology`
+row is why R4b.6 itself still works end-to-end despite this — trajectory
+rides the one feed that was never `want`-gated in the first place.
+
+7 tests, `__tests__/decision-os/psych-explain-route.test.ts` (new — the route
+had no test coverage at all before today). One thing mutation-verified: the
+self-only gate on cross-league/cross-sport, described above.
+
+## 0.25 R4b.5 — TRAJECTORY, CROSS-LEAGUE, CROSS-SPORT
+
+**2026-09-03.** Three reads (P1/P5/P7), and two of the three underlying engines
+already existed and had zero callers — the same shape as R3.3's trade-grade
+finding, twice in one day.
+
+### Trajectory (P1) — wired, not built
+
+`readManagerTrajectory` + `summariseTrajectory`
+(`lib/psychological-profiles/ProfileSeasonSnapshot.ts`) were fully built,
+carefully null-safe (R4b.3's lesson applied twice — once on write, once on
+read), and had exactly one real caller: their own module's doc comment. Added
+`readLeagueTrajectories(leagueId)` — one query for the whole league rather
+than N+1 per manager, sharing the exact row-mapping `readManagerTrajectory`
+already used (extracted to `toTrajectoryPoint` so the two cannot drift) — and
+called it from `psychologyProfileSource.derive()` in `psychology-os/index.ts`,
+attaching a `TrajectorySummary` to every `PsychologyProfileFact`.
+
+Trajectory is NOT viewer-scoped (a manager's history reads the same for
+everyone), so unlike cross-league/cross-sport below it belongs in the
+EXISTING 12h-cached league-level feed rather than a new uncached one.
+
+🛑 **THE SERIALIZER NEEDED ITS OWN EDIT, AND WOULD HAVE SILENTLY DROPPED IT
+OTHERWISE.** `renderItem()` already had a dedicated `PsychologyProfileFact`
+branch (labels, scores, evidence count) that simply never read `trajectory` —
+adding the field to the data does nothing on its own, which is G11 in
+miniature. Caught by writing the render test first rather than assuming;
+mutation-verified by disabling the new branch and confirming exactly the one
+test that asserts trajectory text fails, none of the others.
+
+### Cross-league, self only (P5) — reused whole
+
+`rollUpManagerAcrossLeagues` (`CrossLeagueRollup.ts`) already existed,
+already had one real caller (a REST handler), and already implements P5's
+exact policy — intersection-only, "self" free and "opponents" premium-gated,
+"one league is not a pattern." Nothing about it needed to change. What was
+missing was an AMBIENT, packet-level entry point for the free half: "how
+consistent am I, across every league I play." New
+`lib/decision-os/grounding/psychologyConsistencySlice.ts` resolves the
+caller's own `platformUserId` from ANY claimed team (not the current league
+specifically — a `platformUserId` is constant per platform account, so
+anchoring to one league's row would make a data gap on THAT row disable a
+read every other league could answer) and calls the existing rollup with
+itself as the subject.
+
+⚠ **DELIBERATELY NOT "OPPONENTS."** Grading another manager is a
+request-scoped, entitlement-gated question ("tell me about my rival") that
+the existing REST route already serves. Folding it into an ambient
+league-wide packet slice would mean resolving entitlement during packet
+assembly for a question nobody asked yet — scope creep past what P5 needs
+here.
+
+### Cross-sport, self only (P7) — the one genuinely new piece
+
+Nothing existed. New `lib/psychological-profiles/CrossSportRollup.ts`,
+`rollUpManagerAcrossSports`, mirrors `CrossLeagueRollup`'s shape on a
+different axis: WITHIN one sport, union every label seen across however many
+leagues (too few leagues per sport for a within-sport majority to mean
+anything); ACROSS sports, the same majority rule `CrossLeagueRollup` already
+uses (a label seen in more than half the observed groups is "consistent") —
+just moved from the league axis to the sport axis. Reports BOTH halves of
+P7's own framing: `consistentLabels` (traits that hold) and
+`sportSpecificLabels` (ones that don't, seen in exactly one sport).
+
+`leagueIdsForUser` (private in `CrossLeagueRollup.ts`) is now exported and
+reused rather than re-derived — "which leagues does this user manage" is the
+same question on both axes.
+
+### Why cross-league/cross-sport are NOT in the cached feed
+
+`psychology-os/index.ts`'s own header already said so, before this session
+touched it: both are VIEWER-scoped, so a per-subject cache would leak one
+account's cross-league pattern to every other viewer, and a per-viewer cache
+is almost always cold. Both new reads run through
+`psychologyConsistencySlice.ts` as an uncached, per-request producer — the
+same `decisionBridge.ts` shape R2 established for the four live decision
+engines, joining the packet's concurrent wave rather than the `OsFeed`
+mechanism.
+
+### Flattened for the same reason R3.3's roster grade was
+
+`CrossLeagueRollup`'s `dimensions` (a `Record`) and `labels` (array of
+`{label, leagues, consistency}` objects) do not survive `renderObject()`'s
+deliberately non-recursive design. `psychologyConsistencySlice.ts` reads only
+the fields that render cleanly as primitives/string-arrays
+(`consistentLabels`, observed/without-profile counts, `caveat`) rather than
+passing either rollup's full shape through — the same "the producer shapes
+for the renderer" rule R3.3 already established, applied a second time.
+
+19 new/changed tests across 5 files (`psych-season-snapshot.test.ts`,
+`psychology-os.test.ts`, `grounding-serializer-values.test.ts`, new
+`cross-sport-rollup.test.ts`, new `psychology-consistency-slice.test.ts`).
+Two things mutation-verified: the serializer's trajectory branch (disabling
+it fails exactly the one test that asserts trajectory text, none of the
+others), and — found DURING test-writing, not before — that
+`rollUpManagerAcrossSports`/`rollUpManagerAcrossLeagues` share
+`leagueIdsForUser`'s pre-existing lack of a try/catch, so a query failure
+propagates rather than degrading silently; the packet producer's own
+try/catch is the actual, and only, safety net, matching every other bridge
+this session has built.
+
+## 0.24 R4 — IDENTITY OS: THE MEASURE THE TRAP ALREADY NEEDED
+
+**2026-09-03.** Scoped as R4.1 (re-run the audit) / R4.2 (one source, one
+assertion, one packet slice) / R4.3 (give `unresolved_identity` a producer).
+All three land together — they are one change, not three.
+
+### R4.1 — fresh figures, `scripts/audit-player-identity-coverage.ts`
+
+Registry coverage (Table A): every sport now reports `NO ROUTE: none` — every
+row is reachable by SOME path (an external id or name+team). NCAAF alone grew
+to 62,505 rows since the 2026-08-31 measurement (was ~20,030).
+
+Roster-referenced coverage (Table B, the number that matters — see the
+script's own header on why): NFL 60.8% (758/1247, sample of 25 leagues),
+NCAAF 24.1% (118/490, 1 league) — essentially unchanged from NCAAF's
+2026-08-31 figure. NBA and SOCCER still have leagues with zero rosters,
+unmeasurable.
+
+⚠ **NFL's figure moved from 80.4% to 60.8%, and that is NOT a reported
+regression** — `orderBy: { updatedAt: 'desc' }` samples the 25 MOST RECENTLY
+UPDATED leagues, which is a different league SET each run, not a fixed
+population re-measured. Two samples three days apart are not directly
+comparable; flagging the methodology rather than the number, the same
+distinction §2.12 in `HUB_BUILD_PLAN.md` already drew for NCAAF's own two
+measurements.
+
+### R4.2 — one assertion, landed on the slice that already exists
+
+`ImportAssertions` had four categories per its own D7 header, and "Identity"
+among them was **entirely about MANAGERS** (`managerIdentityCoverage` — does
+a roster's owner map to a real account). Nothing anywhere measured whether
+the PLAYERS on a roster resolve to a real `PlayerIdentityMap` row — a
+completely different, unrelated question that happened to share a section
+title.
+
+Added a fifth section: `playerIdentityCoverage` / `playersResolved` /
+`playersTotal`, computed live in `loadImportAssertions()` (the same
+in-memory-ratio-over-already-fetched-rows shape `managerIdentityCoverage`
+already used — not a new sync, a derived measure). Ids are pulled via
+`getNormalizedLineupSections`, the SAME parser `RosterContextProvider`
+already reads `Roster.playerData` through — not a second implementation —
+then checked against `PlayerIdentityMap` via a provider→column map
+(`sleeper→sleeperId`, `fantrax→fantraxId`, ...). An unmapped provider
+(native/manual — no external ids at all) reports `null`, never a measured
+zero, the same null-vs-zero distinction `rosterCoverage` already draws.
+
+🛑 **"ONE PACKET SLICE" DID NOT MEAN A NEW ONE.** `ImportAssertions` already
+flows through the packet as `importAssertions: GroundedSlice<ImportAssertions>`
+end to end, kill-switch and all. Adding fields to the type is the whole
+change — zero new packet.ts wiring, zero new flags.ts entries. Reusing what
+already renders beats adding a slice that would render the identical fields
+twice.
+
+### R4.3 — `unresolved_identity` gets a producer, via the general mechanism
+
+`FactDependency` gained `minIdentityResolution: number | null`, wired into
+`isConclusive()` next to the existing `minCoverage` check, sharing
+`assertion: 'identity'` with the manager-identity blocker (by design — both
+really are identity failures) but with a distinguishable `detail` string.
+
+⚠ **SET TO 0.15, NOT `minCoverage`'s 0.9.** R4.1's own fresh numbers are why:
+a normal NFL sample resolves ~61%, NCAAF ~24% — the ORDINARY case, not a
+defect. A threshold near `minCoverage`'s would block most real leagues from
+ever getting a lineup decision. 0.15 is a floor against the MEASURED trap (a
+roster where every one of 27 players came back as
+`{ playerId: '6804', name: '6804' }`, 0% resolved, and still graded itself
+`conclusive: ok`) — not a quality bar against resolution nothing in
+production has yet. Only `lineupDecision` carries the threshold;
+`standings`/`leagueRules`/`managerBehaviour`/`globalPlayerValue` do not name
+players to make their core claim.
+
+19 tests across `conclusive.test.ts` and a new `identity-os-coverage.test.ts`.
+Two things mutation-verified: the blocking condition itself (disabling it
+fails exactly the two tests that assert blocking, none of the five that
+assert non-blocking), and the unmapped-provider null guard (removing it
+sends `where: { undefined: { in: [...] } }` to Prisma — the exact silent
+failure the guard exists to prevent).
+
+## 0.23 R3.3 — THE OTHER THREE VALUE QUESTIONS, RESOLVED
+
+**2026-09-03.** OS_FEED_STATE's own M2 table names three sub-questions (2.1
+trade grade · 2.2 roster holes · 2.3 cross-league exposure) and one of its
+file-path claims was already wrong before this session touched it —
+`sumCanonicalValues` lives in `lib/decision-os/value/contract.ts`, not
+`lib/decision-os/trade/` as M2's own text says. Verify paths in this doc
+against the code before trusting them.
+
+### ✅ 2.3 "Am I overexposed to X?" — CONFIRMED DONE, verification only
+
+`resolvePortfolioGrounding` (`lib/intelligence/chimmy/portfolioGrounding.ts`)
+already computes real cross-league exposure via `getCommandCenter(userId)` —
+`center.exposure.rows` carries `{name, count, exposurePct, rostersCounted,
+injury}` per player, already formatted into the `portfolio: GroundedSlice<string>`
+slice's prose. The serializer's `renderValue()` has a dedicated, unconditional
+string branch (`typeof value === 'string'`) that every `GroundedSlice<string>`
+goes through identically — no slice-name special-casing — and that branch is
+already proven end-to-end by an existing test
+(`__tests__/decision-os/grounding-serializer-values.test.ts:135`, "emits the
+four prose slices VERBATIM"). Nothing to build.
+
+### ✅ 2.2 "Where am I weak?" (in VALUE terms) — BUILT AND WIRED
+
+⚠ **Do not confuse this with `weaknessSignals`**
+(`lib/chimmy-context/intel/rosterWeakness.ts`, surfaced into the `roster` slice
+via `RosterContextProvider` and already rendering since the R3 serializer fix —
+see §0.21). That is a real, already-working, already-rendering signal, but it
+compares THIS WEEK's point projections against a static per-position constant
+(`positionProjectionFallback`: QB=17, RB=12, WR/TE=10...) — a weekly-lineup
+signal, not a value one. It answers a genuinely different question and does
+not satisfy "positional replacement level" as M2 states it.
+
+What 2.2 actually needed was a VALUE-based comparison, and
+`lib/core-app/rosterGrade.ts`'s `getRosterGrade` already does exactly that —
+ranks every position's market value against the REST OF THIS LEAGUE'S rosters
+(not a global baseline, which the module's own header says would call a strong
+redraft roster thin because dynasty prices dominate the market). Bridged, not
+re-derived — same playbook as R2:
+
+- New: `lib/decision-os/grounding/rosterValueGradeSlice.ts` —
+  `loadRosterValueGradeSlice({userId, leagueId})`. Loads the league +
+  claimed-team row, builds `getRosterGrade`'s args the same way
+  `lib/core-app/myTeam.ts` (its only existing caller) does, with one
+  correction: `isDynasty` is `deriveLeagueFormat(league) === 'dynasty'`
+  (R4b.1's helper), not raw `league.isDynasty` — so this does not propagate
+  BUG-4 further than it already reaches.
+- 🛑 **`RosterGrade.strongest`/`.weakest` are nested `PositionStrength`
+  objects, and `renderObject()` is deliberately non-recursive** (§0.21's own
+  design principle — descending is what makes an unbounded dump possible
+  again). So the producer FLATTENS them into prefixed primitive fields
+  (`weakestPosition`, `weakestValue`, `weakestRank`, `weakestOutOf`,
+  `strongestPosition`, ...) before they ever reach the packet, rather than
+  growing the serializer a second special-case branch. 8 tests, the flattening
+  itself mutation-verified (reverting to pass the nested objects through
+  un-flattened fails exactly the 2 tests that check for it, none of the other
+  6).
+- Wired into `packet.ts` as `rosterValueGrade` — joins the concurrent wave
+  (own DB reads, no roster dependency, unlike `idpKicker`), opt-in
+  (`want.rosterValueGrade`, default OFF, since `getRosterGrade` reads every
+  roster in the league). `'rosterValueGrade'` added to both
+  `DecisionOsFeed` and `DECISION_OS_FEEDS` in `flags.ts` — the trap this repo
+  already knows about (the two must stay in sync).
+
+### ✅ 2.1 "Is this trade fair?" — ALREADY WIRED; the gap is data, not code
+
+**Not two competing systems — one pipeline.** `lib/decision-os/trade/`
+(`runTradeEvaluateDecision`, wrapped by `runTradeShadowForProposal` in
+`shadow.ts`) does not compute values; its `evaluate` dep is literally
+`async () => memo` (`deps.ts:35-41`) — it wraps the ALREADY-PERSISTED
+`redraft_trade_value_snapshots` row that `captureRedraftTradeValueSnapshot` →
+`buildTradeValueSnapshot` (`lib/trade-value/`) writes. `lib/chimmy-trade/
+tradeIntelligenceTools.ts` reads the same row. No rival implementation exists.
+
+`lib/chimmy-trade/pendingTradeDecisionGrounding.ts` — read in full — is
+already the correct answer to "wire the deterministic trade engine into
+Chimmy": it queries pending incoming proposals, calls
+`runTradeShadowForProposal`, renders the full `Decision<T>` four-answer shape
+via `toTradeCard`, suppresses the grade below `LOW_COMPLETENESS` (60) rather
+than presenting a verdict off thin data, surfaces illegal-trade verdicts, and
+degrades honestly at every failure point (query failure, missing snapshot,
+`DECISION_OS_TRADE_LIVE` off). It is already composed into the live
+`/api/chat/chimmy` route. This module exists BECAUSE `explainTrade`
+(`tradeIntelligenceTools.ts`) turned out to be unreachable — `buildTradeContext
+ForChimmy` is called with only 2 args, so its `proposalId`-gated branch never
+fires on any real request. Someone already found and fixed that gap.
+
+🛑 **MEASURED 2026-09-03 AGAINST PRODUCTION: BOTH DEPENDENCY TABLES ARE
+EMPTY.** `redraft_trade_proposals`: **0 rows**, all statuses. `redraft_trade_
+value_snapshots`: **0 rows**. Not a writer gap (there is nothing upstream
+failing to write) — the native in-app trade-proposal flow itself has never
+been used in production. This matches a comment already in
+`app/api/chat/chimmy/route.ts` that imported leagues (Sleeper, the dominant
+platform per this whole document) trade through their own platform's UI, not
+through this app's trade builder.
+
+**So the code is correct and complete for what it was built to do, and
+currently grades zero real trades — a product-adoption fact, not a defect.**
+Building a NEW entry point (grading a Sleeper trade after the fact, or a
+hypothetical trade described in chat) would need chat-level intent parsing to
+extract proposed assets from natural language — a materially larger, different
+feature than "wire the machinery," and outside M2's own scope framing
+("reuses M1 rendering... none needs new feed work"). Not attempted here;
+recorded as a real gap for whoever scopes it, distinct from 2.1 as written.
+
 ## 0.22 R3.1 — THE IDP/KICKER SLICE, AND THE PRODUCER NOBODY BUILT
 
 **2026-09-03.** Player Value OS sat at 48% because "IDP and kicker have a built adapter and no feed
@@ -219,16 +938,11 @@ feed source" is therefore **correct and should stay that way** — only the pack
 | # | Step | |
 |---|---|---|
 | **R3.1a** | `loadIdpKickerValueSlice` — builds the context, cheap exit, honest gaps. 6 tests, both guards mutation-verified. | ✅ |
-| **R3.1b** | Wired into the packet: `want.idpKicker` (default OFF), an `idpKickerValues` kill switch, and the producer placed AFTER `contextFacts` because it is the only slice that needs the roster. The extractors carry the id-space knowledge and are tested. | ✅ |
-| **R3.2** | A SECOND cron walk for app-level sources, keyed sport+format. `bindLeagueSource` is typed `OsFactSource<{ leagueId }>`, so the three app sources could never be members of the league walk — they are a different shape, not an oversight. Combination set read from `PlayerValueSnapshot` (the four that can actually be served) rather than expanded from leagues. Runs BEFORE the league walk: one app fact serves 249 leagues, one league fact serves one. | ✅ |
-| **R3.3** | The other three value questions. 🛑 INVESTIGATED, AND ONE OF THEM WAS A SERIALIZER BUG: 2.2 "where am I weak" already existed — `computeRosterIntel` produces the signals, the roster slice carries them, and all EIGHT `contextFacts` slices rendered as the word "available". 2.1 is proposal-scoped (same constraint as R2.6) and `sumCanonicalValues` has ZERO callers. 2.3 was already done. | ◧ |
+| **R3.1b** | Wire it into the packet as a slice. ⚠ Needs `rosterPlayerIds` + `rosterPositions` + `numTeams`, so unlike every other producer it DEPENDS on the roster and cannot join the concurrent wave — it is a serialized second hop and must default OFF. | ✅ |
+| **R3.2** | Schedule the app-level value + projection sources (a second cron walk, keyed sport+format). | ✅ `refreshAppSources` in `app/api/cron/domain-os-refresh/route.ts`, runs before the league walk. |
+| **R3.3** | The other three value questions: trade grade · roster holes · cross-league exposure. | ✅ 2026-09-03 — see §0.23. 2.2 built + wired (`rosterValueGrade` slice); 2.3 was already done (verification only); 2.1's machinery was already built and wired, currently data-starved in production (0 rows in both dependency tables) rather than missing code. |
 
-Suite after R3.1: **199 files / 3,707 tests / 0 failures.**
-
-⚠ **AND THE COUNT-DIDN’T-MOVE CHECK EARNED ITS KEEP A SECOND TIME.** After wiring the packet the
-suite read 3,703 — unchanged — meaning nothing exercised the new path. Same signal as R2.4, caught
-the same way: by watching the number rather than reading the diff. Tests for the extractors moved it
-to 3,707.
+Suite after R3.1a: **199 files / 3,703 tests / 0 failures.**
 
 ## 0.21 R2 — BRIDGE PIPELINE A INTO THE PACKET · plan, and what the survey changed
 
@@ -316,7 +1030,7 @@ claiming four and shipping a stub.
 |---|---|---|
 | **R2.1** | `decisionToSlice()` — one generic `Decision<T>` → `GroundedSlice<DecisionFact>` adapter, pure, no I/O. Mirror of `toEvidencePacket.ts`. | ✅ |
 | **R2.2** | Serializer support: render a decision slice as its four answers + verdicts, never `JSON.stringify`. | ✅ |
-| **R2.3** | Wire **commissioner-health** — permissioned, and it needed a guard carried by hand. | ✅ |
+| **R2.3** | Wire **commissioner-health** — ⚠ REVISED, see below. | ⏸ |
 | **R2.4** | Wire **lineup** — reuses the roster + rules the packet already loads. | ✅ |
 | **R2.5** | Wire **waiver** — 🛑 REVISED: request-scoped, like trade. | ⛔ |
 | **R2.6** | **Trade: documented, not wired.** Record why, and point at the proposal-scoped path. | ✅ |
@@ -380,45 +1094,7 @@ point.** The others gate a READ; this gates running a decision engine inside the
 latency ceiling. Charging every turn a lineup decision — including the ones asking about trade
 values — is how the packet went 5.4s over that ceiling before R0.8.
 
-### ✅ R2.3 DONE — commissioner health is bridged, and it is the PERMISSIONED one
-
-`decisionBridge.ts` (`loadCommissionerHealthDecisionSlice`) · `packet.ts` · `flags.ts`
-(`commissionerHealthDecision` kill switch) ·
-`__tests__/decision-os/decision-bridge-commissioner.test.ts` (6)
-
-**Suite: 198 files / 3,697 tests / 0 failures.**
-
-Every other slice answers *what do we know*. This one also answers *who may see it*, and it is the
-only bridge where getting the order wrong leaks rather than merely misinforms.
-
-- **The permission check is REUSED, not reinvented.** `assertLeagueCommissioner` is the same check
-  `resolveCommissionerGroundingOutcome` already uses for the commissionerIntelligence slice. Two
-  implementations of one permission rule is the bug, and the packet already has `not_entitled` as a
-  first-class gap reason so a permission absence never reads as a missing fact.
-- **It runs BEFORE the loader, and the order IS the safeguard.** `getCommissionerHubHealthForUser`
-  is handed `isCommissioner: true` and filters on it — so asserting that flag without having
-  verified it would hand a non-commissioner a commissioner's view of a league they merely play in.
-- **Its own kill switch**, separate from `lineupDecision`, because they cost different things: one
-  loader call versus **ten parallel queries**. A single "decisions" switch would make it impossible
-  to shed the expensive one and keep the cheap one.
-
-🛑 **A GUARD HAD TO BE CARRIED ACROSS BY HAND, AND MISSING IT WOULD HAVE BEEN SILENT.**
-`runCommissionerHealthShadow` refuses a `dashboard-fallback` snapshot — *"skip the
-non-authoritative fallback path (no live roster reads)"* — but that guard lives in the SHADOW
-wrapper, not in `runCommissionerHealthDecision`. This bridge calls the decider directly and walks
-straight past it. A fallback snapshot is assembled from dashboard fields rather than live rosters,
-so deciding on one produces a confident league-health verdict from data the live path itself
-considers unfit to decide on. Refused explicitly, and pinned by a test.
-
-⚠ **AND THE KILL SWITCH WAS SILENTLY INERT FOR ONE EDIT.** The first pass added
-`commissionerHealthDecision` to the `DecisionOsFeed` union but NOT to `DECISION_OS_FEEDS` — a CRLF
-file defeated a replacement pattern containing a newline. A feed absent from that array is never
-iterated by `resolveDecisionOsFeedFlags`, so `killed()` would always return null and the switch
-would do nothing, forever, with nothing failing and no error to notice. Caught by counting
-occurrences rather than trusting the edit; union and array now both read 13 with no member missing.
-**Verify a mechanical edit by measuring its effect, not by the absence of an error.**
-
-### 🛑 R2.5 CHANGED ON CONTACT WITH THE CODE
+### 🛑 R2.5 AND R2.3 CHANGED ON CONTACT WITH THE CODE
 
 **R2.5 — waiver is REQUEST-scoped, exactly like trade.** `RunWaiverClaimInput` requires
 `engineInput: WaiverAIServiceInput`, and the live route supplies it from the **request body**:
@@ -608,12 +1284,6 @@ exists to hold. It writes a row that looks like data.
 **Not fixed here, because the fix is a decision, not an edit.** Either the fallback goes (and
 seasonless leagues get no snapshot, which is what R4b argues for), or it stays and the snapshot
 writer needs to know the season was inferred rather than observed. Filed as **R4b.2**.
-✅ **R4b.2 DONE.** The caller now declares the invention via `seasonInferred`, and the engine
-refuses to snapshot on it. ⚠ THE FALLBACK STAYS: `seasonThrough()` filters `season <= n` and a
-dynasty league carries FUTURE draft picks — 2027s and 2028s are routine — so passing null would
-drop that filter and newly count them, silently changing every signal. Only the SNAPSHOT decision
-changes. Both directions mutation-verified: ignoring the flag fails one test, refusing everything
-fails two.
 
 ⚠ The general lesson, and it is the third time this file has recorded a version of it: **a guard
 is only as strong as the narrowest caller that reaches it.** Checking that the refusal is written
@@ -2246,12 +2916,14 @@ The audit's three cuts. **Nothing else matters until these land.**
 - **R3.3** The other three value questions: trade grade · roster holes ·
   cross-league exposure (**A8**).
 
-### R4 — Identity OS · new → 80%
+### R4 — Identity OS · new → 80% · ✅ 2026-09-03, see §0.24
 
-- **R4.1** Re-run the coverage audit for current figures.
-- **R4.2** One source, one assertion, one packet slice.
-- **R4.3** Give `unresolved_identity` a producer. Fix the
-  `{ playerId: '6804', name: '6804' }` roster grading itself `ok`.
+- **R4.1** ✅ Re-run the coverage audit for current figures.
+- **R4.2** ✅ One source, one assertion, one packet slice — landed as a fifth
+  field on the EXISTING `ImportAssertions`/`importAssertions` slice rather than
+  a new one, since it already flows through the packet unmodified.
+- **R4.3** ✅ Give `unresolved_identity` a producer. `minIdentityResolution` on
+  `lineupDecision`'s `FactDependency`, wired into `isConclusive()`.
 
 ### R4b — Manager Psychology OS into the hub · 65% → 92%
 
@@ -2265,9 +2937,9 @@ seam.
 | **R4b.2** | `manager_psych_profile_seasons` + write a snapshot on each refresh (**P1**) | §10.2 (B) |
 | **R4b.3** | `OsFactSource` → register `'psychology'` as an `OsDomain`. League-level, 12h TTL. **No migration** — `OsDomain` is `VarChar(16)` and widening the union is free. | — |
 | **R4b.4** | `managerPsychology` packet slice, graded, refusing below the floor (**P6**) | — |
-| **R4b.5** | Trajectory + cross-league + cross-sport reads, **derived not cached** (**P1/P5/P7**) | — |
-| **R4b.6** | Chimmy narrates from the facts — **no stored prose** (**P2**) | — |
-| **R4b.7** | Wire into recommendations as **framing only** (**P4**) | — |
+| **R4b.5** | Trajectory + cross-league + cross-sport reads, **derived not cached** (**P1/P5/P7**) | ✅ 2026-09-03, see §0.25 |
+| **R4b.6** | Chimmy narrates from the facts — **no stored prose** (**P2**) | ✅ 2026-09-03, see §0.26. Also surfaced a significant, cross-cutting gap — see the same section. |
+| **R4b.7** | Wire into recommendations as **framing only** (**P4**) | ✅ 2026-09-03, see §0.27. **All of R4b (R4b.1–7) is now done.** |
 
 ⚠ **R4b.2 writes a snapshot going forward; it does not invent history.** The
 first season of trajectory data appears after the first refresh that runs with
@@ -2357,7 +3029,6 @@ Updated **in the same change that does the work** (**W4**).
 | ⏸ | **R0.11** Two round-trip cuts | **Deprioritised.** Justified by a latency problem that does not exist in production; would buy ~50 ms against 1250 ms of headroom. §0.8 |
 | ⬜ | **R0.12** Bound the unbounded `findMany` in `loadImportedActivityEvidence` | Not a latency issue (188 rows here) but 42 leagues share 6,436 rows. §0.7 |
 | ⬜ | **R0.13** 🆕 `savedAnalysis` returns `not_computed` | Now a **data** question (no run for current evidence), not latency. 1113 ms. §0.8 |
-| ⬜ | **R0.9** 🆕 Four context providers timing out at exactly 1500 ms | `matchup` · `roster` · `rankings` · `devy` — half the graded context, failing every build. §0.6 |
 | ⬜ | **R0.4** 🆕 Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Gates Import OS.** 5 min. §0.3 |
 | ⬜ | **R0.5** 🆕 Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | May already be the non-prod target for **W2** |
 | ✅ | **R1.1** Render slice values (**G11**) | **Done 2026-09-02.** Proved red→green, 48/48. Also added `playerName` to the anonymous value contract, and fixed an arbitrary-element `asOf`. Typecheck blocked by a peer's mid-edit file. §0.9 |
@@ -2368,16 +3039,16 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
-| 🛑 | **BUG-2** 🆕 **25% of league syncs failing — `PostgresError 25006`, read-only transaction** | **LIVE and ongoing since 05:00 2026-09-02.** 46/184 rows; `league_state` + `teams_rosters` never complete. Read replica, role default, and code cause all RULED OUT by measurement. Next: the live app's `DATABASE_URL` host, and Neon events at 05:00. **§0.18** |
+| ⚠ | **BUG-2** **25% of league syncs failing — `PostgresError 25006`** — **INCIDENT CLOSED, AFTERMATH OPEN** | **NOT live.** A 17-minute incident: 2026-09-02 05:00:21 → 05:17:47, zero since (~39 h). The open half is the AFTERMATH — no league in `partial`/`failed` has EVER been retried (0 of 37, ~78 missed cycles), so 20% of the portfolio serves data frozen at 09-02 04:01 while the serializer promises an automatic retry. **§0.30** supersedes §0.18. |
 | 🛑 | **BUG-3** 🆕 **Duplicate league rows share one `platformLeagueId`** | Two *King Gingerbeards SF 2026!!!* rows; one has 12 psych profiles, the other 0. A fuzzy name-match decides which a user gets. §0.18 |
-| 🛑 | **BUG-4** 🆕 **`isDynasty` false on a league the owner says is dynasty** | `leagueType='redraft'` too. Weakens BUG-1's headline evidence — the import is not capturing dynasty status. Dynasty/redraft pricing is untrustworthy until fixed. §0.18 |
+| ⚠ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it is a KEEPER bug** | Sleeper reports the example league as `settings.type = 1` = **KEEPER**, so `isDynasty=false` was CORRECT and dynasty capture is fine — `leagueType`/`isDynasty` agree on all 225 leagues (110 dynasty). The real defect was that KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues. **Fixed; §0.29** supersedes this row's original claim. |
 | ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
 | ⬜ | **R1.9** 🆕 Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | Encrypted, so "collector is off" is unverified — not proven either way. §0.13 |
 | ⬜ | **R1.3** Turn the grounding flag on (**G1**) | R1.2 |
-| ⬜ | **R2** Bridge the 4 live engines into the packet | R1 |
-| ⬜ | **R3** Finish Player Value OS | R1 |
-| ⬜ | **R4** Identity OS | R1 |
-| ⬜ | **R4b** Manager Psychology OS into the hub | R1, R2 |
+| ✅ | **R2** Bridge the 4 live engines into the packet | **Done 2026-09-03.** lineupDecision + commissionerHealthDecision producers, opt-in, wired end to end. §0.21 |
+| ✅ | **R3** Finish Player Value OS | **Done 2026-09-03.** R3.1 idpKicker (§0.22), R3.3 rosterValueGrade + the other two value questions (§0.23). |
+| ✅ | **R4** Identity OS | **Done 2026-09-03.** `playerIdentityCoverage` assertion + `minIdentityResolution` gating on lineupDecision. §0.24 |
+| ✅ | **R4b** Manager Psychology OS into the hub | **Done 2026-09-03 — all of R4b.1–R4b.7.** §0.25, §0.26, §0.27. |
 | ⬜ | **R5** Commissioner OS transport decision | Owner |
 | ⬜ | **R6** Rename pass | R1–R4 |
 | ⬜ | **R7** Proactive alerts | R1, R2 |
@@ -2565,30 +3236,10 @@ Stated so nobody goes looking:
 > ✅ **Applied.** Verified by effect: `information_schema` reports `is_nullable = YES` for all five
 > score columns and `NO` for `sampleSize`. The matching code change shipped with it — see §0.20.
 >
-> ✅ **The `DEFAULT 0` hardening is ALSO applied** — 2026-09-02, on the owner's instruction.
->
-> 🛑 **`DROP NOT NULL` does not drop the default, and that gap was the whole bug still armed.**
-> After the first statement the columns permitted NULL but still carried `DEFAULT 0`, so an INSERT
-> that *omitted* one wrote `0` rather than `NULL`. Nothing on the live path could reach it — our
-> writer names all fifteen columns — which is precisely what makes it the kind of trap that
-> survives review: it is invisible until the day someone writes fourteen.
->
-> **Verified by behaviour, not by the ALTER's own success:**
->
-> ```
-> information_schema   column_default = (none) for all five; still 0 for sampleSize
-> rows                 97 before, 97 after — DDL touched no data
-> probe (rolled back)  INSERT omitting aggressionScore  ->  reads NULL   (was 0)
-> ```
->
-> The probe is the only one of the three that demonstrates the *change* rather than the catalog —
-> reading `information_schema` confirms the DDL was recorded, not that an omitted column now
-> behaves differently.
->
-> ⚠ **`sampleSize` keeps both its `NOT NULL` and its `DEFAULT 0`**, for the one reason this whole
-> section turns on: zero observations is a real, measured answer, and zero aggression is not.
->
-> The SQL as applied:
+> ⚠ **One hardening was NOT applied and is still open.** `DROP NOT NULL` does not drop the
+> `DEFAULT 0`, so an INSERT that *omits* one of these columns still writes `0` rather than `NULL`.
+> Nothing on the current path can hit it — our writer names all fifteen columns — but a future
+> writer that omits one silently reintroduces the whole bug. Your call:
 >
 > ```sql
 > ALTER TABLE "manager_psych_profile_seasons"

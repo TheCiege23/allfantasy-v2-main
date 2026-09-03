@@ -56,6 +56,23 @@ export interface CommissionerGateResult {
   isCommissioner?: boolean
   /** True when the source league itself doesn't exist/isn't reachable — maps to 404, not 403. */
   notFound?: boolean
+  /**
+   * The provider's own HTTP status, when this check made a request and got one back.
+   * `null`/`undefined` for everything that isn't a distinguishable provider response —
+   * a network timeout, a provider whose client throws a bare typed error with no status
+   * attached (Yahoo/ESPN/MFL today; see checkYahoo/checkEspn/checkMfl), or a check that
+   * never reaches the network at all (e.g. "no linked account").
+   *
+   * 🛑 THIS EXISTS BECAUSE `notFound` COLLAPSES EVERY OTHER FAILURE INTO ONE BUCKET. A 404
+   * ("this league does not exist, retrying will never help") and a 429 ("Sleeper is
+   * rate-limiting us, retrying in a minute will work") were BOTH just `notFound: false` —
+   * indistinguishable to anything reading the gate result, including the route that turns
+   * this into an HTTP response (see the commit route's own comment on why it used to
+   * hardcode 403 for both). A caller doing a BULK run over many leagues needs this most:
+   * one league 429ing is a signal to slow the whole run down, not evidence the league is
+   * gone.
+   */
+  status?: number | null
 }
 
 export const PROVIDER_LABELS: Partial<Record<ImportProvider, string>> = {
@@ -116,12 +133,30 @@ async function checkSleeper(appUserId: string, sourceLeagueId: string): Promise<
       `https://api.sleeper.app/v1/league/${encodeURIComponent(sourceLeagueId)}/users`,
     )
     if (!r.ok) {
+      /*
+       * 🛑 404 AND 429 ARE NOT THE SAME FAILURE, AND USED TO PRODUCE THE SAME RESULT.
+       * A 404 means this league does not exist — retrying changes nothing. A 429 means
+       * Sleeper is rate-limiting us RIGHT NOW — the league is fine, and a bulk run should
+       * back off rather than barrel into more of them. Both used to fall into the same
+       * `notFound: false, reason: "not reachable"` branch, which is exactly the ambiguity
+       * `status` (added alongside `notFound`) exists to remove. Mirrors the reason wording
+       * `describeSleeperUnavailable` already uses in SleeperLeagueFetchService.ts for the
+       * SAME distinction, made during a real fetch rather than a gate check — kept as two
+       * call sites rather than one shared helper because this one has no retry loop to
+       * hook into (see the file-level note on why retry was not added here too).
+       */
       return {
         ok: false,
         notFound: r.status === 404,
-        reason: r.status === 404
-          ? `Sleeper league ${sourceLeagueId} does not exist.`
-          : `Sleeper league ${sourceLeagueId} not reachable.`,
+        status: r.status,
+        reason:
+          r.status === 404
+            ? `Sleeper league ${sourceLeagueId} does not exist.`
+            : r.status === 429
+              ? 'Sleeper is rate-limiting us right now — this league is fine. Wait about a minute and retry.'
+              : r.status >= 500
+                ? `Sleeper's API is having trouble (HTTP ${r.status}). That is on their side — retry shortly.`
+                : `Sleeper league ${sourceLeagueId} not reachable (HTTP ${r.status}).`,
       }
     }
     const users = (await r.json()) as Array<{

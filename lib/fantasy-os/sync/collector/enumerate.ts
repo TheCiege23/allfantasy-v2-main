@@ -45,14 +45,23 @@ export async function enumerateConnectedLeagues(
       platformLeagueId: { not: '' },
     },
     /*
-     * Newest season first, then a stable secondary order. Stability matters more than it looks:
-     * the per-league due-check plus a bounded batch means a fixed order would refresh the head
-     * of the list forever and never reach the tail — the same starvation `runBudget` documents.
-     * The cadence check is what rotates the portfolio, and it can only do that if the order does
-     * not shuffle between heartbeats.
+     * A stable base order — newest season first, then platform and id. This is the TIE-BREAKER
+     * now, not the selection order: the batch is chosen by staleness below.
+     *
+     * 🛑 IT USED TO BE THE SELECTION ORDER, WITH `take: limit` APPLIED HERE, AND THAT
+     * SILENTLY FROZE 87% OF THE PORTFOLIO. Measured 2026-09-03 against production, with the
+     * cron's default limit of 25 per provider:
+     *
+     *     first 25 by this order    25 leagues   25 synced in 24h  (100%)
+     *     rank 26+                 170 leagues    2 synced in 24h  (1.2%, both manual refreshes)
+     *
+     * The comment that used to sit here named this exact failure and asserted the cadence check
+     * prevented it — "the cadence check is what rotates the portfolio". It cannot. `take` runs
+     * in the DATABASE, so the cadence check only ever saw the same first 25 rows: it could skip
+     * members of a fixed set but never change the set. The heartbeat reported a healthy 25/25
+     * every tick while 170 leagues had not been enumerated once.
      */
     orderBy: [{ season: 'desc' }, { platform: 'asc' }, { platformLeagueId: 'asc' }],
-    ...(typeof limit === 'number' && limit > 0 ? { take: limit } : {}),
   })
 
   const seen = new Set<string>()
@@ -69,7 +78,62 @@ export async function enumerateConnectedLeagues(
     seen.add(runKey)
     connections.push({ runKey, provider, externalLeagueId, season, sport })
   }
+
+  return selectStalestFirst(connections, limit)
+}
+
+/**
+ * Choose which connections this tick refreshes: the STALEST first.
+ *
+ * ⚠ SAME PROVIDER LOAD, DIFFERENT TARGETS. This does not fetch more leagues per tick — it
+ * picks a better `limit` of them. At the cron's default of 25 per provider a ~195-league
+ * portfolio cycles completely in ~8 ticks instead of never reaching league 26.
+ *
+ * Ordering, in priority order:
+ *   1. NEVER attempted (no sync-state row, or a null timestamp) — these have never synced.
+ *   2. Oldest `lastAttemptedSyncAt` first.
+ *   3. The caller's stable base order, so the result is deterministic when timestamps tie.
+ *
+ * ⚠ IT DELIBERATELY READS `lastAttemptedSyncAt`, NOT `lastSuccessfulSyncAt`. Ordering by
+ * success would pin a permanently failing league to the head of every tick forever, starving the
+ * rest — the same starvation this function exists to remove, with a different victim. Attempt
+ * time advances whether or not the sync succeeds, so a failing league yields its slot after one
+ * try.
+ *
+ * ⚠ AND IT MUST NOT CONSULT `syncStatus`. A league left in `partial` or `failed` is exactly
+ * the one that most needs re-attempting; gating on status is how 37 leagues sat frozen for 39
+ * hours after a 17-minute incident.
+ */
+async function selectStalestFirst(
+  connections: LeagueSyncConnection[],
+  limit?: number,
+): Promise<LeagueSyncConnection[]> {
+  const bounded = typeof limit === 'number' && limit > 0
+  // Nothing to choose between: keep the base order and skip the extra query entirely.
+  if (!bounded || connections.length <= limit) return connections
+
+  const states = await prisma.leagueSyncState.findMany({
+    where: { runKey: { in: connections.map((c) => c.runKey) } },
+    select: { runKey: true, lastAttemptedSyncAt: true },
+  })
+  const lastAttemptAt = new Map<string, number | null>()
+  for (const row of states) lastAttemptAt.set(row.runKey, row.lastAttemptedSyncAt?.getTime() ?? null)
+
+  /*
+   * Decorate-sort-undecorate carrying the original index, so the tie-break is explicit in the
+   * comparator rather than relying on the engine's sort stability.
+   */
   return connections
+    .map((c, i) => ({ c, i, at: lastAttemptAt.get(c.runKey) ?? null }))
+    .sort((a, b) => {
+      if (a.at === null && b.at === null) return a.i - b.i
+      if (a.at === null) return -1
+      if (b.at === null) return 1
+      if (a.at !== b.at) return a.at - b.at
+      return a.i - b.i
+    })
+    .slice(0, limit)
+    .map((x) => x.c)
 }
 
 /**

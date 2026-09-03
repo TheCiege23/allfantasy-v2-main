@@ -146,38 +146,73 @@ export interface TrajectoryPoint {
  * direction. Since the whole reason this table exists is direction, the ordering is part of the
  * contract rather than a display preference.
  */
+type SeasonRow = {
+  season: number
+  profileLabels: unknown
+  aggressionScore: number | null
+  sampleSize: number
+  confidence: number | null
+}
+
+/** The one place a raw season row becomes a `TrajectoryPoint` — shared so the per-manager and
+ *  league-wide readers cannot drift on the null-handling (R4b.3's lesson, twice already: `??` on
+ *  the way in, bare `Number()` on the way out). */
+function toTrajectoryPoint(r: SeasonRow): TrajectoryPoint {
+  return {
+    season: Number(r.season),
+    labels: Array.isArray(r.profileLabels) ? (r.profileLabels as string[]) : [],
+    // ⚠ `Number(null)` is 0, not NaN — a bare Number() here silently resurrects the exact bug
+    // the column change was made to fix. Guard before converting, the same way `confidence` does.
+    aggressionScore: r.aggressionScore == null ? null : Number(r.aggressionScore),
+    sampleSize: Number(r.sampleSize),
+    confidence: r.confidence == null ? null : Number(r.confidence),
+  }
+}
+
 export async function readManagerTrajectory(args: {
   leagueId: string
   managerId: string
 }): Promise<TrajectoryPoint[]> {
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{
-        season: number
-        profileLabels: unknown
-        aggressionScore: number | null
-        sampleSize: number
-        confidence: number | null
-      }>
-    >(Prisma.sql`
+    const rows = await prisma.$queryRaw<SeasonRow[]>(Prisma.sql`
       SELECT "season", "profileLabels", "aggressionScore", "sampleSize", "confidence"
       FROM "manager_psych_profile_seasons"
       WHERE "leagueId" = ${args.leagueId} AND "managerId" = ${args.managerId}
       ORDER BY "season" ASC
     `)
-    return rows.map((r) => ({
-      season: Number(r.season),
-      labels: Array.isArray(r.profileLabels) ? (r.profileLabels as string[]) : [],
-      // ⚠ `Number(null)` is 0, not NaN — a bare Number() here silently resurrects the exact bug
-      // the column change was made to fix. Guard before converting, the same way `confidence` does.
-      aggressionScore: r.aggressionScore == null ? null : Number(r.aggressionScore),
-      sampleSize: Number(r.sampleSize),
-      confidence: r.confidence == null ? null : Number(r.confidence),
-    }))
+    return rows.map(toTrajectoryPoint)
   } catch {
     // An absent trajectory is a real answer — "nothing recorded yet" — not an error.
     return []
   }
+}
+
+/**
+ * Every recorded manager's trajectory for one league, in a SINGLE query rather than one per
+ * manager. R4b.5 — the psychology packet slice reports on every manager in the league (typically
+ * 8-14), and `readManagerTrajectory` in a loop would be an N+1 query pattern for something the
+ * 12h-TTL feed cache is about to amortise anyway. Same row shape, same null-handling, one round
+ * trip.
+ */
+export async function readLeagueTrajectories(leagueId: string): Promise<Map<string, TrajectoryPoint[]>> {
+  const out = new Map<string, TrajectoryPoint[]>()
+  try {
+    const rows = await prisma.$queryRaw<Array<SeasonRow & { managerId: string }>>(Prisma.sql`
+      SELECT "managerId", "season", "profileLabels", "aggressionScore", "sampleSize", "confidence"
+      FROM "manager_psych_profile_seasons"
+      WHERE "leagueId" = ${leagueId}
+      ORDER BY "managerId" ASC, "season" ASC
+    `)
+    for (const r of rows) {
+      const point = toTrajectoryPoint(r)
+      const existing = out.get(r.managerId)
+      if (existing) existing.push(point)
+      else out.set(r.managerId, [point])
+    }
+  } catch {
+    // Empty map is the same honest "nothing recorded yet" as readManagerTrajectory's [].
+  }
+  return out
 }
 
 export interface TrajectorySummary {

@@ -4,6 +4,7 @@ import { createOsFeed, type OsFactSource, type OsFeed } from '../domain-os/feed'
 import { HOURS } from '../domain-os/types'
 import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import type { PsychDimension } from '@/lib/psychological-profiles/ProfileEvidenceFloor'
+import { readLeagueTrajectories, summariseTrajectory, type TrajectorySummary } from '@/lib/psychological-profiles/ProfileSeasonSnapshot'
 
 /**
  * Psychology OS — maintained fact state for manager behavioural profiles (R4b).
@@ -32,11 +33,12 @@ import type { PsychDimension } from '@/lib/psychological-profiles/ProfileEvidenc
  *    every viewer. A per-subject cache would leak behaviour from leagues the viewer has no
  *    relationship with; a per-viewer cache is almost always cold. They stay derived at read.
  *
- * ❌ IT DOES NOT CARRY A TRAJECTORY YET. `manager_psych_profiles` is one row per (league,
- *    manager), overwritten on each refresh, so "he was a rebuilder in 2023 and win-now since
- *    2024" is not merely unimplemented — it is unanswerable from the data as stored. That needs
- *    `manager_psych_profile_seasons`, whose SQL is staged for the owner. Until it is applied this
- *    feed reports the CURRENT read honestly and claims no history.
+ * ✅ R4b.5 — IT NOW CARRIES A TRAJECTORY. `manager_psych_profile_seasons` exists and is written
+ *    on every refresh (R4b.2); `readLeagueTrajectories` + `summariseTrajectory` turn its rows into
+ *    a `TrajectorySummary` per manager, batched into ONE query for the whole league rather than
+ *    one per manager. Trajectory is NOT viewer-scoped — "he was a rebuilder in 2023, win-now since
+ *    2024" is exactly as true for every viewer — so it belongs in this cached, league-level feed
+ *    unlike cross-league/cross-sport below.
  */
 
 /** One manager's profile, in the shape Decision OS reasons over. */
@@ -65,6 +67,8 @@ export interface PsychologyProfileFact {
   /** True when at least one dimension clears its floor — i.e. anything may be asserted at all. */
   anySufficient: boolean
   updatedAt: string
+  /** How this manager's recorded seasons have moved, or an honest refusal — never invented. */
+  trajectory: TrajectorySummary
 }
 
 export type PsychologyOsArgs = { leagueId: string; sport: string }
@@ -95,6 +99,12 @@ export const psychologyProfileSource: OsFactSource<PsychologyOsArgs, PsychologyP
     // 12 hours over one failed read, and the feed deliberately never stores an unavailable result.
     if (rows.length === 0) return null
 
+    // One query for the whole league rather than one per manager — see readLeagueTrajectories'
+    // own comment. A read failure degrades to an empty map, which summariseTrajectory already
+    // reports as "no season history has been recorded", the same honest answer as a genuinely
+    // empty trajectory.
+    const trajectoriesByManager = await readLeagueTrajectories(a.leagueId)
+
     return rows.map((r): PsychologyProfileFact => {
       const summary = r.evidenceSummary
       return {
@@ -114,6 +124,7 @@ export const psychologyProfileSource: OsFactSource<PsychologyOsArgs, PsychologyP
         unmeasuredDimensions: summary?.missingDimensions ?? [],
         anySufficient: summary?.anySufficient ?? false,
         updatedAt: r.updatedAt.toISOString(),
+        trajectory: summariseTrajectory(trajectoriesByManager.get(r.managerId) ?? []),
       }
     })
   },

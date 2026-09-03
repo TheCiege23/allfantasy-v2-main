@@ -59,6 +59,7 @@ describe('gapFromVerdict — carries the blocker\'s own remedy, not a generic on
       parity: 'matched', parityNote: null,
       rosterCoverage: 1, rostersHeld: 12, rostersExpected: 12,
       managerIdentityCoverage: 1, managersMapped: 12, managersTotal: 12,
+      playerIdentityCoverage: 1, playersResolved: 200, playersTotal: 200,
       ...over,
     }
   }

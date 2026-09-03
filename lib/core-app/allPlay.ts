@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { buildRosterIdMap } from './rosterIdMatch'
 
 /**
  * All-play records and power rankings, from the weeks that were actually
@@ -157,7 +158,9 @@ export async function getAllPlayBoard(args: {
       select: { externalId: true, teamName: true, ownerName: true, avatarUrl: true },
     })
     .catch(() => [])
-  const teamBy = new Map(teams.map((t) => [t.externalId, t]))
+  // See rosterIdMatch.ts — a raw `externalId` map misses MFL teams once their
+  // zero-padded franchise id has been through the `WeeklyMatchup.rosterId` Int column.
+  const teamBy = buildRosterIdMap(teams, (t) => t.externalId)
 
   const current = rankHistory[rankHistory.length - 1]
   const previous = rankHistory.length > 1 ? rankHistory[rankHistory.length - 2] : null

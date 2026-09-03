@@ -47,8 +47,15 @@ const EMPTY_DIMENSIONS = (): CrossLeagueRollup['dimensions'] => ({
   roster: { leaguesObserved: 0, totalEvidence: 0 },
 })
 
-/** League ids where this user is a claimed manager or the owner. */
-async function leagueIdsForUser(userId: string): Promise<Set<string>> {
+/**
+ * League ids where this user is a claimed manager or the owner.
+ *
+ * Exported for `CrossSportRollup.ts` (R4b.5) — the "which leagues does this user manage" query is
+ * the same question asked on a different axis (by sport, not by shared-viewer intersection), and
+ * a second copy of it is exactly the kind of duplicated query shape this codebase keeps finding
+ * and paying for.
+ */
+export async function leagueIdsForUser(userId: string): Promise<Set<string>> {
   const [claimed, owned] = await Promise.all([
     prisma.leagueTeam.findMany({
       where: { claimedByUserId: userId },

@@ -34,6 +34,12 @@ export interface PsychEngineInput {
   rosterId?: string
   season?: number | null
   /**
+   * The league's format ('dynasty' | 'redraft' | ...), from `deriveLeagueFormat` (R4b.1).
+   * Optional so a caller that has not been updated yet still writes `null`, same as before —
+   * this is a strict addition, not a required migration of every call site at once.
+   */
+  format?: string | null
+  /**
    * True when `season` was INVENTED by the caller rather than read from the league (R4b.2).
    *
    * 🛑 THE SNAPSHOT GUARD BELOW WAS UNREACHABLE WITHOUT THIS. `ProfileRefreshService` computes
@@ -87,6 +93,7 @@ export async function runPsychologicalProfileEngine(
       where: { id: existing.id },
       data: {
         sport: sportNorm ?? input.sport,
+        format: input.format ?? null,
         profileLabels: labels,
         aggressionScore: scores.aggressionScore,
         activityScore: scores.activityScore,
@@ -103,6 +110,7 @@ export async function runPsychologicalProfileEngine(
         leagueId: input.leagueId,
         managerId: input.managerId,
         sport: sportNorm ?? input.sport,
+        format: input.format ?? null,
         profileLabels: labels,
         aggressionScore: scores.aggressionScore,
         activityScore: scores.activityScore,
@@ -171,8 +179,9 @@ export async function runPsychologicalProfileEngine(
       leagueId: input.leagueId,
       managerId: input.managerId,
       sport: sportNorm ?? input.sport,
-      // Not yet resolved — the format column is populated by R4b.1's backfill. Null is honest.
-      format: null,
+      // R4b.1 — resolved by the caller via `deriveLeagueFormat`; null only when the caller hasn't
+      // been updated to pass one, same fallback the live profile row uses above.
+      format: input.format ?? null,
       season: input.season,
       labels,
       scores,

@@ -1,0 +1,178 @@
+--- # ============================================================================
+# Fleaflicker Public API — Contract
+# NORMATIVE for the two endpoints already integrated. The scoreboard endpoint
+# below had its FIRST real probe on 2026-09-03 (see GAPS.md G-01) — its top-level
+# envelope for a league with no schedule yet is now confirmed; the shape of an
+# actual game/matchup row is still not, because the probed league had not drafted.
+# Do not fill in the still-UNKNOWN parts of its `fields:` block from memory or
+# from Fleaflicker's Swagger docs; probe it per README.md and paste the real
+# shape in.
+# Source (standings/rosters): this codebase's existing, working
+#   lib/league-import/fleaflicker/FleaflickerLeagueFetchService.ts + types.ts,
+#   now also backed by real fixtures — see fixtures/*.json.
+# Captured: 2026-09-03
+# ============================================================================
+
+meta:
+  vendor: Fleaflicker
+  base_url: https://www.fleaflicker.com/api
+  base_url_env: none   # no override exists in the codebase today
+  contract_version: 0.2.0   # bumped: first real probe landed (see FetchLeagueScoreboard)
+  captured_at: 2026-09-03
+  docs_url: https://www.fleaflicker.com/api-docs/index.html
+  data_classification: fantasy_platform   # not a real-world sports-data vendor; see README
+  sla: none   # no published SLA found
+
+# ============================================================================
+auth:
+  mechanism: none
+  note: >
+    Confirmed by the existing integration: fetchJson() in
+    FleaflickerLeagueFetchService.ts sends only an `Accept: application/json`
+    header. No token, no cookie, no signed request. Every league is readable
+    by anyone who knows its `league_id` — see README's privacy note on that.
+
+# ============================================================================
+transport:
+  common_query_params:
+    sport:
+      required: true
+      values: [NFL, MLB, NBA, NHL]
+      note: >
+        This is the FULL set this codebase currently parses
+        (parseFleaflickerSourceId's SPORT_SET). Fleaflicker itself may support
+        more; do not add one here without a probe confirming it, per the
+        "no guessing" rule this whole contract exists to enforce.
+    league_id:
+      required: true
+      type: integer
+      note: Platform-assigned, stable across seasons.
+    season:
+      required: true
+      type: integer
+      format: four-digit year
+      note: >
+        A season with no data still returns a normal envelope rather than an
+        error — confirmed by the existing null-safe handling of
+        `standings.season` in fetchFleaflickerLeagueForImport.
+
+  status_codes:
+    200: Valid JSON response.
+    404: "No such league. FleaflickerImportLeagueNotFoundError in the existing client."
+    other: Treated as a generic API error by the existing client; not yet differentiated.
+
+  rate_limit:
+    documented_hard_limit: none
+    note: Nothing found; be polite, no established cadence to cite.
+
+# ============================================================================
+endpoints:
+  FetchLeagueStandings:
+    status: INTEGRATED
+    method: GET
+    path: /FetchLeagueStandings
+    params: [sport, league_id, season]
+    envelope: |
+      {
+        season: number,
+        league: { id, name, logoUrl?, description?, size?, capacity?, maxKeepers?,
+                   waiverType?, defaultWaiverBudget?, rosterRequirements? },
+        divisions: [ { id, name, teams: [ TeamStub ] } ]
+      }
+    team_stub_fields:
+      - id (integer)
+      - name
+      - logoUrl (nullable)
+      - waiverAcquisitionBudget.value
+      - recordOverall.{wins,losses,ties}
+      - pointsFor.value
+      - pointsAgainst.value
+      - owners[].{id,displayName}
+      - initials
+    source_of_truth: lib/league-import/fleaflicker/types.ts (FleaflickerStandingsResponse, FleaflickerTeamStub);
+      real fixture at fixtures/standings.NFL.json (league 356670, a 1/12-team pre-draft league,
+      captured 2026-09-03)
+    note: >
+      Season TOTALS only. No per-week pairing exists here — this is why it
+      cannot supply WeeklyMatchup rows on its own.
+
+  FetchLeagueRosters:
+    status: INTEGRATED
+    method: GET
+    path: /FetchLeagueRosters
+    params: [sport, league_id, season]
+    envelope: |
+      { rosters: [ { team: TeamStub, players: [ { proPlayer: { id, nameFull?, position?, nameShort? } } ] } ] }
+    source_of_truth: lib/league-import/fleaflicker/types.ts (FleaflickerRostersResponse);
+      real fixture at fixtures/rosters.NFL.json — note this particular fixture has an empty
+      `players` array on its one roster (the league has not drafted), so it does NOT
+      demonstrate the `players[].proPlayer` shape; that part still rests on the existing
+      TypeScript types only.
+    note: No scores at all — current roster composition only.
+
+  FetchLeagueScoreboard:
+    status: ENVELOPE_CONFIRMED_GAME_SHAPE_UNVERIFIED   # <-- see GAPS.md G-01. Promoted from
+      # PARAMS_CONFIRMED_SHAPE_UNVERIFIED by a real probe on 2026-09-03, but do not promote to
+      # INTEGRATED yet — the one thing a writer actually needs (a game/matchup row) has never
+      # been observed. See the note below for why.
+    method: GET
+    path: /FetchLeagueScoreboard
+    path_confirmed_via: "https://www.fleaflicker.com/api-docs/index.html — vendor's own published
+      Swagger docs, read 2026-09-03. This is READING DOCUMENTATION, not probing the live data
+      API, so it did not need a real league_id and does not resolve G-01 by itself — see the
+      note below."
+    params: [sport, league_id, season, scoring_period]
+    param_types:
+      sport: "string — NFL | MLB | NBA | NHL, per the docs page"
+      league_id: integer
+      season: integer
+      scoring_period: "integer, OPTIONAL — confirms GAPS.md G-03: it IS week-scoped, and this is
+        the param name. CONFIRMED 2026-09-03: omitting it entirely and passing the CURRENT
+        period's own `value` explicitly (both `1` here) returned byte-identical responses, so it
+        defaults to the current scoring period rather than erroring or returning all weeks."
+    envelope: |
+      CONFIRMED (for a league with no schedule generated yet — see note):
+      {
+        schedulePeriod: SchedulePeriod,             # the current/default period
+        eligibleSchedulePeriods: SchedulePeriod[]    # every period this league's season defines
+      }
+      SchedulePeriod = { ordinal: number, value: number, low: { ordinal: number, startEpochMilli: string (epoch ms, as a string) } }
+
+      STILL UNKNOWN: the key holding actual games/matchups, and everything about a game row's
+      shape (team identity, scores, status). Do NOT guess a key name (e.g. "games") for this —
+      it has never been observed in any captured response. Re-probe once a league with a
+      completed draft and a generated schedule is available.
+    fields:
+      - "schedulePeriod.ordinal: integer, 1-indexed, matches value in every fixture seen so far"
+      - "schedulePeriod.value: integer — the actual week/period number to pass as `scoring_period`"
+      - "schedulePeriod.low.startEpochMilli: string — epoch milliseconds (as a JSON string, not a number) when this period starts"
+      - "eligibleSchedulePeriods: array of the same SchedulePeriod shape, one per week in the season (17 for the 2026 NFL fixture)"
+      - "games (or equivalent): UNKNOWN — see envelope note, do not guess the key name"
+    source_of_truth: "real fixture at fixtures/scoreboard.NFL.json (league 356670, sport=NFL,
+      season=2026, probed both without `scoring_period` and with `scoring_period=1` — identical
+      byte-for-byte, one fixture committed for both)"
+    note: >
+      🛑 THE ENVELOPE FOR A LEAGUE WITH NO SCHEDULE IS NOW CONFIRMED. THE GAME ROW SHAPE IS NOT.
+      League 356670 ("Public League 96FCE6") was probed at membershipType CREATING_COMMISH, size
+      1 of capacity 12, with a draftLiveTimeEpochMilli essentially AT the moment of the probe
+      (2026-09-03T17:45Z, probed 2026-09-03T17:46Z) — i.e. a league that has not drafted and has
+      no generated schedule. Its FetchLeagueRosters response has one roster with an EMPTY
+      `players` array for the same reason. The scoreboard response for such a league carries only
+      `schedulePeriod`/`eligibleSchedulePeriods` and nothing else — no games array, empty or
+      otherwise. This is a genuinely new, real fact (folded into GAPS.md G-05), but it is a
+      DIFFERENT case from what G-01/G-04 actually need: a real game/matchup row, with real team
+      references, from a league that HAS drafted. Do not write a mapper against the game-row
+      shape until that is captured — see GAPS.md G-01's remaining half.
+
+  FetchLeagueBoxscore:
+    status: DISCOVERED_NOT_YET_NEEDED
+    method: GET
+    path: /FetchLeagueBoxscore
+    path_confirmed_via: "same docs page as FetchLeagueScoreboard above, same date"
+    params: [sport, league_id, fantasy_game_id, scoring_period]
+    note: >
+      Found while resolving G-02, not asked for. Per-matchup detail keyed by a
+      `fantasy_game_id` this contract has not seen the shape of yet — presumably a field on
+      a FetchLeagueScoreboard row. Likely useful for lineup-level detail (bench vs. starters)
+      beyond what a WeeklyMatchup row needs, but that is a future decision, not this one. Not
+      probed; not blocking anything today.

@@ -7,6 +7,8 @@ const sportsDataCacheFindManyMock = vi.fn()
 const sportsNewsFindManyMock = vi.fn()
 const sportsInjuryFindManyMock = vi.fn()
 const playerSeasonStatsFindManyMock = vi.fn()
+const weatherCacheFindManyMock = vi.fn()
+const fantasyStatLineFindManyMock = vi.fn()
 const fetchNewsAPIEverythingMock = vi.fn()
 
 vi.mock('@/lib/data/news', () => ({
@@ -28,6 +30,16 @@ vi.mock('@/lib/prisma', () => ({
     sportsNews: { findMany: sportsNewsFindManyMock },
     sportsInjury: { findMany: sportsInjuryFindManyMock },
     playerSeasonStats: { findMany: playerSeasonStatsFindManyMock },
+    /*
+     * ⚠ THE MODULE READS SIX DELEGATES; THIS FACTORY LISTED FOUR OF THEM.
+     * `buildChimmySportDataDigest` grew calls to prisma.weatherCache (the games branch)
+     * and prisma.fantasyStatLine (the player-line branch), and this mock was never
+     * extended — so the games path died on `undefined.findMany` rather than on anything
+     * it does. Same rot as any stale vi.mock: the module moved, the double did not.
+     * If a seventh delegate appears, it belongs here too.
+     */
+    weatherCache: { findMany: weatherCacheFindManyMock },
+    fantasyStatLine: { findMany: fantasyStatLineFindManyMock },
   },
 }))
 
@@ -41,6 +53,8 @@ describe('buildChimmySportDataDigest seeded fixture scenarios', () => {
     sportsNewsFindManyMock.mockResolvedValue([])
     sportsInjuryFindManyMock.mockResolvedValue([])
     playerSeasonStatsFindManyMock.mockResolvedValue([])
+    weatherCacheFindManyMock.mockResolvedValue([])
+    fantasyStatLineFindManyMock.mockResolvedValue([])
     fetchNewsAPIEverythingMock.mockResolvedValue([])
   })
 
@@ -100,7 +114,24 @@ describe('buildChimmySportDataDigest seeded fixture scenarios', () => {
     expect(digest.freshness.perSource.sports_news_MLB).toBe('2026-06-04T13:00:00.000Z')
   })
 
-  it('bridges cached NBA SportsInjury rows into Chimmy context when injury-report rows are absent', async () => {
+  /*
+   * ⚠ THIS TEST USED TO ASSERT THE BUG, AND IT IS INVERTED HERE ON PURPOSE.
+   *
+   * It required the digest to surface a cached SportsInjury row — the fixture below is dated
+   * 2026-06-04 — under the heading "NBA - Injuries (DB cache)". That is exactly the behaviour
+   * 3c784afe5 removed, and the reason it removed it is measured, not stylistic: in production
+   * the newest injury_report_records row was 108 days old, and Chimmy rendered those rows with
+   * no date attached, so the model stated April designations as today's news.
+   *
+   * Both Chimmy paths now read lib/injuries/injuryReadPort, which is TTL-respecting. The stale
+   * fixture still reaches it through the mocked prisma — so this test now proves the port SEES
+   * the row and REFUSES it, which is a stronger guarantee than the old assertion ever made.
+   *
+   * 🛑 DO NOT "FIX" THIS BY MAKING THE DIGEST EMIT THE ROW AGAIN. A green
+   * `toContain('Example Guard')` here would mean a three-month-old injury designation is being
+   * served as current, which is the incident #404 describes.
+   */
+  it('refuses a stale cached SportsInjury row rather than serving it as current', async () => {
     sportsInjuryFindManyMock.mockImplementation(async ({ where }: { where?: { sport?: string } }) => {
       if (where?.sport !== 'NBA') return []
       return [
@@ -124,10 +155,17 @@ describe('buildChimmySportDataDigest seeded fixture scenarios', () => {
       timezone: 'America/New_York',
     })
 
-    expect(digest.text).toContain('NBA - Injuries (DB cache)')
-    expect(digest.text).toContain('Example Guard')
-    expect(digest.sources).toContain('sports_injuries_NBA')
-    expect(digest.freshness.perSource.sports_injuries_NBA).toBe('2026-06-04T10:00:00.000Z')
+    // The stale player must NOT appear, under any heading.
+    expect(digest.text).not.toContain('Example Guard')
+    expect(digest.text).not.toContain('Injuries (DB cache)')
+
+    // And the digest must say so explicitly, rather than going quiet — a silent omission would
+    // let the model fill the gap from its own priors, which is the same failure by another route.
+    expect(digest.text).toContain('every row in the feed is past its freshness window')
+    expect(digest.text).toContain("Do not state or imply any player's injury status for NBA")
+
+    // The stale timestamp must never be published as this source's freshness.
+    expect(digest.freshness.perSource.sports_injuries_NBA).not.toBe('2026-06-04T10:00:00.000Z')
   })
 
   it('builds NBA tonight games context from seeded sportsGame fixtures', async () => {

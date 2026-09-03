@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { buildRosterIdMap } from './rosterIdMatch'
 
 /**
  * The three 3a panels that were shipped as "no engine exists".
@@ -311,8 +312,12 @@ export async function getRivalRecords(
     if (rows.length === 0) continue
     leaguesRead += 1
 
-    const nameByRoster = new Map(
-      leagueTeams.map((t) => [String(t.externalId), t.ownerName || t.teamName || 'Unknown manager']),
+    // See rosterIdMatch.ts — a raw `externalId` map misses MFL teams once their
+    // zero-padded franchise id has been through the `WeeklyMatchup.rosterId` Int column.
+    const nameByRoster = buildRosterIdMap(
+      leagueTeams,
+      (t) => t.externalId,
+      (t) => t.ownerName || t.teamName || 'Unknown manager',
     )
 
     // Index by week so the opponent lookup is not O(n^2) across a full history.

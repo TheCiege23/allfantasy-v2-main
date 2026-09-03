@@ -299,6 +299,16 @@ function renderItem(item: unknown): string | null {
     const unmeasured = Array.isArray(o.unmeasuredDimensions) ? (o.unmeasuredDimensions as string[]) : []
     // Naming what is unmeasured lets an answer decline one read without hedging the whole profile.
     if (unmeasured.length) bits.push(`no ${unmeasured.join('/')} read yet`)
+    /*
+     * R4b.5 — trajectory. Same rule as everything else in this branch: only render it when it says
+     * something. `hasTrajectory: false` is `summariseTrajectory`'s own honest refusal (one season,
+     * or nothing clears the evidence floor), and repeating that refusal here would just be noise —
+     * the label/score bits above already carry the CURRENT read.
+     */
+    const trajectory = o.trajectory as Record<string, unknown> | undefined
+    if (trajectory?.hasTrajectory === true && typeof trajectory.summary === 'string') {
+      bits.push(`trajectory: ${trajectory.summary}`)
+    }
     const n = typeof o.evidenceCount === 'number' ? ` [${o.evidenceCount} obs]` : ''
     return bits.length ? `manager ${o.managerId}${n}: ${bits.join(' — ')}` : null
   }
@@ -370,6 +380,22 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Lineup decision', packet.lineupDecision as GroundedSlice<unknown>],
     ['Waiver decision', packet.waiverDecision as GroundedSlice<unknown>],
     ['Commissioner health decision', packet.commissionerHealthDecision as GroundedSlice<unknown>],
+    /*
+     * 🛑 THREE SLICES ADDED TO THE PACKET AND NEVER TO THIS LIST — G11 REPRODUCED, ONE LEVEL
+     * REMOVED. `idpKickerValues` (R3.1), `rosterValueGrade` (R3.3) and `psychologyConsistency`
+     * (R4b.5) were each added to `DecisionOsGroundingPacket`, to `packet.ts`'s OWN separate
+     * `slices` list that feeds `collectGaps()`, and to `flags.ts` — every wiring point this
+     * session's own established checklist named, except THIS one. The two `slices` arrays share a
+     * name and a shape and are otherwise unrelated: packet.ts's drives `packet.gaps` ("WHAT IS
+     * MISSING"), this one drives "WHAT IS AVAILABLE" — so an ABSENT reading correctly appeared as
+     * a gap while a PRESENT one, with real data, silently never rendered at all. The failure case
+     * was visible; the success case was not — backwards, and unnoticed because every producer-level
+     * test this session wrote (mutation-verified and all) exercised the producer in isolation, never
+     * a full packet through this exact function.
+     */
+    ['IDP/kicker values', packet.idpKickerValues as GroundedSlice<unknown>],
+    ['Roster value grade', packet.rosterValueGrade as GroundedSlice<unknown>],
+    ['Psychology consistency (cross-league/cross-sport)', packet.psychologyConsistency as GroundedSlice<unknown>],
     // R4b — manager behavioural profiles. Rendered like any other collection: bounded,
     // with the hidden count stated.
     ['Manager psychology', packet.managerPsychology as GroundedSlice<unknown>],
@@ -423,6 +449,36 @@ export function serializeDecisionOsGroundingForPrompt(
         'user asks about any of them, say plainly that you do not have it, give the reason above, ' +
         'and offer the fix. Do not estimate it, and do not answer from general knowledge as ' +
         'though it were their league data.',
+    )
+  }
+
+  /*
+   * R4b.7 (P4) — psychology frames a decision's explanation; it never changes the decision.
+   *
+   * ⚠ CONDITIONAL, NOT A STANDING RULE. Padding every prompt with an instruction about an
+   * interaction that is not even in play is the same mistake the gaps block above already avoids
+   * by checking `packet.gaps.length > 0` first. This only appears when BOTH a decision (from one
+   * of the three live engines this packet can carry) AND manager psychology are actually present
+   * — the one situation the rule exists to govern.
+   *
+   * ⚠ ONE GENERAL RULE, NOT ONE PER ENGINE. `decisionBridge.ts`'s own header already states why
+   * the four live engines are never touched by this session's work: "if a change here appears to
+   * need an engine change, that is the signal to stop and re-scope." Wiring framing into each
+   * engine's own text would mean editing the engines, or hand-writing a rule per decision type
+   * that needs updating every time one is added. A rule stated once, here, at the one place every
+   * decision and every psychology fact are already combined into one prompt, covers all three
+   * today and whatever is bridged next without touching any of them.
+   */
+  const hasDecision = [packet.lineupDecision, packet.waiverDecision, packet.commissionerHealthDecision].some(
+    (d) => d?.present,
+  )
+  if (hasDecision && packet.managerPsychology.present) {
+    lines.push('')
+    lines.push(
+      'Manager psychology may inform how you EXPLAIN a decision above — framing, not authority. ' +
+        'A decision\'s four answers, grade, and legality are already final; a behavioural label or ' +
+        'trajectory may motivate why a manager might make a move, never justify a different verdict ' +
+        'than the decision itself gives.',
     )
   }
 

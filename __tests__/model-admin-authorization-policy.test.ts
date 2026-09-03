@@ -179,28 +179,58 @@ describe("model-admin on the core shell keeps the site-admin gate", () => {
    */
   const coreSource = () => readFileSync(resolve(process.cwd(), CORE_SHELL_PAGE), "utf-8")
 
+  /**
+   * The text of `const <name> = …`, bounded by the next sibling declaration.
+   *
+   * ⚠ THESE ASSERTIONS USED TO SLICE 400 CHARACTERS FORWARD FROM `const modelAdminAllowed`,
+   * which quietly assumed the auth read sits beside the gate. That stopped being true the
+   * moment the read was hoisted so ONE call could serve the whole file, and these tests went
+   * red against code that is strictly better — the property they guard was never broken.
+   * Proximity was never the property. Resolving through `getAdminAccessState` and failing
+   * closed is, so that is what is asserted now, however many hops it takes.
+   */
+  const bindingText = (source: string, name: string): string => {
+    const start = source.indexOf("const " + name + " =")
+    if (start === -1) return ""
+    const rest = source.slice(start + 1)
+    const next = rest.search(/\n\s*(?:const|let|var|function|return|export)\s/)
+    return next === -1 ? source.slice(start) : source.slice(start, start + 1 + next)
+  }
+
+  /**
+   * The gate statement plus the definition of every identifier it reads — the chain of code
+   * that actually decides `modelAdminAllowed`. Where those hops sit in the file is not this
+   * test's business; what they do is.
+   */
+  const authorityChain = (source: string): string => {
+    const statement = bindingText(source, "modelAdminAllowed")
+    if (statement === "") return ""
+    const rhs = statement.slice(statement.indexOf("=") + 1)
+    const referenced = [...new Set(rhs.match(/[A-Za-z_$][\w$]*/g) ?? [])]
+    return [statement, ...referenced.map((name) => bindingText(source, name))].join("\n")
+  }
+
   it("gates model-admin on the site-admin allowlist, not league commissionership", () => {
     const source = coreSource()
 
     expect(source).toContain("@/lib/adminAuth")
     // The gate expression, as one string: segment check -> getAdminAccessState -> admin.
-    const gate = source.slice(source.indexOf("const modelAdminAllowed"))
-    expect(gate).toContain("segment === 'model-admin'")
-    expect(gate.slice(0, 400)).toContain("getAdminAccessState()")
-    expect(gate.slice(0, 400)).toContain("status === 'admin'")
+    const chain = authorityChain(source)
+    expect(chain).toContain("segment === 'model-admin'")
+    expect(chain).toContain("getAdminAccessState()")
+    expect(chain).toContain("status === 'admin'")
 
     for (const leagueGate of ["getLeagueRole", "isAfCommissioner", "assertLeagueMember", "resolveLeagueAccess"]) {
-      expect(gate.slice(0, 400)).not.toContain(leagueGate)
+      expect(chain).not.toContain(leagueGate)
     }
   })
 
   it("FAILS CLOSED — an errored gate denies rather than admits", () => {
     // `.catch(() => false)`. If this ever becomes `?? true` or the catch is dropped,
     // an auth outage would open the panel instead of closing it.
-    const gate = coreSource().slice(0)
-    const start = gate.indexOf("const modelAdminAllowed")
-    expect(start).toBeGreaterThan(-1)
-    expect(gate.slice(start, start + 400)).toContain("catch(() => false)")
+    const chain = authorityChain(coreSource())
+    expect(chain).not.toBe("")
+    expect(chain).toContain("catch(() => false)")
   })
 
   it("renders the denial branch instead of the panels when the gate says no", () => {

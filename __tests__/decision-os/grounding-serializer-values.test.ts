@@ -156,6 +156,134 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     expect(text).toMatch(/more not shown/i)
   })
 
+  /**
+   * R4b.5 — trajectory joined `PsychologyProfileFact`, and the `renderItem` branch that already
+   * handles this shape had to be extended by hand to read it. Adding a field to the data does
+   * nothing on its own — G11 in miniature, caught here rather than discovered live.
+   */
+  it('🛑 a manager fact WITH a trajectory renders its summary text', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        managerPsychology: present([
+          {
+            managerId: 'm1', sport: 'NFL', labels: ['aggressive'],
+            scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null },
+            evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z',
+            trajectory: { hasTrajectory: true, summary: '2024: rebuilder → 2026: win-now (aggression +30, across 2 graded seasons).', seasonsRecorded: 2 },
+          },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).toContain('trajectory: 2024: rebuilder → 2026: win-now')
+  })
+
+  it('a manager fact WITHOUT a trajectory renders normally and adds no trajectory noise', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        managerPsychology: present([
+          {
+            managerId: 'm1', sport: 'NFL', labels: ['aggressive'],
+            scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null },
+            evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z',
+            trajectory: { hasTrajectory: false, summary: 'Only one season clears the evidence floor (1 recorded), so there is no direction to report yet.', seasonsRecorded: 1 },
+          },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).toContain('aggressive')
+    expect(text).not.toContain('trajectory:')
+  })
+
+  /**
+   * ── 🛑 A SLICE ADDED TO THE PACKET AND NEVER TO THIS FUNCTION'S OWN `slices` LIST ──────────
+   *
+   * `idpKickerValues` (R3.1), `rosterValueGrade` (R3.3) and `psychologyConsistency` (R4b.5) were
+   * each added to `DecisionOsGroundingPacket`, to `flags.ts`, and to `packet.ts`'s SEPARATE
+   * `slices` list that drives `packet.gaps` — every wiring point this session's own checklist
+   * named, except the one THIS FILE tests. `serializeDecisionOsGroundingForPrompt` has its own,
+   * differently-scoped `slices` const that actually drives "WHAT IS AVAILABLE", and none of the
+   * three were ever added to it — so an absent reading correctly showed up as a gap while a
+   * present one, with real data, silently never rendered. G11 in miniature, a third time today,
+   * and the reason it survived every mutation-verified producer test this session wrote: each one
+   * tested its OWN producer in isolation, never a full packet through this exact function.
+   */
+  it('🛑 idpKickerValues, rosterValueGrade and psychologyConsistency all reach "WHAT IS AVAILABLE"', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        idpKickerValues: present([
+          {
+            status: 'ok',
+            value: { playerId: 'p1', playerName: 'Micah Parsons', position: 'LB', value: 42, unit: 'market_units' },
+          },
+        ] as unknown as ValueLookup[]),
+        rosterValueGrade: present({
+          rank: 3, outOf: 12, value: 45000, median: 38000, pricedPlayers: 14, totalPlayers: 16,
+          leagueScored: true, weakestPosition: 'RB', weakestValue: 4200, weakestRank: 11, weakestOutOf: 12,
+          strongestPosition: 'WR', strongestValue: 18000, strongestRank: 1, strongestOutOf: 12,
+        } as never),
+        psychologyConsistency: present({
+          crossLeagueObserved: 3, crossLeagueWithoutProfile: 0, crossLeagueConsistentLabels: ['aggressive'], crossLeagueCaveat: null,
+          crossSportObserved: 2, crossSportWithoutProfile: 0, crossSportConsistentLabels: ['trade-heavy'], crossSportSpecificLabels: ['patient'], crossSportCaveat: null,
+        } as never),
+      }),
+      NOW,
+    )
+    expect(text).toContain('Micah Parsons')
+    expect(text).toContain('weakestPosition: RB')
+    expect(text).toContain('crossLeagueConsistentLabels: aggressive')
+  })
+
+  /**
+   * ── R4b.7 (P4) — psychology frames a decision's explanation, never changes it ───────────────
+   * One general instruction at the point every decision and every psychology fact are already
+   * combined into one prompt, rather than wiring framing into each engine (which R2's own
+   * decisionBridge.ts explicitly forbids touching) or hand-writing a rule per decision type.
+   */
+  it('🛑 the framing instruction appears when a decision AND psychology are BOTH present', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        lineupDecision: present({
+          decisionType: 'lineup', whatHappened: 'Start Nabers', whyItMatters: 'better matchup',
+          whatToDo: 'start him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
+          dataCompleteness: 100, weakestSource: null, weakestTrust: null,
+        } as never),
+        managerPsychology: present([
+          { managerId: 'm1', sport: 'NFL', labels: ['aggressive'], scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null }, evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z', trajectory: { hasTrajectory: false, summary: '', seasonsRecorded: 0 } },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).toContain('framing, not authority')
+  })
+
+  it('does NOT pad the prompt with the framing instruction when there is no decision to frame', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        managerPsychology: present([
+          { managerId: 'm1', sport: 'NFL', labels: ['aggressive'], scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null }, evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z', trajectory: { hasTrajectory: false, summary: '', seasonsRecorded: 0 } },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).not.toContain('framing, not authority')
+  })
+
+  it('does NOT pad the prompt with the framing instruction when there is a decision but no psychology', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        lineupDecision: present({
+          decisionType: 'lineup', whatHappened: 'Start Nabers', whyItMatters: 'better matchup',
+          whatToDo: 'start him', howConfident: 'high', verdicts: [], actionCount: 0, actionSummary: [],
+          dataCompleteness: 100, weakestSource: null, weakestTrust: null,
+        } as never),
+      }),
+      NOW,
+    )
+    expect(text).not.toContain('framing, not authority')
+  })
+
   it('renders the value of a PRESENT-BUT-INCONCLUSIVE slice, and keeps the warning', () => {
     // 🛑 Dropping true information to punish a stale import is the failure the packet's own roster
     // comment warns about. The number is real; the caveat travels with it.

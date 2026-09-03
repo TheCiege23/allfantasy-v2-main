@@ -5,6 +5,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { runPsychologicalProfileEngine } from './PsychologicalProfileEngine'
 import { backfillTransactionFactsFromTradeHistory } from './TransactionFactBackfill'
 import { ingestSleeperTradeFacts } from './SleeperTradeFactIngest'
+import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 
 /**
  * ProfileRefreshService — generate psychological profiles for a whole league.
@@ -62,6 +63,9 @@ export async function refreshLeagueProfiles(input: {
    */
   const seasonInferred = input.season == null && league?.season == null
   const season = input.season ?? league?.season ?? new Date().getFullYear()
+  // R4b.1 — resolved once per league, same as season/seasonInferred above, and passed to every
+  // manager's engine call rather than re-derived per team.
+  const format = league ? deriveLeagueFormat(league) : null
 
   const result: LeagueProfileRefreshResult = {
     leagueId: input.leagueId,
@@ -89,6 +93,7 @@ export async function refreshLeagueProfiles(input: {
         managerId,
         sport,
         season,
+        format,
         // R4b.2 — the engine decides whether to snapshot; it cannot know the year was invented
         // unless this says so.
         seasonInferred,

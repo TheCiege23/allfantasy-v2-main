@@ -43,6 +43,13 @@ export interface PersistImportedLeagueResult {
   historicalBackfill: unknown
   existed: boolean
   /**
+   * True when this call attached the caller to a League ANOTHER account already imported,
+   * rather than creating a new one. See `claimExistingLeagueForMember`. The UI must not say
+   * "your league has been imported" for this case — nothing of theirs was imported, they were
+   * recognised as an existing member of a league that was already on AllFantasy.
+   */
+  joinedExisting: boolean
+  /**
    * Post-create steps that did not complete.
    *
    * 🛑 EVERY ONE OF THESE USED TO BE `try { } catch { console.warn }` AND NOTHING ELSE, SO AN
@@ -442,6 +449,122 @@ export async function runBootstrapStep(
   }
 }
 
+/**
+ * Attach a real, provider-verified member to a League someone else already imported,
+ * instead of creating a second copy of the same real-world league.
+ *
+ * Mirrors `app/api/league/invite/claim/route.ts` deliberately rather than introducing a
+ * second definition of "claim a team" — same target column (`LeagueTeam.claimedByUserId`),
+ * same audit row (`LeagueManagerClaim`), same uniqueness the invite path already relies on
+ * (`@@unique([leagueId, afUserId])`, `@@unique([leagueId, teamExternalId])`). Two definitions
+ * of what a claim means would drift, and the one difference that matters — invite requires a
+ * token, this requires a provider-proven manager id — is upstream of this function, not in it.
+ *
+ * Returns null on every path that should fall through to an ordinary import: no existing
+ * league, no matching team, or the matching team already claimed by someone else. This can
+ * only ever ADD a shortcut for a case we are confident about; it never blocks or downgrades
+ * the import that would have happened anyway.
+ */
+/** Exported for testability; not part of the public import API. */
+export async function claimExistingLeagueForMember(args: {
+  userId: string
+  provider: ImportProvider
+  platformLeagueId: string
+  seasonYear: number
+  sourceManagerId: string
+}): Promise<PersistImportedLeagueResult | null> {
+  const { userId, provider, platformLeagueId, seasonYear, sourceManagerId } = args
+
+  const otherLeague = await (prisma as any).league.findFirst({
+    where: {
+      userId: { not: userId },
+      platform: provider,
+      platformLeagueId,
+      season: seasonYear,
+    },
+    select: { id: true, name: true, sport: true },
+  })
+  if (!otherLeague) return null
+
+  /*
+   * `platformUserId` is the column every provider's roster mapper already writes with the
+   * team's real external manager id — the same column the same-account self-claim above
+   * matches on, and the same one the invite-claim route matches on. One identity column,
+   * three callers; matching anything else here would be a second, driftable definition.
+   *
+   * `claimedByUserId: null` — never take a team from whoever already holds it. If the id
+   * genuinely maps to two different AF accounts (stale data, a shared login, a prior partial
+   * import), that is a real conflict for a person to resolve, not something to silently
+   * reassign or silently duplicate past.
+   */
+  const team = await (prisma as any).leagueTeam.findFirst({
+    where: { leagueId: otherLeague.id, platformUserId: sourceManagerId, claimedByUserId: null },
+    select: { id: true, externalId: true },
+  })
+
+  if (!team) {
+    /*
+     * 🛑 NOT FOUND IS NOT ALWAYS "SOMEONE ELSE HOLDS IT" — IT IS ALSO WHAT A SECOND CLICK BY
+     * THE SAME NOW-JOINED USER LOOKS LIKE. The query above filters `claimedByUserId: null`,
+     * so once this exact user's first call succeeds, their own team no longer matches it —
+     * re-import, "Import another", or a bulk retry over the same discovered list would find
+     * nothing here and fall through to CREATING THE DUPLICATE this function exists to avoid.
+     * Same shape as the self-claim "zero is not failure" case above: ask whether the team is
+     * already held by THIS user before concluding it belongs to someone else.
+     */
+    const mine = await (prisma as any).leagueTeam.findFirst({
+      where: { leagueId: otherLeague.id, platformUserId: sourceManagerId, claimedByUserId: userId },
+      select: { id: true, externalId: true },
+    })
+    if (!mine) return null
+    return {
+      league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
+      historicalBackfill: null,
+      existed: true,
+      joinedExisting: true,
+      incompleteSteps: [],
+    }
+  }
+
+  try {
+    await prisma.$transaction([
+      (prisma as any).leagueTeam.update({
+        where: { id: team.id },
+        data: { claimedByUserId: userId, isOrphan: false },
+      }),
+      (prisma as any).leagueManagerClaim.create({
+        data: {
+          leagueId: otherLeague.id,
+          afUserId: userId,
+          teamExternalId: team.externalId,
+          platformUserId: sourceManagerId,
+          isConfirmed: true,
+        },
+      }),
+    ])
+  } catch (err) {
+    /*
+     * `@@unique([leagueId, afUserId])` / `@@unique([leagueId, teamExternalId])` on
+     * LeagueManagerClaim can lose a genuine CONCURRENT race — this request and the invite
+     * path (or two of these) both passing the `team` lookup above before either commits. A
+     * simple repeat click by the same user is handled above, before this transaction ever
+     * runs; this catch is only for two different in-flight requests landing at once. Falling
+     * through to an ordinary import is still correct here: worst case is the duplicate this
+     * function exists to avoid, not a crash or a claim taken from its rightful holder.
+     */
+    console.warn(`[ImportedLeagueCommitService] ${provider}: cross-account claim lost a race:`, err)
+    return null
+  }
+
+  return {
+    league: { id: otherLeague.id, name: otherLeague.name, sport: otherLeague.sport },
+    historicalBackfill: null,
+    existed: false,
+    joinedExisting: true,
+    incompleteSteps: [],
+  }
+}
+
 export async function persistImportedLeagueFromNormalization(
   options: PersistImportedLeagueOptions
 ): Promise<PersistImportedLeagueResult> {
@@ -463,6 +586,40 @@ export async function persistImportedLeagueFromNormalization(
 
   if (existing && !allowUpdateExisting) {
     throw new ImportedLeagueConflictError('This league already exists in your account')
+  }
+
+  /*
+   * 🛑 A SECOND REAL MEMBER OF THE SAME LEAGUE MUST JOIN THE EXISTING ROW, NOT CREATE A
+   * DUPLICATE ONE. `League` is unique on `(userId, platform, platformLeagueId, season)` —
+   * userId included — so this check above only ever catches the SAME account re-importing.
+   * Two different AF accounts, both real members of one Sleeper league, each hitting Import
+   * today get two entirely separate League rows: two independent syncs, two copies of every
+   * roster, and no relationship between them. A trade the commissioner's copy sees never
+   * appears on a teammate's, because they are not the same row.
+   *
+   * The membership model to attach a second real member to an EXISTING League already exists
+   * and is already used — `app/api/league/invite/claim/route.ts` does exactly this for the
+   * explicit invite-link flow: it claims a `LeagueTeam` by matching `platformUserId` and
+   * writes a `LeagueManagerClaim` row. Import never checked whether that target already
+   * existed before creating one. This is the same claim, reached from the other door: a real
+   * member does not need an invite link if they can prove membership themselves, and the
+   * commissioner gate upstream (`assertImportCommissioner`) already did — that is what
+   * `importerSourceManagerId` IS: the caller's own manager id on the source platform, proven
+   * by the provider, not typed in by the user.
+   *
+   * ⚠ ONLY WHEN THIS ACCOUNT HAS NO COPY OF ITS OWN (`!existing`). If they already have one,
+   * silently redirecting a re-import into someone else's league is a bigger surprise than
+   * the duplicate it would avoid — that is a merge decision for a person, not an import click.
+   */
+  if (!existing && options.importerSourceManagerId) {
+    const joined = await claimExistingLeagueForMember({
+      userId,
+      provider,
+      platformLeagueId,
+      seasonYear,
+      sourceManagerId: options.importerSourceManagerId,
+    })
+    if (joined) return joined
   }
 
   const resolvedSport = resolveImportedLeagueSport(normalized)
@@ -912,6 +1069,7 @@ export async function persistImportedLeagueFromNormalization(
     },
     historicalBackfill,
     existed: Boolean(existing),
+    joinedExisting: false,
     incompleteSteps,
   }
 }

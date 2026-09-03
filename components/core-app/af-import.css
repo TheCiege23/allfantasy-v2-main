@@ -879,6 +879,23 @@
   color: var(--bad);
 }
 
+/* A 404 is permanent -- the league genuinely does not exist under this id, and
+   retrying will not change that. Same red as the generic failed state; the label
+   text is what actually names the difference. */
+.af-im-league-status--not-found {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* A 429/5xx is the provider's problem, not the league's -- retrying is expected to
+   work, especially once the bulk loop's own backoff has let it cool down. Amber
+   like the attestation state, not red like a permanent failure, since neither the
+   user nor the league did anything wrong here. */
+.af-im-league-status--provider-unavailable {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 /* ── Top bar + step indicator (handoffs 4c / 4d) ──────────────────────
  * The connect screen is step 2 of the auth → connect → choose-leagues journey,
  * so it carries the same brand lockup and progress bar as sign-up.

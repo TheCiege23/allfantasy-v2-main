@@ -24,6 +24,7 @@ import {
   type ScheduleConfigForLeague,
 } from '@/lib/schedule-defaults/ScheduleConfigResolver'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
+import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 
 type JsonRecord = Record<string, unknown>
 
@@ -409,7 +410,7 @@ export function buildCanonicalLeagueRulesFromResolved({
   const teamCount = numberOrNull(league.leagueSize)
   const rosterSize = numberOrNull(league.rosterSize)
   const sport = stringOrNull(league.sport) ?? draftConfig?.sport ?? scoringConfig?.sport ?? 'NFL'
-  const format = stringOrNull(league.leagueType) ?? (league.isDynasty ? 'dynasty' : 'redraft')
+  const format = deriveLeagueFormat(league)
   const activeRules = (scoringConfig?.rules ?? [])
     .filter((rule) => rule.enabled && Math.abs(Number(rule.pointsValue)) > 1e-9)
     .map((rule) => ({
