@@ -299,6 +299,80 @@ serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
 
+## 0.32 🛑 BUG-3 IS NOT A DUPLICATE-ROW BUG — 23 USERS SEE A BLANK WHERE DATA EXISTS
+
+**2026-09-03.** Third filed bug this session whose premise does not survive measurement,
+after BUG-4 (§0.29) and BUG-2 (§0.30).
+
+### Both halves of the filed claim are wrong
+
+BUG-3 reads *"Duplicate league rows share one `platformLeagueId` … A fuzzy name-match
+decides which a user gets."*
+
+- **They are not duplicates.** A `League` row is **per importing USER**, by design, and
+  `enumerate.ts` says so in its own header: *"Multiple `League` rows (one per importing
+  user) can mirror the same external league+season."* The cited league has **three** rows
+  (BUG-3 says two) with three **different `userId`s**, each carrying a full 12 rosters, 12
+  teams and the same **960 draft facts**. Nothing is corrupt.
+- **No fuzzy name-match serves them.** A user's leagues resolve by `userId`. Every
+  name-matching query in the tree is search, admin or discovery — not the serving path.
+
+Scope, measured across production: **240 external leagues, 23 of them mirrored**, max 3
+mirrors.
+
+### The real defect
+
+Profiling is keyed on the League **row**, so the second and third importer get nothing
+until the profiler's own rotation reaches their row — while byte-identical profiles for the
+same twelve managers already exist on a sibling.
+
+| | leagues |
+|---|---|
+| mirrored | 23 |
+| **mirrored with ASYMMETRIC psych coverage** | **19** |
+| mirrored, all rows profiled | 2 |
+| mirrored, no row profiled | 2 |
+
+**23 users are currently served a blank where identical data exists.**
+
+⚠ **NOT the unscheduled-writer trap.** `refreshStaleLeagueProfiles({ maxLeagues: 3 })` IS
+scheduled, from `/api/cron/import-players`, and it sorts never-profiled first. The backlog
+is real but draining — 223 candidates, 125 ever profiled, 103 never, ~24 profile writes a
+day. The waiting is the problem, not a dead cron.
+
+### Fixed — read-side only
+
+`listProfilesByLeague` and `getProfileByLeagueAndManager` fall back to the **freshest**
+profiled sibling of the same `(platform, platformLeagueId, season)`, tagging the result
+`servedFromSiblingLeagueId` so the substitution is visible rather than silent — the same
+honesty `servedFrom` carries in the grounding packet.
+
+- **Nothing is merged, deduped or deleted.** The mirror rows are correct and stay. This is
+  explicitly *not* a dedupe and must not become one.
+- **No new data is exposed.** A profile is keyed on the **platform** manager id, identical
+  across mirrors, and describes the league's managers — not the importing user. Matching
+  requires the same platform, external id AND season.
+- **Only on a completely empty result.** Topping up a partial answer would blend two
+  profiling runs with no way to tell which manager came from where.
+
+10 tests, mutation-verified: disabling the resolver fails exactly the 5 fallback-dependent
+tests and leaves the other 5 passing, including the never-top-up guard.
+
+### ⚠ A test-harness trap that made the control lie, worth keeping
+
+The first mutation run failed **9 of 10** tests when only 5 should have — which reads as a
+*stronger* control and is in fact a broken one.
+
+`vi.clearAllMocks()` clears recorded CALLS but leaves the `mockResolvedValueOnce` queue
+intact. These tests queue two `Once` values (own row, then sibling); with the fallback
+working both are consumed and nothing leaks. Disable the fallback and the second value
+survives into the **next** test, which then fails on a row it never mocked. Four of the nine
+failures were that leak, not the mutation.
+
+`vi.resetAllMocks()` restores the precise 5-of-10 split. **A mutation control that fails
+MORE than expected is as suspect as one that fails less** — the same rule this file already
+applies to a typecheck that reports cleaner than baseline.
+
 ## 0.31 🛑 87% OF THE PORTFOLIO WAS NEVER ENUMERATED — `take: 25` ON A FIXED SORT
 
 **2026-09-03.** The real cause behind §0.30, found by asking why a league 39 hours stale was
@@ -3040,7 +3114,7 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
 | ⚠ | **BUG-2** **25% of league syncs failing — `PostgresError 25006`** — **INCIDENT CLOSED, AFTERMATH OPEN** | **NOT live.** A 17-minute incident: 2026-09-02 05:00:21 → 05:17:47, zero since (~39 h). The open half is the AFTERMATH — no league in `partial`/`failed` has EVER been retried (0 of 37, ~78 missed cycles), so 20% of the portfolio serves data frozen at 09-02 04:01 while the serializer promises an automatic retry. **§0.30** supersedes §0.18. |
-| 🛑 | **BUG-3** 🆕 **Duplicate league rows share one `platformLeagueId`** | Two *King Gingerbeards SF 2026!!!* rows; one has 12 psych profiles, the other 0. A fuzzy name-match decides which a user gets. §0.18 |
+| ⚠ | **BUG-3** ~~Duplicate league rows share one `platformLeagueId`~~ **— PREMISE DISPROVEN** | Not duplicates: a League row is per importing USER, by design (`enumerate.ts`), and there are THREE rows with three different userIds, not two. No fuzzy name-match serves them either — leagues resolve by `userId`. The real defect was 23 users served a blank while an identical sibling mirror held profiles. **Fixed read-side; §0.32.** |
 | ⚠ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it is a KEEPER bug** | Sleeper reports the example league as `settings.type = 1` = **KEEPER**, so `isDynasty=false` was CORRECT and dynasty capture is fine — `leagueType`/`isDynasty` agree on all 225 leagues (110 dynasty). The real defect was that KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues. **Fixed; §0.29** supersedes this row's original claim. |
 | ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
 | ⬜ | **R1.9** 🆕 Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | Encrypted, so "collector is off" is unverified — not proven either way. §0.13 |
