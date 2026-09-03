@@ -15,6 +15,7 @@ import {
   normalizedFaabValue,
   normalizedPickValue,
   normalizedPlayerValue,
+  valueBasisFor,
   type ScoringContext,
 } from './valueEngine'
 import { gradeTrade } from './grader'
@@ -120,6 +121,19 @@ export function buildTradeValueSnapshot(input: {
     faabAmount: a.faabAmount ?? null,
     sources: a.sources,
     internalValue: internalValueFor(a, currentSeason, input.scoring),
+    /*
+     * ⚠ ONLY A PLAYER HAS A BASIS. A pick is priced off the curve and FAAB off its face amount —
+     * neither consults `sources`, so labelling them with a basis would name an input that had no
+     * part in the number.
+     */
+    valuationBasis:
+      a.kind === 'player'
+        ? valueBasisFor({
+            projection: a.sources.projectionValue,
+            marketValue: a.sources.fantasyCalcValue,
+            idpValue: a.sources.idpValue,
+          })
+        : null,
     formatFit:
       a.kind === 'player'
         ? applyFormatFit({

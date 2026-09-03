@@ -45,6 +45,19 @@ export interface AssetValueSnapshot {
   /** Deterministic normalized 0–10000 trade value for this asset. */
   internalValue: number
   /**
+   * WHICH input decided `internalValue` — the answer to "why is this number what it is".
+   *
+   * Comes from `valueBasisFor` in the engine, which is the SAME function the engine branches on,
+   * so a surface can label a number without re-deriving the precedence. Optional because
+   * snapshots written before this field existed do not carry it, and absent must render as
+   * "not recorded" rather than as any particular basis.
+   *
+   * ⚠ `none` IS A REFUSAL, NOT A ZERO VALUATION. It means no usable input reached the engine. A
+   * bare `0` rendered next to a real 6,552 reads as "worthless" when it means "we could not price
+   * him" — opposite claims, and only one of them is true.
+   */
+  valuationBasis?: 'idp' | 'market' | 'projection' | 'none' | null
+  /**
    * The league FORMAT's opinion on this asset — a multiplier and a reason, or null.
    *
    * 🛑 DELIBERATELY NOT APPLIED TO `internalValue`. User's decision: format, need and injury
@@ -53,7 +66,13 @@ export interface AssetValueSnapshot {
    * about it; the moment a format multiplier is baked in, that comparability goes and — worse —
    * the adjustment becomes invisible, with nothing saying which rule moved the number.
    *
-   * Null means the league's format has no model. Sixteen of sixteen coded formats today.
+   * Null means the league's format has no VALUE model.
+   *
+   * ⚠ This comment used to say "sixteen of sixteen coded formats today", which was wrong twice
+   * over — the list of sixteen was built by counting string occurrences and included three things
+   * that are not formats, and "no model" understated what exists: `lib/trade-intel/` already
+   * carries per-format context and risk logic for most of them. What they lack is a model that
+   * can move a number. See the header of `formats/registry.ts`.
    */
   formatFit?: {
     formatId: string | null

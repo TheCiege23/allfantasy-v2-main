@@ -248,24 +248,72 @@ export function normalizedPlayerValue(input: {
    * it by `POSITION_SCARCITY` would count positional scarcity twice, and that table has no IDP
    * entry anyway: LB, DL and DB all fall through to its 1.0 default.
    */
-  if (input.idpValue != null && Number.isFinite(input.idpValue) && input.idpValue > 0) {
-    return clamp(Math.round(input.idpValue), 0, 10000)
+  const basis = valueBasisFor(input)
+
+  if (basis === 'idp') {
+    return clamp(Math.round(input.idpValue as number), 0, 10000)
   }
 
-  const hasProjection = Number.isFinite(input.projection as number) && (input.projection as number) > 0
   let adpPremium = 0
   if (input.adp != null && Number.isFinite(input.adp)) {
     adpPremium = clamp((ADP_PIVOT - input.adp) * ADP_SLOPE, ADP_PREMIUM_MIN, ADP_PREMIUM_MAX)
   }
 
-  if (!hasProjection && input.marketValue != null && Number.isFinite(input.marketValue) && input.marketValue > 0) {
-    return clamp(Math.round(input.marketValue), 0, 10000)
+  if (basis === 'market') {
+    return clamp(Math.round(input.marketValue as number), 0, 10000)
   }
 
   const base = Number.isFinite(input.projection as number) ? Math.max(0, input.projection as number) : 0
   const scarcity = scarcityFor(input.position) * scoringScarcityMultiplier(input.position, input.scoring)
   // 1.7f: soft knee instead of a hard clamp, so two elite players never collapse to one number.
   return clamp(Math.round(softCap(base * PROJ_TO_VALUE * scarcity + adpPremium)), 0, VALUE_CEILING)
+}
+
+/**
+ * Which input decided a player's value — the answer to "why is this number what it is".
+ *
+ * ── 🛑 THIS IS THE ONE IMPLEMENTATION, AND `normalizedPlayerValue` CALLS IT ─────────────────
+ * The obvious way to label a value in the UI is to re-check the same conditions there. That is
+ * two implementations of one rule, and this repo has already measured what that costs: a SQL copy
+ * of `normalizePlayerName` disagreed with the real one on 7.2% of rows. So the branch decision
+ * lives here, the engine branches on its result, and a surface that wants to explain a number
+ * calls the same function rather than reasoning about `sources` for itself.
+ *
+ * ⚠ `adp` IS NEVER A BASIS. It is a PREMIUM added to the projection path — capped, and worth at
+ * most a few hundred points — so a player with an ADP and no projection is priced from the market
+ * or not at all. Reporting "priced from ADP" would name an input that never decides the number.
+ */
+export type ValueBasis = 'idp' | 'market' | 'projection' | 'none'
+
+export function valueBasisFor(input: {
+  projection?: number | null
+  marketValue?: number | null
+  idpValue?: number | null
+}): ValueBasis {
+  /*
+   * IDP first and unconditionally, mirroring the engine: it is already the output of a scarcity
+   * model ranked against this league's own starting slots, so nothing downstream applies to it.
+   */
+  if (input.idpValue != null && Number.isFinite(input.idpValue) && input.idpValue > 0) return 'idp'
+
+  const hasProjection =
+    Number.isFinite(input.projection as number) && (input.projection as number) > 0
+  if (hasProjection) return 'projection'
+
+  if (
+    input.marketValue != null &&
+    Number.isFinite(input.marketValue) &&
+    input.marketValue > 0
+  ) {
+    return 'market'
+  }
+
+  /*
+   * ⚠ `none` MEANS THE ENGINE PRICED HIM AT ZERO FROM NO USABLE INPUT — which is a refusal, not a
+   * valuation, and a surface must say so in words. A rendered `0` beside a real 6,552 reads as
+   * "worthless" when it means "we could not price him", and those are opposite claims.
+   */
+  return 'none'
 }
 
 export function normalizedPickValue(input: {

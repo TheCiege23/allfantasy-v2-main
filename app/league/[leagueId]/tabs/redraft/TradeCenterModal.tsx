@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppModal } from '@/components/ui/AppModal'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-value/snapshot'
+import { TradeValueBreakdown } from '@/components/trade-value/TradeValueBreakdown'
 import {
   createTradeProposal,
   fetchRedraftRoster,
@@ -525,6 +526,23 @@ export function TradeCenterModal({
                   <li key={i}>• {b}</li>
                 ))}
               </ul>
+              {/*
+                * Phase 6.2/6.3/6.4 — the derivation, not just the verdict. Everything below was
+                * already computed and stored by the engine and rendered nowhere, which made the
+                * grade a number to accept or dismiss rather than one to argue with.
+                */}
+              <details className="group" data-testid="trade-value-why">
+                <summary className="cursor-pointer list-none text-[11px] font-medium text-[#ffd7e5]/80 hover:text-[#ffd7e5]">
+                  <span className="group-open:hidden">Why these numbers? ▸</span>
+                  <span className="hidden group-open:inline">Why these numbers? ▾</span>
+                </summary>
+                <div className="mt-2">
+                  <TradeValueBreakdown
+                    snapshot={valuePreview}
+                    sideNames={{ [proposerRosterId]: proposerName, [receiverRosterId]: receiverName }}
+                  />
+                </div>
+              </details>
               <p className="text-[10px] text-white/40">
                 Values captured at proposal time · {new Date(valuePreview.context.capturedAt).toLocaleString()}
               </p>

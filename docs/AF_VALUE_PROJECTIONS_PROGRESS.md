@@ -915,6 +915,74 @@ Decisions locked: store **both** units · `CanonicalValue` is the spine · adjus
 
 ---
 
+## Phase 6 — the engine becomes visible ✅ (2026-09-02)
+
+**The gap this closes, stated plainly: the engine got substantially smarter and nobody could see
+any of it.** The trade console showed a grade, two side TOTALS and three chips. Which input priced
+each player, what the league's format thought, why a player came out at zero — all computed, all
+stored, all rendered nowhere. A grade you cannot interrogate is a number to accept or dismiss,
+never one to argue with.
+
+| Step | Status | Notes |
+|---|---|---|
+| 6.2 "Why is this number what it is" | ✅ | Per-asset basis, in plain language, behind a `<details>` in the trade console |
+| 6.3 Base and format fit as **separate** numbers | ✅ | The fit renders as its own percentage with its own sentence; the base is untouched |
+| 6.4 Refusals render as sentences | ✅ | `valuationBasis: 'none'` says "gap in our data, NOT a judgement that he is worthless" |
+| 6.1 `/projections` surface | ⬜ | Not started |
+
+### 🛑 `valueBasisFor` — one implementation, not two
+
+The obvious way to label a value in the UI is to re-check the engine's conditions there. That is
+two implementations of one rule, and this repo has already measured the cost (a SQL copy of
+`normalizePlayerName` disagreed with the real one on **7.2%** of 500 rows).
+
+So the branch decision was extracted into `valueBasisFor` in `valueEngine.ts`, and
+`normalizedPlayerValue` **branches on its result**. The snapshot records it; the panel reads it.
+Behaviour-preserving — verified by the existing 163 trade-value tests passing unchanged before any
+new assertion was written.
+
+⚠ **`adp` is never a basis.** It is a capped PREMIUM on the projection path, worth a few hundred
+points at most. A player with an ADP and no projection is priced from the market or not at all, so
+reporting "priced from ADP" would name an input that never decides the number.
+
+### The two cases that were previously invisible
+
+- **An unpriced player.** Rendered as a bare `0` beside a real 6,552, that reads as *worthless* —
+  the opposite of what it means. Every zero now says which of the two it is, and a banner counts
+  how many, because a side total that silently omits players looks complete and is not.
+- **A format opinion.** Guillotine's −47% and Four Horsemen's +5% now appear as their own figures
+  with the model's own sentence. A closed trade window renders as a warning, not a discount — the
+  player is worth the same, he is simply untradeable.
+
+### Verified in a browser, without touching the database
+
+`/dev/trade-value-preview` — dev-only, `notFound()` in production, synthetic data, and it imports
+no prisma. Same pattern and same reason as `/dev/admin-29a-preview`: **`.env.local` points
+`DATABASE_URL` at the production Neon endpoint**, so opening a real league locally would run every
+roster query against production to look at a panel.
+
+Confirmed in the DOM rather than by eye: 8 base values, 2 fits, 1 unpriced note. **`7,410` stays
+`7,410` beside a −47% fit** — the blended `3,927` appears nowhere. Server logs contained zero
+prisma lines; the three console errors are pre-existing local-env noise (Sentry DSN, Facebook over
+http).
+
+**Mutation control:** rendering `internalValue × multiplier` as the base turns **2 tests red**,
+including the one asserting the product never appears. Proved applied against a byte-compared
+backup and proved restored the same way.
+
+**Suites: 4,062 passed across 227 files** (87 skipped), exit 0 — including `decision-os`, which
+consumes the refactored engine.
+
+### ⚠ Still not visible
+
+`/projections` (6.1) has no surface. And the panel renders what the **client-side preview**
+computes — `TradeCenterModal` builds its assets with four of five sources null, so in the live
+console most rows will report `Projection` or `Not priced`. That is honest, and it is also the next
+thing worth fixing: the modal cannot call `resolveTradeEnrichment` directly because it is
+`server-only`, so this needs a route.
+
+---
+
 ## Phases 3–7 ⬜ Not started
 
 See §8 of the audit doc. Order: 3.1 kickers → 7.1/7.2 Chimmy tools → the rest.
