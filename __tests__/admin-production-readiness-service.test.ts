@@ -63,4 +63,31 @@ describe("AdminProductionReadinessService", () => {
     // Either a dedicated job=live entry or the job=all entry satisfies this.
     expect(worldCup?.configuredPaths.some((row) => /job=(live|all)\b/.test(row))).toBe(true)
   })
+
+  /*
+   * ⚠ `/api/cron/import-rankings` NEVER EXISTED — grepped the tree, confirmed absent from
+   * both app/api/cron/ and cron-schedule.json. This row could never have reported
+   * "configured" against that matcher; it is a second, lower-severity instance of the
+   * same mistake the world-cup test above already caught, in the same file.
+   *
+   * The capability is real and scheduled under two other names — adp-refresh (external
+   * multi-provider consensus, ridden by ingestPlayerValues and the AI ADP job) and
+   * recompute-allfantasy-adp (AllFantasy's own draft-derived board) — traced downstream
+   * to lib/adp/loadAdpBoard.ts, "THE one place an AllFantasy ADP board is loaded", which
+   * feeds draft ordering and the waiver/trade engines.
+   *
+   * Reads the real cron-schedule.json on purpose, same reason as the world-cup test: that
+   * is what makes it notice the next time this drifts.
+   */
+  it("treats adp-refresh / recompute-allfantasy-adp as covering the rankings requirement", async () => {
+    const { getAdminProductionReadiness } = await import("@/lib/admin-dashboard/AdminProductionReadinessService")
+    const result = await getAdminProductionReadiness()
+    const rankings = result.crons.find((row) => row.id === "general-players-stats-rankings")
+
+    expect(rankings?.status).toBe("configured")
+    expect(rankings?.missing).toEqual([])
+    expect(
+      rankings?.configuredPaths.some((row) => /\/api\/cron\/(adp-refresh|recompute-allfantasy-adp)\b/.test(row))
+    ).toBe(true)
+  })
 })

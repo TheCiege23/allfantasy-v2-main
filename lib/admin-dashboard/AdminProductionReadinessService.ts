@@ -381,11 +381,55 @@ export async function getAdminProductionReadiness(): Promise<AdminProductionRead
         crons,
         note: "Feeds injury impact, waiver/trade context, and notification rules.",
       }),
+      /*
+       * 🛑 `/api/cron/import-rankings` NEVER EXISTED AS A ROUTE. Grepped the tree: no
+       * `app/api/cron/import-rankings` directory, no match anywhere in cron-schedule.json.
+       * So this requiredMatcher could never be satisfied, and this row could never report
+       * anything but "partial" — a permanent, lower-severity sibling of the world-cup false
+       * critical fixed earlier tonight, same file, same underlying mistake: a matcher
+       * describing a route that was renamed, consolidated, or never built under that name.
+       *
+       * THE CAPABILITY IS NOT MISSING — IT LIVES UNDER TWO OTHER NAMES. Traced downstream
+       * from the note's own claim ("draft, start/sit, waiver, trade value"):
+       * lib/adp/loadAdpBoard.ts documents itself as "THE one place an AllFantasy ADP board
+       * is loaded for a league context", consumed by lib/draft-room/adp-ordering.ts and the
+       * waiver/trade engines. It is fed by two scheduled crons, neither named "rankings":
+       *
+       *   /api/cron/adp-refresh              daily, 10:00 UTC. Its own docstring says it
+       *                                       builds "consensus rows for all supported
+       *                                       sports" from Fantrax/Sleeper/ESPN/MFL/NFFC/FFC/
+       *                                       Rolling Insights — and its own comments record
+       *                                       that ingestPlayerValues() (trade value) and
+       *                                       runAiAdpJob() ride along on the same run for the
+       *                                       identical reason this repo already knows:
+       *                                       "`scripts/ingest-player-values.ts` had no
+       *                                       scheduler ... runAiAdpJob ... had NO caller
+       *                                       anywhere in the repo" — the ingestCFBDStats
+       *                                       shape, adopted rather than repeated.
+       *   /api/cron/recompute-allfantasy-adp  AllFantasy's own draft-derived board, rebuilt
+       *                                       from real DraftFact history rather than an
+       *                                       external feed.
+       *
+       * Either is accepted as satisfying this row — they answer the same question
+       * ("is a rankings/consensus board being kept current") from two different sources, and
+       * an operator does not need both green to trust the row.
+       *
+       * ⚠ WEAKER EVIDENCE THAN THE WORLD-CUP FIX, AND SAID SO ON PURPOSE. That fix had a
+       * single route branching on `|| job === "all"` — provably the same code path. This is
+       * two DIFFERENTLY NAMED crons standing in for one described capability, which is a
+       * product judgment about what counts as "rankings" being served, not a code-level proof.
+       * If that judgment is wrong, the fix is to split this into its own row rather than widen
+       * the matcher further.
+       */
       cronRow({
         id: "general-players-stats-rankings",
         category: "General sports",
         label: "Players, stats, projections, rankings",
-        requiredMatchers: ["/api/cron/import-players", "/api/cron/import-projections", "/api/cron/import-rankings"],
+        requiredMatchers: [
+          "/api/cron/import-players",
+          "/api/cron/import-projections",
+          /\/api\/cron\/(adp-refresh|recompute-allfantasy-adp)\b/,
+        ],
         optionalMatchers: ["/api/cron/import-depth-charts"],
         recommended: "Players daily; stats/projections/rankings daily or after games.",
         crons,
