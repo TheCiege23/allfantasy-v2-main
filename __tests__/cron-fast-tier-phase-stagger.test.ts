@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error -- .mjs script, no types; imported for its pure scheduling helpers.
+// No `@ts-expect-error` here, unlike cron-fast-tier-loop.test.ts's identical-looking import of
+// the same module: within one compilation, TypeScript infers a shape for a `.mjs` module the
+// first time some file imports it, and a LATER file importing the same module sees that cached
+// inference rather than a fresh "no declaration file" error. Confirmed by tsc itself -- an
+// `@ts-expect-error` here was flagged TS2578 "Unused directive", not merely unnecessary caution.
 import { intervalMsForSchedule, nextBoundary, assignPhases } from '../scripts/cron-fast-tier-loop.mjs'
-// @ts-expect-error -- .mjs script, no types.
 import { readVercelCrons, classifyCrons } from '../scripts/cron-tier.mjs'
 
 /**
@@ -165,13 +168,18 @@ describe('the real cron schedule, after this fix', () => {
     // named in the incident, so a FUTURE job added to */30 (or any other multi-job cadence) is
     // covered automatically.
     const { fast } = classifyCrons(readVercelCrons())
-    const jobs = fast
+    const jobs: { path: string; intervalMs: number; phaseMs: number }[] = fast
       .map((c: { path: string; schedule: string }) => ({
         path: c.path,
-        intervalMs: intervalMsForSchedule(c.schedule),
+        intervalMs: intervalMsForSchedule(c.schedule) as number | null,
         phaseMs: 0,
       }))
-      .filter((j: { intervalMs: number | null }) => j.intervalMs != null)
+      // Type predicate, not a bare boolean filter -- `.filter()` alone does not narrow
+      // `number | null` to `number` for TypeScript, which is exactly what TS2345/TS18047
+      // below were complaining about the first time this test was written.
+      .filter((j: { intervalMs: number | null }): j is { path: string; intervalMs: number; phaseMs: number } =>
+        j.intervalMs != null,
+      )
 
     assignPhases(jobs)
 
