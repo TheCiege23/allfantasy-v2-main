@@ -49,7 +49,14 @@ function runPrismaGenerateOnce() {
     return { code: 1, combined: 'missing prisma' }
   }
 
-  const r = spawnSync(process.execPath, [prismaCli, 'generate'], {
+  /*
+   * ⚠ --schema IS EXPLICIT ON PURPOSE. Left to discover the project root itself,
+   * prisma can fail to find it and report `UNABLE_TO_FIND_PROJECT_ROOT` — which
+   * it treats as non-fatal during a postinstall, exiting 0 without writing the
+   * client. Naming the schema removes the discovery step that can fail that way.
+   */
+  const schemaPath = path.join(root, 'prisma', 'schema.prisma')
+  const r = spawnSync(process.execPath, [prismaCli, 'generate', '--schema', schemaPath], {
     cwd: root,
     env: process.env,
     encoding: 'utf8',
@@ -71,6 +78,26 @@ let last = { code: 1, combined: '' }
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
   last = runPrismaGenerateOnce()
   if (last.code === 0) {
+    /*
+     * 🛑 EXIT 0 FROM prisma generate IS NOT EVIDENCE THAT A CLIENT WAS WRITTEN.
+     * Prisma's postinstall path is deliberately non-fatal — it can complete
+     * successfully having generated nothing (observed 2026-09-02 as
+     * `generate --postinstall "UNABLE_TO_FIND_PROJECT_ROOT…"`). Trusting the
+     * status alone is what let a broken tree look installed for half an hour,
+     * twice, while every typecheck in the checkout reported ~2,200 errors
+     * against a real baseline of 145.
+     *
+     * So assert the ARTIFACT, by name and size, not the exit code.
+     */
+    const { verifyNodeModules } = require('./verify-node-modules.cjs')
+    const prisma = verifyNodeModules().find((c) => c.name === 'prisma client')
+    if (prisma && !prisma.ok) {
+      process.stderr.write(
+        '[prisma-generate-postinstall] generate reported success but wrote no client.\n' +
+          `[prisma-generate-postinstall] ${prisma.detail}\n`
+      )
+      process.exit(1)
+    }
     process.exit(0)
   }
   const lock = isLikelyFileLockMessage(last.combined)
