@@ -65,7 +65,7 @@ function fmt(n: number): string {
  * Dumping an unknown object would be how ~400 leagues of ranking data reaches a prompt. They keep
  * their manifest line until each has a shape worth rendering; that is R1.1b, not an oversight.
  */
-function renderValue(name: string, value: unknown): string[] {
+function renderValue(name: string, value: unknown, onRoster?: ReadonlySet<string>): string[] {
   // The four `GroundedSlice<string>` slices are already prompt-ready prose. Reducing them to
   // "available" is what silenced three-brain's saved conclusion — the substance of plan item 6.2.
   if (typeof value === 'string') {
@@ -108,13 +108,27 @@ function renderValue(name: string, value: unknown): string[] {
 
   if (!Array.isArray(value) || value.length === 0) return []
 
+  const { ordered, promoted } = orderByRosterRelevance(value, onRoster)
+
   const rows: string[] = []
-  for (const item of value.slice(0, MAX_ITEMS)) {
+  for (const item of ordered.slice(0, MAX_ITEMS)) {
     const line = renderItem(item)
     if (line) rows.push(`    · ${line}`)
   }
-  const hidden = value.length - MAX_ITEMS
-  if (hidden > 0) rows.push(`    · …and ${hidden} more not shown (${name} holds ${value.length})`)
+  const hidden = ordered.length - MAX_ITEMS
+  if (hidden > 0) {
+    /*
+     * ⚠ THE MODEL MUST BE TOLD WHICH EIGHT THESE ARE. Showing the asker's own players without
+     * saying so invites "the top players are …" — reading a roster-scoped sample as a ranked
+     * one. The unordered case keeps its original wording exactly, so nothing changes for a
+     * slice with no roster to sort against.
+     */
+    rows.push(
+      promoted > 0
+        ? `    · …and ${hidden} more not shown (${name} holds ${ordered.length}; your own players are listed first, NOT the highest-valued)`
+        : `    · …and ${hidden} more not shown (${name} holds ${ordered.length})`,
+    )
+  }
   return rows
 }
 
@@ -325,7 +339,90 @@ function renderItem(item: unknown): string | null {
   return null
 }
 
-function sliceLine(name: string, s: GroundedSlice<unknown> | null | undefined, now: number): string[] {
+/**
+ * Normalise a player key so a roster entry and a value row match on the same string.
+ *
+ * Ids are compared as-is; names are lowercased and stripped of punctuation, because "T.J.
+ * Hockenson" on a roster and "TJ Hockenson" in a value feed are the same person.
+ */
+function playerKey(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const t = raw.trim()
+  if (!t) return null
+  return t.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * Every player the ASKER rosters, as match keys — ids and normalised names.
+ *
+ * PURE, and exported for tests. Reads the packet's own `roster` slice; returns an empty set
+ * when there is no roster, which makes every caller a no-op rather than a special case.
+ */
+export function rosterPlayerKeys(roster: GroundedSlice<unknown> | null | undefined): ReadonlySet<string> {
+  const keys = new Set<string>()
+  if (!roster?.present) return keys
+  const v = roster.value as { starters?: unknown; bench?: unknown } | null
+  const players = [
+    ...(Array.isArray(v?.starters) ? (v as { starters: unknown[] }).starters : []),
+    ...(Array.isArray(v?.bench) ? (v as { bench: unknown[] }).bench : []),
+  ] as Array<{ playerId?: unknown; name?: unknown }>
+  for (const pl of players) {
+    const id = playerKey(pl?.playerId)
+    if (id) keys.add(id)
+    const nm = playerKey(pl?.name)
+    if (nm) keys.add(nm)
+  }
+  return keys
+}
+
+/**
+ * R1.4 — put the asker's own players first in a bounded list.
+ *
+ * 🛑 BOUNDING WAS SOLVED; ORDERING WAS NOT. §0.9 measured it on a live packet: the eight
+ * rendered rows were `slice(0, 8)` — neither the user's roster nor the top-ranked players, just
+ * whichever eight the producer happened to emit first. For "what is my WR worth" the right eight
+ * are the asker's, and they were reaching the packet only by luck.
+ *
+ * ⚠ A STABLE PARTITION, NOT A SORT. Within each group the producer's original order is
+ * preserved, so a feed that already emits by descending value keeps that ordering inside the
+ * promoted rows — and the same packet always renders the same text, which a comparator on
+ * floats would not guarantee.
+ *
+ * ⚠ IT NEVER DROPS OR DEDUPES. Every element survives; only the order changes. The caller's
+ * `hidden` count is therefore still exact.
+ *
+ * ⚠ AND IT IS A NO-OP WITHOUT A ROSTER. No roster, an empty roster, or a list whose rows carry
+ * no recognisable player key all return the input untouched with `promoted: 0` — so a slice this
+ * cannot reason about renders exactly as it did before.
+ *
+ * PURE, and exported for tests.
+ */
+export function orderByRosterRelevance(
+  rows: readonly unknown[],
+  onRoster?: ReadonlySet<string>,
+): { ordered: readonly unknown[]; promoted: number } {
+  if (!onRoster || onRoster.size === 0) return { ordered: rows, promoted: 0 }
+
+  const mine: unknown[] = []
+  const rest: unknown[] = []
+  for (const r of rows) {
+    const o = r as { playerId?: unknown; playerName?: unknown; name?: unknown } | null
+    const id = playerKey(o?.playerId)
+    const nm = playerKey(o?.playerName) ?? playerKey(o?.name)
+    if ((id && onRoster.has(id)) || (nm && onRoster.has(nm))) mine.push(r)
+    else rest.push(r)
+  }
+  // Nothing matched: leave the caller's wording alone rather than claiming a promotion.
+  if (mine.length === 0) return { ordered: rows, promoted: 0 }
+  return { ordered: [...mine, ...rest], promoted: mine.length }
+}
+
+function sliceLine(
+  name: string,
+  s: GroundedSlice<unknown> | null | undefined,
+  now: number,
+  onRoster?: ReadonlySet<string>,
+): string[] {
   /*
    * ⚠ TOLERATES A MISSING SLICE, and that is not defensive padding. This is the ONE function
    * standing between an assembled packet and the prompt, and it is called on a fixed list of
@@ -347,7 +444,7 @@ function sliceLine(name: string, s: GroundedSlice<unknown> | null | undefined, n
   // punish a stale import is the failure `packet.ts`'s roster comment warns about; the caveat
   // travels with the number instead of replacing it.
   const blocked = !s.conclusive.ok ? ' — PRESENT BUT NOT SAFE TO ACT ON, see gaps below' : ''
-  return [`- ${name}: available${meta}${blocked}`, ...renderValue(name, s.value)]
+  return [`- ${name}: available${meta}${blocked}`, ...renderValue(name, s.value, onRoster)]
 }
 
 /**
@@ -465,7 +562,16 @@ export function serializeDecisionOsGroundingForPrompt(
       : []),
   ]
 
-  const available = slices.flatMap(([n, s]) => sliceLine(n, s, now))
+  /*
+   * Computed ONCE for the whole packet rather than per slice: the roster does not change between
+   * slices, and every array slice wants the same answer.
+   *
+   * The roster lives under `contextFacts`, which is nullable in its own right -- the whole block
+   * becomes null when the context engine is killed or throws, and `rosterPlayerKeys` returns an
+   * empty set for that, making the ordering a no-op rather than an error.
+   */
+  const onRoster = rosterPlayerKeys(packet.contextFacts?.roster)
+  const available = slices.flatMap(([n, s]) => sliceLine(n, s, now, onRoster))
 
   if (available.length > 0) {
     lines.push('WHAT IS AVAILABLE:')
