@@ -168,6 +168,15 @@ type Phase =
       existed: boolean
       skipped: boolean
       attested: boolean
+      /*
+       * True when this request attached the caller to a league ANOTHER account already
+       * imported (a provider-proven real member joining an existing league), rather than
+       * creating a new one. Distinct from `existed`, which means THIS account already ran
+       * this import. See `claimExistingLeagueForMember` in ImportedLeagueCommitService —
+       * saying "your league has been imported" here would be wrong twice: nothing of
+       * theirs was imported, and the league was not new.
+       */
+      joinedExisting: boolean
     }
 
 const FIELD_BY_PROVIDER: Partial<
@@ -912,6 +921,7 @@ export function ImportV4({
         existed?: boolean
         league_existed?: boolean
         skipped?: boolean
+        joinedExisting?: boolean
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
       /*
@@ -933,6 +943,7 @@ export function ImportV4({
         /* Only a short-circuited run means "nothing was re-read". A forced re-import
            still reports existed:true, because the league does still exist. */
         skipped: Boolean(data?.skipped),
+        joinedExisting: Boolean(data?.joinedExisting),
       })
     },
     [provider]
@@ -2294,9 +2305,11 @@ export function ImportV4({
             stats={doneStats}
             issue={doneIssue}
             noteText={
-              phase.skipped
-                ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
-                : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
+              phase.joinedExisting
+                ? `${phase.leagueName} was already on AllFantasy — you've been added as your team. Nothing was changed on ${providerLabel}, and nothing of yours was re-imported.`
+                : phase.skipped
+                  ? 'This league was already imported, so nothing was re-read and nothing was overwritten. Re-import it below if it is missing data.'
+                  : `${phase.leagueName} is in. Nothing was changed on ${providerLabel}.`
             }
             sourceLink={doneSourceLink}
             note={doneChimmyNote}

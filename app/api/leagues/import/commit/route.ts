@@ -153,6 +153,15 @@ export async function POST(req: NextRequest) {
       importRunId: runId,
       existed: persisted.existed === true,
       /*
+       * ⚠ NOT THE SAME QUESTION AS `existed`. `existed` means this account already ran this
+       * exact import before. `joinedExisting` means a DIFFERENT account did, and this request
+       * proved real membership (the commissioner gate's own manager id, not a claim the user
+       * typed in) and was attached to that league's own team rather than getting a duplicate.
+       * The UI must not say "your league has been imported" for this case — see
+       * `claimExistingLeagueForMember` in ImportedLeagueCommitService.
+       */
+      joinedExisting: persisted.joinedExisting === true,
+      /*
        * ⚠ WHAT DID NOT FINISH, SO "Imported" STOPS BEING AN UNQUALIFIED CLAIM.
        *
        * Every post-create bootstrap step is deliberately non-fatal — failing a whole import

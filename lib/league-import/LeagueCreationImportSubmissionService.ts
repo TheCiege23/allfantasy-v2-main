@@ -51,6 +51,13 @@ export interface SubmitImportResult {
    * which only fires for a league that has never completed an import run.
    */
   existed?: boolean;
+  /**
+   * True when this request attached the caller to a league ANOTHER account already
+   * imported, rather than creating a new one. See `claimExistingLeagueForMember` in
+   * ImportedLeagueCommitService. Distinct from `existed`, which means THIS account
+   * already ran this exact import.
+   */
+  joinedExisting?: boolean;
 }
 
 export interface DiscoverProviderLeaguesResult {
@@ -220,7 +227,12 @@ export async function submitImportCreation(
      * route 200s for both — see its own note — so without this the bulk importer
      * reports "Imported" for leagues where nothing happened.
      */
-    return { ok: true, data, existed: Boolean((data as { existed?: boolean })?.existed) };
+    return {
+      ok: true,
+      data,
+      existed: Boolean((data as { existed?: boolean })?.existed),
+      joinedExisting: Boolean((data as { joinedExisting?: boolean })?.joinedExisting),
+    };
   } catch (e) {
     const message = importRequestErrorMessage(e);
     return { ok: false, error: message };
