@@ -26,6 +26,7 @@ import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
+import { rosterIdsMatch } from './rosterIdMatch'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -545,7 +546,12 @@ export async function getLeagueHomeData(
           ties: r.ties,
           pointsFor: r.pointsFor,
           rank: r.powerRank,
-          isYou: yours?.externalId != null && String(yours.externalId) === String(r.rosterId),
+          // rosterIdsMatch, not a raw string ===: an MFL `externalId` ("0001") no longer
+          // equals `String(r.rosterId)` ("1") once it has been through the Int column —
+          // see rosterIdMatch.ts. `yours.externalId` is already numeric-normalized
+          // elsewhere in this file (see `yourRosterId` below); this is the one spot
+          // that had not been.
+          isYou: rosterIdsMatch(yours?.externalId, r.rosterId),
           /*
            * The power board is keyed on roster id and carries no owner id, so
            * FAAB cannot be joined on this path. Null is the honest answer —
