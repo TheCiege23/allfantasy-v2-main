@@ -83,6 +83,12 @@ export type DecisionOsFeed =
    * first thing an operator should be able to shed without losing the concurrent producers.
    */
   | 'idpKickerValues'
+  /**
+   * Roster value grade — this roster's positional strengths/weaknesses ranked against the rest of
+   * the league by market value (R3.3, 2.2). Bridges `lib/core-app/rosterGrade.ts`, joins the
+   * concurrent wave like the two decision bridges above (own DB reads, no roster dependency).
+   */
+  | 'rosterValueGrade'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -99,6 +105,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'lineupDecision',
   'commissionerHealthDecision',
   'idpKickerValues',
+  'rosterValueGrade',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

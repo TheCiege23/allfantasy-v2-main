@@ -23,6 +23,7 @@ import {
 import type { DecisionFact } from './decisionToSlice'
 import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
+import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -246,6 +247,13 @@ export interface DecisionOsGroundingPacket {
    * tackle-heavy setup, so these cannot be cached sport+format the way a market board can.
    */
   idpKickerValues?: GroundedSlice<ValueLookup[]>
+
+  /**
+   * R3.3 (2.2) — "Where am I weak?" in value terms: this roster's positions ranked against the
+   * rest of the league by market value. Bridges `getRosterGrade` (`lib/core-app/rosterGrade.ts`),
+   * the same playbook R2 used for the four live decision engines rather than re-deriving the math.
+   */
+  rosterValueGrade?: GroundedSlice<RosterValueGradeFact>
 
   /**
    * Every gap on the packet, flattened.
@@ -591,6 +599,14 @@ export interface GroundingPacketArgs {
      * in `loadIdpKickerValueSlice` matters: four leagues in five stop before any query.
      */
     idpKicker?: boolean
+    /**
+     * R3.3 (2.2) — roster value grade (default OFF). Joins the concurrent wave like the two
+     * decision bridges above: it does its own DB reads and does not depend on the roster slice, so
+     * unlike `idpKicker` it is not a serialized second hop — it is opt-in purely because it is a
+     * real query cost (`getRosterGrade` reads every roster in the league to rank against), not
+     * because of an ordering constraint.
+     */
+    rosterValueGrade?: boolean
   }
 }
 
@@ -689,6 +705,7 @@ export async function buildDecisionOsGroundingPacket(
   const lineupDecisionKill = killed('lineupDecision')
   const commishHealthKill = killed('commissionerHealthDecision')
   const idpKickerKill = killed('idpKickerValues')
+  const rosterValueGradeKill = killed('rosterValueGrade')
 
   const pAssertions =
     leagueId && !importKill
@@ -765,6 +782,16 @@ export async function buildDecisionOsGroundingPacket(
   const pCommishHealth =
     want.commissionerHealthDecision && !commishHealthKill
       ? kick('commissionerHealthDecision', loadCommissionerHealthDecisionSlice({ userId: args.userId, leagueId }))
+      : Promise.resolve(null)
+
+  /*
+   * R3.3 (2.2) — roster value grade. Same wave, same rules: its own DB reads, no dependency on the
+   * roster slice, so it joins the concurrent wave rather than serialising behind context like
+   * `idpKicker` does.
+   */
+  const pRosterValueGrade =
+    want.rosterValueGrade && !rosterValueGradeKill
+      ? kick('rosterValueGrade', loadRosterValueGradeSlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   const pDevy = want.devy && !devyKill
@@ -1181,6 +1208,15 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Ask about your league’s health and the deterministic engine runs.',
       })
 
+  const rosterValueGrade: GroundedSlice<RosterValueGradeFact> = rosterValueGradeKill
+    ? absent<RosterValueGradeFact>(rosterValueGradeKill)
+    : (await pRosterValueGrade) ??
+      absent<RosterValueGradeFact>({
+        reason: 'not_requested',
+        detail: 'This question did not call for a roster value grade.',
+        remedy: 'Ask where you are weak or how your roster compares and it runs.',
+      })
+
   const psychologyRows = await pPsychology
   const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
     ? absent<PsychologyProfileFact[]>(psychologyKill)
@@ -1353,6 +1389,7 @@ export async function buildDecisionOsGroundingPacket(
     ['lineupDecision', lineupDecision as GroundedSlice<unknown>],
     ['commissionerHealthDecision', commissionerHealthDecision as GroundedSlice<unknown>],
     ['idpKickerValues', idpKickerValues as GroundedSlice<unknown>],
+    ['rosterValueGrade', rosterValueGrade as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1381,6 +1418,7 @@ export async function buildDecisionOsGroundingPacket(
     lineupDecision,
     commissionerHealthDecision,
     idpKickerValues,
+    rosterValueGrade,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,
