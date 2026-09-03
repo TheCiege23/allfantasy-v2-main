@@ -6,10 +6,20 @@ import { prisma } from "@/lib/prisma"
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { sendMarketingEmail } from "@/lib/email/marketing-email"
+import { isPlausibleEmail } from "@/lib/admin-dashboard/parseManualRecipients"
 
 const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due"]
 const MAX_BROADCAST_RECIPIENTS = 500
 const MAX_SENDS_PER_HOUR = 3
+/*
+ * ⚠ DELIBERATELY SMALLER THAN MAX_BROADCAST_RECIPIENTS. Manual entry exists for
+ * "a handful of specific people" — every other need is already a rule-based
+ * audience above. A generous cap here would make manual entry a second,
+ * unreviewed bulk-send path that happens to skip the "does this audience
+ * definition make sense" scrutiny a segment gets. 50 is comfortably above any
+ * real "handful" and still nowhere near a broadcast.
+ */
+const MAX_MANUAL_RECIPIENTS = 50
 
 export type AdminEmailAudience =
   | "all"
@@ -23,6 +33,7 @@ export type AdminEmailAudience =
   | "win_back"
   | "waitlist_confirmed"
   | "waitlist_all"
+  | "manual"
 
 /** A curated audience with a live-computed recipient count, for the segments panel. */
 export type AdminEmailSegmentCount = {
@@ -71,6 +82,8 @@ export type AdminEmailAudiencePreview = {
   cappedAt: number
   sample: Array<{ username: string | null; emailMasked: string }>
   excludedOptOuts: number
+  /** Manual mode only: entries dropped for not looking like an email at all. */
+  invalidEntries?: number
 }
 
 export type AdminEmailSendResult = {
@@ -110,6 +123,11 @@ export const EMAIL_AUDIENCES: AdminEmailStatus["audiences"] = [
     label: "Win-back — lapsed free users",
     description:
       "Free users whose account is 30+ days old with no login signal in the last 30 days. No active subscription, so a win-back offer costs nothing to send.",
+  },
+  {
+    id: "manual",
+    label: "Manual recipient list",
+    description: `Specific email addresses you paste in, up to ${MAX_MANUAL_RECIPIENTS}. Still checked against opt-outs and undeliverable domains.`,
   },
 ]
 
@@ -305,10 +323,70 @@ async function waitlistRecipients(
     .map((row) => ({ userId: null, email: row.email, username: row.name ?? null }))
 }
 
+/**
+ * Manual entry gets the SAME safety chain as every rule-based audience —
+ * undeliverable-domain filtering, then opt-out filtering by email — plus one
+ * step neither of them needs: the raw text has to be parsed and validated
+ * first, since a human typed or pasted it rather than a query producing it.
+ *
+ * ⚠ AN EMAIL THAT MATCHES AN EXISTING AppUser GETS THAT USER'S id ATTACHED, so
+ * its NotificationOutbox row is attributed like every other user-directed send
+ * rather than landing in the null-userId bucket waitlist recipients use. An
+ * address with no matching account still sends — manual entry is not
+ * restricted to known users — it just logs without an owner, the same as a
+ * waitlist recipient today.
+ */
+async function manualRecipients(
+  rawEntries: string[],
+  limit: number
+): Promise<{ recipients: AdminEmailRecipient[]; invalidEntries: number; excludedOptOuts: number }> {
+  const deduped = Array.from(new Set(rawEntries.map((value) => value.trim().toLowerCase()).filter(Boolean)))
+  const valid = deduped.filter(isPlausibleEmail)
+  const invalidEntries = deduped.length - valid.length
+
+  const deliverable = valid.filter((email) => !isUndeliverableEmailDomain(email))
+  const optOuts = await optOutEmailSet(deliverable)
+  const allowed = deliverable.filter((email) => !optOuts.has(email)).slice(0, limit)
+
+  if (allowed.length === 0) return { recipients: [], invalidEntries, excludedOptOuts: optOuts.size }
+
+  const knownUsers = await prisma.appUser.findMany({
+    where: { email: { in: allowed, mode: "insensitive" } },
+    select: { id: true, email: true, username: true },
+  })
+  const knownByEmail = new Map(knownUsers.map((user) => [user.email.toLowerCase(), user]))
+
+  const recipients = allowed.map((email) => {
+    const known = knownByEmail.get(email)
+    return { userId: known?.id ?? null, email: known?.email ?? email, username: known?.username ?? null }
+  })
+  return { recipients, invalidEntries, excludedOptOuts: optOuts.size }
+}
+
 export async function previewEmailAudience(
   audience: AdminEmailAudience,
-  limit = MAX_BROADCAST_RECIPIENTS
+  limit = MAX_BROADCAST_RECIPIENTS,
+  manualEmails: string[] = []
 ): Promise<{ preview: AdminEmailAudiencePreview; recipients: AdminEmailRecipient[] }> {
+  if (audience === "manual") {
+    const manualLimit = Math.min(limit, MAX_MANUAL_RECIPIENTS)
+    const { recipients, invalidEntries, excludedOptOuts } = await manualRecipients(manualEmails, manualLimit)
+    return {
+      recipients,
+      preview: {
+        audience,
+        recipientCount: recipients.length,
+        cappedAt: manualLimit,
+        sample: recipients.slice(0, 8).map((row) => ({
+          username: row.username,
+          emailMasked: maskAdminEmail(row.email),
+        })),
+        excludedOptOuts,
+        invalidEntries,
+      },
+    }
+  }
+
   if (audience === "waitlist_all" || audience === "waitlist_confirmed") {
     const recipients = await waitlistRecipients(audience, limit)
     return {
@@ -364,6 +442,8 @@ export async function runAdminEmailAction(input: {
   body: string
   adminEmail?: string | null
   confirm?: boolean
+  /** Raw pasted/typed entries. Only read when audience === "manual". */
+  manualEmails?: string[]
 }): Promise<AdminEmailSendResult> {
   const subject = sanitizeSubject(input.subject)
   const body = sanitizeBody(input.body)
@@ -374,9 +454,37 @@ export async function runAdminEmailAction(input: {
     throw new Error("Body is required.")
   }
 
-  const { preview, recipients } = await previewEmailAudience(input.audience)
+  /*
+   * ⚠ NO EARLY THROW FOR AN EMPTY manualEmails LIST, DELIBERATELY. `preview`
+   * should show "0 recipients" rather than error — that is more informative
+   * for an operator who has not typed anyone in yet. `test` ignores the
+   * audience/recipients entirely; it always mails input.adminEmail, so an
+   * empty manual list has no bearing on it. Only `send` can meaningfully fail
+   * on zero recipients, and that is the recipients.length === 0 check below.
+   */
+  const { preview, recipients } = await previewEmailAudience(input.audience, MAX_BROADCAST_RECIPIENTS, input.manualEmails)
   if (input.mode === "preview") {
     return { ok: true, mode: "preview", message: "Preview only. No emails sent.", preview, sent: 0, failed: 0 }
+  }
+
+  /*
+   * ⚠ A ZERO-RECIPIENT SEND WAS PREVIOUSLY "SUCCESSFUL" AND SILENT. It cost a
+   * rate-limit slot and left a 24h duplicate-guard entry behind for nothing —
+   * survivable for a rule-based audience that is rarely empty, but manual entry
+   * makes an empty result routine (every pasted address opted out, every domain
+   * typo'd). Refusing before the rate-limit/duplicate checks means an operator
+   * who fixes the list can retry immediately rather than waiting out a slot they
+   * never used.
+   */
+  if (input.mode === "send" && recipients.length === 0) {
+    return {
+      ok: false,
+      mode: "send",
+      message: "No recipients after filtering opt-outs/invalid entries. Nothing was sent.",
+      preview,
+      sent: 0,
+      failed: 0,
+    }
   }
 
   const status = await getEmailCenterStatus()

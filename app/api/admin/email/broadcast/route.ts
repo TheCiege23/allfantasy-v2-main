@@ -18,6 +18,13 @@ const bodySchema = z.object({
   subject: z.string().min(4).max(140),
   body: z.string().min(10).max(8000),
   confirm: z.boolean().optional(),
+  /*
+   * A sanity ceiling on the RAW payload, not the recipient cap — that is
+   * MAX_MANUAL_RECIPIENTS in the service, enforced after dedup/validation.
+   * This just refuses an absurd paste (a multi-thousand-line CSV) before it
+   * reaches the DB layer at all.
+   */
+  manualEmails: z.array(z.string().max(320)).max(300).optional(),
 })
 
 export async function GET() {
@@ -67,6 +74,18 @@ export async function POST(request: Request) {
           confirmed: parsed.data.confirm ?? false,
           succeeded: result.ok,
           responseStatus: status,
+          /*
+           * ⚠ THE ONLY WAY TO KNOW WHO A "manual" SEND REACHED, AFTER THE FACT.
+           * A rule-based audience is self-describing and reproducible from its
+           * id alone ("audience: paying" means the same query today as it did
+           * then). "manual" is not — the actual recipients depended on whatever
+           * was typed in at that moment and are never stored verbatim (same
+           * reason the body is length-only above). The count is the minimum an
+           * operator reviewing the audit log later needs to know a manual send
+           * of N specific people happened, without the log becoming a second
+           * copy of anyone's email address.
+           */
+          recipientCount: result.preview?.recipientCount ?? null,
         },
       })
     }

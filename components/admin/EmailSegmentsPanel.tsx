@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import type { AdminEmailAudience, AdminEmailStatus } from "@/lib/admin-dashboard/AdminEmailCenterService"
+import { parseManualRecipientInput } from "@/lib/admin-dashboard/parseManualRecipients"
 
 /**
  * 29a — the email segments panel.
@@ -31,6 +32,7 @@ type BroadcastResult = {
     cappedAt: number
     sample: PreviewSample[]
     excludedOptOuts: number
+    invalidEntries?: number
   }
   sent: number
   failed: number
@@ -46,6 +48,7 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
   )
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
+  const [manualInput, setManualInput] = useState("")
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState<"preview" | "test" | "send" | null>(null)
   const [result, setResult] = useState<BroadcastResult | null>(null)
@@ -56,13 +59,29 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
     [status.segments, audience]
   )
 
+  /*
+   * ⚠ CLIENT-SIDE COUNT IS FOR FEEDBACK ONLY, NEVER THE SEND DECISION. It uses
+   * the same parser the server uses (see the shared module's own header for why
+   * that sharing matters), but it cannot see opt-outs or undeliverable domains —
+   * only the server, which has the database, can. "Preview recipients" against
+   * the real backend is what tells an operator the number that will actually
+   * be reached; this is just "how many things did you type" as you type them.
+   */
+  const manualEntries = useMemo(() => parseManualRecipientInput(manualInput), [manualInput])
+  const isManual = audience === "manual"
+
   const subjectValid = subject.trim().length >= 4
   const bodyValid = body.trim().length >= 10
+  const manualListValid = !isManual || manualEntries.length > 0
 
   const run = async (mode: "preview" | "test" | "send") => {
     if (busy) return
     if (mode !== "preview" && (!subjectValid || !bodyValid)) return
     if (mode === "send" && !confirmed) return
+    // Preview and test are allowed through with zero manual entries — preview
+    // shows an honest "0 recipients", and test ignores the audience entirely.
+    // Only a real send needs someone to actually reach.
+    if (mode === "send" && isManual && manualEntries.length === 0) return
     setBusy(mode)
     setError(null)
     try {
@@ -75,6 +94,7 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
           subject: subject.trim() || "(preview)",
           body: body.trim() || "(preview — no body yet)",
           confirm: mode === "send" ? confirmed : undefined,
+          manualEmails: isManual ? manualEntries : undefined,
         }),
       })
       const parsed = (await res.json().catch(() => null)) as BroadcastResult | { ok: false; error: string } | null
@@ -162,6 +182,28 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
           ) : null}
         </label>
 
+        {isManual ? (
+          <label className="mt-3 block">
+            <span className="mb-1 block text-[11px] text-white/50">
+              Recipients — emails separated by comma, space, or one per line
+            </span>
+            <textarea
+              value={manualInput}
+              onChange={(e) => {
+                setManualInput(e.target.value)
+                setResult(null)
+              }}
+              rows={3}
+              placeholder={"jane@example.com, sam@example.com\nor one per line"}
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+            />
+            <p className="mt-1 text-[11px] text-cyan-100/60">
+              {formatCount(manualEntries.length)} entered — click Preview to see how many are real, deliverable,
+              and not opted out.
+            </p>
+          </label>
+        ) : null}
+
         <label className="mt-3 block">
           <span className="mb-1 block text-[11px] text-white/50">Subject</span>
           <input
@@ -215,7 +257,7 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
           <button
             type="button"
             onClick={() => void run("send")}
-            disabled={busy !== null || !subjectValid || !bodyValid || !confirmed}
+            disabled={busy !== null || !subjectValid || !bodyValid || !confirmed || !manualListValid}
             className="rounded-xl bg-rose-500/30 px-3 py-2 text-xs font-black text-white hover:bg-rose-500/45 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === "send" ? "Sending…" : "Send broadcast"}
@@ -243,6 +285,9 @@ export function EmailSegmentsPanel({ status }: { status: AdminEmailStatus }) {
                 {formatCount(result.preview.recipientCount)} recipients (capped at {formatCount(result.preview.cappedAt)}),
                 {" "}
                 {formatCount(result.preview.excludedOptOuts)} opt-outs excluded.
+                {result.preview.invalidEntries ? (
+                  <span> {formatCount(result.preview.invalidEntries)} entries did not look like an email and were dropped.</span>
+                ) : null}
                 {result.preview.sample.length ? (
                   <span> Sample: {result.preview.sample.map((s) => s.username ?? s.emailMasked).join(", ")}.</span>
                 ) : null}
