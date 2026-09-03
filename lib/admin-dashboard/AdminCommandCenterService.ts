@@ -291,8 +291,25 @@ function parseAdminEmails(): string[] {
     .filter(Boolean)
 }
 
-function classifySubscriptionCycle(sku: string | null | undefined, planCode: string | null | undefined): "annual" | "monthly" | "unknown" {
-  const value = `${sku ?? ""} ${planCode ?? ""}`.toLowerCase()
+/** Exported for test: it is pure, and it silently returned "unknown" for every real plan code. */
+export function classifySubscriptionCycle(sku: string | null | undefined, planCode: string | null | undefined): "annual" | "monthly" | "unknown" {
+  /*
+   * 🛑 `_` IS A WORD CHARACTER, SO `\b` NEVER FIRES INSIDE A snake_case CODE.
+   * This read `/\bmonthly\b/` against the raw value and so returned "unknown"
+   * for every plan code this app actually issues — they are snake_case by
+   * convention (`af_war_room`, `af_war_room_runtime_seed`). Measured on
+   * 2026-09-03: production showed 2 subscriptions as 0 monthly / 0 annual /
+   * 2 unknown, which read as missing data and was really a broken matcher.
+   *
+   *   /\bmonthly\b/.test("af_pro_monthly")   false   <- the bug
+   *   /\bmonthly\b/.test("af-pro-monthly")   true    <- only hyphens worked
+   *
+   * So separators are normalised to spaces FIRST and the word boundaries kept.
+   * Dropping `\b` instead would be worse: bare `mo` would then match "moment",
+   * "mode", "promo" — a matcher that is wrong in the other direction and much
+   * harder to notice, because it produces confident answers instead of blanks.
+   */
+  const value = `${sku ?? ""} ${planCode ?? ""}`.toLowerCase().replace(/[_\-.:/]+/g, " ")
   if (/\b(annual|year|yearly|yr)\b/.test(value)) return "annual"
   if (/\b(month|monthly|mo)\b/.test(value)) return "monthly"
   return "unknown"
@@ -887,11 +904,20 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Stripe webhook events", stripeEvents),
       metric("Completed payments (all time)", bracketPaymentsCompleted),
       completedRevenueCents === null
-        ? notTracked("Total revenue", "No completed bracket payments recorded")
-        : metric("Total revenue", `$${(completedRevenueCents / 100).toFixed(2)}`),
-      metric("Revenue last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Rolling 7-hour window"),
-      metric("Revenue today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day"),
-      metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`),
+        ? notTracked("Bracket revenue (all time)", "No completed bracket payments recorded")
+        : metric("Bracket revenue (all time)", `$${(completedRevenueCents / 100).toFixed(2)}`, "Bracket payments only — excludes subscriptions"),
+      /*
+       * ⚠ EVERY FIGURE BELOW IS bracketPayment ONLY, AND THE LABEL MUST SAY SO.
+       * Subscription revenue is not in these sums and cannot be — a Stripe
+       * subscription creates no bracketPayment row, and the price is not stored
+       * on the subscription either (see the MRR note at the end of this list).
+       * Without the scope in the label, "Revenue 7 days $0.00" reads as "the
+       * business took nothing this week" when it means "no bracket entries were
+       * paid for this week", which is a different and much smaller claim.
+       */
+      metric("Revenue last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments · rolling 7-hour window"),
+      metric("Revenue today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments · UTC day"),
+      metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Bracket payments only"),
       metric("Token sales revenue", `$${(tokenSalesRevenueCents / 100).toFixed(2)}`, `${tokenSalesPayments} completed token payment rows`),
       metric("Coupon redemptions", couponRedemptions, `${couponRedemptionsRedeemed} redeemed`),
       notTracked("MRR estimate", "Subscription prices are not reliably stored on subscription rows"),
