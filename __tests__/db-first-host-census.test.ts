@@ -109,6 +109,15 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * builds an icon URL.
    */
   { name: 'cdn-media', why: 'OpenWeather icon assets, not the weather API', test: /^openweathermap\.org$/i },
+  /*
+   * app/layout.tsx renders `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?...">`
+   * — a runtime font load, deliberately not next/font/google (see the comment at that <link> and
+   * af-core.css: this repo's builds have failed for unrelated network/heap reasons before, and a
+   * font fetch must not become a new way for the build to break). The browser fetches this CSS and
+   * then the actual font files from fonts.gstatic.com directly; neither is a data read, and the
+   * gstatic host never appears as a literal in this codebase for the census to find.
+   */
+  { name: 'cdn-media', why: 'Google Fonts stylesheet consumed as a <link> href, not a data read', test: /^fonts\.googleapis\.com$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|www\.youtube\.com|fancred\.app)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
