@@ -97,6 +97,77 @@ const STARTUP_STAGGER_MS = 3_000
 const MAX_CONCURRENCY = 8
 
 /**
+ * A call this slow means the app is struggling, not that the job is big.
+ *
+ * Measured on 2026-09-03: the same fast-tier jobs that answer in 0.5-9s against a warm container
+ * took 51-112s against a cold one — waivers 111,587ms, redraft/score-sync 111,716ms,
+ * notification-outbox-relay 110,982ms, draft-tick 63,169ms. 30s is far above the healthy ceiling
+ * and far below the sick floor, so it separates the two without needing to know which is which.
+ *
+ * ⚠ live-score-tick LEGITIMATELY EXCEEDS THIS DURING GAMES, AND THAT IS EXPECTED. It is bimodal:
+ * measured over 4,461 runs across 7 days, p50 is 117ms (no live games, early return) and p90 is
+ * 94,744ms (its 105s internal poll doing exactly what it exists to do). 26.7% of all its runs cross
+ * 30s, and on 2026-08-29 its MEDIAN run was 90s.
+ *
+ * So on a game day the cap sits at 6-8 rather than 8, BY DESIGN. Do not file that as a bug.
+ * Simulating this function against every instrumented completion on that worst day gives cap 8 in
+ * 54.8% of windows, 7 in 38.1%, 6 in 7.2%, and never 5 or below — the floor is not approached, and
+ * 6 is still above the 4 that caused the starvation MAX_CONCURRENCY was raised from.
+ *
+ * That bound is not luck, it is the healthy-fraction scaling: the 1- and 2-minute jobs dominate the
+ * sample stream, so a job that is slow on EVERY fire still contributes only ~1 sample in 8 and
+ * costs one slot rather than six. A fixed threshold with a hard trip would have been unusable here.
+ */
+const SLOW_CALL_MS = 30_000
+
+/** How many recent calls the latency view remembers. One tick's worth of a full pool, roughly. */
+const LATENCY_SAMPLE_SIZE = 8
+
+/**
+ * Floor for the adaptive cap. Never zero: the loop must keep making SOME progress, or a cold
+ * container would never be given the traffic that warms it and the backoff would be permanent.
+ */
+const MIN_CONCURRENCY = 2
+
+/**
+ * Effective concurrency, given how the app has been answering lately.
+ *
+ * ⚠ WHY THIS EXISTS. `MAX_CONCURRENCY` is a fixed 8, and 8 simultaneous requests against a
+ * container that has just restarted is what turned a routine deploy into a user-visible outage on
+ * 2026-09-02. The container is single-threaded Node with 24 vCPU and 24 GB it cannot use in
+ * parallel (measured: memory peaked 5.1 GB, CPU 1.25 cores), so the ceiling is the event loop, not
+ * the box. Everything is due at once after a restart, eight of them fire, each takes ~110s instead
+ * of ~1s, and real user requests queue behind them.
+ *
+ * ⚠ AND LOWERING MAX_CONCURRENCY IS NOT THE FIX. It was RAISED from 4 to 8 for a measured reason —
+ * slow jobs monopolised four slots and starved the every-minute jobs. A fixed cap cannot be right
+ * for both a warm app and a cold one, because the two want opposite things.
+ *
+ * So the cap is left alone for the healthy case and lowered only while the app is demonstrably
+ * struggling. This is ordinary congestion control: back off under load, restore on recovery, and
+ * never coordinate with the deploy — the loop cannot see a deploy, but it CAN see latency, and
+ * latency is the thing that actually matters.
+ *
+ * `orderByUrgency` still decides WHO gets the reduced slots, so the every-minute jobs this loop
+ * exists for keep their priority while it is backed off.
+ *
+ * Pure and exported so it is tested directly rather than inferred from a live run.
+ */
+export function effectiveConcurrency(recentDurations, max = MAX_CONCURRENCY) {
+  // Not enough evidence yet — do not throttle on one unlucky call at startup.
+  if (!Array.isArray(recentDurations) || recentDurations.length < LATENCY_SAMPLE_SIZE) return max
+
+  const sample = recentDurations.slice(-LATENCY_SAMPLE_SIZE)
+  const slow = sample.filter((d) => Number.isFinite(d) && d >= SLOW_CALL_MS).length
+  if (slow === 0) return max
+
+  // Scale with the HEALTHY fraction, so one slow call among eight barely moves it and a pool that
+  // is entirely slow drops straight to the floor.
+  const healthyFraction = (sample.length - slow) / sample.length
+  return Math.max(MIN_CONCURRENCY, Math.round(max * healthyFraction))
+}
+
+/**
  * A job is only reported as systemically broken after this many attempts, all failed.
  *
  * ⚠ THE WORKFLOW MUST NOT REDDEN ON ONE BAD TICK. Over a 55-minute window a 1-minute job fires ~55
@@ -382,6 +453,10 @@ async function main() {
   )
   const inFlight = new Set()
   let concurrency = 0
+  /** Rolling view of how the app has been answering, for effectiveConcurrency(). */
+  const recentDurations = []
+  /** Last cap logged, so a change is reported once rather than every second. */
+  let lastCap = MAX_CONCURRENCY
 
   const startedAt = Date.now()
   const deadline = startedAt + args.windowMinutes * 60_000
@@ -398,6 +473,11 @@ async function main() {
     s.attempts += 1
     callJob(baseUrl, secret, job.path, job.timeoutMs)
       .then((r) => {
+        // Latency view for effectiveConcurrency(). Recorded for failures too: a call that hangs to
+        // its timeout is the strongest evidence the app is struggling, and dropping it would make
+        // the backoff blindest exactly when it is most needed.
+        recentDurations.push(r.elapsedMs)
+        if (recentDurations.length > LATENCY_SAMPLE_SIZE) recentDurations.shift()
         if (r.ok) {
           s.succeeded += 1
           console.log(`${hhmmss(Date.now())}  OK   ${job.path} (${r.elapsedMs}ms)`)
@@ -439,10 +519,19 @@ async function main() {
       due.push({ ...job, dueAt })
     }
 
+    // Cap for THIS tick. Full 8 while the app answers normally; lower while it is struggling, so a
+    // cold container after a deploy is not met with eight simultaneous requests. See
+    // effectiveConcurrency() for why lowering MAX_CONCURRENCY itself would re-introduce starvation.
+    const capNow = effectiveConcurrency(recentDurations)
+    if (capNow !== lastCap) {
+      console.log(`${hhmmss(now)}  concurrency ${lastCap} -> ${capNow} (recent slow calls)`)
+      lastCap = capNow
+    }
+
     for (const job of orderByUrgency(due, now)) {
       // `break`, not `continue`: anything past the cap keeps its due time and is re-ranked next
       // tick, so a job that has been waiting longest keeps climbing rather than losing its place.
-      if (concurrency >= MAX_CONCURRENCY) break
+      if (concurrency >= capNow) break
       fire(job)
       nextDueAt.set(job.path, nextBoundary(now, job.intervalMs))
     }
