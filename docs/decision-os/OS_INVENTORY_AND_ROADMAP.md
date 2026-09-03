@@ -221,7 +221,7 @@ feed source" is therefore **correct and should stay that way** — only the pack
 | **R3.1a** | `loadIdpKickerValueSlice` — builds the context, cheap exit, honest gaps. 6 tests, both guards mutation-verified. | ✅ |
 | **R3.1b** | Wired into the packet: `want.idpKicker` (default OFF), an `idpKickerValues` kill switch, and the producer placed AFTER `contextFacts` because it is the only slice that needs the roster. The extractors carry the id-space knowledge and are tested. | ✅ |
 | **R3.2** | A SECOND cron walk for app-level sources, keyed sport+format. `bindLeagueSource` is typed `OsFactSource<{ leagueId }>`, so the three app sources could never be members of the league walk — they are a different shape, not an oversight. Combination set read from `PlayerValueSnapshot` (the four that can actually be served) rather than expanded from leagues. Runs BEFORE the league walk: one app fact serves 249 leagues, one league fact serves one. | ✅ |
-| **R3.3** | The other three value questions: trade grade · roster holes · cross-league exposure. | ☐ |
+| **R3.3** | The other three value questions. 🛑 INVESTIGATED, AND ONE OF THEM WAS A SERIALIZER BUG: 2.2 "where am I weak" already existed — `computeRosterIntel` produces the signals, the roster slice carries them, and all EIGHT `contextFacts` slices rendered as the word "available". 2.1 is proposal-scoped (same constraint as R2.6) and `sumCanonicalValues` has ZERO callers. 2.3 was already done. | ◧ |
 
 Suite after R3.1: **199 files / 3,707 tests / 0 failures.**
 

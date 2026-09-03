@@ -83,6 +83,29 @@ function renderValue(name: string, value: unknown): string[] {
    */
   if (isDecisionFact(value)) return renderDecision(value)
 
+  /*
+   * 🛑 PLAIN OBJECTS RENDERED AS THE WORD "available" AND NOTHING ELSE — G11, STILL LIVE.
+   *
+   * `renderValue` handled strings and arrays. All EIGHT `contextFacts` slices are plain objects,
+   * so every one printed its header and no substance: matchup, roster, standings, rankings,
+   * leagueDifficulty, importedHistory, replayInsights, devy. Measured by feeding a real roster
+   * carrying `weaknessSignals: ['shallow_depth:RB']` through this function — the output was
+   * exactly `- Roster: available (served from live)`.
+   *
+   * That is the bug this file was rewritten to fix for values, and it had been true the whole time
+   * for the eight slices that predate the rewrite. `computeRosterIntel` has been producing "where
+   * am I weak" signals that reached the packet and stopped here.
+   */
+  /*
+   * ⚠ `!Array.isArray` IS LOAD-BEARING, NOT DEFENSIVE. `typeof [] === 'object'`, so without it this
+   * branch swallows every ARRAY slice — market values, projections, psychology — and renders their
+   * indices as field names. Five existing serializer tests caught exactly that, which is what a
+   * regression suite is for.
+   */
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return renderObject(value as Record<string, unknown>)
+  }
+
   if (!Array.isArray(value) || value.length === 0) return []
 
   const rows: string[] = []
@@ -99,6 +122,61 @@ function renderValue(name: string, value: unknown): string[] {
  * A bridged engine decision. Structural detection, like every other branch here — only a
  * `DecisionFact` carries `decisionType` alongside the four contract answers.
  */
+/** Fields never worth a line: ids the model cannot use. */
+const SKIP_KEYS = new Set(['leagueId', 'teamId', 'yourTeamId', 'opponentTeamId', 'rosterId', 'userId'])
+
+/**
+ * One plain object, bounded and NON-RECURSIVE.
+ *
+ * 🛑 IT NEVER DESCENDS INTO A NESTED OBJECT, AND THAT IS THE WHOLE SAFETY PROPERTY. `packet.ts`
+ * records that the `ranking` provider returns difficulty ratings for ~400 leagues and dominates the
+ * payload; a renderer that recursed would put that in every prompt. Refusing to descend makes an
+ * unbounded dump IMPOSSIBLE rather than merely unlikely — the same reason `toEvidencePacket`
+ * forbids `JSON.stringify` outright.
+ *
+ * A nested object is reported as PRESENT and not summarised. "We have a ranking snapshot" is true
+ * and useful; inventing a summary of a shape this function has never seen is not.
+ */
+function renderObject(o: Record<string, unknown>): string[] {
+  const rows: string[] = []
+  for (const [k, v] of Object.entries(o)) {
+    if (rows.length >= MAX_ITEMS) break
+    if (SKIP_KEYS.has(k) || v == null) continue
+
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      rows.push(`    ${k}: ${typeof v === 'number' ? fmt(v) : String(v)}`)
+      continue
+    }
+
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue
+      // A string array IS the substance for weaknessSignals/strengthSignals — the answer to
+      // "where am I weak" has been sitting in one of these the whole time.
+      const strings = v.filter((x): x is string => typeof x === 'string')
+      if (strings.length === v.length) {
+        const shown = strings.slice(0, MAX_ITEMS)
+        const more = strings.length > shown.length ? `, and ${strings.length - shown.length} more` : ''
+        rows.push(`    ${k}: ${shown.join(', ')}${more}`)
+        continue
+      }
+      // Objects: only those a known branch can name. The COUNT is always stated, so a collection
+      // this function cannot itemise never reads as empty.
+      const named = v.slice(0, MAX_ITEMS).map(renderItem).filter((l): l is string => Boolean(l))
+      const more = v.length > named.length ? `, and ${v.length - named.length} more` : ''
+      rows.push(
+        named.length > 0
+          ? `    ${k} (${v.length}): ${named.join('; ')}${more}`
+          : `    ${k}: ${v.length} item${v.length === 1 ? '' : 's'} (not itemised here)`,
+      )
+      continue
+    }
+
+    // ⚠ PRESENT, NOT SUMMARISED. See the header: descending is what makes a dump possible.
+    rows.push(`    ${k}: present`)
+  }
+  return rows
+}
+
 function isDecisionFact(v: unknown): v is Record<string, unknown> {
   if (v == null || typeof v !== 'object' || Array.isArray(v)) return false
   const o = v as Record<string, unknown>
@@ -182,6 +260,27 @@ function renderItem(item: unknown): string | null {
     // `sumCanonicalValues` refuses to mix them; a prompt that omits the unit invites the model to
     // do the addition the code refuses to do.
     return `${who}${pos} ${fmt(v.value as number)} ${String(v.unit)}${rank}`
+  }
+
+  /*
+   * RosterPlayerLite — who is actually on the roster. The most basic fact in the packet, and it has
+   * never reached a prompt.
+   *
+   * ⚠ `playerName` IS NULLABLE ON PURPOSE AND THE NULL MUST SURVIVE. `types.ts` records that this
+   * was once a non-null `string`, satisfied with `?? playerId`, and a live dynasty league rendered
+   * 27 of 27 players as their own ids — a player literally named "6804". Falling back to the id
+   * here would rebuild exactly that. An unnamed player is dropped instead; the count still counts him.
+   */
+  /*
+   * ⚠ `points` EXCLUDED, BECAUSE A ProjectionFact ALSO CARRIES playerName AND A PLAYER ID. Without
+   * that clause this branch matches a projection first and renders it as a bare name — silently
+   * dropping the points, which are the entire reason a projection is in the packet. An existing
+   * test caught it; the branches are ordered least-specific-last for exactly this reason.
+   */
+  if (typeof o.playerId === 'string' && typeof o.points !== 'number' && ('playerName' in o || 'position' in o)) {
+    const who = typeof o.playerName === 'string' && o.playerName ? o.playerName : null
+    if (!who) return null
+    return o.position ? `${who} (${String(o.position)})` : who
   }
 
   // PsychologyProfileFact — labels plus only the scores that cleared their evidence floor.
