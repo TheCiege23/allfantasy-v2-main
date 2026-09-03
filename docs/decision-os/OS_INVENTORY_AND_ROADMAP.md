@@ -299,6 +299,82 @@ serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
 
+## 0.30 🛑 BUG-2 IS OVER. THE DAMAGE IS NOT — 37 LEAGUES HAVE BEEN FROZEN FOR 39 HOURS
+
+**2026-09-03, measured read-only against production.** §0.18 calls BUG-2 *"LIVE and
+ongoing since 05:00 2026-09-02"*. It is not live. It was a **17-minute incident**, and
+what it left behind is a different and still-open bug.
+
+### The incident is closed
+
+```
+first read-only error   2026-09-02 05:00:21
+last  read-only error   2026-09-02 05:17:47      <- 17m 26s, and nothing since
+newest sync row         2026-09-03 20:14:43      <- the collector is running normally
+```
+
+Zero read-only failures in the ~39 hours since. §0.18's "46 of 184" now reads 35.
+
+⚠ **READ TIMESTAMPS AS TEXT WHEN MEASURING THIS TABLE.** `scripts/db-readonly-probe.mjs`
+serializes a timestamp through a JS `Date`, and this machine is EDT, so every ISO string
+it prints is **+4 hours**. That is how a first read of this data put the incident at
+09:00 and made the newest row look 3.5 hours in the FUTURE. `to_char(...)` removes it and
+restores agreement with §0.18's 05:00 onset. Aggregates computed in SQL
+(`now() - "updatedAt"`) were never affected — only the displayed strings.
+
+### What is still broken: a league that fails once is never retried
+
+| `syncStatus` | rows | synced in last 24h |
+|---|---|---|
+| `completed` | 144 | 27 |
+| `partial` | 33 | **0** |
+| `failed` | 4 | **0** |
+
+**Not one league in `partial` or `failed` has been re-attempted** — in either half of the
+enumeration order, with `consecutiveFailures = 1` and `lastAttemptedSyncAt` frozen at
+`2026-09-02 05:01`. At the documented 30-minute cadence that is roughly **78 consecutive
+missed opportunities**, so it is a rule, not a coincidence.
+
+Ruled out by measurement, not by reasoning:
+
+| hypothesis | verdict |
+|---|---|
+| Orphaned sync rows (no League to enumerate) | ❌ **0 orphaned** — all 35 join to a live League row |
+| Enumeration order starvation (`take` on a fixed sort) | ❌ the stuck ids **interleave** the healthy range; the 27 synced span ranks 1–109 of 181 |
+| Season-state gating | ❌ **every** league is `preseason` — uniform, explains nothing |
+| A wedged lock | ❌ all 20 lock rows are **expired**, and the lock steals expired leases |
+
+The discriminator is `syncStatus` and nothing else.
+
+### 🆕 20 orphaned lock rows, and they date the incident exactly
+
+`automation_locks` holds **20 rows, all sleeper, all expired, none cleaned up in 39
+hours** — `createdAt` **09-02 05:00**, the incident minute; newest expiry 05:23. The
+release path never ran, which is what a read-only transaction rejecting the DELETE looks
+like. They are harmless (expired leases are stolen) but they are a permanent fingerprint
+of the incident and nothing prunes them.
+
+### 🛑 The product tells those users something false
+
+§0.18 already records that the serializer emits *"It retries automatically on the next
+sync; a manual refresh will also pick it up"*. The first clause is **not true** for a
+league in `partial` or `failed` — it has not retried in 39 hours and there is no evidence
+it ever will. `lib/fantasy-os/sync/collector/manualRefresh.ts` exists specifically to
+"bypass the cadence gate", so the second clause is the only working remedy.
+
+Either the scheduler should retry these or the message should stop promising it does.
+**Deliberately not fixed here:** changing retry semantics for 37 leagues at once is a
+provider-load decision (Sleeper rate limits) and an owner call, not a unilateral one.
+
+### What this changes
+
+- BUG-2 should be **re-triaged from "live, ongoing, top priority" to "closed incident,
+  open aftermath"**. The investigation §0.18 asks for — what deployed at 05:00 — is now
+  forensic rather than urgent.
+- The urgent item is the **retry gap**, which is not platform-specific and would freeze
+  leagues again after any future transient failure.
+- **20% of the imported portfolio is serving data frozen at 2026-09-02 04:01.**
+
 ## 0.29 🛑 BUG-4 IS NOT A DYNASTY BUG — IT IS A KEEPER BUG, AND THE FILED PREMISE IS WRONG
 
 **2026-09-03.** BUG-4 reads *"`isDynasty` false on a league the owner says is dynasty …
