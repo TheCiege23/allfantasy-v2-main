@@ -8,6 +8,7 @@ import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayer
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
 import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
+import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -127,6 +128,22 @@ export const CHIMMY_TOOL_SPECS = [
             description:
               'A specific week, if the user named one. Omit for the season-long baseline — do not guess the current week.',
           },
+        },
+        required: ['player'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'explain_value',
+      description:
+        "WHY a player is worth what he is worth — the step-by-step derivation: projection, the conversion to the value scale, positional scarcity, draft capital, and any compression at the top. Use when the user challenges or asks about a number ('why is he only worth that', 'how did you get that', 'that seems low'). Different from get_player_value, which reports the stored published number; this runs the engine over current inputs and can legitimately disagree with it, in which case it says so. Uses DEFAULT positional scarcity because it takes no league.",
+      parameters: {
+        type: 'object',
+        properties: {
+          player: { type: 'string', description: 'The player name as the user wrote it.' },
+          sport: { type: 'string', description: 'NFL, NCAAF, NBA, MLB, NHL, NCAABB or SOCCER. Defaults to NFL.' },
         },
         required: ['player'],
       },
@@ -370,6 +387,12 @@ export async function executeChimmyTool(
           ? Math.floor(args.week)
           : null
         return await buildPlayerProjectionContext({ playerName: asked, sport, week })
+      }
+
+      case 'explain_value': {
+        const asked = typeof args.player === 'string' ? args.player : ''
+        const sport = typeof args.sport === 'string' ? args.sport : null
+        return await buildExplainValueContext({ playerName: asked, sport })
       }
 
       case 'get_upcoming_games': {

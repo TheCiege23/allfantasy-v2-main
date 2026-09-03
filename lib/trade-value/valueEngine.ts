@@ -248,10 +248,54 @@ export function normalizedPlayerValue(input: {
    * it by `POSITION_SCARCITY` would count positional scarcity twice, and that table has no IDP
    * entry anyway: LB, DL and DB all fall through to its 1.0 default.
    */
+  return explainPlayerValue(input).value
+}
+
+/** One step of the derivation, with the running value after it. */
+export interface ValueDerivationStep {
+  label: string
+  /** A sentence a manager can argue with. Never a formula alone. */
+  detail: string
+  /** The running value after this step. */
+  value: number
+}
+
+export interface ValueDerivation {
+  value: number
+  basis: ValueBasis
+  steps: ValueDerivationStep[]
+}
+
+/**
+ * The full derivation chain behind a player's value.
+ *
+ * ── 🛑 THIS IS THE ONE IMPLEMENTATION. `normalizedPlayerValue` RETURNS `.value` FROM IT ────
+ * An explainer that re-walks the engine's arithmetic is a second implementation of the pricing
+ * rule, and it drifts the first time either side changes — silently, because an explanation that
+ * disagrees with a price still reads perfectly. So the arithmetic lives here once and the engine
+ * delegates, which makes "the explanation matches the number" true by construction rather than by
+ * a test that has to be remembered.
+ */
+export function explainPlayerValue(input: {
+  projection: number | null | undefined
+  adp?: number | null
+  position?: string | null
+  marketValue?: number | null
+  idpValue?: number | null
+  scoring?: ScoringContext | null
+}): ValueDerivation {
   const basis = valueBasisFor(input)
+  const steps: ValueDerivationStep[] = []
 
   if (basis === 'idp') {
-    return clamp(Math.round(input.idpValue as number), 0, 10000)
+    const v = clamp(Math.round(input.idpValue as number), 0, 10000)
+    steps.push({
+      label: 'IDP scarcity model',
+      detail:
+        "Priced against this league's own defensive starting slots and scoring. No market ranks defenders, so this is computed rather than quoted — and positional scarcity is NOT applied on top, because it is already inside this number.",
+      value: v,
+    })
+    return { value: v, basis, steps }
   }
 
   let adpPremium = 0
@@ -260,13 +304,79 @@ export function normalizedPlayerValue(input: {
   }
 
   if (basis === 'market') {
-    return clamp(Math.round(input.marketValue as number), 0, 10000)
+    const v = clamp(Math.round(input.marketValue as number), 0, 10000)
+    steps.push({
+      label: 'Market value',
+      detail:
+        'No usable projection, so this falls back to the market price. Positional scarcity is NOT applied: a market value already embeds positional demand, and multiplying again would count it twice.',
+      value: v,
+    })
+    return { value: v, basis, steps }
   }
 
+  /*
+   * 🛑 `none` DOES NOT SHORT-CIRCUIT, AND AN EARLIER DRAFT OF THIS FUNCTION MADE IT DO SO.
+   *
+   * It looked obviously right — no projection, no market, no IDP, so return 0 with a "not priced"
+   * note. Measured against the pre-extraction engine: a WR with no projection and an ADP of 10 was
+   * priced at 660 and became 0. The whole existing suite stayed green, because nothing covers a
+   * player carrying an ADP alone.
+   *
+   * The original falls through to the projection path with `base = 0`, so the ADP premium still
+   * lands. That behaviour is preserved here deliberately — an explainer that changes a price is
+   * not an explainer. Whether pricing a player off draft capital alone is RIGHT is a separate
+   * question and a real one; it is not this function's to decide silently.
+   */
   const base = Number.isFinite(input.projection as number) ? Math.max(0, input.projection as number) : 0
+  steps.push({
+    label: basis === 'none' ? 'No projection' : 'Projection',
+    detail:
+      basis === 'none'
+        ? 'No projection, market value or defensive value reached the engine, so the points term is zero. This is a gap in the inputs, NOT a judgement that the player is worthless.'
+        : `${base} projected points for the rest of the season.`,
+    value: base,
+  })
+
+  const afterScale = base * PROJ_TO_VALUE
+  steps.push({
+    label: `× ${PROJ_TO_VALUE}`,
+    detail: `Points converted to the 0–${VALUE_CEILING} value scale.`,
+    value: afterScale,
+  })
+
   const scarcity = scarcityFor(input.position) * scoringScarcityMultiplier(input.position, input.scoring)
+  const afterScarcity = afterScale * scarcity
+  steps.push({
+    label: `× ${scarcity.toFixed(2)} scarcity`,
+    detail:
+      scarcity === 1
+        ? 'Position carries no scarcity adjustment in this league.'
+        : `How hard ${input.position ?? 'this position'} is to replace, given the league's starting slots and scoring.`,
+    value: afterScarcity,
+  })
+
+  let running = afterScarcity
+  if (adpPremium !== 0) {
+    running = afterScarcity + adpPremium
+    steps.push({
+      label: `${adpPremium > 0 ? '+' : ''}${Math.round(adpPremium)} draft capital`,
+      detail: `Where the player is being drafted, relative to pick ${ADP_PIVOT}. Capped at ${ADP_PREMIUM_MAX} either way so draft position can nudge a value, never decide it.`,
+      value: running,
+    })
+  }
+
   // 1.7f: soft knee instead of a hard clamp, so two elite players never collapse to one number.
-  return clamp(Math.round(softCap(base * PROJ_TO_VALUE * scarcity + adpPremium)), 0, VALUE_CEILING)
+  const knee = softCap(running)
+  if (Math.round(knee) !== Math.round(running)) {
+    steps.push({
+      label: 'Soft knee',
+      detail: `Above ${SOFT_KNEE} the scale compresses toward ${VALUE_CEILING} rather than clipping, so two elite players stay distinguishable instead of collapsing to the same number.`,
+      value: knee,
+    })
+  }
+
+  const value = clamp(Math.round(knee), 0, VALUE_CEILING)
+  return { value, basis, steps }
 }
 
 /**

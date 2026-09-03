@@ -76,6 +76,13 @@ describe('tool specs', () => {
        * projection is the same number for every user.
        */
       'get_player_projection',
+      /*
+       * WHY a value is what it is. Runs `explainPlayerValue` — the same function
+       * `normalizedPlayerValue` returns its result from — over rows it reads, and
+       * writes nothing. Takes no league, which is why it says in its own output
+       * that the scarcity term is a default.
+       */
+      'explain_value',
       'get_league_standings',
       'get_head_to_head',
       'get_upcoming_games',
