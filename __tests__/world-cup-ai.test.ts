@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { openaiChatText } from "@/lib/openai-client"
+import { routeTextCall } from "@/lib/ai/providerRouter"
 import type { WorldCupMatchView } from "@/lib/world-cup/types"
 import { buildWorldCupMatchupIntelligence } from "@/lib/world-cup/worldCupAIService"
 import {
@@ -7,14 +7,59 @@ import {
   describeBracketImpactIfTeamWins,
 } from "@/lib/world-cup/worldCupPickStrategy"
 
-vi.mock("@/lib/openai-client", () => ({
-  openaiChatText: vi.fn().mockResolvedValue({
+/*
+ * ⚠ THIS FILE USED TO MOCK `@/lib/openai-client`, WHICH THE SERVICE NO LONGER IMPORTS.
+ * 1b9fcfe36 routed every World Cup LLM path through lib/ai/providerRouter so the validator and
+ * audit log could not be bypassed — confirmed directly: that commit's parent names openaiChatText
+ * three times and routeTextCall zero, and the commit itself the reverse. The mock was never moved.
+ *
+ * 🛑 THE COST WAS NOT ONLY TWO RED TESTS. `expect(spy).not.toHaveBeenCalled()` in the
+ * not-entitled case was passing VACUOUSLY — the service never calls openaiChatText under any
+ * conditions, so that assertion would have held even if the entitlement gate were deleted
+ * entirely. Pointing the spy at the function the service actually calls is what restores it.
+ */
+vi.mock("@/lib/ai/providerRouter", () => ({
+  routeTextCall: vi.fn().mockResolvedValue({
     ok: false,
+    text: "",
     status: 503,
     details: "no ai",
     model: "x",
-    baseUrl: "",
+    provider: "x",
   }),
+}))
+
+/*
+ * The service wraps every LLM call in an AiInsightCache lookup that reads and writes Postgres.
+ * Stubbed to a guaranteed cache MISS that simply runs the factory, so these tests exercise the
+ * prompt-construction path they are about rather than a database.
+ */
+vi.mock("@/lib/ai/aiInsightCache", () => ({
+  getOrCreateWcMatchupInsight: vi.fn(
+    async (
+      _input: unknown,
+      onCacheMiss: () => Promise<{
+        resultText: string | null
+        tokensUsed?: number
+        provider?: string
+        model?: string
+      }>
+    ) => {
+      const miss = await onCacheMiss()
+      return {
+        text: miss.resultText ?? null,
+        cacheHit: false,
+        model: miss.model ?? null,
+        tokensUsed: miss.tokensUsed ?? null,
+        provider: miss.provider ?? null,
+      }
+    }
+  ),
+}))
+
+// Audit logging writes a row; not what these tests are about.
+vi.mock("@/lib/ai/auditLogger", () => ({
+  logAiInteraction: vi.fn(),
 }))
 
 const baseMatch = (): WorldCupMatchView => ({
@@ -79,7 +124,7 @@ describe("worldCupAIService buildWorldCupMatchupIntelligence", () => {
 
   beforeEach(() => {
     delete process.env.OPENAI_API_KEY
-    vi.mocked(openaiChatText).mockClear()
+    vi.mocked(routeTextCall).mockClear()
   })
 
   afterEach(() => {
@@ -113,7 +158,7 @@ describe("worldCupAIService buildWorldCupMatchupIntelligence", () => {
 
   it("does not call OpenAI when bracketBrainAiEntitled is false even if OPENAI_API_KEY is set", async () => {
     process.env.OPENAI_API_KEY = "sk-test"
-    const spy = vi.mocked(openaiChatText)
+    const spy = vi.mocked(routeTextCall)
 
     await buildWorldCupMatchupIntelligence({
       match: baseMatch(),
@@ -136,7 +181,7 @@ describe("worldCupAIService buildWorldCupMatchupIntelligence", () => {
 
   it("calls OpenAI for panel summary when entitled and key present", async () => {
     process.env.OPENAI_API_KEY = "sk-test"
-    const spy = vi.mocked(openaiChatText)
+    const spy = vi.mocked(routeTextCall)
     spy.mockResolvedValueOnce({
       ok: true,
       text: "Concise preview text that is long enough for the threshold.",
@@ -167,7 +212,7 @@ describe("worldCupAIService buildWorldCupMatchupIntelligence", () => {
 
   it("grounds explicit matchup explanations to provided bracket model data", async () => {
     process.env.OPENAI_API_KEY = "sk-test"
-    const spy = vi.mocked(openaiChatText)
+    const spy = vi.mocked(routeTextCall)
     spy.mockResolvedValueOnce({
       ok: true,
       text: "WHY: Bracket-model guidance favors Alpha.\nRISK: This is a projection, not a live fact.\nBRACKET: Pick Alpha if you want the model lean.",
