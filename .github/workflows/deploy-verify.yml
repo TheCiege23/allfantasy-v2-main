@@ -1,0 +1,77 @@
+name: Deploy verify
+
+# Checks what production actually SERVES after a deploy, for the redirect class that broke
+# silently on 2026-09-02: every verification email, password-reset link, Yahoo connect and beta
+# invite redirected to https://0.0.0.0:8080 -- the address the server bound to, not the host the
+# visitor reached. Nothing threw, nothing logged, no test went red. A user reported it.
+#
+# WHY A DEPLOYED CHECK WHEN A SOURCE GUARD ALREADY EXISTS
+# __tests__/no-bind-address-origins.test.ts stops the source pattern returning, and runs in Unit
+# tests. It cannot see the ways this comes back WITHOUT a source change: a bad PUBLIC_SITE_URL
+# (that variable held the literal string "[SENSITIVE]" for part of 2026-09-03 and only a hardcoded
+# fallback kept links working), an edited start command, or a Next upgrade that changes how
+# attachRequestMeta builds req.url. Those are invisible to any test that reads the repo.
+#
+# ⚠ IT VERIFIES THE BUILD, NOT "THE SITE". On push it waits for /api/af-debug/sha to report the
+# pushed commit before asserting anything, and fails with NOT_DEPLOYED if it never arrives. That
+# third outcome is the one that would have caught 2026-09-02 on its own: auto-deploy was silently
+# off, two commits sat unshipped for an hour, and every probe against the stale build passed.
+#
+# COST: seven requests per run, plus a SHA poll every 30s while waiting. Deliberately small -- a
+# cold container here has been saturated by five concurrent cron jobs before, and a monitor that
+# contributes to the outage it is watching for is not worth having.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Daily backstop. A push-triggered run covers regressions that ship with a commit; this covers
+    # the ones that arrive with no commit at all -- a changed env var, a rolled-back deploy, a
+    # platform change. Once a day is enough for something no deploy is driving.
+    - cron: "40 6 * * *"
+  workflow_dispatch:
+    inputs:
+      expect_sha:
+        description: 'Wait for this commit to be live before checking (blank = check whatever is deployed now)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push supersedes an older wait -- verifying a build that is already replaced tells
+  # nobody anything.
+  group: deploy-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify deployed redirects
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # No dependencies on purpose: the script uses only global fetch. `npm ci` on this repo takes
+      # minutes, has failed part-way at least three times on 2026-09-03 alone, and a monitor that
+      # cannot run because the install broke is a monitor that reports nothing.
+
+      # Input passed through env: and read as a shell variable, never interpolated into the script
+      # text -- the convention the cron workflows in this directory already follow.
+      - name: Verify
+        env:
+          PUSH_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          INPUT_SHA: ${{ inputs.expect_sha }}
+        run: |
+          set -euo pipefail
+          TARGET="${INPUT_SHA:-${PUSH_SHA:-}}"
+          if [ -n "$TARGET" ]; then
+            node scripts/verify-deployed-redirects.mjs "--expect-sha=$TARGET"
+          else
+            node scripts/verify-deployed-redirects.mjs
+          fi
