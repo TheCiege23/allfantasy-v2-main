@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppModal } from '@/components/ui/AppModal'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-value/snapshot'
+import type { TradeValueSnapshot } from '@/lib/trade-value/types'
 import { TradeValueBreakdown } from '@/components/trade-value/TradeValueBreakdown'
 import {
   createTradeProposal,
@@ -243,9 +244,17 @@ export function TradeCenterModal({
     return out
   }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab])
 
-  // Deterministic value preview (same engine as the persisted snapshot; client-side has no ADP, so
-  // the authoritative captured snapshot may differ slightly — both are deterministic).
-  const valuePreview = useMemo(() => {
+  /*
+   * ⚠ THE FALLBACK, NOT THE ANSWER. This runs the same engine, but on what a browser can see:
+   * a projection and nothing else. Four of the five value sources are null here, `sport` and
+   * `scoring` are empty, and there is no `ScoringContext` — so no `LeagueShape`, which means
+   * standard-league scarcity for everybody and no format fit at all.
+   *
+   * `serverPreview` below replaces it whenever the route answers. This is kept because a failed
+   * fetch must degrade to a rough number that SAYS it is rough, rather than to an empty panel —
+   * and because it renders instantly while the request is in flight.
+   */
+  const clientPreview = useMemo(() => {
     if (!proposerRosterId || !receiverRosterId || (!mineHasAssets && !theirsHasAssets)) return null
     const enriched: EnrichedTradeAsset[] = [
       ...selectedMinePlayers.map((p) => ({
@@ -266,6 +275,54 @@ export function TradeCenterModal({
       context: { sport: '', leagueType: 'redraft', scoring: '', rosterFormat: 'standard', capturedAt: new Date().toISOString() },
     })
   }, [proposerRosterId, receiverRosterId, selectedMinePlayers, selectedTheirsPlayers, mineFaab, theirsFaab, mineHasAssets, theirsHasAssets])
+
+  /*
+   * The REAL valuation, from the same function that writes the captured snapshot.
+   *
+   * 🛑 THE MODAL CANNOT DO THIS ITSELF. `resolveTradeEnrichment` is `server-only`, which is why
+   * the client copy above exists at all and why it is so much poorer. Fetching means the number a
+   * manager sees before sending and the number recorded on the proposal are produced by one
+   * function rather than two that drift.
+   */
+  const [serverPreview, setServerPreview] = useState<TradeValueSnapshot | null>(null)
+  const [previewPending, setPreviewPending] = useState(false)
+
+  useEffect(() => {
+    if (!proposerRosterId || !receiverRosterId || apiAssets.length === 0) {
+      setServerPreview(null)
+      return
+    }
+
+    /*
+     * ⚠ DEBOUNCED AND ABORTED, because this fires on every player click. Without the abort a slow
+     * early response can land after a fast later one and show a valuation for a selection the
+     * manager has already changed — a stale number that looks live.
+     */
+    const ac = new AbortController()
+    setPreviewPending(true)
+    const t = setTimeout(() => {
+      fetch('/api/redraft/trade-value-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId, seasonId, proposerRosterId, receiverRosterId, assets: apiAssets }),
+        signal: ac.signal,
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (!ac.signal.aborted) setServerPreview(j?.snapshot ?? null) })
+        /*
+         * Deliberately silent: a failed preview falls back to the client estimate, which is
+         * labelled as an estimate. Surfacing a red error for a number that is still shown would
+         * be noise, and the label already tells the truth.
+         */
+        .catch(() => { if (!ac.signal.aborted) setServerPreview(null) })
+        .finally(() => { if (!ac.signal.aborted) setPreviewPending(false) })
+    }, 400)
+
+    return () => { ac.abort(); clearTimeout(t); }
+  }, [leagueId, seasonId, proposerRosterId, receiverRosterId, apiAssets])
+
+  const valuePreview = serverPreview ?? clientPreview
+  const previewIsEstimate = serverPreview === null && clientPreview !== null
 
   const canSubmit = Boolean(
     seasonId && proposerRosterId && receiverRosterId && mineHasAssets && theirsHasAssets &&
@@ -543,9 +600,24 @@ export function TradeCenterModal({
                   />
                 </div>
               </details>
-              <p className="text-[10px] text-white/40">
-                Values captured at proposal time · {new Date(valuePreview.context.capturedAt).toLocaleString()}
-              </p>
+              {/*
+                * 🛑 SAY WHICH NUMBER THIS IS. The two differ — the estimate has no market value,
+                * no IDP pricing, no league scarcity and no format fit — and a manager comparing
+                * this against the value recorded on the proposal deserves to know why they moved.
+                * An unlabelled estimate is the version of this panel that misleads.
+                */}
+              {previewIsEstimate ? (
+                <p className="text-[10px] text-amber-200/70" data-testid="trade-value-estimate-note">
+                  ⚠ Rough estimate{previewPending ? ' — still loading the full valuation…' : ''}. Priced from
+                  projections alone, without market values, defensive pricing or your league&apos;s scarcity
+                  settings. The value recorded when you send this trade will differ.
+                </p>
+              ) : (
+                <p className="text-[10px] text-white/40">
+                  Full valuation · your league&apos;s scoring, slots and team count · same engine that records
+                  the trade · {new Date(valuePreview.context.capturedAt).toLocaleString()}
+                </p>
+              )}
             </div>
           ) : null}
           {(deadlinePassed || lockedSelected || faabOver) && (

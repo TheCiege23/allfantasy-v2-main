@@ -47,8 +47,11 @@ async function profileFor(rosterId: string, seasonId: string, leagueSize: number
   })
 }
 
-export async function captureRedraftTradeValueSnapshot(input: {
-  proposalId: string
+/**
+ * Everything needed to PRICE a redraft trade. No proposal, because pricing one does not require
+ * proposing it.
+ */
+export interface RedraftTradeValueInput {
   seasonId: string
   /**
    * The league, so the real scarcity context can be read.
@@ -65,7 +68,25 @@ export async function captureRedraftTradeValueSnapshot(input: {
   rosterFormat: string
   currentSeason: number | null
   assets: RawAsset[]
-}): Promise<TradeValueSnapshot> {
+}
+
+/**
+ * Price a redraft trade. **Reads only — writes nothing.**
+ *
+ * ── 🛑 WHY THIS IS SPLIT OUT FROM THE CAPTURE ──────────────────────────────────────────────
+ * The trade console used to build its own preview client-side, and that copy was strictly worse
+ * in three ways at once: four of the five value sources hardcoded to `null`, an empty `sport` and
+ * `scoring`, and no `ScoringContext` — so no `LeagueShape`, so no format fit and standard-league
+ * scarcity for everybody. A manager saw one number while the snapshot written moments later
+ * carried another, and nothing said which to believe.
+ *
+ * The fix is the same one this file's own header argues for about the resolver: SHARE the
+ * computation rather than re-implement it. A preview and a capture are the same valuation; the
+ * only difference is whether a row is written afterwards.
+ */
+export async function computeRedraftTradeValueSnapshot(
+  input: RedraftTradeValueInput,
+): Promise<TradeValueSnapshot> {
   const playerIds = input.assets
     .filter((a) => a.assetType === 'player' && a.playerId)
     .map((a) => a.playerId as string)
@@ -249,6 +270,20 @@ export async function captureRedraftTradeValueSnapshot(input: {
     profiles: { a, b },
     scoring,
   })
+
+  return snapshot
+}
+
+/**
+ * Price a trade AND persist the immutable snapshot against a proposal.
+ *
+ * The valuation is `computeRedraftTradeValueSnapshot` verbatim — this adds the write and nothing
+ * else, so a preview and the captured row can never disagree about what a trade is worth.
+ */
+export async function captureRedraftTradeValueSnapshot(
+  input: RedraftTradeValueInput & { proposalId: string },
+): Promise<TradeValueSnapshot> {
+  const snapshot = await computeRedraftTradeValueSnapshot(input)
 
   // Honesty pass: `grade`/`fairnessScore` can now be null when NOTHING on
   // either side resolved to a value (previously that scored a false "A+").
