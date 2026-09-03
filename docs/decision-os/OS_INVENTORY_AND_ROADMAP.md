@@ -299,6 +299,51 @@ serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
 
+## 0.33 ✅ R1.6 — EIGHT IDENTICAL GAP LINES BECOME ONE
+
+**2026-09-03.** §0.11 measured a live packet carrying **ten gap lines, eight of them
+identical**: every context slice reporting the same `teams_rosters did not finish syncing`.
+Each line was correct. The repetition is the defect — a prompt that says one sentence eight
+times teaches a reader to skim the gap block, which is exactly how the one gap that matters
+gets missed, and it spends context on redundancy the model cannot use.
+
+### Fixed
+
+`collapseGapsByCause` in `serialize.ts` groups gaps by their shared cause and renders one
+line naming every fact they block:
+
+```
+- teams_rosters did not finish syncing. Affects 8 facts: rosters, matchup, … Fix: …
+```
+
+A single-slice gap renders exactly as before, so the common case is untouched.
+
+🛑 **GROUPED ON THE WHOLE CAUSE — reason, detail AND remedy — NOT ON `detail` ALONE.** Two
+slices blocked for genuinely different reasons can phrase `detail` identically, and merging
+those would attach one slice's remedy to another slice's problem: **a confidently wrong fix,
+which is worse than a repetitive right one.** Two tests pin it.
+
+⚠ **NOTHING IS DROPPED.** Every slice name survives into the collapsed line, because "which
+facts must I decline on" is the entire job of that block. This shortens the prompt without
+removing anything from it.
+
+⚠ **PRESENTATION ONLY.** `packet.gaps` keeps one entry per slice: it is a data structure
+other consumers read — `groundingToEvidence` builds `missingInformation` from it — and
+flattening it there would change what those callers see. A presentation problem belongs in
+the presentation layer.
+
+⚠ The group key is `JSON.stringify([reason, detail, remedy])`, not a joined string: a
+separator character can appear inside a detail or remedy and silently merge two distinct
+causes. Pinned by its own test.
+
+10 tests, mutation-verified: making the key include the slice — so it never groups — fails
+exactly the 3 grouping tests and leaves the other 7 passing, including every non-merge
+guard.
+
+⚠ **R1.7 IS UNCHANGED AND STILL OPEN.** This makes the report readable; it does not make
+`teams_rosters` sync. The eight slices are still inconclusive for a real reason, and §0.11's
+third finding stands.
+
 ## 0.32 🛑 BUG-3 IS NOT A DUPLICATE-ROW BUG — 23 USERS SEE A BLANK WHERE DATA EXISTS
 
 **2026-09-03.** Third filed bug this session whose premise does not survive measurement,
@@ -3109,7 +3154,7 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R1.4** 🆕 Order the bounded rows by relevance | Bounding works; ordering is first-8. For "what is my WR worth" the right 8 are the asker's players. §0.9 |
 | ✅ | **R1.2** Ask for the value lane (**G2**) | **Done 2026-09-02.** Gate was double-locked; packet now derives `valueFormat` + `leagueIdpRules` from rules it already loads. Red→green, 63/63. Typecheck deferred — machine contention. §0.10 |
 | ⬜ | **R1.5** 🆕 Devy for C2C / devy-slot NFL dynasty leagues | The NCAAF sport test will not find them. §0.10 |
-| ⬜ | **R1.6** 🆕 Collapse gaps that share one cause | 8 identical `teams_rosters` lines crowd the prompt. §0.11 |
+| ✅ | **R1.6** Collapse gaps that share one cause | **Done 2026-09-03.** `collapseGapsByCause` groups on reason+detail+remedy and names every affected fact in one line; presentation only, `packet.gaps` unchanged. 10 tests, mutation-verified. §0.33 |
 | ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
