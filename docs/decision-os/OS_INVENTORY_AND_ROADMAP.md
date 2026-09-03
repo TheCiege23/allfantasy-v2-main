@@ -299,6 +299,62 @@ serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
 
+## 0.31 🛑 87% OF THE PORTFOLIO WAS NEVER ENUMERATED — `take: 25` ON A FIXED SORT
+
+**2026-09-03.** The real cause behind §0.30, found by asking why a league 39 hours stale was
+not "due". It was due. It was never **asked about**.
+
+### Measured
+
+`app/api/cron/fantasy-os-exec-sync` defaults to `limit = 25` **per provider**, and
+`enumerateConnectedLeagues` applied that as `take: 25` **inside the Prisma query**, under a
+fixed `[season desc, platform asc, platformLeagueId asc]` sort. Same 25 rows, every tick,
+forever:
+
+| enumeration band | leagues | synced in 24 h |
+|---|---|---|
+| first 25 by that sort | 25 | **25 — 100%** |
+| rank 26+ | 170 | **2 — 1.2%** |
+
+The two in the tail are manual refreshes, which bypass enumeration entirely.
+
+🛑 **THE OLD COMMENT ON THAT `orderBy` NAMED THIS EXACT FAILURE AND ASSERTED IT COULD NOT
+HAPPEN** — *"a fixed order would refresh the head of the list forever and never reach the
+tail … The cadence check is what rotates the portfolio."* It cannot. `take` runs in the
+DATABASE, so the per-league cadence check only ever saw the already-truncated 25: it could
+skip members of a fixed set, never change the set. Meanwhile the heartbeat reported a
+healthy 25/25 every tick — a green check measuring a fifth of the thing it claimed to
+cover.
+
+### Fixed — a reorder, not a bigger batch
+
+`take` is gone from the query; `selectStalestFirst` picks the batch **after** enumeration:
+never-attempted leagues first, then oldest `lastAttemptedSyncAt`, ties broken by the old
+stable order so the result stays deterministic.
+
+⚠ **PROVIDER LOAD IS UNCHANGED.** The same `limit` leagues are fetched per tick — they are
+simply the ones that need it. A ~195-league portfolio now cycles completely in ~8 ticks
+instead of never reaching league 26. Raising `limit` is a separate decision this does not
+require.
+
+Two deliberate choices, both recorded in the code:
+
+- **Orders on `lastAttemptedSyncAt`, never `lastSuccessfulSyncAt`.** Ordering by success
+  would pin a permanently failing league to the head of every tick forever — the same
+  starvation with a different victim. Attempt time advances whether or not the sync
+  succeeds, so a failing league yields its slot after one try.
+- **Never consults `syncStatus`.** A league in `partial`/`failed` is precisely the one that
+  most needs re-attempting.
+
+10 tests, mutation-verified: bypassing the sort (slice in base order = the old behaviour)
+fails exactly the 5 ordering tests — including "the whole portfolio is reachable across
+successive ticks", which is the 87% bug stated directly — while limit-capping, the two
+unbounded paths, dedup and tie-stability correctly keep passing.
+
+⚠ The bounded path costs one extra indexed `leagueSyncState.findMany`. The unbounded path
+and the case where the portfolio already fits inside `limit` short-circuit before it, so
+existing callers issue no additional query.
+
 ## 0.30 🛑 BUG-2 IS OVER. THE DAMAGE IS NOT — 37 LEAGUES HAVE BEEN FROZEN FOR 39 HOURS
 
 **2026-09-03, measured read-only against production.** §0.18 calls BUG-2 *"LIVE and
@@ -334,6 +390,15 @@ restores agreement with §0.18's 05:00 onset. Aggregates computed in SQL
 enumeration order, with `consecutiveFailures = 1` and `lastAttemptedSyncAt` frozen at
 `2026-09-02 05:01`. At the documented 30-minute cadence that is roughly **78 consecutive
 missed opportunities**, so it is a rule, not a coincidence.
+
+⚠ **THE ROOT CAUSE NAMED BELOW IS SUPERSEDED BY §0.31, AND THE CORRECTION MATTERS.** This
+section reads the correlation as "a failed league is never retried" — status-gated. It is
+not. `syncConnectedLeague` never consults `syncStatus` at all; it compares
+`lastAttemptedSyncAt` against the cadence, and 39 hours is due under any cadence. The 37
+frozen leagues were simply never **enumerated**: they sit past the `take: 25` cutoff, which
+is a portfolio-wide starvation affecting **170 leagues**, not a retry rule affecting 37.
+`syncStatus` correlated only because the incident struck leagues that were already in the
+starved tail.
 
 Ruled out by measurement, not by reasoning:
 
