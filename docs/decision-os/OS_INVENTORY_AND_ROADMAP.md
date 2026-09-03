@@ -608,6 +608,12 @@ exists to hold. It writes a row that looks like data.
 **Not fixed here, because the fix is a decision, not an edit.** Either the fallback goes (and
 seasonless leagues get no snapshot, which is what R4b argues for), or it stays and the snapshot
 writer needs to know the season was inferred rather than observed. Filed as **R4b.2**.
+✅ **R4b.2 DONE.** The caller now declares the invention via `seasonInferred`, and the engine
+refuses to snapshot on it. ⚠ THE FALLBACK STAYS: `seasonThrough()` filters `season <= n` and a
+dynasty league carries FUTURE draft picks — 2027s and 2028s are routine — so passing null would
+drop that filter and newly count them, silently changing every signal. Only the SNAPSHOT decision
+changes. Both directions mutation-verified: ignoring the flag fails one test, refusing everything
+fails two.
 
 ⚠ The general lesson, and it is the third time this file has recorded a version of it: **a guard
 is only as strong as the narrowest caller that reaches it.** Checking that the refusal is written

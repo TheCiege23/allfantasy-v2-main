@@ -46,6 +46,21 @@ export async function refreshLeagueProfiles(input: {
   })
 
   const sport = normalizeToSupportedSport(input.sport ?? league?.sport ?? 'NFL')
+  /*
+   * ⚠ THE FALLBACK STAYS, AND THE INVENTION IS NOW DECLARED (R4b.2).
+   *
+   * `seasonThrough()` in the aggregator filters `season <= n`, and a dynasty league carries FUTURE
+   * draft picks — 2027s and 2028s are routine. Dropping the fallback would pass null, which drops
+   * that filter entirely and newly counts them, silently changing every signal. So the current
+   * year still bounds the aggregation exactly as it did.
+   *
+   * 🛑 WHAT CHANGES IS THAT THE ENGINE IS NOW TOLD. It refuses to write a season SNAPSHOT on an
+   * invented year — its `season != null` guard was unreachable while this line guaranteed a number,
+   * so a league with no recorded season had its cumulative history filed under whatever year the
+   * cron happened to fire. For a dynasty league that corrupts the very trajectory the table exists
+   * to hold.
+   */
+  const seasonInferred = input.season == null && league?.season == null
   const season = input.season ?? league?.season ?? new Date().getFullYear()
 
   const result: LeagueProfileRefreshResult = {
@@ -74,6 +89,9 @@ export async function refreshLeagueProfiles(input: {
         managerId,
         sport,
         season,
+        // R4b.2 — the engine decides whether to snapshot; it cannot know the year was invented
+        // unless this says so.
+        seasonInferred,
         sleeperUsername: team.ownerName ?? undefined,
         rosterId: undefined,
       })

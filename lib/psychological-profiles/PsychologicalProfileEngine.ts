@@ -33,6 +33,21 @@ export interface PsychEngineInput {
   sleeperUsername?: string
   rosterId?: string
   season?: number | null
+  /**
+   * True when `season` was INVENTED by the caller rather than read from the league (R4b.2).
+   *
+   * 🛑 THE SNAPSHOT GUARD BELOW WAS UNREACHABLE WITHOUT THIS. `ProfileRefreshService` computes
+   * `input.season ?? league?.season ?? new Date().getFullYear()`, so `season` is never null by the
+   * time it arrives here and `if (input.season != null)` could never refuse anything. The refusal
+   * was correct and structurally dead.
+   *
+   * ⚠ A SEPARATE FLAG RATHER THAN PASSING NULL, and the reason is the aggregator. Its
+   * `seasonThrough()` filters `season <= n`, and a dynasty league carries FUTURE draft picks —
+   * 2027s and 2028s are routine. Passing null drops that filter entirely and newly counts them,
+   * which silently changes every signal. So the invented season still bounds the aggregation
+   * exactly as before; only the SNAPSHOT decision changes.
+   */
+  seasonInferred?: boolean
 }
 
 export interface PsychEngineResult {
@@ -135,11 +150,22 @@ export async function runPsychologicalProfileEngine(
    * returns false rather than throwing, and that outcome is deliberately visible to a caller who
    * wants it rather than swallowed — the lesson from a cron that reported 400 writes it never made.
    *
-   * ⚠ NO SEASON, NO SNAPSHOT. `input.season` is optional, and inventing one — `new Date()
-   * .getFullYear()` is the tempting line — would file a dynasty league's cumulative history under
-   * whatever year the cron happened to run, which is worse than having no history at all.
+   * ⚠ NO SEASON, NO SNAPSHOT — AND NO *INVENTED* SEASON EITHER (R4b.2). `input.season` is
+   * optional, and inventing one — `new Date().getFullYear()` is the tempting line — would file a
+   * dynasty league's cumulative history under whatever year the cron happened to run, which is
+   * worse than having no history at all.
+   *
+   * 🛑 THAT IS EXACTLY WHAT THE CALLER DID, AND THIS GUARD COULD NOT SEE IT. `ProfileRefreshService`
+   * writes `input.season ?? league?.season ?? new Date().getFullYear()`, so `season` was never null
+   * here and `season != null` refused nothing, ever. The rule was right and structurally
+   * unreachable — a guard is only as strong as the narrowest caller that reaches it, and checking
+   * that a refusal is written correctly says nothing about whether any input can trigger it.
+   *
+   * `seasonInferred` is how the caller now admits the invention. The aggregation still uses the
+   * invented year, deliberately — see the field's own note on why passing null there would change
+   * every signal.
    */
-  if (input.season != null) {
+  if (input.season != null && !input.seasonInferred) {
     const floor = summarizeEvidence(signals)
     await writeProfileSeasonSnapshot({
       leagueId: input.leagueId,
