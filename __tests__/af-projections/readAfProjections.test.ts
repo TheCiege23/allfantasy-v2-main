@@ -15,7 +15,11 @@ vi.mock('@/lib/prisma', () => ({
   prisma: { aFProjectionSnapshot: { findMany: h.findMany, findFirst: h.findFirst } },
 }))
 
-import { listAfProjections, newestProjectionSeason } from '@/lib/af-projections/readAfProjections'
+import {
+  findAfProjectionsByName,
+  listAfProjections,
+  newestProjectionSeason,
+} from '@/lib/af-projections/readAfProjections'
 
 const row = (over: Record<string, unknown> = {}) => ({
   playerId: 'p1',
@@ -112,6 +116,23 @@ describe('🛑 one player, several rows', () => {
     expect(rows.map((r) => r.playerName)).toEqual(['B', 'A'])
   })
 
+  it("🛑 orders week DESC with `nulls: 'last'`, or the baseline wins over the week-scoped row", async () => {
+    /*
+     * `week` is NULL for the season-long baseline, and POSTGRES SORTS NULLS FIRST ON DESC. So a
+     * bare `{ week: 'desc' }` — which this shipped with — floats the baseline above the
+     * week-scoped row, and the dedupe then keeps the baseline. The stated intent and the actual
+     * behaviour were opposites.
+     *
+     * Asserted on the query rather than on results, because the mock cannot execute an ORDER BY:
+     * the ordering IS the behaviour here, so the argument is the only place to check it.
+     * `lib/core-app/playerFinder.ts` records the same trap, measured on DeVonta Smith.
+     */
+    await listAfProjections({ sport: 'NFL', week: 3 })
+    expect(h.findMany.mock.calls[0][0].orderBy[0]).toEqual({
+      week: { sort: 'desc', nulls: 'last' },
+    })
+  })
+
   it('over-fetches so the dedupe cannot starve the page', async () => {
     await listAfProjections({ sport: 'NFL', limit: 50 })
     const take = h.findMany.mock.calls[0][0].take
@@ -178,5 +199,59 @@ describe('filters', () => {
     const { rows } = await listAfProjections({ sport: 'NFL', limit: 100000 })
     expect(h.findMany.mock.calls[0][0].take).toBeLessThanOrEqual(600)
     expect(rows.length).toBeLessThanOrEqual(200)
+  })
+})
+
+describe('findAfProjectionsByName', () => {
+  it("carries the same `nulls: 'last'` ordering as the list reader", async () => {
+    // Two readers, one rule. A fix applied to only one of them is the bug returning by another door.
+    h.findMany.mockResolvedValue([row({ playerName: 'Test Back' })])
+    await findAfProjectionsByName({ playerName: 'Test Back', sport: 'NFL', week: 3 })
+    expect(h.findMany.mock.calls[0][0].orderBy[0]).toEqual({
+      week: { sort: 'desc', nulls: 'last' },
+    })
+  })
+
+  it('narrows SQL on the longest LETTER run, so punctuation cannot break the match', async () => {
+    /*
+     * Stored names carry raw punctuation — "Ja'Marr Chase", "A.J. Brown", "Patrick O'Brien". A
+     * `contains` on the user's spelling misses all three; the longest letter run ("Chase",
+     * "Brown", "Brien") is a substring of the stored value whichever way it falls.
+     */
+    h.findMany.mockResolvedValue([])
+    await findAfProjectionsByName({ playerName: "Ja'Marr Chase", sport: 'NFL' })
+    expect(h.findMany.mock.calls[0][0].where.playerName).toEqual({
+      contains: 'Chase', mode: 'insensitive',
+    })
+
+    h.findMany.mockClear()
+    await findAfProjectionsByName({ playerName: 'A.J. Brown', sport: 'NFL' })
+    expect(h.findMany.mock.calls[0][0].where.playerName).toEqual({
+      contains: 'Brown', mode: 'insensitive',
+    })
+  })
+
+  it('🛑 the contains is a NET — only the normalized name decides', async () => {
+    // Searching "Chase" also returns "Chase Brown" and "Chase Young".
+    h.findMany.mockResolvedValue([
+      row({ playerId: 'a', playerName: 'Chase Brown' }),
+      row({ playerId: 'b', playerName: "Ja'Marr Chase" }),
+      row({ playerId: 'c', playerName: 'Chase Young' }),
+    ])
+    const { rows } = await findAfProjectionsByName({ playerName: 'JaMarr Chase', sport: 'NFL' })
+    expect(rows.map((r) => r.playerName)).toEqual(["Ja'Marr Chase"])
+  })
+
+  it('returns nothing when the season is unknown, without querying rows', async () => {
+    h.findFirst.mockResolvedValue(null)
+    const out = await findAfProjectionsByName({ playerName: 'Test Back', sport: 'NFL' })
+    expect(out).toEqual({ rows: [], season: null })
+    expect(h.findMany).not.toHaveBeenCalled()
+  })
+
+  it('refuses a name with no letters rather than querying on an empty token', async () => {
+    const out = await findAfProjectionsByName({ playerName: '12 34', sport: 'NFL' })
+    expect(out.rows).toEqual([])
+    expect(h.findMany).not.toHaveBeenCalled()
   })
 })

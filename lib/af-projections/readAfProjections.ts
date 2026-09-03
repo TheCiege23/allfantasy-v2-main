@@ -124,10 +124,16 @@ export async function listAfProjections(
       ...(args.week != null ? { OR: [{ week: args.week }, { week: null }] } : { week: null }),
     },
     /*
-     * Week-scoped first (nulls last), then freshest, then by size — so the first row seen per
-     * player is the best-informed one, and the final list reads high-to-low.
+     * Week-scoped first, then freshest, then by size — so the first row seen per player is the
+     * best-informed one, and the final list reads high-to-low.
+     *
+     * 🛑 `nulls: 'last'` IS LOAD-BEARING AND WAS MISSING. `week` is NULL for the season-long
+     * baseline, and Postgres sorts NULLS FIRST on a DESC order — so the bare `week: 'desc'` this
+     * used to carry floated the BASELINE above the week-scoped row and did the exact opposite of
+     * the line above it. `lib/core-app/playerFinder.ts` records the same trap, measured on
+     * DeVonta Smith, where it silently picked a row with no stats attached.
      */
-    orderBy: [{ week: 'desc' }, { computedAt: 'desc' }, { afProjection: 'desc' }],
+    orderBy: [{ week: { sort: 'desc', nulls: 'last' } }, { computedAt: 'desc' }, { afProjection: 'desc' }],
     take: Math.min(MAX_LIMIT * 3, limit * 3),
     select: {
       playerId: true,
@@ -217,8 +223,8 @@ export async function findAfProjectionsByName(args: {
       playerName: { contains: token, mode: 'insensitive' as const },
       ...(args.week != null ? { OR: [{ week: args.week }, { week: null }] } : {}),
     },
-    // Same order as the list reader: week-scoped first, then freshest.
-    orderBy: [{ week: 'desc' }, { computedAt: 'desc' }],
+    // Same order as the list reader, INCLUDING `nulls: 'last'` — see the note there.
+    orderBy: [{ week: { sort: 'desc', nulls: 'last' } }, { computedAt: 'desc' }],
     take: 50,
     select: {
       playerId: true,

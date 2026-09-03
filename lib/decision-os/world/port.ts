@@ -1332,9 +1332,16 @@ export async function loadAfProjectionRows(
         // Both the week-scoped row for THIS week and the season-long baseline.
         ...(week != null ? { OR: [{ week }, { week: null }] } : { week: null }),
       },
-      // Week-scoped first (nulls last), then freshest — so the caller's first hit per player is
-      // the best-informed row available.
-      orderBy: [{ week: 'desc' }, { computedAt: 'desc' }],
+      /*
+       * Week-scoped first, then freshest — so the caller's first hit per player is the
+       * best-informed row available.
+       *
+       * 🛑 `nulls: 'last'` IS LOAD-BEARING AND WAS MISSING. `week` is NULL for the season
+       * baseline and Postgres sorts NULLS FIRST on DESC, so the bare `week: 'desc'` this used to
+       * carry returned the BASELINE ahead of the week-scoped row — the opposite of the line
+       * above. See `lib/core-app/playerFinder.ts` for the same trap, measured.
+       */
+      orderBy: [{ week: { sort: 'desc', nulls: 'last' } }, { computedAt: 'desc' }],
       select: {
         playerId: true,
         sport: true,
