@@ -1,0 +1,187 @@
+{
+  "divisions": [
+    {
+      "id": 1065500,
+      "name": "Division 1",
+      "teams": [
+        {
+          "id": 1840747,
+          "name": "Jetz",
+          "recordOverall": {
+            "winPercentage": {
+              "formatted": ".000"
+            },
+            "formatted": "0-0"
+          },
+          "recordDivision": {
+            "winPercentage": {
+              "formatted": ".000"
+            },
+            "rank": 1,
+            "formatted": "0-0"
+          },
+          "recordPostseason": {
+            "winPercentage": {
+              "formatted": ".000"
+            },
+            "formatted": "0-0"
+          },
+          "pointsFor": {
+            "formatted": "0"
+          },
+          "pointsAgainst": {
+            "formatted": "0"
+          },
+          "streak": {
+            "formatted": "-"
+          },
+          "draftPosition": 2,
+          "owners": [
+            {
+              "id": 2308175,
+              "displayName": "TheCiege",
+              "lastSeen": "1788457289000",
+              "initials": "T",
+              "lastSeenIso": "2026-09-03T17:41:29Z"
+            }
+          ],
+          "initials": "J"
+        }
+      ]
+    },
+    {
+      "id": 1065501,
+      "name": "Division 2"
+    },
+    {
+      "id": 1065502,
+      "name": "Division 3"
+    }
+  ],
+  "season": 2026,
+  "league": {
+    "id": 356670,
+    "name": "Public League 96FCE6",
+    "activeForCurrentSeason": true,
+    "membershipType": "CREATING_COMMISH",
+    "rosterRequirements": {
+      "positions": [
+        {
+          "label": "QB",
+          "group": "START",
+          "eligibility": [
+            "QB"
+          ],
+          "min": 1,
+          "max": 4,
+          "start": 1,
+          "colors": [
+            "DRAFT_BOARD_RED"
+          ]
+        },
+        {
+          "label": "RB",
+          "group": "START",
+          "eligibility": [
+            "RB"
+          ],
+          "min": 2,
+          "max": 6,
+          "start": 1,
+          "colors": [
+            "DRAFT_BOARD_GREEN"
+          ]
+        },
+        {
+          "label": "WR",
+          "group": "START",
+          "eligibility": [
+            "WR"
+          ],
+          "min": 2,
+          "max": 7,
+          "start": 2,
+          "colors": [
+            "DRAFT_BOARD_BLUE"
+          ]
+        },
+        {
+          "label": "TE",
+          "group": "START",
+          "eligibility": [
+            "TE"
+          ],
+          "min": 1,
+          "max": 3,
+          "start": 1,
+          "colors": [
+            "DRAFT_BOARD_YELLOW"
+          ]
+        },
+        {
+          "label": "RB/WR/TE",
+          "group": "START",
+          "eligibility": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "start": 1,
+          "colors": [
+            "DRAFT_BOARD_GREEN",
+            "DRAFT_BOARD_BLUE",
+            "DRAFT_BOARD_YELLOW"
+          ]
+        },
+        {
+          "label": "K",
+          "group": "START",
+          "eligibility": [
+            "K"
+          ],
+          "min": 1,
+          "max": 3,
+          "start": 1,
+          "colors": [
+            "DRAFT_BOARD_GRAY"
+          ]
+        },
+        {
+          "label": "D/ST",
+          "group": "START",
+          "eligibility": [
+            "D/ST"
+          ],
+          "min": 1,
+          "max": 3,
+          "start": 1,
+          "colors": [
+            "DRAFT_BOARD_PURPLE"
+          ]
+        },
+        {
+          "label": "BN",
+          "max": 7
+        }
+      ],
+      "rosterSize": 15,
+      "starterCount": 8,
+      "benchCount": 7,
+      "eligibility": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "K",
+        "D/ST"
+      ]
+    },
+    "draftLiveTimeEpochMilli": "1788457500000",
+    "size": 1,
+    "capacity": 12,
+    "initials": "PL",
+    "description": "12-Team Redraft",
+    "chatChannel": "/chats/NFL/leagues/356670/all",
+    "draftSecondsPerSelection": 90
+  }
+}

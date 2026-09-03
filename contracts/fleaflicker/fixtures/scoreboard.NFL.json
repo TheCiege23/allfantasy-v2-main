@@ -1,0 +1,148 @@
+{
+  "schedulePeriod": {
+    "ordinal": 1,
+    "low": {
+      "ordinal": 1,
+      "startEpochMilli": "1788861600000"
+    },
+    "value": 1
+  },
+  "eligibleSchedulePeriods": [
+    {
+      "ordinal": 1,
+      "low": {
+        "ordinal": 1,
+        "startEpochMilli": "1788861600000"
+      },
+      "value": 1
+    },
+    {
+      "ordinal": 2,
+      "low": {
+        "ordinal": 2,
+        "startEpochMilli": "1789466400000"
+      },
+      "value": 2
+    },
+    {
+      "ordinal": 3,
+      "low": {
+        "ordinal": 3,
+        "startEpochMilli": "1790071200000"
+      },
+      "value": 3
+    },
+    {
+      "ordinal": 4,
+      "low": {
+        "ordinal": 4,
+        "startEpochMilli": "1790676000000"
+      },
+      "value": 4
+    },
+    {
+      "ordinal": 5,
+      "low": {
+        "ordinal": 5,
+        "startEpochMilli": "1791280800000"
+      },
+      "value": 5
+    },
+    {
+      "ordinal": 6,
+      "low": {
+        "ordinal": 6,
+        "startEpochMilli": "1791885600000"
+      },
+      "value": 6
+    },
+    {
+      "ordinal": 7,
+      "low": {
+        "ordinal": 7,
+        "startEpochMilli": "1792490400000"
+      },
+      "value": 7
+    },
+    {
+      "ordinal": 8,
+      "low": {
+        "ordinal": 8,
+        "startEpochMilli": "1793095200000"
+      },
+      "value": 8
+    },
+    {
+      "ordinal": 9,
+      "low": {
+        "ordinal": 9,
+        "startEpochMilli": "1793703600000"
+      },
+      "value": 9
+    },
+    {
+      "ordinal": 10,
+      "low": {
+        "ordinal": 10,
+        "startEpochMilli": "1794308400000"
+      },
+      "value": 10
+    },
+    {
+      "ordinal": 11,
+      "low": {
+        "ordinal": 11,
+        "startEpochMilli": "1794913200000"
+      },
+      "value": 11
+    },
+    {
+      "ordinal": 12,
+      "low": {
+        "ordinal": 12,
+        "startEpochMilli": "1795518000000"
+      },
+      "value": 12
+    },
+    {
+      "ordinal": 13,
+      "low": {
+        "ordinal": 13,
+        "startEpochMilli": "1796122800000"
+      },
+      "value": 13
+    },
+    {
+      "ordinal": 14,
+      "low": {
+        "ordinal": 14,
+        "startEpochMilli": "1796727600000"
+      },
+      "value": 14
+    },
+    {
+      "ordinal": 15,
+      "low": {
+        "ordinal": 15,
+        "startEpochMilli": "1797332400000"
+      },
+      "value": 15
+    },
+    {
+      "ordinal": 16,
+      "low": {
+        "ordinal": 16,
+        "startEpochMilli": "1797937200000"
+      },
+      "value": 16
+    },
+    {
+      "ordinal": 17,
+      "low": {
+        "ordinal": 17,
+        "startEpochMilli": "1798542000000"
+      },
+      "value": 17
+    }
+  ]
+}
