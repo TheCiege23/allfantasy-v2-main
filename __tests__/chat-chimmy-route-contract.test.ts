@@ -146,6 +146,24 @@ function buildMultipartRequest(formData?: FormData) {
   })
 }
 
+// This file imports app/api/chat/chimmy/route.ts — 3,102 lines that pull the orchestration,
+// tool-registry, memory and token-service graphs in behind these mocks — and the FIRST test pays
+// the whole cold Vite transform for it. Measured alone on this checkout: 13.20s total, of which
+// 8.02s is transform, and "returns 401 when unauthenticated" absorbs 11,544ms while every other
+// test in the file runs in 1-35ms.
+//
+// That fits inside the default 30s on an idle machine and does NOT fit on a loaded one: run
+// alongside four other files it timed out at 30,032ms, which then cascaded — the next test's
+// `mockResolvedValueOnce(429)` was consumed by the still-in-flight call, so it saw 200 and failed
+// too. Two red tests, one clock.
+//
+// So this is a transform-cost timeout, not a logic hang, and the way to tell them apart is that
+// the file passes 17/17 in isolation, repeatedly. Same shape and same remedy already recorded in
+// slow-draft-try-queue-autopick-integration, commissionerOsRecommendations and
+// league-create-defaults-api. File-level rather than on the one slow test, because the cost lands
+// on whichever test runs FIRST and that is an ordering detail no annotation should depend on.
+vi.setConfig({ testTimeout: 60000 })
+
 describe("POST /api/chat/chimmy contract", () => {
   beforeEach(() => {
     vi.clearAllMocks()
