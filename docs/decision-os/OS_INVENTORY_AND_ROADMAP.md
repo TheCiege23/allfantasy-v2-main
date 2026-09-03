@@ -166,6 +166,79 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.26 R4b.6 — CHIMMY NARRATES FROM THE FACTS, AND A SIGNIFICANT GAP FOUND ALONG THE WAY
+
+**2026-09-03.** P2's requirement — structured facts in, Chimmy narrates at
+ask-time, nothing stored — already had a complete, working implementation:
+`app/api/leagues/[leagueId]/psychological-profiles/explain/route.ts`. Built
+before today, unrelated to this session's work, and doing exactly what P2
+asks: a `deterministicPayload` of raw facts, an AI orchestration call with an
+explicit "stay deterministic-first" instruction, a fact-guard validation pass
+(`validateToolOutput`) that catches the model claiming something the payload
+doesn't contain, and a non-AI `fallbackNarrative` if the call fails. Fresh
+prose every request, nothing persisted.
+
+**What it did not know about: trajectory, cross-league, cross-sport** —
+because none of them existed until R4b.5, a few hours earlier today. R4b.6 is
+that route learning about them:
+
+- Trajectory (`readManagerTrajectory` + `summariseTrajectory`) is fetched for
+  ANY profile the caller can already see — not self-gated, matching
+  `psychology-os/index.ts`'s own reasoning that a manager's history reads the
+  same for every viewer.
+- Cross-league/cross-sport (`loadPsychologyConsistencySlice`, reused directly
+  rather than re-derived a third time) is fetched ONLY when the profile being
+  explained is the CALLER'S OWN. 🛑 **Deliberately a DIFFERENT gate from
+  `canSeeOpponents`** — `resolveProfileAccess`'s entitlement check answers "may
+  this caller READ this profile at all" (a subscription question); whether the
+  explanation may include the SUBJECT's cross-league/cross-sport data is a
+  separate question, and `loadPsychologyConsistencySlice` already restricts
+  that to the account it's called with, by design. Explaining a paid-for
+  opponent view therefore still never includes their cross-league reading —
+  mutation-verified: forcing `isSelf = true` unconditionally fails exactly the
+  one test asserting that gate, none of the other six.
+- Every new field is `null`, never a fabricated absence-as-negative, and the
+  model is explicitly told a null field means "not measured," not "no." Same
+  discipline P2/P4 already required of the existing fields.
+
+### 🛑 THE BIGGER FINDING: MOST OF WHAT R2/R3.3/R4b.5 BUILT NEVER REACHES THE LIVE CHAT ROUTE
+
+Investigating where `explain`'s narration fits alongside the AMBIENT chat path
+surfaced something bigger. `app/api/chat/chimmy/route.ts` — the one live
+chat route — calls `buildDecisionOsGroundingPacket` with a **hardcoded**
+`want: { values: true, devy: <NCAAF check>, projections: true, leagueRules:
+true }`. Every opt-in slice built this session is `want`-gated and defaults
+OFF:
+
+| Slice | Roadmap item | Reaches the live chat route? |
+|---|---|---|
+| `lineupDecision` | R2 | ❌ never — `want.lineupDecision` is never set |
+| `commissionerHealthDecision` | R2 | ❌ never |
+| `idpKicker` | R3.1 | ❌ never |
+| `rosterValueGrade` | R3.3 | ❌ never |
+| `psychologyConsistency` (cross-league/cross-sport) | R4b.5 | ❌ never |
+| `managerPsychology` (incl. trajectory) | R4b.4/R4b.5 | ✅ always — gated only by the kill switch, not `want` |
+| `savedAnalysis` | earlier | ❌ never |
+
+**Not a defect in any of those items individually** — each is correctly
+built, wired into the packet, and tested against what it claims to do. The
+gap is a layer none of them owned: nothing decides, per question, which
+opt-in slices a chat turn should ask for. This is the same shape as M4's own
+"intent router" milestone in `OS_FEED_STATE_2026-09-01.md` — genuinely a
+separate, larger piece of work (deciding from a user's question whether it's
+about a lineup, a trade, a roster weakness, a cross-league pattern), not
+something to fold into R4b.6 as a side effect.
+
+**Recorded here rather than fixed here.** Fixing it changes several already-
+"done" items' real-world status at once and deserves its own scoped pass, not
+a quiet patch riding on a psychology-narration commit. The `managerPsychology`
+row is why R4b.6 itself still works end-to-end despite this — trajectory
+rides the one feed that was never `want`-gated in the first place.
+
+7 tests, `__tests__/decision-os/psych-explain-route.test.ts` (new — the route
+had no test coverage at all before today). One thing mutation-verified: the
+self-only gate on cross-league/cross-sport, described above.
+
 ## 0.25 R4b.5 — TRAJECTORY, CROSS-LEAGUE, CROSS-SPORT
 
 **2026-09-03.** Three reads (P1/P5/P7), and two of the three underlying engines
@@ -2503,7 +2576,7 @@ seam.
 | **R4b.3** | `OsFactSource` → register `'psychology'` as an `OsDomain`. League-level, 12h TTL. **No migration** — `OsDomain` is `VarChar(16)` and widening the union is free. | — |
 | **R4b.4** | `managerPsychology` packet slice, graded, refusing below the floor (**P6**) | — |
 | **R4b.5** | Trajectory + cross-league + cross-sport reads, **derived not cached** (**P1/P5/P7**) | ✅ 2026-09-03, see §0.25 |
-| **R4b.6** | Chimmy narrates from the facts — **no stored prose** (**P2**) | — |
+| **R4b.6** | Chimmy narrates from the facts — **no stored prose** (**P2**) | ✅ 2026-09-03, see §0.26. Also surfaced a significant, cross-cutting gap — see the same section. |
 | **R4b.7** | Wire into recommendations as **framing only** (**P4**) | — |
 
 ⚠ **R4b.2 writes a snapshot going forward; it does not invent history.** The
