@@ -23,7 +23,7 @@
     "build:staging": "node scripts/railway-clean-next-build.cjs && node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build",
     "start:staging": "node node_modules/next/dist/bin/next start -p 3017 -H 127.0.0.1",
     "test:e2e:staging": "playwright test e2e/g8-team-defense-browser.spec.ts --project=chromium --reporter=line",
-    "prebuild": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs",
+    "prebuild": "node scripts/verify-node-modules.cjs && node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs",
     "build": "node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build",
     "build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && node scripts/railway-loader-cache-purge.cjs && node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build && node scripts/railway-postbuild-css-audit.cjs",
     "clean:next:prod": "node scripts/clean-next-prod-out.cjs",
@@ -198,7 +198,8 @@
     "data:audit-provider-coverage": "tsx scripts/audit-provider-coverage.ts",
     "data:audit-player-surfaces": "node --env-file=.env --import tsx scripts/audit-player-surfaces.ts",
     "data:audit-player-experience": "node --env-file=.env --import tsx scripts/audit-player-experience.ts",
-    "data:audit-provider-gaps": "node --env-file=.env --import tsx scripts/audit-provider-gaps.ts"
+    "data:audit-provider-gaps": "node --env-file=.env --import tsx scripts/audit-provider-gaps.ts",
+    "doctor": "node scripts/verify-node-modules.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
