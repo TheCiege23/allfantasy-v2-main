@@ -299,6 +299,94 @@ serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
 
+## 0.29 🛑 BUG-4 IS NOT A DYNASTY BUG — IT IS A KEEPER BUG, AND THE FILED PREMISE IS WRONG
+
+**2026-09-03.** BUG-4 reads *"`isDynasty` false on a league the owner says is dynasty …
+the import is not capturing dynasty status … dynasty/redraft pricing is untrustworthy
+until fixed."* Measured against production, **every clause of that is wrong except the
+observation that `isDynasty` is false.**
+
+### What the data says
+
+Sleeper's own payload for the league BUG-4 was filed against
+(`1335730625293844480`, *King Gingerbeards SF 2026!!!*):
+
+```
+settings.type      1      (0 = redraft, 1 = KEEPER, 2 = dynasty)
+max_keepers        2
+taxi_slots         0
+```
+
+**It is a keeper league, not a dynasty league.** `isDynasty: false` is the CORRECT value,
+and the import computed it correctly from `type === 2`.
+
+**Dynasty capture is not broken.** Across all 225 imported Sleeper leagues:
+
+| `leagueType` | rows | `isDynasty = true` |
+|---|---|---|
+| dynasty | 110 | **110** |
+| redraft | 100 | 0 |
+| guillotine | 12 | 0 |
+| zombie | 2 | 0 |
+| survivor | 1 | 0 |
+
+The two fields agree on **every single row**. There is no league with
+`leagueType='redraft'` and `isDynasty=true`.
+
+⚠ **THAT ALSO RETIRES A HAZARD `lib/league-runtime/leagueFormat.ts` DOCUMENTS IN ITS OWN
+HEADER**, which cites BUG-4 and warns that such leagues "resolve to `'redraft'` with
+`isDynasty` silently discarded". Zero rows are in that state. The comment describes a
+reachable code path, not an occurring one, and should say so.
+
+### The real defect, which nobody had filed
+
+**A keeper league is indistinguishable from a redraft league, end to end.**
+
+`settings.type` is the only signal that separates them, and it **reaches the database
+nowhere** — absent from the stored settings blob on **225/225** rows, because the blob is
+rebuilt from the import mapper's output rather than from Sleeper's raw payload.
+
+Consequence, and it is the G11 shape again: `isKeeper` in
+`lib/ai/leagueSportsGroundingPacket.ts` tested only
+`String(league.leagueType ?? "").includes("keeper")`. `leagueType` holds exactly the five
+values in the table above. **None contains "keeper", so `isKeeper` was false for 100% of
+leagues in production** — a flag that could never be true, reading a column that could
+never hold the value.
+
+🛑 **AND THE OBVIOUS FIX IS WRONG, WHICH IS WHY IT WAS MEASURED FIRST.** `max_keepers`
+looks like the natural signal. It is `>= 1` on **225/225** leagues — dynasty, guillotine
+and survivor included — as is the `League.keeperCount` column derived from it. Deriving
+keeper status from either would have marked **every league in the database** a keeper
+league. The check that killed it is in the test file as a permanent guard.
+
+### Fixed
+
+- `SleeperLeagueMapper` derives `is_keeper` from `type === 1` and emits it. It reaches the
+  settings blob for free: `buildImportedLeagueSettings` spreads `normalized.league`, which
+  is exactly how `isDynasty` already gets there.
+- `leagueSportsGroundingPacket` reads that flag, keeping the substring as a fallback so a
+  human-confirmed keeper type still resolves.
+- Writer and reader in ONE change, deliberately — a reader without its writer points a
+  surface at data nothing populates, which this repo already paid for once with
+  `ingestCFBDStats`.
+
+10 tests, both halves mutation-verified: dropping the mapper emission fails exactly the 5
+mapper tests; restoring the old substring-only reader fails exactly the 3 tests that
+depend on the new signal, and correctly leaves the other 2 passing.
+
+### Still open, and deliberately not fixed here
+
+- ⚠ **Three subsystems disagree on whether keeper counts as dynasty.** The replay framework
+  says YES (`type === 2 || type === 1`, in `ingestSleeperTradesForLeague`,
+  `lineupSleeperNormalizer`, `sleeperTradeNormalizer`); the import says NO; and
+  `sleeperCohortClient` / `app/api/league/transfer` treat it as its own third format. That
+  is one rule with three implementations and wants an owner decision, not a unilateral pick.
+- **`leagueType` is never written by any import path** — only by
+  `lib/career/leagueTypeConfirmation.ts` on human confirmation. Writing `'keeper'` there
+  from vendor data would change 100 production rows and is a data decision, not a code one.
+- 🆕 **BUG-3 undercounts: there are THREE duplicate rows for this league**
+  (`17739ade…`, `fcde8abf…`, `3d1b9554…`), not two.
+
 ## 0.26 R4b.6 — CHIMMY NARRATES FROM THE FACTS, AND A SIGNIFICANT GAP FOUND ALONG THE WAY
 
 **2026-09-03.** P2's requirement — structured facts in, Chimmy narrates at
