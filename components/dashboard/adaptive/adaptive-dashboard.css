@@ -3,10 +3,25 @@
  * `__tests__/root-language-provider-layout.test.tsx` asserts the document does not depend on
  * build-time Google font fetches, and this repo's builds have failed for unrelated network
  * and heap reasons before; a font fetch must not become a new way for the build to break.
- * An absolute `@import` URL is passed through to the browser untouched by css-loader.
  * If fonts.googleapis.com is unreachable the stacks in `--af-font-*` below carry the design.
+ *
+ * ⚠ THE `@import` THIS COMMENT USED TO DEFEND IS DEAD CODE — REMOVED, NOT RESTORED.
+ * Next concatenates this file into one route bundle with the other af-*.css files, and
+ * whichever one lands ahead of it (af-geo.css, measured) pushes several style rules ahead
+ * of the `@import`. CSS requires `@import` to precede every rule in its stylesheet, so the
+ * browser drops it silently: the rule was present in the served bundle's source text and
+ * absent from `document.styleSheets`. This file's own comment previously claimed the fonts
+ * were "fetched by the browser at runtime" via that `@import` — they never were; Bebas Neue
+ * and Outfit fell through to the fallback stacks below on every `.af-adaptive` surface.
+ * Same trap, same fix, as components/core-app/af-core.css (see its top comment).
+ *
+ * The actual load is a `<link rel="stylesheet">` in app/layout.tsx (Next's App Router hoists
+ * it into <head> on its own — no manual <head> tag needed, and none of the ordering problem
+ * above applies to a real <link>). Neither `--af-font-ui` nor `--af-font-display` below is
+ * itself fetched from anywhere; both are plain fallback chains naming 'Outfit'/'Bebas Neue'
+ * first, so once the browser has loaded those families from the <link>, the existing
+ * declarations resolve to them with no further change needed here.
  */
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
 /*
  * Adaptive dashboard — scoped design system.
@@ -70,7 +85,8 @@
   --af-rail-w: 74px;
 
   /*
-   * Fonts are loaded at RUNTIME via <link> in the route layout, never `next/font/google`:
+   * Fonts are loaded at RUNTIME via a <link> in app/layout.tsx (the root layout, so every
+   * route gets it), never `next/font/google`:
    * `__tests__/root-language-provider-layout.test.tsx` asserts the document does not depend
    * on build-time Google font fetches, and this repo's builds have failed for unrelated
    * network/heap reasons before. The fallback stack is deliberately complete so a blocked

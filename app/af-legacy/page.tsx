@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react'
+import dynamic from 'next/dynamic'
 import { GracefulImage } from '@/components/media/GracefulImage'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -10,7 +11,8 @@ import LegacyTutorial from "@/app/components/LegacyTutorial"
 import SmartRecommendations from "@/app/components/SmartRecommendations"
 import AIGMStatusIndicator from "@/app/components/AIGMStatusIndicator"
 import HeroMetricAI from "@/app/components/HeroMetricAI"
-import PortfolioChart from "@/components/PortfolioChart"
+// Deferred: only rendered once reportCardLeague + username are both set, pulls in recharts.
+const PortfolioChart = dynamic(() => import("@/components/PortfolioChart"), { ssr: false })
 import PlayerBadge from "@/components/PlayerBadge"
 import PlayerProfileCard from "@/components/PlayerProfileCard"
 import MiniPlayerImg from "@/components/MiniPlayerImg"

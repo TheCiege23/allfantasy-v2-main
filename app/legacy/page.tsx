@@ -1,15 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import RosterLegacyReport from '@/app/components/RosterLegacyReport';
-import SyncedRosters from '@/app/components/SyncedRosters';
-import WaiverAI from '@/app/components/WaiverAI';
 import ChimmyChat from '@/app/components/ChimmyChat';
-import MockDraftSimulatorClient from '@/components/MockDraftSimulatorClient';
 import Link from 'next/link';
 import LegacyLeagueIdeaForm from '@/app/components/LegacyLeagueIdeaForm';
+
+// All four below are tab-gated (or, for the two 'overview' ones, at least split
+// into their own chunk instead of the shared bundle); none needs SSR — auth-
+// gated interactive tools with no indexable content.
+const RosterLegacyReport = dynamic(() => import('@/app/components/RosterLegacyReport'), { ssr: false });
+const SyncedRosters = dynamic(() => import('@/app/components/SyncedRosters'), { ssr: false });
+const WaiverAI = dynamic(() => import('@/app/components/WaiverAI'), { ssr: false });
+const MockDraftSimulatorClient = dynamic(() => import('@/components/MockDraftSimulatorClient'), { ssr: false });
 
 type LeagueOption = {
   id: string

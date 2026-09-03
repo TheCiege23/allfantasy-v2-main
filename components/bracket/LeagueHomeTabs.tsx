@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useMemo, useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
 import { Trophy, ChevronDown, MessageCircle, Pin, Send, X, Share2, Copy, Check, Settings, Zap, Crown, Shield } from "lucide-react"
 import { BracketTreeView } from "./BracketTreeView"
 import { PoolStandings } from "./PoolStandings"
 import { GameScores } from "./GameScores"
 import { PoolBrackets } from "./PoolBrackets"
-import { LiveModeView } from "./LiveModeView"
 import { PoolChat } from "./PoolChat"
+
+// Deferred: only rendered on the "live" tab, pulls in framer-motion.
+const LiveModeView = dynamic(() => import("./LiveModeView").then((m) => m.LiveModeView), { ssr: false })
 import { useBracketLive } from "@/lib/hooks/useBracketLive"
 import CopyJoinCode from "@/app/brackets/leagues/[leagueId]/CopyJoinCode"
 import CreateEntryButton from "@/app/brackets/leagues/[leagueId]/CreateEntryButton"

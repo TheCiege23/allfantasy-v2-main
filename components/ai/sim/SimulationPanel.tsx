@@ -1,9 +1,15 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Loader2, X } from 'lucide-react'
-import { SimulationResultCard } from '@/components/ai/sim/SimulationResultCard'
 import type { FranchiseSimResult, SeasonSimResult, TradeSimResult } from '@/lib/ai/sim/types'
+
+// Deferred: only rendered after a simulation completes, pulls in recharts.
+const SimulationResultCard = dynamic(
+  () => import('@/components/ai/sim/SimulationResultCard').then((m) => m.SimulationResultCard),
+  { ssr: false }
+)
 
 type SimKind = 'season' | 'franchise' | 'draft' | 'trade'
 

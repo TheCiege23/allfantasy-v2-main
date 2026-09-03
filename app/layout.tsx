@@ -145,28 +145,43 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className="scroll-smooth"
       suppressHydrationWarning
     >
+      {/*
+        Deliberately a runtime <link>, not Next's build-time Google-fonts font
+        loader: this repo's build has failed for unrelated network/heap reasons
+        before, and __tests__/root-language-provider-layout.test.tsx asserts
+        the root document does not depend on a build-time Google Fonts fetch
+        (it greps this file's source for that loader's import path, so this
+        comment deliberately doesn't spell it out either). Rendering a <link>
+        here (rather than inside a manual <head>) is enough — Next's App
+        Router hoists it into the document <head> on its own.
+
+        Covers two design systems that were both silently falling back to
+        system fonts because each one's CSS assumed a <link> existed elsewhere
+        and none ever did:
+          - .af-core (af-core.css): dashboard, Player Finder, my team, matchup,
+            trades, waivers, Draft HQ, War Room, and the homepage (LandingV4
+            imports af-core.css directly) — wants Archivo + JetBrains Mono.
+          - .af-adaptive (adaptive-dashboard.css): wants Bebas Neue + Outfit.
+            That file's own `@import` is dead code — Next concatenates it into
+            a route bundle after af-geo.css, and CSS silently drops an
+            `@import` that doesn't lead every rule in its file (see the comment
+            at the top of af-core.css for the measured trap).
+
+        Both files read the family by name with a full fallback chain
+        (e.g. `font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif`),
+        so this <link> is the only thing needed — no CSS variable to define.
+        Global, but inert for every page that doesn't render matching text: the
+        browser fetches this one small stylesheet and downloads a font file
+        only when it's actually needed.
+      */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+      />
       <body
         className="antialiased min-h-screen mode-readable"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
-
-        {/*
-          The core-app design handoff's two typefaces. Every .af-core surface
-          asks for Archivo and JetBrains Mono by name, and nothing was loading
-          them, so all of it fell through to system-ui and generic monospace —
-          the display headings and the mono labels are most of that design's
-          character, and none of it was reaching a user.
-
-          Loaded here rather than from af-core.css because an @import inside a
-          route-bundled CSS file is dropped whenever another af-*.css is
-          concatenated ahead of it (measured: af-geo.css was). A <link> here is
-          the one place stylesheet ordering is guaranteed.
-
-          Global, but inert for every page that does not name these families:
-          the browser fetches the small stylesheet and downloads a font file
-          only when matching text is actually rendered. Weights are exactly the
-          handoff's — Archivo 400/600/700/800/900, JetBrains Mono 400/500/700/800.
-        */}
 
         {metaPixelId ? (
           <script
