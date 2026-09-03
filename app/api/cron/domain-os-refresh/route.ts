@@ -7,6 +7,8 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { createOsStore, safeRead, type OsDomain, type OsFactSource, type OsFeed } from '@/lib/decision-os/domain-os'
 import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
 import { createWaiverOs, waiverSettingsSource } from '@/lib/decision-os/waiver-os'
+import { createValueOs, marketValueSource, devyValueSource } from '@/lib/decision-os/value-os'
+import { createProjectionOs, canonicalProjectionSource } from '@/lib/decision-os/projection-os'
 
 /**
  * GET /api/cron/domain-os-refresh
@@ -122,6 +124,19 @@ const ROTATION_PERIOD_MS = 30 * 60 * 1000
 /** League statuses that mean "no longer playing"; refreshing their rules helps nobody. */
 const DEAD_STATUSES = ['ARCHIVED', 'COMPLETE', 'COMPLETED', 'CLOSED']
 
+/**
+ * Upper bound on app-level combinations warmed per fire (R3.2).
+ *
+ * ⚠ A CAP ON A SET THAT IS CURRENTLY FOUR. `PlayerValueSnapshot` holds exactly
+ * DYNASTY/REDRAFT x ONE_QB/SUPERFLEX today, so this never binds — it exists so a data anomaly
+ * (a bad import writing a hundred format strings) cannot turn a bounded walk into an unbounded
+ * one. A cap that never fires is the point; the day it fires, something upstream is wrong.
+ */
+const APP_COMBO_CAP = 24
+
+/** Devy values only exist for college football. Warming them for NFL would derive nothing. */
+const DEVY_SPORTS = ['NCAAF'] as const
+
 type RefreshCounts = {
   considered: number
   due: number
@@ -200,11 +215,100 @@ function target<TFacts>(
   }
 }
 
+/**
+ * R3.2 — the SECOND walk: app-level sources, keyed sport+format rather than by league.
+ *
+ * ── 🛑 WHY THE LEAGUE WALK COULD NEVER REACH THESE ──────────────────────────────────────────
+ * `bindLeagueSource` is typed `OsFactSource<{ leagueId: string }, …>`. `marketValueSource` takes
+ * `{ sport, format, qbFormat }`, `devyValueSource` takes `{ sport, currentSeason }` and
+ * `canonicalProjectionSource` takes `{ sport, season, week? }` — none is satisfiable from a league
+ * id, so none could ever be a member of that list. They were not omitted by oversight; they are a
+ * different shape of walk.
+ *
+ * The cost of that was measured on 2026-09-03: `domain_os_facts` held 125 lineup rows and 223 each
+ * for waiver and draft, all minutes old — against **1 projection row and 2 value rows, nine hours
+ * stale**. Those few existed only because a read-through populated them on demand. Every other
+ * request paid a live derive.
+ *
+ * ── ✅ THE COMBINATION SET IS MEASURED, NOT GUESSED ─────────────────────────────────────────
+ * The obvious approach — expand sport x isDynasty x qbFormat from the league table — warms
+ * combinations that cannot be served. `marketAdapter` reads `PlayerValueSnapshot` filtered on
+ * `format`/`qbFormat`, so a combination with no snapshot rows derives nothing however many leagues
+ * use it. So the set comes from the SNAPSHOT table: exactly the combinations that can produce an
+ * answer, and it stays correct as the data changes rather than drifting from a hardcoded list.
+ *
+ * ── ⚠ IT RUNS BEFORE THE LEAGUE WALK, AND THAT IS A PRIORITY DECISION ───────────────────────
+ * One app-level fact serves every league — 249 of them today. One league fact serves one. If the
+ * run budget exhausts mid-fire, the four market combinations are worth more than four leagues'
+ * draft rules. It also sidesteps the league walk's `leagues.length === 0` early return, which
+ * would otherwise skip app sources entirely on a fire where the league query came back empty.
+ */
+async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeof createRunBudget>): Promise<void> {
+  const store = createOsStore()
+  const valueOs = createValueOs({ store })
+  const projectionOs = createProjectionOs({ store })
+
+  const combos = await prisma.playerValueSnapshot
+    .findMany({ select: { format: true, qbFormat: true }, distinct: ['format', 'qbFormat'], take: APP_COMBO_CAP })
+    .catch((e: unknown) => {
+      counts.errors.push(`value_combo_query: ${e instanceof Error ? e.message : String(e)}`)
+      return [] as { format: string; qbFormat: string }[]
+    })
+
+  const season = new Date().getUTCFullYear()
+
+  type Unit = { domain: OsDomain; label: string; run: () => Promise<'written' | 'unavailable' | 'write_failed'> }
+  const units: Unit[] = [
+    ...combos.map((c) => ({
+      domain: 'value' as OsDomain,
+      label: `market:NFL:${c.format}:${c.qbFormat}`,
+      run: () => valueOs.refresh(marketValueSource, { sport: 'NFL', format: c.format, qbFormat: c.qbFormat }),
+    })),
+    ...DEVY_SPORTS.map((sp) => ({
+      domain: 'value' as OsDomain,
+      label: `devy:${sp}:${season}`,
+      run: () => valueOs.refresh(devyValueSource, { sport: sp, currentSeason: season }),
+    })),
+    {
+      domain: 'projection' as OsDomain,
+      label: `projection:NFL:${season}`,
+      /*
+       * ⚠ SEASON-SCOPED, NOT WEEK-SCOPED, DELIBERATELY. `scopeKey` falls back to the literal
+       * 'season' when `week` is absent, and `writeAfProjectionSnapshots` runs once a day — so a
+       * per-week warm would write 18 entries for a fact that changes daily.
+       */
+      run: () => projectionOs.refresh(canonicalProjectionSource, { sport: 'NFL', season }),
+    },
+  ]
+
+  for (const u of units) {
+    // `exhausted()` is the budget's actual surface — there is no `hasTimeFor`. Same call the
+    // league walk below makes, so both halves stop on the same signal.
+    if (budget.exhausted()) { counts.skippedForTime += 1; continue }
+    counts.considered += 1
+    counts.due += 1
+    try {
+      const outcome = await u.run()
+      if (outcome === 'written') counts.written += 1
+      else if (outcome === 'write_failed') counts.writeFailed += 1
+      else counts.unavailable += 1
+    } catch (e) {
+      counts.failed += 1
+      if (counts.errors.length < 10) {
+        counts.errors.push(`${u.domain}/${u.label}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+  }
+}
+
 async function run(): Promise<RefreshCounts> {
   const budget = createRunBudget()
   const counts: RefreshCounts = {
     considered: 0, due: 0, written: 0, unavailable: 0, writeFailed: 0, failed: 0, skippedForTime: 0, errors: [],
   }
+
+  // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
+  await refreshAppSources(counts, budget)
 
   const leagues = await prisma.league
     .findMany({
