@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest'
 // first time some file imports it, and a LATER file importing the same module sees that cached
 // inference rather than a fresh "no declaration file" error. Confirmed by tsc itself -- an
 // `@ts-expect-error` here was flagged TS2578 "Unused directive", not merely unnecessary caution.
-import { intervalMsForSchedule, nextBoundary, assignPhases } from '../scripts/cron-fast-tier-loop.mjs'
+import {
+  intervalMsForSchedule,
+  nextBoundary,
+  assignPhases,
+  seedCatchupDueTimes,
+} from '../scripts/cron-fast-tier-loop.mjs'
 import { readVercelCrons, classifyCrons } from '../scripts/cron-tier.mjs'
 
 /**
@@ -160,6 +165,91 @@ describe('assignPhases', () => {
   })
 })
 
+describe('seedCatchupDueTimes', () => {
+  it('spreads every-minute jobs (all at phase 0) a few seconds apart, same as before this fix', () => {
+    const jobs = [
+      { path: '/a', intervalMs: 60_000, phaseMs: 0 },
+      { path: '/b', intervalMs: 60_000, phaseMs: 0 },
+      { path: '/c', intervalMs: 60_000, phaseMs: 0 },
+    ]
+    const startedAt = 1_700_000_000_000
+    const due = seedCatchupDueTimes(jobs, startedAt)
+    const times = [...due.values()].sort((a, b) => a - b)
+    expect(times).toEqual([startedAt, startedAt + 3_000, startedAt + 6_000])
+  })
+
+  it('THE ACTUAL INCIDENT: catch-up no longer fires phase-separated jobs mere seconds apart', () => {
+    // Real phases from assignPhases on the five incident jobs -- not invented ones. Sorted
+    // alphabetically these get 0, 360_000, 720_000, 1_080_000, 1_440_000 respectively.
+    const jobs = [
+      { path: '/api/cron/fantasy-os-exec-sync', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/import-injuries', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/draft-pool-prewarm', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/trade-grade-notify', intervalMs: 1_800_000, phaseMs: 0 },
+    ]
+    assignPhases(jobs)
+
+    const startedAt = 1_700_000_000_000
+    const due = seedCatchupDueTimes(jobs, startedAt)
+
+    // The regression this exists to prevent, measured 2026-09-03: the OLD seed
+    // (`startedAt + i*STARTUP_STAGGER_MS`, `i` = raw declaration order) fired three of these five
+    // only 3-23 SECONDS apart despite assignPhases having placed them 6-18 MINUTES apart -- on jobs
+    // individually slow enough to run 125+s, which is precisely how the 16:24:40-16:25:13Z
+    // collision happened on a build that DID carry the phase fix. Exact values, not a loose bound --
+    // same rigor as the "separates every pair by at least interval/groupSize" test above.
+    expect(due.get('/api/cron/domain-os-refresh')).toBe(startedAt + 0 + 0 * 3_000)
+    expect(due.get('/api/cron/draft-pool-prewarm')).toBe(startedAt + 360_000 + 1 * 3_000)
+    expect(due.get('/api/cron/fantasy-os-exec-sync')).toBe(startedAt + 720_000 + 2 * 3_000)
+    expect(due.get('/api/cron/import-injuries')).toBe(startedAt + 1_080_000 + 3 * 3_000)
+    expect(due.get('/api/cron/trade-grade-notify')).toBe(startedAt + 1_440_000 + 4 * 3_000)
+
+    // And the general property, not just these five literal values: every gap is minutes, in the
+    // same ballpark as the phase spacing, never mere seconds.
+    const times = [...due.values()].sort((a, b) => a - b)
+    for (let i = 1; i < times.length; i += 1) {
+      expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(360_000)
+    }
+  })
+
+  it('still fires every job well inside a normal run window, never a full cycle away', () => {
+    const jobs = [
+      { path: '/api/cron/fantasy-os-exec-sync', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/import-injuries', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/draft-pool-prewarm', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/trade-grade-notify', intervalMs: 1_800_000, phaseMs: 0 },
+    ]
+    assignPhases(jobs)
+    const startedAt = 1_700_000_000_000
+    const due = seedCatchupDueTimes(jobs, startedAt)
+    // The latest phase (24 min) plus its stagger slot is still comfortably under the interval
+    // (30 min) it belongs to, let alone the 50-minute default window -- nothing waits a full cycle.
+    expect(Math.max(...due.values()) - startedAt).toBeLessThan(1_800_000)
+  })
+
+  it('is deterministic across repeated calls and independent of input order', () => {
+    const forward = [
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/fantasy-os-exec-sync', intervalMs: 1_800_000, phaseMs: 0 },
+    ]
+    assignPhases(forward)
+    const reversed = [...forward].reverse().map((j) => ({ ...j }))
+    const startedAt = 1_700_000_000_000
+    const a = seedCatchupDueTimes(forward, startedAt)
+    const b = seedCatchupDueTimes(reversed, startedAt)
+    expect(Object.fromEntries(a)).toEqual(Object.fromEntries(b))
+  })
+
+  it('does not mutate its input jobs', () => {
+    const jobs = [{ path: '/a', intervalMs: 60_000, phaseMs: 0 }]
+    const before = JSON.stringify(jobs)
+    seedCatchupDueTimes(jobs, 1_700_000_000_000)
+    expect(JSON.stringify(jobs)).toBe(before)
+  })
+})
+
 describe('the real cron schedule, after this fix', () => {
   it('no two fast-tier jobs sharing an interval > 1 minute share a phase', () => {
     // The regression test for the actual incident: run the real classifier and the real
@@ -221,5 +311,36 @@ describe('the real cron schedule, after this fix', () => {
     assignPhases(jobs)
     const phases = jobs.map((j: { phaseMs: number }) => j.phaseMs)
     expect(new Set(phases).size).toBe(5)
+  })
+
+  it('the five incident jobs stay minutes apart in the CATCH-UP schedule too, not just steady state', () => {
+    // The second half of the regression: assignPhases alone was proven above, but the incident
+    // that prompted seedCatchupDueTimes happened on a build that already had assignPhases -- the
+    // gap was the startup catch-up ignoring phaseMs, not the recurring boundary math. Running the
+    // REAL schedule through the full pipeline main() actually uses (classify -> assign -> seed)
+    // is what would have caught that gap before it shipped.
+    const { fast } = classifyCrons(readVercelCrons())
+    const named = [
+      '/api/cron/fantasy-os-exec-sync',
+      '/api/cron/domain-os-refresh',
+      '/api/cron/import-injuries',
+      '/api/cron/draft-pool-prewarm',
+      '/api/cron/trade-grade-notify',
+    ]
+    const jobs = fast
+      .filter((c: { path: string }) => named.includes(c.path))
+      .map((c: { path: string; schedule: string }) => ({
+        path: c.path,
+        intervalMs: intervalMsForSchedule(c.schedule),
+        phaseMs: 0,
+      }))
+    assignPhases(jobs)
+
+    const startedAt = 1_700_000_000_000
+    const due = seedCatchupDueTimes(jobs, startedAt)
+    const times = [...due.values()].sort((a, b) => a - b)
+    for (let i = 1; i < times.length; i += 1) {
+      expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(360_000)
+    }
   })
 })

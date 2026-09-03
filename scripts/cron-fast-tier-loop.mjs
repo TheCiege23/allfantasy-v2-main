@@ -289,6 +289,43 @@ export function assignPhases(jobs) {
 }
 
 /**
+ * Startup catch-up: every job's first-ever due time, staggered so it fires soon without idling
+ * until its next real boundary -- but WITHOUT re-colliding jobs `assignPhases` already separated.
+ *
+ * 🛑 A RAW ARRAY-INDEX STAGGER RE-COLLIDES EXACTLY WHAT ASSIGNPHASES EXISTS TO PREVENT, AND IT
+ * ALREADY DID. Measured 2026-09-03, on a run whose checkout DID carry the phase fix: Railway logs a
+ * request's completion, not its start, and three of the five *\/30 jobs (domain-os-refresh,
+ * import-injuries, draft-pool-prewarm) LOOKED like they fired 16:26:45-16:27:17 -- but subtracting
+ * each one's own ~125s duration puts every actual fire between 16:24:40 and 16:25:13, a 33-second
+ * span matching STARTUP_STAGGER_MS times this loop's ~12 jobs. The old seed
+ * (`startedAt + i*STARTUP_STAGGER_MS`) has no phaseMs term, so it fired three jobs assignPhases had
+ * placed 6-18 MINUTES apart only 3-23 SECONDS apart -- close enough, on jobs individually slow
+ * enough to run 125+s, that they were concurrently in flight for most of that window regardless of
+ * the concurrency ramp.
+ *
+ * This is not a rare edge case: the workflow restarted 8 times in 3 hours the day this was found
+ * (GitHub drops most of its own scheduled triggers under load -- see the workflow file), so the
+ * catch-up window is closer to the common case here than steady state is.
+ *
+ * Adding `phaseMs` to the seed restores the REAL separation (minutes, not seconds) for jobs
+ * assignPhases grouped. `i*STARTUP_STAGGER_MS` still spreads jobs that SHARE a phase -- every
+ * every-minute job, plus any solo-interval job left at the phase-0 default -- by a few seconds
+ * each, preserving the original "12 jobs must not hit the app in the same second" property. Sorted
+ * by (phaseMs, path) rather than declared order so `i` clusters same-phase jobs together instead of
+ * scattering the stagger across the whole array.
+ *
+ * Pure and exported so it is tested directly, the same way assignPhases is.
+ */
+export function seedCatchupDueTimes(jobs, startedAt) {
+  const ordered = [...jobs].sort(
+    (a, b) => a.phaseMs - b.phaseMs || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+  )
+  const due = new Map()
+  ordered.forEach((j, i) => due.set(j.path, startedAt + j.phaseMs + i * STARTUP_STAGGER_MS))
+  return due
+}
+
+/**
  * Order due jobs so the one most overdue RELATIVE TO ITS OWN CADENCE goes first.
  *
  * ⚠ FIXED ARRAY ORDER STARVED EXACTLY THE JOBS THIS LOOP EXISTS FOR. `classifyCrons` returns
@@ -558,10 +595,9 @@ async function main() {
   const startedAt = Date.now()
   const deadline = startedAt + args.windowMinutes * 60_000
 
-  // Startup catch-up: fire everything once, staggered. Without this a */30 job starting at :00
-  // would wait until :30 for its first boundary, so a short window could run it zero times.
-  const nextDueAt = new Map()
-  jobs.forEach((j, i) => nextDueAt.set(j.path, startedAt + i * STARTUP_STAGGER_MS))
+  // Startup catch-up: every job's first-ever due time. See seedCatchupDueTimes for why this is not
+  // a plain array-index stagger -- that shape re-collided the jobs assignPhases exists to keep apart.
+  const nextDueAt = seedCatchupDueTimes(jobs, startedAt)
 
   const fire = (job) => {
     inFlight.add(job.path)
