@@ -80,7 +80,7 @@ export function buildLeaguePulse(context: CommissionerContext): LeaguePulse {
     dimensions.push({
       dimension: 'activity',
       state: stateFromScore(engine.engagementScore),
-      explanation: `Engagement score ${engine.engagementScore}/100 — reflects trades, waiver claims, and lineup submission activity. Trend: ${trend.available ? trend.direction : 'unavailable'}.`,
+      explanation: `Activity score ${engine.engagementScore}/100 — reflects trades, waiver claims, and lineup submission activity. Trend: ${trend.available ? trend.direction : 'unavailable'}.`,
       evidence: [...engine.transactionHealthNotes, ...engine.waiverHealthNotes, ...engine.tradeHealthNotes],
       confidence: engine.confidencePct,
       freshness: 'fresh',

@@ -162,7 +162,7 @@ export function CommissionerHQ({
               scores into the section's headline visualization. */}
           <div className="mb-3 flex flex-wrap items-center justify-around gap-2 rounded-xl border border-white/[0.05] bg-black/20 px-2 py-3">
             <ChampionshipGauge percent={snapshot.healthScore} label={t('dashboard.warroom.commissionerHQ.health.overallScore')} accent={scoreAccent(snapshot.healthScore)} size={62} />
-            {/* Engagement's ring and the "Engagement" StatChip below both read snapshot.engagementScore
+            {/* Activity's ring and the "Activity" StatChip below both read snapshot.engagementScore
                 directly (one canonical source) — previously the StatChip read a separate, merely-copied
                 metrics.leagueEngagement field with no visual link between the two encodings. */}
             <Link

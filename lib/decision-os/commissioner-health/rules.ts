@@ -66,7 +66,7 @@ export function evaluateCommissionerHealthRules(snapshot: CommissionerLeagueHeal
   if (snapshot.overallStatus === 'critical') out.push(verdict('league_health_critical', `League health is CRITICAL (${snapshot.healthScore}/100).`, 'critical'))
   else if (snapshot.overallStatus === 'at_risk') out.push(verdict('league_health_critical', `League health is at risk (${snapshot.healthScore}/100).`, 'warning'))
 
-  if (snapshot.engagementScore < 40) out.push(verdict('engagement_low', `Engagement is low (${snapshot.engagementScore}/100).`, 'warning'))
+  if (snapshot.engagementScore < 40) out.push(verdict('engagement_low', `Activity is low (${snapshot.engagementScore}/100).`, 'warning'))
   if (snapshot.fairnessScore < 50) out.push(verdict('fairness_low', `Fairness is low (${snapshot.fairnessScore}/100).`, 'warning'))
   if (snapshot.sustainabilityScore < 50) out.push(verdict('sustainability_low', `Sustainability is low (${snapshot.sustainabilityScore}/100).`, 'warning'))
 

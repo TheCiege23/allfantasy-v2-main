@@ -171,7 +171,7 @@ export function HealthScoreCard(props: HealthScoreCardProps) {
       {available ? (
         <>
           <div className="af-cm-subscores">
-            <SubScore name="Engagement" value={engagement} />
+            <SubScore name="Activity" value={engagement} />
             <SubScore name="Fairness" value={fairness} />
             <SubScore name="Sustainability" value={sustainability} />
           </div>

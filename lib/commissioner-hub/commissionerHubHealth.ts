@@ -93,8 +93,10 @@ export type CommissionerLeagueHealthSnapshot = {
    * a league that is fully staffed and silent, or half-empty and busy. Do not treat them as
    * interchangeable just because the worst case lines up.
    *
-   * 🛑 NINE UI SURFACES READ THIS FIELD and label it "Engagement" in five languages
-   * (`dashboard.warroom.commissionerHQ.health.engagementScore`). The behavioural score reaches
+   * 🛑 NINE UI SURFACES READ THIS FIELD and label it "Activity" in five languages
+   * (`dashboard.warroom.commissionerHQ.health.engagementScore`, relabeled by 6.1's Engagement→
+   * Activity rename — the key name stayed `engagement`/`engagementScore` on purpose; only the
+   * human-facing text moved). The behavioural score reaches
    * ZERO surfaces. So 6.1's "collapse the scorers, keep the behavioural one" is not a swap —
    * it would repoint every one of those dashboards at a different question.
    */
