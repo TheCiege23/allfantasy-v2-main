@@ -680,8 +680,25 @@ describe('Invariant 18b: cron prewarm bounds one hung league so it cannot fail t
   it('imports runWithConcurrency and withTimeout from the shared async utils', () => {
     expect(cronPrewarmSrc).toMatch(/import\s*\{\s*runWithConcurrency,\s*withTimeout\s*\}\s*from\s*'@\/lib\/async-utils'/)
   })
-  it('derives the latest-start deadline from maxDuration, not a hardcoded number', () => {
-    expect(cronPrewarmSrc).toContain('LATEST_START_DEADLINE_MS = maxDuration * 1000')
+  it('derives the latest-start deadline from maxDuration and every per-league budget', () => {
+    /*
+     * Asserts the RELATIONSHIP, not the layout.
+     *
+     * This previously pinned the literal substring "LATEST_START_DEADLINE_MS = maxDuration * 1000",
+     * which coupled formatting to correctness in both directions: it FAILED on a wrapped but
+     * correct expression, and it would have PASSED on a wrong expression that merely began with
+     * those characters. It did fail that way — the cache-check budget could not be added to the
+     * deadline without either breaking this test or keeping the line artificially long.
+     *
+     * Every budget a single league can spend must be subtracted here, or the property this
+     * deadline exists to provide (the last league allowed to START can still finish) is false.
+     */
+    const expr =
+      /const LATEST_START_DEADLINE_MS =([^\n]*(?:\n[ \t]+[^\n]*)*)/.exec(cronPrewarmSrc)?.[1] ?? ''
+    expect(expr).toContain('maxDuration')
+    expect(expr).toContain('CACHE_CHECK_TIMEOUT_MS')
+    expect(expr).toContain('PER_LEAGUE_TIMEOUT_MS')
+    expect(expr).toContain('RESPONSE_MARGIN_MS')
   })
   it('marks work past the deadline as deferred rather than attempting it', () => {
     expect(cronPrewarmSrc).toContain("action: 'deferred'")

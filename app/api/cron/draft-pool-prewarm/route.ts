@@ -82,12 +82,17 @@ export const maxDuration = 300
 const CONCURRENCY = 3
 const PER_LEAGUE_TIMEOUT_MS = 120_000
 const CACHE_CHECK_TIMEOUT_MS = 5_000
+/**
+ * A rejection arriving after HALF the check budget is read as saturation rather than as a cache
+ * miss. Half is chosen so the two doors cannot disagree: anything slower than this would have
+ * tripped the timeout shortly anyway, and anything faster is the immediate error a genuine miss
+ * produces. Found in review — the first version of this file mapped EVERY rejection to "build it",
+ * which left the outage path open under exactly the load the timeout was added to detect.
+ */
+const SLOW_REJECTION_MS = CACHE_CHECK_TIMEOUT_MS / 2
 const RESPONSE_MARGIN_MS = 20_000
-// Kept on ONE line: Invariant 18b asserts the literal substring
-// "LATEST_START_DEADLINE_MS = maxDuration * 1000" to pin that this is derived rather than
-// hardcoded. Wrapping the expression satisfies the intent and breaks the test, so the code
-// bends to the existing invariant rather than the invariant being rewritten to fit new code.
-const LATEST_START_DEADLINE_MS = maxDuration * 1000 - CACHE_CHECK_TIMEOUT_MS - PER_LEAGUE_TIMEOUT_MS - RESPONSE_MARGIN_MS
+const LATEST_START_DEADLINE_MS =
+  maxDuration * 1000 - CACHE_CHECK_TIMEOUT_MS - PER_LEAGUE_TIMEOUT_MS - RESPONSE_MARGIN_MS
 
 async function handle(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) {
@@ -109,24 +114,42 @@ async function handle(req: NextRequest) {
       return { leagueId, action: 'deferred', error: 'past this run’s start deadline; retried next tick' }
     }
 
-    // A rejected check means "not warm" (build it). A check that never RETURNS means the process
-    // is saturated -- a different fact, and the opposite response.
+    /*
+     * THREE OUTCOMES, NOT TWO — and the third is the one a first pass gets wrong.
+     *
+     * A check that never RETURNS is saturation. A check that REJECTS is ambiguous: a genuine
+     * cache-miss error comes back immediately, but pool exhaustion, a statement timeout and a
+     * socket error are ALSO rejections, they are saturation symptoms, and they arrive slow.
+     * Mapping every rejection to "not warm" leaves the route with two doors under load, one of
+     * which still starts a 60-90s build into a dying process — the exact outage this bounds.
+     *
+     * So the rejection is TIMED. Fast rejection keeps the old behaviour (build it); a rejection
+     * arriving late in the budget goes through the same door as a timeout.
+     */
+    const checkStartedAt = Date.now()
+    let rejectedAfterMs = -1
     const check = await withTimeout(
       checkDraftPoolCacheFast(leagueId)
         .then((readiness) => readiness.warm)
-        .catch(() => false),
+        .catch(() => {
+          rejectedAfterMs = Date.now() - checkStartedAt
+          return false
+        }),
       CACHE_CHECK_TIMEOUT_MS,
     )
 
-    if (!check.ok) {
+    const slowRejection = rejectedAfterMs >= 0 && rejectedAfterMs > SLOW_REJECTION_MS
+    if (!check.ok || slowRejection) {
       console.warn('[draft-pool-prewarm] cache check exceeded its budget — deferring rather than building', {
         leagueId,
         timeoutMs: CACHE_CHECK_TIMEOUT_MS,
+        reason: check.ok ? 'slow-rejection' : 'timeout',
+        rejectedAfterMs: rejectedAfterMs >= 0 ? rejectedAfterMs : null,
       })
       return {
         leagueId,
         action: 'deferred',
-        error: `cache check exceeded ${CACHE_CHECK_TIMEOUT_MS}ms; container saturated, retried next tick`,
+        error: `cache check ${check.ok ? `rejected after ${rejectedAfterMs}ms` : `exceeded ${CACHE_CHECK_TIMEOUT_MS}ms`}; container saturated, retried next tick`,
       }
     }
 
@@ -148,6 +171,22 @@ async function handle(req: NextRequest) {
       error: result.ok ? undefined : result.error,
     }
   })
+
+  /*
+   * WHICH KIND OF DEFERRAL WAS THAT? The discriminator is already in hand at tick end and costs
+   * no extra query: load defers EVERY league, a pathological league defers ALONE while its peers
+   * succeed. Without this the distinction is only recoverable by a human noticing the same
+   * leagueId recur across ticks — an observable becomes a hope. Raised in review.
+   */
+  const deferred = results.filter((r) => r.action === 'deferred')
+  if (deferred.length > 0) {
+    console.warn('[draft-pool-prewarm] deferrals this tick', {
+      deferred: deferred.length,
+      total: results.length,
+      diagnosis: deferred.length === results.length ? 'container-saturated' : 'league-specific',
+      leagueIds: deferred.map((r) => r.leagueId),
+    })
+  }
 
   console.info('[draft-pool-prewarm] cron done', { totalMs: Date.now() - t, results })
   return NextResponse.json({ ok: true, results })
