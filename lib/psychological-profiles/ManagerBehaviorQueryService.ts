@@ -143,6 +143,69 @@ export interface ManagerPsychProfileView {
   /** Evidence-gated scores. Null means unmeasured — render it as such, never 0. */
   displayScores?: DisplayScores
   evidenceSummary?: ProfileEvidenceSummaryView
+  /**
+   * Set ONLY when this profile was read from a sibling mirror of the same external league
+   * rather than from the league id asked for. Absent is the normal case.
+   *
+   * Never silently substituted: a caller that cares which row answered can see it, in the same
+   * spirit as the grounding packet's `servedFrom`. See `resolveProfiledSiblingLeagueId`.
+   */
+  servedFromSiblingLeagueId?: string
+}
+
+/**
+ * Find another League row for the SAME external league that already has profiles.
+ *
+ * 🛑 WHY THIS EXISTS. A League row is per importing USER — `enumerate.ts` says so directly:
+ * "Multiple `League` rows (one per importing user) can mirror the same external league+season."
+ * Profiling is keyed on the League ROW, so the second and third person to import a league get
+ * nothing until the profiler's own rotation reaches their row, even though byte-identical
+ * profiles already exist for the same 12 managers.
+ *
+ * Measured 2026-09-03: 23 users were in exactly that state, across 19 of the 23 mirrored
+ * leagues in production. The three rows for one league each carried the SAME 960 draft facts
+ * and the same 12 rosters — the evidence is not merely similar, it is the same evidence.
+ *
+ * ⚠ THIS IS NOT A DEDUPE, AND IT MUST NOT BECOME ONE. The mirror rows are correct and
+ * intended; nothing here merges or deletes anything. It only answers "has this same external
+ * league already been profiled elsewhere" on the READ path.
+ *
+ * ⚠ NO NEW DATA IS EXPOSED. A profile is keyed on the PLATFORM manager id (the Sleeper/ESPN
+ * user), which is identical across mirrors, and describes the league's managers — not the
+ * importing user. Two rows for one external league describe the same twelve people. Matching
+ * requires the same platform, the same external league id AND the same season, so nothing
+ * from a different league or year can answer.
+ */
+async function resolveProfiledSiblingLeagueId(leagueId: string): Promise<string | null> {
+  const self = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { platform: true, platformLeagueId: true, season: true },
+  })
+  // An empty external id is the "not connected to a platform" case — it has no siblings.
+  if (!self?.platformLeagueId) return null
+
+  const siblings = await prisma.league.findMany({
+    where: {
+      platform: self.platform,
+      platformLeagueId: self.platformLeagueId,
+      season: self.season,
+      id: { not: leagueId },
+    },
+    select: { id: true },
+  })
+  if (siblings.length === 0) return null
+
+  /*
+   * Pick the sibling whose profiles are FRESHEST, not merely the first found — with three
+   * mirrors it is entirely possible for two to be profiled at different times, and serving the
+   * older one would be a silent downgrade.
+   */
+  const newest = await prisma.managerPsychProfile.findFirst({
+    where: { leagueId: { in: siblings.map((r) => r.id) } },
+    orderBy: { updatedAt: 'desc' },
+    select: { leagueId: true },
+  })
+  return newest?.leagueId ?? null
 }
 
 export async function getProfileByLeagueAndManager(
@@ -159,8 +222,23 @@ export async function getProfileByLeagueAndManager(
       },
     },
   })
-  if (!p) return null
-  return toView(p)
+  if (p) return toView(p)
+
+  // Nothing for this row — see if a sibling mirror of the same external league has it.
+  const siblingId = await resolveProfiledSiblingLeagueId(leagueId)
+  if (!siblingId) return null
+  const fromSibling = await prisma.managerPsychProfile.findUnique({
+    where: { leagueId_managerId: { leagueId: siblingId, managerId } },
+    include: {
+      _count: { select: { evidence: true } },
+      evidence: {
+        where: { evidenceType: { in: EVIDENCE_COUNT_TYPES } },
+        select: { evidenceType: true, value: true },
+      },
+    },
+  })
+  if (!fromSibling) return null
+  return { ...toView(fromSibling), servedFromSiblingLeagueId: siblingId }
 }
 
 export async function listProfilesByLeague(
@@ -198,7 +276,28 @@ export async function listProfilesByLeague(
     orderBy: { updatedAt: 'desc' },
     take: options?.limit ?? 50,
   })
-  return list.map(toView)
+  if (list.length > 0) return list.map(toView)
+
+  /*
+   * ⚠ ONLY ON A COMPLETELY EMPTY RESULT. A partial result is this league's own answer and must
+   * stand: mixing a sibling's rows into it would silently blend two profiling runs, and the
+   * caller could not tell which manager came from where.
+   */
+  const siblingId = await resolveProfiledSiblingLeagueId(leagueId)
+  if (!siblingId) return []
+  const fromSibling = await prisma.managerPsychProfile.findMany({
+    where: { ...where, leagueId: siblingId },
+    include: {
+      _count: { select: { evidence: true } },
+      evidence: {
+        where: { evidenceType: { in: EVIDENCE_COUNT_TYPES } },
+        select: { evidenceType: true, value: true },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: options?.limit ?? 50,
+  })
+  return fromSibling.map((row) => ({ ...toView(row), servedFromSiblingLeagueId: siblingId }))
 }
 
 export async function getProfileById(profileId: string): Promise<ManagerPsychProfileView | null> {
