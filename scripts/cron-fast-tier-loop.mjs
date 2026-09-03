@@ -154,17 +154,36 @@ const MIN_CONCURRENCY = 2
  * Pure and exported so it is tested directly rather than inferred from a live run.
  */
 export function effectiveConcurrency(recentDurations, max = MAX_CONCURRENCY) {
-  // Not enough evidence yet — do not throttle on one unlucky call at startup.
-  if (!Array.isArray(recentDurations) || recentDurations.length < LATENCY_SAMPLE_SIZE) return max
+  // No evidence at all -> the FLOOR, never the ceiling. See the slow-start note below.
+  if (!Array.isArray(recentDurations) || recentDurations.length === 0) return MIN_CONCURRENCY
 
   const sample = recentDurations.slice(-LATENCY_SAMPLE_SIZE)
   const slow = sample.filter((d) => Number.isFinite(d) && d >= SLOW_CALL_MS).length
-  if (slow === 0) return max
 
-  // Scale with the HEALTHY fraction, so one slow call among eight barely moves it and a pool that
-  // is entirely slow drops straight to the floor.
+  // Steady state: scale with the HEALTHY fraction, so one slow call among eight barely moves it
+  // and a pool that is entirely slow drops to the floor.
   const healthyFraction = (sample.length - slow) / sample.length
-  return Math.max(MIN_CONCURRENCY, Math.round(max * healthyFraction))
+  const steady = Math.max(MIN_CONCURRENCY, Math.round(max * healthyFraction))
+
+  /*
+   * 🛑 SLOW START, AND IT IS THE HALF THAT WAS MISSING. The first version of this returned `max`
+   * until it had a full window of samples, reasoning that one unlucky call should not collapse the
+   * pool. That is backwards, and it took production down for six minutes at 04:01Z on 2026-09-03.
+   *
+   * Every workflow run begins with an EMPTY window, and the startup catch-up above deliberately
+   * fires every job at once. So a run opened at the full 8 with the throttle inert, jammed a
+   * container that could not take it, and only began protecting it after the damage was done —
+   * eight crons at 125,004ms, all abandoned, while real requests queued behind them. Waiting for
+   * evidence of harm means the harm has already happened, and a new run starts every hour.
+   *
+   * So capacity is EARNED: one slot above the floor per healthy call observed. A run opens at 2,
+   * reaches the full 8 after six healthy calls, and a cold or struggling container simply never
+   * hands out those slots. Whichever of the two limits is lower wins, so a backoff still overrides
+   * a ramp that has not finished.
+   */
+  const earned = MIN_CONCURRENCY + (sample.length - slow)
+
+  return Math.min(steady, earned, max)
 }
 
 /**
@@ -455,8 +474,12 @@ async function main() {
   let concurrency = 0
   /** Rolling view of how the app has been answering, for effectiveConcurrency(). */
   const recentDurations = []
-  /** Last cap logged, so a change is reported once rather than every second. */
-  let lastCap = MAX_CONCURRENCY
+  /**
+   * Last cap logged, so a change is reported once rather than every second. Seeded at the FLOOR
+   * because that is where slow start begins — seeding at the ceiling would log a phantom "8 -> 2"
+   * on the first tick and read as a backoff that never happened.
+   */
+  let lastCap = MIN_CONCURRENCY
 
   const startedAt = Date.now()
   const deadline = startedAt + args.windowMinutes * 60_000

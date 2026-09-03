@@ -22,10 +22,8 @@ describe('effectiveConcurrency — the healthy case must be untouched', () => {
     expect(effectiveConcurrency(HEALTHY)).toBe(8)
   })
 
-  it('does not throttle before it has enough evidence', () => {
-    // One slow call at startup must not collapse the pool.
-    expect(effectiveConcurrency([120_000])).toBe(8)
-    expect(effectiveConcurrency([120_000, 110_000, 90_000])).toBe(8)
+  it('reaches the full cap once a full healthy window exists', () => {
+    expect(effectiveConcurrency(new Array(8).fill(1_000))).toBe(8)
   })
 
   it('ignores a single slow call among a healthy sample', () => {
@@ -83,9 +81,49 @@ describe('the backoff must not undo the starvation fix', () => {
   })
 })
 
+/**
+ * SLOW START. The first version returned the full cap until it had 8 samples, so every workflow
+ * run opened at concurrency 8 with the throttle inert — and the startup catch-up fires every job
+ * at once. That took production down for six minutes at 04:01Z on 2026-09-03: eight crons at
+ * 125,004ms, all abandoned. Capacity must be earned, not assumed.
+ */
+describe('slow start — a run must not open at full throttle', () => {
+  it('starts at the floor with no evidence at all', () => {
+    expect(effectiveConcurrency([])).toBe(2)
+  })
+
+  it('earns one slot per healthy call rather than jumping to the cap', () => {
+    expect(effectiveConcurrency([500])).toBe(3)
+    expect(effectiveConcurrency([500, 600])).toBe(4)
+    expect(effectiveConcurrency([500, 600, 700])).toBe(5)
+    expect(effectiveConcurrency([500, 600, 700, 800])).toBe(6)
+    expect(effectiveConcurrency([500, 600, 700, 800, 900])).toBe(7)
+    expect(effectiveConcurrency([500, 600, 700, 800, 900, 1000])).toBe(8)
+  })
+
+  it('does NOT ramp on slow calls — a cold container never earns the slots', () => {
+    expect(effectiveConcurrency([120_000])).toBe(2)
+    expect(effectiveConcurrency([120_000, 110_000, 90_000])).toBe(2)
+  })
+
+  it('is the regression test for the 04:01Z outage', () => {
+    // A fresh run's very first tick, which is exactly when the startup catch-up fires everything.
+    expect(effectiveConcurrency([])).toBeLessThanOrEqual(2)
+    // And it must not have been 8, which is what took the site down.
+    expect(effectiveConcurrency([])).not.toBe(8)
+  })
+
+  it('lets a backoff override an unfinished ramp', () => {
+    // 5 samples, 3 healthy: earned = 2+3 = 5, steady = round(8 * 3/5) = 5. Lower of the two.
+    expect(effectiveConcurrency([500, 600, 700, 120_000, 130_000])).toBe(5)
+    // 5 samples, 1 healthy: earned = 3, steady = round(8 * 1/5) = 2. Backoff wins.
+    expect(effectiveConcurrency([500, 120_000, 130_000, 140_000, 150_000])).toBe(2)
+  })
+})
+
 describe('input robustness', () => {
-  it('survives a non-array', () => {
-    expect(effectiveConcurrency(undefined as unknown as number[])).toBe(8)
+  it('treats a non-array as no evidence, so the floor', () => {
+    expect(effectiveConcurrency(undefined as unknown as number[])).toBe(2)
   })
 
   it('ignores non-finite samples rather than counting them as slow', () => {
