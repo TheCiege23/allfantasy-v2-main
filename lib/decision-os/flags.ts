@@ -89,6 +89,12 @@ export type DecisionOsFeed =
    * concurrent wave like the two decision bridges above (own DB reads, no roster dependency).
    */
   | 'rosterValueGrade'
+  /**
+   * Cross-league + cross-sport psychology consistency, SELF ONLY (R4b.5, P5/P7). Derived at read,
+   * never cached — see `psychologyConsistencySlice.ts`'s own header for why this cannot share
+   * `managerPsychology`'s feed the way trajectory did.
+   */
+  | 'psychologyConsistency'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -106,6 +112,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'commissionerHealthDecision',
   'idpKickerValues',
   'rosterValueGrade',
+  'psychologyConsistency',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

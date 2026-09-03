@@ -24,6 +24,7 @@ import type { DecisionFact } from './decisionToSlice'
 import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
 import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
+import { loadPsychologyConsistencySlice, type PsychologyConsistencyFact } from './psychologyConsistencySlice'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -254,6 +255,12 @@ export interface DecisionOsGroundingPacket {
    * the same playbook R2 used for the four live decision engines rather than re-deriving the math.
    */
   rosterValueGrade?: GroundedSlice<RosterValueGradeFact>
+
+  /**
+   * R4b.5 — cross-league + cross-sport psychology consistency, self only (P5/P7). Derived at
+   * read, never cached — see `psychologyConsistencySlice.ts`.
+   */
+  psychologyConsistency?: GroundedSlice<PsychologyConsistencyFact>
 
   /**
    * Every gap on the packet, flattened.
@@ -607,6 +614,12 @@ export interface GroundingPacketArgs {
      * because of an ordering constraint.
      */
     rosterValueGrade?: boolean
+    /**
+     * R4b.5 — cross-league + cross-sport psychology consistency, self only (default OFF). Joins
+     * the concurrent wave; opt-in because it is a real query cost (walks every league the caller
+     * manages), not because of an ordering constraint.
+     */
+    psychologyConsistency?: boolean
   }
 }
 
@@ -706,6 +719,7 @@ export async function buildDecisionOsGroundingPacket(
   const commishHealthKill = killed('commissionerHealthDecision')
   const idpKickerKill = killed('idpKickerValues')
   const rosterValueGradeKill = killed('rosterValueGrade')
+  const psychologyConsistencyKill = killed('psychologyConsistency')
 
   const pAssertions =
     leagueId && !importKill
@@ -792,6 +806,15 @@ export async function buildDecisionOsGroundingPacket(
   const pRosterValueGrade =
     want.rosterValueGrade && !rosterValueGradeKill
       ? kick('rosterValueGrade', loadRosterValueGradeSlice({ userId: args.userId, leagueId }))
+      : Promise.resolve(null)
+
+  /*
+   * R4b.5 — cross-league + cross-sport psychology. Same wave, same rules: its own DB reads, no
+   * dependency on any other slice.
+   */
+  const pPsychologyConsistency =
+    want.psychologyConsistency && !psychologyConsistencyKill
+      ? kick('psychologyConsistency', loadPsychologyConsistencySlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   const pDevy = want.devy && !devyKill
@@ -1217,6 +1240,15 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Ask where you are weak or how your roster compares and it runs.',
       })
 
+  const psychologyConsistency: GroundedSlice<PsychologyConsistencyFact> = psychologyConsistencyKill
+    ? absent<PsychologyConsistencyFact>(psychologyConsistencyKill)
+    : (await pPsychologyConsistency) ??
+      absent<PsychologyConsistencyFact>({
+        reason: 'not_requested',
+        detail: 'This question did not call for a cross-league or cross-sport read.',
+        remedy: 'Ask how consistent you are across leagues or sports and it runs.',
+      })
+
   const psychologyRows = await pPsychology
   const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
     ? absent<PsychologyProfileFact[]>(psychologyKill)
@@ -1390,6 +1422,7 @@ export async function buildDecisionOsGroundingPacket(
     ['commissionerHealthDecision', commissionerHealthDecision as GroundedSlice<unknown>],
     ['idpKickerValues', idpKickerValues as GroundedSlice<unknown>],
     ['rosterValueGrade', rosterValueGrade as GroundedSlice<unknown>],
+    ['psychologyConsistency', psychologyConsistency as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1419,6 +1452,7 @@ export async function buildDecisionOsGroundingPacket(
     commissionerHealthDecision,
     idpKickerValues,
     rosterValueGrade,
+    psychologyConsistency,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

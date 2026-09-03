@@ -299,6 +299,16 @@ function renderItem(item: unknown): string | null {
     const unmeasured = Array.isArray(o.unmeasuredDimensions) ? (o.unmeasuredDimensions as string[]) : []
     // Naming what is unmeasured lets an answer decline one read without hedging the whole profile.
     if (unmeasured.length) bits.push(`no ${unmeasured.join('/')} read yet`)
+    /*
+     * R4b.5 — trajectory. Same rule as everything else in this branch: only render it when it says
+     * something. `hasTrajectory: false` is `summariseTrajectory`'s own honest refusal (one season,
+     * or nothing clears the evidence floor), and repeating that refusal here would just be noise —
+     * the label/score bits above already carry the CURRENT read.
+     */
+    const trajectory = o.trajectory as Record<string, unknown> | undefined
+    if (trajectory?.hasTrajectory === true && typeof trajectory.summary === 'string') {
+      bits.push(`trajectory: ${trajectory.summary}`)
+    }
     const n = typeof o.evidenceCount === 'number' ? ` [${o.evidenceCount} obs]` : ''
     return bits.length ? `manager ${o.managerId}${n}: ${bits.join(' — ')}` : null
   }

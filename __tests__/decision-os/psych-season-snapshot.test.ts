@@ -10,6 +10,7 @@ vi.mock('@/lib/prisma', () => ({
 import {
   writeProfileSeasonSnapshot,
   readManagerTrajectory,
+  readLeagueTrajectories,
   summariseTrajectory,
 } from '@/lib/psychological-profiles/ProfileSeasonSnapshot'
 
@@ -82,6 +83,48 @@ describe('P1 — per-season snapshots make a trajectory possible', () => {
   it('returns an empty trajectory rather than throwing when nothing is recorded', async () => {
     queryRaw.mockRejectedValue(new Error('nope'))
     await expect(readManagerTrajectory({ leagueId: 'L1', managerId: 'm1' })).resolves.toEqual([])
+  })
+
+  /**
+   * ── R4b.5 — `readLeagueTrajectories`: one query for the whole league, not one per manager ────
+   * The psychology packet slice reports on every manager in a league (8-14, typically), and
+   * `readManagerTrajectory` in a loop would be N+1. Same row shape, same null-handling — these
+   * tests exist to catch the two ways that could drift: managers not correctly grouped, or the
+   * batched path silently losing the null-preservation guard the single-manager path already has.
+   */
+  it('🛑 groups seasons by manager, and each manager stays season-ordered within their own group', async () => {
+    queryRaw.mockResolvedValue([
+      { managerId: 'm1', season: 2024, profileLabels: ['rebuilder'], aggressionScore: 20, sampleSize: 10, confidence: 0.5 },
+      { managerId: 'm2', season: 2025, profileLabels: ['aggressive'], aggressionScore: 90, sampleSize: 40, confidence: 0.9 },
+      { managerId: 'm1', season: 2026, profileLabels: ['win-now'], aggressionScore: 80, sampleSize: 50, confidence: 0.7 },
+    ])
+    const byManager = await readLeagueTrajectories('L1')
+    expect(byManager.get('m1')?.map((p) => p.season)).toEqual([2024, 2026])
+    expect(byManager.get('m2')?.map((p) => p.season)).toEqual([2025])
+  })
+
+  it('🛑 preserves a null aggressionScore in the batched read, same as the single-manager read', async () => {
+    // `Number(null)` is 0, not NaN — R4b.3's exact bug, in the path this session already fixed it
+    // once. The batched query shares `toTrajectoryPoint`, but a regression here would be silent:
+    // the map still builds, it would just quietly resurrect a coerced zero.
+    queryRaw.mockResolvedValue([
+      { managerId: 'm1', season: 2026, profileLabels: [], aggressionScore: null, sampleSize: 5, confidence: 0.4 },
+    ])
+    const byManager = await readLeagueTrajectories('L1')
+    expect(byManager.get('m1')?.[0]?.aggressionScore).toBeNull()
+  })
+
+  it('returns an empty map rather than throwing when the query fails', async () => {
+    queryRaw.mockRejectedValue(new Error('nope'))
+    const byManager = await readLeagueTrajectories('L1')
+    expect(byManager.size).toBe(0)
+  })
+
+  it('a manager with no rows at all is simply absent from the map (not an empty array)', async () => {
+    queryRaw.mockResolvedValue([])
+    const byManager = await readLeagueTrajectories('L1')
+    expect(byManager.has('m-nonexistent')).toBe(false)
+    expect(byManager.get('m-nonexistent')).toBeUndefined()
   })
 
   it('🛑 a SINGLE season is not a trajectory, and says so', () => {

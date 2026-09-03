@@ -156,6 +156,46 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     expect(text).toMatch(/more not shown/i)
   })
 
+  /**
+   * R4b.5 — trajectory joined `PsychologyProfileFact`, and the `renderItem` branch that already
+   * handles this shape had to be extended by hand to read it. Adding a field to the data does
+   * nothing on its own — G11 in miniature, caught here rather than discovered live.
+   */
+  it('🛑 a manager fact WITH a trajectory renders its summary text', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        managerPsychology: present([
+          {
+            managerId: 'm1', sport: 'NFL', labels: ['aggressive'],
+            scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null },
+            evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z',
+            trajectory: { hasTrajectory: true, summary: '2024: rebuilder → 2026: win-now (aggression +30, across 2 graded seasons).', seasonsRecorded: 2 },
+          },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).toContain('trajectory: 2024: rebuilder → 2026: win-now')
+  })
+
+  it('a manager fact WITHOUT a trajectory renders normally and adds no trajectory noise', () => {
+    const text = serializeDecisionOsGroundingForPrompt(
+      packet({
+        managerPsychology: present([
+          {
+            managerId: 'm1', sport: 'NFL', labels: ['aggressive'],
+            scores: { aggressionScore: 80, activityScore: null, tradeFrequencyScore: null, waiverFocusScore: null, riskToleranceScore: null },
+            evidenceCount: 40, unmeasuredDimensions: [], anySufficient: true, updatedAt: '2026-09-01T00:00:00.000Z',
+            trajectory: { hasTrajectory: false, summary: 'Only one season clears the evidence floor (1 recorded), so there is no direction to report yet.', seasonsRecorded: 1 },
+          },
+        ]),
+      }),
+      NOW,
+    )
+    expect(text).toContain('aggressive')
+    expect(text).not.toContain('trajectory:')
+  })
+
   it('renders the value of a PRESENT-BUT-INCONCLUSIVE slice, and keeps the warning', () => {
     // 🛑 Dropping true information to punish a stale import is the failure the packet's own roster
     // comment warns about. The number is real; the caveat travels with it.
