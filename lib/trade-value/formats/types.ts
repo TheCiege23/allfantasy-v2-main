@@ -46,6 +46,20 @@ export interface FormatValueInput {
    * format's state, which is the coupling the registry exists to avoid.
    */
   teamState?: unknown
+  /**
+   * Format-specific state about THIS ASSET, as opposed to the roster holding it.
+   *
+   * 🛑 WHY A SECOND CHANNEL RATHER THAN MORE FIELDS. Keeper value is the first fact here that is
+   * per-PLAYER rather than per-TEAM: what you acquire is not the player, it is the player MINUS
+   * what he costs to keep, and a receiver kept at a 2nd is a worse asset than the same receiver
+   * kept at a 7th. `teamState` cannot carry that — it is one object for the whole roster — and
+   * adding a typed `keeperCostRound` to this interface would make every future per-asset fact
+   * re-open the same question.
+   *
+   * ⚠ DELIBERATELY `unknown`, exactly like `teamState`. Each model narrows it itself and returns
+   * null when the shape it needs is absent, so no format depends on another format's state type.
+   */
+  assetState?: unknown
 }
 
 /**

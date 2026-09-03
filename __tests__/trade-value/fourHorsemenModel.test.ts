@@ -57,7 +57,7 @@ describe('registry', () => {
      * red, which is the behaviour wanted. Every id here must be one with genuinely no model, or
      * this stops testing the fallback and starts testing a stale inventory.
      */
-    for (const id of ['pirate', 'zombie', 'big_brother', 'redraft']) {
+    for (const id of ['pirate', 'big_brother', 'redraft', 'survivor']) {
       expect(formatModelFor(id)).toBeNull()
     }
     expect(formatModelFor(null)).toBeNull()
@@ -65,19 +65,23 @@ describe('registry', () => {
   })
 
   it('reports its own coverage honestly', () => {
-    expect(modelledFormatIds()).toEqual(['four_horsemen', 'guillotine'])
+    expect(modelledFormatIds()).toEqual(['four_horsemen', 'guillotine', 'keeper', 'tournament', 'zombie'])
     /*
-     * ⚠ THE ARITHMETIC IS DELIBERATELY EXPLICIT: guillotine IS a canonical format and now has a
-     * model, so it leaves the gap list; Four Horsemen is a specific league that was never in it.
-     * Two models, but only ONE of them reduces the count — writing that out is what stops the
-     * next model being scored against a number nobody can reconstruct.
+     * ⚠ MINUS FOUR, AND THE ARITHMETIC IS DELIBERATELY EXPLICIT. Five models exist, but only the
+     * four that are CANONICAL formats leave the gap list — guillotine, tournament, keeper and
+     * zombie. Four Horsemen is a specific league and was never in it. Writing that out is what
+     * stops the next model being scored against a number nobody can reconstruct.
      */
     expect(formatIdsWithoutValueModel().length).toBe(
-      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length - 1,
+      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length - 4,
     )
     expect(formatIdsWithoutValueModel()).not.toContain('four_horsemen')
-    expect(formatIdsWithoutValueModel()).not.toContain('guillotine')
-    expect(formatIdsWithoutValueModel()).toContain('tournament')
+    for (const modelled of ['guillotine', 'tournament', 'keeper', 'zombie']) {
+      expect(formatIdsWithoutValueModel(), modelled).not.toContain(modelled)
+    }
+    // Still genuinely unmodelled, so the list is not vacuously passing.
+    expect(formatIdsWithoutValueModel()).toContain('survivor')
+    expect(formatIdsWithoutValueModel()).toContain('big_brother')
   })
 
   /*

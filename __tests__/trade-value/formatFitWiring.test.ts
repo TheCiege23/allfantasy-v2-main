@@ -121,10 +121,18 @@ describe('🛑 the base price is untouched', () => {
 
 describe('what reaches the model', () => {
   it('an unmodelled format yields null, not a default', () => {
-    // ⚠ Was `guillotine` until guillotine gained a model. Must name a format with none.
+    /*
+     * ⚠ THIS EXAMPLE HAS NOW BEEN REPLACED TWICE — `guillotine`, then `zombie`, each as it gained
+     * a model. That churn is the test working: it must name a format with genuinely NO model, or
+     * it stops testing the fallback and starts asserting a stale inventory.
+     *
+     * `big_brother` is the safest choice remaining: it has a large engine directory but no
+     * settings snapshot and no rulebook on file, so it cannot gain a value model without someone
+     * supplying one first.
+     */
     const a = firstAsset(build({
       context: {
-        sport: 'NFL', leagueType: 'zombie', scoring: 'ppr',
+        sport: 'NFL', leagueType: 'big_brother', scoring: 'ppr',
         rosterFormat: 'standard', capturedAt: '2026-09-02T00:00:00.000Z',
       },
     }))
@@ -150,6 +158,42 @@ describe('what reaches the model', () => {
     }))
     expect(a.formatFit).toBeTruthy()
     expect(a.formatFit!.formatId).toBe('four_horsemen')
+  })
+
+  it('🛑 carries assetStateByPlayerId through, or keeper and zombie are dead code', () => {
+    /*
+     * THIS TEST EXISTS BECAUSE THE WIRING WAS NEARLY OMITTED. `assetState` was added to
+     * `FormatValueInput`, the keeper and zombie models were written against it, and all 243
+     * trade-value tests passed — because those tests call the models DIRECTLY. Nothing on the real
+     * path supplied one, so both models would have returned null forever while looking correct.
+     *
+     * That is exactly how `rescoreKickerForLeague` sat with zero consumers under a comment saying
+     * it ran. Asserted through the BUILDER, not the model, because the model working proves
+     * nothing about whether anything ever calls it with state.
+     */
+    const a = firstAsset(build({
+      context: {
+        sport: 'NFL', leagueType: 'keeper', scoring: 'ppr',
+        rosterFormat: 'standard', capturedAt: '2026-09-02T00:00:00.000Z',
+      },
+      assetStateByPlayerId: { p1: { costRound: 12 } },
+    }))
+    expect(a.formatFit).toBeTruthy()
+    expect(a.formatFit!.formatId).toBe('keeper')
+    // A late-round keeper leaves most of the market value as surplus.
+    expect(a.formatFit!.fit).toBeTruthy()
+    expect(a.formatFit!.fit!.multiplier).toBeGreaterThan(0.5)
+    expect(a.formatFit!.fit!.reason).toMatch(/keeps at a/i)
+  })
+
+  it('a keeper league with no per-asset state gets no fit, not a guessed contract', () => {
+    const a = firstAsset(build({
+      context: {
+        sport: 'NFL', leagueType: 'keeper', scoring: 'ppr',
+        rosterFormat: 'standard', capturedAt: '2026-09-02T00:00:00.000Z',
+      },
+    }))
+    expect(a.formatFit!.fit).toBeNull()
   })
 
   it('no shape means no fit — the model is not asked to reason from nothing', () => {

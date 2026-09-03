@@ -97,6 +97,19 @@ export function buildTradeValueSnapshot(input: {
    * and a single shared blob could not express that.
    */
   teamStateByRosterId?: Record<string, unknown> | null
+  /**
+   * Per-ASSET format state, keyed by `playerId` — a keeper's cost round, a weapon's points.
+   *
+   * 🛑 KEYED ON THE PLAYER, NOT THE ROSTER, WHICH IS THE WHOLE REASON IT EXISTS. Keeper value is
+   * the first fact in this engine that differs between two players on the same team: the same
+   * receiver kept at a 2nd and at a 7th are different assets, and `teamStateByRosterId` has one
+   * object for the whole roster and cannot say so.
+   *
+   * ⚠ Absent is fine and common — every model returns null rather than guessing when its state is
+   * missing. What is NOT fine is declaring the channel and never wiring it, which is how
+   * `rescoreKickerForLeague` sat with zero consumers under a comment claiming it ran.
+   */
+  assetStateByPlayerId?: Record<string, unknown> | null
 }): TradeValueSnapshot {
   const currentSeason = input.currentSeason ?? null
 
@@ -156,6 +169,8 @@ export function buildTradeValueSnapshot(input: {
             currentWeek: input.currentWeek ?? null,
             // The state of the roster GIVING the asset up.
             teamState: input.teamStateByRosterId?.[a.fromRosterId],
+            // Per-asset, so it is keyed on the player rather than either roster.
+            assetState: a.playerId ? input.assetStateByPlayerId?.[a.playerId] : undefined,
           })
         : null,
   }))

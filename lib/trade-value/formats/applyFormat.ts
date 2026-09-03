@@ -70,6 +70,17 @@ export interface ApplyFormatFitInput {
   shape: LeagueShape | null | undefined
   currentWeek?: number | null
   teamState?: unknown
+  /**
+   * Per-ASSET format state — a keeper's cost round, a zombie weapon's points.
+   *
+   * 🛑 THIS PARAMETER EXISTS BECAUSE THE MODELS ARE DEAD WITHOUT IT, and it was very nearly
+   * omitted. `assetState` was added to `FormatValueInput`, both models were written against it,
+   * and every test passed — because the tests call the models directly. Nothing on the real path
+   * would ever have supplied one, so keeper and zombie would have returned null forever while
+   * looking correct. Same shape as `rescoreKickerForLeague`, which sat with zero consumers under a
+   * comment claiming it ran.
+   */
+  assetState?: unknown
 }
 
 /**
@@ -97,6 +108,7 @@ export function applyFormatFit(input: ApplyFormatFitInput): FormatFit | null {
     shape: input.shape,
     currentWeek: input.currentWeek ?? null,
     teamState: input.teamState,
+    assetState: input.assetState,
   }
 
   /*
