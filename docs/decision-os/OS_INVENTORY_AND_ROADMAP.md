@@ -298,6 +298,64 @@ did`) for the full account; not duplicated here.
 serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
+## 0.35 ✅ R0.4 + R0.5 — AND R0.4 REFUTES §0.3'S HEADLINE
+
+**2026-09-03.** Both answered by measurement, neither by the probe each asked for.
+
+### R0.4 — the collector IS live. §0.3 said it was off.
+
+§0.3 concluded the collector was disabled because the Vercel dashboard showed
+`FANTASY_OS_EXEC_SYNC_LIVE` as a base64 `Config` value rather than the literal string
+`true`, and the gate is a strict `=== 'true'`. It asked for a five-minute probe: hit the cron
+endpoint with the `CRON_SECRET` bearer and look for the disabled `reason`.
+
+**That probe is unnecessary, and the conclusion it was meant to confirm is wrong.** Measured
+against `league_sync_state`:
+
+```
+attempted in last 2h   38
+succeeded in last 2h   35
+newest success         09-03 23:12:51   (81 seconds before the reading)
+```
+
+The route returns the disabled `reason` and performs **no sync at all** unless the gate
+passes. Successful syncs are landing every few minutes, so the gate passes and the value IS
+`'true'`. **Import OS is not gated by this.**
+
+⚠ **TWO REASONS §0.3 WAS WRONG, AND BOTH ARE ALREADY IN THIS FILE.** §0.13 records that §0.3
+read the **dead Vercel project**; and production has since moved to Railway, so a Vercel
+dashboard value describes neither the old nor the current deploy. A conclusion drawn from an
+env-var *display* survived two platform corrections without being re-checked.
+
+🛑 **THE RULE THIS VINDICATES: JUDGE A JOB BY ITS OUTPUT TABLES, NOT BY ITS CONFIG.** A cron
+can return 200 and do nothing; an env var can be unreadable, stale, or read off the wrong
+project. `max(lastSuccessfulSyncAt)` cannot lie about whether work happened. It is also
+cheaper than the probe, and — unlike hitting a live cron endpoint — it has no side effect on
+production.
+
+### R0.5 — a real second database, but a DEAD one
+
+```
+TRADE_OS_VALIDATION_DATABASE_URL   ep-hidden-block-ad77fprp …  db mydb_shadow
+production DATABASE_URL            ep-curly-block-ad0dlt9o  …  db neondb
+```
+
+Different endpoint AND different database name, so §0.3's hope was reasonable — but it
+**cannot serve as the W2 non-prod target**, because the endpoint does not exist.
+`docs/redraft/PHASE_NEXT_BASELINE_AND_PATH_DECISION.md` already recorded it as stale, matching
+no live compute endpoint across the account's five Neon projects, and §0.18's own census found
+**exactly one** active endpoint in the All Fantasy project. Two independent measurements, one
+of them from another session, agreeing.
+
+⚠ **AND `mydb_shadow` IS A NAME TO BE WARY OF EVEN IF IT WERE ALIVE.** That is Prisma's shadow
+-database convention, and a shadow database is **dropped and recreated** by `prisma migrate
+dev`. Pointing a test suite at one would work until the next migration silently wiped it.
+`schema.prisma` declares no `shadowDatabaseUrl`, and **zero code reads either variable** — so
+today it is provisioned, dead, and unused.
+
+**W2 still needs a non-prod database.** This was the most promising candidate on the list and
+it is not one; that is a real answer, not a deferral.
+
 ## 0.34 ✅ R1.4 — THE BOUNDED ROWS ARE THE ASKER'S PLAYERS
 
 **2026-09-03.** §0.9 measured it on a live packet: *"the 8 rendered rows are arbitrary —
@@ -3190,8 +3248,8 @@ Updated **in the same change that does the work** (**W4**).
 | ⏸ | **R0.11** Two round-trip cuts | **Deprioritised.** Justified by a latency problem that does not exist in production; would buy ~50 ms against 1250 ms of headroom. §0.8 |
 | ⬜ | **R0.12** Bound the unbounded `findMany` in `loadImportedActivityEvidence` | Not a latency issue (188 rows here) but 42 leagues share 6,436 rows. §0.7 |
 | ⬜ | **R0.13** 🆕 `savedAnalysis` returns `not_computed` | Now a **data** question (no run for current evidence), not latency. 1113 ms. §0.8 |
-| ⬜ | **R0.4** 🆕 Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Gates Import OS.** 5 min. §0.3 |
-| ⬜ | **R0.5** 🆕 Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | May already be the non-prod target for **W2** |
+| ✅ | **R0.4** Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Done 2026-09-03 — and it REFUTES §0.3.** Answered WITHOUT calling the endpoint: the collector demonstrably runs. 38 leagues attempted and 35 succeeded in two hours, newest success 81 seconds before the reading. The route returns the disabled `reason` and syncs NOTHING unless `FANTASY_OS_EXEC_SYNC_LIVE === 'true'`, so live writes prove the gate passes. **Import OS is not gated.** §0.35 |
+| ✅ | **R0.5** Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | **Done 2026-09-03. NOT usable for W2 — the endpoint is STALE.** Host `ep-hidden-block-ad77fprp` / db `mydb_shadow`, versus production `ep-curly-block-ad0dlt9o` / `neondb`. Genuinely a different database, but a dead one: `docs/redraft/PHASE_NEXT_BASELINE_AND_PATH_DECISION.md` already recorded it matching no live compute endpoint across the account's 5 Neon projects, and §0.18's endpoint census found exactly one active. Zero code reads it. §0.35 |
 | ✅ | **R1.1** Render slice values (**G11**) | **Done 2026-09-02.** Proved red→green, 48/48. Also added `playerName` to the anonymous value contract, and fixed an arbitrary-element `asOf`. Typecheck blocked by a peer's mid-edit file. §0.9 |
 | ✅ | **R1.4** Order the bounded rows by relevance | **Done 2026-09-03.** `orderByRosterRelevance` promotes the asker's own players (starters + bench, punctuation-normalised names) as a stable partition; no-op without a roster, nothing dropped, and the hidden-count line says the rows are roster-scoped rather than top-valued. 11 tests, mutation-verified. §0.34 |
 | ✅ | **R1.2** Ask for the value lane (**G2**) | **Done 2026-09-02.** Gate was double-locked; packet now derives `valueFormat` + `leagueIdpRules` from rules it already loads. Red→green, 63/63. Typecheck deferred — machine contention. §0.10 |
@@ -3204,7 +3262,7 @@ Updated **in the same change that does the work** (**W4**).
 | ⚠ | **BUG-3** ~~Duplicate league rows share one `platformLeagueId`~~ **— PREMISE DISPROVEN** | Not duplicates: a League row is per importing USER, by design (`enumerate.ts`), and there are THREE rows with three different userIds, not two. No fuzzy name-match serves them either — leagues resolve by `userId`. The real defect was 23 users served a blank while an identical sibling mirror held profiles. **Fixed read-side; §0.32.** |
 | ⚠ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it is a KEEPER bug** | Sleeper reports the example league as `settings.type = 1` = **KEEPER**, so `isDynasty=false` was CORRECT and dynasty capture is fine — `leagueType`/`isDynasty` agree on all 225 leagues (110 dynasty). The real defect was that KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues. **Fixed; §0.29** supersedes this row's original claim. |
 | ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
-| ⬜ | **R1.9** 🆕 Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | Encrypted, so "collector is off" is unverified — not proven either way. §0.13 |
+| ✅ | **R1.9** Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | **Resolved 2026-09-03 by R0.4's evidence, not by reading the var.** It is encrypted and unreadable, but the collector's own writes settle it: syncs are landing, and they cannot land unless the value is exactly `'true'`. §0.35 |
 | ⬜ | **R1.3** Turn the grounding flag on (**G1**) | R1.2 |
 | ✅ | **R2** Bridge the 4 live engines into the packet | **Done 2026-09-03.** lineupDecision + commissionerHealthDecision producers, opt-in, wired end to end. §0.21 |
 | ✅ | **R3** Finish Player Value OS | **Done 2026-09-03.** R3.1 idpKicker (§0.22), R3.3 rosterValueGrade + the other two value questions (§0.23). |
