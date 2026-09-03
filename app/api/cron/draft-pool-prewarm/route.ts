@@ -42,10 +42,52 @@ export const maxDuration = 300
  * passes it, remaining leagues are marked 'deferred' without being attempted; they are picked up
  * on the very next tick (this cron runs every 30 minutes) instead of becoming another 504.
  */
+/**
+ * 🛑 THE DEADLINE ABOVE WAS DERIVED ASSUMING THE CACHE CHECK IS FREE. IT IS NOT.
+ *
+ * `checkDraftPoolCacheFast` documents itself as "queries DB in <50 ms, never triggers a cold
+ * build", and that is true of the work it issues. It is NOT true of the time it takes, because
+ * this process is single-threaded and the check is competing with CONCURRENCY cold builds that
+ * the docblock above already measures at 60-90s each.
+ *
+ * MEASURED IN PRODUCTION, 2026-09-03 12:33Z, on the container serving the site:
+ *
+ *     [draft-perf] pool fast-check { warm: false, source: 'cold', entryCount: 0, ms: 65841 }
+ *     [draft-perf] pool fast-check { ... ms: 65835 }
+ *     [draft-perf] pool fast-check { ... ms: 66383 }
+ *     [draft-pool-prewarm] league exceeded its per-league timeout ... { timeoutMs: 120000 }  x3
+ *
+ * 65,841ms against a documented 50ms is not a slow query, it is a starved event loop. And it
+ * breaks the arithmetic: a league that spends 65s deciding whether to build, then starts a build
+ * budgeted at 120s, needs 185s -- but LATEST_START_DEADLINE_MS only guaranteed it 160s. So the
+ * "last league allowed to START must still be able to finish" property the deadline exists to
+ * provide was FALSE exactly when the container was under load, which is the only time it matters.
+ * That is how this cron reaches maxDuration and 504s, which is the failure the deadline was
+ * added to prevent.
+ *
+ * So the check is bounded, and a check that BLOWS its budget is treated as a load signal rather
+ * than as a reason to build. A cache probe that cannot complete in 5s (100x its documented cost)
+ * is direct evidence this process cannot afford a 60-90s build right now, and starting one is
+ * what turns a slow container into an outage -- measured the same day, the site's own homepage
+ * timing out at 30s while /api/health answered in 0.2s.
+ *
+ * Deferring is already this cron's answer to "not enough budget"; this just teaches it a second
+ * way to run out. Deferred leagues are retried on the next tick, 30 minutes later.
+ *
+ * ⚠ A LEAGUE WHOSE CHECK IS SLOW FOR A NON-LOAD REASON WOULD DEFER EVERY TICK and never warm.
+ * Nothing here distinguishes "saturated" from "this one league's query is pathological". The
+ * warn log names the league so that case is visible rather than silent; if one leagueId recurs
+ * across ticks, the cause is that league, not the container.
+ */
 const CONCURRENCY = 3
 const PER_LEAGUE_TIMEOUT_MS = 120_000
+const CACHE_CHECK_TIMEOUT_MS = 5_000
 const RESPONSE_MARGIN_MS = 20_000
-const LATEST_START_DEADLINE_MS = maxDuration * 1000 - PER_LEAGUE_TIMEOUT_MS - RESPONSE_MARGIN_MS
+// Kept on ONE line: Invariant 18b asserts the literal substring
+// "LATEST_START_DEADLINE_MS = maxDuration * 1000" to pin that this is derived rather than
+// hardcoded. Wrapping the expression satisfies the intent and breaks the test, so the code
+// bends to the existing invariant rather than the invariant being rewritten to fit new code.
+const LATEST_START_DEADLINE_MS = maxDuration * 1000 - CACHE_CHECK_TIMEOUT_MS - PER_LEAGUE_TIMEOUT_MS - RESPONSE_MARGIN_MS
 
 async function handle(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) {
@@ -67,8 +109,28 @@ async function handle(req: NextRequest) {
       return { leagueId, action: 'deferred', error: 'past this run’s start deadline; retried next tick' }
     }
 
-    const { warm } = await checkDraftPoolCacheFast(leagueId).catch(() => ({ warm: false }))
-    if (warm) return { leagueId, action: 'warm' }
+    // A rejected check means "not warm" (build it). A check that never RETURNS means the process
+    // is saturated -- a different fact, and the opposite response.
+    const check = await withTimeout(
+      checkDraftPoolCacheFast(leagueId)
+        .then((readiness) => readiness.warm)
+        .catch(() => false),
+      CACHE_CHECK_TIMEOUT_MS,
+    )
+
+    if (!check.ok) {
+      console.warn('[draft-pool-prewarm] cache check exceeded its budget — deferring rather than building', {
+        leagueId,
+        timeoutMs: CACHE_CHECK_TIMEOUT_MS,
+      })
+      return {
+        leagueId,
+        action: 'deferred',
+        error: `cache check exceeded ${CACHE_CHECK_TIMEOUT_MS}ms; container saturated, retried next tick`,
+      }
+    }
+
+    if (check.value) return { leagueId, action: 'warm' }
 
     const outcome = await withTimeout(ensureDraftPoolReady(leagueId), PER_LEAGUE_TIMEOUT_MS)
     if (!outcome.ok) {
