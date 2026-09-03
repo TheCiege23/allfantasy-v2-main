@@ -70,6 +70,12 @@ describe('tool specs', () => {
        * every user, so unlike its neighbours it needs no session scope at all.
        */
       'get_player_value',
+      /*
+       * One player's projection, by NAME. Reads `AFProjectionSnapshot` through
+       * `findAfProjectionsByName`, writes nothing, and takes no league — a
+       * projection is the same number for every user.
+       */
+      'get_player_projection',
       'get_league_standings',
       'get_head_to_head',
       'get_upcoming_games',

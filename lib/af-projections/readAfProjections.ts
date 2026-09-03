@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 
 /**
  * DB-first read layer for `AFProjectionSnapshot` — the LIST shape.
@@ -162,4 +163,96 @@ export async function listAfProjections(
   deduped.sort((a, b) => b.afProjection - a.afProjection)
 
   return { rows: deduped.slice(0, limit), season }
+}
+
+/**
+ * The longest run of letters in a name, used to narrow the SQL query before matching properly.
+ *
+ * ⚠ SPLIT ON NON-LETTERS, NOT ON SPACES. `playerName` is stored raw — "Ja'Marr Chase",
+ * "A.J. Brown", "Patrick O'Brien" — and a `contains` on the user's punctuation would miss all
+ * three. Taking the longest LETTER run gives "Chase", "Brown" and "Brien", each of which is a
+ * substring of the stored value whichever way the apostrophes and periods fall.
+ *
+ * Returns '' when the input has no letters, which the caller treats as "cannot narrow".
+ */
+function longestLetterRun(raw: string): string {
+  const parts = String(raw).split(/[^A-Za-z]+/).filter(Boolean)
+  return parts.reduce((best, p) => (p.length > best.length ? p : best), '')
+}
+
+/**
+ * Every projection row for ONE player, found by name.
+ *
+ * ── 🛑 NARROWED IN SQL, MATCHED IN JS, AND THE SPLIT IS DELIBERATE ─────────────────────────
+ * `AFProjectionSnapshot` has no index on `playerName` — only `[playerId, week, season]` and
+ * `[sport, week, season]` — so a name query alone is a scan. Narrowing on the indexed
+ * `sport` + `season` first, then a `contains` on one letter-run, cuts it to a handful of rows.
+ *
+ * The final match is `normalizePlayerName`, in JavaScript, because that is where the identity
+ * rules live: apostrophes and periods stripped, adjacent single letters collapsed, and
+ * generational suffixes KEPT so Marvin Harrison Jr. never collapses into his father. CLAUDE.md
+ * records what reimplementing that in SQL costs — a copy disagreed with the real one on 7.2% of
+ * 500 rows, on exactly these cases.
+ */
+export async function findAfProjectionsByName(args: {
+  playerName: string
+  sport: string
+  season?: number | null
+  week?: number | null
+}): Promise<{ rows: AfProjectionListRow[]; season: number | null }> {
+  const sport = args.sport.trim().toUpperCase()
+  const target = normalizePlayerName(args.playerName)
+  if (!sport || !target) return { rows: [], season: null }
+
+  const season = args.season ?? (await newestProjectionSeason(sport))
+  if (season == null) return { rows: [], season: null }
+
+  const token = longestLetterRun(args.playerName)
+  if (!token) return { rows: [], season }
+
+  const rows = await prisma.aFProjectionSnapshot.findMany({
+    where: {
+      sport,
+      season,
+      playerName: { contains: token, mode: 'insensitive' as const },
+      ...(args.week != null ? { OR: [{ week: args.week }, { week: null }] } : {}),
+    },
+    // Same order as the list reader: week-scoped first, then freshest.
+    orderBy: [{ week: 'desc' }, { computedAt: 'desc' }],
+    take: 50,
+    select: {
+      playerId: true,
+      playerName: true,
+      position: true,
+      sport: true,
+      season: true,
+      week: true,
+      afProjection: true,
+      baselineProjection: true,
+      weatherAdjustment: true,
+      rosProjection: true,
+      rosWeeksRemaining: true,
+      confidenceLevel: true,
+      adjustmentReason: true,
+      isOutdoorGame: true,
+      computedAt: true,
+    },
+  })
+
+  /*
+   * ⚠ THE `contains` IS A NET, NOT AN ANSWER. Searching "Chase" also returns "Chase Brown" and
+   * "Chase Young"; only the normalized comparison decides. Returning the SQL hits directly would
+   * answer a question about a different player, confidently.
+   */
+  const matched = rows.filter((r) => normalizePlayerName(r.playerName) === target)
+
+  const seen = new Set<string>()
+  const deduped: AfProjectionListRow[] = []
+  for (const r of matched) {
+    if (seen.has(r.playerId)) continue
+    seen.add(r.playerId)
+    deduped.push(r)
+  }
+
+  return { rows: deduped, season }
 }

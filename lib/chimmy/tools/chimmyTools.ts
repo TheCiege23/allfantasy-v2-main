@@ -7,6 +7,7 @@ import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
 import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
+import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -98,6 +99,33 @@ export const CHIMMY_TOOL_SPECS = [
             type: 'string',
             description:
               'The player name as the user wrote it, e.g. "Ja\'Marr Chase". Do not add or drop suffixes like Jr.',
+          },
+        },
+        required: ['player'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_player_projection',
+      description:
+        "How many fantasy points ONE named player is projected for — use for 'how many points will X score', 'is X worth starting', 'what's X projected for this week'. Returns TWO DIFFERENT NUMBERS: a per-game rate and a rest-of-season total. They are not interchangeable; quote whichever the user asked for and never average or compare them. Also returns the confidence, the baseline before weather, and the reason on file. Says plainly when no projection is stored, and a miss is NOT evidence the player is inactive.",
+      parameters: {
+        type: 'object',
+        properties: {
+          player: {
+            type: 'string',
+            description: 'The player name as the user wrote it. Do not add or drop suffixes like Jr.',
+          },
+          sport: {
+            type: 'string',
+            description: 'NFL, NCAAF, NBA, MLB, NHL, NCAABB or SOCCER. Defaults to NFL.',
+          },
+          week: {
+            type: 'number',
+            description:
+              'A specific week, if the user named one. Omit for the season-long baseline — do not guess the current week.',
           },
         },
         required: ['player'],
@@ -326,6 +354,22 @@ export async function executeChimmyTool(
       case 'get_player_value': {
         const asked = typeof args.player === 'string' ? args.player : ''
         return await buildPlayerValueContext({ playerName: asked })
+      }
+
+      /* Same reasoning as get_player_value: no league gate, because a projection is the same
+       * number for every user and there is nothing here to scope. */
+      case 'get_player_projection': {
+        const asked = typeof args.player === 'string' ? args.player : ''
+        const sport = typeof args.sport === 'string' ? args.sport : null
+        /*
+         * ⚠ ONLY A REAL NUMBER BECOMES A WEEK. `Number(undefined)` is NaN and `Number(null)` is 0
+         * — and week 0 is a valid-looking query that matches nothing, which would read as "no
+         * projection for this player" rather than "you asked for a week that does not exist".
+         */
+        const week = typeof args.week === 'number' && Number.isFinite(args.week)
+          ? Math.floor(args.week)
+          : null
+        return await buildPlayerProjectionContext({ playerName: asked, sport, week })
       }
 
       case 'get_upcoming_games': {
