@@ -3,6 +3,7 @@ import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
 import { runRivalryEngine } from '@/lib/rivalry-engine/RivalryEngine'
 import { runLeagueDramaEngine } from '@/lib/drama-engine/LeagueDramaEngine'
 import { runPsychologicalProfileEngine } from '@/lib/psychological-profiles/PsychologicalProfileEngine'
+import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 import { normalizeSportForRelationship } from './SportRelationshipResolver'
 import { syncRivalryEdgesIntoGraph } from './GraphRivalryBridge'
 
@@ -92,6 +93,7 @@ export async function runRelationshipInsightOrchestrator(
           managerId: team.externalId || team.id,
           sport,
           season,
+          format: deriveLeagueFormat(league),
           sleeperUsername: team.ownerName,
         })
         success += 1

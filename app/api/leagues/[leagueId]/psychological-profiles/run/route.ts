@@ -3,6 +3,7 @@ import { resolveProfileAccess } from '@/lib/psychological-profiles/ProfileAccess
 import { runPsychologicalProfileEngine } from '@/lib/psychological-profiles/PsychologicalProfileEngine'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +30,7 @@ export async function POST(
 
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { sport: true, season: true },
+      select: { sport: true, season: true, leagueType: true, isDynasty: true },
     })
     if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -54,6 +55,7 @@ export async function POST(
       managerId: String(managerId),
       sport: sportResolved,
       season: seasonResolved,
+      format: deriveLeagueFormat(league),
       sleeperUsername,
       rosterId,
     })

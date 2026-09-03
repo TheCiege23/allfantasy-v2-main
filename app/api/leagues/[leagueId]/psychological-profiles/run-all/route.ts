@@ -3,6 +3,7 @@ import { resolveProfileAccess } from '@/lib/psychological-profiles/ProfileAccess
 import { prisma } from '@/lib/prisma'
 import { runPsychologicalProfileEngine } from '@/lib/psychological-profiles/PsychologicalProfileEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { deriveLeagueFormat } from '@/lib/league-runtime/leagueFormat'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,7 @@ export async function POST(
           managerId,
           sport,
           season,
+          format: deriveLeagueFormat(league),
           sleeperUsername: team.ownerName,
           rosterId: undefined,
         })

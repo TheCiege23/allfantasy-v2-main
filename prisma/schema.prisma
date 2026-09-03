@@ -5249,6 +5249,11 @@ model ManagerPsychProfile {
   leagueId            String                  @db.VarChar(64)
   managerId           String                  @db.VarChar(128)
   sport               String                  @db.VarChar(16)
+  /// League format (dynasty · redraft · keeper · bestball · guillotine · devy), from
+  /// deriveLeagueFormat (R4b.1). Column already live in production, added by hand alongside
+  /// manager_psych_profile_seasons (see prisma/migrations-pending/20260902060000_manager_psych_seasons) —
+  /// this declaration only teaches the Prisma Client about a column that already exists.
+  format              String?                 @db.VarChar(24)
   profileLabels       Json                    @default("[]")
   aggressionScore     Float                   @default(0)
   activityScore       Float                   @default(0)
