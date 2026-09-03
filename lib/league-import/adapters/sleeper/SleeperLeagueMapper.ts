@@ -51,6 +51,20 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const settings = (league.settings ?? {}) as Record<string, unknown>
     const type = settings.type
     const isDynasty = type === 2
+    /*
+     * Sleeper's `settings.type` is the ONLY signal that separates a keeper league from a
+     * redraft one: 0 = redraft, 1 = keeper, 2 = dynasty. Measured against production, every
+     * other candidate is a Sleeper default that says nothing — `max_keepers` is >= 1 on
+     * 225/225 imported leagues and `League.keeperCount` on 225/225, dynasty and guillotine
+     * included, so neither discriminates.
+     *
+     * 🛑 AND `type` REACHES THE DATABASE NOWHERE ELSE. It is absent from the stored settings
+     * blob on 225/225 rows, because the blob is rebuilt from THIS mapper's output rather than
+     * from Sleeper's raw payload. So a keeper league was indistinguishable from redraft the
+     * moment the import finished, which is why `isKeeper` in the grounding packet was false
+     * for every league in production.
+     */
+    const isKeeper = type === 1
     const rosterPositions = league.roster_positions ?? []
     const rosterSize = rosterPositions.length || null
     const ppr = league.scoring_settings?.rec ?? 0
@@ -124,6 +138,8 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       taxi_allow_vets: taxiAllowVets,
       taxi_deadline_week: taxiDeadlineWeek,
       max_keepers: maxKeepers,
+      // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
+      is_keeper: isKeeper,
       reserve_allow_cov: reserveAllowCov,
       reserve_allow_sus: reserveAllowSus,
       reserve_allow_out: reserveAllowOut,

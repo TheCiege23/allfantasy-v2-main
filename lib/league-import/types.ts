@@ -84,6 +84,15 @@ export interface NormalizedLeagueSettings {
   taxi_allow_vets?: boolean
   taxi_deadline_week?: number
   max_keepers?: number
+  /**
+   * True only for a league the PROVIDER reports as keeper (Sleeper `settings.type === 1`).
+   *
+   * ⚠ NOT DERIVABLE FROM `max_keepers`. That field is >= 1 on every imported Sleeper league in
+   * production — dynasty, redraft, guillotine and survivor alike — so it cannot separate a
+   * keeper league from any other. This flag exists because the provider's own type code is the
+   * only thing that can, and it is otherwise discarded at import.
+   */
+  is_keeper?: boolean
   reserve_allow_cov?: boolean
   reserve_allow_sus?: boolean
   reserve_allow_out?: boolean

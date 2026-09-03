@@ -230,7 +230,15 @@ function firstBoolean(...values: unknown[]): boolean {
   return false
 }
 
-function resolveSettings(league: Record<string, unknown>): LeagueGroundingSettings {
+/**
+ * Derive the league's format flags from a League row.
+ *
+ * EXPORTED FOR TESTS. It is pure — a row in, flags out — while its only caller,
+ * `buildLeagueSportsGroundingPacket`, fans out to eleven async loaders. Asserting a single
+ * format flag through that would mean mocking all eleven, so the derivation is tested at its
+ * own granularity instead.
+ */
+export function resolveSettings(league: Record<string, unknown>): LeagueGroundingSettings {
   const settings = asRecord(league.settings)
   const scoringSettings = asRecord(settings.scoringSettings ?? settings.scoring)
   const draftSettings = asRecord(settings.draftSettings ?? settings.draft)
@@ -260,7 +268,21 @@ function resolveSettings(league: Record<string, unknown>): LeagueGroundingSettin
     isIDP: firstBoolean(league.idp, settings.idp, flags.isIDP) || scoring.includes("idp"),
     isBestBall: String(league.leagueType ?? "").includes("best_ball"),
     isDynasty: firstBoolean(league.isDynasty, settings.isDynasty) || String(league.leagueType ?? "").includes("dynasty"),
-    isKeeper: String(league.leagueType ?? "").includes("keeper"),
+    /*
+     * 🛑 THIS READ WAS FALSE FOR 100% OF PRODUCTION LEAGUES. It used to test only
+     * `leagueType.includes("keeper")`, and `leagueType` holds exactly five values across all
+     * 225 imported Sleeper leagues — dynasty (110), redraft (100), guillotine (12), zombie (2),
+     * survivor (1). None contains "keeper", so the substring could never match and Chimmy saw
+     * every keeper league as a plain redraft.
+     *
+     * `settings.is_keeper` is the real signal, written by the provider mappers from the
+     * provider's own type code (Sleeper `settings.type === 1`) and carried into the settings
+     * blob by `buildImportedLeagueSettings`. The substring is kept as a fallback so a league
+     * whose type a human confirms as keeper still reads true.
+     */
+    isKeeper:
+      firstBoolean(league.isKeeper, settings.is_keeper, settings.isKeeper) ||
+      String(league.leagueType ?? "").includes("keeper"),
     playoffTeams: league.playoffTeams != null ? Number(league.playoffTeams) : null,
     playoffWeekStart: firstNumber(league.playoffWeekStart, league.playoffStartWeek),
     rosterSlots: firstNumber(league.rosterSlots, league.rosterSize, rosterSettings.rosterSize, rosterSettings.totalSlots),
