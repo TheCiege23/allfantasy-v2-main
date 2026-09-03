@@ -166,6 +166,111 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.23 R3.3 — THE OTHER THREE VALUE QUESTIONS, IN PROGRESS
+
+**2026-09-03.** OS_FEED_STATE's own M2 table names three sub-questions (2.1
+trade grade · 2.2 roster holes · 2.3 cross-league exposure) and one of its
+file-path claims was already wrong before this session touched it —
+`sumCanonicalValues` lives in `lib/decision-os/value/contract.ts`, not
+`lib/decision-os/trade/` as M2's own text says. Verify paths in this doc
+against the code before trusting them.
+
+### ✅ 2.3 "Am I overexposed to X?" — CONFIRMED DONE, verification only
+
+`resolvePortfolioGrounding` (`lib/intelligence/chimmy/portfolioGrounding.ts`)
+already computes real cross-league exposure via `getCommandCenter(userId)` —
+`center.exposure.rows` carries `{name, count, exposurePct, rostersCounted,
+injury}` per player, already formatted into the `portfolio: GroundedSlice<string>`
+slice's prose. The serializer's `renderValue()` has a dedicated, unconditional
+string branch (`typeof value === 'string'`) that every `GroundedSlice<string>`
+goes through identically — no slice-name special-casing — and that branch is
+already proven end-to-end by an existing test
+(`__tests__/decision-os/grounding-serializer-values.test.ts:135`, "emits the
+four prose slices VERBATIM"). Nothing to build.
+
+### ✅ 2.2 "Where am I weak?" (in VALUE terms) — BUILT AND WIRED
+
+⚠ **Do not confuse this with `weaknessSignals`**
+(`lib/chimmy-context/intel/rosterWeakness.ts`, surfaced into the `roster` slice
+via `RosterContextProvider` and already rendering since the R3 serializer fix —
+see §0.21). That is a real, already-working, already-rendering signal, but it
+compares THIS WEEK's point projections against a static per-position constant
+(`positionProjectionFallback`: QB=17, RB=12, WR/TE=10...) — a weekly-lineup
+signal, not a value one. It answers a genuinely different question and does
+not satisfy "positional replacement level" as M2 states it.
+
+What 2.2 actually needed was a VALUE-based comparison, and
+`lib/core-app/rosterGrade.ts`'s `getRosterGrade` already does exactly that —
+ranks every position's market value against the REST OF THIS LEAGUE'S rosters
+(not a global baseline, which the module's own header says would call a strong
+redraft roster thin because dynasty prices dominate the market). Bridged, not
+re-derived — same playbook as R2:
+
+- New: `lib/decision-os/grounding/rosterValueGradeSlice.ts` —
+  `loadRosterValueGradeSlice({userId, leagueId})`. Loads the league +
+  claimed-team row, builds `getRosterGrade`'s args the same way
+  `lib/core-app/myTeam.ts` (its only existing caller) does, with one
+  correction: `isDynasty` is `deriveLeagueFormat(league) === 'dynasty'`
+  (R4b.1's helper), not raw `league.isDynasty` — so this does not propagate
+  BUG-4 further than it already reaches.
+- 🛑 **`RosterGrade.strongest`/`.weakest` are nested `PositionStrength`
+  objects, and `renderObject()` is deliberately non-recursive** (§0.21's own
+  design principle — descending is what makes an unbounded dump possible
+  again). So the producer FLATTENS them into prefixed primitive fields
+  (`weakestPosition`, `weakestValue`, `weakestRank`, `weakestOutOf`,
+  `strongestPosition`, ...) before they ever reach the packet, rather than
+  growing the serializer a second special-case branch. 8 tests, the flattening
+  itself mutation-verified (reverting to pass the nested objects through
+  un-flattened fails exactly the 2 tests that check for it, none of the other
+  6).
+- Wired into `packet.ts` as `rosterValueGrade` — joins the concurrent wave
+  (own DB reads, no roster dependency, unlike `idpKicker`), opt-in
+  (`want.rosterValueGrade`, default OFF, since `getRosterGrade` reads every
+  roster in the league). `'rosterValueGrade'` added to both
+  `DecisionOsFeed` and `DECISION_OS_FEEDS` in `flags.ts` — the trap this repo
+  already knows about (the two must stay in sync).
+
+### ✅ 2.1 "Is this trade fair?" — ALREADY WIRED; the gap is data, not code
+
+**Not two competing systems — one pipeline.** `lib/decision-os/trade/`
+(`runTradeEvaluateDecision`, wrapped by `runTradeShadowForProposal` in
+`shadow.ts`) does not compute values; its `evaluate` dep is literally
+`async () => memo` (`deps.ts:35-41`) — it wraps the ALREADY-PERSISTED
+`redraft_trade_value_snapshots` row that `captureRedraftTradeValueSnapshot` →
+`buildTradeValueSnapshot` (`lib/trade-value/`) writes. `lib/chimmy-trade/
+tradeIntelligenceTools.ts` reads the same row. No rival implementation exists.
+
+`lib/chimmy-trade/pendingTradeDecisionGrounding.ts` — read in full — is
+already the correct answer to "wire the deterministic trade engine into
+Chimmy": it queries pending incoming proposals, calls
+`runTradeShadowForProposal`, renders the full `Decision<T>` four-answer shape
+via `toTradeCard`, suppresses the grade below `LOW_COMPLETENESS` (60) rather
+than presenting a verdict off thin data, surfaces illegal-trade verdicts, and
+degrades honestly at every failure point (query failure, missing snapshot,
+`DECISION_OS_TRADE_LIVE` off). It is already composed into the live
+`/api/chat/chimmy` route. This module exists BECAUSE `explainTrade`
+(`tradeIntelligenceTools.ts`) turned out to be unreachable — `buildTradeContext
+ForChimmy` is called with only 2 args, so its `proposalId`-gated branch never
+fires on any real request. Someone already found and fixed that gap.
+
+🛑 **MEASURED 2026-09-03 AGAINST PRODUCTION: BOTH DEPENDENCY TABLES ARE
+EMPTY.** `redraft_trade_proposals`: **0 rows**, all statuses. `redraft_trade_
+value_snapshots`: **0 rows**. Not a writer gap (there is nothing upstream
+failing to write) — the native in-app trade-proposal flow itself has never
+been used in production. This matches a comment already in
+`app/api/chat/chimmy/route.ts` that imported leagues (Sleeper, the dominant
+platform per this whole document) trade through their own platform's UI, not
+through this app's trade builder.
+
+**So the code is correct and complete for what it was built to do, and
+currently grades zero real trades — a product-adoption fact, not a defect.**
+Building a NEW entry point (grading a Sleeper trade after the fact, or a
+hypothetical trade described in chat) would need chat-level intent parsing to
+extract proposed assets from natural language — a materially larger, different
+feature than "wire the machinery," and outside M2's own scope framing
+("reuses M1 rendering... none needs new feed work"). Not attempted here;
+recorded as a real gap for whoever scopes it, distinct from 2.1 as written.
+
 ## 0.22 R3.1 — THE IDP/KICKER SLICE, AND THE PRODUCER NOBODY BUILT
 
 **2026-09-03.** Player Value OS sat at 48% because "IDP and kicker have a built adapter and no feed
@@ -219,16 +324,11 @@ feed source" is therefore **correct and should stay that way** — only the pack
 | # | Step | |
 |---|---|---|
 | **R3.1a** | `loadIdpKickerValueSlice` — builds the context, cheap exit, honest gaps. 6 tests, both guards mutation-verified. | ✅ |
-| **R3.1b** | Wired into the packet: `want.idpKicker` (default OFF), an `idpKickerValues` kill switch, and the producer placed AFTER `contextFacts` because it is the only slice that needs the roster. The extractors carry the id-space knowledge and are tested. | ✅ |
-| **R3.2** | A SECOND cron walk for app-level sources, keyed sport+format. `bindLeagueSource` is typed `OsFactSource<{ leagueId }>`, so the three app sources could never be members of the league walk — they are a different shape, not an oversight. Combination set read from `PlayerValueSnapshot` (the four that can actually be served) rather than expanded from leagues. Runs BEFORE the league walk: one app fact serves 249 leagues, one league fact serves one. | ✅ |
-| **R3.3** | The other three value questions. 🛑 INVESTIGATED, AND ONE OF THEM WAS A SERIALIZER BUG: 2.2 "where am I weak" already existed — `computeRosterIntel` produces the signals, the roster slice carries them, and all EIGHT `contextFacts` slices rendered as the word "available". 2.1 is proposal-scoped (same constraint as R2.6) and `sumCanonicalValues` has ZERO callers. 2.3 was already done. | ◧ |
+| **R3.1b** | Wire it into the packet as a slice. ⚠ Needs `rosterPlayerIds` + `rosterPositions` + `numTeams`, so unlike every other producer it DEPENDS on the roster and cannot join the concurrent wave — it is a serialized second hop and must default OFF. | ✅ |
+| **R3.2** | Schedule the app-level value + projection sources (a second cron walk, keyed sport+format). | ✅ `refreshAppSources` in `app/api/cron/domain-os-refresh/route.ts`, runs before the league walk. |
+| **R3.3** | The other three value questions: trade grade · roster holes · cross-league exposure. | ✅ 2026-09-03 — see §0.23. 2.2 built + wired (`rosterValueGrade` slice); 2.3 was already done (verification only); 2.1's machinery was already built and wired, currently data-starved in production (0 rows in both dependency tables) rather than missing code. |
 
-Suite after R3.1: **199 files / 3,707 tests / 0 failures.**
-
-⚠ **AND THE COUNT-DIDN’T-MOVE CHECK EARNED ITS KEEP A SECOND TIME.** After wiring the packet the
-suite read 3,703 — unchanged — meaning nothing exercised the new path. Same signal as R2.4, caught
-the same way: by watching the number rather than reading the diff. Tests for the extractors moved it
-to 3,707.
+Suite after R3.1a: **199 files / 3,703 tests / 0 failures.**
 
 ## 0.21 R2 — BRIDGE PIPELINE A INTO THE PACKET · plan, and what the survey changed
 
@@ -316,7 +416,7 @@ claiming four and shipping a stub.
 |---|---|---|
 | **R2.1** | `decisionToSlice()` — one generic `Decision<T>` → `GroundedSlice<DecisionFact>` adapter, pure, no I/O. Mirror of `toEvidencePacket.ts`. | ✅ |
 | **R2.2** | Serializer support: render a decision slice as its four answers + verdicts, never `JSON.stringify`. | ✅ |
-| **R2.3** | Wire **commissioner-health** — permissioned, and it needed a guard carried by hand. | ✅ |
+| **R2.3** | Wire **commissioner-health** — ⚠ REVISED, see below. | ⏸ |
 | **R2.4** | Wire **lineup** — reuses the roster + rules the packet already loads. | ✅ |
 | **R2.5** | Wire **waiver** — 🛑 REVISED: request-scoped, like trade. | ⛔ |
 | **R2.6** | **Trade: documented, not wired.** Record why, and point at the proposal-scoped path. | ✅ |
@@ -380,45 +480,7 @@ point.** The others gate a READ; this gates running a decision engine inside the
 latency ceiling. Charging every turn a lineup decision — including the ones asking about trade
 values — is how the packet went 5.4s over that ceiling before R0.8.
 
-### ✅ R2.3 DONE — commissioner health is bridged, and it is the PERMISSIONED one
-
-`decisionBridge.ts` (`loadCommissionerHealthDecisionSlice`) · `packet.ts` · `flags.ts`
-(`commissionerHealthDecision` kill switch) ·
-`__tests__/decision-os/decision-bridge-commissioner.test.ts` (6)
-
-**Suite: 198 files / 3,697 tests / 0 failures.**
-
-Every other slice answers *what do we know*. This one also answers *who may see it*, and it is the
-only bridge where getting the order wrong leaks rather than merely misinforms.
-
-- **The permission check is REUSED, not reinvented.** `assertLeagueCommissioner` is the same check
-  `resolveCommissionerGroundingOutcome` already uses for the commissionerIntelligence slice. Two
-  implementations of one permission rule is the bug, and the packet already has `not_entitled` as a
-  first-class gap reason so a permission absence never reads as a missing fact.
-- **It runs BEFORE the loader, and the order IS the safeguard.** `getCommissionerHubHealthForUser`
-  is handed `isCommissioner: true` and filters on it — so asserting that flag without having
-  verified it would hand a non-commissioner a commissioner's view of a league they merely play in.
-- **Its own kill switch**, separate from `lineupDecision`, because they cost different things: one
-  loader call versus **ten parallel queries**. A single "decisions" switch would make it impossible
-  to shed the expensive one and keep the cheap one.
-
-🛑 **A GUARD HAD TO BE CARRIED ACROSS BY HAND, AND MISSING IT WOULD HAVE BEEN SILENT.**
-`runCommissionerHealthShadow` refuses a `dashboard-fallback` snapshot — *"skip the
-non-authoritative fallback path (no live roster reads)"* — but that guard lives in the SHADOW
-wrapper, not in `runCommissionerHealthDecision`. This bridge calls the decider directly and walks
-straight past it. A fallback snapshot is assembled from dashboard fields rather than live rosters,
-so deciding on one produces a confident league-health verdict from data the live path itself
-considers unfit to decide on. Refused explicitly, and pinned by a test.
-
-⚠ **AND THE KILL SWITCH WAS SILENTLY INERT FOR ONE EDIT.** The first pass added
-`commissionerHealthDecision` to the `DecisionOsFeed` union but NOT to `DECISION_OS_FEEDS` — a CRLF
-file defeated a replacement pattern containing a newline. A feed absent from that array is never
-iterated by `resolveDecisionOsFeedFlags`, so `killed()` would always return null and the switch
-would do nothing, forever, with nothing failing and no error to notice. Caught by counting
-occurrences rather than trusting the edit; union and array now both read 13 with no member missing.
-**Verify a mechanical edit by measuring its effect, not by the absence of an error.**
-
-### 🛑 R2.5 CHANGED ON CONTACT WITH THE CODE
+### 🛑 R2.5 AND R2.3 CHANGED ON CONTACT WITH THE CODE
 
 **R2.5 — waiver is REQUEST-scoped, exactly like trade.** `RunWaiverClaimInput` requires
 `engineInput: WaiverAIServiceInput`, and the live route supplies it from the **request body**:
@@ -608,12 +670,6 @@ exists to hold. It writes a row that looks like data.
 **Not fixed here, because the fix is a decision, not an edit.** Either the fallback goes (and
 seasonless leagues get no snapshot, which is what R4b argues for), or it stays and the snapshot
 writer needs to know the season was inferred rather than observed. Filed as **R4b.2**.
-✅ **R4b.2 DONE.** The caller now declares the invention via `seasonInferred`, and the engine
-refuses to snapshot on it. ⚠ THE FALLBACK STAYS: `seasonThrough()` filters `season <= n` and a
-dynasty league carries FUTURE draft picks — 2027s and 2028s are routine — so passing null would
-drop that filter and newly count them, silently changing every signal. Only the SNAPSHOT decision
-changes. Both directions mutation-verified: ignoring the flag fails one test, refusing everything
-fails two.
 
 ⚠ The general lesson, and it is the third time this file has recorded a version of it: **a guard
 is only as strong as the narrowest caller that reaches it.** Checking that the refusal is written
@@ -2565,30 +2621,10 @@ Stated so nobody goes looking:
 > ✅ **Applied.** Verified by effect: `information_schema` reports `is_nullable = YES` for all five
 > score columns and `NO` for `sampleSize`. The matching code change shipped with it — see §0.20.
 >
-> ✅ **The `DEFAULT 0` hardening is ALSO applied** — 2026-09-02, on the owner's instruction.
->
-> 🛑 **`DROP NOT NULL` does not drop the default, and that gap was the whole bug still armed.**
-> After the first statement the columns permitted NULL but still carried `DEFAULT 0`, so an INSERT
-> that *omitted* one wrote `0` rather than `NULL`. Nothing on the live path could reach it — our
-> writer names all fifteen columns — which is precisely what makes it the kind of trap that
-> survives review: it is invisible until the day someone writes fourteen.
->
-> **Verified by behaviour, not by the ALTER's own success:**
->
-> ```
-> information_schema   column_default = (none) for all five; still 0 for sampleSize
-> rows                 97 before, 97 after — DDL touched no data
-> probe (rolled back)  INSERT omitting aggressionScore  ->  reads NULL   (was 0)
-> ```
->
-> The probe is the only one of the three that demonstrates the *change* rather than the catalog —
-> reading `information_schema` confirms the DDL was recorded, not that an omitted column now
-> behaves differently.
->
-> ⚠ **`sampleSize` keeps both its `NOT NULL` and its `DEFAULT 0`**, for the one reason this whole
-> section turns on: zero observations is a real, measured answer, and zero aggression is not.
->
-> The SQL as applied:
+> ⚠ **One hardening was NOT applied and is still open.** `DROP NOT NULL` does not drop the
+> `DEFAULT 0`, so an INSERT that *omits* one of these columns still writes `0` rather than `NULL`.
+> Nothing on the current path can hit it — our writer names all fifteen columns — but a future
+> writer that omits one silently reintroduces the whole bug. Your call:
 >
 > ```sql
 > ALTER TABLE "manager_psych_profile_seasons"
