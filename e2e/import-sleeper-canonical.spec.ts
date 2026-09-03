@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 /**
  * Batch 1 — Canonical Sleeper import via the REAL `/import` route.
@@ -112,15 +113,22 @@ test.describe('Canonical Sleeper import — real /import route', () => {
       await route.fulfill({ status: 500, body: 'legacy path must not be used' })
     })
 
-    // Authenticate via the dev-only bypass (DEV_AUTH_BYPASS_ENABLED) so the real
-    // session-gated /import route renders. Never used in production; no real
-    // credentials involved.
-    const csrf = (await page.request.get('/api/auth/csrf').then((r) => r.json())) as {
-      csrfToken?: string
-    }
-    await page.request.post('/api/auth/callback/dev-bypass?json=true', {
-      form: { csrfToken: csrf.csrfToken ?? '', callbackUrl: '/import', json: 'true' },
-    })
+    /*
+     * ⚠ THE OLD SIGN-IN HERE WAS A NO-OP IN CI, AND SILENTLY SO.
+     *
+     * It posted to `/api/auth/callback/dev-bypass`, a provider lib/auth.ts only
+     * registers when DEV_AUTH_BYPASS_ENABLED === 'true'. That variable is set in no
+     * workflow file, so in CI the provider does not exist, the POST does nothing, and
+     * `/import` — which redirects to /login without a session — never rendered. The
+     * spec then spent its full 90s budget on the first assertion and reported a
+     * missing test id, which reads as a deleted import screen rather than as a
+     * visitor who was never signed in.
+     *
+     * signInAs mints a token with the SERVER's own secret (CI sets NEXTAUTH_SECRET),
+     * so it is a real session rather than a product bypass, and it is what the rest
+     * of this suite already uses.
+     */
+    await signInAs(page, { id: 'e2e-import-user', username: 'commish_user' })
 
     // Land on /import with the Sleeper username prefilled via the SAME query
     // contract the landing funnel uses (provider + username) — this also proves
@@ -140,6 +148,22 @@ test.describe('Canonical Sleeper import — real /import route', () => {
     // 1) Discover leagues from the prefilled Sleeper account identifier.
     await page.getByTestId('import-discovery-find').click()
 
+    /*
+     * ⚠ KNOWN GAP FROM HERE DOWN — THE SIGN-IN FIX ABOVE DOES NOT MAKE THIS PASS, AND
+     * PRETENDING OTHERWISE WOULD BE WORSE THAN LEAVING IT RED.
+     *
+     * `/import` renders ImportV4 (app/import/page.tsx), which carries exactly three of
+     * this spec's ids: `import-tab-<provider>`, `import-discovery-account` and
+     * `import-discovery-find`. The three below — import-league-select-*, import-commit
+     * and import-go-dashboard — live in components/unified-import-ui/LeagueImportFlow
+     * and LegacyImportResults, which `/import` does not render.
+     *
+     * That flow is NOT deleted: app/legacy-import/page.tsx still renders it. So the
+     * select → preview → commit journey moved routes rather than disappearing, and
+     * which route should own it is a product decision — retarget this spec at
+     * /legacy-import, or give ImportV4 the same contract — not something to settle
+     * inside a test file.
+     */
     // 2) The discovered league appears; select it to preview.
     await expect(page.getByText('Dynasty Warlords')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId(`import-league-select-${SLEEPER_LEAGUE_ID}`).click()

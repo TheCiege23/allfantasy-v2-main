@@ -140,15 +140,46 @@ export function normalizePlatform(
   return "direct"
 }
 
-/** Referrer host only. Returns null for same-origin, empty, or unparseable referrers. */
-export function extractReferrerHost(referrer: string | null | undefined, selfHost?: string | null): string | null {
+/**
+ * Every spelling of "this machine". `NextURL` rewrites `127.0.0.1` and `[::1]` to
+ * `localhost` when it parses a request, so on a dev server bound to 127.0.0.1
+ * `request.nextUrl.hostname` reads `localhost` while the browser's Referer still names
+ * `127.0.0.1`. A plain string compare then calls our own page an external referrer.
+ */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"])
+
+/** Lower-cased, `www.`-stripped, port-stripped host with every loopback alias folded to one value. */
+function canonicalHost(value: string | null | undefined): string | null {
+  const host = clean(value)
+    ?.toLowerCase()
+    .replace(/^www\./, "")
+    // A `Host` header carries the port; a URL hostname does not.
+    .replace(/:\d+$/, "")
+  if (!host) return null
+  return LOOPBACK_HOSTS.has(host) ? "localhost" : host
+}
+
+/**
+ * Referrer host only. Returns null for same-origin, empty, or unparseable referrers.
+ *
+ * `selfHost` may list several names for this origin — the parsed URL's hostname plus the
+ * request's `Host` / `X-Forwarded-Host` — because a proxied deploy and a loopback dev
+ * server each know themselves by more than one.
+ */
+export function extractReferrerHost(
+  referrer: string | null | undefined,
+  selfHost?: string | null | Array<string | null | undefined>,
+): string | null {
   const raw = clean(referrer)
   if (!raw) return null
   try {
     const host = new URL(raw).hostname.toLowerCase().replace(/^www\./, "")
     if (!host) return null
-    const self = clean(selfHost)?.toLowerCase().replace(/^www\./, "")
-    if (self && host === self) return null
+    const selves = (Array.isArray(selfHost) ? selfHost : [selfHost])
+      .map(canonicalHost)
+      .filter((value): value is string => Boolean(value))
+    const candidate = canonicalHost(host)
+    if (candidate && selves.includes(candidate)) return null
     return host.slice(0, MAX_FIELD_LENGTH)
   } catch {
     return null
@@ -163,12 +194,14 @@ export function parseAttributionTouch(input: {
   url: URL
   referrer?: string | null
   now: Date
+  /** Extra names this origin answers to (request `Host`, `X-Forwarded-Host`). */
+  selfHosts?: Array<string | null | undefined>
 }): AttributionTouch | null {
-  const { url, referrer, now } = input
+  const { url, referrer, now, selfHosts } = input
   const params = url.searchParams
 
   const hasCampaignSignal = CAMPAIGN_QUERY_KEYS.some((key) => clean(params.get(key)) !== null)
-  const referrerHost = extractReferrerHost(referrer, url.hostname)
+  const referrerHost = extractReferrerHost(referrer, [url.hostname, ...(selfHosts ?? [])])
 
   if (!hasCampaignSignal && !referrerHost) return null
 

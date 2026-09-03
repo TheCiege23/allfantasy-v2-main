@@ -124,7 +124,18 @@ test.describe('@waiver waiver wire click audit', () => {
 
     await page.getByTestId('waiver-search-input').fill('Alpha')
     await expect(page.getByText('Alpha Runner')).toBeVisible()
-    await expect(page.getByTestId('waiver-player-team-logo-player-1')).toBeVisible()
+    /*
+     * ⚠ THE BADGE IS KEYED ON THE TEAM, NOT THE PLAYER — AND IT HAS TWO IDS.
+     *
+     * WaiverPlayerRow's TeamLogoBadge renders `waiver-player-team-logo-<TEAM>` when a
+     * usable logo URL resolves and `waiver-player-team-logo-fallback-<TEAM>` when it does
+     * not (missing URL, a default-avatar placeholder, or an onError). So
+     * `waiver-player-team-logo-player-1` could never match anything, and which of the two
+     * real ids appears depends on whether an external logo host answered — not something
+     * a click audit should be asserting. Alpha Runner is KC in the harness fixture.
+     */
+    const teamBadge = page.locator('[data-testid="waiver-player-team-logo-KC"], [data-testid="waiver-player-team-logo-fallback-KC"]')
+    await expect(teamBadge.first()).toBeVisible()
 
     await page.getByTestId('waiver-position-filter-RB').click()
     await expect(page.getByText('Alpha Runner')).toBeVisible()

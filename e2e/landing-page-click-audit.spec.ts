@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test"
 
 /**
- * Landing click audit, retargeted at the Nocturne landing.
+ * Landing click audit, retargeted (again) at the landing `/` actually renders.
  *
- * `/` renders LandingNocturne now; the scrollytelling landing this spec was
- * written against is still on disk for rollback but is no longer mounted. Every
- * `landing-*` testid it asserted therefore resolved to nothing, and the whole
- * spec failed as "element(s) not found" — which reads as a broken homepage
- * rather than as a homepage that was replaced.
+ * `/` renders LandingV4 now (see app/page.tsx). This spec has already been
+ * re-pointed once — from the scrollytelling landing to LandingNocturne — and
+ * both times the failure read as a broken homepage rather than a replaced one:
+ * every `nocturne-*` testid resolved to nothing. The ids it drives are now
+ * `landing-nav-sign-in`, `landing-nav-primary` and `landing-hero-primary` on
+ * LandingV4 itself, so the next redesign has a contract to carry forward
+ * instead of a spec to discover.
  *
  * Kept: the parts that describe any landing page — that it renders, that its
  * internal links resolve, that the tool pages it advertises are reachable, and
@@ -15,9 +17,9 @@ import { expect, test } from "@playwright/test"
  * earning their keep.
  *
  * Dropped: the theme-toggle and language-toggle sequences, and the mobile
- * sticky-CTA block. Nocturne ships no theme or language control in its header
- * (`data-mode`/`data-lang` still live on <html>, but nothing on this page flips
- * them) and has no sticky mobile CTA. Asserting them here would be asserting a
+ * sticky-CTA block. LandingV4 ships no theme control and no sticky mobile CTA;
+ * its language switch is a pair of plain `/?lang=` links, which the link
+ * sweep below already covers. Asserting more than that would be asserting a
  * different page than the one users get.
  */
 
@@ -28,9 +30,9 @@ test.describe("@growth landing page click audit", () => {
     await page.setViewportSize({ width: 1366, height: 900 })
     await page.goto("/", { waitUntil: "domcontentloaded" })
 
-    await expect(page.getByTestId("nocturne-nav-sign-in")).toBeVisible()
-    await expect(page.getByTestId("nocturne-nav-sign-up")).toBeVisible()
-    await expect(page.getByTestId("nocturne-hero-primary")).toBeVisible()
+    await expect(page.getByTestId("landing-nav-sign-in")).toBeVisible()
+    await expect(page.getByTestId("landing-nav-primary")).toBeVisible()
+    await expect(page.getByTestId("landing-hero-primary")).toBeVisible()
     // The headline ships server-rendered — a "Loading…" shell here would mean
     // crawlers and link previews see nothing.
     await expect(page.locator("h1").first()).toBeVisible()
@@ -88,7 +90,7 @@ test.describe("@growth landing page click audit", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" })
 
     await expect(page.locator("h1").first()).toBeVisible()
-    await expect(page.getByTestId("nocturne-hero-primary")).toBeVisible()
+    await expect(page.getByTestId("landing-hero-primary")).toBeVisible()
 
     // A landing page that scrolls sideways on a phone is the single most common
     // way this surface breaks, and the reason this check outlived the redesign.
@@ -97,7 +99,7 @@ test.describe("@growth landing page click audit", () => {
     })
     expect(mobileHasOverflow).toBeFalsy()
 
-    await page.getByTestId("nocturne-hero-primary").click()
+    await page.getByTestId("landing-hero-primary").click()
     await expect(page).not.toHaveURL(/\/$/, { timeout: 20_000 })
   })
 })

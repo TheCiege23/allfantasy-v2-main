@@ -148,3 +148,43 @@ describe("applyAttributionCapture", () => {
     expect(setCookieValue(res, LATEST_TOUCH_COOKIE)).toBeUndefined()
   })
 })
+
+describe("applyAttributionCapture recognises its own origin", () => {
+  function requestWithHeaders(href: string, headers: Record<string, string>) {
+    return new NextRequest(new URL(href), { headers: new Headers(headers) })
+  }
+
+  it("does not fabricate a touch for a page asset whose Referer is our own loopback page", () => {
+    // NextURL parses 127.0.0.1 as `localhost`; the browser's Referer still says 127.0.0.1.
+    const req = requestWithHeaders("http://127.0.0.1:3101/railway-styles.css", {
+      host: "127.0.0.1:3101",
+      referer: "http://127.0.0.1:3101/",
+    })
+    expect(req.nextUrl.hostname).toBe("localhost")
+
+    const res = applyAttributionCapture(req, NextResponse.next(), NOW)
+    expect(setCookieValue(res, ANON_ID_COOKIE)).toBeTruthy()
+    // Organic traffic must differ from a tracked link only by the ABSENCE of a touch.
+    expect(setCookieValue(res, FIRST_TOUCH_COOKIE)).toBeUndefined()
+    expect(setCookieValue(res, LATEST_TOUCH_COOKIE)).toBeUndefined()
+  })
+
+  it("trusts the forwarded host a proxy presented, not only the parsed URL", () => {
+    const req = requestWithHeaders("https://internal-origin.example/pricing", {
+      host: "internal-origin.example",
+      "x-forwarded-host": "www.allfantasy.ai",
+      referer: "https://allfantasy.ai/",
+    })
+    const res = applyAttributionCapture(req, NextResponse.next(), NOW)
+    expect(setCookieValue(res, FIRST_TOUCH_COOKIE)).toBeUndefined()
+  })
+
+  it("still records a genuine external referrer on a loopback server", () => {
+    const req = requestWithHeaders("http://127.0.0.1:3101/", {
+      host: "127.0.0.1:3101",
+      referer: "https://www.tiktok.com/@af/video/1",
+    })
+    const res = applyAttributionCapture(req, NextResponse.next(), NOW)
+    expect(setCookieValue(res, FIRST_TOUCH_COOKIE)).toBeTruthy()
+  })
+})

@@ -39,8 +39,25 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
     if (!token) {
+      /*
+       * ⚠ console.WARN, NOT console.ERROR — AND THE DIFFERENCE IS NOT COSMETIC.
+       *
+       * This is a developer nag about an optional analytics token, fired on every
+       * page load in every non-production environment. As a console.error it was
+       * indistinguishable from an application crash to anything reading the console,
+       * and three e2e specs assert exactly that — `create-league-g30-simple-flow`,
+       * `create-league-g31-video-tiles` (x3) and `league-story-creator-click-audit`
+       * collect `msg.type() === 'error'` and require the list to be empty. All four
+       * tests failed on this line and nothing else, on every CI run, for a config
+       * value CI is not supposed to set.
+       *
+       * The cost of that is worse than the four red tests: a "no runtime errors"
+       * check that is ALWAYS red cannot report the crash it exists to catch, so it
+       * gets read as noise. Warning keeps the nag visible to a developer and lets
+       * the assertion mean something again.
+       */
       if (process.env.NODE_ENV !== 'production') {
-        console.error(
+        console.warn(
           'NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN variable required by PostHog is missing or ' +
             'un-configured, this causes events to be silently missed. This error stops ' +
             'appearing once NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN is configured'

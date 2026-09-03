@@ -43,11 +43,37 @@ function readEnvFile(fileName) {
   }
 }
 
+/**
+ * Optional: name an env file whose DATABASE_URL should be used for the e2e server.
+ *
+ * WHY: `.claude/launch.json` is committed, so it cannot carry a connection string, and the
+ * fallback below reads `.env.local`, which in this repo is PRODUCTION (refused by
+ * assertSafeE2ETarget). Pointing at `.env.test` by NAME lets a launch entry start a safe
+ * e2e server with no secret in the repo. Explicit process.env still wins, so a deliberate
+ * shell export is never silently overridden.
+ */
+function resolveEnvFileDatabase() {
+  const fileName = process.env.AF_E2E_ENV_FILE
+  if (!fileName) return undefined
+  const fileEnv = readEnvFile(fileName)
+  for (const key of DATABASE_ENV_KEYS) {
+    const value = fileEnv[key]
+    if (typeof value === "string" && value.trim()) {
+      return { url: value.trim(), directUrl: (fileEnv.DIRECT_URL || "").trim() || undefined, fileName }
+    }
+  }
+  console.error(`[playwright-dev-server] AF_E2E_ENV_FILE=${fileName} has no database URL`)
+  process.exit(1)
+}
+
 function resolveDatabaseUrl() {
   for (const key of DATABASE_ENV_KEYS) {
     const value = process.env[key]
     if (typeof value === "string" && value.trim()) return value.trim()
   }
+
+  const fromFile = resolveEnvFileDatabase()
+  if (fromFile) return fromFile.url
 
   for (const fileName of ENV_FILES) {
     const fileEnv = readEnvFile(fileName)
@@ -133,9 +159,15 @@ const envDb = resolveDatabaseUrl()
 const normalizedDb = normalizeSupabaseSessionPooler(envDb)
 assertSafeE2ETarget(normalizedDb)
 const distDir = process.env.AF_NEXT_DIST_DIR || process.env.PLAYWRIGHT_DIST_DIR || `.next-playwright-${port}`
+const envFileDb = resolveEnvFileDatabase()
 const childEnv = {
   ...process.env,
   ...(normalizedDb ? { DATABASE_URL: normalizedDb } : {}),
+  // Prisma only reads DIRECT_URL for CLI work, but leave nothing pointing at .env.local's
+  // value when the server was deliberately aimed at another database.
+  ...(normalizedDb && !process.env.DIRECT_URL
+    ? { DIRECT_URL: normalizeSupabaseSessionPooler(envFileDb?.directUrl || normalizedDb) }
+    : {}),
   AF_NEXT_DIST_DIR: distDir,
   AUTH_TRUST_HOST: process.env.AUTH_TRUST_HOST || "true",
   NEXTAUTH_URL: process.env.NEXTAUTH_URL || `http://127.0.0.1:${port}`,

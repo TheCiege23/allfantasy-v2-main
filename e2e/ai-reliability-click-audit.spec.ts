@@ -319,8 +319,17 @@ test.describe('@ai reliability click audit', () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await clickHydrated(page.getByTestId('unified-ai-run-button'))
 
-    await clickHydrated(page.getByTestId('unified-ai-mobile-drawer-open-button'))
+    /*
+     * A run at mobile width opens the result drawer on its own, so the "view result"
+     * button is only needed when it did not. Clicking it while the drawer is already
+     * open is not a journey a user can take — the drawer's own full-screen backdrop
+     * sits over that button — and doing it unconditionally spent the whole 180s test
+     * budget on an element Playwright could see but never deliver a click to.
+     */
     const mobileDrawer = page.getByTestId('unified-ai-mobile-drawer')
+    if (!(await mobileDrawer.isVisible().catch(() => false))) {
+      await clickHydrated(page.getByTestId('unified-ai-mobile-drawer-open-button'))
+    }
     const drawerErrorState = page.getByTestId('unified-ai-mobile-drawer-error-state')
     const recoveryOutput = mobileDrawer.getByText(/Recovery output after retry/i)
     const hasDrawerError = await drawerErrorState.isVisible().catch(() => false)

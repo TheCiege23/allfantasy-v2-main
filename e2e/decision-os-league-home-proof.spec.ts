@@ -159,8 +159,19 @@ test.describe('G29 Decision OS authenticated theme SSR proof', () => {
       headers: E2E_HEADERS,
       data: { team: 'KC', season: 2098, week: 1 },
     })
-    expect(seedResponse.ok(), `Decision OS seed failed (${seedResponse.status()})`).toBeTruthy()
-    const seedBody = (await seedResponse.json()) as SeededLeague
+    /*
+     * Read the body BEFORE asserting. `Decision OS seed failed (500)` was all this
+     * reported for weeks, which is a status code rather than a cause — and the seed
+     * route is the only place that knows why. It now returns a `detail`, so put it in
+     * the assertion message where CI will show it.
+     */
+    const seedText = await seedResponse.text()
+    expect(
+      seedResponse.ok(),
+      `Decision OS seed failed (${seedResponse.status()}): ${seedText.slice(0, 500)}`,
+    ).toBeTruthy()
+    // Parsed from the text already read above rather than re-reading the response.
+    const seedBody = JSON.parse(seedText) as SeededLeague
     seeded = {
       leagueId: seedBody.leagueId,
       season: seedBody.season,

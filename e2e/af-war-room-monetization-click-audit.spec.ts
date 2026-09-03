@@ -6,6 +6,24 @@ function featureFromRequestUrl(url: string): string {
 }
 
 async function mockAfWarRoomMonetization(page: Page) {
+  /*
+   * ⚠ UNMOCKED, AND IT STALLS THE GATE RATHER THAN FAILING IT.
+   *
+   * FeatureGate renders "Checking premium access..." while `loading || accessTier.loading`,
+   * and useAccessTier's only input is GET /api/guest-mode/status. Left unmocked it goes to
+   * the real dev server, which reads a cookie and hits the database; until it answers the
+   * gate renders neither the children nor LockedFeatureCard, so the locked region this
+   * test asserts simply never exists. Same shape as the unmocked bootstrap routes in the
+   * draft-room specs: the failure surfaces as a missing element one gate downstream.
+   */
+  await page.route('**/api/guest-mode/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ isGuest: false, sleeperUsername: null, displayName: null }),
+    })
+  })
+
   await page.route('**/api/config/features', async (route) => {
     await route.fulfill({
       status: 200,
@@ -118,7 +136,7 @@ test.describe('@monetization af war room monetization click audit', () => {
       /\/tokens\?ruleCode=ai_war_room_multi_step_planning/
     )
 
-    await expect(page.getByTestId('af-war-room-plan-diff-af-war-room')).toBeVisible()
+    await expect(page.getByTestId('af-war-room-plan-diff-af-legacy')).toBeVisible()
     await expect(page.getByTestId('af-war-room-plan-diff-af-pro')).toBeVisible()
     await expect(page.getByTestId('af-war-room-plan-diff-af-commissioner')).toBeVisible()
 
@@ -134,7 +152,14 @@ test.describe('@monetization af war room monetization click audit', () => {
       )
     }
 
-    const futurePlanningLockCard = page.getByRole('region', { name: /af war room future planning is locked/i })
+    /*
+     * ⚠ DISPLAY RENAME, NOT A MISSING CARD: "AF War Room" became "AF Legacy" in
+     * 55c822df6 (display only — the war_room entitlement and the Stripe plan are
+     * unchanged, which is why the /upgrade?plan=war_room assertion below still holds).
+     * LockedFeatureCard builds its region label from featureName, and
+     * LegacyStrategyTab now passes featureNameOverride="AF Legacy future planning".
+     */
+    const futurePlanningLockCard = page.getByRole('region', { name: /af legacy future planning is locked/i })
     await expect(futurePlanningLockCard).toBeVisible()
     await expect(futurePlanningLockCard.getByTestId('locked-feature-upgrade-link')).toHaveAttribute(
       'href',

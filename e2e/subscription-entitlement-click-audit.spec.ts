@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -95,9 +96,21 @@ test.describe('@monetization subscription entitlement click audit', () => {
       /\/tokens\?ruleCode=ai_chimmy_chat_message/
     )
 
+    /*
+     * ⚠ /tokens IS SIGNED-IN-ONLY, SO ANONYMOUSLY THIS CLICK LANDS ON /login.
+     *
+     * The href assertion above passes and the click fires, but the browser ends up at
+     * /login?callbackUrl=/tokens — which never matches this pattern, so the test
+     * reported a 15s timeout on a CTA that was working exactly as designed. Signing in
+     * is what makes the assertion describe the journey a real buyer takes.
+     */
+    await signInAs(page, { id: 'e2e-entitlement-user' })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForHarnessReady(page)
+    const tokenFallbackAfterSignIn = page.getByTestId('locked-feature-token-fallback-link')
     await Promise.all([
       page.waitForURL(/\/tokens\?ruleCode=ai_chimmy_chat_message/, { timeout: 15_000 }),
-      tokenFallbackLink.click(),
+      tokenFallbackAfterSignIn.click(),
     ])
   })
 

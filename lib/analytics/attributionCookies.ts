@@ -119,6 +119,17 @@ export function applyAttributionCapture(
     const touch = parseAttributionTouch({
       url: request.nextUrl,
       referrer: request.headers.get("referer"),
+      /*
+       * ⚠ `request.nextUrl.hostname` ALONE MIS-IDENTIFIES OUR OWN PAGES. Next rewrites a
+       * loopback host to `localhost` when it parses the URL, so on a dev server at
+       * 127.0.0.1 every page asset — `/railway-styles.css` was the one measured — arrived
+       * with a Referer of `http://127.0.0.1:…/` that did not equal `localhost`, counted
+       * as an external referral, and stamped a fabricated `other` first touch on a visitor
+       * who had no campaign at all. The e2e attribution suite failed on exactly that.
+       * The `Host` and `X-Forwarded-Host` headers are the names the browser and any
+       * proxy actually used for us, so they join the self-host list.
+       */
+      selfHosts: [request.headers.get("host"), request.headers.get("x-forwarded-host")],
       now,
     })
     if (!touch) return response

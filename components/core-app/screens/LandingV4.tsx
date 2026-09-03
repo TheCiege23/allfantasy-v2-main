@@ -211,7 +211,11 @@ export function LandingV4({
         <div className="af-lp-nav-right">
           <LangSwitch lang={lang} label={c.nav.langLabel} />
           {/* "Sign in" is noise to someone already signed in. */}
-          {signedIn ? null : <Link href="/login">{c.nav.signIn}</Link>}
+          {signedIn ? null : (
+            <Link href="/login" data-testid="landing-nav-sign-in">
+              {c.nav.signIn}
+            </Link>
+          )}
           {/* Partners points at the B2B screen, which is served by the
               /core catch-all as the `partners` segment — no extra route. It was
               previously an in-page #business anchor, which became a dead link
@@ -221,7 +225,7 @@ export function LandingV4({
             {c.nav.partners}
             <span className="af-lp-api-chip af-num">API</span>
           </Link>
-          <Link href={primaryCta.href} className="af-btn af-lp-cta">
+          <Link href={primaryCta.href} className="af-btn af-lp-cta" data-testid="landing-nav-primary">
             {primaryCta.label}
           </Link>
         </div>
@@ -250,7 +254,7 @@ export function LandingV4({
           </h1>
           <p className="af-lp-sub">{c.hero.sub}</p>
           <div className="af-lp-hero-ctas">
-            <Link href={primaryCta.href} className="af-btn af-lp-cta-lg">
+            <Link href={primaryCta.href} className="af-btn af-lp-cta-lg" data-testid="landing-hero-primary">
               {signedIn ? primaryCta.label : c.hero.ctaPrimary}
             </Link>
             <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">

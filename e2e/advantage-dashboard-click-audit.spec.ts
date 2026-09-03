@@ -43,10 +43,19 @@ test.describe('@advantage dashboard click audit', () => {
 
     await openHarness(page)
 
+    /*
+     * ⚠ THIS CARD POINTED AT A DEPRECATED ALIAS, AND THE WAIT COULD NEVER MATCH.
+     *
+     * middleware.ts (redirectDeprecatedAppRoutes) 307s /app/power-rankings to
+     * /power-rankings. So the href assertion passed, the click navigated fine, and
+     * waitForURL(/\/app\/power-rankings/) then waited 15s for a URL the browser had
+     * already been redirected away from — reported as a click that went nowhere.
+     * The card now links to the canonical path, so there is no redirect to lose.
+     */
     const powerCard = page.getByTestId('advantage-card-power-rankings')
-    await expect(powerCard).toHaveAttribute('href', '/app/power-rankings')
+    await expect(powerCard).toHaveAttribute('href', '/power-rankings')
     await Promise.all([
-      page.waitForURL(/\/app\/power-rankings/, { timeout: 15_000 }),
+      page.waitForURL(/\/power-rankings/, { timeout: 15_000 }),
       powerCard.click(),
     ])
 

@@ -69,6 +69,21 @@ describe("extractReferrerHost", () => {
     expect(host).not.toContain("secret-value")
     expect(host).not.toContain("a@b.com")
   })
+
+  it("treats every loopback spelling as the same origin", () => {
+    // NextURL rewrites 127.0.0.1 to localhost, so the URL says one and the Referer the other.
+    expect(extractReferrerHost("http://127.0.0.1:3101/", "localhost")).toBeNull()
+    expect(extractReferrerHost("http://localhost:3101/", "127.0.0.1")).toBeNull()
+    expect(extractReferrerHost("http://[::1]:3101/", "localhost")).toBeNull()
+    // A real external referrer is still a referrer.
+    expect(extractReferrerHost("https://news.ycombinator.com/item?id=1", "localhost")).toBe("news.ycombinator.com")
+  })
+
+  it("accepts several self hosts and ignores the port a Host header carries", () => {
+    expect(extractReferrerHost("https://www.allfantasy.ai/pricing", ["localhost", "allfantasy.ai:443"])).toBeNull()
+    expect(extractReferrerHost("https://allfantasy.ai/pricing", [null, undefined, "allfantasy.ai"])).toBeNull()
+    expect(extractReferrerHost("https://tiktok.com/@af", ["localhost", "allfantasy.ai"])).toBe("tiktok.com")
+  })
 })
 
 describe("parseAttributionTouch", () => {

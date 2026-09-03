@@ -12,7 +12,9 @@ export function getPostHogClient(): PostHog | null {
   const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN
   if (!token) {
     if (process.env.NODE_ENV !== 'production') {
-      console.error(
+      // Warn, not error — see the note in components/providers/PostHogProvider.tsx.
+      // A missing optional analytics token is a configuration gap, not a fault.
+      console.warn(
         'NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN variable required by PostHog is missing or ' +
           'un-configured, this causes events to be silently missed. This error stops ' +
           'appearing once NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN is configured'

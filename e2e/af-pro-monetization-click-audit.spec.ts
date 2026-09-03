@@ -69,7 +69,7 @@ test.describe('@monetization af pro monetization click audit', () => {
 
     await expect(page.getByTestId('af-plan-diff-af-pro')).toBeVisible()
     await expect(page.getByTestId('af-plan-diff-af-commissioner')).toBeVisible()
-    await expect(page.getByTestId('af-plan-diff-af-war-room')).toBeVisible()
+    await expect(page.getByTestId('af-plan-diff-af-legacy')).toBeVisible()
 
     const cardPrefixes = ['afpro-trade', 'afpro-matchup', 'afpro-planning', 'afpro-player-ai']
     for (const prefix of cardPrefixes) {

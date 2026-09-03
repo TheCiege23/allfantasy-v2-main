@@ -22,6 +22,22 @@ import type { AIProvider } from '@/lib/ai-tool-registry'
 
 const REQUEST_LOCK_MIN_MS = 120
 
+/**
+ * The width at which the mobile result drawer stops rendering.
+ *
+ * ⚠ THIS MUST AGREE WITH THE `sm:hidden` ON THE DRAWER'S BACKDROP. Tailwind's `sm`
+ * breakpoint is 640px, so at or above it the backdrop is `display:none`. Stated once
+ * here because the failure mode when the two disagree is silent: the flag says open,
+ * the CSS says hidden, and nothing is wrong until the viewport changes.
+ */
+const MOBILE_DRAWER_HIDDEN_QUERY = '(min-width: 640px)'
+
+/** True when the drawer would actually be on screen. SSR and jsdom answer "no". */
+function isNarrowViewport(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return !window.matchMedia(MOBILE_DRAWER_HIDDEN_QUERY).matches
+}
+
 type ProviderResult = {
   provider: string
   raw: string
@@ -211,6 +227,38 @@ export default function UnifiedAIWorkbench() {
   const [expandedExplanation, setExpandedExplanation] = useState(false)
   const [mobileResultOpen, setMobileResultOpen] = useState(false)
   const [lastAction, setLastAction] = useState<'run' | 'compare'>('run')
+  /*
+   * ⚠ THE DRAWER IS MOBILE-ONLY BY CSS, BUT ITS STATE IS NOT, AND THE GAP BITES.
+   *
+   * `mobileResultOpen` is set on every successful run (see runRequest) and only the
+   * close button and the backdrop clear it. The backdrop itself is
+   * `fixed inset-0 z-[60] … sm:hidden`, so while the viewport is wide it is
+   * `display:none` and harmless — the run at desktop width leaves the flag TRUE with
+   * nothing on screen to reveal it.
+   *
+   * Narrow the viewport afterwards and `sm:hidden` stops applying: a full-screen
+   * backdrop the reader never opened appears over the controls. Someone rotating a
+   * tablet, or dragging a desktop window narrow, gets the page silently covered; the
+   * only affordance out is the close button of a drawer they did not ask for.
+   *
+   * Found via two e2e specs that run at desktop width and then resize to 390px
+   * (ai-reliability, unified-ai-interface). Their next click resolved a visible,
+   * enabled button and then hung on the pointer-events check until the whole 180s
+   * test budget was gone — which reads as a dead button rather than an overlay.
+   *
+   * So the flag follows the breakpoint the CSS uses (Tailwind `sm` = 640px), which is
+   * the same shape as the CommsDock docked/overlay switch.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia(MOBILE_DRAWER_HIDDEN_QUERY)
+    const closeWhenWide = () => {
+      if (mq.matches) setMobileResultOpen(false)
+    }
+    closeWhenWide()
+    mq.addEventListener('change', closeWhenWide)
+    return () => mq.removeEventListener('change', closeWhenWide)
+  }, [])
   const [selectedAlternateProvider, setSelectedAlternateProvider] = useState<string | null>(null)
   const [providerSelection, setProviderSelection] = useState<'auto' | AIProvider>('auto')
   const [saveLoading, setSaveLoading] = useState(false)
@@ -375,7 +423,9 @@ export default function UnifiedAIWorkbench() {
       setResult(parsed)
       setSelectedAlternateProvider(null)
       setExpandedExplanation(false)
-      setMobileResultOpen(true)
+      // Opening a drawer the CSS immediately hides leaves a flag that only becomes
+      // visible if the viewport later narrows — see the note on mobileResultOpen.
+      setMobileResultOpen(isNarrowViewport())
     } catch {
       setError('Network error while running AI. Please retry.')
       setResult(null)

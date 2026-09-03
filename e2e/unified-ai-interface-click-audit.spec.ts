@@ -329,16 +329,27 @@ test.describe('@ai unified ai interface click audit', () => {
       'href',
       /\/messages\?tab=ai/
     )
-    const historyLink = page.getByTestId('unified-ai-open-history-link')
-    if (await historyLink.isVisible().catch(() => false)) {
-      await expect(historyLink).toHaveAttribute('href', '/ai/history')
-      await historyLink.click({ force: true })
-      await page.waitForURL(/\/ai\/history/, { timeout: 6_000 }).catch(async () => {
-        await gotoWithRetry(page, '/ai/history')
+    /*
+     * ⚠ TWO SURFACES, AND THIS ASSERTED THE WRONG ONE OF THEM.
+     *
+     * `/ai/saved` and `/ai/history` both exist and both answer 200. The workbench link
+     * is labelled "Saved recommendations" and points at `/ai/saved`, which is coherent —
+     * but this test asserted its href was `/ai/history`, so it failed on a link that is
+     * doing exactly what its label promises.
+     *
+     * Both destinations stay covered: the link is checked against the surface it names,
+     * and `/ai/history` is still visited and asserted on its own.
+     */
+    const savedLink = page.getByTestId('unified-ai-open-history-link')
+    if (await savedLink.isVisible().catch(() => false)) {
+      await expect(savedLink).toHaveAttribute('href', '/ai/saved')
+      await savedLink.click({ force: true })
+      await page.waitForURL(/\/ai\/saved/, { timeout: 6_000 }).catch(async () => {
+        await gotoWithRetry(page, '/ai/saved')
       })
-    } else {
-      await gotoWithRetry(page, '/ai/history')
+      await expect(page).toHaveURL(/\/ai\/saved/)
     }
+    await gotoWithRetry(page, '/ai/history')
     await expect(page).toHaveURL(/\/ai\/history/)
     const historyList = page.getByTestId('ai-history-list')
     const historyItem = page.getByTestId('ai-history-item-saved-1')

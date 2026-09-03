@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -194,6 +195,15 @@ test.describe('@psych psychological profiles click audit', () => {
         }),
       })
     })
+
+    /*
+     * `/app/league/*` is session-gated (lib/auth/session-auth-paths.ts). The gate only
+     * fires when NEXTAUTH_SECRET is set — unset locally, SET in CI — so anonymously this
+     * spec passed on a developer machine and 307'd to /login on every CI run, failing as
+     * "element(s) not found" rather than as a redirect. Same fix, same reason, as
+     * league-drama / hall-of-fame / legacy-score.
+     */
+    await signInAs(page, { id: 'e2e-psych-user' })
 
     await page.goto('/app/league/league_psych_1/psychological-profiles')
     await expect(page.getByRole('heading', { name: 'Psychological Profiles' })).toBeVisible()

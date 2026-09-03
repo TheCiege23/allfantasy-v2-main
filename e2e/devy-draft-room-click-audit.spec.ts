@@ -296,6 +296,29 @@ async function mockDevyDraftRoomApis(
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
+  /*
+   * ⚠ NOT OPTIONAL, EVEN THOUGH NOTHING BELOW ASSERTS THEM — AND THE CATCH-ALL
+   * MAKES THE MISS WORSE, NOT BETTER.
+   *
+   * fetchDraftChromeData() calls /api/league/settings (singular "league") and
+   * /api/leagues/<id>/privacy inside a Promise.all, and DraftRoomPageClient awaits
+   * that BEFORE it ever calls fetchDraftPool. The wildcard api catch-all below treats
+   * any URL containing `/api/leagues/<id>/` as "known" and calls route.fallback() —
+   * so `privacy` fell through to the REAL dev server with a league id that does not
+   * exist. The bootstrap never settled, the pool was never fetched, and the panel
+   * rendered with a working search box and zero rows.
+   *
+   * That is why this reads as a missing testid or missing player name two awaits
+   * downstream of the actual cause. Same trap, same fix, as
+   * draft-asset-pipeline-click-audit.spec.ts and commit 123543c4d.
+   */
+  await page.route('**/api/league/settings**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settings: {} }) })
+  })
+  await page.route(`**/api/leagues/${leagueId}/privacy`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ privacy: {} }) })
+  })
+
   await page.route('**/api/**', async (route) => {
     const url = route.request().url()
     const known = [

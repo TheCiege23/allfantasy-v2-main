@@ -74,7 +74,20 @@ export async function seedG8CommissionerLeague(
   })
   if (!validated.ok) throw new Error(`G8 seed: invalid create body: ${validated.error}`)
   const created = await executeCanonicalLeagueCreation({ appUserId: userId, body: validated.data })
-  if (!created.ok) throw new Error(`G8 seed: canonical create failed: ${created.response.error}`)
+  if (!created.ok) {
+    /*
+     * ⚠ CARRY THE `detail`, NOT JUST THE `error`. executeCanonicalLeagueCreation
+     * already computes a real Prisma diagnostic via prismaErrorDetail() and returns it
+     * as `response.detail`; `response.error` is the fixed string "Failed to create
+     * league" and says nothing. Throwing only the latter is the second place this
+     * failure was stripped of its cause — the route above it was the first — and
+     * between them a seed that fails for a specific, nameable reason surfaced to CI as
+     * a bare 500 for weeks.
+     */
+    const detail = (created.response as { detail?: unknown }).detail
+    const suffix = typeof detail === 'string' && detail.trim() ? ` — ${detail}` : ''
+    throw new Error(`G8 seed: canonical create failed: ${created.response.error}${suffix}`)
+  }
   const leagueId = created.response.league.id
   const league = { id: leagueId }
 

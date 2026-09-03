@@ -81,7 +81,7 @@ test.describe("@news fantasy news aggregator click audit", () => {
       await cardPopup.close()
     }
 
-    await expect(playerLink).toHaveAttribute("href", /\/af-legacy\?tab=players&q=Josh%20Allen/)
+    await expect(playerLink).toHaveAttribute("href", /\/af-rankings\?q=Josh%20Allen/)
 
     await shareButton.click()
     await expect

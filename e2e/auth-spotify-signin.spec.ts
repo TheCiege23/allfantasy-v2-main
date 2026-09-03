@@ -46,8 +46,15 @@ test.describe('@auth Spotify sign-in wiring', () => {
     test.setTimeout(120_000)
     await registerAndLoginTo(page, '/settings?tab=connected')
 
-    const linkRes = await page.request.post('/api/e2e/auth/spotify/mock-connect')
-    expect(linkRes.ok()).toBeTruthy()
+    /*
+     * The fixture route is gated on the `x-allfantasy-e2e` header as well as the
+     * environment — it fabricates an OAuth link, so an env check alone would leave it
+     * reachable on any non-production deploy. Without the header it answers 404.
+     */
+    const linkRes = await page.request.post('/api/e2e/auth/spotify/mock-connect', {
+      headers: { 'x-allfantasy-e2e': '1' },
+    })
+    expect(linkRes.ok(), `mock-connect failed (${linkRes.status()}): ${await linkRes.text()}`).toBeTruthy()
 
     const accountsRes = await page.request.get('/api/user/connected-accounts')
     expect(accountsRes.ok()).toBeTruthy()

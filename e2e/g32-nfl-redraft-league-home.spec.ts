@@ -31,7 +31,7 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     await routeEntitlements(page, ['supreme'])
     await gotoHarness(page, '?playIntro=1')
 
-    await expect(page.locator('[data-mode="dark"]')).toBeVisible()
+    await expect(page.locator('main[data-mode="dark"]')).toBeVisible()
     await expect(page.getByTestId('concept-intro-video')).toBeVisible()
     await expect(page.getByTestId('concept-intro-video')).toHaveAttribute('src', '/media/league-intros/redraft-league-intro.mp4')
     await page.getByTestId('concept-intro-skip').click()
@@ -77,7 +77,7 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     await routeEntitlements(page, ['pro'])
     await gotoHarness(page, '?role=manager&mode=light')
 
-    await expect(page.locator('[data-mode="light"]')).toBeVisible()
+    await expect(page.locator('main[data-mode="light"]')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Manager Intelligence' }).first()).toBeVisible()
     await expect(page.getByTestId('g32-manager-intelligence-section')).toContainText('Unlocked')
 

@@ -405,6 +405,29 @@ async function mockSlowDraftRoomApis(page: Page, leagueId: string) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
+  /*
+   * ⚠ NOT OPTIONAL, EVEN THOUGH NOTHING BELOW ASSERTS THEM — AND THE CATCH-ALL
+   * MAKES THE MISS WORSE, NOT BETTER.
+   *
+   * fetchDraftChromeData() calls /api/league/settings (singular "league") and
+   * /api/leagues/<id>/privacy inside a Promise.all, and DraftRoomPageClient awaits
+   * that BEFORE it ever calls fetchDraftPool. The wildcard api catch-all below treats
+   * any URL containing `/api/leagues/<id>/` as "known" and calls route.fallback() —
+   * so `privacy` fell through to the REAL dev server with a league id that does not
+   * exist. The bootstrap never settled, the pool was never fetched, and the panel
+   * rendered with a working search box and zero rows.
+   *
+   * That is why this reads as a missing testid or missing player name two awaits
+   * downstream of the actual cause. Same trap, same fix, as
+   * draft-asset-pipeline-click-audit.spec.ts and commit 123543c4d.
+   */
+  await page.route('**/api/league/settings**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settings: {} }) })
+  })
+  await page.route(`**/api/leagues/${leagueId}/privacy`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ privacy: {} }) })
+  })
+
   await page.route('**/api/**', async (route) => {
     const url = route.request().url()
     const known = [
@@ -448,6 +471,14 @@ async function openDraftRoomHarness(page: Page) {
   await expect(page.getByTestId('draft-room-shell')).toBeVisible()
 }
 
+/** Open the top-bar overflow menu that holds draft-resync-button, if it is not already open. */
+async function openResyncMenu(page: Page) {
+  const resync = page.getByTestId('draft-resync-button')
+  if (await resync.isVisible().catch(() => false)) return
+  await clickHydrated(page.getByTestId('draft-topbar-menu-toggle'))
+  await expect(resync).toBeVisible({ timeout: 15_000 })
+}
+
 test.describe('@slow-draft-room click audit', () => {
   test('slow draft timer, pause window, picks, queue autopick, and resync are wired', async ({ page }) => {
     const leagueId = `e2e-slow-draft-${Date.now()}`
@@ -466,6 +497,16 @@ test.describe('@slow-draft-room click audit', () => {
     const resyncCountBefore = mocks.getResyncHits().length
     const timerBefore = await page.getByTestId('draft-topbar-timer-value').first().innerText()
     expect(timerBefore.toLowerCase()).toContain('h')
+    /*
+     * ⚠ RESYNC MOVED INTO THE TOP-BAR OVERFLOW MENU, SO IT IS NOT ON SCREEN UNTIL OPENED.
+     *
+     * DraftTopBar renders draft-resync-button only when `menuOpen && menuPos`, inside a
+     * createPortal. Not a rename — the id is unchanged — which is why this failed as
+     * "element(s) not found" and read like a deleted control. Two consequences:
+     * the menu has to be opened first, and the locator must stay PAGE-scoped, because
+     * the portal mounts outside draft-desktop-layout.
+     */
+    await openResyncMenu(page)
     await clickHydrated(page.getByTestId('draft-resync-button'))
     await expect.poll(() => mocks.getResyncHits().length).toBeGreaterThan(resyncCountBefore)
     await expect
@@ -502,6 +543,8 @@ test.describe('@slow-draft-room click audit', () => {
 
     // Resync should not leave stale on-the-clock state.
     const onClockBefore = await page.getByTestId('draft-topbar-on-clock-manager').first().innerText()
+    // The menu closes itself after a resync (DraftTopBar sets menuOpen false), so re-open it.
+    await openResyncMenu(page)
     await clickHydrated(page.getByTestId('draft-resync-button'))
     await expect.poll(() => mocks.getResyncHits().length).toBeGreaterThan(0)
     const onClockAfter = await page.getByTestId('draft-topbar-on-clock-manager').first().innerText()

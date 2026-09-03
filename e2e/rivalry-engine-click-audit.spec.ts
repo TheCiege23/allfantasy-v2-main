@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -195,6 +196,16 @@ test.describe('@rivalry rivalry engine click audit', () => {
         }),
       })
     })
+
+    /*
+     * This spec STARTS on the ungated /leagues/<id> surface, but the "Details" link it
+     * clicks is built as /app/league/<id>/rivalries/<id> (RivalryEngineList.tsx), which
+     * IS session-gated. Anonymously the click lands on
+     * /login?callbackUrl=%2Fapp%2Fleague%2F… and the waitForURL for **\/rivalries\/riv-1
+     * never matches, so the whole test times out at the navigation rather than reporting
+     * a redirect. The gate is inert locally (no NEXTAUTH_SECRET) and live in CI.
+     */
+    await signInAs(page, { id: 'e2e-rivalry-user' })
 
     await page.goto('/leagues/league_riv_1?tab=Intelligence')
     await expect(page.getByRole('heading', { name: 'League Intelligence Graph' }).first()).toBeVisible()

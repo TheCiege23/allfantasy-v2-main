@@ -33,12 +33,32 @@ export async function POST(request: Request) {
     /* optional body */
   }
 
-  const seeded = await seedG8CommissionerLeague(prisma, userId, {
-    team: body.team ?? 'KC',
-    season: typeof body.season === 'number' ? body.season : 2098,
-    week: typeof body.week === 'number' ? body.week : 1,
-  })
-  return NextResponse.json({ ok: true, ...seeded })
+  /*
+   * ⚠ AN UNCAUGHT THROW HERE COSTS A DAY, BECAUSE THE REASON NEVER LEAVES THE SERVER.
+   *
+   * This route used to call the seed bare. Every failure inside it — an invalid
+   * payload, a draft session that never appeared, or the canonical-create transaction
+   * exceeding its 25s budget — surfaced to the caller as an opaque 500, and the e2e
+   * assertion could only report `Decision OS seed failed (500)`. The seed helper
+   * itself already discards the underlying `detail` string once (it re-throws a
+   * summary), so nothing downstream could recover it either.
+   *
+   * This is a test-only, header-gated fixture route, so returning the message is not
+   * an information-disclosure concern the way it would be on a user-facing endpoint —
+   * and it turns a silent 500 into a failure that names its own cause.
+   */
+  try {
+    const seeded = await seedG8CommissionerLeague(prisma, userId, {
+      team: body.team ?? 'KC',
+      season: typeof body.season === 'number' ? body.season : 2098,
+      week: typeof body.week === 'number' ? body.week : 1,
+    })
+    return NextResponse.json({ ok: true, ...seeded })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[e2e/decision-os-proof-league] seed failed:', error)
+    return NextResponse.json({ error: 'Seed failed', detail }, { status: 500 })
+  }
 }
 
 export async function DELETE(request: Request) {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -21,6 +22,33 @@ async function gotoWithRetry(page: Parameters<typeof test>[0]['page'], url: stri
 test.describe('@prestige Prompt43 integration click audit', () => {
   test('audits commissioner trust/legacy integration links', async ({ page }) => {
     const leagueId = `e2e-prestige-commissioner-${Date.now()}`
+
+    /*
+     * ⚠ THE AI COMMISSIONER PANEL IS BEHIND AN ENTITLEMENT GATE, AND UNENTITLED IT
+     * RENDERS AN UPSELL CARD INSTEAD OF ITS CONTENTS.
+     *
+     * CommissionerTab wraps <AICommissionerPanel> in
+     * <FeatureGate featureId="commissioner_automation">, which reads
+     * GET /api/subscription/entitlements through useEntitlement. Anonymously that
+     * resolves to no plan, FeatureGate swaps in the upsell, and every testid inside the
+     * panel vanishes — which is why the assertions ABOVE the gate (the trust-score link,
+     * the coverage line) pass and the first one INSIDE it fails as "element(s) not found".
+     * Granting the plan here is what puts the spec back in front of the panel it audits.
+     */
+    await page.route('**/api/subscription/entitlements**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          entitlement: {
+            plans: ['commissioner', 'supreme'],
+            status: 'active',
+            currentPeriodEnd: null,
+            gracePeriodEnd: null,
+          },
+        }),
+      })
+    })
 
     await page.route(`**/api/commissioner/leagues/${leagueId}/waivers?type=pending**`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ claims: [] }) })
@@ -290,6 +318,15 @@ test.describe('@prestige Prompt43 integration click audit', () => {
         }),
       })
     })
+    /*
+     * `/app/league/*` is session-gated (lib/auth/session-auth-paths.ts). The gate only
+     * fires when NEXTAUTH_SECRET is set — unset locally, SET in CI — so anonymously this
+     * spec passed on a developer machine and 307'd to /login on every CI run, failing as
+     * "element(s) not found" rather than as a redirect. Same fix, same reason, as
+     * league-drama / hall-of-fame / legacy-score.
+     */
+    await signInAs(page, { id: 'e2e-prestige-user' })
+
     await gotoWithRetry(page, `/app/league/${leagueId}/hall-of-fame/entries/entry-1`)
     await expect(page.getByText(/legacy context/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /view legacy score/i })).toHaveAttribute(

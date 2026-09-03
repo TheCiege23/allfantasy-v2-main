@@ -290,8 +290,32 @@ test.describe('@chimmy Chimmy voice coverage', () => {
       })
     })
 
+    /*
+     * ⚠ `/api/tts` ANSWERS TWO DIFFERENT QUESTIONS AND THIS MOCK USED TO CONFLATE THEM.
+     *
+     * GET is a capability PROBE: ChimmyChatShell asks whether text-to-speech is
+     * configured and requires `r.ok && data.available === true` from a JSON body.
+     * POST is the synthesis call and returns audio bytes.
+     *
+     * Answering the GET with `audio/mpeg` made `r.json()` throw; the `.catch(() => null)`
+     * swallowed it, `available` was never true, and the component set `ttsUnavailable`.
+     * The voice toggle is `disabled={ttsUnavailable}` — so the spec disabled the very
+     * button it then asserted was enabled, and the failure read as a broken product.
+     *
+     * Note the real handler would also say "no" here: it reports availability from
+     * ELEVENLABS_API_KEY, which CI does not set. Voice is only testable behind a mock,
+     * so the mock has to honour both halves of the contract.
+     */
     const ttsBodies: Array<Record<string, unknown>> = []
     await page.route('**/api/tts', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true, available: true }),
+        })
+        return
+      }
       ttsBodies.push(route.request().postDataJSON() as Record<string, unknown>)
       await route.fulfill({
         status: 200,

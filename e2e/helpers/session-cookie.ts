@@ -36,6 +36,25 @@ export async function signInAs(
     secret,
     token: {
       sub: user.id,
+      /*
+       * ⚠ `id` AS WELL AS `sub`, AND OMITTING IT MADE THIS HELPER HALF-WORK.
+       *
+       * Middleware authenticates by reading `token.sub` (see the getToken call in
+       * middleware.ts), so a token carrying only `sub` sails through every route gate
+       * and looks like a working session. But the NextAuth session callback in
+       * lib/auth.ts populates `session.user.id` from **`token.id`**, which is what the
+       * real jwt callback sets on sign-in (`token.id = user.id`). Without it,
+       * `getServerSession()` returns a session whose `user.id` is undefined.
+       *
+       * The result is a session that passes middleware and fails every server
+       * component that checks for a user id — and those redirect to /login, so the
+       * symptom is an unexplained redirect on a page the test just proved it could
+       * reach. `app/tokens/layout.tsx` is exactly that: it redirects to
+       * `/login?callbackUrl=/tokens` when `session.user.id` is missing, which sent the
+       * subscription-entitlement token CTA test to a 15s waitForURL timeout while
+       * `/api/auth/session` cheerfully reported the user as signed in.
+       */
+      id: user.id,
       email: user.email ?? `${user.id}@allfantasy.test`,
       name: user.name ?? 'E2E User',
       // Middleware runs a SECOND gate after the session check: a token without a

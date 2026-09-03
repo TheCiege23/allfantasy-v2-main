@@ -210,7 +210,7 @@ export function buildAiStoryAndRankingPlaceholders(sportFilter: string | null): 
       type: "power_rankings_card" as const,
       title: "Power rankings",
       body: "See rest-of-season power rankings and tier breakdowns.",
-      href: "/app/power-rankings",
+      href: "/power-rankings",
       sport,
       leagueId: null,
       leagueName: null,

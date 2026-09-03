@@ -15,11 +15,33 @@ test.describe.configure({ timeout: 180_000 })
 
 const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 
+/*
+ * ⚠ THE SHELL HAS TWO LEVELS OF NAVIGATION, AND THIS SPEC ONLY KNEW ABOUT ONE.
+ *
+ * LeagueShell renders GROUP pills (`league-tab-group-<group>`, plain buttons carrying
+ * aria-pressed) and, beneath the active group only, its TABS (`league-tab-<id>`, which
+ * do carry role="tab"). Two consequences the old selectors fell into:
+ *
+ *   1. Only the ACTIVE group's tabs exist in the DOM. From Home — which is in the
+ *      `league` group — no roster tab is present at any accessible name, so
+ *      getByRole('tab', { name: 'Roster' }) could never match.
+ *   2. The tab row is gated on `activeGroup.tabs.length > 1`. The `roster` group holds
+ *      exactly one tab, so selecting it renders NO role="tab" element at all — the
+ *      pill is the only handle that surface has.
+ *
+ * And the label is 'My Team', not 'Roster' (LeagueShell forces it after localisation),
+ * so even the group that does render it answers to a different name than this spec used.
+ *
+ * Test ids rather than accessible names throughout: the shell guarantees the id, while
+ * the label is localised and has already been renamed once.
+ */
+const LEAGUE_GROUP_TABS = ['home', 'matchups', 'players', 'trades'] as const
+
 async function gotoHarnessReady(page: Page): Promise<void> {
   await page.goto(HARNESS_PATH, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 120_000 })
   await page.waitForLoadState('networkidle').catch(() => null)
-  await page.getByRole('tab', { name: 'Home' }).waitFor({ state: 'visible', timeout: 30_000 })
+  await page.getByTestId('league-tab-group-league').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
 test.describe('@nfl-redraft @league-shell player media fallback', () => {
@@ -44,16 +66,26 @@ test.describe('@nfl-redraft @league-shell player media fallback', () => {
 
     // The harness has no roster fixture data, so the live tabs render an
     // empty state rather than rows — the smoke is "navigating to these tabs
-    // does not crash the dashboard, and the 6 core tabs stay visible".
-    for (const tabName of ['Roster', 'Players', 'Trades', 'Matchups', 'League', 'Home']) {
-      await clickHydrated(page.getByRole('tab', { name: tabName }))
+    // does not crash the dashboard, and the core surfaces stay reachable".
+
+    // My Team lives in its own single-tab group, so the pill is the way in.
+    await clickHydrated(page.getByTestId('league-tab-group-roster'))
+    await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 5_000 })
+
+    // Back to the league group, then across each of its tabs in turn.
+    await clickHydrated(page.getByTestId('league-tab-group-league'))
+    for (const tabId of LEAGUE_GROUP_TABS) {
+      await clickHydrated(page.getByTestId(`league-tab-${tabId}`))
       await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 5_000 })
     }
 
-    // Six core tabs remain present after the navigation cycle (no shell crash).
-    const requiredTabs = ['Home', 'Roster', 'Matchups', 'Players', 'Trades', 'League']
-    for (const t of requiredTabs) {
-      await expect(page.getByRole('tab', { name: t })).toBeVisible()
+    // The core surfaces remain reachable after the navigation cycle (no shell crash):
+    // both groups still offer their pill, and the league group still lists its tabs.
+    for (const group of ['league', 'roster'] as const) {
+      await expect(page.getByTestId(`league-tab-group-${group}`)).toBeVisible()
+    }
+    for (const tabId of LEAGUE_GROUP_TABS) {
+      await expect(page.getByTestId(`league-tab-${tabId}`)).toBeVisible()
     }
 
     // The settings gear and harness root remain mounted — proves the broken

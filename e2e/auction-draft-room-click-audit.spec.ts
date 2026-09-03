@@ -649,6 +649,29 @@ async function mockAuctionDraftRoomApis(page: Page, leagueId: string) {
     })
   })
 
+  /*
+   * ⚠ NOT OPTIONAL, EVEN THOUGH NOTHING BELOW ASSERTS THEM — AND THE CATCH-ALL
+   * MAKES THE MISS WORSE, NOT BETTER.
+   *
+   * fetchDraftChromeData() calls /api/league/settings (singular "league") and
+   * /api/leagues/<id>/privacy inside a Promise.all, and DraftRoomPageClient awaits
+   * that BEFORE it ever calls fetchDraftPool. The wildcard api catch-all below treats
+   * any URL containing `/api/leagues/<id>/` as "known" and calls route.fallback() —
+   * so `privacy` fell through to the REAL dev server with a league id that does not
+   * exist. The bootstrap never settled, the pool was never fetched, and the panel
+   * rendered with a working search box and zero rows.
+   *
+   * That is why this reads as a missing testid or missing player name two awaits
+   * downstream of the actual cause. Same trap, same fix, as
+   * draft-asset-pipeline-click-audit.spec.ts and commit 123543c4d.
+   */
+  await page.route('**/api/league/settings**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settings: {} }) })
+  })
+  await page.route(`**/api/leagues/${leagueId}/privacy`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ privacy: {} }) })
+  })
+
   await page.route('**/api/**', async (route) => {
     const url = route.request().url()
     const knownRoot = [
@@ -719,6 +742,17 @@ test.describe('@auction-draft-room click audit', () => {
     const auctionSpotlight = desktop.locator('[data-auction-spotlight]').first()
     await expect(auctionSpotlight).toBeVisible()
     await expect(desktop.getByTestId('auction-current-nominator').first()).toContainText('Alpha')
+
+    /*
+     * ⚠ NFL RENDERS THE SLEEPER TABLE, AND draft-nominate-player-N ONLY EXISTS ON A CARD.
+     *
+     * PlayerPanel picks the table whenever poolLayout is 'auto' and sport is NFL, which
+     * is exactly how this spec navigates. The virtualized card list — the only place the
+     * draft-*-N ids live — never mounts, so this failed as a missing testid while the
+     * pool had loaded correctly. draft-pool-view-cards is the real user control for
+     * this, and switching through it is what draft-asset-pipeline already does.
+     */
+    await clickHydrated(desktop.getByTestId('draft-pool-view-cards'))
 
     // Nominate player flow.
     await desktop.getByTestId('draft-player-search-input').fill('Atlas')

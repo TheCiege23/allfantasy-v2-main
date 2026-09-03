@@ -90,6 +90,28 @@ test.describe('@ai ai system final integration click audit', () => {
       })
     })
 
+    /*
+     * ⚠ THE SIXTH ENDPOINT, AND LEAVING IT OUT LOOKS LIKE A STALE TESTID.
+     *
+     * WaiverWirePage bootstraps with ONE Promise.all over six endpoints and gates the
+     * whole render on it. Five were mocked here; `/state` fell through the `**\/api/**`
+     * catch-all to the real handler, which does getServerSession + Prisma and never
+     * answers for an anonymous e2e page. The page then sits on its spinner forever and
+     * `waiver-ai-help-link` is reported as "element(s) not found" — a missing mock
+     * wearing the costume of a deleted test id.
+     *
+     * Only `state.nextRunAt` is read (WaiverWirePage.tsx), so that is all this returns.
+     */
+    await page.route(`**/api/waiver-wire/leagues/${leagueId}/state`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          state: { nextRunAt: '2026-09-09T13:00:00.000Z' },
+        }),
+      })
+    })
+
     await page.route(`**/api/league/roster?leagueId=${leagueId}`, async (route) => {
       await route.fulfill({
         status: 200,

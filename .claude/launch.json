@@ -121,6 +121,26 @@
         "AF_NEXT_DIST_DIR": ".next-dev-visuals-b2",
         "NODE_OPTIONS": "--max-old-space-size=6144"
       }
+    },
+    {
+      "// next-dev-playwright": "Playwright e2e server on the port playwright.config.ts expects (3101), aimed at the .env.test database by file NAME so no connection string lives in this file. Its OWN dist dir: the default `.next-playwright-<port>` had 22 files COMMITTED to git despite .gitignore listing `.next-playwright-*/` (ignore rules do not apply to already-tracked files), so git and Next wrote the same paths and the server died mid-run with `UNKNOWN: unknown error, open react-loadable-manifest.json` and 500'd every route. scripts/playwright-dev-server.cjs refuses to start against production and cleans its own dist dir; Playwright reuses this server rather than spawning a second. ADMIN_PASSWORD mirrors the throwaway value CI sets for the @admin specs.",
+      "name": "next-dev-playwright",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/playwright-dev-server.cjs",
+        "--port",
+        "3101"
+      ],
+      "port": 3101,
+      "env": {
+        "AF_E2E_ENV_FILE": ".env.test",
+        "PLAYWRIGHT_PORT": "3101",
+        "PLAYWRIGHT_E2E": "1",
+        "ADMIN_PASSWORD": "admin123",
+        "ADMIN_PASSWORD_HASH": "",
+        "NODE_OPTIONS": "--max-old-space-size=6144",
+        "AF_NEXT_DIST_DIR": ".next-playwright-e2e"
+      }
     }
   ]
 }
