@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import dynamic from 'next/dynamic'
+import nextDynamic from 'next/dynamic'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -8,7 +8,7 @@ import { sessionKeyMock } from '@/lib/draft/session-key'
 // This file is a Server Component, so `ssr: false` isn't allowed here — plain
 // dynamic() still splits the framer-motion-heavy draft room (via DraftShell)
 // into its own chunk instead of the main page bundle.
-const DraftRoom = dynamic(() => import('../../components/DraftRoom').then((m) => m.DraftRoom))
+const DraftRoom = nextDynamic(() => import('../../components/DraftRoom').then((m) => m.DraftRoom))
 
 export const dynamic = 'force-dynamic'
 
