@@ -7,6 +7,7 @@ import { getToken } from "next-auth/jwt"
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
+import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
@@ -551,12 +552,17 @@ async function routeMiddleware(request: NextRequest) {
     tokenUserId = typeof token.sub === 'string' ? token.sub : null
   }
 
-  const country = request.headers.get("x-vercel-ip-country")
-  const region = request.headers.get("x-vercel-ip-country-region")
+  // Edge-agnostic: Cloudflare in production, Vercel on previews. Shared with
+  // lib/geo/detectUserState so the gate and the API report the same answer —
+  // they were two separate copies of this until 2026-09-02, and both went blind
+  // together when production left Vercel.
+  const edgeGeo = resolveEdgeGeo(request.headers)
+  const country = edgeGeo.country
+  const region = edgeGeo.regionCode
   const ip = request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
 
   if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
-    const stateCode = region.toUpperCase()
+    const stateCode = region
 
     if (isFullyBlocked(stateCode)) {
       if (pathname.startsWith("/api/")) {
@@ -610,7 +616,7 @@ async function routeMiddleware(request: NextRequest) {
     clearGuestTrialCookie(request, response)
   }
   if (country === "US" && region) {
-    response.headers.set("x-user-state", region.toUpperCase())
+    response.headers.set("x-user-state", region)
   }
   if (ip) {
     response.headers.set("x-client-ip", ip)

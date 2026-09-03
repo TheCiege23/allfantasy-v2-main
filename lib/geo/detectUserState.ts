@@ -1,4 +1,5 @@
 import type { GeoDetectionResult } from "./geoTypes"
+import { resolveEdgeGeo } from "./geoHeaders"
 
 export type { GeoDetectionResult } from "./geoTypes"
 
@@ -62,19 +63,21 @@ async function ipapiVpnHint(ip: string | null): Promise<boolean> {
 }
 
 /**
- * Detects a user's US state from Vercel geo headers (Edge/API).
+ * Detects a user's US state from whichever edge is in front of us — Cloudflare
+ * in production since 2026-09-02, Vercel on preview deployments.
+ *
+ * The header reading lives in `./geoHeaders` rather than here, because
+ * `middleware.ts` asks the same question and the two copies of it drifted apart
+ * the moment the platform changed underneath them.
+ *
  * Optional VPN detection when PROXYCHECK_API_KEY / IPAPI_KEY are configured.
  */
 export async function detectUserState(request: Request | Headers): Promise<GeoDetectionResult> {
   const headers = getHeadersSource(request)
-  const country = headers.get("x-vercel-ip-country")?.trim().toUpperCase() ?? null
-  const regionRaw = headers.get("x-vercel-ip-country-region")?.trim() ?? null
+  const geo = resolveEdgeGeo(headers)
   const rawIp = extractClientIp(headers)
 
-  let stateCode: string | null = null
-  if (country === "US" && regionRaw) {
-    stateCode = regionRaw.toUpperCase()
-  }
+  const stateCode = geo.country === "US" ? geo.regionCode : null
 
   let isVpnOrProxy = false
   if (rawIp) {
@@ -85,11 +88,15 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
   }
 
   const detectionSource: GeoDetectionResult["detectionSource"] =
-    country != null || regionRaw != null ? "vercel_headers" : "unknown"
+    geo.source === "cloudflare"
+      ? "cloudflare_headers"
+      : geo.source === "vercel"
+        ? "vercel_headers"
+        : "unknown"
 
   return {
     stateCode,
-    country,
+    country: geo.country,
     isVpnOrProxy,
     detectionSource,
     rawIp,
