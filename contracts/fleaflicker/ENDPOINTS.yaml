@@ -1,0 +1,139 @@
+--- # ============================================================================
+# Fleaflicker Public API — Contract
+# NORMATIVE for the two endpoints already integrated. The scoreboard endpoint
+# below is a STUB pending its first probe — see GAPS.md G-01. Do not fill in
+# its `fields:` block from memory or from Fleaflicker's Swagger docs; probe it
+# per README.md and paste the real shape in.
+# Source (standings/rosters): this codebase's existing, working
+#   lib/league-import/fleaflicker/FleaflickerLeagueFetchService.ts + types.ts
+# Captured: 2026-09-03
+# ============================================================================
+
+meta:
+  vendor: Fleaflicker
+  base_url: https://www.fleaflicker.com/api
+  base_url_env: none   # no override exists in the codebase today
+  contract_version: 0.1.0
+  captured_at: 2026-09-03
+  docs_url: https://www.fleaflicker.com/api-docs/index.html
+  data_classification: fantasy_platform   # not a real-world sports-data vendor; see README
+  sla: none   # no published SLA found
+
+# ============================================================================
+auth:
+  mechanism: none
+  note: >
+    Confirmed by the existing integration: fetchJson() in
+    FleaflickerLeagueFetchService.ts sends only an `Accept: application/json`
+    header. No token, no cookie, no signed request. Every league is readable
+    by anyone who knows its `league_id` — see README's privacy note on that.
+
+# ============================================================================
+transport:
+  common_query_params:
+    sport:
+      required: true
+      values: [NFL, MLB, NBA, NHL]
+      note: >
+        This is the FULL set this codebase currently parses
+        (parseFleaflickerSourceId's SPORT_SET). Fleaflicker itself may support
+        more; do not add one here without a probe confirming it, per the
+        "no guessing" rule this whole contract exists to enforce.
+    league_id:
+      required: true
+      type: integer
+      note: Platform-assigned, stable across seasons.
+    season:
+      required: true
+      type: integer
+      format: four-digit year
+      note: >
+        A season with no data still returns a normal envelope rather than an
+        error — confirmed by the existing null-safe handling of
+        `standings.season` in fetchFleaflickerLeagueForImport.
+
+  status_codes:
+    200: Valid JSON response.
+    404: "No such league. FleaflickerImportLeagueNotFoundError in the existing client."
+    other: Treated as a generic API error by the existing client; not yet differentiated.
+
+  rate_limit:
+    documented_hard_limit: none
+    note: Nothing found; be polite, no established cadence to cite.
+
+# ============================================================================
+endpoints:
+  FetchLeagueStandings:
+    status: INTEGRATED
+    method: GET
+    path: /FetchLeagueStandings
+    params: [sport, league_id, season]
+    envelope: |
+      {
+        season: number,
+        league: { id, name, logoUrl?, description?, size?, capacity?, maxKeepers?,
+                   waiverType?, defaultWaiverBudget?, rosterRequirements? },
+        divisions: [ { id, name, teams: [ TeamStub ] } ]
+      }
+    team_stub_fields:
+      - id (integer)
+      - name
+      - logoUrl (nullable)
+      - waiverAcquisitionBudget.value
+      - recordOverall.{wins,losses,ties}
+      - pointsFor.value
+      - pointsAgainst.value
+      - owners[].{id,displayName}
+      - initials
+    source_of_truth: lib/league-import/fleaflicker/types.ts (FleaflickerStandingsResponse, FleaflickerTeamStub)
+    note: >
+      Season TOTALS only. No per-week pairing exists here — this is why it
+      cannot supply WeeklyMatchup rows on its own.
+
+  FetchLeagueRosters:
+    status: INTEGRATED
+    method: GET
+    path: /FetchLeagueRosters
+    params: [sport, league_id, season]
+    envelope: |
+      { rosters: [ { team: TeamStub, players: [ { proPlayer: { id, nameFull?, position?, nameShort? } } ] } ] }
+    source_of_truth: lib/league-import/fleaflicker/types.ts (FleaflickerRostersResponse)
+    note: No scores at all — current roster composition only.
+
+  FetchLeagueScoreboard:
+    status: PARAMS_CONFIRMED_SHAPE_UNVERIFIED   # <-- see GAPS.md G-01. Do not promote to
+                                                  #     INTEGRATED without a real fixture.
+    method: GET
+    path: /FetchLeagueScoreboard
+    path_confirmed_via: "https://www.fleaflicker.com/api-docs/index.html — vendor's own published
+      Swagger docs, read 2026-09-03. This is READING DOCUMENTATION, not probing the live data
+      API, so it did not need a real league_id and does not resolve G-01 by itself — see the
+      note below."
+    params: [sport, league_id, season, scoring_period]
+    param_types:
+      sport: "string — NFL | MLB | NBA | NHL, per the docs page"
+      league_id: integer
+      season: integer
+      scoring_period: integer   # confirms GAPS.md G-03: it IS week-scoped, and this is the param name
+    envelope: UNKNOWN — a real fixture is still required
+    fields: UNKNOWN — a real fixture is still required
+    note: >
+      🛑 THE PATH AND PARAM NAMES ARE CONFIRMED. THE RESPONSE SHAPE IS NOT. Confirming a path
+      exists in a vendor's Swagger index is not the same thing as knowing what it returns for a
+      real league in a real week — envelope structure, field names, how a bye week or an
+      unplayed week renders, and (most load-bearing per GAPS.md G-04) which id space identifies
+      a team on a matchup row are all still open. Do not write a mapper against this entry until
+      GAPS.md G-01 is RESOLVED with a committed fixture.
+
+  FetchLeagueBoxscore:
+    status: DISCOVERED_NOT_YET_NEEDED
+    method: GET
+    path: /FetchLeagueBoxscore
+    path_confirmed_via: "same docs page as FetchLeagueScoreboard above, same date"
+    params: [sport, league_id, fantasy_game_id, scoring_period]
+    note: >
+      Found while resolving G-02, not asked for. Per-matchup detail keyed by a
+      `fantasy_game_id` this contract has not seen the shape of yet — presumably a field on
+      a FetchLeagueScoreboard row. Likely useful for lineup-level detail (bench vs. starters)
+      beyond what a WeeklyMatchup row needs, but that is a future decision, not this one. Not
+      probed; not blocking anything today.
