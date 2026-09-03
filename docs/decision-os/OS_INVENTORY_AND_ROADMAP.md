@@ -166,6 +166,68 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.28 THE INTENT ROUTER — R2/R3.1/R3.3/R4b.5's OPT-IN SLICES NOW GET ASKED FOR
+
+**2026-09-03.** Closes the gap §0.26 found: the live chat route hardcoded
+`want` to four always-on flags, so `lineupDecision`/`commissionerHealthDecision`
+(R2), `idpKicker` (R3.1), `rosterValueGrade` (R3.3) and `psychologyConsistency`
+(R4b.5) — all built, tested, wired into the packet — never reached a real
+chat turn.
+
+### Reused, not built: two intent classifiers already exist, one already runs in this exact route
+
+`lib/chimmy-context/intent/IntentClassifier.ts` and `lib/chimmy-orchestration/
+intent-classifier.ts` both export a function named `classifyChimmyIntent`,
+with different vocabularies, for different purposes. Census: the
+`chimmy-context` one has **zero real callers** anywhere in the tree. The
+`chimmy-orchestration` one is **already called inside
+`app/api/chat/chimmy/route.ts`** (line ~1789, for labelling the turn for
+orchestration — an unrelated, pre-existing purpose) and its vocabulary
+already includes `manager_psychology` and `player_value`, which the other
+classifier's does not.
+
+🛑 **THAT CALL HAPPENS AFTER THE PACKET IS ALREADY BUILT** (line ~1675 vs.
+~1789), and reordering a 1800-line live route to share one call was more risk
+than the fix needed. Solution: a SECOND, EARLY call to the same pure,
+synchronous, no-I/O function, using only `message` — available since line
+640 — rather than the fuller `recentUserSnippet` the later call also has.
+Calling a regex-matching function twice costs microseconds; reordering
+working code in a route this size does not need to be risked for that.
+
+### One pure function, not inline conditionals in the route
+
+`lib/decision-os/grounding/intentToWant.ts` — `deriveWantFromIntent(intent)`
+— maps FOUR of the fourteen possible intents to the four low-risk opt-in
+flags:
+
+| Intent | Flag |
+|---|---|
+| `start_sit` | `lineupDecision` |
+| `commissioner` | `commissionerHealthDecision` |
+| `manager_psychology` | `psychologyConsistency` |
+| `player_value` | `rosterValueGrade` |
+
+⚠ **NOT SEVEN.** `waiver` maps to nothing — `waiverDecision` has no producer
+anywhere in `packet.ts` (a type field only, matching R2.6's own "documented,
+not wired" note for waiver alongside trade). `idpKicker` is deliberately
+excluded despite being a real, wired producer: its own doc comment names it
+"the one slice that cannot join the concurrent wave" — a serialized second
+hop with its own cost profile — and turning it on for every player_value
+question is a real latency decision needing its own measurement, not a rider
+on this fix.
+
+Extracted as its OWN pure function (no packet/route knowledge, just intent
+in, four booleans out) specifically so it is unit-testable without mocking a
+1800-line route handler — the route itself now does one thing:
+`deriveWantFromIntent(classifyChimmyIntent(message).intent)`, spread into
+the existing `want` object.
+
+7 tests. One thing mutation-verified: swapping the `start_sit` mapping to
+`waiver` fails exactly the two tests that check either intent's mapping,
+none of the other five — including a structural guard asserting every
+intent maps to at most one true flag, so a future accidental OR of two
+conditions would be caught even without a test naming that exact pair.
+
 ## 0.27 R4b.7 — FRAMING ONLY, AND ALL OF R4b IS NOW DONE
 
 **2026-09-03.** P4: "Explanation and framing only. The deterministic engine's
