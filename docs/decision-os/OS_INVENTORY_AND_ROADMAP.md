@@ -166,6 +166,107 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.25 R4b.5 — TRAJECTORY, CROSS-LEAGUE, CROSS-SPORT
+
+**2026-09-03.** Three reads (P1/P5/P7), and two of the three underlying engines
+already existed and had zero callers — the same shape as R3.3's trade-grade
+finding, twice in one day.
+
+### Trajectory (P1) — wired, not built
+
+`readManagerTrajectory` + `summariseTrajectory`
+(`lib/psychological-profiles/ProfileSeasonSnapshot.ts`) were fully built,
+carefully null-safe (R4b.3's lesson applied twice — once on write, once on
+read), and had exactly one real caller: their own module's doc comment. Added
+`readLeagueTrajectories(leagueId)` — one query for the whole league rather
+than N+1 per manager, sharing the exact row-mapping `readManagerTrajectory`
+already used (extracted to `toTrajectoryPoint` so the two cannot drift) — and
+called it from `psychologyProfileSource.derive()` in `psychology-os/index.ts`,
+attaching a `TrajectorySummary` to every `PsychologyProfileFact`.
+
+Trajectory is NOT viewer-scoped (a manager's history reads the same for
+everyone), so unlike cross-league/cross-sport below it belongs in the
+EXISTING 12h-cached league-level feed rather than a new uncached one.
+
+🛑 **THE SERIALIZER NEEDED ITS OWN EDIT, AND WOULD HAVE SILENTLY DROPPED IT
+OTHERWISE.** `renderItem()` already had a dedicated `PsychologyProfileFact`
+branch (labels, scores, evidence count) that simply never read `trajectory` —
+adding the field to the data does nothing on its own, which is G11 in
+miniature. Caught by writing the render test first rather than assuming;
+mutation-verified by disabling the new branch and confirming exactly the one
+test that asserts trajectory text fails, none of the others.
+
+### Cross-league, self only (P5) — reused whole
+
+`rollUpManagerAcrossLeagues` (`CrossLeagueRollup.ts`) already existed,
+already had one real caller (a REST handler), and already implements P5's
+exact policy — intersection-only, "self" free and "opponents" premium-gated,
+"one league is not a pattern." Nothing about it needed to change. What was
+missing was an AMBIENT, packet-level entry point for the free half: "how
+consistent am I, across every league I play." New
+`lib/decision-os/grounding/psychologyConsistencySlice.ts` resolves the
+caller's own `platformUserId` from ANY claimed team (not the current league
+specifically — a `platformUserId` is constant per platform account, so
+anchoring to one league's row would make a data gap on THAT row disable a
+read every other league could answer) and calls the existing rollup with
+itself as the subject.
+
+⚠ **DELIBERATELY NOT "OPPONENTS."** Grading another manager is a
+request-scoped, entitlement-gated question ("tell me about my rival") that
+the existing REST route already serves. Folding it into an ambient
+league-wide packet slice would mean resolving entitlement during packet
+assembly for a question nobody asked yet — scope creep past what P5 needs
+here.
+
+### Cross-sport, self only (P7) — the one genuinely new piece
+
+Nothing existed. New `lib/psychological-profiles/CrossSportRollup.ts`,
+`rollUpManagerAcrossSports`, mirrors `CrossLeagueRollup`'s shape on a
+different axis: WITHIN one sport, union every label seen across however many
+leagues (too few leagues per sport for a within-sport majority to mean
+anything); ACROSS sports, the same majority rule `CrossLeagueRollup` already
+uses (a label seen in more than half the observed groups is "consistent") —
+just moved from the league axis to the sport axis. Reports BOTH halves of
+P7's own framing: `consistentLabels` (traits that hold) and
+`sportSpecificLabels` (ones that don't, seen in exactly one sport).
+
+`leagueIdsForUser` (private in `CrossLeagueRollup.ts`) is now exported and
+reused rather than re-derived — "which leagues does this user manage" is the
+same question on both axes.
+
+### Why cross-league/cross-sport are NOT in the cached feed
+
+`psychology-os/index.ts`'s own header already said so, before this session
+touched it: both are VIEWER-scoped, so a per-subject cache would leak one
+account's cross-league pattern to every other viewer, and a per-viewer cache
+is almost always cold. Both new reads run through
+`psychologyConsistencySlice.ts` as an uncached, per-request producer — the
+same `decisionBridge.ts` shape R2 established for the four live decision
+engines, joining the packet's concurrent wave rather than the `OsFeed`
+mechanism.
+
+### Flattened for the same reason R3.3's roster grade was
+
+`CrossLeagueRollup`'s `dimensions` (a `Record`) and `labels` (array of
+`{label, leagues, consistency}` objects) do not survive `renderObject()`'s
+deliberately non-recursive design. `psychologyConsistencySlice.ts` reads only
+the fields that render cleanly as primitives/string-arrays
+(`consistentLabels`, observed/without-profile counts, `caveat`) rather than
+passing either rollup's full shape through — the same "the producer shapes
+for the renderer" rule R3.3 already established, applied a second time.
+
+19 new/changed tests across 5 files (`psych-season-snapshot.test.ts`,
+`psychology-os.test.ts`, `grounding-serializer-values.test.ts`, new
+`cross-sport-rollup.test.ts`, new `psychology-consistency-slice.test.ts`).
+Two things mutation-verified: the serializer's trajectory branch (disabling
+it fails exactly the one test that asserts trajectory text, none of the
+others), and — found DURING test-writing, not before — that
+`rollUpManagerAcrossSports`/`rollUpManagerAcrossLeagues` share
+`leagueIdsForUser`'s pre-existing lack of a try/catch, so a query failure
+propagates rather than degrading silently; the packet producer's own
+try/catch is the actual, and only, safety net, matching every other bridge
+this session has built.
+
 ## 0.24 R4 — IDENTITY OS: THE MEASURE THE TRAP ALREADY NEEDED
 
 **2026-09-03.** Scoped as R4.1 (re-run the audit) / R4.2 (one source, one
@@ -2401,7 +2502,7 @@ seam.
 | **R4b.2** | `manager_psych_profile_seasons` + write a snapshot on each refresh (**P1**) | §10.2 (B) |
 | **R4b.3** | `OsFactSource` → register `'psychology'` as an `OsDomain`. League-level, 12h TTL. **No migration** — `OsDomain` is `VarChar(16)` and widening the union is free. | — |
 | **R4b.4** | `managerPsychology` packet slice, graded, refusing below the floor (**P6**) | — |
-| **R4b.5** | Trajectory + cross-league + cross-sport reads, **derived not cached** (**P1/P5/P7**) | — |
+| **R4b.5** | Trajectory + cross-league + cross-sport reads, **derived not cached** (**P1/P5/P7**) | ✅ 2026-09-03, see §0.25 |
 | **R4b.6** | Chimmy narrates from the facts — **no stored prose** (**P2**) | — |
 | **R4b.7** | Wire into recommendations as **framing only** (**P4**) | — |
 
