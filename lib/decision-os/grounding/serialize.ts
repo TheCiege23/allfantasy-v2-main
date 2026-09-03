@@ -73,6 +73,16 @@ function renderValue(name: string, value: unknown): string[] {
     return trimmed.split('\n').map((l) => `    ${l}`)
   }
 
+  /*
+   * DecisionFact (R2.1) — a bridged decision from one of the four live engines.
+   *
+   * 🛑 THIS BRANCH MUST PRECEDE THE ARRAY CHECK BELOW, AND ITS ABSENCE WAS G11 IN MINIATURE. A
+   * DecisionFact is a plain object, so without it `!Array.isArray(value)` returns [] and a decision
+   * slice serialises to its header line and nothing else — "lineupDecision: available", which is
+   * precisely the failure this file was rewritten to fix for values.
+   */
+  if (isDecisionFact(value)) return renderDecision(value)
+
   if (!Array.isArray(value) || value.length === 0) return []
 
   const rows: string[] = []
@@ -82,6 +92,67 @@ function renderValue(name: string, value: unknown): string[] {
   }
   const hidden = value.length - MAX_ITEMS
   if (hidden > 0) rows.push(`    · …and ${hidden} more not shown (${name} holds ${value.length})`)
+  return rows
+}
+
+/**
+ * A bridged engine decision. Structural detection, like every other branch here — only a
+ * `DecisionFact` carries `decisionType` alongside the four contract answers.
+ */
+function isDecisionFact(v: unknown): v is Record<string, unknown> {
+  if (v == null || typeof v !== 'object' || Array.isArray(v)) return false
+  const o = v as Record<string, unknown>
+  return typeof o.decisionType === 'string' && typeof o.whatHappened === 'string' && Array.isArray(o.verdicts)
+}
+
+/**
+ * Render one decision as the four answers the Decision Contract guarantees.
+ *
+ * ⚠ THE FOUR ANSWERS ARE THE SUBSTANCE, not decoration around a score. `what_to_do` is the
+ * recommendation itself, and dropping it to save tokens would leave the model to re-derive a
+ * conclusion the deterministic engine already reached — which is the fabrication risk the whole
+ * grounding design exists to remove.
+ */
+function renderDecision(o: Record<string, unknown>): string[] {
+  const rows: string[] = []
+  const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '')
+
+  rows.push(`    what happened: ${s('whatHappened')}`)
+  rows.push(`    why it matters: ${s('whyItMatters')}`)
+  rows.push(`    what to do: ${s('whatToDo')}`)
+  rows.push(`    confidence: ${s('howConfident')}`)
+
+  /*
+   * 🛑 ILLEGAL VERDICTS ARE RENDERED FIRST AMONG THE VERDICTS AND ARE NEVER TRUNCATED AWAY. This
+   * is the half of a decision that is not advice — it is what the league's rules permit — and a
+   * model that does not see it can cheerfully recommend a move the rules forbid.
+   */
+  const verdicts = (o.verdicts as unknown[]).filter(
+    (x): x is Record<string, unknown> => x != null && typeof x === 'object',
+  )
+  const illegal = verdicts.filter((v) => v.verdict === 'illegal')
+  for (const v of illegal) rows.push(`    NOT ALLOWED — ${String(v.rule)}: ${String(v.message)}`)
+  const others = verdicts.filter((v) => v.verdict !== 'illegal').slice(0, 3)
+  for (const v of others) rows.push(`    rule ${String(v.rule)}: ${String(v.verdict)} — ${String(v.message)}`)
+
+  const count = typeof o.actionCount === 'number' ? o.actionCount : 0
+  const summary = Array.isArray(o.actionSummary) ? (o.actionSummary as unknown[]).filter((x) => typeof x === 'string') : []
+  if (count > 0) {
+    // ⚠ The COUNT is always stated even when nothing is described, so "3 recommended actions" is
+    // never silently rendered as though there were none.
+    rows.push(
+      summary.length > 0
+        ? `    ${count} recommended action${count === 1 ? '' : 's'}: ${summary.join('; ')}${count > summary.length ? `, and ${count - summary.length} more` : ''}`
+        : `    ${count} recommended action${count === 1 ? '' : 's'} (not itemised here)`,
+    )
+  }
+
+  // ⚠ The honesty fields go LAST but are never omitted: a decision resting on a weak input reads
+  // identically to a strong one without them.
+  const dc = typeof o.dataCompleteness === 'number' ? o.dataCompleteness : null
+  if (dc != null && dc < 100) {
+    rows.push(`    based on ${dc}% of the inputs it wants; weakest input "${String(o.weakestSource)}" (${String(o.weakestTrust)})`)
+  }
   return rows
 }
 
@@ -187,6 +258,19 @@ export function serializeDecisionOsGroundingForPrompt(
     ['Cross-league portfolio', packet.portfolio as GroundedSlice<unknown>],
     // 6.2 — three-brain's saved conclusion, read not run. See packet.savedAnalysis.
     ['Saved analysis', packet.savedAnalysis as GroundedSlice<unknown>],
+    /*
+     * R2 — decisions bridged from the four live engines.
+     *
+     * ⚠ NAMED "DECISION" IN THE PROMPT ON PURPOSE. These are deterministic verdicts the engine
+     * already reached, not facts for the model to reason from. Chimmy's job is to EXPLAIN one,
+     * never to re-derive or overrule it — which is the A5/P3 invariant.
+     *
+     * The `as` cast is safe against a missing slice: `sliceLine` returns [] for null/undefined,
+     * which is what an optional slice is when this build did not request a decision.
+     */
+    ['Lineup decision', packet.lineupDecision as GroundedSlice<unknown>],
+    ['Waiver decision', packet.waiverDecision as GroundedSlice<unknown>],
+    ['Commissioner health decision', packet.commissionerHealthDecision as GroundedSlice<unknown>],
     // R4b — manager behavioural profiles. Rendered like any other collection: bounded,
     // with the hidden count stated.
     ['Manager psychology', packet.managerPsychology as GroundedSlice<unknown>],

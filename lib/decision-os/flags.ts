@@ -56,6 +56,16 @@ export type DecisionOsFeed =
   | 'savedAnalysis'
   /** Manager behavioural profiles (R4b). Killable like every other feed, fail-open. */
   | 'managerPsychology'
+  /**
+   * The lineup decision bridged from Pipeline A (R2.4).
+   *
+   * 🛑 THIS ONE RUNS AN ENGINE RATHER THAN READING A STORE, which is why its own switch matters
+   * more than the others'. Every feed above is a read; this is a decision computed inside the chat
+   * route's latency ceiling. If it ever becomes the slow slice, an operator must be able to drop it
+   * without dropping the packet — and without a per-engine switch, one slow engine is a slow Chimmy
+   * for everyone.
+   */
+  | 'lineupDecision'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -69,6 +79,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'portfolio',
   'savedAnalysis',
   'managerPsychology',
+  'lineupDecision',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

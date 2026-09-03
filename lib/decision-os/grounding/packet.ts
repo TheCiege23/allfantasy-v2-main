@@ -15,6 +15,13 @@ import {
   resolvePortfolioGrounding,
   type PortfolioGroundingOutcome,
 } from '@/lib/intelligence/chimmy/portfolioGrounding'
+/*
+ * ⚠ TYPE-ONLY, AND THAT MATTERS. `decisionToSlice` imports `GroundedSlice` from this file, so a
+ * value import here would close a runtime cycle. `import type` is erased at compile time, so the
+ * cycle exists only in the type graph, where it is legal and inert.
+ */
+import type { DecisionFact } from './decisionToSlice'
+import { loadLineupDecisionSlice } from './decisionBridge'
 import { isConclusiveFor, type ConclusivenessVerdict, type FactProfileName } from '../conclusive'
 import { resolveDecisionOsFeedFlags, type DecisionOsFeed } from '../flags'
 import { loadSavedThreeBrainAnalysis } from './savedAnalysis'
@@ -209,6 +216,26 @@ export interface DecisionOsGroundingPacket {
    */
   managerPsychology: GroundedSlice<PsychologyProfileFact[]>
   savedAnalysis: GroundedSlice<string>
+
+  /*
+   * ── R2 — THE BRIDGE FROM PIPELINE A ─────────────────────────────────────────────────────────
+   *
+   * Decisions from the four LIVE engines, adapted read-only by `decisionToSlice`. Until R2 these
+   * engines were the half of the system that worked and that users saw, while sharing no code with
+   * the half that feeds Chimmy.
+   *
+   * ⚠ OPTIONAL ON PURPOSE. Every existing construction site predates them, and a required field
+   * would break each one at once; the serializer already tolerates a missing slice. Optional here
+   * means "this build did not ask for a decision", which is exactly what `not_requested` says.
+   *
+   * 🛑 TRADE IS DELIBERATELY ABSENT. `decideTradeEvaluate` requires a `TradeProposalContext` — a
+   * trade decision is PROPOSAL-scoped, and a general turn ("how does my roster look?") contains no
+   * proposal. Adding a trade slice here would mean inventing one. The proposal-scoped path already
+   * exists at `lib/chimmy-trade/pendingTradeDecisionGrounding.ts`.
+   */
+  lineupDecision?: GroundedSlice<DecisionFact>
+  waiverDecision?: GroundedSlice<DecisionFact>
+  commissionerHealthDecision?: GroundedSlice<DecisionFact>
 
   /**
    * Every gap on the packet, flattened.
@@ -527,6 +554,16 @@ export interface GroundingPacketArgs {
     devy?: boolean
     projections?: boolean
     leagueRules?: boolean
+    /**
+     * R2.4 — run the live lineup engine and carry its decision (default OFF).
+     *
+     * 🛑 OPT-IN, UNLIKE EVERY FLAG ABOVE IT, AND THE ASYMMETRY IS DELIBERATE. The others gate a
+     * READ; this gates running a decision engine inside the chat route's latency ceiling. Costing
+     * every turn a lineup decision — including the ones asking about trade values — is how the
+     * packet went 5.4s over that ceiling before R0.8. A caller asks for this when the question is
+     * about a lineup.
+     */
+    lineupDecision?: boolean
   }
 }
 
@@ -622,6 +659,7 @@ export async function buildDecisionOsGroundingPacket(
   const leagueIntelKill = killed('leagueIntelligence')
   const portfolioKill = killed('portfolio')
   const psychologyKill = killed('managerPsychology')
+  const lineupDecisionKill = killed('lineupDecision')
 
   const pAssertions =
     leagueId && !importKill
@@ -669,6 +707,23 @@ export async function buildDecisionOsGroundingPacket(
   const pPsychology =
     leagueId && !psychologyKill
       ? kick('managerPsychology', psychologyOs.loadProfiles({ leagueId, sport: args.sport }).catch(() => null))
+      : Promise.resolve(null)
+
+  /*
+   * R2.4 — the lineup decision, bridged from the live engine.
+   *
+   * ⚠ STARTED HERE WITH THE OTHERS, NOT AWAITED HERE. It joins the same concurrent wave the
+   * waterfall fix established: none of these reads consumes another's result, so they all start
+   * together and each `await` stays in slice order below. An engine run awaited in sequence would
+   * put the packet straight back over the ceiling R0.8 measured.
+   *
+   * ⚠ `.catch` IS INSIDE THE BRIDGE, not here. `loadLineupDecisionSlice` returns an honest gap
+   * slice rather than throwing, so unlike the loaders above it never resolves to null — which is
+   * why the assembly below reads it directly instead of testing for substance.
+   */
+  const pLineupDecision =
+    want.lineupDecision && !lineupDecisionKill
+      ? kick('lineupDecision', loadLineupDecisionSlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   const pDevy = want.devy && !devyKill
@@ -1058,6 +1113,24 @@ export async function buildDecisionOsGroundingPacket(
    * model and invite it to characterise them anyway, which is the "[] presented as available"
    * failure §5.2 exists to prevent, reached through a non-empty array.
    */
+  /*
+   * R2.4 — the bridged lineup decision.
+   *
+   * ⚠ THREE STATES, AND THE THIRD IS THE ONE WORTH NAMING. A killed feed and an unrequested one
+   * are different absences: `disabled` says an operator switched it off and the user can do
+   * nothing, `not_requested` says the question did not call for a lineup decision and assembling
+   * one would be waste. Collapsing them would report an operator action as a user's phrasing.
+   */
+  const lineupDecisionSlice = await pLineupDecision
+  const lineupDecision: GroundedSlice<DecisionFact> = lineupDecisionKill
+    ? absent<DecisionFact>(lineupDecisionKill)
+    : lineupDecisionSlice ??
+      absent<DecisionFact>({
+        reason: 'not_requested',
+        detail: 'This question did not call for a lineup decision.',
+        remedy: 'Ask about your lineup and the deterministic engine runs.',
+      })
+
   const psychologyRows = await pPsychology
   const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
     ? absent<PsychologyProfileFact[]>(psychologyKill)
@@ -1167,6 +1240,7 @@ export async function buildDecisionOsGroundingPacket(
     ['portfolio', portfolio as GroundedSlice<unknown>],
     ['savedAnalysis', savedAnalysis as GroundedSlice<unknown>],
     ['managerPsychology', managerPsychology as GroundedSlice<unknown>],
+    ['lineupDecision', lineupDecision as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1192,6 +1266,7 @@ export async function buildDecisionOsGroundingPacket(
     portfolio,
     savedAnalysis,
     managerPsychology,
+    lineupDecision,
     gaps: collectGaps(slices),
     meta: {
       durationMs: Date.now() - startedAt,

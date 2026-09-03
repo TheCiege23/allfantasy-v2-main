@@ -166,6 +166,186 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.21 R2 — BRIDGE PIPELINE A INTO THE PACKET · plan, and what the survey changed
+
+**2026-09-03.** R2's one-line spec said: *"a **read-only** adapter: the four live engines'
+decision objects → packet slices."* Four findings from reading the code change that plan before
+a line is written. Three make it easier than expected; one makes it smaller.
+
+### ✅ F-1 — ALL FOUR ENGINES ALREADY SHARE ONE CONTRACT, so this is ONE adapter, not four
+
+```
+decideLineupSet(dco, deps)          -> Decision<LineupActionItem>
+decideWaiverClaim(dco, deps)        -> Decision<WaiverClaimRecommendation>
+decideTradeEvaluate(dco, deps)      -> Decision<TradeEvaluation>
+decideCommissionerHealth(dco, deps) -> Decision<CommissionerHealthAssessment>
+```
+
+`Decision<TAction>` (`lib/decision-os/core/decision.ts`) already carries **everything a
+`GroundedSlice` needs**, which is why the mapping is translation rather than invention:
+
+| `Decision` field | → `GroundedSlice` |
+|---|---|
+| `data_completeness` (0–100) + `confidence` (0–100) | `confidence` (0..1), `conclusive` |
+| `provenance.weakest_trust` | the gap `reason` when it is `low`/`unverified` |
+| `uncertainty_sources[]` | the gap `detail` |
+| `four_answers` + `explanation` | the serialised value Chimmy reads |
+| `rule_verdicts[]` | the hard constraints Chimmy must not contradict |
+
+⚠ **`Decision` measures its own honesty already.** `data_completeness` is explicitly "separate
+from confidence", and `provenance.weakest_source` is documented as *"the weakest required input
+drives confidence/completeness honesty"*. The packet's conclusiveness model and the engines'
+provenance model were designed to the same principle independently. The adapter does not have to
+invent a confidence story; it has to avoid losing the one already there.
+
+### 🛑 F-2 — "READ-ONLY ADAPTER" HAS AN UNSTATED PREREQUISITE: THERE IS NOTHING TO READ
+
+There IS a decision store — `canonical_decisions`, with a 46-column schema and a writer at
+`lib/decision-os/canonical/prismaDecisionStore.ts:236`.
+
+```
+SELECT count(*) FROM canonical_decisions;   ->   0
+```
+
+**Zero rows in production.** The four engines run *inline, per request*, on their own routes
+(`lib/decision-os/{lineup,waiver,trade,commissioner-health}/index.ts`) and nothing persists the
+result. So a bridge that reads the store returns nothing, for every league, silently.
+
+🛑 That is precisely the `ingestCFBDStats` failure this repo has already paid for once — *"pointing
+a surface at a table nothing refreshes is worse than the live call it replaced: it fails silently
+and looks correct."* **So R2 runs the engines inline off inputs the packet already holds.**
+Persisting decisions is a separate, later decision (R2.7), not a prerequisite.
+
+### ✅ F-3 — THE ENGINES ARE CHEAP; THEIR *INPUTS* ARE THE COST
+
+`resolveLineupWorld` and `buildLineupDCO` are **pure and synchronous** — no `await`, no I/O. The
+orchestrator's own docstring says Prisma reads happen "in an injected loader at the route seam,
+never here". So running an engine costs whatever its inputs cost, and nothing more.
+
+And the packet **already loads most of them**: `leagueRules`, `roster`, `matchup`, `standings`,
+`projections`, `marketValues`. The bridge is therefore mostly *reuse*, not new fetching — which is
+what keeps it inside the latency budget R0.8/R0.10 established.
+
+### 🛑 F-4 — IT IS NOT "+4 OS's". TRADE DOES NOT FIT A LEAGUE-SCOPED PACKET.
+
+The four engines' inputs are **not** uniform, and one of them is structurally different:
+
+| Engine | Required input | Fits a general packet build? |
+|---|---|---|
+| Commissioner-health | `snapshot` + `userId` | ✅ cheapest — one object |
+| Lineup | roster players, rules, weeks | ✅ packet already holds roster + rules |
+| Waiver | `engineInput: WaiverAIServiceInput` + world | ⚠ needs a waiver pool loaded |
+| **Trade** | **`proposal: TradeProposalContext`** + assets | 🛑 **no proposal exists in a general turn** |
+
+A trade decision is **proposal-scoped**, not league-scoped. "How does my roster look?" contains no
+proposal, so there is nothing for `decideTradeEvaluate` to evaluate. Forcing a trade slice into
+every packet would mean inventing a proposal, which is the fabrication the whole grounding design
+exists to prevent.
+
+⚠ And a path for the real case already exists: `lib/chimmy-trade/pendingTradeDecisionGrounding.ts`
+(the scorecard's footnote 3). **R2 wires three engines and documents the fourth**, rather than
+claiming four and shipping a stub.
+
+### The plan
+
+| # | Step | Status |
+|---|---|---|
+| **R2.1** | `decisionToSlice()` — one generic `Decision<T>` → `GroundedSlice<DecisionFact>` adapter, pure, no I/O. Mirror of `toEvidencePacket.ts`. | ✅ |
+| **R2.2** | Serializer support: render a decision slice as its four answers + verdicts, never `JSON.stringify`. | ✅ |
+| **R2.3** | Wire **commissioner-health** — ⚠ REVISED, see below. | ⏸ |
+| **R2.4** | Wire **lineup** — reuses the roster + rules the packet already loads. | ✅ |
+| **R2.5** | Wire **waiver** — 🛑 REVISED: request-scoped, like trade. | ⛔ |
+| **R2.6** | **Trade: documented, not wired.** Record why, and point at the proposal-scoped path. | ✅ |
+| **R2.7** | Decide whether to persist decisions to `canonical_decisions` — separate from R2, and it needs a writer wired at the same time or not at all. | ☐ |
+
+**Each engine gets its own `want` flag and its own kill switch**, exactly like `values`/`devy`/
+`projections`. A bridge that cannot be switched off per-engine turns one slow engine into a slow
+Chimmy for everyone.
+
+⚠ **The engines are NOT to be modified.** They are live, load-bearing and correct. Every step here
+adds a caller; none changes a decider. If a step seems to need an engine change, that is the signal
+to stop and re-scope.
+
+### ✅ R2.1 + R2.2 DONE — the seam exists and is proven
+
+`lib/decision-os/grounding/decisionToSlice.ts` (new) · `serialize.ts` · `packet.ts`
+· `__tests__/decision-os/decision-to-slice.test.ts` (10) ·
+`__tests__/decision-os/decision-slice-serialization.test.ts` (5)
+
+**Suite: 196 files / 3,686 tests / 0 failures** (was 194 / 3,671).
+
+Three design rules are load-bearing and each is pinned by a mutation-verified test:
+
+1. 🛑 **An `illegal` rule verdict does NOT make a decision inconclusive.** It is the most conclusive
+   thing a decision can say — "your league's rules forbid this" is a finding, not a gap. Only the
+   QUALITY OF THE INPUTS may block; never the content. Getting this backwards would suppress
+   exactly the answer a user most needs, and it is the single most plausible "fix" someone would
+   later apply.
+2. ⚠ **A malformed decision degrades to a gap rather than throwing.** `assertFourAnswers` throws by
+   design and is deliberately *not* called here: one bad decision must not take down the packet
+   build for every other slice in the same turn.
+3. ⚠ **Actions are counted always, described only when the caller supplies a describer.** Without
+   one, a best-effort stringifier on an unknown shape yields `[object Object]` and puts it in a
+   prompt as though it were a fact.
+
+🛑 **AND R2.2 CAUGHT G11 ARRIVING THROUGH A NEW DOOR.** `renderValue` returns `[]` for anything
+that is not a string or an array, and a `DecisionFact` is a plain object — so a decision slice
+would have serialised to `Lineup decision: available` with no substance beneath it. That is the
+precise bug the serializer was rewritten to fix for values, reappearing for a new value type.
+A test asserts the four answers reach the prompt; reverting the branch fails four of five.
+
+⚠ **`packet.ts` now imports `DecisionFact` as `import type`, and that is not stylistic.**
+`decisionToSlice` imports `GroundedSlice` from `packet`, so a value import would close a runtime
+cycle. Type-only is erased at compile time, leaving the cycle in the type graph where it is inert.
+
+### ✅ R2.4 DONE — lineup is bridged end to end
+
+`grounding/decisionBridge.ts` (new) · `packet.ts` (`want.lineupDecision`, producer, assembly) ·
+`flags.ts` (`lineupDecision` kill switch) · `__tests__/decision-os/decision-bridge.test.ts` (5)
+
+**Suite: 197 files / 3,691 tests / 0 failures.**
+
+The bridge separates three absences that are easy to collapse and costly to confuse:
+`disabled` (an operator switched it off — the user can do nothing), `not_synced` (a null loader
+result: an unimported or off-season league — tell them to sync, not to file a bug), and
+`not_computed` (the engine threw). It also **never passes `shadow` deps**: that option runs the
+legacy recommender too, and a chat turn wants the decision, not a second opinion it never reads.
+
+⚠ **`want.lineupDecision` DEFAULTS OFF, unlike every flag beside it, and the asymmetry is the
+point.** The others gate a READ; this gates running a decision engine inside the chat route's
+latency ceiling. Charging every turn a lineup decision — including the ones asking about trade
+values — is how the packet went 5.4s over that ceiling before R0.8.
+
+### 🛑 R2.5 AND R2.3 CHANGED ON CONTACT WITH THE CODE
+
+**R2.5 — waiver is REQUEST-scoped, exactly like trade.** `RunWaiverClaimInput` requires
+`engineInput: WaiverAIServiceInput`, and the live route supplies it from the **request body**:
+
+```ts
+// app/api/waiver-ai/engine/route.ts:242
+runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis }, …)
+```
+
+`input` is what the user submitted — which targets, which budget. A general chat turn has none, and
+synthesising one would be inventing the user's question. **Same structural class as trade**, found
+by tracing the caller rather than by assuming the plan was right. `loadWaiverWorldFacts` exists and
+gives world facts, but world facts are not the ask.
+
+**R2.3 — commissioner-health is feasible but needs an input the packet does not hold.**
+`buildCommissionerHealthSnapshot` is pure, but the only loader is
+`getCommissionerHubHealthForUser(userId, leagues: UserLeague[])` — it takes the user's whole league
+list, filters to `isCommissioner`, and returns snapshots for **all** of them. The packet knows one
+`leagueId`, not a `UserLeague[]`. It is a real wiring job (load the league, build the snapshot,
+run), not a one-liner, and it applies only when the user commissions that league. Parked
+deliberately rather than half-done.
+
+⚠ **SO R2 IS "+1 WIRED, +3 EXPLAINED", NOT "+4 CONNECTED".** The original estimate assumed four
+interchangeable engines behind one contract. The contract is genuinely shared — that part held —
+but their INPUTS are not: one is DB-derivable (lineup), one needs a different loader shape
+(commissioner), and two are scoped to a user request that a chat turn does not contain (waiver,
+trade). Lineup is also the highest-value single one, so the leverage estimate was closer than the
+count was.
+
 ## 0.20 ✅ THE SNAPSHOT WRITER RUNS IN PRODUCTION — and it has a defect I introduced
 
 **2026-09-02, 19:19 UTC.** Baseline was 0 rows at 19:07:34. A watch caught the first write.
