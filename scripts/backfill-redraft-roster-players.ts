@@ -56,7 +56,7 @@ async function main() {
 
   console.log(`${apply ? 'APPLY' : 'DRY RUN'} — ${leagues.length} league(s)\n`)
 
-  let totals = { leagues: 0, created: 0, present: 0, noLink: 0, noPlayers: 0 }
+  let totals = { leagues: 0, created: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0 }
 
   for (const l of leagues) {
     /*
@@ -71,6 +71,7 @@ async function main() {
     if (!apply) {
       console.log(`  would fix  ${l.id}  ${String(l.leagueType ?? '?').padEnd(11)} ${emptyRosters} empty roster(s)  ${l.name ?? ''}`)
       totals.leagues += 1
+      totals.emptyRosters += emptyRosters
       continue
     }
 
@@ -89,7 +90,14 @@ async function main() {
 
   console.log('\n──────────')
   if (!apply) {
-    console.log(`${totals.leagues} league(s) would be touched. Re-run with --apply to write.`)
+    /*
+     * ⚠ ROSTERS, NOT ONLY LEAGUES. A league with ONE empty roster and a league with EIGHTEEN both
+     * count as one league here, so the league count barely moves after a successful run while the
+     * thing that matters collapses. Reporting leagues alone made a 95% reduction in empty rosters
+     * look like 229 -> 226 and read as "it did nothing".
+     */
+    console.log(`${totals.leagues} league(s) hold ${totals.emptyRosters} empty roster(s).`)
+    console.log('Re-run with --apply to write.')
   } else {
     console.log(`leagues touched      ${totals.leagues}`)
     console.log(`players created      ${totals.created}`)
