@@ -87,8 +87,86 @@ const PROBES = [
   { name: 'api/health', path: '/api/health', redirect: false },
 ]
 
+/**
+ * Pages, checked by what they RENDER rather than by their status code.
+ *
+ * ⚠ A STATUS CHECK WOULD NOT HAVE CAUGHT THE FAILURE THIS EXISTS FOR. On 2026-09-03
+ * an optimizePackageImports change made framer-motion's context resolve against a
+ * second module copy, so `useContext` read null across ~250 routes. And this repo has
+ * already shipped the neighbouring failure once: a proxy that wrapped shell-less HTML
+ * in a hand-built <html><body>, which served 200s that rendered nothing — the reason
+ * scripts/railway-next-start.cjs now carries "if HTML arrives without a document
+ * shell, fix the render, do not re-add a rewriter here".
+ *
+ * Both return 200. So the assertions are about the body:
+ *
+ *   1. a real document shell — <html> … </html>
+ *   2. the App Router flight payload (`self.__next_f`), which is only emitted when the
+ *      server actually rendered the tree. Its absence is the shell-less case.
+ *   3. no Next error-page marker
+ *   4. a size floor, because a technically-valid but empty shell passes 1-3
+ */
+const PAGE_PROBES = [
+  { name: 'home', path: '/' },
+  { name: 'login', path: '/login' },
+  { name: 'signup', path: '/signup' },
+  { name: 'pricing', path: '/pricing' },
+  { name: 'blog', path: '/blog' },
+  { name: 'brackets', path: '/brackets' },
+  { name: 'verify', path: '/verify' },
+  { name: 'ai', path: '/ai' },
+]
+
+/** Markers Next emits on its own error pages — a 200 carrying one is not a render. */
+const ERROR_MARKERS = [
+  'Application error: a client-side exception',
+  'Internal Server Error',
+  'This page could not be found',
+]
+
+const MIN_PAGE_BYTES = 1500
+
+export function judgePage(status, body) {
+  if (status >= 500) return { ok: false, kind: 'server-error', why: `HTTP ${status}` }
+  const html = String(body ?? '')
+  if (!/<html[\s>]/i.test(html) || !/<\/html>/i.test(html)) {
+    return { ok: false, kind: 'no-shell', why: 'response has no <html> … </html> document shell' }
+  }
+  for (const marker of ERROR_MARKERS) {
+    if (html.includes(marker)) {
+      return { ok: false, kind: 'error-page', why: `rendered Next's error page (${marker})` }
+    }
+  }
+  if (!html.includes('self.__next_f')) {
+    return {
+      ok: false,
+      kind: 'not-rendered',
+      why: 'no App Router flight payload — the server did not render the tree',
+    }
+  }
+  if (html.length < MIN_PAGE_BYTES) {
+    return { ok: false, kind: 'too-small', why: `only ${html.length} bytes of HTML` }
+  }
+  return { ok: true, kind: 'rendered' }
+}
+
 class Unreachable extends Error {}
 
+/**
+ * ⚠ FOLLOWS THE HOST-CANONICALISATION HOP, AND MUST.
+ *
+ * Middleware 308s between the apex and www to whichever host is canonical, and that
+ * direction is configuration: it was www -> apex earlier on 2026-09-03 and apex -> www
+ * after the variable restore. A probe that stops at the first redirect therefore tests
+ * the canonicaliser, not the handler — and it keeps reporting green while no longer
+ * checking the thing it was written for. That is the same "check that quietly stopped
+ * checking" failure this file exists to prevent, so it is guarded here rather than left
+ * to whoever reads the output.
+ *
+ * Deliberately narrow: at most ONE extra hop, only to a canonical host, and only when
+ * the PATH is unchanged. A redirect that moves the path is the handler's own answer and
+ * is what we are here to judge.
+ */
 async function probe({ path, method = 'GET' }, attempt = 1) {
   try {
     const res = await fetch(`${BASE}${path}`, {
@@ -96,7 +174,20 @@ async function probe({ path, method = 'GET' }, attempt = 1) {
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
     })
-    return { status: res.status, location: res.headers.get('location') }
+    const location = res.headers.get('location')
+
+    if (location && res.status >= 300 && res.status < 400) {
+      let target = null
+      try {
+        target = new URL(location, `${BASE}${path}`)
+      } catch { /* unparseable is a finding, not something to follow */ }
+      const samePath = target && target.pathname === new URL(`${BASE}${path}`).pathname
+      if (target && samePath && CANONICAL_HOSTS.has(target.hostname.toLowerCase())) {
+        const hop = await fetch(target, { method, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
+        return { status: hop.status, location: hop.headers.get('location'), viaCanonicalHop: true }
+      }
+    }
+    return { status: res.status, location }
   } catch (err) {
     if (attempt < 3) {
       await new Promise((r) => setTimeout(r, attempt * 5000))
@@ -175,8 +266,38 @@ function selfTest() {
     }
   }
 
+  /*
+   * Page cases, same rule: pin the REASON. A 200 that rendered nothing and a 200 that
+   * rendered an error page are different failures and must not be caught by whichever
+   * branch happens to fire first.
+   */
+  const shell = (inner) =>
+    `<!DOCTYPE html><html lang="en"><head><title>x</title></head><body>${inner}</body></html>`
+  const flight = `<script>self.__next_f.push([1,"data"])</script>`
+  const filler = 'x'.repeat(MIN_PAGE_BYTES)
+
+  const pageCases = [
+    [500, shell(flight + filler), 'server-error'],
+    [200, `{"error":"boom"}`, 'no-shell'],
+    [200, shell('Application error: a client-side exception' + filler), 'error-page'],
+    // The shell-less render this repo already shipped once: valid HTML, no flight payload.
+    [200, shell('<div id="root"></div>' + filler), 'not-rendered'],
+    [200, shell(flight), 'too-small'],
+    [200, shell(flight + filler), 'rendered'],
+  ]
+  for (const [status, body, expectedKind] of pageCases) {
+    const v = judgePage(status, body)
+    if (v.kind !== expectedKind) {
+      console.error(`  SELF-TEST FAILED: page case expected '${expectedKind}', got '${v.kind}'`)
+      bad++
+    }
+  }
+
   if (bad === 0) {
-    console.log(`  self-test ok -- ${mustFail.length} bad Locations caught, ${mustPass.length} good ones accepted`)
+    console.log(
+      `  self-test ok -- ${mustFail.length} bad Locations caught, ${mustPass.length} good ones accepted, ` +
+        `${pageCases.length} page verdicts correct`,
+    )
     return true
   }
   console.error(`  self-test FAILED with ${bad} problem(s) -- the assertions cannot be trusted`)
@@ -202,6 +323,37 @@ async function main() {
       process.exit(2)
     }
     console.log(`  deployed: ${sha.slice(0, 9)}`)
+  }
+
+  /*
+   * ⚠ PREFLIGHT: THE RUNTIME'S OWN NODE_ENV, because tonight's outage was exactly this
+   * and it is one assertion.
+   *
+   * On 2026-09-03 Railway production carried NODE_ENV="development", copied in from a
+   * local .env during a variable restore. Bundles are compiled with production baked in,
+   * but Next's static-generation worker picks its runtime from the real env var — so it
+   * loaded the dev React, got a second copy, and every useContext read null across ~250
+   * routes. Builds failed for hours and three people chased a nondeterministic race that
+   * was never there.
+   *
+   * It is checked from /api/af-debug/sha rather than the Railway API deliberately: that
+   * endpoint already reports nodeEnv, so this needs no platform token, no new secret, and
+   * no extra request — and it asserts what the RUNNING PROCESS believes, which is the
+   * thing that actually decides, rather than what a dashboard says is configured.
+   */
+  try {
+    const res = await fetch(`${BASE}/api/af-debug/sha`, { signal: AbortSignal.timeout(20_000) })
+    const info = await res.json()
+    if (info?.nodeEnv !== 'production') {
+      console.error(`\nBAD_RUNTIME_ENV -- the deployed process reports NODE_ENV=${JSON.stringify(info?.nodeEnv)}, expected "production".`)
+      console.error('   Next selects its runtime from this at static-generation time. Anything other')
+      console.error('   than "production" gives the build a second React copy, which nulls useContext')
+      console.error('   across every route. Fix the service variable before reading anything below.')
+      process.exit(4)
+    }
+    console.log(`  runtime NODE_ENV: ${info.nodeEnv}`)
+  } catch {
+    console.log('  runtime NODE_ENV: could not be read (continuing; the probes below still apply)')
   }
 
   // Rule 3: prove the assertions can fail before trusting them to pass.
@@ -239,7 +391,30 @@ async function main() {
       console.log(`  FAIL  ${p.name}  ${r.status}  ${r.location ?? '(no Location)'}`)
       continue
     }
-    console.log(`  ok    ${p.name}  ${r.status}  ${r.location}`)
+    console.log(`  ok    ${p.name}  ${r.status}  ${r.location}${r.viaCanonicalHop ? '  (via canonical hop)' : ''}`)
+  }
+
+  /*
+   * Pages last: they are the most expensive probes and the least likely to be the thing
+   * that is wrong, so a redirect regression surfaces before the run spends time here.
+   */
+  for (const p of PAGE_PROBES) {
+    let res
+    try {
+      res = await fetch(`${BASE}${p.path}`, { signal: AbortSignal.timeout(30_000) })
+    } catch (err) {
+      console.error(`\nUNREACHABLE -- ${p.path}: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('   Not a render regression; a reachability or capacity problem.')
+      process.exit(3)
+    }
+    const body = await res.text().catch(() => '')
+    const verdict = judgePage(res.status, body)
+    if (!verdict.ok) {
+      failures.push(`page ${p.path}: ${verdict.why}`)
+      console.log(`  FAIL  page ${p.name}  ${res.status}  ${verdict.kind}`)
+      continue
+    }
+    console.log(`  ok    page ${p.name}  ${res.status}  ${body.length} bytes rendered`)
   }
 
   if (failures.length > 0) {
@@ -249,7 +424,7 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`\nAll ${PROBES.length} probes passed.`)
+  console.log(`\nAll ${PROBES.length + PAGE_PROBES.length} probes passed (${PROBES.length} redirect/API, ${PAGE_PROBES.length} page renders).`)
 }
 
 main().catch((err) => {
