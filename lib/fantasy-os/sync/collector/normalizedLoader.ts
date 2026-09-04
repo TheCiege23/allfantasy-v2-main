@@ -207,6 +207,7 @@ export async function fetchNormalizedForConnection(
     const result = await runPipeline({
       provider: connection.provider,
       sourceId: connection.externalLeagueId,
+      currentStateOnly: true,
     })
     if (result.success) return result.normalized
     if (result.code === 'LEAGUE_NOT_FOUND') {
@@ -233,6 +234,7 @@ export async function fetchNormalizedForConnection(
       provider: connection.provider,
       sourceId: connection.externalLeagueId,
       userId,
+      currentStateOnly: true,
     })
     if (result.success) return result.normalized
 

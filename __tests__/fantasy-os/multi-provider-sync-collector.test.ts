@@ -41,6 +41,7 @@ import {
   type LeagueSyncConnection,
 } from '@/lib/fantasy-os/sync/collector/types'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
+import type { ImportedLeagueNormalizationInput } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 
 function connection(overrides: Partial<LeagueSyncConnection> = {}): LeagueSyncConnection {
   return {
@@ -126,6 +127,7 @@ describe('needs a USER vs needs a CREDENTIAL — the distinction Fantrax lives i
       provider: 'fantrax',
       sourceId: 'abc',
       userId: 'owner-1',
+      currentStateOnly: true,
     })
   })
 
@@ -157,6 +159,62 @@ describe('needs a USER vs needs a CREDENTIAL — the distinction Fantrax lives i
   })
 })
 
+describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
+  /*
+   * 🛑 THE REFRESH WAS PAYING FOR HISTORY IT THREW AWAY. This pipeline was called with no
+   * options, so each provider applied its IMPORT defaults and went looking for prior seasons --
+   * ESPN up to 6 SERIAL loadEspnLeagueRaw calls, Sleeper up to 10 SERIAL previous_league_id hops --
+   * on every 30-minute tick. Nothing on the refresh path reads `previous_seasons`: its only
+   * consumer is `previousSeasonCount` in importPersistenceService, which the collector never calls.
+   *
+   * Measured 2026-09-04: a healthy ESPN league syncs in ~20-25s against the runner's 240s budget,
+   * yet 70 of 1284 runs in 24h still crossed it, and the runner drops whatever scope is next --
+   * always `traded_picks`, which is last.
+   */
+  it('sets currentStateOnly on the user-scoped path', async () => {
+    const runPipeline = vi.fn(async () => ok())
+    await fetchNormalizedForConnection(connection({ provider: 'espn', externalLeagueId: '123' }), {
+      runPipeline: runPipeline as never,
+      resolveCandidates: async () => ['u1'],
+    })
+    expect(runPipeline).toHaveBeenCalledWith({
+      provider: 'espn',
+      sourceId: '123',
+      userId: 'u1',
+      currentStateOnly: true,
+    })
+  })
+
+  it('sets currentStateOnly on the unowned path too', async () => {
+    const runPipeline = vi.fn(async () => ok())
+    await fetchNormalizedForConnection(
+      connection({ provider: 'sleeper', runKey: 'sleeper:123:2026' }),
+      { runPipeline: runPipeline as never },
+    )
+    expect(runPipeline).toHaveBeenCalledWith({
+      provider: 'sleeper',
+      sourceId: '123',
+      currentStateOnly: true,
+    })
+  })
+
+  /*
+   * ⚠ THE GUARD THAT MATTERS MORE THAN THE OPTIMISATION. Import and manual re-sync persist
+   * through persistImportWithCanonicalAudit, which counts `previous_seasons` into the legacy
+   * evidence rows. If this flag ever leaked to those call sites, every imported league would be
+   * silently recorded as having no history -- a data defect, not a slow sync. It is opt-IN, so a
+   * caller that says nothing keeps the full-history default.
+   */
+  it('is opt-in: a caller that says nothing keeps full history', () => {
+    const asImportCallSite: ImportedLeagueNormalizationInput = {
+      provider: 'espn',
+      sourceId: '123',
+      userId: 'u1',
+    }
+    expect(asImportCallSite.currentStateOnly).toBeUndefined()
+  })
+})
+
 describe('fetchNormalizedForConnection — keyless providers', () => {
   it('reads without resolving any user, and never passes a userId', async () => {
     const runPipeline = vi.fn(async () => ok())
@@ -169,7 +227,11 @@ describe('fetchNormalizedForConnection — keyless providers', () => {
 
     expect(out).toBe(NORMALIZED)
     expect(resolveCandidates).not.toHaveBeenCalled()
-    expect(runPipeline).toHaveBeenCalledWith({ provider: 'sleeper', sourceId: '123' })
+    expect(runPipeline).toHaveBeenCalledWith({
+      provider: 'sleeper',
+      sourceId: '123',
+      currentStateOnly: true,
+    })
     expect(runPipeline.mock.calls[0][0]).not.toHaveProperty('userId')
   })
 

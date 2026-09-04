@@ -40,6 +40,34 @@ export interface ImportedLeagueNormalizationInput {
   provider: ImportProvider
   sourceId: string
   userId?: string
+  /**
+   * Fetch ONLY the current season's mutable state — skip prior-season discovery.
+   *
+   * 🛑 A SCHEDULED REFRESH WAS PAYING FOR HISTORY IT THEN THREW AWAY. Every 30-minute
+   * `fantasy-os-exec-sync` tick ran this pipeline with no options, so each provider applied its
+   * IMPORT defaults and went looking for prior seasons — ESPN up to 6 SERIAL `loadEspnLeagueRaw`
+   * calls (one per candidate season, `discoverEspnPreviousSeasons`), Sleeper up to 10 SERIAL hops
+   * chasing `previous_league_id`, MFL likewise.
+   *
+   * ⚠ AND NOTHING ON THE REFRESH PATH READS THE RESULT. `previous_seasons` has exactly one
+   * consumer in the codebase — `previousSeasonCount` in `importPersistenceService`, which the
+   * collector never calls. The collector's own scope contract already says immutable historical
+   * scopes belong to the `*HistoricalBackfill*` services and are "never refetched" here.
+   *
+   * Measured 2026-09-04: a healthy ESPN league syncs in ~20-25s against the runner's 240s budget,
+   * but 70 of 1284 sync runs in 24h still crossed it — and because the runner checks the clock
+   * BEFORE each scope, whatever remains is dropped. `traded_picks` is last in
+   * `LEAGUE_SYNC_SCOPES`, so it is always the casualty. Removing work nobody reads is the cheapest
+   * way to buy that budget back.
+   *
+   * Only ESPN, MFL and Sleeper expose a knob for this; for Yahoo, Fantrax and Fleaflicker it is a
+   * no-op, which is correct — they do no prior-season discovery to skip.
+   *
+   * ⚠ IMPORT AND MANUAL RE-SYNC MUST NOT SET THIS. They persist through
+   * `persistImportWithCanonicalAudit`, which counts `previous_seasons` into the legacy evidence
+   * rows; a true here would silently record every imported league as having no history.
+   */
+  currentStateOnly?: boolean
 }
 
 export interface ImportedLeagueNormalizationResult {
@@ -81,12 +109,17 @@ export async function runImportedLeagueNormalizationPipeline(
 ): Promise<ImportedLeagueNormalizationResult | ImportedLeagueNormalizationError> {
   const provider = typeof input === 'string' ? 'sleeper' : input.provider
   const sourceId = typeof input === 'string' ? input : input.sourceId
+  /* Legacy string input is an import call site, so it keeps the full-history default. */
+  const currentStateOnly = typeof input === 'string' ? false : input.currentStateOnly === true
 
   try {
     let payload: unknown
 
     if (provider === 'sleeper') {
-      payload = await fetchSleeperLeagueForImport(sourceId)
+      payload = await fetchSleeperLeagueForImport(
+        sourceId,
+        currentStateOnly ? { maxPreviousSeasons: 0 } : {},
+      )
       if (!(payload as any)?.league?.league_id) {
         return {
           success: false,
@@ -111,7 +144,11 @@ export async function runImportedLeagueNormalizationPipeline(
           code: 'UNAUTHORIZED',
         }
       }
-      payload = await fetchEspnLeagueForImport(input.userId, sourceId)
+      payload = await fetchEspnLeagueForImport(
+        input.userId,
+        sourceId,
+        currentStateOnly ? { includePreviousSeasons: false } : {},
+      )
     } else if (provider === 'mfl') {
       if (typeof input === 'string' || !input.userId) {
         return {
@@ -120,7 +157,11 @@ export async function runImportedLeagueNormalizationPipeline(
           code: 'UNAUTHORIZED',
         }
       }
-      payload = await fetchMflLeagueForImport(input.userId, sourceId)
+      payload = await fetchMflLeagueForImport(
+        input.userId,
+        sourceId,
+        currentStateOnly ? { includePreviousSeasons: false } : {},
+      )
     } else if (provider === 'fantrax') {
       if (typeof input === 'string' || !input.userId) {
         return {
