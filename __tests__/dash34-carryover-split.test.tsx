@@ -67,7 +67,19 @@ describe('Dash34Carryover', () => {
 describe('the first-kickoff line', () => {
   const LOCK = {
     countdown: 'in 3d 2h',
-    countdownTo: '2026-09-04T00:20:00.000Z',
+    /*
+     * ⚠ RELATIVE, NEVER A FIXED STAMP — THIS TEST EXPIRED ON A DATE, NOT ON A COMMIT.
+     * It was '2026-09-04T00:20:00.000Z'. On 2026-09-04 that moment passed, the component
+     * correctly switched from a countdown to "underway", and `toMatch(/in \d/)` below
+     * started failing on unchanged code. It was the ONLY new break in the whole vitest
+     * ratchet at the time -- 59 files failing, 58 of them already in the baseline -- so
+     * one expiring fixture was holding the entire CI signal red.
+     *
+     * Third instance of this exact bomb in this repo: 7c0ca4336 (survivor voting, went
+     * off 2026-09-03) and the superseded 26e7d9e89 fixed the same shape elsewhere.
+     * A fixture that encodes an absolute date is a scheduled failure.
+     */
+    countdownTo: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     countdownLabel: 'FIRST KICKOFF',
     kickoffLabel: 'NFL · Week 1',
     headline: 'Steelers at Bills',
