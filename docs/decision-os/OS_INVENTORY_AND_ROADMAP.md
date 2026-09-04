@@ -166,6 +166,77 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.43 ✅ THE COMMISSIONER MANAGER DNA DIRECTORY — THE CLASSIFIER WAS NEVER THE GAP
+
+**2026-09-04.** The `managers` namespace has been returning an honest *"the Decision OS backend does
+not yet expose manager archetype, trend, or reliability classification"* error, and `live.ts` said in
+its own comment that the Phase 6.2 DNA classifier **"has no exposed route today"**.
+
+🛑 **THAT COMMENT WAS STALE, AND HAD BEEN FOR A WHILE.** `assembleManagerDna` runs on every request
+to `/api/decision-os/manager-intelligence`, computes a profile for **every manager in the league**,
+and then returns exactly one — the caller's own. The capability existed, with data
+(`decision_os_imported_activity`: 95 leagues, avg 179 rows). What did not exist was any route that
+did not narrow it away.
+
+⚠ **THE NARROWING IS DELIBERATE, WHICH IS WHY THIS NEEDED A DECISION AND NOT JUST PLUMBING.** The
+per-manager route's own header documents the privacy property: *"an unrelated caller could never see
+another manager's DNA/recommendations."* A directory widens that, so the question was never "wire it
+up" but "who may see whom".
+
+### The authorization model already existed — no second gate was invented
+
+`TIER_SCOPE_MAP` grants `intelligence:league:read` to the **commissioner and platform tiers only**; a
+manager-tier key holds `intelligence:manager:read` and is refused. That is exactly the boundary a
+directory of other people's behavioural profiles needs, and reusing it means there is no second
+authorization rule to drift out of sync with the first.
+
+Precedent checked rather than assumed, and it is nuanced: within-league psychology profiles are
+ALREADY shared league-wide (`listProfilesByLeague` feeds the packet's `managerPsychology` slice),
+while cross-league consistency is self-only (`psych-explain-route.ts`'s `isSelf`). A commissioner
+seeing within-league behavioural labels is consistent with what the app already does.
+
+### What was built
+
+- `computeLeagueDna` extracted from `resolveManagerIntelligencePayload` — the per-manager view and
+  the directory now run ONE pipeline. Two implementations of one rule is the bug, and a directory
+  whose classifications disagreed with a manager's own view of themselves would be worse than either.
+- `/api/v1/intelligence/league/manager-dna`, scoped as above.
+- `derivation` (the classifier's internal trace) is withheld even from an authorized commissioner;
+  `warnings` is carried, because hiding caveats makes every profile look equally solid.
+
+### Two fields still have no source, and are OPTIONAL rather than invented
+
+| field | why |
+|---|---|
+| `tenureSeasons` | a roster-history fact Decision OS does not model. `Team.seasonKey` is the SPORTS team, not a fantasy roster — checked, not assumed. |
+| `reliabilityScore` | the backend classifies reliability as an ordinal LEVEL; `engagementReliability` is passed through instead of a manufactured number. |
+
+`engagementTrend` **is** real — per-manager behavioral snapshots, via the same
+`deriveBehavioralTrend`/`deriveEventCountDelta` pair the league trend uses, so a manager's direction
+and their league's can never diverge by rule.
+
+🛑 **A MANAGER WITH FEWER THAN TWO SNAPSHOTS HAS NO TREND, AND MUST NOT GET ONE.** 'steady' is a
+measurement. Back-filling it from `engagementReliability` would repeat the exact misrepresentation
+this module refused to make for months — a LEVEL is not a DIRECTION, and a manager can be reliably
+absent. A mutation control proves the rule is load-bearing: fabricating 'steady' fails five tests.
+
+### ⚠ IT IS BUILT AND SWITCHED OFF — THE TRIPWIRE THIS FILE EXISTS FOR
+
+`isLiveReady('managers')` reads `commissioner_os_live_ready_managers` from `platform_config` and
+**defaults to false**. Measured: only `analytics` and `mission-control` are `true` (both set
+2026-07-04). So the directory returns "not yet integrated" until an owner flips it, and the page
+looks exactly as it did before.
+
+Three things must all be true for a real directory to render, and none is a code change:
+
+1. `commissioner_os_live_ready_managers = true` in `platform_config`
+2. `DECISION_OS_INTELLIGENCE_API_ENABLED=true`
+3. a registered `DECISION_OS_API_KEY` at commissioner or platform tier
+
+This is the pattern this document keeps recording — mechanism built and correct, adoption or a
+decision missing. It is written here so the next person does not re-derive a capability gap that
+was already closed.
+
 ## 0.42 ✅ R6 — THE THREE LISTS ARE NOW ONE. THE IDENTIFIER HALF IS MEASURED, NOT DONE.
 
 **2026-09-04.** R6 is *"Docs and identifiers only, no behaviour change. Do it in one pass so the
@@ -3822,7 +3893,7 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R3** Finish Player Value OS | **Done 2026-09-03.** R3.1 idpKicker (§0.22), R3.3 rosterValueGrade + the other two value questions (§0.23). |
 | ✅ | **R4** Identity OS | **Done 2026-09-03.** `playerIdentityCoverage` assertion + `minIdentityResolution` gating on lineupDecision. §0.24 |
 | ✅ | **R4b** Manager Psychology OS into the hub | **Done 2026-09-03 — all of R4b.1–R4b.7.** §0.25, §0.26, §0.27. |
-| ⬜ | **R5** Commissioner OS transport decision | Owner |
+| ✅ | **R5** Commissioner OS transport decision | **Decided by owner 2026-09-04: keep the HTTP service (Option B)** — Decision OS is also going to third parties as an API, a widget and headless, so the transport IS the product boundary; direct imports would have to be torn back out. The follow-on capability gap is CLOSED: the manager DNA directory now has a route, gated on the existing `intelligence:league:read` scope. ⚠ Shipped switched OFF — `commissioner_os_live_ready_managers` defaults false. §0.43 |
 | ⚠ | **R6** Rename pass | **Docs half DONE 2026-09-04 — the three lists are now one table (§0.42).** Found List 2 had already drifted (OsDomain is 9, doc said 8; `psychology` added by R4b). Identifier half measured and NOT taken: `OsDomain` 4 files, commissioner-os/sports-os 11 each, **fantasy-os 36**, and the seven marketed labels are user-visible product copy = owner's call. Needs a quiet tree, not discovery. §0.42 |
 | ✅ | **R7** Proactive alerts | **Fatigue budget done 2026-09-03; the rest was ALREADY BUILT.** Outbox, all four transports and the full push flow already existed — the outbox sent a notification that day. Only the budget was missing. Default is EXEMPT so a marketing flood can never drop a waiver result. ⚠ `web_push_subscriptions` is 0 rows: built and surfaced, zero adoption. §0.39 |
 
