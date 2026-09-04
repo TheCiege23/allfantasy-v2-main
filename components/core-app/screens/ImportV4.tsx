@@ -31,6 +31,7 @@ import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import { EspnConnectPanel } from '@/components/core-app/import/EspnConnectPanel'
 import { ImportProgress, type ImportStep } from '@/components/core-app/import/ImportProgress'
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
+import { markOnce, track, type Sport } from '@/lib/analytics/dataLayer'
 import { readBackfillOutcome } from '@/lib/league-import/backfillOutcome'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import {
@@ -592,6 +593,47 @@ function Working({ label }: { label: string }) {
  * silently drop every one of those into a blank Sleeper form — the link would
  * still "work", it would just ignore what it was asked to do.
  */
+/**
+ * One `league_connected` push, from either import path.
+ *
+ * ⚠ `first_connection` IS BROWSER-SCOPED, NOT ACCOUNT-SCOPED. It answers "is this
+ * the first league this BROWSER has connected", because nothing on this screen
+ * knows whether the account already had leagues — ImportV4 takes no session and
+ * no userId, and the commit response does not carry a total. It is right for the
+ * common case (a new user importing on the device they signed up on) and wrong
+ * for a returning user on a second device, who will be reported as activating
+ * again. Making it truthful means sourcing a "leagues before this import" count
+ * server-side; until then treat the activation number as an upper bound.
+ */
+const TRACKED_SPORTS = ['nfl', 'nba', 'nhl', 'mlb'] as const
+
+/**
+ * `sport` is a required field on league_connected, but DiscoveredLeague.sport is
+ * an optional free string echoed back by the provider. Falling back to 'nfl' is
+ * not a guess: both discovery calls in this file request `{ sport: 'nfl' }`
+ * explicitly, so an unset or unrecognised value on a row we asked for as NFL is
+ * a missing echo, not a different sport.
+ */
+function toSport(raw: string | undefined): Sport {
+  const value = (raw ?? '').trim().toLowerCase()
+  return (TRACKED_SPORTS as readonly string[]).includes(value) ? (value as Sport) : 'nfl'
+}
+
+function trackLeagueConnected(args: {
+  platform: ImportProvider
+  sport?: string
+  leagueCount: number
+}): void {
+  if (args.leagueCount < 1) return
+  track({
+    event: 'league_connected',
+    platform: args.platform,
+    sport: toSport(args.sport),
+    league_count: args.leagueCount,
+    first_connection: markOnce('league_connected:first'),
+  })
+}
+
 export type ImportV4Props = {
   state?: ImportPreviewState
   defaultProvider?: ImportProvider
@@ -941,6 +983,25 @@ export function ImportV4({
        * work already done. Harmless when there is no list — nothing reads the map.
        */
       setBulkStatus((prev) => (prev[sourceId] ? { ...prev, [sourceId]: 'done' } : prev))
+
+      /*
+       * ⚠ `res.ok` IS NOT "A LEAGUE WAS CONNECTED". The persist returns 200 for an
+       * idempotent replay too, and reports it as existed/skipped — the same
+       * distinction the block below already relies on for its copy. Counting
+       * those as conversions is the production bug recorded further down this
+       * file, where 33 leagues reported imported and zero were, wired straight
+       * into an ad platform's optimiser. Only a run that actually wrote is a
+       * `league_connected`.
+       */
+      const wroteSomething = !data?.skipped && !(data?.existed ?? data?.league_existed)
+      if (wroteSomething) {
+        trackLeagueConnected({
+          platform: provider,
+          sport: leagues.find((l) => l.sourceId === sourceId)?.sport,
+          leagueCount: 1,
+        })
+      }
+
       setPhase({
         k: 'done',
         leagueId,
@@ -956,7 +1017,10 @@ export function ImportV4({
         joinedExisting: Boolean(data?.joinedExisting),
       })
     },
-    [provider]
+    // `leagues` joins the deps for the sport lookup above. Safe: runCommit is
+    // referenced only from onClick handlers, never from an effect's dep array,
+    // so a new identity per discovery re-runs nothing.
+    [provider, leagues]
   )
 
   /**
@@ -1155,8 +1219,25 @@ export function ImportV4({
     }
     setBulkRunning(false)
     setBulkDone(true)
+
+    /*
+     * One event for the whole run, counting only rows that actually wrote.
+     * 'exists' is excluded for the same reason `skipped`/`existed` is on the
+     * single-league path: it is an idempotent replay, not a connection. Read off
+     * `results` rather than `bulkCounts`, because bulkCounts derives from
+     * `bulkStatus` state that has not re-rendered yet at this point.
+     */
+    const connected = results.filter((r) => r.status === 'done')
+    if (connected.length > 0) {
+      trackLeagueConnected({
+        platform: provider,
+        sport: selectedLeagues.find((l) => l.sourceId === connected[0].leagueId)?.sport,
+        leagueCount: connected.length,
+      })
+    }
+
     return results
-  }, [bulkRunning, selectedLeagues, importOneLeague])
+  }, [bulkRunning, selectedLeagues, importOneLeague, provider])
 
   /**
    * Re-runs a single failed league in place. Deliberately NOT a navigation: a

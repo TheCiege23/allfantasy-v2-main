@@ -134,6 +134,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // automation tooling used for Visual OS screenshot capture (docs/os/VISUAL_OS_V1_FOUNDATION.md).
   const isVisualQaMode = process.env.PLAYWRIGHT_E2E === '1';
   const gaMeasurementId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
+  // Gated on isVisualQaMode with the rest of them, for the reason the comment
+  // above gives: a GTM container loads whatever tags it holds, so leaving it on
+  // under Visual OS capture would reintroduce exactly the outbound-call volume
+  // that suppression exists to remove — and more of it than any single pixel.
+  const gtmId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GTM_ID || '';
   const metaPixelId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
   const fbAppId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
   return (
@@ -324,6 +329,42 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 gtag('config', '${gaMeasurementId}', { send_page_view: true });
                 gtag('config', 'AW-17768764414');
               `}
+            </Script>
+          </>
+        )}
+
+        {/*
+          Google Tag Manager.
+
+          🛑 THIS CONTAINER MUST NOT CARRY A META PIXEL BASE TAG OR A GOOGLE TAG.
+          Both are already installed directly above — `meta-pixel-base` calls
+          fbq('init') + fbq('track','PageView'), and `google-gtag` calls
+          gtag('config') for the GA4 property AND for AW-17768764414. Adding the
+          usual "base pixels fire on Initialization – All Pages" tags in GTM
+          double-initialises both vendors and double-counts every PageView.
+          TikTok and Reddit have no in-repo install, so their base tags DO belong
+          in the container.
+
+          The init script is `beforeInteractive` on purpose: `dataLayer` has to be
+          an array before the container script runs, and before any component
+          effect can push onto it. lib/analytics/dataLayer.ts creates the array
+          itself if it has to, so a push that lands first is not lost — but the
+          ordering here is what makes that the fallback rather than the norm.
+
+          No <noscript> iframe: it only serves JS-disabled clients, who cannot use
+          the app at all, and it is a documented source of hydration warnings.
+        */}
+        {gtmId && (
+          <>
+            <Script id="gtm-init" strategy="beforeInteractive">
+              {`window.dataLayer = window.dataLayer || [];`}
+            </Script>
+            <Script id="gtm-loader" strategy="afterInteractive">
+              {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${gtmId}');`}
             </Script>
           </>
         )}

@@ -141,6 +141,21 @@
         "NODE_OPTIONS": "--max-old-space-size=6144",
         "AF_NEXT_DIST_DIR": ".next-playwright-e2e"
       }
+    },
+    {
+      "// next-dev-gtm": "GTM/dataLayer verification server. Own dist dir per the convention above — a dev server killed mid-compile leaves the previous one locked on Windows. NEXT_PUBLIC_GTM_ID is deliberately UNSET: the point of the check is that lib/analytics/dataLayer.ts queues events with no container present, which is also the real production state until the container is published.",
+      "name": "next-dev-gtm",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-gtm",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
     }
   ]
 }

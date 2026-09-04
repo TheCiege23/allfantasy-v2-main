@@ -14,6 +14,7 @@ import { Suspense, useState } from 'react'
 // globals.css instead of the design's teal. Must precede af-auth.css.
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-auth.css'
+import { trackOnce } from '@/lib/analytics/dataLayer'
 import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialProviderResolver'
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 
@@ -369,6 +370,21 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             : 'We could not create your account. Please try again.'
         )
         return
+      }
+
+      /*
+       * The account is committed at this point — /api/auth/register has returned
+       * ok:true with the created id. Fired here rather than after signIn because
+       * the branch below is explicit that a failed sign-in does NOT mean signup
+       * failed; hanging the conversion off signIn would drop a real account.
+       *
+       * Keyed on the server's own userId. This handler is an onSubmit, so a
+       * refresh cannot replay it — the once-guard is here for a double-submit and
+       * for React's StrictMode double-invoke in dev.
+       */
+      const createdUserId = typeof data.userId === 'string' ? data.userId : null
+      if (createdUserId) {
+        trackOnce(`sign_up:${createdUserId}`, { event: 'sign_up', method: 'email' })
       }
 
       const signedIn = await signIn('credentials', {

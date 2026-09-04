@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { track } from '@/lib/analytics/dataLayer'
+import { resolvePlanTierFromSku } from '@/lib/monetization-analytics'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
 import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/planIncludes'
@@ -170,6 +172,26 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
     successMessage: 'Purchase complete. We refreshed your access.',
   })
 
+  /*
+   * app/pricing/page.tsx is a server component, so the view event has to live
+   * here. Empty deps: one push per mount, not one per interval toggle or
+   * checkout attempt. Deliberately NOT once-guarded across mounts — a repeat
+   * pricing view is a real signal, and view_pricing is not a conversion.
+   *
+   * ⚠ THE REF IS NOT BELT-AND-BRACES. next.config.js sets reactStrictMode: true,
+   * which double-invokes effects in dev — measured on /pricing before this guard:
+   * two view_pricing entries on one load, with two different event_ids. React
+   * does not do that in a production build, so this is not a prod double-count,
+   * but the guide's verification pass counts occurrences by hand in GTM Preview
+   * and a phantom second hit there is a false alarm worth not shipping.
+   */
+  const viewTracked = useRef(false)
+  useEffect(() => {
+    if (viewTracked.current) return
+    viewTracked.current = true
+    track({ event: 'view_pricing' })
+  }, [])
+
   const ordered = useMemo(
     () =>
       LANE_ORDER.map((f) => plans.find((p) => p.planFamily === f)).filter(
@@ -191,6 +213,13 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   async function startCheckout(sku: string, productType: 'subscription' | 'token_pack') {
     setError(null)
     setPendingSku(sku)
+    /*
+     * Fired on the click, before resolveCheckoutUrl — this is intent, not
+     * outcome, and a checkout that fails to resolve is still a begin_checkout.
+     * Not once-guarded: a user comparing two plans genuinely begins checkout
+     * twice, and begin_checkout is a funnel step rather than a conversion.
+     */
+    track({ event: 'begin_checkout', plan: resolvePlanTierFromSku(sku) })
     const result = await resolveCheckoutUrl({ sku, productType, returnPath: '/pricing' })
     if (!result.ok) {
       setError(result.error)

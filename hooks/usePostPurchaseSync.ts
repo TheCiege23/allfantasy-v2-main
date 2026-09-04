@@ -16,6 +16,7 @@ import {
   trackSubscriptionPurchaseSuccess,
   trackTokenPurchaseSuccess,
 } from '@/lib/monetization-analytics'
+import { trackOnce } from '@/lib/analytics/dataLayer'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { dispatchPostPurchaseSyncEvent } from '@/lib/state-consistency/post-purchase-sync-events'
 import { dispatchStateRefreshEvent } from '@/lib/state-consistency/state-events'
@@ -318,6 +319,37 @@ export function usePostPurchaseSync(options: UsePostPurchaseSyncOptions = {}): U
           })
 
           if (syncStatus === 'synced') {
+            /*
+             * GTM `purchase`, alongside — not instead of — the gtag events below.
+             * Those go straight to GA4 via lib/gtag; this one feeds the container
+             * so Meta/TikTok/Reddit can dedup it against the server-side
+             * Conversions API using the shared event_id.
+             *
+             * ⚠ NO `value` OR `currency`. Nothing on the checkout return carries a
+             * charge amount — grants happen on the invoice.payment_succeeded
+             * webhook (see the note at the top of this file) — so a revenue
+             * figure here would have to be invented. It is omitted instead: an
+             * absent value is a gap the platform reports, a wrong one is a number
+             * that silently trains bidding. Revenue belongs on the server-side
+             * event, keyed to this same transaction_id.
+             *
+             * ⚠ ONCE-GUARDED, AND THIS IS THE ONE SITE THAT GENUINELY NEEDS IT.
+             * Stripe's success_url leaves ?checkout=success&session_id=… in the
+             * address bar, so this effect re-runs and re-enters this branch on
+             * every refresh and every back-navigation to the page.
+             */
+            if (sessionId) {
+              trackOnce(`purchase:${sessionId}`, {
+                event: 'purchase',
+                // `plan` is required. A token-pack purchase resolves to the
+                // 'tokens' tier and a SKU nothing recognises resolves to
+                // 'unknown' — both are real members of MonetizationPlanTier, so
+                // the fallback names the gap rather than inventing a plan.
+                plan: effectivePlanTiers[0] ?? 'unknown',
+                transaction_id: sessionId,
+              })
+            }
+
             if (evidence.subscription) {
               trackSubscriptionPurchaseSuccess({
                 returnPath,
