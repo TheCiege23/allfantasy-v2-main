@@ -17,7 +17,30 @@ interface CheckResult {
 }
 
 export default function ChooseUsernameForm({ prefill, callbackUrl }: Props) {
-  const { update: updateSession } = useSession()
+  /*
+   * ⚠ DESTRUCTURING THIS TOOK THE WHOLE SITE DOWN, AND ONLY IN PRODUCTION.
+   *
+   * next-auth v4's `useSession()` throws a helpful "must be wrapped in a
+   * <SessionProvider>" error in development, but in a PRODUCTION build that
+   * guard is compiled out and it simply returns `undefined`. Destructuring then
+   * throws a TypeError during SSR, which escapes to the root layout boundary and
+   * blanks the page — every page, not just this one.
+   *
+   * Observed on Railway 2026-08-22, repeating on each request:
+   *   TypeError: Cannot destructure property 'update' of
+   *     '(0 , o.useSession)(...)' as it is undefined
+   *     at /app/.next-build/server/chunks/91347.js   digest: '1493842128'
+   *
+   * The provider wiring is correct (layout.tsx renders AppProviders ->
+   * SessionAppProvider -> SessionProvider), so WHY the context is missing under
+   * Railway is a separate, still-open question. This makes the component survive
+   * its absence instead of taking the application with it.
+   *
+   * ⚠ 39 OTHER FILES DESTRUCTURE `useSession()` THE SAME WAY. Each is the same
+   * landmine; this is the one that detonated. A codemod is the real fix.
+   */
+  const session = useSession()
+  const updateSession = session?.update
   const router = useRouter()
 
   const [username, setUsername] = useState(prefill)
@@ -106,10 +129,22 @@ export default function ChooseUsernameForm({ prefill, callbackUrl }: Props) {
         setSaveError(data.error ?? "Failed to save username")
         return
       }
-      // Refresh the JWT cookie so the middleware gate sees the new username
-      // without requiring a sign-out / sign-in cycle.
-      await updateSession({ username: normalized })
-      router.push(callbackUrl)
+      /*
+       * Refresh the JWT cookie so the middleware gate sees the new username
+       * without requiring a sign-out / sign-in cycle.
+       *
+       * When `update` is unavailable (no session context — see the note above) a
+       * client-side push would bounce off the username gate forever, because the
+       * cookie still carries the old claim. A full navigation re-reads the
+       * session from the server, which picks the username up from the database
+       * via the JWT callback. Slower, but it completes instead of looping.
+       */
+      if (updateSession) {
+        await updateSession({ username: normalized })
+        router.push(callbackUrl)
+      } else {
+        window.location.assign(callbackUrl)
+      }
     } catch {
       setSaveError("Something went wrong. Please try again.")
     } finally {
