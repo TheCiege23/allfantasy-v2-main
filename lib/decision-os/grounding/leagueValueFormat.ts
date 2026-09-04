@@ -1,4 +1,5 @@
 import { detectQbFormat } from '@/lib/core-app/slotEligibility'
+import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
 
 /**
  * League-derived inputs for pricing and scoring, read off `CanonicalLeagueRules`.
@@ -37,6 +38,37 @@ import { detectQbFormat } from '@/lib/core-app/slotEligibility'
  * Returns null when the rules cannot be read — the caller must then say it does not know, never
  * fall back to a default. A stated default is a claim.
  */
+/**
+ * R1.5 — does this league want the devy board even though it is not an NCAAF league?
+ *
+ * 🛑 THE GAP THIS CLOSES. `want.devy` was `sport === 'NCAAF'`, and the board is college-football
+ * only, so that test is right for every ordinary league. It is WRONG for a C2C / devy-slot NFL
+ * dynasty league, which rosters college players in an NFL league and therefore wants the board
+ * while failing the sport test. Recorded as a known limitation when the sport scoping shipped.
+ *
+ * ⚠ IT READS THE VARIANT, WHICH IS ALREADY IN THE RULES THE PACKET LOADS. `canonicalLeagueRules`
+ * puts `leagueVariant` at `general.variant`, so this costs NO new query — the same argument
+ * `deriveValueFormat` makes right below it. The alternative was calling `isDevyLeague` from the
+ * chat route, which is a DB round-trip on every turn and delays the packet kick.
+ *
+ * ⚠ IT MATCHES THE CANONICAL VARIANT CONSTANT, NOT A SUBSTRING. `lib/devy/types.ts` defines
+ * `DEVY_DYNASTY_VARIANT = 'devy_dynasty'`, and `isDevyLeague` compares against exactly that. A
+ * loose `/devy/i` test here would be a SECOND definition of "is this a devy league" that could
+ * drift from the first — the two-implementations-of-one-rule bug this repo has paid for before.
+ * The comparison is case-insensitive only to survive an importer's casing, not to widen the rule.
+ *
+ * ⚠ AND IT DELIBERATELY DOES NOT READ `devy_league_configs`. That is the other half of
+ * `isDevyLeague`, and reading it here would be the query this derivation exists to avoid. A
+ * league with a config row but no variant is not detected by this path; that is a known and
+ * accepted narrowing, recorded rather than hidden — see §0.38.
+ */
+export function deriveWantsDevyBoard(rules: unknown): boolean {
+  if (!rules || typeof rules !== 'object') return false
+  const r = rules as { general?: { variant?: unknown } }
+  const v = r.general?.variant
+  return typeof v === 'string' && v.trim().toLowerCase() === DEVY_DYNASTY_VARIANT
+}
+
 export function deriveValueFormat(rules: unknown): { format: string; qbFormat: string } | null {
   if (!rules || typeof rules !== 'object') return null
   const r = rules as { general?: { format?: unknown }; roster?: { starters?: unknown } }

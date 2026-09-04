@@ -543,8 +543,8 @@ export function oldestAsOf(rows: ReadonlyArray<{ computedAt?: string | null }>):
  * of packet.ts's imports, `ChimmyContextEngine` included, on messages that never build a packet.
  * One implementation, two callers, no second copy to drift.
  */
-export { deriveValueFormat, deriveIdpRules } from './leagueValueFormat'
-import { deriveValueFormat, deriveIdpRules, deriveLeagueSizeAndPpr } from './leagueValueFormat'
+export { deriveValueFormat, deriveIdpRules, deriveWantsDevyBoard } from './leagueValueFormat'
+import { deriveValueFormat, deriveIdpRules, deriveLeagueSizeAndPpr, deriveWantsDevyBoard } from './leagueValueFormat'
 
 /**
  * Date the psychology slice by its OLDEST profile, for the same reason `oldestAsOf` exists:
@@ -833,10 +833,28 @@ export async function buildDecisionOsGroundingPacket(
       ? kick('psychologyConsistency', loadPsychologyConsistencySlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
-  const pDevy = want.devy && !devyKill
+  /*
+   * R1.5 — devy is requested for NCAAF, OR for a league whose VARIANT says it rosters college
+   * players (a C2C / devy-slot NFL dynasty league). The sport test alone missed the second kind.
+   *
+   * ⚠ THE NCAAF PATH IS UNCHANGED AND STAYS FULLY PARALLEL. When the caller already asked for
+   * devy this resolves immediately and the load kicks with the rest of the wave — exactly the
+   * escape `pValueFormat` gives a caller who supplies `args.valueFormat`. Only the case that
+   * previously got NOTHING pays the one hop off `pRules`, and it is the same hop the market lane
+   * already pays for the same reason.
+   */
+  const pWantsDevy: Promise<boolean> = want.devy
+    ? Promise.resolve(true)
+    : pRules.then(deriveWantsDevyBoard).catch(() => false)
+
+  const pDevy = !devyKill
     ? kick(
         'devyValues',
-        valueOs.loadDevy({ sport: args.sport, currentSeason: args.season }).catch(() => null),
+        pWantsDevy.then((wants) =>
+          wants
+            ? valueOs.loadDevy({ sport: args.sport, currentSeason: args.season }).catch(() => null)
+            : null,
+        ),
       )
     : Promise.resolve(null)
 
@@ -975,23 +993,43 @@ export async function buildDecisionOsGroundingPacket(
   }
 
   // ── Devy values ───────────────────────────────────────────────────────────────────────────
+  /*
+   * R1.5 — gated on the RESOLVED eligibility, not on `want.devy`.
+   *
+   * 🛑 GATING THE LOAD ALONE WAS NOT ENOUGH, AND THE WIRING TEST IS WHAT CAUGHT IT. The first
+   * version of this change chained the FETCH off the rules but left this block reading
+   * `want.devy`, so a devy-variant league fetched the board and then threw it away as
+   * `not_requested`. Both halves have to consult the same answer.
+   */
+  const wantsDevy = await pWantsDevy
+  /*
+   * Whether the BOARD APPLIES at all, which is what the failure wording turns on. An NCAAF
+   * league and a devy-variant league both roster college players, so an empty result means "the
+   * board is empty" for either. Only a league that never wanted it gets "no such model".
+   */
+  /*
+   * ⚠ `wantsDevy` ALONE IS THE WRONG TEST, AND AN EXISTING SUITE CAUGHT IT. A caller passing
+   * `want.devy` for a sport with no model does not make a model exist — that case must still
+   * read `no_producer`, which is what "does not claim it is merely cold" asserts. So the board
+   * applies only when the sport is NCAAF, or when the VARIANT said so: if the caller did not ask
+   * and `wantsDevy` still resolved true, it can only have come from `deriveWantsDevyBoard`.
+   */
+  const devyBoardApplies = args.sport.toUpperCase() === 'NCAAF' || (!want.devy && wantsDevy)
   let devyValues: GroundedSlice<ValueLookup[]> = absent(NOT_REQUESTED)
-  if (want.devy && devyKill) devyValues = absent(devyKill)
-  else if (want.devy) {
+  if (wantsDevy && devyKill) devyValues = absent(devyKill)
+  else if (wantsDevy) {
     const v = verdictFor('globalPlayerValue')
     const rows = await pDevy
     devyValues = hasSubstance(rows)
       ? present(rows, { servedFrom: 'store', conclusive: v })
       : absent({
-          reason: args.sport.toUpperCase() === 'NCAAF' ? 'not_computed' : 'no_producer',
-          detail:
-            args.sport.toUpperCase() === 'NCAAF'
-              ? 'The devy board is empty for this season.'
-              : `There is no devy valuation model for ${args.sport}. The board is college football only.`,
-          remedy:
-            args.sport.toUpperCase() === 'NCAAF'
-              ? 'The pool seeds on the import-players cron; it fills on the next run.'
-              : 'Nothing to fix — no such model exists.',
+          reason: devyBoardApplies ? 'not_computed' : 'no_producer',
+          detail: devyBoardApplies
+            ? 'The devy board is empty for this season.'
+            : `There is no devy valuation model for ${args.sport}. The board is college football only.`,
+          remedy: devyBoardApplies
+            ? 'The pool seeds on the import-players cron; it fills on the next run.'
+            : 'Nothing to fix — no such model exists.',
         }, v)
   }
 

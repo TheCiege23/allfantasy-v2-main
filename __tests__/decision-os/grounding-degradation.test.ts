@@ -670,3 +670,70 @@ describe('R2.6 · waiverDecision reports an honest gap, and only when requested'
     expect(p.waiverDecision?.gap).toBeTruthy()
   })
 })
+
+/**
+ * R1.5 — devy is requested for a devy-variant league even though the sport test fails it.
+ *
+ * 🛑 WIRED, NOT JUST DERIVED. `deriveWantsDevyBoard` has its own unit suite; that proves the
+ * predicate and says nothing about whether the packet consults it. This asserts the path through
+ * the builder — the R1.4 lesson, where 11 green helper tests sat on top of a call site reading a
+ * property that did not exist.
+ */
+describe('R1.5 · a devy-variant league gets the board without being NCAAF', () => {
+  it('🛑 want.devy false + devy_dynasty variant STILL loads the board', async () => {
+    loadRules.mockResolvedValue({ general: { format: 'dynasty', variant: 'devy_dynasty' } })
+    loadDevy.mockResolvedValue([{ status: 'ok', value: { playerId: 'devy1' } }])
+
+    const p = await buildDecisionOsGroundingPacket({
+      ...ARGS,
+      want: { values: true, devy: false, projections: true, leagueRules: true },
+    })
+
+    expect(loadDevy).toHaveBeenCalled()
+    expect(p.devyValues.present).toBe(true)
+  })
+
+  it('an ordinary dynasty league still does NOT load it', async () => {
+    loadRules.mockResolvedValue({ general: { format: 'dynasty', variant: 'dynasty' } })
+    loadDevy.mockResolvedValue([{ status: 'ok', value: { playerId: 'devy1' } }])
+
+    const p = await buildDecisionOsGroundingPacket({
+      ...ARGS,
+      want: { values: true, devy: false, projections: true, leagueRules: true },
+    })
+
+    expect(loadDevy).not.toHaveBeenCalled()
+    expect(p.devyValues.present).toBe(false)
+  })
+
+  /**
+   * ⚠ THE NCAAF PATH MUST NOT REGRESS. When the caller already asked, the load kicks with the
+   * rest of the wave and never waits on rules — the same escape `args.valueFormat` gives the
+   * market lane. If this ever starts depending on rules, an NCAAF league pays a hop for nothing.
+   */
+  it('🛑 an explicit want.devy still loads even when the rules never resolve', async () => {
+    loadRules.mockRejectedValue(new Error('rules down'))
+    loadDevy.mockResolvedValue([{ status: 'ok', value: { playerId: 'devy1' } }])
+
+    const p = await buildDecisionOsGroundingPacket({
+      ...ARGS,
+      want: { values: true, devy: true, projections: true, leagueRules: true },
+    })
+
+    expect(loadDevy).toHaveBeenCalled()
+    expect(p.devyValues.present).toBe(true)
+  })
+
+  it('a failed rules load degrades to no devy, never to a throw', async () => {
+    loadRules.mockRejectedValue(new Error('rules down'))
+    loadDevy.mockResolvedValue([{ status: 'ok', value: { playerId: 'devy1' } }])
+
+    const p = await buildDecisionOsGroundingPacket({
+      ...ARGS,
+      want: { values: true, devy: false, projections: true, leagueRules: true },
+    })
+
+    expect(loadDevy).not.toHaveBeenCalled()
+    expect(p.devyValues.present).toBe(false)
+  })
+})
