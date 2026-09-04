@@ -7722,6 +7722,23 @@ model Roster {
   id                   String                     @id @default(uuid())
   leagueId             String
   platformUserId       String
+  /// The same team's row in `redraft_rosters`, when one is known.
+  ///
+  /// Exists because the guillotine engines disagree about what a team IS: the automation engine
+  /// works in this model, while the flag consumers read (`isEliminated`), the trade path, standings
+  /// and Chimmy's grounding all read `RedraftRoster`. There was no FK, no externalId and no mapping
+  /// column between the two — only the semantic pair platformUserId <-> ownerId, which is not total.
+  ///
+  /// ⚠ NULLABLE BECAUSE THE MAPPING IS INCOMPLETE, NOT BECAUSE IT IS OPTIONAL. Measured on
+  /// 2026-09-04: 2,721 of 3,222 rosters (84.5%) link; 501 do not — 23 carry an app uuid in
+  /// platformUserId rather than a platform id, 6 carry neither shape, the rest have no counterpart.
+  /// A NULL here means "no known redraft roster", which a caller must handle explicitly rather than
+  /// treat as "not eliminated".
+  ///
+  /// Column added by hand via `prisma/migrations-pending/` SQL, applied 2026-09-04; this
+  /// declaration only teaches the Prisma Client about a column that already exists.
+  redraftRosterId      String?                    @unique
+  redraftRoster        RedraftRoster?             @relation("RosterRedraftLink", fields: [redraftRosterId], references: [id], onDelete: SetNull)
   playerData           Json
   faabRemaining        Int?
   createdAt            DateTime                   @default(now())
@@ -13730,6 +13747,10 @@ model RedraftRoster {
   playoffWinningMatchups   RedraftPlayoffMatchup[]    @relation("RedraftPlayoffWinnerRoster")
   playoffSeeds             RedraftPlayoffSeed[]
   players                  RedraftRosterPlayer[]
+  /// Back-relation for `Roster.redraftRosterId`. See that field for why the link exists and why it
+  /// is incomplete; nothing here should assume every redraft roster has a `Roster` counterpart —
+  /// 60 of them do not.
+  legacyRoster             Roster?                    @relation("RosterRedraftLink")
   rosterMoveHistory        RedraftRosterMoveHistory[]
   season                   RedraftSeason              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   tradeAssetsFrom          RedraftTradeAsset[]        @relation("RedraftTradeAssetFrom")

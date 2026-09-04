@@ -15,6 +15,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 
 export interface CanonicalSeasonMaterializationResult {
   seasonId: string | null
@@ -118,6 +119,31 @@ export async function materializeRedraftSeasonForImportedLeague(
       }),
     ),
   )
+
+  /*
+   * Link each `Roster` to the `RedraftRoster` just created for the same manager.
+   *
+   * This is the moment the correspondence first EXISTS — `Roster` rows were written during league
+   * bootstrap, their redraft counterparts only now — so it is the earliest point the link can be
+   * set at all. Note `ownerId` above uses the same `platformUserId || id` fallback that
+   * `bootstrapLeagueFromNormalizedImport` uses for `Roster.platformUserId`, which is exactly why
+   * the two resolve to each other here.
+   *
+   * ⚠ AN OPTIMIZATION, NOT THE GUARANTEE. `resolveRedraftRosterId` reconciles lazily on the read
+   * path, so a league that never passes through this function still resolves the first time
+   * something needs it. Enforcing the invariant in one place and warming it here is deliberate:
+   * the alternative is the same write copied across twelve `Roster` and eight `RedraftRoster`
+   * creation sites, where the next site added silently breaks it.
+   *
+   * Non-fatal on purpose. A failed reconcile must not fail an import — the lazy path will catch it,
+   * and a league that imported is worth more than a link that can be recomputed.
+   */
+  await reconcileRosterRedraftLinks(leagueId).catch((e) => {
+    console.warn(
+      '[import] roster link reconcile failed; lazy resolution will retry',
+      JSON.stringify({ leagueId, error: e instanceof Error ? e.message : String(e) }),
+    )
+  })
 
   return { seasonId: season.id, created: true, rosterCount: rosters.length }
 }

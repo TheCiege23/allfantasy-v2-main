@@ -21,8 +21,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  rosterFind: vi.fn(),
-  redraftFind: vi.fn(),
+  resolve: vi.fn(),
   redraftUpdate: vi.fn(),
   rosterUpdate: vi.fn(),
 }))
@@ -30,9 +29,18 @@ const h = vi.hoisted(() => ({
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    roster: { findMany: h.rosterFind, update: h.rosterUpdate },
-    redraftRoster: { findMany: h.redraftFind, update: h.redraftUpdate },
+    roster: { update: h.rosterUpdate },
+    redraftRoster: { update: h.redraftUpdate },
   },
+}))
+/*
+ * The id-space resolution moved OUT of this engine and into the shared reconciler once
+ * `Roster.redraftRosterId` existed. Mocking the resolver rather than the two findMany calls it
+ * replaced is the point: the engine no longer owns a copy of that rule, so a test that still
+ * described the join would be asserting an implementation this file does not have.
+ */
+vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks', () => ({
+  resolveRedraftRosterId: h.resolve,
 }))
 
 import { markRedraftRostersEliminated } from '@/lib/guillotine/GuillotineEliminationEngine'
@@ -43,9 +51,8 @@ beforeEach(() => {
 })
 
 describe('🛑 the flag is written to the model that has it', () => {
-  it('resolves Roster -> RedraftRoster by platform user id and updates the right one', async () => {
-    h.rosterFind.mockResolvedValue([{ id: 'roster-uuid-1', platformUserId: '641060272219443200' }])
-    h.redraftFind.mockResolvedValue([{ id: 'cmtl6v21c12wq', ownerId: '641060272219443200' }])
+  it('writes the flag to the RedraftRoster the resolver returns', async () => {
+    h.resolve.mockResolvedValue('cmtl6v21c12wq')
 
     const out = await markRedraftRostersEliminated('L1', ['roster-uuid-1'])
 
@@ -66,8 +73,7 @@ describe('🛑 the flag is written to the model that has it', () => {
      * a chopped roster genuinely may not resolve. Silence there means standings show a chopped
      * team as alive with nothing anywhere saying why.
      */
-    h.rosterFind.mockResolvedValue([{ id: 'roster-uuid-2', platformUserId: 'not-a-sleeper-id' }])
-    h.redraftFind.mockResolvedValue([])
+    h.resolve.mockResolvedValue(null)
 
     const out = await markRedraftRostersEliminated('L1', ['roster-uuid-2'])
 
@@ -77,11 +83,7 @@ describe('🛑 the flag is written to the model that has it', () => {
   })
 
   it('marks what it can and reports what it cannot, in one batch', async () => {
-    h.rosterFind.mockResolvedValue([
-      { id: 'r-ok', platformUserId: '111' },
-      { id: 'r-bad', platformUserId: 'uuid-owner' },
-    ])
-    h.redraftFind.mockResolvedValue([{ id: 'rr-ok', ownerId: '111' }])
+    h.resolve.mockImplementation(async (_l: string, id: string) => (id === 'r-ok' ? 'rr-ok' : null))
 
     const out = await markRedraftRostersEliminated('L1', ['r-ok', 'r-bad'])
 
@@ -92,7 +94,7 @@ describe('🛑 the flag is written to the model that has it', () => {
   it('does nothing, quietly, when nobody was chopped', async () => {
     const out = await markRedraftRostersEliminated('L1', [])
     expect(out).toEqual({ marked: [], unresolved: [] })
-    expect(h.rosterFind).not.toHaveBeenCalled()
+    expect(h.resolve).not.toHaveBeenCalled()
   })
 
   it('🛑 does NOT swallow a real write failure', async () => {
@@ -100,8 +102,7 @@ describe('🛑 the flag is written to the model that has it', () => {
      * The other half of the original defect. `.catch(() => {})` meant a genuine database error was
      * indistinguishable from success. A rejection must propagate.
      */
-    h.rosterFind.mockResolvedValue([{ id: 'r1', platformUserId: '111' }])
-    h.redraftFind.mockResolvedValue([{ id: 'rr1', ownerId: '111' }])
+    h.resolve.mockResolvedValue('rr1')
     h.redraftUpdate.mockRejectedValue(new Error('db exploded'))
 
     await expect(markRedraftRostersEliminated('L1', ['r1'])).rejects.toThrow('db exploded')

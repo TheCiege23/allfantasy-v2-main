@@ -9,6 +9,7 @@ import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
 import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
+import { resolveRedraftRosterId } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 
 export interface RunEliminationInput {
@@ -50,23 +51,19 @@ export async function markRedraftRostersEliminated(
   const unresolved: string[] = []
   if (rosterIds.length === 0) return { marked, unresolved }
 
-  const rosters = await prisma.roster
-    .findMany({ where: { id: { in: rosterIds } }, select: { id: true, platformUserId: true } })
-    .catch(() => [] as Array<{ id: string; platformUserId: string }>)
-
-  const ownerByRoster = new Map(rosters.map((r) => [r.id, r.platformUserId]))
-  const owners = rosters.map((r) => r.platformUserId).filter(Boolean)
-
-  const redraft = owners.length
-    ? await prisma.redraftRoster
-        .findMany({ where: { leagueId, ownerId: { in: owners } }, select: { id: true, ownerId: true } })
-        .catch(() => [] as Array<{ id: string; ownerId: string }>)
-    : []
-  const redraftByOwner = new Map(redraft.map((r) => [r.ownerId, r.id]))
-
   for (const rosterId of rosterIds) {
-    const owner = ownerByRoster.get(rosterId)
-    const redraftId = owner ? redraftByOwner.get(owner) : undefined
+    /*
+     * Resolved through `Roster.redraftRosterId`, the real column, rather than by re-deriving the
+     * platform-user-id join here.
+     *
+     * That join was what this function shipped with, and it worked — but it re-computed a
+     * correspondence the schema can now state, and every consumer that re-derives a rule owns a
+     * copy of it. `resolveRedraftRosterId` also reconciles LAZILY when the column is null, so a
+     * league whose link was never warmed still resolves the first time a chop needs it. Without
+     * that, the one-time backfill decays: measured 2026-09-04, the newest 45 rosters in production
+     * linked at 36% against 84% for the established population.
+     */
+    const redraftId = await resolveRedraftRosterId(leagueId, rosterId).catch(() => null)
     if (!redraftId) {
       unresolved.push(rosterId)
       continue
