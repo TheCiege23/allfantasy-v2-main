@@ -927,6 +927,50 @@ carries the COMMITTED `tsconfig.json`.
 belong to sessions that are still running, and removing one breaks a peer's
 typecheck rather than yours. Leave the file; check somewhere else.
 
+#### A test double that stopped doubling anything
+
+Three of the five test failures repaired on 2026-09-03 were ONE bug: a module
+changed dependency and its mock did not. It has two faces, and the second is why
+this sits here rather than only in the migration note far above.
+
+**LOUD.** The mock lacks an export the module now calls and the suite dies —
+`No "getTwilioRuntimeStatus" export is defined on the "@/lib/twilio-client" mock`,
+or `Cannot read properties of undefined (reading 'findMany')` where a `vi.mock` of
+`@/lib/prisma` lists four delegates and the module reads six. Irritating, but it
+tells you.
+
+🛑 **SILENT, AND THIS IS THE ONE THAT COSTS.** The assertion still passes —
+against nothing. `__tests__/world-cup-ai` mocked `@/lib/openai-client` and spied
+on it, while `1b9fcfe36` had routed the service through `lib/ai/providerRouter`.
+Its "does not call OpenAI when bracketBrainAiEntitled is false" test was GREEN,
+and would have stayed green with the entitlement gate DELETED, because it watched
+a function the service never calls under any conditions. A guard that cannot fail
+is worse than no guard: it gets cited as coverage.
+
+⚠ **AND NOTHING IN THIS REPO WOULD HAVE CAUGHT EITHER FORM ON ITS OWN.**
+`tsconfig.json` excludes every test and spec pattern repo-wide — `__tests__`,
+`tests`, `**/*.test.ts(x)`, `**/*.spec.ts(x)` — so NO test file is typechecked by
+any run here (`tsc --listFilesOnly` reports zero of them among 12,548 files), and
+`next.config.js` sets `typescript.ignoreBuildErrors: true`, so a green build is
+not a typecheck either. A mock can contradict its module's real contract
+indefinitely and nothing goes red until a human runs the suite and reads it.
+
+**So when a module changes dependency, two steps, not one:**
+
+1. Grep the test tree for mocks of the OLD dependency. The fantasycalc note above
+   says this for one migration; it generalises to every one.
+2. For each assertion that still PASSES, ask whether it can fail — then make it.
+   Breaking the thing it guards is usually one line: forcing
+   `bracketBrainAiEntitled = true` turned that green entitlement test red
+   immediately. An assertion you have never seen fail is not yet evidence.
+
+⚠ **AND A MODULE'S TEST PASSING IN YOUR BRANCH SAYS NOTHING ABOUT `main` WHEN THE
+SOURCE DIFFERS.** Two of the three looked fine in the session branch and failed on
+`main`, because the branch still carried the pre-migration module — so the stale
+mock still matched. Compare the blob of BOTH the test and the module across
+branches before concluding anything; the branch that is wrong is usually the one
+where everything is green.
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 User's decision, 2026-08-29, and the larger half of the build bill. The
