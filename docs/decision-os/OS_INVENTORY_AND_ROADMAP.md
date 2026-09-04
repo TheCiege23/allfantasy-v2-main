@@ -166,6 +166,81 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.42 ✅ R6 — THE THREE LISTS ARE NOW ONE. THE IDENTIFIER HALF IS MEASURED, NOT DONE.
+
+**2026-09-04.** R6 is *"Docs and identifiers only, no behaviour change. Do it in one pass so the
+three lists become one."* The docs half is done here. The identifier half is **measured and
+deliberately not taken** — the reasons are below and they are about cost and ownership, not
+effort.
+
+### The lists, re-verified against the code rather than trusted
+
+| list | source | doc said | actually |
+|---|---|---|---|
+| 1 — marketed | `FantasyOsGateway.tsx` `GUIDED_SEQUENCE` | 7 | **7** ✅ |
+| 2 — domain feeds | `domain-os/types.ts` `OsDomain` | 8 | 🛑 **9** |
+| 3 — engines | `lib/decision-os/*/decision.ts` | 4 | **4** ✅ |
+
+🛑 **LIST 2 HAD ALREADY DRIFTED.** `psychology` was added to `OsDomain` by R4b and §2 still said
+eight. That is R6's own justification arriving on schedule: a list nobody reconciles goes stale
+inside one working week.
+
+`draft` confirmed engine-less — no `decision.ts` — so §6's "either build one or retire the name"
+still stands as the open question for D5.
+
+### The one list
+
+Every name that has ever been called an OS, resolved to §6's two-kinds rule: a **Fact OS** owns a
+class of truth, a **Decision domain** owns a class of question, and a hub, page or nav label is
+**neither**.
+
+| name in the wild | what it actually is | lives in |
+|---|---|---|
+| Import OS | **Fact OS** | `decision-os/import` + `fantasy-os/sync` |
+| League OS | **Fact OS** (absorbs draft *rules*) | `league-runtime`, `domain-os` |
+| Player Value OS | **Fact OS** — market · IDP · kicker · devy | `decision-os/grounding/*Slice` |
+| Projection OS | **Fact OS** | `domain-os` projection source |
+| Identity OS | **Fact OS** | `decision-os/import/assertions` (R4) |
+| Manager Psychology OS | **Fact OS** — now inside the hub | `decision-os/psychology-os` (R4b) |
+| Lineup · Waiver · Trade · Commissioner | **Decision domains** — all four have engines | `decision-os/{lineup,waiver,trade,commissioner-health}` |
+| Draft | **Decision domain with NO engine** | feed only; D5 unresolved |
+| Decision OS | **the hub** — the only thing that assembles, grades and answers | `decision-os/grounding` |
+| Chimmy | **the interface** | `/api/chat/chimmy` |
+| Platform OS · Manager OS | ❌ **nav labels, not systems** — seven names routing to two pages | `FantasyOsGateway` |
+| Commissioner OS (`lib/commissioner-os/`) | ❌ **a UI data layer**, not the engine of the same name | 12 namespaces over HTTP |
+| Fantasy OS (`lib/fantasy-os/`) | **split**: `sync` is a producer → Import OS; "exec intelligence" is reporting | — |
+| Sports OS (`lib/sports-os/`) | ❌ **reporting only**, by design | readiness / identity health |
+
+⚠ **THE TWO COLLISIONS ARE THE POINT.** "Commissioner OS" names both a live decision engine and a
+UI data layer that calls it over HTTP; "Fantasy OS" names both a real producer and a reporting
+layer. Anyone reasoning about either from its name alone is reasoning about the wrong thing.
+
+### The identifier half — measured, and deliberately not taken
+
+| rename | files touched |
+|---|---|
+| `OsDomain` members | **4** |
+| `lib/commissioner-os` → distinguish from the engine | 11 importers |
+| `lib/sports-os` | 11 importers |
+| `lib/fantasy-os` → absorb `sync` into Import OS | **36 importers** |
+| the seven marketed labels | 1 file — **but user-visible** |
+
+Two reasons it stops here, and neither is effort:
+
+🛑 **THE NAV LABELS ARE PRODUCT COPY, NOT IDENTIFIERS.** R6 says "no behaviour change", but seven
+names a user reads on a page is exactly a behaviour change to them. Retiring "Platform OS" and
+"Manager OS" is the owner's call about what the product is called, not a refactor to be slipped
+into a rename pass.
+
+⚠ **AND A 36-FILE RENAME IN THIS CHECKOUT IS A COLLISION, NOT A COST.** ~9 sessions share this
+working tree; a rename touching 36 importers conflicts with whatever anyone else is holding, for a
+change that alters no behaviour. The right moment is a quiet tree and one session, not the middle
+of a batch queue. The measurement above is the whole preparation — whoever does it needs no
+discovery, only a window.
+
+**The clarity R6 was for is delivered by the table above.** The renames make the code match the
+document; the document was the part that was lying.
+
 ## 0.41 ✅ R1.7 — RESOLVED BY THE ENUMERATION FIX, MEASURED IN PRODUCTION
 
 **2026-09-04.** R1.7 recorded that `teams_rosters` was genuinely failing to sync on live leagues,
@@ -3248,11 +3323,15 @@ says so. That mismatch is itself a defect.
 🛑 **These are navigation labels, not systems.** Seven names route to **two
 pages**. Nothing behind this list is an engine.
 
-### List 2 — The eight DOMAIN FEEDS (the kernel's own union)
+### List 2 — The NINE DOMAIN FEEDS (the kernel's own union)
 
 `lib/decision-os/domain-os/types.ts`, `OsDomain`:
 
-`lineup · waiver · trade · draft · league · value · projection · import`
+`lineup · waiver · trade · draft · league · value · projection · import · psychology`
+
+⚠ **This said EIGHT until 2026-09-04 and had been wrong since R4b added `psychology`.** Corrected
+by R6's reconciliation (§0.42), which is the drift R6 exists to catch — a list nobody reconciles
+goes stale inside one working week.
 
 ### List 3 — The four DECISION ENGINES (what actually decides)
 
@@ -3744,7 +3823,7 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R4** Identity OS | **Done 2026-09-03.** `playerIdentityCoverage` assertion + `minIdentityResolution` gating on lineupDecision. §0.24 |
 | ✅ | **R4b** Manager Psychology OS into the hub | **Done 2026-09-03 — all of R4b.1–R4b.7.** §0.25, §0.26, §0.27. |
 | ⬜ | **R5** Commissioner OS transport decision | Owner |
-| ⬜ | **R6** Rename pass | R1–R4 |
+| ⚠ | **R6** Rename pass | **Docs half DONE 2026-09-04 — the three lists are now one table (§0.42).** Found List 2 had already drifted (OsDomain is 9, doc said 8; `psychology` added by R4b). Identifier half measured and NOT taken: `OsDomain` 4 files, commissioner-os/sports-os 11 each, **fantasy-os 36**, and the seven marketed labels are user-visible product copy = owner's call. Needs a quiet tree, not discovery. §0.42 |
 | ✅ | **R7** Proactive alerts | **Fatigue budget done 2026-09-03; the rest was ALREADY BUILT.** Outbox, all four transports and the full push flow already existed — the outbox sent a notification that day. Only the budget was missing. Default is EXEMPT so a marketing flood can never drop a waiver result. ⚠ `web_push_subscriptions` is 0 rows: built and surfaced, zero adoption. §0.39 |
 
 ---
