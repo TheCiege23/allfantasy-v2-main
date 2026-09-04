@@ -166,6 +166,63 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.41 ✅ R1.7 — RESOLVED BY THE ENUMERATION FIX, MEASURED IN PRODUCTION
+
+**2026-09-04.** R1.7 recorded that `teams_rosters` was genuinely failing to sync on live leagues,
+leaving eight packet slices inconclusive — *"not a packet bug, the packet is reporting a real
+import problem accurately"*. That was true when written. It is no longer.
+
+### Measured before and after
+
+| | 2026-09-03 | 2026-09-04 |
+|---|---|---|
+| rows with `teams_rosters` incomplete | **~35** | **3** |
+| `syncStatus = partial` | 33 | **10** |
+| `syncStatus = completed` | 146 | **191** |
+| total rows | 184 | 204 |
+
+Newest sync attempt at the time of measuring: **two minutes prior**.
+
+🛑 **THIS IS THE ENUMERATION FIX (§0.31) WORKING, AND IT IS THE FIRST DIRECT PRODUCTION EVIDENCE
+OF IT.** Those leagues were not failing to sync — 87% of the portfolio was never being
+*enumerated*, so `teams_rosters` never got a second attempt. Staleness-ordered selection reached
+them, and they completed. R1.7 and R1.5's diagnosis both dissolve into §0.31's root cause.
+
+⚠ **AND IT VINDICATES WAITING RATHER THAN MEASURING SOONER.** R1.7 was deliberately deferred
+until the fix had been live a while, on the grounds that measuring during the starvation window
+would describe the broken state. Measuring on 09-03 would have "confirmed" a `teams_rosters` bug
+that does not exist.
+
+### What the three remaining rows actually are — none of them R1.7
+
+All three fail at **`league_state`**, which is upstream of `teams_rosters`; the scope shows
+incomplete as a consequence, not as its own defect.
+
+- **1 Fantrax — `"Sign in before import"`.** A credential problem, actively retrying
+  (`consecutiveFailures: 1`, attempted two hours before measuring). Needs a user to
+  re-authenticate; no code will fix it.
+- **2 Sleeper — `"League not found"`.** The leagues no longer exist upstream, at 70 and 92
+  consecutive failures, last attempted **08-24**.
+
+### 🆕 A small finding: orphaned sync-state rows are never cleaned
+
+Both "League not found" rows are **orphaned** — no `leagues` row matches their
+`(provider, externalLeagueId, season)`. That explains why they froze on 08-24 rather than being
+retried: enumeration reads `leagues`, so a sync-state row whose League row was deleted becomes
+unreachable.
+
+**They are operationally harmless** — unreachable means they consume no slot and cost nothing.
+The cost is to READING: `syncStatus = 'failed'` counts 3 when only 1 is actionable, so anyone
+judging sync health sees roughly double the real failure count.
+
+⚠ `reconcileRemovals` does NOT cover this — it reconciles rosters removed *within* a league
+(`applyTeamsRosters`), not sync-state rows for leagues that are gone. Checked rather than assumed,
+because the name reads like it would.
+
+**Not built.** Two rows out of 204, no operational cost, and the fix is either a data deletion or
+a new maintenance pass. Recorded so the next person reading a failure count knows to subtract the
+orphans — and so nobody reaches for `reconcileRemovals` expecting it to help.
+
 ## 0.40 ✅ R0.12 CLOSED AS NOT-A-DEFECT · ⏸ R0.13 IS ONE FLAG AWAY, AND IT IS WORTH ~1113ms
 
 **2026-09-04.** Both measured before touching anything. Neither wanted the change its ledger row
@@ -3674,7 +3731,7 @@ Updated **in the same change that does the work** (**W4**).
 | ⏸ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Deferred 2026-09-03 — real gap, ZERO beneficiaries.** devy_league_configs, devy_leagues and leagueVariant~devy are all 0 rows; the board itself has 1,721 players. Every fix costs a per-turn query or serializes devy behind rules, and nothing carrying `leagueVariant` is in scope at the gate. Fix located and trigger recorded. §0.38 |
 | ✅ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Done 2026-09-03.** `deriveWantsDevyBoard` reads `general.variant` from rules the packet already loads — no new query, and the NCAAF path stays fully parallel. Population is still zero, so this closes a LATENT defect. 9 tests; two bugs caught during the build (resolution gate, and board-applies vs caller-asked). §0.38 |
 | ⬜ | **R1.6** 🆕 Collapse gaps that share one cause | 8 identical `teams_rosters` lines crowd the prompt. §0.11 |
-| ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
+| ✅ | **R1.7** `teams_rosters` scope is failing to sync on live leagues | **RESOLVED 2026-09-04 by the enumeration fix (§0.31), measured in production:** teams_rosters-incomplete went ~35 → 3, partial 33 → 10, completed 146 → 191. They were never failing — 87% of the portfolio was never being ENUMERATED. Of the 3 left, 1 is a Fantrax credential prompt and 2 are orphaned rows for leagues deleted upstream. §0.41 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
 | ⚠ | **BUG-2** **25% of league syncs failing — `PostgresError 25006`** — **INCIDENT CLOSED, AFTERMATH OPEN** | **NOT live.** A 17-minute incident: 2026-09-02 05:00:21 → 05:17:47, zero since (~39 h). The open half is the AFTERMATH — no league in `partial`/`failed` has EVER been retried (0 of 37, ~78 missed cycles), so 20% of the portfolio serves data frozen at 09-02 04:01 while the serializer promises an automatic retry. **§0.30** supersedes §0.18. |
