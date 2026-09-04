@@ -16,6 +16,11 @@ export interface ManagerIntelligenceViewProps {
 
 const TREND_LABEL = { rising: 'Rising', steady: 'Steady', declining: 'Declining' } as const
 const TREND_DIRECTION = { rising: 'up', steady: 'flat', declining: 'down' } as const
+const RELIABILITY_LABEL = {
+  reliable: 'Consistent',
+  inconsistent: 'Some gaps',
+  unreliable: 'Major gaps',
+} as const
 
 /**
  * Manager Intelligence owns behavioral pattern analysis only — this
@@ -42,13 +47,34 @@ export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntellige
                 </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted)' }}>
-                  <span>Tenure: {manager.tenureSeasons} season{manager.tenureSeasons === 1 ? '' : 's'}</span>
-                  <TrendIndicator direction={TREND_DIRECTION[manager.engagementTrend]} label={TREND_LABEL[manager.engagementTrend]} />
-                </div>
-                <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Reliability: {manager.reliabilityScore}
-                </div>
+                {/* Tenure and trend are each rendered ONLY when real. An absent trend means the
+                    manager has fewer than two behavioral snapshots, which is unknown — rendering a
+                    flat indicator there would be indistinguishable from a measured 'steady'. */}
+                {(manager.tenureSeasons !== undefined || manager.engagementTrend) && (
+                  <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted)' }}>
+                    {manager.tenureSeasons !== undefined ? (
+                      <span>Tenure: {manager.tenureSeasons} season{manager.tenureSeasons === 1 ? '' : 's'}</span>
+                    ) : (
+                      <span />
+                    )}
+                    {manager.engagementTrend && (
+                      <TrendIndicator
+                        direction={TREND_DIRECTION[manager.engagementTrend]}
+                        label={TREND_LABEL[manager.engagementTrend]}
+                      />
+                    )}
+                  </div>
+                )}
+                {/* The live backend classifies reliability as an ordinal level; demo/stub supply a
+                    score. Prefer the real classification, fall back to the score, show neither
+                    rather than a placeholder. */}
+                {(manager.engagementReliability ?? manager.reliabilityScore) !== undefined && (
+                  <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                    Reliability: {manager.engagementReliability
+                      ? RELIABILITY_LABEL[manager.engagementReliability]
+                      : manager.reliabilityScore}
+                  </div>
+                )}
                 {manager.recognition && (
                   <p className="text-xs" style={{ color: 'var(--severity-positive-text)' }}>
                     {manager.recognition}

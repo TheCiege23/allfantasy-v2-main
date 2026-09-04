@@ -47,6 +47,7 @@ import type {
 } from './contracts'
 import { TIER_SCOPE_MAP } from './contracts'
 import { checkIntelligenceGate } from './gate'
+import { resolveManagerDnaDirectory } from '@/lib/decision-os/managerDnaDirectory'
 
 // ── Context ────────────────────────────────────────────────────────────────────
 
@@ -343,6 +344,67 @@ export async function leagueTrendIntelligenceHandler(
   return {
     status: 200,
     body: { data, meta: { requestId, derivedAt, completeness, version: 'v1', tier } satisfies IntelligenceApiMeta },
+  }
+}
+
+// ── League Manager DNA directory handler ───────────────────────────
+
+/**
+ * GET /api/v1/intelligence/league/manager-dna?leagueId={id}
+ *
+ * Every manager's Phase 6.2 DNA classification for one league - the directory the per-manager
+ * route deliberately withholds by narrowing to the caller's own profile.
+ *
+ * Required scope: `intelligence:league:read`, which `TIER_SCOPE_MAP` grants to the **commissioner
+ * and platform tiers only**. That is the authorization decision this endpoint rests on, and it is
+ * an existing one rather than a new one: a manager-tier key holds `intelligence:manager:read` and
+ * is refused here, which is exactly the boundary a directory of other people's behavioural profiles
+ * needs. No new role concept, no second gate to keep in sync with the first.
+ *
+ * Bypasses `IntelligenceDataProvider` for the same reason the trend and deadline handlers do: the
+ * DNA pipeline is its own composition (Phase 5.1/5.2 -> 6.1/6.2), not the event-derived
+ * `ManagerBehavioralIntelligence` those methods return. There is no stub/real swap to preserve -
+ * the honest "insufficient data" state arises naturally as `primaryIdentity: 'unknown'` per row,
+ * in every environment.
+ */
+export async function leagueManagerDnaIntelligenceHandler(
+  ctx: IntelligenceApiContext,
+): Promise<IntelligenceHandlerResult> {
+  const gate = checkIntelligenceGate(ctx.headers)
+  if (!gate.ok) return { status: gate.status, body: gate.error }
+
+  const { tier, requestId } = gate
+  if (!hasScope(tier, 'intelligence:league:read')) {
+    return errorResult(403, 'FORBIDDEN', 'API key does not have league intelligence scope.', requestId)
+  }
+
+  const leagueId = ctx.searchParams.get('leagueId')?.trim() ?? ''
+  if (!leagueId) {
+    return errorResult(400, 'INVALID_REQUEST', 'Missing required query parameter: leagueId.', requestId)
+  }
+
+  const directory = await resolveManagerDnaDirectory({ leagueId })
+  if (!directory.available) return dataUnavailable(requestId)
+
+  // Mean of the per-row input-quality scores, not a headline confidence: an empty league is 0
+  // rather than 100, so "nothing to report" never reads as "perfectly complete".
+  const completeness =
+    directory.rows.length === 0
+      ? 0
+      : Math.round(directory.rows.reduce((sum, r) => sum + r.completeness, 0) / directory.rows.length)
+
+  return {
+    status: 200,
+    body: {
+      data: directory,
+      meta: {
+        requestId,
+        derivedAt: new Date().toISOString(),
+        completeness,
+        version: 'v1',
+        tier,
+      } satisfies IntelligenceApiMeta,
+    },
   }
 }
 

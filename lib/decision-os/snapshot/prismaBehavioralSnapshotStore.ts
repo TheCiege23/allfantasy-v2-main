@@ -61,7 +61,10 @@ export interface DecisionOsBehavioralSnapshotDelegate {
     update: UpdateInput
   }): Promise<unknown>
   findMany(args: {
-    where: { leagueId: string; managerId: string }
+    // `managerId` is optional and `scope` is accepted so ONE query can read every manager-scope
+    // row in a league (see `defaultListManagerBehavioralTrends`). Widening the parameter type is
+    // safe for existing callers, which all still pass `managerId`.
+    where: { leagueId: string; managerId?: string; scope?: string }
     orderBy: { periodKey: 'asc' }
     take?: number
   }): Promise<DecisionOsBehavioralSnapshotRow[]>
@@ -173,6 +176,46 @@ export async function defaultListLeagueBehavioralTrend(
     return await store.listTrend({ leagueId, managerId: options?.managerId ?? null, limit: options?.limit })
   } catch {
     return []
+  }
+}
+
+/**
+ * Batch per-manager trend reader. ONE query for every manager-scope row in a league, grouped in
+ * memory - deliberately not `defaultListLeagueBehavioralTrend` called per manager, which is N+1
+ * against a 12-manager league.
+ *
+ * Degrades exactly like its league sibling: a missing delegate or a failed read returns an EMPTY
+ * MAP, never a fabricated trend. A manager absent from the map has no snapshots, which callers
+ * must render as "unknown", never as "steady".
+ */
+export async function defaultListManagerBehavioralTrends(
+  leagueId: string,
+): Promise<Map<string, BehavioralSnapshotRecord[]>> {
+  const byManager = new Map<string, BehavioralSnapshotRecord[]>()
+  try {
+    const delegate = (defaultPrisma as unknown as {
+      decisionOsBehavioralSnapshot?: DecisionOsBehavioralSnapshotDelegate
+    })?.decisionOsBehavioralSnapshot
+    if (!delegate) return byManager
+
+    const rows = await delegate.findMany({
+      where: { leagueId, scope: 'manager' },
+      orderBy: { periodKey: 'asc' },
+    })
+
+    for (const row of rows) {
+      const record = rowToRecord(row)
+      // Defensive: `scope: 'manager'` should guarantee a non-null managerId, but the sentinel
+      // mapping is the only thing enforcing that and a mislabelled row must not become a
+      // league-scope record filed under a manager key.
+      if (record.managerId === null) continue
+      const existing = byManager.get(record.managerId)
+      if (existing) existing.push(record)
+      else byManager.set(record.managerId, [record])
+    }
+    return byManager
+  } catch {
+    return byManager
   }
 }
 

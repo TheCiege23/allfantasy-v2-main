@@ -69,6 +69,7 @@ import {
 } from '@/lib/decision-os/phase6'
 import type {
   ManagerDnaProfile,
+  ManagerDnaResult,
   ManagerSignalInput,
   ManagerEngagementTier,
 } from '@/lib/decision-os/phase6/dna/types'
@@ -227,6 +228,60 @@ export type ManagerIntelligencePayload = {
   leagueTrend: LeagueActivityTrendSummary
 }
 
+export interface LeagueDnaComputation {
+  /** Every manager's DNA profile in the league, not narrowed to any one caller. */
+  dnaResult: ManagerDnaResult
+  patternsResult: ReturnType<typeof detectBehavioralPatterns>
+}
+
+/**
+ * The Phase 5.1/5.2 -> 6.1/6.2 pipeline, extracted so the per-manager payload
+ * (`resolveManagerIntelligencePayload`) and the commissioner directory
+ * (`resolveManagerDnaDirectory`) run the SAME computation rather than two copies of it.
+ *
+ * Two implementations of one rule is the bug; a directory whose classifications disagreed with a
+ * manager's own view of themselves would be worse than either alone.
+ *
+ * `includeManagerId` forces one manager into the set even with zero events, producing an honest
+ * zero-activity profile rather than a skipped one. The directory deliberately omits it: a directory
+ * lists who is actually there, and inventing a row for an absent manager is not the same favour.
+ *
+ * THROWS on pipeline failure. Both callers wrap it, each degrading in its own documented way.
+ */
+export async function computeLeagueDna({
+  leagueId,
+  includeManagerId,
+  now = new Date(),
+}: {
+  leagueId: string
+  includeManagerId?: string
+  now?: Date
+}): Promise<LeagueDnaComputation> {
+  const lookback = lookbackDays()
+  const since = sinceDate(lookback)
+  const events = await loadLeagueEvents(leagueId, since)
+
+  const leagueFacts = assembleLeagueBehavioralFacts({ leagueId, events, lookbackDays: lookback })
+  const managerIds = new Set(leagueFacts.activeManagerIds)
+  if (includeManagerId) managerIds.add(includeManagerId)
+
+  const managerIntelligences: ManagerBehavioralIntelligence[] = [...managerIds].map((id) => {
+    const facts = assembleManagerBehavioralFacts({ managerId: id, leagueId, events, lookbackDays: lookback })
+    return deriveManagerBehavioralIntelligence(facts, events, now)
+  })
+
+  const patternsResult = detectBehavioralPatterns({ leagueId, events, analysisWindowDays: lookback })
+  const managerSignals: ManagerSignalInput[] = managerIntelligences.map(toManagerSignal)
+
+  const dnaResult = assembleManagerDna({
+    leagueId,
+    managerPatterns: patternsResult.managerPatterns,
+    managerSignals,
+  })
+
+  return { dnaResult, patternsResult }
+}
+
 /**
  * Resolve a real Manager DNA profile + Manager Recommendation set for one
  * manager in one league, via the real Phase 5.1/5.2 -> 6.1/6.2/6.4 pipeline.
@@ -253,27 +308,10 @@ export async function resolveManagerIntelligencePayload({
   const leagueTrend = await resolveLeagueActivityTrend(leagueId)
 
   try {
-    const lookback = lookbackDays()
-    const since = sinceDate(lookback)
-    const events = await loadLeagueEvents(leagueId, since)
-
-    const leagueFacts = assembleLeagueBehavioralFacts({ leagueId, events, lookbackDays: lookback })
-    const managerIds = new Set(leagueFacts.activeManagerIds)
-    managerIds.add(managerId)
-
-    const managerIntelligences: ManagerBehavioralIntelligence[] = [...managerIds].map((id) => {
-      const facts = assembleManagerBehavioralFacts({ managerId: id, leagueId, events, lookbackDays: lookback })
-      return deriveManagerBehavioralIntelligence(facts, events, now)
-    })
-
-    const patternsResult = detectBehavioralPatterns({ leagueId, events, analysisWindowDays: lookback })
-
-    const managerSignals: ManagerSignalInput[] = managerIntelligences.map(toManagerSignal)
-
-    const dnaResult = assembleManagerDna({
+    const { dnaResult, patternsResult } = await computeLeagueDna({
       leagueId,
-      managerPatterns: patternsResult.managerPatterns,
-      managerSignals,
+      includeManagerId: managerId,
+      now,
     })
 
     const targetProfile = dnaResult.profiles.find((p) => p.managerId === managerId) ?? null
