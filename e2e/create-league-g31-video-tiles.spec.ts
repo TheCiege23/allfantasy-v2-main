@@ -15,7 +15,20 @@ function watchRuntimeErrors(page: Page) {
 }
 
 function relevantRuntimeErrors(errors: string[]) {
-  return errors.filter((entry) => !/favicon|ResizeObserver|FB\.getLoginStatus/i.test(entry))
+  /*
+   * ⚠ `Invalid Sentry Dsn` IS ENVIRONMENT CONFIG, NOT A PAGE DEFECT, and it fails this
+   * spec on any machine without a DSN -- .env.test carries none, so all three tests in
+   * this file went red on a console line the Create League page did not cause. It joins
+   * favicon / ResizeObserver / FB.getLoginStatus, which are here for the same reason:
+   * third-party and deployment noise that would otherwise drown the runtime errors this
+   * assertion exists to catch.
+   *
+   * Scoped to this spec deliberately. A real Sentry misconfiguration is worth knowing
+   * about; it is simply not what a Create League video-tile test is measuring.
+   */
+  return errors.filter(
+    (entry) => !/favicon|ResizeObserver|FB\.getLoginStatus|Invalid Sentry Dsn/i.test(entry),
+  )
 }
 
 async function stubEntitlements(page: Page, hasCommissioner = false) {

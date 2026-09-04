@@ -218,5 +218,13 @@ test('renders from SSR dark cookie, Spanish language cookie, and mobile layout w
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow).toBeLessThanOrEqual(2)
-  expect(errors.filter((entry) => !/favicon|ResizeObserver/i.test(entry))).toEqual([])
+  /*
+   * ⚠ `Invalid Sentry Dsn` is environment config, not a runtime crash: .env.test carries
+   * no DSN, so this assertion went red on a console line the page did not cause. Same
+   * class as favicon / ResizeObserver already filtered here, and the same addition made
+   * in create-league-g31-video-tiles.spec.ts.
+   */
+  expect(
+    errors.filter((entry) => !/favicon|ResizeObserver|Invalid Sentry Dsn/i.test(entry)),
+  ).toEqual([])
 })
