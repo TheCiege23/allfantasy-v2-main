@@ -235,6 +235,27 @@ const nextConfig = {
   },
 
   experimental: {
+    // 🛑 DIAGNOSTIC ONLY — NOT A FIX. Do not remove this comment when it is removed.
+    // Two reasoned attempts at the #673 useContext-null regression (08ee395c1,
+    // ab6993b40) both failed on Railway with the byte-identical crash: same digest
+    // (3463372292), same shared chunk (server/chunks/2034.js), across ~250 routes,
+    // every time. Both were guesses tested against production Railway builds with
+    // no way to confirm the mechanism, because production builds strip source maps
+    // — the stack trace only ever names minified internal Next.js runtime frames
+    // and an opaque chunk file, never the actual component/module at fault.
+    //
+    // This turns those maps back on for the SERVER bundle only (client bundle/UX
+    // is unaffected either way) so the next occurrence of this crash — whether
+    // from a real fix attempt or a plain retry — reports the real source file and
+    // line instead of "chunks/2034.js:1:50150". Not reproducible locally (tried:
+    // clean on Windows, and this repo's own history says an earlier structurally
+    // similar bug "only shows up on the Linux builder" — ef1c84417), and Docker is
+    // not available on this machine to test a Linux build directly. This is the
+    // best remaining path to real evidence rather than another guess.
+    //
+    // Revert once the real cause is identified and fixed — source maps are extra
+    // build output with no reason to ship indefinitely.
+    serverSourceMaps: true,
     // Next 14.2 compiles the client and server passes in parallel build workers.
     // On Railway (Linux) that build loses the root layout: app-build-manifest.json
     // lists zero CSS for /layout, app/globals.css never enters the module graph,
