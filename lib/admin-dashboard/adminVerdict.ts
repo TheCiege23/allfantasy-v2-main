@@ -68,17 +68,18 @@ export function buildAdminVerdict(metrics: AdminCommandCenterMetrics): AdminVerd
   const issues: AdminIssue[] = []
 
   /*
-   * Providers. `configured: false` is not automatically a fault — plenty of
-   * providers are deliberately unconfigured — so only a provider that is
-   * configured AND reporting a bad status counts. `consumedBy` turns the row
-   * into a blast radius rather than a red dot.
-   *
-   * `disabled`, `public_fallback` and `unknown` are deliberate or unmeasured
-   * states, not faults, and raising them here would teach the operator to
-   * ignore the strip.
+   * Providers. PROVIDER_FAULT is the ONLY filter -- do not add a `!provider.configured` guard
+   * back here. `disabled`, `public_fallback`, `unknown` and a deliberately-unconfigured provider
+   * are absent from PROVIDER_FAULT, so `severity` is undefined and they are skipped below exactly
+   * as before. But `missing_env` -- a provider with NO credentials at all -- is `configured: false`
+   * BY DEFINITION (statusFromConfig's only path to it) and is ALSO listed in PROVIDER_FAULT as
+   * 'critical', on purpose: a provider missing its environment variables entirely is a real fault,
+   * arguably the most operator-actionable one there is. A `!provider.configured` early-return here
+   * previously skipped every provider before this map was ever consulted, so `missing_env` could
+   * never reach an issue despite being right there in the map -- silently contradicting the map's
+   * own listed severity. `consumedBy` turns the row into a blast radius rather than a red dot.
    */
   for (const provider of metrics.providerHealth) {
-    if (!provider.configured) continue
     const severity = PROVIDER_FAULT[provider.status]
     if (!severity) continue
     const consumers = provider.consumedBy.length

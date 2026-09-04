@@ -240,6 +240,76 @@ describe("AdminProviderHealthService", () => {
     })
   })
 
+  it("THE ACTUAL BUG: a configured provider whose last sync attempt errored escalates to configured_failing", async () => {
+    // Same env as the "reports configured World Cup provider" case above, but the sync row's
+    // most recent attempt errored instead of succeeding. Before this fix, statusFromConfig was
+    // always called with no knowledge of syncSummary (only providerRow looks that up), so this
+    // stayed "configured" forever and PROVIDER_FAULT.configured_failing could never fire.
+    process.env.WORLD_CUP_DATA_PROVIDER = "apifootball"
+    process.env.API_SPORTS_KEY = "test-key"
+    process.env.API_FOOTBALL_WORLD_CUP_LEAGUE_ID = "1"
+    process.env.WORLD_CUP_CRON_SECRET = "cron-secret"
+
+    const syncAt = new Date("2026-09-03T12:00:00.000Z")
+    prismaMock.providerSyncState.findMany.mockResolvedValue([
+      {
+        provider: "api_sports",
+        lastCompletedAt: syncAt,
+        lastSuccessAt: null,
+        lastErrorAt: syncAt,
+        lastError: "401 Unauthorized: API key revoked",
+        recordsImported: 0,
+        recordsUpdated: 0,
+        recordsSkipped: 0,
+        updatedAt: syncAt,
+      },
+    ])
+    prismaMock.worldCupTeam.count.mockResolvedValue(48)
+    prismaMock.worldCupOfficialFixture.count.mockResolvedValue(104)
+    prismaMock.worldCupOfficialGroupStanding.count.mockResolvedValue(48)
+
+    const { getAdminProviderHealthRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+    const rows = await getAdminProviderHealthRows()
+    const worldCup = rows.find((row) => row.id === "api_football_world_cup")
+
+    expect(worldCup).toMatchObject({
+      status: "configured_failing",
+      configured: true,
+      lastError: "401 Unauthorized: API key revoked",
+    })
+  })
+
+  it("does not escalate a provider that is not_production_ready even if its sync last errored", async () => {
+    // A row with its own more specific fault (here: World Cup configured but not fully
+    // production-ready) keeps that status -- a sync-error escalation only applies to a plain
+    // "configured" row, so it cannot mask or override a status with its own distinct meaning.
+    process.env.WORLD_CUP_DATA_PROVIDER = "apifootball"
+    process.env.API_SPORTS_KEY = "test-key"
+    // Deliberately omit API_FOOTBALL_WORLD_CUP_LEAGUE_ID / WORLD_CUP_CRON_SECRET so
+    // apiFootballWorldCupProductionReady is false while apiFootballWorldCupKeyConfigured is true.
+
+    const syncAt = new Date("2026-09-03T12:00:00.000Z")
+    prismaMock.providerSyncState.findMany.mockResolvedValue([
+      {
+        provider: "api_sports",
+        lastCompletedAt: syncAt,
+        lastSuccessAt: null,
+        lastErrorAt: syncAt,
+        lastError: "some stale error",
+        recordsImported: 0,
+        recordsUpdated: 0,
+        recordsSkipped: 0,
+        updatedAt: syncAt,
+      },
+    ])
+
+    const { getAdminProviderHealthRows } = await import("@/lib/admin-dashboard/AdminProviderHealthService")
+    const rows = await getAdminProviderHealthRows()
+    const worldCup = rows.find((row) => row.id === "api_football_world_cup")
+
+    expect(worldCup?.status).toBe("not_production_ready")
+  })
+
   it("reports per-sport import reliability from Neon tables without provider calls", async () => {
     process.env.WORLD_CUP_DATA_PROVIDER = "apifootball"
     process.env.API_SPORTS_KEY = "test-key"

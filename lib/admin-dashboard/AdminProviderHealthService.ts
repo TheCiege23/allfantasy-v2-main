@@ -708,8 +708,39 @@ function providerRow(
   const callSummary = lookupCallSummary(input.calls, input.id)
   const rateWindow = lookupRateWindow(input.rates, input.id)
   const syncSummary = lookupSync(input.sync, input.id)
+
+  /*
+   * 🛑 WITHOUT THIS, `configured_failing` WAS DEAD CODE. Every `providerRow(...)` call site
+   * computes `status` via `statusFromConfig({...})` BEFORE this function runs -- at that point
+   * the caller has no `syncSummary`, since that is only looked up in here. So `failing` was
+   * never passed by any of the ~15 call sites, `statusFromConfig` never returned
+   * "configured_failing", and adminVerdict.ts's PROVIDER_FAULT.configured_failing ('critical')
+   * could never fire: a provider with valid-looking env vars that is actually erroring on every
+   * sync attempt (revoked key, persistent 401s/5xx) stayed "configured" forever, with the real
+   * error sitting unseen in `lastError` on a row nobody's headline verdict reads.
+   *
+   * Escalating here -- the one place that already has syncSummary -- fixes it centrally instead
+   * of asking every call site to look up sync state a second time just to pass `failing` in
+   * before providerRow ever runs. Only escalates FROM "configured": a row already flagged
+   * disabled/scaffold_only/public_fallback/not_production_ready/missing_env has its own more
+   * specific reason for that status, and a stale error from before it was descoped should not
+   * override it.
+   *
+   * `syncSummary.lastError` is safe to treat as "the most recent attempt failed", not a sticky
+   * flag: recordProviderSync (lib/provider-sync-logger.ts) unconditionally overwrites
+   * ProviderSyncState.lastError on every call, so it reads null again the moment a sync
+   * succeeds -- verified directly, not assumed, since the adjacent `lastErrorAt` field in that
+   * same writer IS sticky (skipped via `undefined` on success) and looks like the same trap at a
+   * glance. `getSyncSummaries()` gates its OWN read on `lastErrorAt` being truthy, which could
+   * have propagated that staleness -- it doesn't, because `safeError(null)` on the correctly
+   * cleared `lastError` still returns null regardless of what the stale timestamp says.
+   */
+  const status =
+    input.status === "configured" && syncSummary?.lastError ? "configured_failing" : input.status
+
   return {
     ...input,
+    status,
     requestCount24h: callSummary.requestCount24h,
     avgLatencyMs24h: callSummary.avgLatencyMs24h,
     rateLimit: formatRateLimit(rateWindow),
