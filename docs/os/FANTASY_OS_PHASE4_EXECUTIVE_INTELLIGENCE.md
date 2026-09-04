@@ -126,7 +126,9 @@ persistence, run timeout, partial-failure recovery, and full accounting where **
 requests** (both classified). Operational tables live in `fos_phase4`: `sync_schedule`, `sync_run`,
 `sync_checkpoint`, `sync_request`, `sync_failure`, `sync_snapshot`, `sync_lock`.
 
-**Incremental** — scheduled runs request only changed data since the last checkpoint (`INCREMENTAL_SCOPES`);
+**Incremental** — scheduled runs request only changed data since the last checkpoint
+(`LEAGUE_SYNC_SCOPES` in `sync/collector/types.ts`, the only scope list the collector uses — the
+`INCREMENTAL_SCOPES` const this line used to name had no consumers and was deleted 2026-09-04);
 immutable historical records are reused from checkpoint, never re-crawled. The original unrestricted discovery
 is never repeated. The **offseason** enrichment (`OFFSEASON_SCOPES`) closes the week-0 gap append-only and
 writes a **new** versioned `sync_snapshot` with its own checksum/provenance — it never overwrites the certified

@@ -217,19 +217,6 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
   }
 }
 
-/** Default incremental scope set for a Sleeper-backed league portfolio refresh (changed-data only). */
-export const INCREMENTAL_SCOPES: SyncScope[] = [
-  'league_state',
-  'rosters',
-  'recent_matchups',
-  'recent_transactions',
-  'recent_trades',
-  'recent_waivers',
-  'current_drafts',
-  'changed_traded_picks',
-  'new_or_renewed_league_seasons',
-]
-
 /** Offseason enrichment scopes — append-only closure of the disclosed week-0 gap. */
 export const OFFSEASON_SCOPES: SyncScope[] = [
   'offseason_trades',

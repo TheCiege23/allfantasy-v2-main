@@ -117,10 +117,18 @@ export function providerNeedsUser(provider: ImportProvider): boolean {
  * `SleeperHistorical*` backfill services and are checkpoint-skipped here — never refetched. Scopes with
  * no canonical destination table (e.g. transactions) are intentionally NOT synced (no fabrication).
  *
- * Mapping to `runner.INCREMENTAL_SCOPES`:
- *  - `league_state`      ↔ league_state (League row + settings + current LeagueSeason)
- *  - `traded_picks`      ↔ changed_traded_picks (future_draft_picks)
- *  - `teams_rosters`     ↔ rosters + recent_matchups + standings (LeagueTeam/Roster/TeamPerformance)
+ * What each scope actually writes:
+ *  - `league_state`      → League row + settings + current LeagueSeason
+ *  - `traded_picks`      → future_draft_picks
+ *  - `teams_rosters`     → LeagueTeam / Roster / TeamPerformance (rosters, recent matchups, standings)
+ *
+ * ⚠ THIS USED TO READ "Mapping to `runner.INCREMENTAL_SCOPES`" AND POINTED AT A LIST NOTHING USED.
+ * That nine-entry Sleeper-era const in `runner.ts` had zero consumers anywhere in lib, app or the
+ * test tree, and its scope names (`rosters`, `changed_traded_picks`, `recent_waivers`) did not match
+ * these three. A signpost to a dead array is worse than no signpost: the names differ just enough
+ * that a reader trying to add or reorder a scope could reasonably edit the wrong one. Deleted
+ * 2026-09-04; this list is now described in terms of what it writes, which cannot go stale the same
+ * way. `LEAGUE_SYNC_SCOPES` below is the only scope list the collector has.
  *
  * 🛑 THE ORDER IS LOAD-BEARING, AND IT IS ABOUT THE RUN BUDGET — NOT DEPENDENCIES.
  *
