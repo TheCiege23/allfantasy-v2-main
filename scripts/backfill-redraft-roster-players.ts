@@ -20,10 +20,20 @@
  * and changes nothing, because a bulk write across every league is not something to trigger by
  * running a file.
  *
- *   npx tsx scripts/backfill-redraft-roster-players.ts                 # report only
- *   npx tsx scripts/backfill-redraft-roster-players.ts --apply
- *   npx tsx scripts/backfill-redraft-roster-players.ts --apply --league <id>
- *   npx tsx scripts/backfill-redraft-roster-players.ts --apply --limit 5
+ *   npm run backfill:redraft-roster-players                    # report only
+ *   npm run backfill:redraft-roster-players -- --apply
+ *   npm run backfill:redraft-roster-players -- --apply --league <id>
+ *   npm run backfill:redraft-roster-players -- --apply --limit 5
+ *
+ * ⚠ RUN IT THROUGH npm, NOT `npx tsx` DIRECTLY. This file's import chain reaches modules that
+ * `import 'server-only'`, which throws outside a Next server context — plain node resolves the
+ * throwing variant of that package where Next resolves a harmless one. The npm script preloads
+ * `scripts/_audit-preload.cjs`, the shim every other backfill here already uses, which reproduces
+ * what the server runtime does rather than defeating a real guard. `npx tsx` on this file fails at
+ * line 1 of the first server module it touches.
+ *
+ * ⚠ AND IT READS `.env`, WHICH POINTS AT PRODUCTION on this checkout. That is deliberate for a
+ * backfill, and it is why the default is a dry run.
  */
 
 import { prisma } from '@/lib/prisma'
