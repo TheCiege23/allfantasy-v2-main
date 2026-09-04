@@ -71,6 +71,61 @@ export type FormatRules = {
 }
 
 /**
+ * Alias tags that NAME A FORMAT, and may therefore override `leagueType`.
+ *
+ * 🛑 `aliasTags` IS OVERLOADED AND THIS SET IS WHAT SEPARATES ITS TWO MEANINGS. It carries format
+ * flavours flattened onto a base shell — `pirate_vampire` and `royal` onto dynasty,
+ * `king_of_the_hill` onto redraft, where the alias IS the real format — and it ALSO carries `idp`,
+ * which is a scoring configuration that can sit on any format at all.
+ *
+ * Letting any alias win treats the second kind as the first. Run against the shapes actually stored
+ * in production on 2026-09-03 — 183 of 271 leagues carry `['idp']` — `alias[0]` returns:
+ *
+ *     dynasty    + ['idp']   97 leagues  →  redraft     ← the dynasty destroyed by a scoring flag
+ *     guillotine + ['idp']   11 leagues  →  redraft
+ *     zombie     + ['idp']    2 leagues  →  redraft
+ *
+ * 110 of 271, 41%. The 97 are the expensive ones: pricing a dynasty as a redraft switches off the
+ * entire future-pick and long-horizon side of the valuation.
+ *
+ * ⚠ THIS WAS LATENT, NOT LIVE, AND THAT IS THE WHOLE REASON TO FIX IT NOW. No production caller
+ * passes `aliasTags` today — `buildFormatNotes`, the one that reaches `/api/trade-value/analyze`,
+ * declares a `league` shape with no such field, so this function has only ever seen `undefined`.
+ * The bug fires on the NEXT correct change: this module's own header says "⚠ READ THESE OR FOUR
+ * FORMATS PRICE AS SOMETHING ELSE", and whoever obeys it wires `aliasTags` through and silently
+ * misroutes 110 leagues in the same commit that fixes four. Fixed ahead of that wiring so the
+ * instruction is safe to follow.
+ *
+ * ⚠ THE FIX IS NOT TO STOP WRITING `idp`. It is load-bearing as a modifier in three other places
+ * (`runPresetEngine` reads it to pick the IDP variant, `validateCreateLeague` and
+ * `createLeagueHandler` to select the catalog concept). Removing it there would break IDP league
+ * CREATION to fix league READING. The overload is resolved here, at the one reader that mistook a
+ * modifier for a format.
+ *
+ * ⚠ AN ALLOWLIST, NOT A DENYLIST OF MODIFIERS, DELIBERATELY. An unrecognised alias falls through to
+ * `leagueType` — the canonical concept id, which is never wrong, only less specific. That is the
+ * honest degrade. A denylist would instead let the NEXT modifier added to `normalizeConcept`
+ * silently repeat this exact failure on another hundred leagues.
+ */
+export const FORMAT_ALIASES: ReadonlySet<string> = new Set([
+  'pirate_vampire',
+  'pirate',
+  'royal',
+  'king_of_the_hill',
+  'koth',
+])
+
+/**
+ * Alias tags that are real and deliberate but describe SCORING OR ROSTER, not format.
+ *
+ * Not read by this module — it exists so that `__tests__/trade-intel/aliasClassification.test.ts`
+ * can assert every tag `normalizeConcept` is capable of pushing is classified as exactly one of the
+ * two. A new tag added there without a decision here fails that test rather than silently choosing
+ * the `leagueType` fallback and looking correct.
+ */
+export const MODIFIER_ALIASES: ReadonlySet<string> = new Set(['idp'])
+
+/**
  * Read the format from the league row.
  *
  * Prefers the explicit `leagueType` because it is the canonical concept id.
@@ -99,11 +154,16 @@ export function readFormatRules(league: {
 }): FormatRules {
   const alias = (league.aliasTags ?? []).map((t) => String(t).trim().toLowerCase())
   /*
-   * The alias wins when present: it is the more specific statement, and the
-   * base format is what the normaliser fell back to rather than what the
-   * league is.
+   * A FORMAT alias wins when present: it is the more specific statement, and the base format is
+   * what the normaliser fell back to rather than what the league is.
+   *
+   * 🛑 `alias[0]` WAS THE BUG. Position in the array carries no meaning — the import path builds
+   * the list as `[...normaliserTags, ...idpTags]`, so which tag lands first is an accident of how
+   * the league was created, not a statement about it. `find` over the format allowlist asks the
+   * question that was always intended: is any of these actually a format?
    */
-  const raw = (alias[0] ?? league.leagueType ?? '').trim().toLowerCase()
+  const formatAlias = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
+  const raw = (formatAlias ?? league.leagueType ?? '').trim().toLowerCase()
   const keeperCount = league.keeperCount ?? 0
 
   const baseConcept: LeagueConcept =
