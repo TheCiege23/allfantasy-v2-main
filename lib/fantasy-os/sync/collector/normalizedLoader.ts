@@ -5,10 +5,17 @@
  *
  * Everything else in the collector was already provider-neutral. This is not, and cannot be:
  *
- *   sleeper, fleaflicker   keyless public reads. Anyone can refresh any league.
- *   fantrax                unauthenticated `fxea` reads. The Secret ID identifies WHICH TEAM
- *                          is yours, which a refresh does not need.
+ *   sleeper, fleaflicker   keyless public reads, and UNOWNED. Anyone can refresh any league.
+ *   fantrax                unauthenticated `fxea` reads — no credential — but the refresh reads a
+ *                          STORED SNAPSHOT whose `appUserId` is checked by a fail-closed ownership
+ *                          gate, so it still needs an importing USER.
  *   espn, yahoo, mfl       need a credential stored against a specific AllFantasy user.
+ *
+ * 🛑 SO THE BRANCH BELOW ASKS `providerNeedsUser`, NOT `providerNeedsCredential`. It used to ask
+ * the credential question, which put Fantrax on the no-user path and made the pipeline refuse it
+ * with "Sign in before importing from Fantrax." forever — see USER_SCOPED_PROVIDERS in ./types
+ * for the production measurement. "Needs a key" and "needs an owner" are different questions and
+ * Fantrax is the provider where they diverge.
  *
  * And a connection is not one user. `League` is keyed `(userId, platform, platformLeagueId,
  * season)`, so the same external league is mirrored by a row per importing manager — the
@@ -41,7 +48,12 @@
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
-import { providerNeedsCredential, type LeagueSyncConnection } from './types'
+/*
+ * BOTH questions are asked in this file, deliberately: `providerNeedsUser` decides whether to
+ * attribute the read to an importing user at all, `providerNeedsCredential` decides whether a
+ * stored `leagueAuth` row is a precondition. Fantrax answers yes to the first and no to the second.
+ */
+import { providerNeedsCredential, providerNeedsUser, type LeagueSyncConnection } from './types'
 
 /**
  * Bound on credential probes per league.
@@ -187,11 +199,11 @@ export async function fetchNormalizedForConnection(
   const maxCandidates = deps.maxCandidates ?? MAX_USER_CANDIDATES
 
   /*
-   * A keyless provider takes the no-user path directly. Resolving candidates for it would be a
-   * wasted query, and — worse — a keyless league whose only importing user was deleted would
-   * then skip for want of a credential it never needed.
+   * An UNOWNED provider takes the no-user path directly. Resolving candidates for it would be a
+   * wasted query, and — worse — such a league whose only importing user was deleted would then
+   * skip for want of a credential it never needed.
    */
-  if (!providerNeedsCredential(connection.provider)) {
+  if (!providerNeedsUser(connection.provider)) {
     const result = await runPipeline({
       provider: connection.provider,
       sourceId: connection.externalLeagueId,

@@ -81,6 +81,37 @@ export function providerNeedsCredential(provider: ImportProvider): boolean {
 }
 
 /**
+ * Providers whose refresh must be attributed to an importing USER — a different question from
+ * whether it needs a stored credential, and conflating the two broke Fantrax entirely.
+ *
+ * 🛑 FANTRAX NEEDS A USER AND NO CREDENTIAL, AND ONLY THIS SET CAN SAY SO. Its `fxea` reads are
+ * unauthenticated, so it is correctly absent from `CREDENTIALED_PROVIDERS` above — but the import
+ * pipeline reads a STORED SNAPSHOT (`FantraxLeague`), and that row carries `appUserId` behind a
+ * deliberately fail-closed ownership gate in `FantraxLeagueFetchService`:
+ *
+ *     if (!leagueRecord || leagueRecord.appUserId !== userId) throw ...not found
+ *
+ * `fetchNormalizedForConnection` used `providerNeedsCredential` to decide whether to pass a
+ * `userId` at all, so Fantrax took the no-user path and the pipeline refused it with
+ * "Sign in before importing from Fantrax." on EVERY heartbeat. Measured in production
+ * 2026-09-04: the one connected Fantrax league sat at syncStatus `failed`, all three scopes
+ * incomplete, `lastError` exactly that string — and because the keyless branch cannot classify
+ * an `UNAUTHORIZED` result as "try the next user", it threw as a retryable provider failure and
+ * inflated `consecutiveFailures` against a provider that was answering perfectly.
+ *
+ * Sleeper and Fleaflicker stay out: their reads are public AND their refresh is unowned, so a
+ * league whose only importing user was deleted must still refresh.
+ */
+export const USER_SCOPED_PROVIDERS = new Set<ImportProvider>([
+  ...CREDENTIALED_PROVIDERS,
+  'fantrax',
+])
+
+export function providerNeedsUser(provider: ImportProvider): boolean {
+  return USER_SCOPED_PROVIDERS.has(provider)
+}
+
+/**
  * The mutable "current state" scopes this batch synchronizes, mapped to real canonical persistence.
  * Immutable historical scopes (completed drafts, prior-season snapshots) are owned by the existing
  * `SleeperHistorical*` backfill services and are checkpoint-skipped here — never refetched. Scopes with

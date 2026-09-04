@@ -36,6 +36,7 @@ import {
 } from '@/lib/fantasy-os/sync/collector/normalizedLoader'
 import {
   providerNeedsCredential,
+  providerNeedsUser,
   SYNCABLE_PROVIDERS,
   type LeagueSyncConnection,
 } from '@/lib/fantasy-os/sync/collector/types'
@@ -81,6 +82,78 @@ describe('provider credential classification', () => {
     for (const p of SYNCABLE_PROVIDERS) {
       expect(typeof providerNeedsCredential(p)).toBe('boolean')
     }
+  })
+})
+
+describe('needs a USER vs needs a CREDENTIAL — the distinction Fantrax lives in', () => {
+  /*
+   * 🛑 THE REGRESSION. `fetchNormalizedForConnection` decided whether to pass a `userId` by
+   * asking `providerNeedsCredential`. Fantrax needs no credential (unauthenticated `fxea` reads)
+   * but DOES need an owner: the refresh reads a stored `FantraxLeague` snapshot behind a
+   * fail-closed `appUserId !== userId` gate. So it took the no-user path and the import pipeline
+   * refused it with "Sign in before importing from Fantrax." on every single heartbeat.
+   *
+   * Measured in production 2026-09-04: the one connected Fantrax league sat at syncStatus
+   * `failed`, all three scopes incomplete, `consecutiveFailures` climbing, `lastError` exactly
+   * `fantrax normalize failed: Sign in before importing from Fantrax.`
+   */
+  it('asks for a user for fantrax, while still asking for no credential', () => {
+    expect(providerNeedsUser('fantrax')).toBe(true)
+    expect(providerNeedsCredential('fantrax')).toBe(false)
+  })
+
+  it('keeps the truly unowned providers on the no-user path', () => {
+    expect(providerNeedsUser('sleeper')).toBe(false)
+    expect(providerNeedsUser('fleaflicker')).toBe(false)
+  })
+
+  it('every credentialed provider also needs a user', () => {
+    for (const p of SYNCABLE_PROVIDERS) {
+      if (providerNeedsCredential(p)) expect(providerNeedsUser(p)).toBe(true)
+    }
+  })
+
+  /* The behavioural half: the loader must actually PASS the userId, not merely classify it. */
+  it('passes an importing userId when refreshing fantrax', async () => {
+    const runPipeline = vi.fn(async () => ok())
+    const out = await fetchNormalizedForConnection(
+      connection({ provider: 'fantrax', runKey: 'fantrax:abc:2026', externalLeagueId: 'abc' }),
+      { runPipeline: runPipeline as never, resolveCandidates: async () => ['owner-1'] },
+    )
+
+    expect(out).toBe(NORMALIZED)
+    expect(runPipeline).toHaveBeenCalledWith({
+      provider: 'fantrax',
+      sourceId: 'abc',
+      userId: 'owner-1',
+    })
+  })
+
+  /*
+   * The ownership gate rejects a non-owner as "not found", which the loader must read as
+   * SyncLeagueGoneError — a skip — rather than throwing a retryable provider failure. Before the
+   * fix the keyless branch could not classify this at all and every rejection inflated
+   * `consecutiveFailures` against a provider that was answering perfectly.
+   */
+  it('treats an ownership rejection as gone, not as a retryable provider failure', async () => {
+    const runPipeline = vi.fn(async () => fail('LEAGUE_NOT_FOUND', 'Fantrax league not found.'))
+    await expect(
+      fetchNormalizedForConnection(connection({ provider: 'fantrax', externalLeagueId: 'abc' }), {
+        runPipeline: runPipeline as never,
+        resolveCandidates: async () => ['not-the-owner'],
+      }),
+    ).rejects.toBeInstanceOf(SyncLeagueGoneError)
+  })
+
+  it('reports no-importing-user as a credentials skip rather than a failure', async () => {
+    const runPipeline = vi.fn(async () => ok())
+    await expect(
+      fetchNormalizedForConnection(connection({ provider: 'fantrax' }), {
+        runPipeline: runPipeline as never,
+        resolveCandidates: async () => [],
+      }),
+    ).rejects.toBeInstanceOf(SyncCredentialsUnavailableError)
+    expect(runPipeline).not.toHaveBeenCalled()
   })
 })
 
