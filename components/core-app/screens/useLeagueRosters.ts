@@ -32,6 +32,8 @@ export type RosterPlayer = {
   imageUrl: string | null
   byeWeek: number | null
   injuryStatus: string | null
+  /** ⚠ NULL IS "NOT PRICED", NEVER 0 — an unpriced asset is why a verdict declines to judge. */
+  value: number | null
 }
 
 export type RosterPick = {

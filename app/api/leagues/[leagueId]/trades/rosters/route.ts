@@ -7,6 +7,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationService'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,15 @@ export type TradeableRosterPlayer = {
   byeWeek: number | null
   /** Designation when one is on file; absence is not a statement of health. */
   injuryStatus: string | null
+  /**
+   * Market value on the 0-10000 FantasyCalc convention, or null when the player is not on the
+   * board.
+   *
+   * ⚠ NULL IS "NOT PRICED", NEVER 0. A zero would read as a worthless player, and the picker must
+   * show those differently — an unpriced asset is exactly what makes a trade verdict decline to
+   * judge, so hiding the distinction here would hide the reason downstream.
+   */
+  value: number | null
 }
 
 /**
@@ -180,7 +190,8 @@ export async function GET(
     rosters.map(async (r) => {
       const playerIds = getRosterPlayerIds(r.playerData)
       let players: TradeableRosterPlayer[] = playerIds.map((id) => ({
-        id, name: id, position: null, team: null, imageUrl: null, byeWeek: null, injuryStatus: null,
+        id, name: id, position: null, team: null, imageUrl: null, byeWeek: null,
+        injuryStatus: null, value: null,
       }))
       try {
         const rows = await getNormalizedPlayerData({
@@ -208,6 +219,8 @@ export async function GET(
             imageUrl: enriched?.imageUrl ?? enriched?.headshotUrl ?? null,
             byeWeek: enriched?.byeWeek ?? null,
             injuryStatus: enriched?.injuryStatus ?? null,
+            // Filled in one batch below — see the value pass.
+            value: null,
           }
         })
       } catch {
@@ -281,6 +294,40 @@ export async function GET(
 
   const viewerTeamRosterId =
     viewerRosterId?.id ?? rosters.find((r) => identityIds.has(r.platformUserId))?.id ?? null
+
+  /*
+   * ── MARKET VALUE, IN ONE BATCH FOR THE WHOLE LEAGUE ────────────────────────────────────────
+   *
+   * Resolved after the rosters are assembled rather than inside the per-roster loop: every roster
+   * in a league draws from the same valuation snapshot, so a lookup per roster would read it twelve
+   * to thirty-two times for one answer.
+   *
+   * ⚠ THE SETTINGS MATCH `/api/trade-value/player-search` EXACTLY, and that is not incidental. The
+   * picker shows search results beside roster rows; if the two resolved value under different
+   * settings the SAME player would carry two different numbers on one screen, and a manager would
+   * have no way to tell which the engine used. `getPlayerValuesForNamesDbFirst` defaults to
+   * `numQbs: 2`, so the settings are passed explicitly rather than defaulted.
+   *
+   * DB-first by construction — this is a request path, and `getFantasyCalcValuesDbFirst` reads
+   * `sportsDataCache` rather than the vendor. It returns an empty map on failure, so an outage
+   * costs values and nothing else.
+   */
+  const allNames = result.flatMap((r) => r.players.map((p) => p.name)).filter(Boolean)
+  if (allNames.length > 0) {
+    const values = await getPlayerValuesForNamesDbFirst(allNames, {
+      isDynasty: true,
+      numQbs: 1,
+      numTeams: 12,
+      ppr: 1,
+    }).catch(() => new Map())
+    for (const r of result) {
+      for (const p of r.players) {
+        // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
+        // which the picker renders differently from a low value.
+        p.value = values.get(p.name.toLowerCase())?.value ?? null
+      }
+    }
+  }
 
   return NextResponse.json({
     rosters: result,
