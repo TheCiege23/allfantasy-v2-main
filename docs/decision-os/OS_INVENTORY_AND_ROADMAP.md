@@ -298,6 +298,88 @@ did`) for the full account; not duplicated here.
 serializer fix's own control): the conditional framing instruction in both
 directions, and the trade-grounding rule addition (reverting it fails
 exactly the one test that checks for it).
+## 0.36 ✅ SCORECARD REFRESH — §3 WAS STALE IN THE OPTIMISTIC DIRECTION'S OPPOSITE
+
+**2026-09-03.** §3 scored the system at **~58% built**, with the memorable split *"construction
+~85%, connection ~30%"*. Three of its footnotes now describe a system that no longer exists,
+and every one of them understated the truth. Re-measured rather than re-estimated.
+
+### What was re-measured, and how
+
+| axis | method |
+|---|---|
+| 1 Feed · 2 Kernel | enumerated every `OsFactSource` in `lib/decision-os/` — **13 sources** |
+| 5 Packet | the slice fields on `DecisionOsGroundingPacket`, and the producer assignments at `packet.ts:1450-1455` |
+| 6 Chimmy | the serializer's own slice list, compared field-by-field against the packet's |
+| 4 Cron | **empirically, per §0.35's rule** — output tables, not config |
+| 3 Engine · 7 User | ⚠ **carried forward unverified** from the original audit |
+
+### The three stale footnotes
+
+- **⁷ "Import OS collector gated off"** — **false.** §0.35 measured 35 successful syncs in two
+  hours. The collector is live and Import OS is not gated.
+- **¹⁰ "Manager Psychology has no `OsFactSource`, zero references in `lib/decision-os/`"** —
+  **false since R4b.** `psychologyProfileSource` is registered, and the packet carries TWO
+  psychology slices (`managerPsychology`, `psychologyConsistency`).
+- **⁶ "assembled and graded, then serialized to the word `available`" (G11)** — **fully
+  closed.** Every field on the packet type now appears in the serializer's list, including the
+  three that silently did not until earlier today.
+
+🛑 **AND ONE FOOTNOTE THE REFRESH CONFIRMS RATHER THAN RETIRES.** `waiverDecision` is a type
+field (`packet.ts:240`) and a serializer entry (`serialize.ts:528`), and it is **absent from
+the producer assignment block**. It is plumbed end to end and nothing fills it — so it renders
+absent forever. That is the single clearest "built everything except the part that works" in
+the system.
+
+### Refreshed grid
+
+⚠ **Scored on a STATED rule, because the original's arithmetic is not reproducible from its
+own marks.** ✅ = full weight, ⚠ = half, ❌ = 0, n/a = excluded from the denominator; axes 1–3
+weigh 13.33 each, axes 4–7 weigh 15 each. The marks are the measurement; the percentages are
+derived and should be compared to each other, not to the old numbers.
+
+| OS | 1 Feed | 2 Kernel | 3 Engine | 4 Cron | 5 Packet | 6 Chimmy | 7 User | **%** | was |
+|---|---|---|---|---|---|---|---|---|---|
+| **Manager Psychology OS** | ✅ | ✅ | ✅ | ✅ | ✅ ×2 | ✅ | ✅ | **100%** | 65% |
+| **Import OS** | ✅ | ✅ | n/a | ✅ | ✅ | ✅ | ✅ | **100%** | 63% |
+| **Lineup OS** | ✅ | ✅ | ✅ | n/a | ✅ | ✅ | ✅ | **100%** | 70% |
+| **Projection OS** | ✅ | ✅ | n/a | ⚠ | ✅ | ✅ | ✅ | **91%** | 68% |
+| **League OS** | ✅ | ✅ | n/a | ❌ | ✅ | ✅ | ✅ | **83%** | 85% |
+| **Player Value OS** | ✅ | ✅ | n/a | ❌ | ✅ | ✅ | ⚠ | **74%** | 48% |
+| **Waiver OS** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | **70%** | 75% |
+| **Trade OS** | ✅ | ✅ | ✅ | ❌ | ❌ | ⚠ | ✅ | **63%** | 73% |
+| **Draft OS** | ✅ | ✅ | ⚠ | ✅ | ❌ | ❌ | ⚠ | **56%** | 45% |
+
+**Producer mean: ~82%**, against the original's ~58% whole-system figure.
+
+### Interface OS's — two more stale lines
+
+- **Decision OS (hub)** — *"the packet has never run in prod"* is **false**; §0.11 analysed a
+  live production packet run, which is where R1.4 and R1.6 came from.
+- **Fantasy OS** — *"collector gated off in committed prod env"* is the same disproven claim
+  as footnote 7.
+- **Chimmy** — *"works, on the OLD grounding path"* is now wrong: the intent router wires the
+  opt-in slices into the live chat route.
+- **Commissioner OS (35%)** — ⚠ **UNCHANGED and now the clear floor.** Default mode `demo`,
+  `isLiveReady()` false, `DECISION_OS_BASE_URL` present only in `.env.local`. That is **R5**,
+  an owner transport decision.
+
+### What the refresh actually changes about priorities
+
+The old headline — *construction 85%, connection 30%* — **is no longer the shape of the
+problem.** Connection is now the majority of what works: 6 of 9 producer OS's reach Chimmy
+through the packet.
+
+What remains is narrower and more specific than "connect everything":
+
+1. **`waiverDecision` has no producer.** One missing function; everything else exists.
+2. **Trade OS reaches Chimmy only by a side path** (`pendingTradeDecisionGrounding`) whose
+   table, `redraft_trade_proposals`, is **0 rows in production**.
+3. **Commissioner OS is a transport decision, not code** — R5, and it is the lowest score by a
+   wide margin.
+4. **Draft OS's feed warms a runtime with zero callers**, per the original's footnote 9 — the
+   one place where "built and connected to nothing" still holds after today.
+
 ## 0.35 ✅ R0.4 + R0.5 — AND R0.4 REFUTES §0.3'S HEADLINE
 
 **2026-09-03.** Both answered by measurement, neither by the probe each asked for.
