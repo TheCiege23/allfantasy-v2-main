@@ -682,6 +682,53 @@ conflict rules already name, reached from the opposite side: not a habit of
 taking one side, but a habit of **reusing a resolution that worked before**.
 Twice correct is not evidence about the third time.
 
+🛑 **AND THE SAME TRAP REACHED THROUGH A CHERRY-PICK, WHERE THE RESOLUTION IS
+RIGHT FIVE TIMES AND THEN SILENTLY INVERTS THE SIXTH COMMIT.**
+
+`docs/decision-os/OS_INVENTORY_AND_ROADMAP.md` conflicts on nearly every pick,
+because nearly every commit APPENDS a section. "Strip the markers, keep both
+sides" is the correct resolution for those, and it is correct often enough to
+become a reflex worth scripting.
+
+It is wrong the moment one side REMOVES a line. Keeping both sides of a deletion
+conflict means the removal does not happen. Measured 2026-09-03, applying a
+resolver that had just been correct five times to a sixth commit that deleted a
+duplicate ledger row:
+
+```
+the original commit    1 file changed, 1 deletion(-)
+the picked result      1 file changed, 1 insertion(+)      <- inverted
+```
+
+A commit whose message says it removes a duplicate, that ADDS a line instead,
+leaving the duplicate it named still in the file.
+
+⚠ **AND THE `grep '^D'` GUARD ABOVE PASSES IT.** That check — and
+`--diff-filter=D` — counts deleted **FILES**, so a botched LINE-level deletion
+reads as zero deletions and goes green. It was caught by reading the post-pick
+`--stat`, not by any guard.
+
+**Do NOT widen the file-level guard to cover this.** It answers the one question
+it exists for — did this batch delete a FILE, the thing that silently drops a
+peer's work — and making it a line-level integrity check makes it noisier at the
+job it does well. A DELETION commit needs its own assertion instead, and only
+deletion commits do:
+
+```
+git show <sha> --stat        # must still say deletion(-) AFTER the pick
+```
+
+🛑 **THE CHEAPEST FIX IS TO REMOVE THE DECISION, NOT TO REMEMBER THE EXCEPTION.**
+A deletion authored against different line numbering conflicts again on the next
+attempt, and correctness then rests on remembering not to run the resolver —
+the same memory that just failed immediately after five correct applications.
+**Rebuild the deletion commit against the already-landed tree so it applies
+clean**, and there is no conflict to resolve at all.
+
+The durable half is not about this file or this resolver: **reusing a resolution
+without checking the new case is the same KIND.** Append-only and deletion are
+not the same kind, and nothing in the process asks which one you have.
+
 #### An escaping layer eats a backslash and the regex still runs
 
 🛑 **`\s+` INSIDE A SQL REGEX BECOMES `s+` IF ANY LAYER BETWEEN YOU AND POSTGRES
