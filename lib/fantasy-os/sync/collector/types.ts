@@ -119,10 +119,41 @@ export function providerNeedsUser(provider: ImportProvider): boolean {
  *
  * Mapping to `runner.INCREMENTAL_SCOPES`:
  *  - `league_state`      ↔ league_state (League row + settings + current LeagueSeason)
- *  - `teams_rosters`     ↔ rosters + recent_matchups + standings (LeagueTeam/Roster/TeamPerformance)
  *  - `traded_picks`      ↔ changed_traded_picks (future_draft_picks)
+ *  - `teams_rosters`     ↔ rosters + recent_matchups + standings (LeagueTeam/Roster/TeamPerformance)
+ *
+ * 🛑 THE ORDER IS LOAD-BEARING, AND IT IS ABOUT THE RUN BUDGET — NOT DEPENDENCIES.
+ *
+ * `runner.ts` checks the elapsed clock BEFORE each scope and never aborts one mid-flight. So a
+ * scope that starts before the deadline always finishes, and the scopes still queued behind an
+ * overrun are the ones dropped. `traded_picks` used to be LAST, which made it the permanent
+ * casualty: measured 2026-09-04, 70 of 1284 fantasy-os-sleeper-sync runs in 24h crossed the 240s
+ * budget, and EVERY `partial` in production read `incompleteScopes: ["traded_picks"]`. Dynasty
+ * pick ownership was the one thing that went stale, systematically, on every slow league.
+ *
+ * Moving it ahead of `teams_rosters` is not a trade of one casualty for another, because of the
+ * no-mid-scope-abort rule above. With `teams_rosters` (the expensive scope) last, it still STARTS
+ * before the deadline in the common overrun case and runs to completion:
+ *
+ *   before:  league_state 5s -> teams_rosters 250s -> traded_picks checked at 255s  DROPPED
+ *   after:   league_state 5s -> traded_picks 10s   -> teams_rosters starts at 15s   BOTH COMPLETE
+ *
+ * The only case that still drops a scope is the scopes ahead of it exhausting 240s on their own,
+ * which now takes `league_state` + `traded_picks` — both cheap — rather than `teams_rosters` alone.
+ *
+ * ⚠ SAFE ONLY BECAUSE THESE SCOPES ARE INDEPENDENT, WHICH WAS CHECKED RATHER THAN ASSUMED.
+ * `applyTradedPicks` takes `leagueId` and the normalized picks and reads no team or roster row;
+ * `persistTradedPicks` writes `originalRosterId`/`currentOwnerId` straight from the payload. On
+ * `FutureDraftPick` those are plain `String @db.VarChar(64)` with NO foreign key to `LeagueTeam` —
+ * the model's only relation is to `League`, which already exists on a refresh. So `traded_picks`
+ * does not need `teams_rosters` to have run. If a future scope DOES gain a real dependency, this
+ * ordering stops being free and the comment above stops being true.
+ *
+ * `IMPORT_SCOPES` in lib/decision-os/import/assertions.ts is a SEPARATE list pinned by its own
+ * test; it is a freshness-reporting coverage set, not an execution order, and is deliberately
+ * left alone.
  */
-export const LEAGUE_SYNC_SCOPES = ['league_state', 'teams_rosters', 'traded_picks'] as const
+export const LEAGUE_SYNC_SCOPES = ['league_state', 'traded_picks', 'teams_rosters'] as const
 export type LeagueSyncScope = (typeof LEAGUE_SYNC_SCOPES)[number]
 
 /**
