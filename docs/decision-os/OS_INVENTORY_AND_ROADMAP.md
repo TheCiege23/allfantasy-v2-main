@@ -166,6 +166,98 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.37 🛑 SCOPING `tradeDecision` — THE ANSWER IS DO NOT BUILD IT, AND I RECOMMENDED IT WRONGLY
+
+**2026-09-03.** I proposed `tradeDecision` as the highest-value next build: the trade engine is
+the biggest in the system at 22 files, trade questions are what people actually ask, and unlike
+`waiverDecision` its blocker looked like it would not be a latency ruling. **Scoping it says
+build nothing.** Recording the reasoning, because the conclusion is counter-intuitive and the
+next person will have the same instinct I did.
+
+### The engine needs a PERSISTED PROPOSAL, and there are none
+
+`RunTradeEvaluateInput` takes a `proposal: TradeProposalContext`, and that type is not a
+description of a hypothetical trade:
+
+```ts
+interface TradeProposalContext {
+  proposalId: string          // required — a row that already exists
+  proposerRosterId: string
+  receiverRosterId: string
+  status: string | null
+  vetoMode: string | null
+}
+```
+
+`proposalId` is required. The engine evaluates a trade that has been PROPOSED and stored — it
+does not evaluate "should I trade X for Y" from a sentence.
+
+The only table with that shape is `redraft_trade_proposals`. Measured in production:
+
+```
+redraft_trade_proposals     0 rows
+trade_analysis_snapshots    1 row
+```
+
+### Both required inputs are empty, not one
+
+⚠ **THE SNAPSHOT IS THE SECOND EMPTY INPUT, AND IT IS EASY TO MISS.**
+`buildProductionTradeDecisionDeps(memo: TradeValueSnapshot)` is wrap-fidelity, and its own
+comment is explicit that this is not a shadow-only limitation:
+
+> *"The recommender is the persisted deterministic snapshot (`memo`) — fed wrap-fidelity. **For a
+> non-shadow live run, the memo is still the authoritative captured snapshot.**"*
+
+⚠ **THAT IS STRICTLY WORSE THAN WAIVER.** Waiver has `productionWaiverRecommend()`, an
+independent recommender explicitly reserved "for a future live run". Trade has **no equivalent** —
+there is no path that recomputes rather than reads a captured snapshot. So `tradeDecision` needs
+two persisted rows, and both tables are empty.
+
+### It is NOT an unfinished build — it is an unused one
+
+The feature is complete end to end. Two writers
+(`lib/trade-runtime/resolveNflRedraftTradeRuntime.ts:491` and
+`app/api/redraft/trade-proposals/route.ts:163`), ten reader modules, a full engine, and an
+existing grounding path. **Zero rows means nobody has proposed a trade through AllFantasy**, not
+that something was left half-built.
+
+🛑 **AND THE DARK PATH ALREADY EXISTS.** `lib/chimmy-trade/pendingTradeDecisionGrounding.ts`
+reads that same empty table today. Building `tradeDecision` would be the **second** surface
+pointed at it — the "migrate the read and wire the writer together, or not at all" failure from
+`ingestCFBDStats`, committed knowingly this time.
+
+### The 18,057 rows are real, and answer a different question
+
+`LeagueTrade` holds **18,057** rows and `LeagueTradeHistory` **4,273** — but their columns
+(`transactionId`, `tradeDate`, `playersGiven`, `valueGiven`, `analyzed`) are **completed** trades
+imported from platforms. No pending status, no proposer/receiver semantics.
+
+That is the shape of the imported portfolio: Sleeper dominates, and a Sleeper trade arrives
+already DONE. "Was that trade fair" and "should I accept this" are different products, and only
+the second is what the engine evaluates. The completed rows already feed
+`manager_trade_tendencies` (481 rows), which works.
+
+### Recommendation
+
+**Do not build `tradeDecision`.** It would be correctly written and permanently absent.
+
+Worth considering instead, in order:
+
+1. **Nothing, and that is a real answer.** The engine is not broken and not wasted — it is live in
+   shadow on the redraft trade path and will start producing the moment a proposal exists.
+2. **A product question for the owner, not an engineering one:** should AllFantasy-native trade
+   proposals exist for IMPORTED leagues? Today the writers are redraft-scoped while 225 Sleeper
+   leagues cannot produce a proposal at all. That is the actual gap, and it is a product decision.
+3. **If a trade fact in chat is the goal**, the honest cheap version is the `waiverDecision`
+   treatment from §0.36's sibling commit — an opt-in slice that explains why it has nothing,
+   pointing at the trade surface. Small, and it stops the silence without pretending.
+
+⚠ **AND THE PROCESS LESSON, WHICH IS THE SAME ONE AS `waiverDecision`.** I estimated both from
+the engine's SIZE and its apparent completeness, and was wrong both times in the same direction:
+the blocker was never the engine, it was the INPUT the engine requires. Twenty-two files of
+working code with two empty tables in front of it is worth less than a one-file producer with
+data. **Check what feeds a thing before scoping the thing.**
+
 ## 0.28 THE INTENT ROUTER — R2/R3.1/R3.3/R4b.5's OPT-IN SLICES NOW GET ASKED FOR
 
 **2026-09-03.** Closes the gap §0.26 found: the live chat route hardcoded
