@@ -223,12 +223,31 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
       .sort((a, b) => a.periodPoints - b.periodPoints)
       .find((s) => !chopSet.has(s.rosterId))?.periodPoints ?? minPoints
 
-  const redraftRows = await prisma.redraftRoster
-    .findMany({
-      where: { id: { in: [...redraftById.values()] } },
-      select: { id: true, teamName: true, ownerName: true, ownerId: true },
-    })
-    .catch(() => [] as Array<{ id: string; teamName: string | null; ownerName: string; ownerId: string }>)
+  /*
+   * ⚠ THE EMPTY CASE IS SKIPPED, NOT QUERIED. When no roster resolves to a RedraftRoster the id
+   * list is empty, and `id: { in: [] }` is a round-trip that cannot return a row -- paid on every
+   * chop in a league whose links have not been reconciled, which is the common case before the
+   * backfill runs.
+   *
+   * 🛑 AND THE `.catch` BELOW COULD NOT COVER IT. `prisma.redraftRoster.findMany` reads a property
+   * off `prisma.redraftRoster` BEFORE any promise exists, so an absent delegate throws
+   * synchronously and `.catch` never sees it. That is not hypothetical: it is what
+   * `guillotine-full-regression` hit -- the audit lift landed a read this engine had previously
+   * reached only behind an `owners.length` guard, and the suite went red on main. A rejected
+   * promise is the only failure a `.catch` converts; a missing delegate is a TypeError.
+   */
+  const redraftIds = [...redraftById.values()]
+  const redraftRows = redraftIds.length
+    ? await prisma.redraftRoster
+        .findMany({
+          where: { id: { in: redraftIds } },
+          select: { id: true, teamName: true, ownerName: true, ownerId: true },
+        })
+        .catch(
+          () =>
+            [] as Array<{ id: string; teamName: string | null; ownerName: string; ownerId: string }>,
+        )
+    : []
   const metaById = new Map(redraftRows.map((r) => [r.id, r]))
 
   const auditChopped = choppedRosterIds.flatMap((rosterId) => {

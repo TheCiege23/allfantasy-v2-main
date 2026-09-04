@@ -28,7 +28,19 @@ const prismaMock = vi.hoisted(() => ({
   appUser: {
     findMany: vi.fn(),
   },
+  /*
+   * The engine reads this delegate for the chop audit. It was absent, so the audit lift crashed
+   * here with `Cannot read properties of undefined (reading 'findMany')` -- a synchronous TypeError
+   * that the engine's `.catch` could not convert, because the property access happens before any
+   * promise exists.
+   */
+  redraftRoster: {
+    findMany: vi.fn(),
+    update: vi.fn(),
+  },
 }))
+const resolveRedraftRosterIdMock = vi.hoisted(() => vi.fn())
+const resolveRedraftRosterIdsMock = vi.hoisted(() => vi.fn())
 
 const getGuillotineConfigMock = vi.hoisted(() => vi.fn())
 const resolveTiebreakMock = vi.hoisted(() => vi.fn())
@@ -42,6 +54,17 @@ const dangerMock = vi.hoisted(() => vi.fn())
 const eventsMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+/*
+ * The engine resolves across the two roster id spaces through this module. Mocking it keeps this
+ * suite testing ELIMINATION rather than re-modelling the reconciler's query sequence -- the
+ * reconciler has its own suite. Both exports are stubbed because the engine imports both:
+ * `resolveRedraftRosterId` for the elimination write, `resolveRedraftRosterIds` for the audit.
+ */
+vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks', () => ({
+  resolveRedraftRosterId: resolveRedraftRosterIdMock,
+  resolveRedraftRosterIds: resolveRedraftRosterIdsMock,
+  reconcileRosterRedraftLinks: vi.fn(),
+}))
 vi.mock('@/lib/guillotine/GuillotineLeagueConfig', () => ({
   getGuillotineConfig: getGuillotineConfigMock,
 }))
@@ -87,6 +110,11 @@ describe('Guillotine full regression matrix', () => {
     vi.clearAllMocks()
     prismaMock.roster.update.mockResolvedValue({ id: 'ok' })
     prismaMock.leagueTeam.updateMany.mockResolvedValue({ count: 1 })
+    // Default to UNRESOLVED, which is the state of a league whose links have not been reconciled.
+    resolveRedraftRosterIdMock.mockResolvedValue(null)
+    resolveRedraftRosterIdsMock.mockResolvedValue(new Map<string, string>())
+    prismaMock.redraftRoster.findMany.mockResolvedValue([])
+    prismaMock.redraftRoster.update.mockResolvedValue({ id: 'ok' })
   })
 
   it('supports all 7 sports with valid guillotine config and waivers after chop', () => {
@@ -153,6 +181,11 @@ describe('Guillotine full regression matrix', () => {
     })
     prismaMock.roster.findMany.mockResolvedValue([{ id: 'r-low', platformUserId: 'u1' }])
     prismaMock.appUser.findMany.mockResolvedValue([{ id: 'u1', displayName: 'Lowest Team', email: 'u1@test.com' }])
+    resolveRedraftRosterIdMock.mockResolvedValue('rr-low')
+    resolveRedraftRosterIdsMock.mockResolvedValue(new Map([['r-low', 'rr-low']]))
+    prismaMock.redraftRoster.findMany.mockResolvedValue([
+      { id: 'rr-low', teamName: 'Lowest Team', ownerName: 'u1', ownerId: 'u1' },
+    ])
 
     const out = await runElimination({
       leagueId: 'league-1',
@@ -162,8 +195,15 @@ describe('Guillotine full regression matrix', () => {
 
     expect(out?.choppedRosterIds).toEqual(['r-low'])
     expect(prismaMock.guillotineRosterState.upsert).toHaveBeenCalledTimes(1)
-    expect(prismaMock.roster.update).toHaveBeenCalledWith({
-      where: { id: 'r-low' },
+    /*
+     * THIS ASSERTION USED TO NAME `prisma.roster.update`, AND HAD BEEN FAILING SINCE b05de0bf0.
+     * `Roster` HAS NO `isEliminated` COLUMN -- the old call only compiled behind a cast, and was
+     * removed. The flag lives on `RedraftRoster`, so the write crosses the two roster id spaces
+     * and the RESOLVED id is the thing worth pinning: asserting `r-low` would pass against a
+     * version that never translated at all, which is the bug the link column exists to prevent.
+     */
+    expect(prismaMock.redraftRoster.update).toHaveBeenCalledWith({
+      where: { id: 'rr-low' },
       data: { isEliminated: true },
     })
     expect(prismaMock.leagueTeam.updateMany).toHaveBeenCalledWith({
@@ -182,6 +222,53 @@ describe('Guillotine full regression matrix', () => {
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop', expect.any(Object))
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('chops a league whose roster links are unreconciled, and issues no empty query', async () => {
+    /*
+     * The degraded path, which is every league until the backfill runs. Nothing resolves, so
+     * nothing can be marked -- but the chop itself must still complete, and the audit must not
+     * issue `id: { in: [] }`, a round-trip that cannot return a row.
+     *
+     * THE EMPTY QUERY WAS NOT MERELY WASTEFUL, IT CRASHED. `prisma.redraftRoster.findMany` reads
+     * a property off `prisma.redraftRoster` BEFORE any promise exists, so an absent delegate
+     * throws synchronously and the engine's `.catch` never sees it -- a `.catch` converts a
+     * rejected promise, not a TypeError. That is what took this suite red on main after the
+     * audit lift.
+     */
+    getGuillotineConfigMock.mockResolvedValue({
+      leagueId: 'league-1',
+      isActive: true,
+      currentWeek: 3,
+    })
+    evaluateWeekMock.mockResolvedValue({
+      pastCutoff: true,
+      scores: [
+        { rosterId: 'r-low', periodPoints: 77 },
+        { rosterId: 'r-mid', periodPoints: 100 },
+      ],
+    })
+    getDraftSlotByRosterMock.mockResolvedValue(new Map([['r-low', 2], ['r-mid', 1]]))
+    resolveTiebreakMock.mockReturnValue({
+      choppedRosterIds: ['r-low'],
+      stepUsed: 'bench_points',
+      reason: 'lowest score',
+    })
+    prismaMock.roster.findMany.mockResolvedValue([{ id: 'r-low', platformUserId: 'u1' }])
+    prismaMock.appUser.findMany.mockResolvedValue([{ id: 'u1', displayName: 'Lowest Team', email: 'u1@test.com' }])
+    // beforeEach already leaves both resolvers unresolved; restated here because it IS the fixture.
+    resolveRedraftRosterIdMock.mockResolvedValue(null)
+    resolveRedraftRosterIdsMock.mockResolvedValue(new Map())
+
+    const out = await runElimination({
+      leagueId: 'league-1',
+      weekOrPeriod: 3,
+      systemUserId: 'system',
+    })
+
+    expect(out?.choppedRosterIds).toEqual(['r-low'])
+    expect(prismaMock.redraftRoster.findMany).not.toHaveBeenCalled()
+    expect(prismaMock.redraftRoster.update).not.toHaveBeenCalled()
   })
 
   it('release engine clears players from chopped rosters for waiver pool', async () => {
