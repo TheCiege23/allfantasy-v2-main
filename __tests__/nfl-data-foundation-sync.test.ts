@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
@@ -55,6 +55,11 @@ const basePlayer = (overrides: Partial<CanonicalNflPlayer>): CanonicalNflPlayer 
 })
 
 describe('NFL foundation sync utilities', () => {
+  // Only one test pins the clock; hand it back so nothing after it inherits fake timers.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('builds Rolling Insights REST paths from the requested season year', () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'lib/workers/providers/rolling-insights.ts'), 'utf8')
     expect(src).toContain('function requestedYearFromQuery')
@@ -105,6 +110,26 @@ describe('NFL foundation sync utilities', () => {
   })
 
   it('probes 2026 and 2026-2027 schedules in dry-run without writing', async () => {
+    /*
+     * ⚠ THE CLOCK IS PINNED BECAUSE THIS ASSERTION SILENTLY DEPENDS ON IT.
+     *
+     * rollingInsightsScheduleSeasonCandidates(season) returns
+     *   unique([String(season), rollingInsightsSeasonRange(season), getCurrentNFLSeason()])
+     * and that third entry is derived from the wall clock. Today it is '2026-2027',
+     * which unique() collapses into the second entry, so the probe list is the two
+     * seasons this test names. Once the real NFL season rolls over, getCurrentNFLSeason()
+     * returns '2027-2028', the list becomes three entries, and this test fails with no
+     * commit to blame -- the same shape as the survivor-voting deadline that sat red for
+     * four days because nothing changed and nobody could bisect it.
+     *
+     * The product code is CORRECT: probing the current season alongside the requested one
+     * is deliberate. It is the assertion that was assuming what year it is, so the fix is
+     * to say so rather than to loosen the expectation -- a toContain here would still pass
+     * if the candidate list silently lost an entry.
+     */
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-15T12:00:00Z')) // inside the 2026-2027 NFL season
+
     const upsert = vi.fn()
     const fetchSchedule = vi.fn(async ({ season }: { season?: string }) =>
       season === '2026-2027'
