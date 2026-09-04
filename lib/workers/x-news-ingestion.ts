@@ -16,6 +16,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { buildNewsPlayerIndex, type NewsPlayerIndex } from '@/lib/player-identity/resolveNewsPlayer'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import {
   classifyPlayerNewsCategory,
@@ -137,13 +138,15 @@ export async function runXNewsIngestion(sports?: string[]): Promise<{
     const queries = SPORT_SEARCH_QUERIES[sport]
     if (!queries) continue
 
+    const playerIndex = await buildNewsPlayerIndex(sport)
+
     for (const query of queries) {
       try {
         const items = await searchXForNews(query, sport)
         fetched += items.length
 
         for (const item of items) {
-          const persisted = await persistNewsItem(item)
+          const persisted = await persistNewsItem(item, playerIndex)
           if (persisted === 'new') {
             newRecords++
             // If it's an injury, also create/update injury record
@@ -348,7 +351,15 @@ export function headlineSimilarity(a: string, b: string): number {
  * the cache expired. That is harmless on a button press and corrosive on a
  * schedule, which is why this compares similarity instead.
  */
-async function persistNewsItem(item: XNewsItem): Promise<'new' | 'duplicate' | 'error'> {
+async function persistNewsItem(
+  item: XNewsItem,
+  /**
+   * Optional canonical-player index. Passed in rather than built here because this function runs
+   * once per news item and the registry read is per SPORT — building it inside would turn one
+   * indexed read into hundreds. Omitted, the row is written unattributed exactly as before.
+   */
+  index?: NewsPlayerIndex,
+): Promise<'new' | 'duplicate' | 'error'> {
   if (!item.headline.trim()) return 'error'
 
   // An unattributed item has no player to scope the comparison to, and matching
@@ -379,7 +390,10 @@ async function persistNewsItem(item: XNewsItem): Promise<'new' | 'duplicate' | '
   const inserted = await prisma.playerNewsRecord.create({
     data: {
       sport: item.sport,
-      playerId: null,
+      // Resolved against the canonical registry. Null stays null: an unresolved name is kept as
+      // GENERAL NEWS with its headline intact rather than dropped, and `playerId IS NOT NULL`
+      // becomes the marker for "attributed to a player" without needing a schema change.
+      playerId: index?.resolve(item.playerName, item.team).playerId ?? null,
       // PlayerNewsRecord.playerName is a non-nullable String column; coerce
       // null items (unattributed headlines) to an empty string. Downstream
       // notification dispatch filters these out via a trim check.
@@ -632,6 +646,8 @@ export async function ingestXNewsForPlayers(input: {
   const noNews: string[] = []
   const errors: string[] = []
 
+  const playerIndex = await buildNewsPlayerIndex(sport)
+
   for (const player of targets) {
     const name = player.name.trim()
     const result = await searchSubjectOnX({
@@ -656,7 +672,7 @@ export async function ingestXNewsForPlayers(input: {
     }
 
     for (const item of toNewsItems(result, { sport, name, team: player.team ?? null })) {
-      const persisted = await persistNewsItem(item)
+      const persisted = await persistNewsItem(item, playerIndex)
       if (persisted === 'new') {
         newRecords++
         if (item.category === 'injury') {

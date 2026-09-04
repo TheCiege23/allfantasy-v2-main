@@ -3,6 +3,12 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import {
+  buildNewsPlayerIndex,
+  tallyNewsResolution,
+  attributionRate,
+  emptyNewsResolutionTally,
+} from '@/lib/player-identity/resolveNewsPlayer'
 import { apiChain } from '@/lib/workers/api-chain'
 import {
   SUPPORTED_SPORTS as API_CHAIN_SPORTS,
@@ -64,9 +70,19 @@ function normalizeNewsRecord(
   }
 }
 
+export interface NewsImportAttribution {
+  exact: number
+  normalized: number
+  team_disambiguated: number
+  ambiguous: number
+  unresolved: number
+  /** Attributed share 0-1, or null when nothing was processed. */
+  rate: number | null
+}
+
 export async function runNewsImporter(options?: {
   sports?: string[]
-}): Promise<{ imported: number; sports: string[] }> {
+}): Promise<{ imported: number; sports: string[]; attribution: NewsImportAttribution }> {
   const sports: ApiChainSport[] = Array.from(
     new Set(
       options?.sports?.length
@@ -76,6 +92,7 @@ export async function runNewsImporter(options?: {
   )
 
   let imported = 0
+  const tally = emptyNewsResolutionTally()
   for (const sport of sports) {
     const dbSport = apiChainSportToDbSport(sport)
     const [legacyRows, chainResponse] = await Promise.all([
@@ -119,12 +136,35 @@ export async function runNewsImporter(options?: {
     ]
 
     if (records.length === 0) continue
+
+    // Resolve each extracted name to a canonical player BEFORE writing. One registry read per
+    // sport, not per item. A name that does not resolve is kept as general news with its headline
+    // intact and a null playerId — this importer's own sources (espn, newsapi) were measured
+    // writing non-players like "Power Rankings" and "Dallas Cowboys" into the player column ~50%
+    // of the time, and those are not failed matches, they are not players.
+    const index = await buildNewsPlayerIndex(dbSport)
+    const attributed = records.map((r) => {
+      const match = index.resolve(r.playerName, r.team)
+      tallyNewsResolution(tally, match.matchType)
+      // The canonical id WINS over any provider id already present. ADR_F2_7 established that
+      // the provider value uses a foreign namespace and is not joinable to our players, so
+      // keeping it would preserve an id nothing can use. An unresolved name keeps whatever was
+      // there (usually null) and stays general news.
+      return match.playerId ? { ...r, playerId: match.playerId } : r
+    })
+
     await prisma.playerNewsRecord.createMany({
-      data: records,
+      data: attributed,
       skipDuplicates: true,
     })
-    imported += records.length
+    imported += attributed.length
   }
 
-  return { imported, sports: sports.map((s) => apiChainSportToDbSport(s)) }
+  return {
+    imported,
+    sports: sports.map((s) => apiChainSportToDbSport(s)),
+    // Surfaced so a degraded extractor is visible in the cron's own output rather than only in
+    // a later audit. `null` means nothing was processed — a rate over zero items is not 100%.
+    attribution: { ...tally, rate: attributionRate(tally) },
+  }
 }
