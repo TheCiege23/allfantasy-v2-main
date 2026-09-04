@@ -16,6 +16,7 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { reconcileRosterRedraftLinks } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
+import { materializeRedraftRosterPlayersForLeague } from '@/lib/league-runtime/materializeRedraftRosterPlayers'
 
 export interface CanonicalSeasonMaterializationResult {
   seasonId: string | null
@@ -53,6 +54,22 @@ export async function materializeRedraftSeasonForImportedLeague(
   })
   if (existing) {
     const rosterCount = await prisma.redraftRoster.count({ where: { seasonId: existing.id } })
+    /*
+     * 🛑 THE ALREADY-MATERIALISED PATH NEEDS THE PLAYERS TOO, AND THIS IS WHERE A FORWARD-ONLY FIX
+     * WOULD HAVE FAILED. Every league whose season already exists returns here — which is all 3,039
+     * empty rosters measured in production. Wiring the projection only into the create path below
+     * would have fixed new imports and left every existing league exactly as broken, while looking
+     * finished.
+     *
+     * Safe to run on this path because it is idempotent and create-only: a league that already has
+     * its players does nothing but two reads, and one that lost them to a failed import gets them.
+     */
+    await materializeRedraftRosterPlayersForLeague(leagueId, { sport }).catch((e) => {
+      console.warn(
+        '[import] redraft roster player backfill failed on an existing season',
+        JSON.stringify({ leagueId, error: e instanceof Error ? e.message : String(e) }),
+      )
+    })
     return { seasonId: existing.id, created: false, rosterCount }
   }
 
@@ -141,6 +158,30 @@ export async function materializeRedraftSeasonForImportedLeague(
   await reconcileRosterRedraftLinks(leagueId).catch((e) => {
     console.warn(
       '[import] roster link reconcile failed; lazy resolution will retry',
+      JSON.stringify({ leagueId, error: e instanceof Error ? e.message : String(e) }),
+    )
+  })
+
+  /*
+   * 🛑 AND GIVE THOSE ROSTERS THEIR PLAYERS, WHICH THIS FUNCTION HAS NEVER DONE.
+   *
+   * It creates a `RedraftRoster` per team and stopped there. Every writer of `RedraftRosterPlayer`
+   * is a transaction path — draft finalisation, waivers, keeper carryover — and none of those runs
+   * on an imported league, so an imported roster was materialised empty and stayed empty. Measured
+   * on production 2026-09-04: 3,039 of 3,130 redraft rosters (97%) had no players, including 100%
+   * of guillotine, zombie and survivor leagues.
+   *
+   * That is why the trade console could not price a deal. `captureSnapshot` builds its team profile
+   * from `roster.players` and reads their positions to judge depth; with none it produces no
+   * profile and the verdict degrades to "we could not price enough of this deal". Nothing was wrong
+   * with the valuation — there was nothing to value.
+   *
+   * Non-fatal, like the reconcile above: a league that imported is worth more than a projection
+   * that can be re-run, and this is idempotent so a retry costs nothing.
+   */
+  await materializeRedraftRosterPlayersForLeague(leagueId, { sport }).catch((e) => {
+    console.warn(
+      '[import] redraft roster player materialization failed',
       JSON.stringify({ leagueId, error: e instanceof Error ? e.message : String(e) }),
     )
   })
