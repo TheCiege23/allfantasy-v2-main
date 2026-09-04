@@ -166,11 +166,18 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
-## 0.38 ⏸ R1.5 — REAL GAP, ZERO BENEFICIARIES, AND EVERY FIX COSTS SOMETHING
+## 0.38 ✅ R1.5 — BUILT, AFTER BEING SCOPED AS A DEFER AND OVERRULED
 
 **2026-09-03.** R1.5 says a C2C / devy-slot NFL dynasty league wants the devy board and the
-`sport === 'NCAAF'` test will not find it. The gap is real and the analysis stands. **Deferred,
-with the fix located precisely so nobody repeats the investigation.**
+`sport === 'NCAAF'` test will not find it.
+
+🛑 **I SCOPED THIS AS A DEFER AND THE OWNER OVERRULED IT. THE OVERRULE WAS RIGHT.** My argument
+was that the beneficiary population is zero, so no implementation cost was worth paying. What
+that misses is that the defect is **latent, not absent**: the first devy league created would
+have silently got nothing, and "correct before anyone needs it" is a defensible standard for a
+one-hop change. Building it also surfaced **two real bugs** that a deferral would have left
+sitting in the analysis instead of the code — see the end of this section. The measurement below
+stands; the conclusion I drew from it did not.
 
 ### The board has data. The consumers do not exist.
 
@@ -209,16 +216,44 @@ no second read and no second derivation to drift. It may even be free in wall-cl
 not the packet's critical path, which is dominated by `savedAnalysis` — but that is a claim
 requiring a production measurement, and measuring it for zero users is not worth the run.
 
-### Trigger, so this is picked up at the right moment
+### What was built — the free option, not the expensive one
 
-Build it when the FIRST devy league exists — `select count(*) from devy_league_configs` > 0, or any
-league with `leagueVariant = 'devy_dynasty'`. At that point prefer the packet-side derivation,
-reuse `isDevyLeague` rather than re-deriving the predicate, and measure whether devy's later start
-moves the packet's p95 before accepting the serialization.
+`deriveWantsDevyBoard(rules)` reads `general.variant`, which `canonicalLeagueRules` already puts
+in the rules the packet has paid for. `pWantsDevy` then gates the devy load:
 
-⚠ **UNTIL THEN THE CURRENT BEHAVIOUR IS CORRECT, NOT MERELY TOLERABLE.** With zero devy leagues,
-scoping devy to NCAAF requests the board exactly when it can be used and never raises a
-`no_producer` gap on an NFL answer. The bug is latent, not active.
+```ts
+const pWantsDevy = want.devy
+  ? Promise.resolve(true)                              // caller asked — FULLY PARALLEL, no hop
+  : pRules.then(deriveWantsDevyBoard).catch(() => false)
+```
+
+⚠ **THE NCAAF PATH IS BYTE-FOR-BYTE UNCHANGED**, which is the whole point of the promise rather
+than an await — the same escape `args.valueFormat` gives the market lane. Only the case that
+previously got NOTHING pays the hop off `pRules`, and it is the hop the market lane already pays
+for the same reason. **A test asserts devy still loads when `pRules` REJECTS**, so that escape
+cannot silently regress into a dependency.
+
+It matches `DEVY_DYNASTY_VARIANT` exactly rather than a `/devy/i` substring, because
+`isDevyLeague` compares against that constant and a loose test here would be a second definition
+of one rule.
+
+### 🛑 Two bugs the tests caught, and neither was visible in the analysis
+
+1. **Gating the LOAD was not enough.** The first version chained the fetch off the rules and left
+   the slice RESOLUTION reading `want.devy` — so a devy-variant league fetched the board and then
+   threw it away as `not_requested`. The **wiring test** caught it; the predicate's own unit suite
+   passed throughout. That is R1.4's lesson (§0.34) paying for itself one commit later.
+2. **Conflating "should we load" with "does the board apply" broke an existing assertion.** A
+   caller passing `want.devy` for a sport with no model must still read `no_producer`, not
+   `not_computed` — the existing "does not claim it is merely cold" test. `devyBoardApplies` is
+   now NCAAF **or variant-derived specifically**, never merely "the caller asked".
+
+5 predicate tests + 4 wiring tests. Mutation-verified in both halves: reverting EITHER the load
+gate or the resolution gate fails the end-to-end test, which is correct — either alone leaves the
+feature broken, and that is exactly the shape of bug #1.
+
+⚠ **THE POPULATION IS STILL ZERO.** This fixes a latent defect and buys nothing today. Recorded
+plainly so the next reader does not mistake a green suite for a feature in use.
 
 ## 0.37 🛑 SCOPING `tradeDecision` — THE ANSWER IS DO NOT BUILD IT, AND I RECOMMENDED IT WRONGLY
 
@@ -3484,6 +3519,7 @@ Updated **in the same change that does the work** (**W4**).
 | ⬜ | **R1.5** 🆕 Devy for C2C / devy-slot NFL dynasty leagues | The NCAAF sport test will not find them. §0.10 |
 | ✅ | **R1.6** Collapse gaps that share one cause | **Done 2026-09-03.** `collapseGapsByCause` groups on reason+detail+remedy and names every affected fact in one line; presentation only, `packet.gaps` unchanged. 10 tests, mutation-verified. §0.33 |
 | ⏸ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Deferred 2026-09-03 — real gap, ZERO beneficiaries.** devy_league_configs, devy_leagues and leagueVariant~devy are all 0 rows; the board itself has 1,721 players. Every fix costs a per-turn query or serializes devy behind rules, and nothing carrying `leagueVariant` is in scope at the gate. Fix located and trigger recorded. §0.38 |
+| ✅ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Done 2026-09-03.** `deriveWantsDevyBoard` reads `general.variant` from rules the packet already loads — no new query, and the NCAAF path stays fully parallel. Population is still zero, so this closes a LATENT defect. 9 tests; two bugs caught during the build (resolution gate, and board-applies vs caller-asked). §0.38 |
 | ⬜ | **R1.6** 🆕 Collapse gaps that share one cause | 8 identical `teams_rosters` lines crowd the prompt. §0.11 |
 | ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
