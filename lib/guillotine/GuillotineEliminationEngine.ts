@@ -271,8 +271,20 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
     chopped: auditChopped,
     standings: auditStandings,
     teamsActiveThisPeriod: evalResult.scores.length,
-    /* Real, where the manual engine hardcoded false — this engine knows whether a tie was broken. */
-    wasTiebreaker: stepUsed != null && stepUsed !== 'lowest_score',
+    /*
+     * Real, where the manual engine hardcoded false — this engine knows whether a tie was broken.
+     *
+     * ⚠ `stepUsed != null` IS THE WHOLE TEST, and the first version of this line got it wrong in a
+     * way only the compiler caught. It read `stepUsed != null && stepUsed !== 'lowest_score'`, and
+     * `TiebreakStep` has no such member — so the second clause was always true, and TS2367 said so.
+     * The typecheck pair on the picked tip is what surfaced it; every test stayed green, because the
+     * expression still produced a boolean and the audit tests supply `wasTiebreaker` directly.
+     *
+     * `resolveTiebreak` returns a step ONLY when it had to break a tie: null for "no candidates",
+     * null for "no tied candidates", and a named step otherwise. So non-null already means exactly
+     * "a tie was broken", and the extra clause was inventing a distinction that does not exist.
+     */
+    wasTiebreaker: stepUsed != null,
   }).catch((e) => {
     console.warn(
       '[guillotine] chop audit failed; the chop itself stands',
