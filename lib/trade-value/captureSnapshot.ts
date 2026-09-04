@@ -10,6 +10,7 @@ import { buildTeamProfile } from './teamProfile'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from './types'
 import { scoringContextFromWorld } from '@/lib/decision-os/trade/scoringContextFromWorld'
 import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
+import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 
 type RawAsset = {
   fromRosterId: string
@@ -106,12 +107,37 @@ export async function computeRedraftTradeValueSnapshot(
    * `buildLeagueShape` refusing is better than a 12-team guess for a 4- or 32-team league.
    */
   let scoring = null as ReturnType<typeof scoringContextFromWorld>
+  /*
+   * The league's REAL format, so the format registry can resolve a model for it.
+   *
+   * 🛑 THIS FILE USED TO HARDCODE `leagueType: 'redraft'` AND THAT MADE FOUR FORMATS UNREACHABLE.
+   * Production holds 12 guillotine leagues, 2 zombie and 1 survivor — 231 rosters between them,
+   * all with redraft seasons, so this IS their trade path. `guillotineModel` has existed since it
+   * was written and could never once have been selected, because the one caller that reaches the
+   * engine told it every league was a redraft.
+   *
+   * ⚠ NULL WHEN NO `leagueId` WAS SUPPLIED, WHICH IS NOT THE SAME AS 'redraft'. `leagueId` is
+   * optional on this input by design (see the field's own note), and a caller that omits it gets
+   * the previous behaviour — no shape, so `applyFormatFit` returns null anyway. Substituting
+   * 'redraft' for "unknown" is what created this bug the first time.
+   */
+  let formatLeagueType: string | null = null
+  let formatAliasTags: string[] | null = null
+  let formatIsDynasty: boolean | null = null
+  let formatKeeperCount: number | null = null
   if (input.leagueId) {
     const league = await prisma.league.findUnique({
       where: { id: input.leagueId },
-      select: { starters: true, settings: true, rosterSize: true, irSlots: true, taxiSlots: true },
+      select: {
+        starters: true, settings: true, rosterSize: true, irSlots: true, taxiSlots: true,
+        leagueType: true, isDynasty: true, keeperCount: true,
+      },
     })
     if (league) {
+      formatLeagueType = league.leagueType ?? null
+      formatAliasTags = readConceptAliasTags(league.settings)
+      formatIsDynasty = league.isDynasty ?? null
+      formatKeeperCount = league.keeperCount ?? null
       const starterSlots = Array.isArray(league.starters)
         ? (league.starters as unknown[]).filter((x): x is string => typeof x === 'string')
         : null
@@ -255,7 +281,17 @@ export async function computeRedraftTradeValueSnapshot(
 
   const context: TradeValueContext = {
     sport: input.sport,
-    leagueType: 'redraft',
+    /*
+     * The league's own format, or 'redraft' only when we genuinely have no league to ask.
+     *
+     * ⚠ THE FALLBACK IS THE PRE-EXISTING BEHAVIOUR, NOT A GUESS UPGRADED. `TradeValueContext`
+     * requires a string, and with no `leagueId` there is nothing better to say; the snapshot's
+     * other fields degrade the same way. What changed is that a league we CAN ask is now asked.
+     */
+    leagueType: formatLeagueType ?? 'redraft',
+    aliasTags: formatAliasTags,
+    isDynasty: formatIsDynasty,
+    keeperCount: formatKeeperCount,
     scoring: input.scoring,
     rosterFormat: input.rosterFormat,
     capturedAt: new Date().toISOString(),

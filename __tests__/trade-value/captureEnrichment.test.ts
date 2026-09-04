@@ -29,13 +29,25 @@ vi.mock('@/lib/decision-os/trade/enrichmentPort', () => ({
   }),
 }))
 
-const league = {
+const BASE_LEAGUE = {
   starters: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF', 'LB', 'LB', 'DB'],
-  settings: { rec: 1, bonus_rec_te: 0.5 },
+  settings: { rec: 1, bonus_rec_te: 0.5 } as Record<string, unknown>,
   rosterSize: 18,
   irSlots: 2,
   taxiSlots: 0,
+  /*
+   * ⚠ THESE THREE WERE ABSENT AND THE SUITE STILL PASSED, which is why they are called out.
+   * `captureSnapshot` used to hardcode `leagueType: 'redraft'` into the context it built, so the
+   * league row's real format never reached the value engine and no test could tell. They are
+   * present now so a mock resembles the row the code actually selects.
+   */
+  leagueType: 'redraft' as string | null,
+  isDynasty: false as boolean | null,
+  keeperCount: 0 as number | null,
 }
+
+// Reassigned per test; the prisma mock reads it at call time.
+let league: Record<string, unknown> = { ...BASE_LEAGUE }
 
 let written: Record<string, unknown> | null = null
 
@@ -92,6 +104,7 @@ const assetFor = (name: string) =>
     | undefined
 
 beforeEach(() => {
+  league = { ...BASE_LEAGUE }
   calls.enrichment = []
   written = null
   enrichmentReturn = { enrichment: {} }
@@ -185,5 +198,51 @@ describe('honest degradation — a resolver failure must not lose what already w
     // 🛑 null means "not known"; 0 would mean "worth nothing" and the grader acts on that.
     expect(assetFor('Alim McNeill')!.sources.fantasyCalcValue).toBeNull()
     expect(assetFor('Alim McNeill')!.sources.idpValue).toBeNull()
+  })
+})
+
+describe('🛑 the league\'s real format reaches the value engine', () => {
+  /*
+   * WHAT THIS CLOSES, AND WHY THE OTHER GUILLOTINE TEST IS NOT ENOUGH.
+   * `__tests__/trade-value/guillotineReachability.test.ts` proves the RESOLVER maps a guillotine
+   * league to `guillotineModel`. It cannot prove this file hands it a guillotine league, because it
+   * calls `applyFormatFit` directly. That is the same gap that nearly shipped `assetState` as dead
+   * code: the model worked, and nothing on the real path ever called it with anything.
+   *
+   * So these assert through `computeRedraftTradeValueSnapshot` — the function production uses.
+   */
+  it('carries leagueType from the row, not a literal', async () => {
+    league = { ...BASE_LEAGUE, leagueType: 'guillotine' }
+    const snap = await captureRedraftTradeValueSnapshot(baseInput)
+    expect(snap.context.leagueType).toBe('guillotine')
+  })
+
+  it('carries aliasTags from conceptRules.extensions', async () => {
+    league = {
+      ...BASE_LEAGUE,
+      leagueType: 'guillotine',
+      settings: {
+        ...BASE_LEAGUE.settings,
+        conceptRules: { concept: 'guillotine', version: 1, extensions: { aliasTags: ['idp'] } },
+      },
+    }
+    const snap = await captureRedraftTradeValueSnapshot(baseInput)
+    expect(snap.context.aliasTags).toEqual(['idp'])
+    // And the modifier tag must not drag the format back to redraft.
+    expect(snap.context.leagueType).toBe('guillotine')
+  })
+
+  it('carries the keeper and dynasty fallbacks the resolver needs', async () => {
+    league = { ...BASE_LEAGUE, leagueType: null, isDynasty: true, keeperCount: 3 }
+    const snap = await captureRedraftTradeValueSnapshot(baseInput)
+    expect(snap.context.isDynasty).toBe(true)
+    expect(snap.context.keeperCount).toBe(3)
+  })
+
+  it('still says redraft when the row says redraft — no behaviour change for the common case', async () => {
+    league = { ...BASE_LEAGUE }
+    const snap = await captureRedraftTradeValueSnapshot(baseInput)
+    expect(snap.context.leagueType).toBe('redraft')
+    expect(snap.context.aliasTags).toEqual([])
   })
 })
