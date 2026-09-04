@@ -162,6 +162,7 @@
     "capture:pwa-screenshots": "node scripts/capture-pwa-screenshots.mjs",
     "sync:sports-foundation": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sync-sports-foundation.ts",
     "guard:db-first-api": "node scripts/check-db-first-api-boundary.mjs",
+    "guard:decision-engine": "node scripts/check-decision-engine-boundary.mjs",
     "verify:deploy": "node scripts/verify-deployed-redirects.mjs",
     "verify:deploy:self-test": "node scripts/verify-deployed-redirects.mjs --self-test",
     "guard:external-id-namespace": "node scripts/check-external-id-namespace.mjs",
