@@ -41,6 +41,26 @@ type TradeConsolePlayerLine = {
   team: string
 }
 
+type RosterPlayer = {
+  kind: 'player'
+  sport: string
+  playerId: string | null
+  name: string
+  position: string
+  team: string
+  slot: string
+  injuryStatus?: string | null
+  byeWeek?: number | null
+  resolved: boolean
+}
+
+type RosterMeta = {
+  resolved: number
+  unresolved: number
+  synced: boolean
+  source: string
+}
+
 type SearchHit = {
   kind: 'player'
   sport: string
@@ -94,7 +114,7 @@ export function TradeValueModal({
   const [detailId, setDetailId] = useState<string | null>(null)
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
   const [leagueTeams, setLeagueTeams] = useState<
-    Array<{ externalId: string; teamName: string; ownerName: string; isYou?: boolean }>
+    Array<{ externalId: string; teamName: string; ownerName: string; platformUserId?: string | null; isYou?: boolean }>
   >([])
   const [opponentTeamExternalId, setOpponentTeamExternalId] = useState('')
   const [teamsLoading, setTeamsLoading] = useState(false)
@@ -151,6 +171,7 @@ export function TradeValueModal({
           externalId: string
           teamName: string
           ownerName: string
+          platformUserId?: string | null
           isYou?: boolean
         }>
         setLeagueTeams(teams)
@@ -167,6 +188,82 @@ export function TradeValueModal({
       cancelled = true
     }
   }, [effectiveLeagueId])
+
+  /**
+   * Rosters for the two teams on screen.
+   *
+   * The console could previously name a league's teams and nothing about what they own — the only
+   * way to fill a side was to type a player's name from memory, which meant opening Sleeper in
+   * another tab to remember who was on a roster.
+   */
+  const [yourRoster, setYourRoster] = useState<RosterPlayer[]>([])
+  const [oppRoster, setOppRoster] = useState<RosterPlayer[]>([])
+  const [rosterMeta, setRosterMeta] = useState<{
+    you: RosterMeta | null
+    opp: RosterMeta | null
+  }>({ you: null, opp: null })
+  const [rosterLoading, setRosterLoading] = useState(false)
+
+  const yourPlatformUserId = leagueTeams.find((t) => t.isYou)?.platformUserId ?? null
+  const oppPlatformUserId =
+    leagueTeams.find((t) => t.externalId === opponentTeamExternalId)?.platformUserId ?? null
+
+  useEffect(() => {
+    if (!effectiveLeagueId) {
+      setYourRoster([])
+      setOppRoster([])
+      setRosterMeta({ you: null, opp: null })
+      return
+    }
+    let cancelled = false
+    setRosterLoading(true)
+
+    const load = async (platformUserId: string | null): Promise<{ players: RosterPlayer[]; meta: RosterMeta | null }> => {
+      if (!platformUserId) return { players: [], meta: null }
+      try {
+        const r = await fetch(
+          `/api/trade-value/league-roster?leagueId=${encodeURIComponent(effectiveLeagueId)}&platformUserId=${encodeURIComponent(platformUserId)}`,
+          { cache: 'no-store' },
+        )
+        if (!r.ok) return { players: [], meta: null }
+        const j = (await r.json()) as {
+          players?: RosterPlayer[]
+          resolved?: number
+          unresolved?: number
+          synced?: boolean
+          source?: string
+        }
+        return {
+          players: Array.isArray(j.players) ? j.players : [],
+          // Carried so the UI can say "20 of 22 shown" rather than silently rendering 20 — a
+          // partial roster that looks complete is worse than one that admits the gap.
+          meta: {
+            resolved: j.resolved ?? 0,
+            unresolved: j.unresolved ?? 0,
+            synced: j.synced !== false,
+            source: j.source ?? 'unknown',
+          },
+        }
+      } catch {
+        return { players: [], meta: null }
+      }
+    }
+
+    Promise.all([load(yourPlatformUserId), load(oppPlatformUserId)])
+      .then(([mine, theirs]) => {
+        if (cancelled) return
+        setYourRoster(mine.players)
+        setOppRoster(theirs.players)
+        setRosterMeta({ you: mine.meta, opp: theirs.meta })
+      })
+      .finally(() => {
+        if (!cancelled) setRosterLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [effectiveLeagueId, yourPlatformUserId, oppPlatformUserId])
 
   useEffect(() => {
     if (effectiveLeagueId && leagues.some((l) => l.id === effectiveLeagueId)) {
@@ -690,6 +787,10 @@ export function TradeValueModal({
           label="You give"
           accent="purple"
           rows={give}
+          rosterPlayers={yourRoster}
+          rosterMeta={rosterMeta.you}
+          rosterLabel="Your roster"
+          rosterLoading={rosterLoading}
           searchHits={searchGive}
           searchLoading={searchLoading === 'give'}
           onSearch={(q) => runSearch('give', q)}
@@ -714,6 +815,10 @@ export function TradeValueModal({
           label="You get"
           accent="cyan"
           rows={getRows}
+          rosterPlayers={oppRoster}
+          rosterMeta={rosterMeta.opp}
+          rosterLabel="Their roster"
+          rosterLoading={rosterLoading}
           searchHits={searchGet}
           searchLoading={searchLoading === 'get'}
           onSearch={(q) => runSearch('get', q)}
@@ -1354,6 +1459,10 @@ function TradeColumn({
   onSearch,
   onChange,
   onPickPlayer,
+  rosterPlayers,
+  rosterMeta,
+  rosterLabel,
+  rosterLoading,
 }: {
   label: string
   accent: 'purple' | 'cyan'
@@ -1363,11 +1472,27 @@ function TradeColumn({
   onSearch: (q: string) => void
   onChange: (fn: (r: SideRow[]) => SideRow[]) => void
   onPickPlayer: (index: number, hit: SearchHit) => void
+  rosterPlayers?: RosterPlayer[]
+  rosterMeta?: RosterMeta | null
+  rosterLabel?: string
+  rosterLoading?: boolean
 }) {
   const accentCls =
     accent === 'purple'
       ? 'shadow-[inset_0_0_40px_rgba(240,128,128,0.06)]'
       : 'shadow-[inset_0_0_40px_rgba(0,212,170,0.06)]'
+
+  /**
+   * Append a roster player as a new row rather than filling an existing one. `onPickPlayer` fills
+   * the row you searched from; clicking a roster name is a different gesture — you are adding a
+   * player, not completing a half-typed one.
+   */
+  const addFromRoster = (rp: RosterPlayer) => {
+    onChange((rowsNow) => [
+      ...rowsNow.filter((r) => !(r.kind === 'player' && !r.name.trim())),
+      { key: newKey(), kind: 'player', name: rp.name, playerId: rp.playerId, sportHint: rp.sport },
+    ])
+  }
 
   const updateRow = (i: number, next: SideRow) => {
     onChange((prev) => prev.map((r, j) => (j === i ? next : r)))
@@ -1376,6 +1501,50 @@ function TradeColumn({
   return (
     <div className={`rounded-[12px] border border-[#2e3347] bg-[#161b22] p-2.5 ${accentCls}`}>
       <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-[#5c6480]">{label}</p>
+
+      {/* Roster picker. Present only when a league is selected and that team has a synced roster —
+          a global (sport-only) trade has no roster to show, and saying so beats an empty box. */}
+      {rosterLoading ? (
+        <p className="mb-2 text-[10px] text-[#5c6480]">Loading roster…</p>
+      ) : rosterPlayers && rosterPlayers.length > 0 ? (
+        <details className="mb-2 rounded-[10px] border border-[#2e3347]/90 bg-[#0b0e14]">
+          <summary className="cursor-pointer list-none px-2 py-1.5 text-[10px] font-semibold text-white/60 hover:text-white/80">
+            {rosterLabel ?? 'Roster'} · {rosterPlayers.length} players
+            {rosterMeta && rosterMeta.unresolved > 0 ? (
+              /* Named rather than hidden: a roster of 22 rendering 20 rows with no explanation is
+                 indistinguishable from a 20-player roster. */
+              <span className="ml-1 text-[#d98b7c]">({rosterMeta.unresolved} unnamed)</span>
+            ) : null}
+          </summary>
+          <div className="max-h-44 overflow-y-auto border-t border-[#2e3347]/60">
+            {rosterPlayers.map((rp, idx) => (
+              <button
+                key={`${rp.playerId ?? rp.name}-${idx}`}
+                type="button"
+                onClick={() => addFromRoster(rp)}
+                className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-white/[0.05]"
+                title={`Add ${rp.name}`}
+              >
+                <User className="h-3 w-3 shrink-0 text-white/35" />
+                <span className="truncate">
+                  {rp.name}{' '}
+                  <span className="text-white/35">
+                    {rp.position}
+                    {rp.team ? ` · ${rp.team}` : ''}
+                    {rp.slot && rp.slot !== 'bench' ? ` · ${rp.slot}` : ''}
+                  </span>
+                </span>
+                {rp.injuryStatus ? (
+                  <span className="ml-auto shrink-0 text-[9px] uppercase text-[#d98b7c]">{rp.injuryStatus}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </details>
+      ) : rosterMeta && !rosterMeta.synced ? (
+        <p className="mb-2 text-[10px] text-[#5c6480]">No synced roster for this team — search by name below.</p>
+      ) : null}
+
       <div className="space-y-2">
         {rows.map((row, i) => (
           <div key={row.key} className="rounded-[10px] border border-[#2e3347]/90 bg-[#0b0e14] p-1.5">
