@@ -140,6 +140,18 @@ export function recordTradeSurfaceShadow(
       agreement: obs.comparison ? obs.comparison.agreement : null,
       leagueScoped: Boolean(obs.leagueId),
       authenticated: Boolean(obs.userId),
+      /**
+       * The IDS, not just the booleans above. `persistParityEvent` lifts `flags.leagueId` and
+       * `flags.userId` into their own columns, and until now this recorded only whether they
+       * EXISTED — so every trade observation landed with both columns null.
+       *
+       * That matters for the Phase 3 gate rather than for reporting: without them a sample cannot
+       * be scoped to a league, cannot exclude the team's own test leagues, and cannot be weighted
+       * per user. A gate satisfied by one enthusiastic tester in one league is not evidence about
+       * the surface.
+       */
+      leagueId: obs.leagueId ?? null,
+      userId: obs.userId ?? null,
       assetsGive: obs.assetsGive ?? null,
       assetsGet: obs.assetsGet ?? null,
       multiTeam: Boolean(obs.multiTeam),

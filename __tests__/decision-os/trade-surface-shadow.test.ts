@@ -111,6 +111,55 @@ describe("recordTradeSurfaceShadow", () => {
     })
   })
 
+  it("carries the league and user IDS, not just booleans about them", () => {
+    // Found on the first real production observation, 2026-09-04: every trade row landed with
+    // decision_parity_record.leagueId and .userId NULL. persistParityEvent lifts `flags.leagueId`
+    // and `flags.userId` into those columns, and this recorded only whether they EXISTED.
+    //
+    // It matters for the Phase 3 gate rather than for reporting: without the ids a sample cannot be
+    // scoped to a league, cannot exclude the team's own test leagues, and cannot be weighted per
+    // user. A gate satisfied by one enthusiastic tester in one league is not evidence about the
+    // surface.
+    const cap = captureEvents()
+    try {
+      recordTradeSurfaceShadow(
+        { surface: "console", leagueId: "league-abc", userId: "user-123", assetsGive: 1, assetsGet: 1 },
+        { DECISION_OS_TRADE_SHADOW_CONSOLE: "true" } as NodeJS.ProcessEnv,
+      )
+      expect(cap.events).toHaveLength(1)
+      expect(cap.events[0]!.flags).toMatchObject({
+        leagueId: "league-abc",
+        userId: "user-123",
+        // The booleans stay: they are what the skip taxonomy reads, and dropping them would
+        // change canonicalInputSkipReason's inputs.
+        leagueScoped: true,
+        authenticated: true,
+      })
+    } finally {
+      cap.stop()
+    }
+  })
+
+  it("records nulls rather than omitting the ids on an anonymous console browse", () => {
+    // The console allows unauthenticated use. A null is a fact about the sample; an absent key is
+    // indistinguishable from a version of this code that never recorded it.
+    const cap = captureEvents()
+    try {
+      recordTradeSurfaceShadow(
+        { surface: "console", assetsGive: 1, assetsGet: 1 },
+        { DECISION_OS_TRADE_SHADOW_CONSOLE: "true" } as NodeJS.ProcessEnv,
+      )
+      expect(cap.events).toHaveLength(1)
+      const flags = cap.events[0]!.flags as Record<string, unknown>
+      expect(flags).toHaveProperty("leagueId", null)
+      expect(flags).toHaveProperty("userId", null)
+      expect(flags.leagueScoped).toBe(false)
+      expect(flags.authenticated).toBe(false)
+    } finally {
+      cap.stop()
+    }
+  })
+
   it("never throws, even when the telemetry sink explodes", () => {
     registerDecisionTelemetrySink(() => {
       throw new Error("sink boom")

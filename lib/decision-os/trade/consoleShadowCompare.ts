@@ -146,12 +146,39 @@ export function compareConsoleVerdictWithCanonicalGrade(input: {
         ? 'opponent'
         : 'you'
 
+  /**
+   * 🛑 SECOND HONESTY PASS: ZERO CONFIDENCE IS NOT AGREEMENT.
+   *
+   * The pass above catches an ungradeable trade. This catches the subtler case it lets through — a
+   * trade that grades cleanly and confidently means nothing.
+   *
+   * Observed on the first real production observation, 2026-09-04: a 2027 1st for a 2027 1st scored
+   * `insufficientData: false`, `fairnessScore: 100`, `grade: 'A+'` — so the pass above did not fire —
+   * with `confidenceScore: 0`, because neither pick could be priced. Advantage resolved to 'even',
+   * the console also said 'even', and it recorded `agreement: true`.
+   *
+   * That is two engines failing to price the same deal and agreeing on the silence. The console's own
+   * UI said so out loud: "an even-looking score here means we have no signal, not that the trade is
+   * fair." Counting it would mean the Phase 3 gate is satisfied FASTEST by exactly the deals nobody
+   * can price — the opposite of what it exists to prove.
+   *
+   * Zero is the line rather than an invented floor: any positive confidence is some signal, which the
+   * gate can weight for itself. The computed grade and fairness are KEPT, unlike the pass above,
+   * because they were genuinely produced — only the agreement claim is withdrawn.
+   */
+  const agreement =
+    snapshot.grade.confidenceScore <= 0
+      ? null
+      : input.consoleAdvantage === 'mixed'
+        ? null
+        : input.consoleAdvantage === advantage
+
   return {
     canonicalGrade: snapshot.grade.grade,
     canonicalFairnessScore: snapshot.grade.fairnessScore,
     canonicalConfidenceScore: snapshot.grade.confidenceScore,
     canonicalValueDifference: snapshot.grade.valueDifference,
     canonicalAdvantage: advantage,
-    agreement: input.consoleAdvantage === 'mixed' ? null : input.consoleAdvantage === advantage,
+    agreement,
   }
 }
