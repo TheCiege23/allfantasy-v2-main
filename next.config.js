@@ -16,6 +16,28 @@ const isRailwayRuntime = !!(
   process.env.RAILWAY_GIT_COMMIT_SHA
 );
 
+// 🛑 DIAGNOSTIC ONLY, RAILWAY ONLY — the other half of `experimental.serverSourceMaps`
+// below. That flag makes Next EMIT `.map` files for the server bundle; it does NOT make
+// Node's uncaught-exception printer consult them. Measured on a304abd35: maps enabled,
+// stack trace still `chunks/2034.js:1:50150`. Node only rewrites a thrown error's stack
+// through source maps when started with `--enable-source-maps`.
+//
+// It has to travel via NODE_OPTIONS, not as a CLI flag on the parent `node … next build`
+// process: the #673 crash happens inside the forked static-generation WORKER, and Next
+// forks that worker with `NODE_OPTIONS: getNodeOptionsWithoutInspect()` — read LIVE from
+// process.env at fork time, with only --inspect* and --max-old-space-size stripped
+// (next/dist/build/index.js createStaticWorker, next/dist/server/lib/utils.js). A parent
+// CLI flag is not inherited by that fork; a mutation here runs before any worker exists.
+//
+// Gated to Railway so peers' local `npm run build` (Windows, where `VAR=x cmd` is not a
+// thing) is untouched. Remove together with serverSourceMaps once the real cause is found.
+if (isRailwayRuntime) {
+  const existing = process.env.NODE_OPTIONS || '';
+  if (!existing.includes('--enable-source-maps')) {
+    process.env.NODE_OPTIONS = `${existing} --enable-source-maps`.trim();
+  }
+}
+
 const nextConfig = {
   reactStrictMode: true,
     optimizeFonts: false,
