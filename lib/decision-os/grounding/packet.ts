@@ -620,6 +620,22 @@ export interface GroundingPacketArgs {
      * manages), not because of an ordering constraint.
      */
     psychologyConsistency?: boolean
+    /**
+     * R2.6 — the waiver claim decision (default OFF).
+     *
+     * 🛑 ASKING FOR THIS TODAY GETS AN HONEST GAP, NOT A DECISION. There is no producer: the
+     * waiver engine at `lib/decision-os/waiver/` is a WRAP-FIDELITY wrapper over the legacy
+     * `/api/waiver-ai/engine` output, and the input it needs — `availablePlayers`, the waiver
+     * wire pool — is supplied by that route and is not available from
+     * `loadWaiverWorldFacts`. So the flag exists to make the absence VISIBLE to a caller who
+     * wanted it, not to switch on work that happens.
+     *
+     * ⚠ IT IS STILL OPT-IN, AND THAT IS THE POINT. An always-surfaced "no waiver decision"
+     * would put the same line on every answer and teach a reader to skim the gap block — the
+     * exact failure `not_requested` is excluded for, and the one R1.6 just spent a commit
+     * fixing. Unasked, it stays `not_requested` and never renders.
+     */
+    waiverDecision?: boolean
   }
 }
 
@@ -1249,6 +1265,42 @@ export async function buildDecisionOsGroundingPacket(
         remedy: 'Ask how consistent you are across leagues or sports and it runs.',
       })
 
+  /*
+   * R2.6 — waiverDecision. THE ONE SLICE WITH NO PRODUCER, AND IT SAYS SO.
+   *
+   * 🛑 IT WAS INVISIBLE BEFORE THIS. The field was declared on the packet type, rendered by the
+   * serializer, and assigned NOWHERE — so it was `undefined` on every packet, and `sliceLine`
+   * tolerates undefined by emitting nothing. It also was not in the array above that feeds
+   * `collectGaps`. The result: a declared fact that was neither reported as available nor
+   * reported as missing, in a packet whose entire contract is that those are the only two
+   * options.
+   *
+   * ⚠ WHY THERE IS NO PRODUCER, recorded so the next reader does not re-derive it. The engine
+   * at `lib/decision-os/waiver/` is complete, but it is a WRAP-FIDELITY wrapper: it takes the
+   * legacy `/api/waiver-ai/engine` OUTPUT and proves the wrapper adds no drift.
+   * `productionWaiverRecommend()` exists for a future live run and is deterministic — no LLM
+   * unless `includeAIExplanation` is set — so cost is not the blocker. The blocker is INPUT:
+   * `WaiverAIEngineInput` needs `availablePlayers`, the waiver wire pool, which the legacy
+   * route already holds and `loadWaiverWorldFacts` does not load. Building it means a pool
+   * loader inside the packet's latency ceiling, which is a scoped decision, not a bridge.
+   *
+   * Until then the honest answer is a gap with a remedy that actually works: the waiver
+   * product surface is live, so a user is pointed at the thing that CAN answer them.
+   */
+  const waiverDecision: GroundedSlice<DecisionFact> = want.waiverDecision
+    ? absent<DecisionFact>({
+        reason: 'no_producer',
+        detail:
+          'A waiver claim decision cannot be computed here yet — the waiver engine needs the ' +
+          'available-player pool for this league, which this packet does not load.',
+        remedy: 'The waiver assistant in the app has the pool and can recommend claims there.',
+      })
+    : absent<DecisionFact>({
+        reason: 'not_requested',
+        detail: 'This question did not call for a waiver claim decision.',
+        remedy: 'Ask who to claim off waivers and it is requested.',
+      })
+
   const psychologyRows = await pPsychology
   const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill
     ? absent<PsychologyProfileFact[]>(psychologyKill)
@@ -1423,6 +1475,7 @@ export async function buildDecisionOsGroundingPacket(
     ['idpKickerValues', idpKickerValues as GroundedSlice<unknown>],
     ['rosterValueGrade', rosterValueGrade as GroundedSlice<unknown>],
     ['psychologyConsistency', psychologyConsistency as GroundedSlice<unknown>],
+    ['waiverDecision', waiverDecision as GroundedSlice<unknown>],
     ...(contextFacts
       ? (Object.entries(contextFacts) as Array<[string, GroundedSlice<unknown>]>)
       : []),
@@ -1448,6 +1501,7 @@ export async function buildDecisionOsGroundingPacket(
     portfolio,
     savedAnalysis,
     managerPsychology,
+    waiverDecision,
     lineupDecision,
     commissionerHealthDecision,
     idpKickerValues,

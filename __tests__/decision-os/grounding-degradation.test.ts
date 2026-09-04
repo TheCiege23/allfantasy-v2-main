@@ -631,3 +631,42 @@ describe('a portfolio that timed out is not a portfolio that is empty', () => {
     expect(p.portfolio.gap?.remedy).toMatch(/import/i)
   })
 })
+
+/**
+ * R2.6 — `waiverDecision` is the one slice with NO producer, and it must say so ONLY when asked.
+ *
+ * 🛑 IT USED TO BE INVISIBLE. The field was declared on the packet type and rendered by the
+ * serializer, and assigned nowhere — `undefined` on every packet, which `sliceLine` tolerates by
+ * emitting nothing. It was also absent from the array feeding `collectGaps`. So a declared fact
+ * was neither reported available nor reported missing, in a packet whose whole contract is that
+ * those are the only two options. The structural suite above could not see it precisely because
+ * an undefined slice does not appear in `everySlice`.
+ */
+describe('R2.6 · waiverDecision reports an honest gap, and only when requested', () => {
+  it('🛑 when REQUESTED it surfaces a no_producer gap naming the missing input', async () => {
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, waiverDecision: true } })
+
+    expect(p.waiverDecision?.present).toBe(false)
+    expect(p.waiverDecision?.gap?.reason).toBe('no_producer')
+    // The remedy must point somewhere that actually works, not at a TODO.
+    expect(p.waiverDecision?.gap?.remedy).toMatch(/waiver assistant/i)
+
+    const surfaced = p.gaps.filter((g) => g.slice === 'waiverDecision')
+    expect(surfaced).toHaveLength(1)
+  })
+
+  it('🛑 when NOT requested it is not_requested and never reaches the gap block', async () => {
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+
+    expect(p.waiverDecision?.gap?.reason).toBe('not_requested')
+    // The anti-crowding guarantee: an always-surfaced "no waiver decision" would put the same
+    // line on every answer and teach a reader to skim the gap block.
+    expect(p.gaps.some((g) => g.slice === 'waiverDecision')).toBe(false)
+  })
+
+  it('is never silently undefined — the defect this replaced', async () => {
+    const p = await buildDecisionOsGroundingPacket(ARGS)
+    expect(p.waiverDecision).toBeDefined()
+    expect(p.waiverDecision?.gap).toBeTruthy()
+  })
+})

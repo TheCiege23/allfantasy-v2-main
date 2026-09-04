@@ -49,9 +49,21 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
     expect(w.psychologyConsistency).toBe(false)
   })
 
-  it('🛑 waiver turns on NOTHING — waiverDecision has no producer in packet.ts to request', () => {
+  /**
+   * ⚠ THIS ASSERTION WAS INVERTED DELIBERATELY, AND THE REASON IS NOT "waiver works now".
+   *
+   * It still has no producer. But the slice now returns an honest `no_producer` gap that names
+   * the missing input (the available-player pool) and points at the waiver surface that can
+   * answer — so requesting it gives the model something to be honest ABOUT. Unmapped, a waiver
+   * question got no waiver fact and no explanation, which is the silence D8 exists to prevent.
+   */
+  it('waiver turns on waiverDecision — which answers with an honest gap, not a decision', () => {
     const w = deriveWantFromIntent('waiver')
-    expect(Object.values(w).every((v) => v === false)).toBe(true)
+    expect(w.waiverDecision).toBe(true)
+    expect(w.lineupDecision).toBe(false)
+    expect(w.commissionerHealthDecision).toBe(false)
+    expect(w.psychologyConsistency).toBe(false)
+    expect(w.rosterValueGrade).toBe(false)
   })
 
   it('every other intent (trade, draft, matchup, league_strength, bracket, injury, weather, story_recap, general) turns on nothing', () => {

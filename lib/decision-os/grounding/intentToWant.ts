@@ -11,12 +11,20 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * below). This file does not know what a `DecisionOsGroundingPacket` is, only which of its
  * opt-in slices each Chimmy intent should turn on.
  *
- * ⚠ FOUR FLAGS, NOT SEVEN. `waiverDecision` has no producer anywhere in `packet.ts` — mapping
- * `waiver` intent to it would request a slice nothing can ever fill. `idpKicker` is deliberately
- * excluded too: its own doc comment names it "the one slice that cannot join the concurrent
- * wave" — a serialized second hop with its own cost profile — and turning it on for every
- * player_value question is a real latency decision that deserves its own measurement, not a
- * rider on this fix.
+ * ⚠ FIVE FLAGS, NOT SEVEN — and `waiverDecision` is mapped for a reason that is NOT "it works".
+ * It still has no producer. Asking for it returns an honest `no_producer` gap naming the missing
+ * input and pointing at the waiver surface that CAN answer. That is strictly better than the
+ * silence it replaced: unmapped, a waiver question got no waiver fact AND no explanation, so the
+ * model had nothing to be honest about. Mapped, the refusal is grounded.
+ *
+ * ⚠ AND IT MUST STAY OPT-IN FOR EXACTLY THAT REASON. The gap is only surfaced when the intent
+ * asked for it; on every other turn the slice is `not_requested` and never renders. An
+ * always-on "no waiver decision" line would teach a reader to skim the gap block — the failure
+ * R1.6 spent a commit removing.
+ *
+ * `idpKicker` remains excluded: its own doc comment names it "the one slice that cannot join the
+ * concurrent wave" — a serialized second hop with its own cost profile — and turning it on for
+ * every player_value question is a real latency decision that deserves its own measurement.
  *
  * ⚠ REUSES `chimmy-orchestration`'s classifier, not `chimmy-context`'s. Two intent classifiers
  * share the name `classifyChimmyIntent` in this codebase (`lib/chimmy-context/intent/
@@ -45,7 +53,11 @@ type PacketWant = NonNullable<GroundingPacketArgs['want']>
 export type IntentDerivedWant = Required<
   Pick<
     PacketWant,
-    'lineupDecision' | 'commissionerHealthDecision' | 'psychologyConsistency' | 'rosterValueGrade'
+    | 'lineupDecision'
+    | 'commissionerHealthDecision'
+    | 'psychologyConsistency'
+    | 'rosterValueGrade'
+    | 'waiverDecision'
   >
 >
 
@@ -55,5 +67,6 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
     commissionerHealthDecision: intent === 'commissioner',
     psychologyConsistency: intent === 'manager_psychology',
     rosterValueGrade: intent === 'player_value',
+    waiverDecision: intent === 'waiver',
   }
 }
