@@ -190,7 +190,17 @@ export function DraftRoomShell({
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
           <div
             className={cn(
-              'shrink-0 overflow-auto overscroll-contain [overflow-anchor:none] border-b',
+              /*
+               * ⚠ `min-h-[160px]` AND NOT `shrink-0`. The board used to refuse to shrink
+               * while capped at 60vh, and the bottom dock is shrink-0 too — so in this
+               * fixed-height column the player pool was the only flexible item and
+               * absorbed the entire deficit. Measured at 1280x720 in the auction layout:
+               * the pool's scroll container was 20px tall and its first row rendered at
+               * y=871, below a 720px viewport, so `document.elementFromPoint` at that
+               * row's centre returned null. The pool was unusable, not merely awkward.
+               * The board now yields space down to a floor instead of starving it.
+               */
+              'min-h-[160px] overflow-auto overscroll-contain [overflow-anchor:none] border-b',
               bottomDockExpanded ? 'max-h-[min(60vh,720px)]' : 'min-h-0 max-h-[unset] flex-1',
               surfaceVariant === 'redraft_snake'
                 ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(10,22,44,0.98),rgba(6,12,22,0.99))] shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]'
@@ -222,7 +232,12 @@ export function DraftRoomShell({
           ) : null}
           <div
             className={cn(
-              'flex min-h-0 overflow-hidden',
+              /*
+               * `min-h-[300px]` gives the pool a floor. `min-h-0` explicitly PERMITTED the
+               * collapse measured above — it is the standard flexbox escape hatch, and
+               * here it was the thing letting a sibling squeeze this to 20px.
+               */
+              'flex min-h-[300px] overflow-hidden',
               bottomDockExpanded ? 'flex-1' : 'hidden',
             )}
             data-testid="draft-premium-main-zones"
@@ -247,7 +262,25 @@ export function DraftRoomShell({
             </div>
           </div>
           {bottomBar ? (
-            <div className="relative shrink-0 border-t border-white/10 bg-[#040915]" data-testid="draft-premium-bottom-dock-wrap">
+            <div
+              /*
+               * ⚠ SHRINKABLE, WITH A FLOOR — BUT ONLY WHILE EXPANDED. This was `shrink-0`
+               * at up to 30vh, so on a short screen it kept its full height and the
+               * deficit fell entirely on the player pool, which is the primary surface
+               * and the one measured collapsed to 20px. A secondary dock should yield
+               * before the pool does.
+               *
+               * The floor MUST NOT apply when collapsed. The inner dock animates to
+               * `max-h-0`, so an unconditional `min-h` would hold 120px of empty space
+               * open and quietly defeat the collapse control this wrapper is built
+               * around — trading one layout bug for another.
+               */
+              className={cn(
+                'relative border-t border-white/10 bg-[#040915]',
+                bottomDockExpanded ? 'min-h-[120px]' : 'shrink-0',
+              )}
+              data-testid="draft-premium-bottom-dock-wrap"
+            >
               {allowPremiumDockCollapse ? (
                 <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-1/2">
                   <button

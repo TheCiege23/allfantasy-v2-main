@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { clickHydrated, waitForHydrated } from './helpers/hydration'
+import { clickHydrated } from './helpers/hydration'
 import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -705,33 +705,45 @@ async function mockAuctionDraftRoomApis(page: Page, leagueId: string) {
 }
 
 /*
- * ⚠ ACTIVATE BY KEYBOARD IN THE AUCTION POOL — ITS CONTROLS ARE POINTER-UNREACHABLE.
+ * Activate a pool control by pointer, via clickHydrated.
  *
- * The pool panel's filter bar is `sticky top-0 z-20` (PlayerPanel.tsx:843), and in the
- * AUCTION desktop layout the panel is short enough that the bar overlaps the content
- * beneath it. Playwright named the interceptor for two different targets — the row-0
- * Nominate button and, one step later, the pick-confirmation Confirm button — both as
- * "<span class=tabular-nums> from <div class=sticky top-0 z-20 ...> intercepts pointer
- * events" while reporting the target itself "visible, enabled and stable".
+ * ⚠ THIS USED TO BE FOCUS + ENTER, AND THE REASON IS WORTH KEEPING. These controls were
+ * genuinely unreachable by pointer: in the auction layout the pool's scroll container
+ * collapsed to 20px and its first row rendered at y=871 in a 720px viewport, so
+ * `document.elementFromPoint` at the Nominate button's centre returned NULL — the
+ * control was off-screen entirely. Playwright's scroll-into-view then put the row under
+ * the pool's 130px sticky filter bar, which is the interception its call log reported.
  *
- * Scrolling does not help: pool rows are virtualized at `position: absolute` with
- * translateY (:265-269), so row 0 is pinned at y=0 with no distance to scroll.
- * `{ force: true }` is actively harmful here — it skips the hit-test, the click still
- * lands on the header, and the test fails later on an action that never happened. A fix
- * that turns a loud failure into a quiet one is not a fix.
+ * That was a product bug, not a test problem, and it is fixed in DraftRoomShell: the
+ * board and the bottom dock now yield space instead of starving the pool. Measured at
+ * 1280x720 before and after:
  *
- * Focus + Enter runs the button's own handler, is exactly what a keyboard user does, and
- * cannot be swallowed by an overlay.
+ *   scroller 20px -> 168px, button y=871 -> y=643,
+ *   elementFromPoint at its centre: null -> BUTTON[draft-nominate-player-0]
  *
- * ⚠ THE OVERLAP IS A REAL PRODUCT DEFECT, not a test artifact: a pointer user in this
- * layout cannot reach these controls either. Recorded here rather than patched blind
- * from a spec; it belongs in a change to the auction pool's layout.
+ * So a real pointer click is the correct assertion again, and it now verifies the fix
+ * rather than working around it. If this starts intercepting again, the layout has
+ * regressed — do not reach for force:true or keyboard activation to silence it.
  */
 async function pressAuctionButton(locator: Locator) {
-  await expect(locator).toBeVisible()
-  await waitForHydrated(locator)
-  await locator.focus()
-  await locator.press('Enter')
+  await clickHydrated(locator)
+}
+
+/**
+ * Open the top-bar overflow menu that holds draft-resync-button, if it is not already open.
+ *
+ * ⚠ RESYNC IS NOT ON SCREEN UNTIL THE MENU IS OPENED, AND IT IS NOT A RENAME.
+ * DraftTopBar renders draft-resync-button only when `menuOpen && menuPos`, inside a
+ * createPortal. The id is unchanged, so a direct click fails as "element(s) not found"
+ * and reads exactly like a deleted control. The locator must also stay PAGE-scoped:
+ * the portal mounts outside draft-desktop-layout. Same fix already carried by the slow
+ * spec, which hit this first.
+ */
+async function openResyncMenu(page: Page) {
+  const resync = page.getByTestId('draft-resync-button')
+  if (await resync.isVisible().catch(() => false)) return
+  await clickHydrated(page.getByTestId('draft-topbar-menu-toggle'))
+  await expect(resync).toBeVisible({ timeout: 15_000 })
 }
 
 async function openDraftRoomHarness(page: Page) {
@@ -859,6 +871,7 @@ test.describe('@auction-draft-room click audit', () => {
     // Timer updates on resync while waiting for nomination.
     const resyncCountBefore = mocks.getResyncHits().length
     const timerBefore = await desktop.getByTestId('auction-nomination-timer').first().innerText()
+    await openResyncMenu(page)
     await clickHydrated(page.getByTestId('draft-resync-button'))
     await expect.poll(() => mocks.getResyncHits().length).toBeGreaterThan(resyncCountBefore)
     await expect
