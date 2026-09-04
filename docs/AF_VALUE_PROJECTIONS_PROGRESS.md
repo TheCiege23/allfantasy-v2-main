@@ -7,6 +7,76 @@ Updated as each step lands. **Nothing here is pushed to production.**
 
 ---
 
+## 🛑 2026-09-03 — the format census, and why the format work STOPS here
+
+Handed to the pusher as tip `307eb9d3e` on base `5a94f395a`, tag `handoff/e8-fourteen`,
+**14 commits**. Awaiting their Railway-green gate. Not pushed.
+
+### The measurement that changes the plan
+
+Run against the read-only census branch. **271 leagues in production:**
+
+| leagueType | leagues | has a value model? | has live state? |
+|---|---|---|---|
+| redraft | 144 | — | n/a |
+| dynasty | 112 | — | n/a |
+| guillotine | **12** | ✅ | ❌ `guillotine_seasons` = **0 rows** |
+| zombie | 2 | ✅ | ❌ `zombie_leagues` = **0 rows** |
+| survivor | 1 | ⬜ | — |
+| four_horsemen · keeper · tournament · pirate · KOTH · c2c · devy · big_brother · salary_cap · best_ball | **0 each** | 3 of them ✅ | — |
+
+`keeper_declarations` is also **0 rows**. `guillotine_roster_states` has exactly one row and
+it is a test fixture (`gwr-runtime-nfl-guillotine-league`).
+
+### What follows from it
+
+🛑 **Writing more format models is writing more dead code, and I have stopped.** Of the five
+models built, only `fourHorsemen` produces a fit without live state — and it has zero leagues.
+The other four read `teamState`/`assetState` that nothing writes. A sixth model would be a
+sixth thing that ships green and does nothing.
+
+🛑 **Wiring readers for those tables would be worse than not wiring them.** That is the
+`ingestCFBDStats` mistake CLAUDE.md names: pointing a surface at a table nothing refreshes fails
+silently and looks correct.
+
+✅ **Where the remaining value is: 256 of 271 leagues (94%) are redraft or dynasty** — the
+`captureSnapshot.ts` path. Projections, scoring context and market value, which is what Phases 3–5
+already cover.
+
+⏸ **The one concept format worth wiring is guillotine**, and it is a *writer* problem, not a model
+problem. Its 12 leagues are real and paid ($20/$30 entry, newest created 2026-09-03) and
+`GuillotineSeason` already has the exact columns the model wants (`totalTeamsStarted`,
+`currentTeamsActive`). Nothing populates it. **Your call whether that is worth a scheduled writer.**
+
+### ✅ The bug the census turned up — `5e96e1aaa`
+
+`aliasTags` is overloaded: it carries **format flavours** (`pirate_vampire`/`royal`→dynasty,
+`king_of_the_hill`→redraft, where the alias IS the format) *and* `idp`, a scoring modifier that can
+sit on any format. `readFormatRules` took `alias[0]` unconditionally. **183 of 271 leagues carry
+`['idp']`**, so:
+
+    dynasty    + ['idp']   97 leagues  →  redraft
+    guillotine + ['idp']   11 leagues  →  redraft
+    zombie     + ['idp']    2 leagues  →  redraft
+
+110 of 271 — **41%** — to the wrong format, the 97 dynasty leagues being the costly ones.
+
+⚠ **LATENT, not live.** No production caller passes `aliasTags` today. It fires on the *next*
+correct change: the module's own header instructs readers to pass them through, and commit 12 of
+this batch does exactly that for `buildTradeValueSnapshot`. Fixed ahead of the wiring.
+
+Fixed with a format **allowlist** (unknown alias → fall through to `leagueType`, the honest degrade),
+plus a test that source-scans the producers and fails if a new tag is added without being classified
+as format-or-modifier. Three mutation controls, each proved applied and restored byte-identical —
+including one showing the classification test passes **vacuously** without its own scanner control.
+**485 tests / 31 files green.**
+
+⚠ **Method note.** The first census asked `conceptRules->'aliasTags'` and returned null for all 271
+rows; I was one edit from publishing "no league has ever carried an alias tag". The tags live at
+`conceptRules->'extensions'->'aliasTags'`. Wrong path, plausible answer, no error.
+
+---
+
 ## ✅ LANDED ON MAIN — 2026-09-02
 
 All work is on `origin/main`, verified **by patch-id** rather than by ancestry (a cherry-pick
