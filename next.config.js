@@ -259,25 +259,36 @@ const nextConfig = {
     // instead of the whole package. Only list packages this repo imports from —
     // verified via `grep -rl "from '<pkg>'" app components lib` before adding.
     //
-    // 🛑 `recharts` and `framer-motion` are deliberately NOT listed, and that is
-    // not an oversight. Both are already present in Next's own built-in default
-    // optimizePackageImports list as of 14.2+, so listing them again here is a
-    // no-op for the safe cases — but `framer-motion` in particular ships internal
-    // React Context modules (MotionConfigContext etc.) through re-exports that the
-    // barrel-import transform does not always preserve as a single module
-    // instance. When it splits, every consumer's `useContext` call resolves
-    // against the WRONG module copy and reads null — which is exactly what #673
-    // did here: every single app-router page failed static generation with an
-    // identical `TypeError: Cannot read properties of null (reading 'useContext')`
-    // in the same shared chunk, because framer-motion is common enough to land in
-    // a shared/vendor chunk every route pulls in, not just the pages that render
-    // an animation. `lucide-react` and `date-fns` are unaffected — Next's own
-    // default list already covers them, so keeping them here is redundant but
-    // harmless, not the source of this failure.
+    // ⚠ `recharts` and `framer-motion` are deliberately not (re-)listed here, but
+    // this is NOT the fix for the #673 useContext regression — that theory was
+    // tested and disproven. `recharts` is unconditionally on Next 14.2.35's own
+    // built-in default optimizePackageImports list (grep node_modules/next/dist/
+    // server/config.js), so it was never possible to opt it out via this array in
+    // the first place. `framer-motion` is genuinely NOT on that default list, so
+    // removing it here should have mattered — except a rebuild of the exact same
+    // source with it removed crashed with the byte-identical error, in the exact
+    // same shared chunk number, as the build that still had it listed. That rules
+    // out optimizePackageImports as the mechanism entirely. See `cpus: 1` below
+    // for what the evidence actually points to.
     optimizePackageImports: [
       'lucide-react',
       'date-fns',
     ],
+    // 🛑 Forces static generation (the `Generating static pages` phase, which
+    // runs AFTER webpack compilation succeeds) onto a single worker process
+    // instead of Next's default of 4 parallel forked workers. Not a guess: the
+    // exact same commit (6e7818d95) produced one SUCCESS Railway deployment and
+    // one FAILED one three minutes apart — the useContext-null crash is
+    // nondeterministic, not a property of the source. Compilation ("✓ Compiled
+    // successfully") is unaffected in every failing build; only the parallel
+    // static-generation worker pool (next/dist/build/index.js's
+    // getNumberOfWorkers, defaulting to 4) runs after that point, and this repo
+    // already has one confirmed precedent for exactly this shape of bug —
+    // `webpackBuildWorker: false` above, added for a *different* parallel-worker
+    // race (the client/server compile split) that dropped the root layout's
+    // shell entirely on Railway's Linux builder. That fix's own reasoning
+    // applies here unchanged: "serialising costs build time and nothing else."
+    cpus: 1,
   },
 
   images: {
