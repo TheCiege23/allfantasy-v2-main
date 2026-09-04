@@ -296,8 +296,16 @@ export function TradeAssetPicker(props: {
                     </span>
                     <span className="af-tc-row-sub">
                       {p.position ? <span className="af-tc-pos">{p.position}</span> : null}
+                      {/*
+                        ⚠ `af-tc-row-team`, NOT `af-tc-team` — the latter is the TEAM CARD in
+                        TradeCenter.tsx. Carrying it here inherited `flex-direction: column`, 14px
+                        of padding and a border from a component this chip has nothing to do with,
+                        which stacked the logo above the abbreviation and made every roster row
+                        130px tall against an intended ~48px. The DOM was correct and the tests
+                        passed throughout: a textContent assertion cannot see a layout.
+                      */}
                       {p.team ? (
-                        <span className="af-tc-team">
+                        <span className="af-tc-row-team">
                           {teamLogoFor(p.team) ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img src={teamLogoFor(p.team) as string} alt="" loading="lazy" />

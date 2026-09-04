@@ -1307,15 +1307,23 @@
   text-transform: uppercase;
 }
 
+/*
+ * ⚠ `af-tc-row-team`, NOT `af-tc-team`. The latter is the TEAM CARD at the top of this file
+ * (flex column, 14px padding, border, surface background). This chip carried that class until
+ * 2026-09-04 and silently inherited all of it — the logo stacked above the abbreviation and each
+ * roster row measured 130px against an intended ~48px. Nothing failed: the DOM was right, the
+ * tests assert textContent, and a CSS lint has no opinion. Caught by measuring the box in a
+ * browser, which is the only thing that can see it.
+ */
 .af-tc-row-body .af-tc-pos,
-.af-tc-row-body .af-tc-team,
+.af-tc-row-body .af-tc-row-team,
 .af-tc-row-body .af-tc-bye {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 .af-tc-row-body .af-tc-pos::after,
-.af-tc-row-body .af-tc-team::after {
+.af-tc-row-body .af-tc-row-team::after {
   content: '·';
   margin-left: 6px;
   opacity: 0.5;
@@ -1323,7 +1331,8 @@
 .af-tc-row-body .af-tc-bye::after {
   content: none;
 }
-.af-tc-team img {
+/* Scoped to the row chip. Unscoped, this also sized every image inside the team CARD. */
+.af-tc-row-team img {
   width: 14px;
   height: 14px;
   object-fit: contain;
