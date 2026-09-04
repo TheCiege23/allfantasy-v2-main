@@ -166,6 +166,93 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.40 ✅ R0.12 CLOSED AS NOT-A-DEFECT · ⏸ R0.13 IS ONE FLAG AWAY, AND IT IS WORTH ~1113ms
+
+**2026-09-04.** Both measured before touching anything. Neither wanted the change its ledger row
+described, and R0.13 turns out to be the largest latency win left in the packet.
+
+### R0.12 — "bound the unbounded `findMany`". Do not.
+
+Two reasons, and the second is the one that matters.
+
+**It is not big.** `decision_os_imported_activity` across production:
+
+```
+leagues with activity        95
+max rows for ONE league     364
+average per league          179
+p95                         290
+```
+
+364 rows of three selected columns is not an unbounded-read problem at any scale that exists.
+
+🛑 **AND `take: N` WOULD BE WRONG, NOT MERELY UNNECESSARY.** The rows are AGGREGATED, not
+sampled: counts per activity type, `total: rows.length`, a `managerCount` Set across every row,
+`lastActivityAt` as a max, and a **content-based version string** built from those counts. Bounding
+would silently produce wrong totals — and worse, a version that changes with whichever rows came
+back. That version exists to make a re-ingest that changed nothing NOT look like a material
+change; a flapping version invalidates cached analyses and forces provider spend. The function's
+own comment says so.
+
+The correct fix, if this ever matters, is **DB-side aggregation** (`groupBy`/`count`), not a cap.
+Recorded so nobody reaches for `take` later.
+
+### R0.13 — `savedAnalysis` is correct, and costs ~1113ms to be correct
+
+`decision_intelligence_runs` holds **0 rows**, so `savedAnalysis` returns `not_computed` for every
+league, always. That is **not a defect**: the maintenance cron's own docstring says refresh
+execution *"is inert until a live evidence rehydrator is injected (Phase 3), **by design**"*.
+
+⚠ **THE COST IS THE FINDING.** §0.8 measured `savedAnalysis` at **1113 ms** against roughly
+**1250 ms** of total packet headroom. So the packet spends nearly its entire budget reaching an
+answer that is structurally guaranteed until Phase 3 lands.
+
+🛑 **AND THE OBVIOUS FIX IS FORECLOSED — CHECK BEFORE REORDERING.** `readLeagueIntelligence`
+builds evidence (line ~118) and only then looks up the run (line ~150), which looks like a trivial
+reorder. It is not: `computeIntelligenceRequestIdentity(evidence.ctx)` derives the lookup key FROM
+the evidence, and the comment defending it is explicit — that is *"what makes changed league data
+miss the cache instead of serving a stale answer under a matching key"*. Looking up the run first
+is impossible without giving up that property.
+
+So the 1113 ms is structural given the design, and the only lever is not to ask the question.
+
+### The lever already exists, and it is an owner action rather than a code change
+
+`savedAnalysis` is already behind `flags.enabled('savedAnalysis')`. Kill orders live in the
+DATABASE and fail open, so it is ON because no kill row exists — not because anyone chose it.
+
+**Killing `savedAnalysis` until Phase 3 lands returns ~1113 ms of a ~1250 ms budget** and changes
+no answer: the slice reads `not_computed` either way.
+
+✅ **DONE 2026-09-04, at the owner's direction.** Applied through
+`setDecisionOsFeedEnabled('savedAnalysis', false)` rather than raw SQL, so the key format is
+correct by construction and the cache is invalidated the way the app would do it. Verified through
+the app's own resolver, not merely by the row existing:
+
+```
+BEFORE  row absent (fail-open, enabled)   enabled: true    killed: []
+AFTER   decision_os_feed_savedAnalysis=false   enabled: false   killed: ['savedAnalysis']
+```
+
+Confirmed independently read-only afterwards, and `platform_config` holds exactly ONE
+`decision_os_feed_%` row — nothing else was killed by accident.
+
+⚠ **THE SLICE NOW RENDERS NOTHING RATHER THAN `not_computed`.** A killed feed resolves to
+`not_requested`, which `collectGaps` excludes by design, so the prompt loses the line saying no
+saved analysis exists. That is the intended trade and worth stating: the information was true but
+never actionable, and R1.6's whole finding was that a permanent gap line teaches a reader to skim
+the block.
+
+⚠ **AND IT SHOULD BE UNKILLED WHEN PHASE 3 LANDS**, or the slice stays silent after the thing that
+would fill it starts working. Noted here because a kill row is exactly the kind of temporary
+measure that becomes permanent by being invisible.
+
+### The pattern, now four for four
+
+R0.12 and R0.13 join `tradeDecision`, R1.5 and R7: the mechanism is built and correct, and the
+thing missing is data, adoption, or a decision. **Neither of these two wanted the code change its
+ledger row asked for**, and finding that out cost two measurements each.
+
 ## 0.39 ✅ R7 — THE FATIGUE BUDGET. THE REST OF R7 WAS ALREADY BUILT.
 
 **2026-09-03.** R7 is filed as *"one outbox, four transports, one fatigue budget enforced in the
@@ -3575,8 +3662,8 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R0.10** Re-measure on a production build | **Done 2026-09-02. IT WAS THE DEV SERVER.** 1730–1782 ms vs a 3000 ms ceiling — **~1250 ms headroom.** Overturns three conclusions in this file. §0.8 |
 | ✅ | **R0.9** Four context providers "timing out" | **Closed without work — dev artifact.** All four return `ok=true` in 566–1170 ms on production. §0.8 |
 | ⏸ | **R0.11** Two round-trip cuts | **Deprioritised.** Justified by a latency problem that does not exist in production; would buy ~50 ms against 1250 ms of headroom. §0.8 |
-| ⬜ | **R0.12** Bound the unbounded `findMany` in `loadImportedActivityEvidence` | Not a latency issue (188 rows here) but 42 leagues share 6,436 rows. §0.7 |
-| ⬜ | **R0.13** 🆕 `savedAnalysis` returns `not_computed` | Now a **data** question (no run for current evidence), not latency. 1113 ms. §0.8 |
+| ✅ | **R0.12** Bound the unbounded `findMany` in `loadImportedActivityEvidence` | **Closed 2026-09-04 as NOT-A-DEFECT.** Max 364 rows for any one league (95 leagues, p95 290), three columns. And `take: N` would be WRONG — the rows are aggregated into counts, a managerCount Set and a content-based version string, so a cap silently corrupts totals and flaps the version. DB-side aggregation is the fix if it ever matters. §0.40 |
+| ⏸ | **R0.13** `savedAnalysis` returns `not_computed` | **Correct, not broken** — `decision_intelligence_runs` is 0 rows and refresh is inert until Phase 3 by design. But it costs **~1113ms of ~1250ms** headroom to reach a guaranteed answer, and the reorder that would avoid it is foreclosed (the lookup key derives from the evidence). **KILLED 2026-09-04** at the owner's direction — `decision_os_feed_savedAnalysis=false`, verified through the app's own resolver. ⚠ Must be UNKILLED when Phase 3 lands. §0.40 |
 | ✅ | **R0.4** Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Done 2026-09-03 — and it REFUTES §0.3.** Answered WITHOUT calling the endpoint: the collector demonstrably runs. 38 leagues attempted and 35 succeeded in two hours, newest success 81 seconds before the reading. The route returns the disabled `reason` and syncs NOTHING unless `FANTASY_OS_EXEC_SYNC_LIVE === 'true'`, so live writes prove the gate passes. **Import OS is not gated.** §0.35 |
 | ✅ | **R0.5** Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | **Done 2026-09-03. NOT usable for W2 — the endpoint is STALE.** Host `ep-hidden-block-ad77fprp` / db `mydb_shadow`, versus production `ep-curly-block-ad0dlt9o` / `neondb`. Genuinely a different database, but a dead one: `docs/redraft/PHASE_NEXT_BASELINE_AND_PATH_DECISION.md` already recorded it matching no live compute endpoint across the account's 5 Neon projects, and §0.18's endpoint census found exactly one active. Zero code reads it. §0.35 |
 | ✅ | **R1.1** Render slice values (**G11**) | **Done 2026-09-02.** Proved red→green, 48/48. Also added `playerName` to the anonymous value contract, and fixed an arbitrary-element `asOf`. Typecheck blocked by a peer's mid-edit file. §0.9 |
