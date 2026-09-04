@@ -432,13 +432,45 @@ test.describe('@draft-asset-pipeline click audit', () => {
     await expect(desktop.getByTestId('player-detail-modal')).toHaveCount(0)
 
     await clickHydrated(desktop.getByTestId('draft-queue-add-0'))
-    await expect(desktop.getByTestId('draft-queue-item-0')).toContainText('Broken Image Back')
+    /*
+     * ⚠ SCOPE TO THE RIGHT DOCK: `draft-queue-item-0` EXISTS TWICE.
+     * The queue renders in both draft-right-dock-panel-queue and draft-bottom-dock-tabs,
+     * so an unscoped locator is a strict-mode violation ("resolved to 2 elements") rather
+     * than a missing item -- the add itself worked and both copies held the player. Same
+     * duplicate-dock shape that hides draft-chat-open-ai-helper in the auction spec.
+     */
+    await expect(
+      desktop.getByTestId('draft-right-dock-panel-queue').getByTestId('draft-queue-item-0'),
+    ).toContainText('Broken Image Back')
 
     await expect(desktop.getByTestId('draft-player-card-0-headshot-fallback')).toBeVisible({ timeout: 15_000 })
-    await expect(desktop.getByTestId('draft-player-card-0-team-logo-fallback')).toBeVisible({ timeout: 15_000 })
+    /*
+     * ⚠ THE TEAM LOGO RESOLVES; IT DOES NOT FALL BACK. This asserted the initials badge
+     * and could never pass, because a null team logo with a KNOWN abbreviation is
+     * deliberately resolved rather than degraded -- normalizePlayer.ts:107:
+     *
+     *   let teamLogoUrl = display.assets.teamLogoUrl ?? null
+     *   if (!teamLogoUrl && teamAbbr) teamLogoUrl = getTeamLogo(teamAbbr, sport)
+     *
+     * so this fixture's `teamLogoUrl: null` + `abbreviation: 'NYJ'` yields a league asset
+     * and TeamLogoOrFallback takes its `showImg` branch. The headshot has no equivalent
+     * derivation, which is why its fallback above is correct and this one was not.
+     *
+     * Asserting the resolved image is also the stronger claim for an asset-pipeline spec:
+     * it proves the pipeline recovered a logo the payload did not carry. Reaching the
+     * initials badge would need a player with no resolvable team, which neither fixture
+     * has.
+     */
+    await expect(desktop.getByTestId('draft-player-card-0-team-logo-image')).toBeVisible({ timeout: 15_000 })
 
+    /*
+     * ⚠ NO CONFIRM STEP ON A SNAKE PICK. `draft-confirm-pick-button` lives inside
+     * PlayerPanel's `pendingNomination` block -- the AUCTION nomination confirm, which the
+     * testid name hides. A snake pick goes straight through `onDraftRequest`, so the board
+     * assertion below is what proves the pick landed. Same phantom step removed from the
+     * slow spec; the auction spec keeps it, correctly, for an actual nomination.
+     */
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-2')).toContainText('Broken Image Back')
 
     await expect(page.getByText(/sleeperId|ffcPlayerId|external_source_id/i)).toHaveCount(0)
