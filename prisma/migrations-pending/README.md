@@ -155,3 +155,66 @@ Apply this only once the tenant-aware build is **serving traffic** — merged is
 not the same as serving. And note it does not weaken the invariant meanwhile:
 `schema.prisma` still carries no `@default`, so the generated client makes
 `tenantId` required and application code cannot omit it.
+
+### `20260903222531_weekly_matchup_roster_id_text`
+
+✅ **APPLIED TO PRODUCTION 2026-09-03.** `WeeklyMatchup.rosterId Int` → `String`.
+One statement: `ALTER COLUMN "rosterId" TYPE TEXT USING "rosterId"::text` —
+lossless, every existing Int becomes its exact text form. Verified before (44,538
+rows, 0 nulls) and after (44,538 rows, 0 nulls, 0 non-numeric values, all four
+indexes including the `leagueId/seasonYear/week/rosterId` unique constraint
+intact) via direct query against production.
+
+**Why.** MFL franchise ids are zero-padded strings ("0001"). Stored verbatim as
+`LeagueTeam.externalId`, they lose their leading zeros the moment they pass through
+this `Int` column — `Number('0001')` is `1`, `String(1)` is `"1"`, which never
+matches "0001" again. This is why MFL has no `WeeklyMatchup` writer at all; see
+`lib/fantasy-os/sync/collector/index.ts`'s own note. Four readers
+(`lib/core-app/leagueScoreboard.ts`, `allPlay.ts`, `dash3aPanels.ts`, `leagueHome.ts`)
+were already patched around the *symptom* via `lib/core-app/rosterIdMatch.ts`
+(`buildRosterIdMap`/`rosterIdsMatch`, a numeric-normalized-alias map) — that fix
+stands regardless of this migration and does not need reverting. This migration
+removes the *cause*.
+
+🛑 **`schema.prisma` is not updated by the SQL file itself** — it is a separate,
+committed code change (writers + every reader across `lib/core-app`, `lib/ai/sim`,
+`lib/rankings-engine`, `lib/season-forecast`, `lib/today-actions-engine`, plus
+tests) landing through the normal review/batch process, not this file.
+
+✅ **MEASURED, NOT ASSUMED — the sequencing question, resolved by testing rather
+than by argument.** An earlier version of this entry required the SQL and the
+code to land "together, in one change, on explicit instruction to apply,"
+reasoning that applying the SQL alone would leave the (still-Int-typed) deployed
+client "expecting Int against a TEXT column (read-side breakage)." That was never
+tested, and it is wrong. Two real Prisma clients were pointed at two real Neon
+branches to check both directions directly:
+
+- **currently-deployed (Int-typed) client → a branch already migrated to Text**:
+  `findMany` succeeds, silently coercing `"1"` back to JS number `1`. `create`
+  succeeds, writing a JS number in and getting it stored as text. No error either
+  direction.
+- **the new (String-typed) client → a branch still on Int**: `findMany` fails
+  (`P2032`: "expected non-nullable type String, found incompatible value of
+  '1'"). `create` fails (Postgres wire-protocol error). Hard failure, both
+  directions.
+
+The reason it is one-directional: Postgres permits an implicit `int → text` cast
+in assignment context (a write, or a plain column read) but refuses
+`text = integer` in comparison context. Because of that asymmetry, this was
+independently re-verified rather than taken on the two-test result alone: every
+deployed `WeeklyMatchup` query was censused and confirmed to use `rosterId` only
+via `select` or `create`/`createMany` — never in a `where` filter, and there is
+no upsert or compound-key lookup on it anywhere — so the comparison-context
+failure mode does not exist on code that is actually live.
+
+**Conclusion:** applying this SQL alone, ahead of the schema.prisma + code
+change, is safe against currently-deployed code and was the order actually used.
+The reverse order — code first — is the dangerous one: total, immediate failure
+of every `WeeklyMatchup` read and write until the SQL catches up. The two do not
+need to land in the same deploy window.
+
+⚠ **This safety is specific to today's actual data and today's actual queries,
+not a general rule about Int→Text migrations.** No MFL writer exists yet, so
+nothing is writing a zero-padded `rosterId` under the old (Int-typed) client. A
+future change that adds a `where`/upsert on `rosterId`, or a writer producing a
+non-plain-digit value, would need this re-checked, not assumed to still hold.

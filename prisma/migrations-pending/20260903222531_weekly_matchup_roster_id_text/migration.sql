@@ -1,0 +1,49 @@
+-- WeeklyMatchup.rosterId: Int -> Text.
+--
+-- Root fix for the MFL zero-padding trap documented in lib/fantasy-os/sync/collector/index.ts
+-- and lib/core-app/rosterIdMatch.ts. MFL franchise ids are zero-padded strings ("0001"); every
+-- other provider currently writing this column (Sleeper, ESPN, Yahoo, Fantrax) already uses a
+-- plain unpadded integer string, so this is lossless for all four of them -- see the census in
+-- prisma/migrations-pending/README.md before applying.
+--
+-- Lossless, one-directional cast: every existing Int value becomes its exact text
+-- representation ("1" for 1, "12" for 12, ...). Nothing is truncated or reinterpreted.
+--
+-- APPLIED to production 2026-09-03. Row count verified before (44,538) and after (44,538,
+-- 0 nulls, 0 non-numeric) via information_schema + a direct count; all four indexes
+-- (including the leagueId/seasonYear/week/rosterId unique constraint) confirmed intact.
+--
+-- ✅ MEASURED, NOT ASSUMED: an earlier version of this comment said the SQL and the
+-- schema.prisma + code change "must land together" and that applying this SQL alone would
+-- leave the (still-Int-typed) generated client "failing to parse the column it reads back."
+-- That was never tested and turned out to be wrong. Two real Prisma clients were pointed at
+-- two real Neon branches to check both directions directly:
+--
+--   currently-deployed (Int-typed) client -> a branch already migrated to Text:
+--     findMany SUCCEEDS, silently coercing "1" back to JS number 1. create SUCCEEDS,
+--     writing a JS number in and getting it stored as text. No error either direction.
+--   the new (String-typed) client -> a branch still on Int:
+--     findMany FAILS (P2032: "expected non-nullable type String, found incompatible
+--     value of '1'"). create FAILS (Postgres wire-protocol error). Hard failure, both
+--     directions.
+--
+-- The reason it is one-directional: Postgres permits an implicit int -> text cast in
+-- assignment context (a write/read of a plain column value) but refuses text = integer in
+-- comparison context. allfantasy-v2-main-be independently censused every deployed
+-- WeeklyMatchup query and confirmed rosterId is never used in a `where` filter or an
+-- upsert/compound-key lookup anywhere -- only ever read via `select` or written via
+-- `create`/`createMany` -- so the comparison-context failure mode this migration would
+-- otherwise risk does not occur on the code that is actually live.
+--
+-- Conclusion: applying this SQL alone, ahead of the schema.prisma + code change, is safe
+-- against currently-deployed code -- proven, not assumed -- and is the recommended order.
+-- Applying the code change first (String-typed client against a still-Int column) is the
+-- direction that is actually dangerous: total, immediate failure of every WeeklyMatchup
+-- read and write until the SQL catches up. The two do NOT need to land in the same window.
+--
+-- This safety is specific to today's actual data: no MFL writer exists yet, so nothing is
+-- writing a zero-padded rosterId under the old (Int-typed) client. Do not read this as
+-- "any future schema drift like this is automatically safe" -- it was checked for this
+-- exact column and this exact set of live queries, not derived from a general rule.
+
+ALTER TABLE "WeeklyMatchup" ALTER COLUMN "rosterId" TYPE TEXT USING "rosterId"::text;
