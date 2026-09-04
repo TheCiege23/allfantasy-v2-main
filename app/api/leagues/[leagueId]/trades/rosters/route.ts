@@ -217,7 +217,14 @@ export async function GET(
             position: enriched?.position ?? null,
             team: enriched?.team ?? null,
             imageUrl: enriched?.imageUrl ?? enriched?.headshotUrl ?? null,
-            byeWeek: enriched?.byeWeek ?? null,
+            /*
+             * ⚠ `byeWeek` IS NESTED UNDER `product`, NOT TOP-LEVEL, and reading it from the top
+             * level is silent rather than loud: `enriched?.byeWeek` is `undefined`, `?? null`
+             * turns that into `null`, and the row renders as "no bye week" for every player.
+             * `serializeUnifiedPlayerForApi` populates `product.byeWeek` from `entry.byeWeek`,
+             * so the value was available the whole time.
+             */
+            byeWeek: enriched?.product?.byeWeek ?? null,
             injuryStatus: enriched?.injuryStatus ?? null,
             // Filled in one batch below — see the value pass.
             value: null,

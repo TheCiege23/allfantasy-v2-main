@@ -197,7 +197,15 @@ export async function materializeRedraftRosterPlayersForLeague(
           sport: String(dto?.sport ?? sport),
           slotType: slotTypeFor(r.playerData, playerId, position),
           injuryStatus: dto?.injuryStatus ?? null,
-          byeWeek: dto?.byeWeek ?? null,
+          /*
+           * 🛑 `byeWeek` IS NESTED UNDER `product`, AND GETTING THIS WRONG PERSISTS THE MISTAKE.
+           * `dto?.byeWeek` is `undefined`, `?? null` makes it `null`, and this row is written to
+           * `RedraftRosterPlayer.byeWeek` — a real `Int?` column. So every imported roster player
+           * lands with a permanently absent bye week that looks like the provider never supplied
+           * one, and nothing surfaces it: no crash, no empty state, and `ignoreBuildErrors` in
+           * next.config.js means the build never sees the type error either.
+           */
+          byeWeek: dto?.product?.byeWeek ?? null,
           // Matches the 2,110 rows already in this table that came from an import.
           acquisitionType: 'imported',
         },
