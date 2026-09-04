@@ -16,28 +16,6 @@ const isRailwayRuntime = !!(
   process.env.RAILWAY_GIT_COMMIT_SHA
 );
 
-// 🛑 DIAGNOSTIC ONLY, RAILWAY ONLY — the other half of `experimental.serverSourceMaps`
-// below. That flag makes Next EMIT `.map` files for the server bundle; it does NOT make
-// Node's uncaught-exception printer consult them. Measured on a304abd35: maps enabled,
-// stack trace still `chunks/2034.js:1:50150`. Node only rewrites a thrown error's stack
-// through source maps when started with `--enable-source-maps`.
-//
-// It has to travel via NODE_OPTIONS, not as a CLI flag on the parent `node … next build`
-// process: the #673 crash happens inside the forked static-generation WORKER, and Next
-// forks that worker with `NODE_OPTIONS: getNodeOptionsWithoutInspect()` — read LIVE from
-// process.env at fork time, with only --inspect* and --max-old-space-size stripped
-// (next/dist/build/index.js createStaticWorker, next/dist/server/lib/utils.js). A parent
-// CLI flag is not inherited by that fork; a mutation here runs before any worker exists.
-//
-// Gated to Railway so peers' local `npm run build` (Windows, where `VAR=x cmd` is not a
-// thing) is untouched. Remove together with serverSourceMaps once the real cause is found.
-if (isRailwayRuntime) {
-  const existing = process.env.NODE_OPTIONS || '';
-  if (!existing.includes('--enable-source-maps')) {
-    process.env.NODE_OPTIONS = `${existing} --enable-source-maps`.trim();
-  }
-}
-
 const nextConfig = {
   reactStrictMode: true,
     optimizeFonts: false,
@@ -257,27 +235,6 @@ const nextConfig = {
   },
 
   experimental: {
-    // 🛑 DIAGNOSTIC ONLY — NOT A FIX. Do not remove this comment when it is removed.
-    // Two reasoned attempts at the #673 useContext-null regression (08ee395c1,
-    // ab6993b40) both failed on Railway with the byte-identical crash: same digest
-    // (3463372292), same shared chunk (server/chunks/2034.js), across ~250 routes,
-    // every time. Both were guesses tested against production Railway builds with
-    // no way to confirm the mechanism, because production builds strip source maps
-    // — the stack trace only ever names minified internal Next.js runtime frames
-    // and an opaque chunk file, never the actual component/module at fault.
-    //
-    // This turns those maps back on for the SERVER bundle only (client bundle/UX
-    // is unaffected either way) so the next occurrence of this crash — whether
-    // from a real fix attempt or a plain retry — reports the real source file and
-    // line instead of "chunks/2034.js:1:50150". Not reproducible locally (tried:
-    // clean on Windows, and this repo's own history says an earlier structurally
-    // similar bug "only shows up on the Linux builder" — ef1c84417), and Docker is
-    // not available on this machine to test a Linux build directly. This is the
-    // best remaining path to real evidence rather than another guess.
-    //
-    // Revert once the real cause is identified and fixed — source maps are extra
-    // build output with no reason to ship indefinitely.
-    serverSourceMaps: true,
     // Next 14.2 compiles the client and server passes in parallel build workers.
     // On Railway (Linux) that build loses the root layout: app-build-manifest.json
     // lists zero CSS for /layout, app/globals.css never enters the module graph,
@@ -301,37 +258,12 @@ const nextConfig = {
     // path imports so a route ships only the icons/helpers it actually uses
     // instead of the whole package. Only list packages this repo imports from —
     // verified via `grep -rl "from '<pkg>'" app components lib` before adding.
-    //
-    // ⚠ `recharts` and `framer-motion` are deliberately not (re-)listed here, but
-    // this is NOT the fix for the #673 useContext regression — that theory was
-    // tested and disproven. `recharts` is unconditionally on Next 14.2.35's own
-    // built-in default optimizePackageImports list (grep node_modules/next/dist/
-    // server/config.js), so it was never possible to opt it out via this array in
-    // the first place. `framer-motion` is genuinely NOT on that default list, so
-    // removing it here should have mattered — except a rebuild of the exact same
-    // source with it removed crashed with the byte-identical error, in the exact
-    // same shared chunk number, as the build that still had it listed. That rules
-    // out optimizePackageImports as the mechanism entirely. See `cpus: 1` below
-    // for what the evidence actually points to.
     optimizePackageImports: [
       'lucide-react',
       'date-fns',
+      'recharts',
+      'framer-motion',
     ],
-    // 🛑 Forces static generation (the `Generating static pages` phase, which
-    // runs AFTER webpack compilation succeeds) onto a single worker process
-    // instead of Next's default of 4 parallel forked workers. Not a guess: the
-    // exact same commit (6e7818d95) produced one SUCCESS Railway deployment and
-    // one FAILED one three minutes apart — the useContext-null crash is
-    // nondeterministic, not a property of the source. Compilation ("✓ Compiled
-    // successfully") is unaffected in every failing build; only the parallel
-    // static-generation worker pool (next/dist/build/index.js's
-    // getNumberOfWorkers, defaulting to 4) runs after that point, and this repo
-    // already has one confirmed precedent for exactly this shape of bug —
-    // `webpackBuildWorker: false` above, added for a *different* parallel-worker
-    // race (the client/server compile split) that dropped the root layout's
-    // shell entirely on Railway's Linux builder. That fix's own reasoning
-    // applies here unchanged: "serialising costs build time and nothing else."
-    cpus: 1,
   },
 
   images: {
