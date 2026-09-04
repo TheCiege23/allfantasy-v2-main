@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RosterPick } from '@/components/core-app/screens/useLeagueRosters'
+import type { RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
+import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
 
 /**
  * The asset picker behind "+ Add asset" on the Trade Center.
@@ -63,6 +64,29 @@ export function TradeAssetPicker(props: {
   rosterLabel?: string | null
   /** True once a counterparty is chosen, so "we do not know" can be said precisely. */
   rosterKnown?: boolean
+  /**
+   * The players on the roster this side sends from.
+   *
+   * 🛑 THE REASON THIS PICKER STOPPED BEING A SEARCH BOX. Every field it needs was already fetched
+   * by `/api/leagues/[id]/trades/rosters` and discarded on the wire, so the only way to name a
+   * player was to type him. Passing the roster in makes the common case — offering someone you
+   * already own — a click.
+   *
+   * ⚠ EMPTY IS NOT "NO PLAYERS". It also means the roster has not loaded or is not known yet, and
+   * the copy below keeps those apart rather than telling a manager their team is empty.
+   */
+  rosterPlayers?: RosterPlayer[]
+  /**
+   * FAAB left to spend, from the roster row.
+   *
+   * ⚠ NULL MEANS THE LEAGUE TRACKS NO BUDGET — not $0 available. Offering a $0 input for a league
+   * with no FAAB invites a bid that cannot be made, so the two render differently.
+   */
+  faabAvailable?: number | null
+  /** Manager identity for the header, so it is obvious whose assets these are. */
+  managerName?: string | null
+  managerAvatarUrl?: string | null
+  managerRecord?: { wins: number; losses: number; ties: number } | null
 }) {
   const [tab, setTab] = useState<'player' | 'pick' | 'faab'>('player')
   const [query, setQuery] = useState('')
@@ -74,6 +98,50 @@ export function TradeAssetPicker(props: {
   const [faab, setFaab] = useState(10)
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const roster = props.rosterPlayers ?? []
+
+  /**
+   * Local filter over the roster.
+   *
+   * ⚠ SUBSTRING ACROSS NAME, POSITION AND TEAM, not name alone. A manager types "WR" or "GB" as
+   * readily as a surname, and a filter that only matched names would silently return nothing for
+   * either — indistinguishable from "you have no receivers".
+   */
+  const filteredRoster = (() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return roster
+    return roster.filter((p) =>
+      [p.name, p.position, p.team].some((f) => f?.toLowerCase().includes(q)),
+    )
+  })()
+
+  const rosterHeading = props.managerName ? `${props.managerName} — roster` : 'On this roster'
+
+  /**
+   * The FAAB amount actually offered, clamped to the balance.
+   *
+   * 🛑 DERIVED, NOT JUST CLAMPED ON CHANGE — and a test caught the difference. `faab` initialises
+   * to 10, so a manager with $0 available saw a $10 field and an enabled button without touching
+   * anything: an onChange clamp never runs if nothing changes. Clamping at the point of USE means
+   * the displayed value, the disabled state and the submitted amount cannot disagree.
+   */
+  const effectiveFaab = props.faabAvailable != null ? Math.min(faab, props.faabAvailable) : faab
+
+  /**
+   * Team logo, resolved on the client from the abbreviation.
+   *
+   * Returns null for an unknown team or sport, and the row then shows the abbreviation alone —
+   * which is why the abbreviation is rendered beside the logo rather than replaced by it.
+   */
+  const teamLogoFor = (team: string | null): string | null => {
+    if (!team) return null
+    try {
+      return resolveTeamLogoUrlSync(team, props.sport ?? 'NFL')
+    } catch {
+      return null
+    }
+  }
 
   const search = useCallback(
     async (q: string) => {
@@ -127,15 +195,145 @@ export function TradeAssetPicker(props: {
         </button>
       </div>
 
+      {/*
+        ── WHOSE ASSETS THESE ARE ───────────────────────────────────────────────────────────────
+        Both columns open an identical-looking picker, and picking from the wrong one offers an
+        asset the manager does not hold — which the engine refuses only at send. Naming the manager
+        here makes that mistake visible before it is made.
+
+        ⚠ A 0-0-0 RECORD IS RENDERED, NOT HIDDEN. Pre-season every team genuinely is 0-0-0, and
+        suppressing it would read as "no record available" in the month this gets most use.
+      */}
+      {props.managerName || props.managerRecord ? (
+        <div className="af-tc-picker-manager">
+          <span className="af-tc-manager-avatar" aria-hidden="true">
+            {props.managerAvatarUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={props.managerAvatarUrl} alt="" loading="lazy" />
+            ) : (
+              <span className="af-tc-headshot-fallback">
+                {(props.managerName ?? '?').slice(0, 1)}
+              </span>
+            )}
+          </span>
+          <span className="af-tc-manager-body">
+            <span className="af-tc-manager-name">{props.managerName ?? 'This manager'}</span>
+            {props.managerRecord ? (
+              <span className="af-tc-row-sub">
+                {props.managerRecord.wins}-{props.managerRecord.losses}
+                {props.managerRecord.ties > 0 ? `-${props.managerRecord.ties}` : ''}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+
       {tab === 'player' ? (
         <>
           <input
             className="af-tc-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search a player…"
+            placeholder={roster.length > 0 ? 'Filter this roster, or search anyone…' : 'Search a player…'}
             autoFocus
           />
+
+          {/*
+            ── THE ROSTER, WHICH IS THE COMMON CASE ─────────────────────────────────────────────
+            Offering someone you already own is what a manager does most of the time, so it comes
+            first and needs no typing. The filter is LOCAL — instant, and it cannot hide a player
+            because a remote search was slow or failed.
+          */}
+          {roster.length > 0 ? (
+            <>
+              <span className="af-label">
+                {rosterHeading}
+                {filteredRoster.length === roster.length
+                  ? ` · ${roster.length}`
+                  : ` · ${filteredRoster.length} of ${roster.length}`}
+              </span>
+              {filteredRoster.length === 0 ? (
+                <p className="af-tc-row-sub">Nobody on this roster matches that.</p>
+              ) : null}
+              {filteredRoster.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="af-tc-row af-tc-row--button af-tc-row--player"
+                  onClick={() =>
+                    props.onPick({
+                      kind: 'player',
+                      playerId: p.id,
+                      name: p.name,
+                      position: p.position,
+                      team: p.team,
+                      value: p.value,
+                      sportHint: props.sport ?? undefined,
+                    })
+                  }
+                >
+                  {/*
+                    A headshot is optional and often absent. The initial keeps row height and
+                    alignment identical either way, so a roster does not look ragged.
+                  */}
+                  <span className="af-tc-headshot" aria-hidden="true">
+                    {p.imageUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={p.imageUrl} alt="" loading="lazy" />
+                    ) : (
+                      <span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>
+                    )}
+                  </span>
+
+                  <span className="af-tc-row-body">
+                    <span className="af-tc-row-name">
+                      {p.name}
+                      {p.injuryStatus ? (
+                        <span className="af-tc-injury" title={p.injuryStatus}>
+                          {p.injuryStatus}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="af-tc-row-sub">
+                      {p.position ? <span className="af-tc-pos">{p.position}</span> : null}
+                      {p.team ? (
+                        <span className="af-tc-team">
+                          {teamLogoFor(p.team) ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={teamLogoFor(p.team) as string} alt="" loading="lazy" />
+                          ) : null}
+                          {p.team}
+                        </span>
+                      ) : null}
+                      {/*
+                        ⚠ ONLY WHEN KNOWN. A null bye means "we do not know"; rendering it as a
+                        week — or as 0 — states a fact a manager could plan around and be wrong.
+                      */}
+                      {p.byeWeek != null ? <span className="af-tc-bye">BYE {p.byeWeek}</span> : null}
+                    </span>
+                  </span>
+
+                  {/* Unpriced shows an em dash. The picker must never imply zero. */}
+                  <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
+                    {p.value == null ? '—' : p.value.toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </>
+          ) : props.rosterKnown ? (
+            <p className="af-tc-row-sub">
+              No players are listed on this roster yet. You can still search for anyone below.
+            </p>
+          ) : null}
+
+          {/*
+            Search stays, as the way to reach a player NOT on this roster — valuing a waiver add,
+            or a hypothetical. Labelled so it reads as a second section rather than competing with
+            the list above.
+          */}
+          {roster.length > 0 && query.trim().length >= MIN_QUERY ? (
+            <span className="af-label">Anyone else</span>
+          ) : null}
           {searching ? <p className="af-tc-row-sub">Searching…</p> : null}
           {!searching && query.trim().length >= MIN_QUERY && rows.length === 0 ? (
             <p className="af-tc-row-sub">
@@ -269,22 +467,60 @@ export function TradeAssetPicker(props: {
 
       {tab === 'faab' ? (
         <div className="af-tc-picker-fields">
+          {/*
+            ── WHAT IS ACTUALLY AVAILABLE ───────────────────────────────────────────────────────
+            ⚠ NULL AND ZERO ARE DIFFERENT AND MUST READ DIFFERENTLY. Null means this league tracks
+            no FAAB budget at all; zero means the manager has spent it. Showing "$0 available" for
+            a league with no budget invites an offer that cannot be made, and hiding the control
+            for a manager who is genuinely at zero hides a true fact.
+          */}
+          {props.faabAvailable == null ? (
+            <p className="af-tc-row-sub">
+              This league does not track a FAAB budget, so there is no balance to offer from. You
+              can still enter an amount if you are pricing a hypothetical.
+            </p>
+          ) : (
+            <p className="af-tc-row-sub">
+              <strong>${props.faabAvailable.toLocaleString()}</strong> available
+              {props.managerName ? ` to ${props.managerName}` : ''}
+              {props.faabAvailable === 0 ? ' — nothing left to offer.' : ''}
+            </p>
+          )}
+
           <label className="af-tc-field">
             <span className="af-label">Amount</span>
             <input
               className="af-tc-input"
               type="number"
-              value={faab}
+              inputMode="numeric"
+              value={effectiveFaab}
               min={0}
-              onChange={(e) => setFaab(Number(e.target.value))}
+              /*
+               * Capped at the balance when there IS one, so the field cannot express an offer the
+               * league would refuse. Uncapped when the balance is unknown — a cap of 0 there would
+               * be a guess presented as a rule.
+               */
+              {...(props.faabAvailable != null ? { max: props.faabAvailable } : {})}
+              onChange={(e) => {
+                /*
+                 * Numbers only, and clamped on the way in rather than on submit. `Number('')` is 0
+                 * and `Number('abc')` is NaN — both would otherwise reach the engine as an amount.
+                 */
+                const raw = Number(e.target.value)
+                if (!Number.isFinite(raw)) return
+                const floored = Math.max(0, Math.floor(raw))
+                setFaab(props.faabAvailable != null ? Math.min(floored, props.faabAvailable) : floored)
+              }}
             />
           </label>
           <button
             type="button"
             className="af-btn"
-            onClick={() => props.onPick({ kind: 'faab', amount: faab })}
+            /* Nothing to offer is not a trade — the control says so rather than sending a zero. */
+            disabled={effectiveFaab <= 0}
+            onClick={() => props.onPick({ kind: 'faab', amount: effectiveFaab })}
           >
-            Add FAAB
+            {effectiveFaab > 0 ? `Add $${effectiveFaab.toLocaleString()} FAAB` : 'Enter an amount'}
           </button>
         </div>
       ) : null}

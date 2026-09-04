@@ -846,6 +846,34 @@ export function TradeCenter(props: {
                 }
                 rosterLabel={side.side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
                 rosterKnown={Boolean(side.side === 'give' ? myRoster : partnerRoster)}
+                /*
+                  Same rule as the picks directly above, for the same reason: each column sends
+                  from its OWN roster. Offering a player from the wrong side builds an asset the
+                  manager does not hold, and the engine only refuses it at send.
+                */
+                rosterPlayers={
+                  side.side === 'give' ? myRoster?.players ?? [] : partnerRoster?.players ?? []
+                }
+                faabAvailable={
+                  side.side === 'give'
+                    ? myRoster?.faabRemaining ?? null
+                    : partnerRoster?.faabRemaining ?? null
+                }
+                managerName={
+                  side.side === 'give' ? myRoster?.ownerName ?? 'You' : partnerRoster?.ownerName ?? null
+                }
+                managerAvatarUrl={
+                  side.side === 'give' ? myRoster?.avatarUrl ?? null : partnerRoster?.avatarUrl ?? null
+                }
+                managerRecord={(() => {
+                  const r = side.side === 'give' ? myRoster : partnerRoster
+                  /*
+                    ⚠ NULL ONLY WHEN THE ROSTER IS UNKNOWN, never because the record is 0-0-0.
+                    Pre-season every team is 0-0-0 and that is a real record, so collapsing it to
+                    null here would make the header say "no record" for the whole of September.
+                  */
+                  return r ? { wins: r.wins, losses: r.losses, ties: r.ties } : null
+                })()}
               />
             ) : (
               <button

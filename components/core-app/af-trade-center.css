@@ -1258,3 +1258,112 @@
     font-size: 32px;
   }
 }
+
+/* ── Asset picker: roster rows, manager header, FAAB ─────────────────────────
+ *
+ * Added when the picker stopped being a search box. Every value the rows render
+ * was already being fetched by the rosters endpoint and discarded on the wire.
+ *
+ * ⚠ APPENDED AT THE END OF THE FILE, DELIBERATELY. This stylesheet carries
+ * several `@media` blocks, and inserting a rule in the middle of one silently
+ * moves every rule below it into that narrower query — brace balance stays 0,
+ * nothing throws, and no lint can see it. The repo has been bitten by exactly
+ * that in af-matchup.css. Appending cannot land inside an existing query.
+ */
+
+.af-tc-row--player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Fixed box so a missing headshot does not change row height or alignment. */
+.af-tc-headshot,
+.af-tc-manager-avatar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface2, rgba(255, 255, 255, 0.06));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.af-tc-manager-avatar {
+  width: 32px;
+  height: 32px;
+}
+.af-tc-headshot img,
+.af-tc-manager-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.af-tc-headshot-fallback {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.af-tc-row-body .af-tc-pos,
+.af-tc-row-body .af-tc-team,
+.af-tc-row-body .af-tc-bye {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.af-tc-row-body .af-tc-pos::after,
+.af-tc-row-body .af-tc-team::after {
+  content: '·';
+  margin-left: 6px;
+  opacity: 0.5;
+}
+.af-tc-row-body .af-tc-bye::after {
+  content: none;
+}
+.af-tc-team img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+/* Bye is a planning fact, not a warning — readable, not loud. */
+.af-tc-bye {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* An injury designation is the one thing on the row that should catch the eye. */
+.af-tc-injury {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--warn, #fbbf24);
+  background: color-mix(in srgb, var(--warn, #fbbf24) 16%, transparent);
+}
+
+.af-tc-picker-manager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px 10px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.07));
+  margin-bottom: 8px;
+}
+.af-tc-manager-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.af-tc-manager-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
