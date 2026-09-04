@@ -453,3 +453,67 @@ the goal at no cost.
 must be able to write the row before any reader depends on it. Pointing
 `/api/yahoo/leagues` at a table nothing populates is the `ingestCFBDStats` failure —
 worse than the live call it replaces, because it fails silently and looks correct.
+### `20260904040000_deleted_league_tombstones`
+
+✅ **APPLIED TO PRODUCTION 2026-09-05 05:37:29Z, and recorded.** Applied on
+explicit instruction from the repo owner. Verified by EFFECT on production, not by
+the record: six columns with the declared types, `deleted_league_tombstones_pkey` on
+`id`, the compound unique
+`deleted_league_tombstones_userId_platform_platformLeagueId_key`,
+`deleted_league_tombstones_userId_idx`, and `deleted_league_tombstones_userId_fkey`
+→ `app_users(id)` ON UPDATE CASCADE ON DELETE CASCADE. The `_prisma_migrations` row
+was written by hand with the real sha256 `87cacb1cf8c13107e003f67d1ee88ffddfd7cdb8a089e10678c260a65b56faa5`
+(171 rows now), `rolled_back_at` NULL, and **0** rows matching the correct P3009
+predicate `finished_at IS NULL AND rolled_back_at IS NULL`. The table is empty, as
+expected until the code ships.
+
+Adds one table, `deleted_league_tombstones`. Records that a user removed a
+league from their dashboard, so the next import or sync does not silently bring
+it back.
+
+**Why it is needed.** `DELETE /api/league/[leagueId]` is a HARD delete. Once the
+`League` row is gone, nothing in the database distinguishes "this user never
+imported this league" from "this user imported it and threw it away" — so the
+next import, a manual `POST /api/league/sync`, or the cron-driven background
+import step recreates it. There was already a client-side patch for exactly this
+in `app/dashboard/DashboardShell.tsx` (a `sessionStorage` tombstone set), which
+dies at tab close and cannot stop a server-side recreate at all. This promotes
+that idea to the server.
+
+⚠ **Additive and order-independent, unlike the rosterId change above.** One new
+table, no existing table touched, no backfill. Nothing reads or writes it until
+the accompanying code ships, so applying it early is a no-op rather than a
+break. It was parked because this directory's rule is "apply on explicit
+instruction", not because the sequencing is delicate.
+
+**Why a table and not `leagues.deletedAt`** — two independent reasons, either
+one sufficient:
+
+- Other users attach to the same `League` row via `RedraftLeagueMember.userId`
+  and `LeagueTeam.claimedByUserId`, and `lib/dashboard/get-dashboard-league-list.ts`
+  unions all three. A column on `leagues` would hide the league from co-members
+  who never asked for that.
+- The tombstone must **outlive the row it refers to**, which a column on that
+  row cannot do.
+
+Keyed on `(userId, platform, platformLeagueId)` — the EXTERNAL identity, never
+`leagues.id`, because a re-import mints a new id and an id-keyed tombstone would
+never match. Not season-scoped, because the delete route already removes every
+season of a platform league for that user.
+
+**Code that goes with it** (all in the same change):
+`lib/league-delete/leagueTombstones.ts` is the only place the key is normalized —
+every writer and reader goes through `tombstoneKeyFor`/`tombstoneLookupKey`, so
+a platform-casing drift cannot silently stop the matching. Guards live in
+`lib/league-sync-core.ts` (`syncLeague`), `lib/sleeper-sync.ts`
+(`syncSleeperLeague`) and `lib/league-import/ImportedLeagueCommitService.ts`
+(`persistImportedLeagueFromNormalization`). The import page learns about it from
+`app/api/leagues/import/discover/route.ts`, which flags each candidate with
+`previouslyDeleted`.
+
+⚠ `lib/import-os/collector/enumerate.ts` deliberately has **no** guard (the commit
+wrote this as `lib/fantasy-os/sync/collector/enumerate.ts`; that namespace was renamed
+by `80849f9c5` and the old path no longer resolves).
+With a hard delete the `League` row is gone, so its `groupBy` and its
+`resolveLeagueIdsForConnection` fan-out cannot find it; a guard there would be
+dead code. That stops being true the day anyone converts this to a soft delete.

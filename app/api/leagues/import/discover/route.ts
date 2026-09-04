@@ -18,6 +18,56 @@ import {
   YahooImportConnectionError,
 } from '@/lib/league-import/yahoo/YahooLeagueFetchService'
 import { describeYahooRejection } from '@/lib/league-import/yahoo/yahooRejection'
+import {
+  getTombstonedLookupKeys,
+  tombstoneLookupKey,
+} from '@/lib/league-delete/leagueTombstones'
+
+/**
+ * Mark the leagues this user previously deleted, so the import page can ask for
+ * confirmation instead of silently re-importing something they threw away.
+ *
+ * ⚠ `platformLeagueId` IS NOT ALWAYS `sourceId`. Fantrax's sourceId is
+ * `fantrax-league:<leagueId>|<teamName>` — matching a tombstone against that
+ * whole string would never hit, and the flag would silently never appear for
+ * Fantrax. Every caller therefore passes an explicit accessor for the
+ * provider's own league id rather than letting this reach for `sourceId`.
+ *
+ * Fails OPEN: if the tombstone lookup throws, discovery still returns its
+ * leagues with the flag absent. A discovery page that 500s is a worse outcome
+ * than one that omits a confirmation prompt, and the import path re-checks the
+ * tombstone server-side anyway — this flag is the prompt, not the enforcement.
+ */
+async function markPreviouslyDeleted<T>(
+  userId: string,
+  platform: string,
+  leagues: T[],
+  getPlatformLeagueId: (league: T) => string | null | undefined,
+): Promise<Array<T & { previouslyDeleted: boolean }>> {
+  const withIds = leagues.map((league) => ({
+    league,
+    platformLeagueId: String(getPlatformLeagueId(league) ?? '').trim(),
+  }))
+
+  try {
+    const suppressed = await getTombstonedLookupKeys(
+      userId,
+      withIds
+        .filter((entry) => entry.platformLeagueId.length > 0)
+        .map((entry) => ({ platform, platformLeagueId: entry.platformLeagueId })),
+    )
+
+    return withIds.map(({ league, platformLeagueId }) => ({
+      ...league,
+      previouslyDeleted:
+        platformLeagueId.length > 0 &&
+        suppressed.has(tombstoneLookupKey(platform, platformLeagueId)),
+    }))
+  } catch (error) {
+    console.error('[api/leagues/import/discover] tombstone lookup failed', error)
+    return withIds.map(({ league }) => ({ ...league, previouslyDeleted: false }))
+  }
+}
 
 function normalizeSeason(raw: unknown): string {
   const currentSeason = String(new Date().getFullYear())
@@ -108,13 +158,18 @@ export async function POST(req: NextRequest) {
           accountIdentifier: 'connected-yahoo-account',
           displayName: 'Your connected Yahoo account',
         },
-        leagues: filtered.map((league) => ({
-          sourceId: league.leagueKey,
-          name: league.name ?? league.leagueKey,
-          sport: league.sport ? league.sport.toLowerCase() : null,
-          season: league.season != null ? String(league.season) : null,
-          totalTeams: league.numTeams,
-        })),
+        leagues: await markPreviouslyDeleted(
+          auth.userId,
+          'yahoo',
+          filtered.map((league) => ({
+            sourceId: league.leagueKey,
+            name: league.name ?? league.leagueKey,
+            sport: league.sport ? league.sport.toLowerCase() : null,
+            season: league.season != null ? String(league.season) : null,
+            totalTeams: league.numTeams,
+          })),
+          (league) => league.sourceId,
+        ),
       })
     } catch (error) {
       if (error instanceof YahooImportConnectionError) {
@@ -225,15 +280,23 @@ export async function POST(req: NextRequest) {
         /* Same `fantrax-league:<id>|<team>` contract the league-id path emits, so preview,
            commit and importFantraxLeague need no changes -- the difference is only that the
            team came from Fantrax instead of from a person clicking. */
-        leagues: mine.data.map((league) => ({
-          sourceId: league.teamNames[0]
-            ? `fantrax-league:${league.leagueId}|${league.teamNames[0]}`
-            : `fantrax-league:${league.leagueId}`,
-          name: league.leagueName,
-          sport: null,
-          season: null,
-          totalTeams: null,
-        })),
+        leagues: await markPreviouslyDeleted(
+          auth.userId,
+          'fantrax',
+          mine.data.map((league) => ({
+            sourceId: league.teamNames[0]
+              ? `fantrax-league:${league.leagueId}|${league.teamNames[0]}`
+              : `fantrax-league:${league.leagueId}`,
+            name: league.leagueName,
+            sport: null,
+            season: null,
+            totalTeams: null,
+            /* Carried separately from `sourceId` on purpose: the sourceId embeds the
+               team name, so it is not the id a tombstone is keyed on. */
+            fantraxLeagueId: league.leagueId,
+          })),
+          (league) => league.fantraxLeagueId,
+        ),
       })
     }
 
@@ -282,13 +345,21 @@ export async function POST(req: NextRequest) {
        * stateless — `fantrax-league:<leagueId>|<teamName>` is the only place the
        * choice is carried, and FantraxLeagueFetchService parses it back out.
        */
-      leagues: teams.map((team) => ({
-        sourceId: `fantrax-league:${leagueId}|${team.name}`,
-        name: team.name,
-        sport: null,
-        season,
-        totalTeams: teams.length,
-      })),
+      /* Every entry here is a TEAM in one league, so they all carry the same
+         `leagueId` and therefore the same deletion flag — correct, because
+         picking any of them imports that one league. */
+      leagues: await markPreviouslyDeleted(
+        auth.userId,
+        'fantrax',
+        teams.map((team) => ({
+          sourceId: `fantrax-league:${leagueId}|${team.name}`,
+          name: team.name,
+          sport: null,
+          season,
+          totalTeams: teams.length,
+        })),
+        () => leagueId,
+      ),
     })
   }
 
@@ -316,18 +387,23 @@ export async function POST(req: NextRequest) {
           accountIdentifier: profile.sleeperUsername ?? profile.sleeperUserId,
           displayName: profile.sleeperUsername ?? 'Your Sleeper account',
         },
-        leagues: leagues.map((league) => ({
-          sourceId: league.league_id,
-          name: league.name,
-          sport: league.sport,
-          season: league.season,
-          status: league.status,
-          totalTeams: league.total_rosters,
-          isDynasty: league.settings?.type === 2,
-          avatarUrl: league.avatar
-            ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}`
-            : null,
-        })),
+        leagues: await markPreviouslyDeleted(
+          auth.userId,
+          'sleeper',
+          leagues.map((league) => ({
+            sourceId: league.league_id,
+            name: league.name,
+            sport: league.sport,
+            season: league.season,
+            status: league.status,
+            totalTeams: league.total_rosters,
+            isDynasty: league.settings?.type === 2,
+            avatarUrl: league.avatar
+              ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}`
+              : null,
+          })),
+          (league) => league.sourceId,
+        ),
       })
     } catch (error) {
       return NextResponse.json(
@@ -414,18 +490,23 @@ export async function POST(req: NextRequest) {
           sleeperUser.user.username ||
           accountIdentifier,
       },
-      leagues: leagues.map((league) => ({
-        sourceId: league.league_id,
-        name: league.name,
-        sport: league.sport,
-        season: league.season,
-        status: league.status,
-        totalTeams: league.total_rosters,
-        isDynasty: league.settings?.type === 2,
-        avatarUrl: league.avatar
-          ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}`
-          : null,
-      })),
+      leagues: await markPreviouslyDeleted(
+        auth.userId,
+        'sleeper',
+        leagues.map((league) => ({
+          sourceId: league.league_id,
+          name: league.name,
+          sport: league.sport,
+          season: league.season,
+          status: league.status,
+          totalTeams: league.total_rosters,
+          isDynasty: league.settings?.type === 2,
+          avatarUrl: league.avatar
+            ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}`
+            : null,
+        })),
+        (league) => league.sourceId,
+      ),
     })
   } catch (error) {
     return NextResponse.json(

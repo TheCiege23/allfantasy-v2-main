@@ -8,6 +8,7 @@ import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/
 import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { clearLeagueTombstone, tombstoneKeyFor } from '@/lib/league-delete/leagueTombstones'
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import type {
   CanonicalImportBundle,
@@ -18,11 +19,42 @@ import type {
 
 export class ImportedLeagueConflictError extends Error {}
 
+/**
+ * The user previously DELETED this league and has not confirmed they want it
+ * back. Distinct from `ImportedLeagueConflictError`, which means the opposite
+ * (the league is already here) — conflating them would send the UI to a "you
+ * already have this" message for a league the user cannot currently see.
+ *
+ * Carries the identity so the route can echo it back and the import page can
+ * put a specific league in its confirmation prompt.
+ */
+export class ImportedLeagueTombstonedError extends Error {
+  constructor(
+    message: string,
+    readonly tombstone: {
+      platform: string
+      platformLeagueId: string
+      leagueName: string | null
+      deletedAt: Date | null
+    },
+  ) {
+    super(message)
+  }
+}
+
 export interface PersistImportedLeagueOptions {
   userId: string
   provider: ImportProvider
   normalized: NormalizedImportResult
   allowUpdateExisting?: boolean
+  /**
+   * The user has seen "you deleted this before" and said yes anyway.
+   *
+   * ⚠ Default false, and it must stay a default-false OPT-IN. Defaulting this
+   * to true would make every existing caller silently bypass the tombstone and
+   * turn the whole feature off without a single call site changing.
+   */
+  confirmReimportOfDeleted?: boolean
   /** When set, merges canonical `SettingsSnapshot` + concept rules into `League.settings` and top-level league fields. */
   canonicalBundle?: CanonicalImportBundle
   /**
@@ -589,6 +621,46 @@ export async function persistImportedLeagueFromNormalization(
   }
 
   /*
+   * 🛑 THE USER DELETED THIS LEAGUE. Do not silently bring it back.
+   *
+   * Checked only when there is no `existing` row: if a live League row is
+   * already here then whatever the tombstone says is stale (they re-imported at
+   * some point without going through this path), and blocking an update to a
+   * league sitting on their dashboard right now would be nonsense.
+   *
+   * ⚠ THE ORDER MATTERS. This sits AFTER the `existing` conflict check and
+   * BEFORE `claimExistingLeagueForMember`, because joining another account's
+   * league is still a way for a league the user deleted to reappear on their
+   * dashboard — arguably the most confusing one, since it arrives without them
+   * importing anything of their own.
+   */
+  if (!existing && !options.confirmReimportOfDeleted) {
+    const key = tombstoneKeyFor(provider, platformLeagueId)
+    const tombstone = await prisma.deletedLeagueTombstone.findUnique({
+      where: {
+        userId_platform_platformLeagueId: {
+          userId,
+          platform: key.platform,
+          platformLeagueId: key.platformLeagueId,
+        },
+      },
+      select: { platform: true, platformLeagueId: true, leagueName: true, deletedAt: true },
+    })
+
+    if (tombstone) {
+      throw new ImportedLeagueTombstonedError(
+        'You previously removed this league. Confirm you want to import it again.',
+        {
+          platform: tombstone.platform,
+          platformLeagueId: tombstone.platformLeagueId,
+          leagueName: tombstone.leagueName,
+          deletedAt: tombstone.deletedAt,
+        },
+      )
+    }
+  }
+
+  /*
    * 🛑 A SECOND REAL MEMBER OF THE SAME LEAGUE MUST JOIN THE EXISTING ROW, NOT CREATE A
    * DUPLICATE ONE. `League` is unique on `(userId, platform, platformLeagueId, season)` —
    * userId included — so this check above only ever catches the SAME account re-importing.
@@ -691,6 +763,30 @@ export async function persistImportedLeagueFromNormalization(
           ...leaguePayload,
         },
       })
+
+  /*
+   * The league is back by explicit request, so stop suppressing it.
+   *
+   * ⚠ CLEARED, not just bypassed. Leaving the tombstone in place would let the
+   * import succeed and then have the very next sync suppress the league again —
+   * the user confirms the re-import and watches it disappear anyway, which is
+   * worse than the original bug because they took an action to prevent it.
+   *
+   * Unconditional rather than gated on `confirmReimportOfDeleted`: reaching
+   * this line at all means a League row now exists for this identity, and a
+   * tombstone alongside a live row is contradictory state regardless of which
+   * door the import came through.
+   */
+  await clearLeagueTombstone({ userId, platform: provider, platformLeagueId }).catch(
+    (tombstoneError: unknown) => {
+      // Not fatal: the league imported. A stale tombstone costs one extra
+      // confirmation later, which is far better than failing a good import.
+      console.error(
+        '[ImportedLeagueCommitService] failed to clear league tombstone',
+        tombstoneError,
+      )
+    },
+  )
 
   /* Collected across every post-create step and returned; see `runBootstrapStep`. */
   const incompleteSteps: ImportWarningRecord[] = []

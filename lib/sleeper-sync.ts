@@ -4,6 +4,10 @@ import type {
   SleeperUserRaw,
 } from '@/lib/league-import/adapters/sleeper/types';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
+import {
+  isLeagueTombstoned,
+  LeagueDeletedByUserError,
+} from '@/lib/league-delete/leagueTombstones';
 
 export interface SleeperSyncResult {
   success: boolean;
@@ -197,6 +201,25 @@ export async function syncSleeperLeague(
   userId: string,
   opts?: { forceActivate?: boolean }
 ): Promise<SleeperSyncResult> {
+  /*
+   * 🛑 REFUSE TO RESURRECT A LEAGUE THE USER DELETED. Same shape as the guard in
+   * `syncLeague` (lib/league-sync-core.ts): `sleeperLeagueId` comes from a
+   * request body, this function creates a League row further down, and nothing
+   * else checks whether the user threw this league away.
+   *
+   * Note `forceActivate` does NOT override this. That flag exists to clear the
+   * `legacy_summary` marker on a league the user is actively reactivating — it
+   * says nothing about a deletion, and letting it double as a tombstone bypass
+   * would silently reopen this path for the one caller that sets it.
+   */
+  if (
+    await isLeagueTombstoned({ userId, platform: 'sleeper', platformLeagueId: sleeperLeagueId })
+  ) {
+    throw new LeagueDeletedByUserError(
+      'This league was removed from your account. Re-import it to bring it back.'
+    );
+  }
+
   const [leagueRes, rostersRes, usersRes] = await Promise.all([
     fetch(`https://api.sleeper.app/v1/league/${sleeperLeagueId}`),
     fetch(`https://api.sleeper.app/v1/league/${sleeperLeagueId}/rosters`),

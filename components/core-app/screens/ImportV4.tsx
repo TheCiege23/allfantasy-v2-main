@@ -143,6 +143,33 @@ type DiscoveredLeague = {
   sport?: string
   season?: string
   totalTeams?: number
+  /**
+   * This user deleted this league from AllFantasy before. Set by
+   * `/api/leagues/import/discover`; see lib/league-delete/leagueTombstones.ts.
+   *
+   * Optional because older cached payloads and any provider branch that has not
+   * been through `markPreviouslyDeleted` simply will not carry it — absent is
+   * treated as "not deleted", which is the safe reading: the import path checks
+   * the tombstone server-side regardless, so a missing flag costs a confirmation
+   * prompt, never a silent re-import.
+   */
+  previouslyDeleted?: boolean
+}
+
+/**
+ * Leagues that must start UNTICKED: the ones this user previously deleted.
+ *
+ * 🛑 THE TICK IS THE CONFIRMATION. The user asked for a league they removed not
+ * to come back, so a bulk import must not sweep it back in by default —
+ * defaulting it checked would reproduce the exact resurrection the tombstone
+ * exists to stop, just with a checkbox in front of it.
+ */
+function defaultExclusionsFor(found: DiscoveredLeague[]): Record<string, true> {
+  const next: Record<string, true> = {}
+  for (const league of found) {
+    if (league.previouslyDeleted) next[league.sourceId] = true
+  }
+  return next
 }
 
 type Phase =
@@ -792,6 +819,7 @@ export function ImportV4({
       const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string }
       const found = payload?.leagues ?? []
       setLeagues(found)
+      setExcluded(defaultExclusionsFor(found))
       setAccountLabel(payload?.accountLabel ?? null)
       /*
        * ⚠ A LOOKUP THAT SUCCEEDED AND FOUND NOTHING USED TO RENDER AS NOTHING.
@@ -827,6 +855,7 @@ export function ImportV4({
       const payload = res.data as { leagues?: DiscoveredLeague[]; accountLabel?: string }
       if (!payload?.leagues?.length) return
       setLeagues(payload.leagues)
+      setExcluded(defaultExclusionsFor(payload.leagues))
       setAccountLabel(payload.accountLabel ?? null)
     })
     return () => {
@@ -928,12 +957,23 @@ export function ImportV4({
     async (sourceId: string, attested: boolean, force = false) => {
       setError(null)
       setPhase({ k: 'committing', sourceId })
+      /* Same reasoning as `importOneLeague`: a previously-deleted row is only
+         importable once the user has ticked it, so reaching here carries their
+         confirmation and it must be forwarded. */
+      const confirmReimportOfDeleted = leagues.some(
+        (l) => l.sourceId === sourceId && l.previouslyDeleted,
+      )
       const res = await submitImportCreation(
         provider,
         sourceId,
         '',
         attested ? { accepted: true } : undefined,
-        force ? { force: true } : undefined
+        force || confirmReimportOfDeleted
+          ? {
+              ...(force ? { force: true } : {}),
+              ...(confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
+            }
+          : undefined
       )
       if (!res.ok) {
         /**
@@ -1017,6 +1057,7 @@ export function ImportV4({
         joinedExisting: Boolean(data?.joinedExisting),
       })
     },
+    // `leagues` is read for the deleted-league confirmation; see importOneLeague.
     // `leagues` joins the deps for the sport lookup above. Safe: runCommit is
     // referenced only from onClick handlers, never from an effect's dep array,
     // so a new identity per discovery re-runs nothing.
@@ -1119,6 +1160,12 @@ export function ImportV4({
    * checked fails in the recoverable direction: the rows are visible and
    * unticking one takes a single click. Restore the rule the moment discovery
    * carries a real status.
+   *
+   * ✅ THAT MOMENT ARRIVED for one case: discovery now carries `previouslyDeleted`,
+   * a real server-side fact rather than an inference, so a league this user
+   * deliberately deleted defaults UNCHECKED. Ticking it is the confirmation —
+   * see `defaultExclusionsFor`. The rest still default checked, for the reason
+   * above.
    */
   const [excluded, setExcluded] = useState<Record<string, true>>({})
   const selectedLeagues = leagues.filter((l) => !excluded[l.sourceId])
@@ -1144,7 +1191,23 @@ export function ImportV4({
   const importOneLeague = useCallback(
     async (sourceId: string): Promise<BulkLeagueResult> => {
       setBulkStatus((prev) => ({ ...prev, [sourceId]: 'importing' }))
-      const res = await submitImportCreation(provider, sourceId, '')
+      /*
+       * A row the user had deleted only reaches here because they ticked it —
+       * such rows start unticked (see `defaultExclusionsFor`). So reaching this
+       * line IS the confirmation, and it has to be forwarded or the route
+       * refuses with LEAGUE_PREVIOUSLY_DELETED and the tick appears to do
+       * nothing.
+       */
+      const confirmReimportOfDeleted = leagues.some(
+        (l) => l.sourceId === sourceId && l.previouslyDeleted,
+      )
+      const res = await submitImportCreation(
+        provider,
+        sourceId,
+        '',
+        undefined,
+        confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : undefined,
+      )
       /*
        * Attestation is deliberately NOT auto-accepted here. The server asks for it
        * when someone imports a league they do not commission, and answering that on
@@ -1196,7 +1259,10 @@ export function ImportV4({
       setBulkStatus((prev) => ({ ...prev, [sourceId]: status }))
       return { leagueId: sourceId, status, reason: message }
     },
-    [provider]
+    // `leagues` is read to decide whether this row needs the deleted-league
+    // confirmation; omitting it would capture a stale list and silently drop
+    // the flag for a league discovered after the callback was created.
+    [provider, leagues]
   )
 
   const runBulkImport = useCallback(async () => {
@@ -2275,8 +2341,14 @@ export function ImportV4({
                     result has nothing to choose between, and a checkbox there
                     would imply the single "Import" button below it might not
                     apply to it.
+
+                    ⚠ EXCEPT FOR A PREVIOUSLY-DELETED LEAGUE, WHICH ALWAYS GETS
+                    ONE. Such a row starts unticked, and the tick IS the
+                    confirmation — so suppressing the checkbox on a lone result
+                    would leave it excluded with no control to include it, i.e.
+                    a league the user could see and could not import.
                   */}
-                  {leagues.length > 1 && !rowsAreTeams ? (
+                  {(leagues.length > 1 || l.previouslyDeleted) && !rowsAreTeams ? (
                     <input
                       type="checkbox"
                       className="af-im-league-check"
@@ -2293,6 +2365,18 @@ export function ImportV4({
                         .filter(Boolean)
                         .join(' · ')}
                     </span>
+                    {/*
+                      An unticked row has to say WHY it is unticked, or it reads
+                      as a bug — the user sees a league they recognise, sitting
+                      there excluded, with no explanation. This is also the
+                      confirmation prompt itself: the sentence states what
+                      ticking the box will do.
+                    */}
+                    {l.previouslyDeleted ? (
+                      <span className="af-im-league-reason">
+                        You removed this league from AllFantasy. Tick it to import it again.
+                      </span>
+                    ) : null}
                     {/*
                       ⚠ WHY IT FAILED, NOT JUST THAT IT DID. "Failed" on its own makes
                       Retry a coin flip — a league that failed because it does not exist

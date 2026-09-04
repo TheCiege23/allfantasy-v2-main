@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
+import { isLeagueTombstoned } from '@/lib/league-delete/leagueTombstones'
 import { runWithConcurrency } from '@/lib/async-utils'
 import { SLEEPER_IMPORT_SPORTS, SLEEPER_SPORT_BY_SUPPORTED } from '@/lib/league-import/sleeper/import-sports'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
@@ -285,6 +286,20 @@ export async function POST(req: NextRequest) {
           const fpts = toNumber(settings.fpts, Number.NaN)
           const fptsDecimal = toNumber(settings.fpts_decimal, 0)
           pf = Number.isFinite(fpts) ? fpts + fptsDecimal / 100 : pf
+        }
+
+        /*
+         * 🛑 SKIP A LEAGUE THE USER DELETED. This is a bare upsert with no
+         * existing-row branch at all, so without this it re-creates anything in
+         * the payload — and a bulk import is exactly where one unwanted league
+         * rides back in unnoticed among dozens of wanted ones.
+         *
+         * `return 0` rather than `continue`: this is a callback returning a
+         * per-league count, not a loop body. Counting it as 0 imported is
+         * accurate — nothing was written.
+         */
+        if (await isLeagueTombstoned({ userId, platform: 'sleeper', platformLeagueId })) {
+          return 0
         }
 
         const leagueImportData = {

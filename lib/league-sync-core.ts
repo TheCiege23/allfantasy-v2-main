@@ -6,6 +6,10 @@ import {
   parseOAuthErrorCode,
   YAHOO_RECONNECT_MESSAGE,
 } from '@/lib/league-import/yahoo/yahooOAuthRecovery';
+import {
+  isLeagueTombstoned,
+  LeagueDeletedByUserError,
+} from '@/lib/league-delete/leagueTombstones';
 import { XMLParser } from 'fast-xml-parser';
 
 export interface LeaguePayload {
@@ -433,6 +437,25 @@ export async function syncLeague(
   platform: string,
   platformLeagueId: string
 ): Promise<SyncResult> {
+  /*
+   * 🛑 REFUSE TO RESURRECT A LEAGUE THE USER DELETED.
+   *
+   * This function `upsert`s below, and `platformLeagueId` arrives straight from
+   * a request body with no check that a League row exists — so before this
+   * guard, a single POST to /api/league/sync recreated any league the user had
+   * removed. That made it the cheapest resurrection path in the codebase.
+   *
+   * ⚠ BEFORE `fetchLeaguePayload`, deliberately. Checking after would still
+   * refuse the write, but only after spending a provider round trip (and, for
+   * Yahoo/ESPN/MFL, a credential decrypt) on a league we already know we will
+   * not store.
+   */
+  if (await isLeagueTombstoned({ userId, platform, platformLeagueId })) {
+    throw new LeagueDeletedByUserError(
+      'This league was removed from your account. Re-import it to bring it back.'
+    );
+  }
+
   const leaguePayload = await fetchLeaguePayload(userId, platform, platformLeagueId);
   const season = leaguePayload.season;
 

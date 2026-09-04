@@ -203,7 +203,19 @@ export async function submitImportCreation(
   sourceInput: string,
   _userId: string,
   attestation?: CommissionerAttestation,
-  options?: { force?: boolean }
+  options?: {
+    force?: boolean
+    /**
+     * The user ticked a league they had previously deleted, which is the
+     * confirmation the import route requires before undoing a deletion.
+     *
+     * ⚠ SEPARATE FROM `force`. `force` means "overwrite the league I already
+     * have"; this means "bring back one I threw away". Folding them together
+     * would let any caller that sets `force` for an unrelated reason silently
+     * resurrect a deleted league.
+     */
+    confirmReimportOfDeleted?: boolean
+  }
 ): Promise<SubmitImportResult> {
   if (!isImportProviderAvailable(provider)) {
     return { ok: false, error: `Import from ${provider} is not yet available.` };
@@ -222,6 +234,7 @@ export async function submitImportCreation(
         sourceId: trimmed,
         ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
         ...(options?.force ? { force: true } : {}),
+        ...(options?.confirmReimportOfDeleted ? { confirmReimportOfDeleted: true } : {}),
       }),
     });
     const data = await res.json();

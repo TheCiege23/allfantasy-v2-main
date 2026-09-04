@@ -13,7 +13,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
-import { ImportedLeagueConflictError } from '@/lib/league-import/ImportedLeagueCommitService'
+import {
+  ImportedLeagueConflictError,
+  ImportedLeagueTombstonedError,
+} from '@/lib/league-import/ImportedLeagueCommitService'
 import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
@@ -69,6 +72,15 @@ export async function POST(req: NextRequest) {
     attestation?: { accepted?: boolean; statement?: string }
     /** When true, re-import over an existing league instead of returning 409. */
     force?: boolean
+    /**
+     * When true, import a league this user previously DELETED, instead of
+     * returning 409 `LEAGUE_PREVIOUSLY_DELETED`.
+     *
+     * ⚠ Deliberately not folded into `force`. `force` overwrites a league they
+     * still have; this undoes a deletion. A client setting `force` for its own
+     * reasons must not silently resurrect something the user threw away.
+     */
+    confirmReimportOfDeleted?: boolean
   }
   try {
     body = await req.json()
@@ -143,6 +155,15 @@ export async function POST(req: NextRequest) {
       normalized: result.normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
+      /*
+       * The user saw "you deleted this before" and said yes.
+       *
+       * ⚠ NOT folded into `body.force`. `force` means "overwrite the league I
+       * already have"; this means "bring back one I threw away". They are
+       * different questions with different prompts, and a client that set
+       * `force` for an unrelated reason must not silently also undo a deletion.
+       */
+      confirmReimportOfDeleted: Boolean(body.confirmReimportOfDeleted),
       /*
        * The gate resolved this on the way in — it has to, to decide whether this
        * caller may import at all — and it was dropped here. That is why every
@@ -221,6 +242,33 @@ export async function POST(req: NextRequest) {
           error: error.message,
           code: 'LEAGUE_ALREADY_IMPORTED',
           hint: 'Open the existing league or use League Sync to refresh it instead of re-importing.',
+        },
+        { status: 409 },
+      )
+    }
+    /*
+     * The user deleted this league before. Not an error state to recover from —
+     * an offer, which is why it carries the identity and the original name back
+     * so the client can name the league in its confirmation prompt.
+     *
+     * ⚠ A SEPARATE CODE FROM `LEAGUE_ALREADY_IMPORTED`, and the two must not be
+     * merged. They are opposites: one means the league is already on the
+     * dashboard, the other means it is deliberately absent. A client that showed
+     * "you already have this league" for a tombstone would be telling the user
+     * to go open something they cannot see.
+     */
+    if (error instanceof ImportedLeagueTombstonedError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: 'LEAGUE_PREVIOUSLY_DELETED',
+          hint: 'Re-send this import with confirmReimportOfDeleted: true to bring it back.',
+          tombstone: {
+            platform: error.tombstone.platform,
+            platformLeagueId: error.tombstone.platformLeagueId,
+            leagueName: error.tombstone.leagueName,
+            deletedAt: error.tombstone.deletedAt?.toISOString() ?? null,
+          },
         },
         { status: 409 },
       )

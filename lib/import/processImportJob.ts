@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
+import { isLeagueTombstoned } from '@/lib/league-delete/leagueTombstones'
 
 import { sendImportCompleteNotification } from '@/lib/import/sendImportNotification'
 import { sleeperApiSportToLeagueSport } from '@/lib/import/sleeperApiSportToLeagueSport'
@@ -131,6 +132,19 @@ export async function importLegacySeasonAtIndex(
           const wonChampionship = finalStanding === 1
 
           const platformLeagueId = String(league.league_id ?? '')
+
+          /*
+           * 🛑 SKIP A LEAGUE THE USER DELETED. This job is CRON-AUTHED and
+           * self-chaining (`/api/leagues/import/internal-step`), so it runs long
+           * after the user has closed the page — which makes it the resurrection
+           * path they are least able to explain if it fires. Skipping one league
+           * rather than aborting the job: the rest of the batch is legitimate
+           * work they asked for.
+           */
+          if (await isLeagueTombstoned({ userId, platform: 'sleeper', platformLeagueId })) {
+            continue
+          }
+
           const fpts =
             typeof settings.fpts === 'number'
               ? settings.fpts

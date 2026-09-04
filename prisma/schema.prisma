@@ -3733,6 +3733,7 @@ model AppUser {
   identitySignals                          IdentitySignal[]
   householdExceptionsAsA                   HouseholdException[]                   @relation("HouseholdExceptionUserA")
   householdExceptionsAsB                   HouseholdException[]                   @relation("HouseholdExceptionUserB")
+  deletedLeagueTombstones                  DeletedLeagueTombstone[]
 
   @@map("app_users")
 }
@@ -6688,6 +6689,51 @@ model HouseholdException {
   @@index([appUserIdB])
   @@index([leagueId])
   @@map("household_exceptions")
+}
+
+/// A league the user removed from their dashboard, remembered so it does not
+/// silently come back on the next import or sync.
+///
+/// 🛑 THIS ROW DELIBERATELY OUTLIVES THE `League` ROW, and that is the whole
+/// point. `DELETE /api/league/[leagueId]` hard-deletes the `League` row and
+/// ~145 cascading children, which leaves nothing behind to distinguish "never
+/// imported" from "imported, then explicitly removed" — so every import and
+/// sync path recreates it. Before this model existed the only defence was a
+/// `sessionStorage` tombstone in `app/dashboard/DashboardShell.tsx` that died
+/// at tab close and could not stop the server-side resurrection at all.
+///
+/// Keyed on the EXTERNAL identity (`platform` + `platformLeagueId`), never on
+/// `League.id`, because a re-import mints a new `League.id` and an id-keyed
+/// tombstone would miss it.
+///
+/// NOT season-scoped, on purpose: the delete route already removes every season
+/// of a platform league for that user, so the tombstone matches that same blast
+/// radius rather than leaving other seasons to wander back in.
+///
+/// Per-user on purpose. Other users attach to the same `League` row via
+/// `RedraftLeagueMember` and `LeagueTeam.claimedByUserId`; a `deletedAt` column
+/// on `League` would hide the league from co-members who never asked for that,
+/// and would also make the three import-dedupe layers treat it as "already
+/// imported" so the owner could never re-import it either.
+///
+/// Cleared, not merely ignored, when the user confirms a re-import — see
+/// `lib/league-delete/leagueTombstones.ts`.
+model DeletedLeagueTombstone {
+  id               String   @id @default(cuid())
+  userId           String
+  /// Lowercased provider slug, matching `League.platform` ("sleeper", "espn", ...).
+  platform         String
+  /// The provider's own league id, matching `League.platformLeagueId`.
+  platformLeagueId String
+  /// Denormalized so the import page can name the league in its confirmation
+  /// prompt without re-fetching a provider for a league the user has removed.
+  leagueName       String?
+  deletedAt        DateTime @default(now())
+  user             AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, platformLeagueId])
+  @@index([userId])
+  @@map("deleted_league_tombstones")
 }
 
 /// Per-user per-league Chimmy AutoCoachâ„¢ (AF Pro); commissioner can block via `League.autoCoachEnabled` + `blockedByCommissioner`.
