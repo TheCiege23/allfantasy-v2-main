@@ -3595,7 +3595,6 @@ Updated **in the same change that does the work** (**W4**).
 | ⚠ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it is a KEEPER bug** | Sleeper reports the example league as `settings.type = 1` = **KEEPER**, so `isDynasty=false` was CORRECT and dynasty capture is fine — `leagueType`/`isDynasty` agree on all 225 leagues (110 dynasty). The real defect was that KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues. **Fixed; §0.29** supersedes this row's original claim. |
 | ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
 | ✅ | **R1.9** Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | **Resolved 2026-09-03 by R0.4's evidence, not by reading the var.** It is encrypted and unreadable, but the collector's own writes settle it: syncs are landing, and they cannot land unless the value is exactly `'true'`. §0.35 |
-| ⬜ | **R1.3** Turn the grounding flag on (**G1**) | R1.2 |
 | ✅ | **R2** Bridge the 4 live engines into the packet | **Done 2026-09-03.** lineupDecision + commissionerHealthDecision producers, opt-in, wired end to end. §0.21 |
 | ✅ | **R3** Finish Player Value OS | **Done 2026-09-03.** R3.1 idpKicker (§0.22), R3.3 rosterValueGrade + the other two value questions (§0.23). |
 | ✅ | **R4** Identity OS | **Done 2026-09-03.** `playerIdentityCoverage` assertion + `minIdentityResolution` gating on lineupDecision. §0.24 |
