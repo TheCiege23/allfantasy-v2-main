@@ -16,7 +16,23 @@ import { useCallback, useEffect, useState } from 'react'
  * runs once they start building something.
  */
 
-export type RosterPlayer = { id: string; name: string; position: string | null }
+/**
+ * A player on someone's roster, as the picker renders them.
+ *
+ * ⚠ EVERY FIELD PAST `position` ALREADY EXISTED SERVER-SIDE and was being discarded before it
+ * reached the wire. The picker was a search box because this shape gave it nothing to show.
+ * `null` on any of them is a real state — no headshot, no known bye — and must render as absent
+ * rather than as a placeholder value a manager could mistake for data.
+ */
+export type RosterPlayer = {
+  id: string
+  name: string
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+  byeWeek: number | null
+  injuryStatus: string | null
+}
 
 export type RosterPick = {
   pickId: string
@@ -34,6 +50,14 @@ export type LeagueRoster = {
   /** `LeagueTeam.externalId` — what the analyzer means by opponent. */
   teamExternalId: string | null
   ownerName: string | null
+  /** Manager avatar from the league, for the header above their asset list. */
+  avatarUrl: string | null
+  /** ⚠ 0-0-0 is a REAL record pre-season, not "unknown". Render it. */
+  wins: number
+  losses: number
+  ties: number
+  /** FAAB left. Null means the league tracks none — not $0 available to offer. */
+  faabRemaining: number | null
   canReceiveProposal: boolean
 }
 

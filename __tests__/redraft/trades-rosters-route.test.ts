@@ -46,6 +46,17 @@ vi.mock('@/lib/league/league-access', () => ({
 vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({
   getNormalizedPlayerData: (...args: unknown[]) => getNormalizedPlayerData(...args),
 }))
+/*
+ * ⚠ THE SERIALIZER IS MOCKED AS IDENTITY, DELIBERATELY. What is under test here is that the ROUTE
+ * stops discarding fields — its previous mapping kept `{ id, name, position }` and dropped the
+ * rest. Driving the real serializer instead means the fixture has to satisfy its whole
+ * `UnifiedPlayerProductView` contract, and an incomplete one makes it throw into the route's
+ * `catch`, which falls back to raw ids — so the test fails with nulls that look like the bug it is
+ * checking for rather than like a bad fixture. Two different things, identical symptom.
+ */
+vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi', () => ({
+  serializeUnifiedPlayerForApi: (row: Record<string, unknown>) => row,
+}))
 
 import { GET } from '@/app/api/leagues/[leagueId]/trades/rosters/route'
 
@@ -106,6 +117,107 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const body = (await res.json()) as { rosters: Array<{ players: Array<{ id: string; name: string }> }> }
-    expect(body.rosters[0].players).toEqual([{ id: 'synthetic-id-1', name: 'synthetic-id-1', position: null }])
+    /*
+     * ⚠ THE FALLBACK MUST CARRY EVERY FIELD, NOT A NARROWER OBJECT. The picker renders a headshot
+     * slot, a team logo, a bye week and an injury chip from this shape; a fallback that omitted
+     * them would make the enrichment failure a RENDER failure too, on a row that should simply
+     * show a name and blanks. Asserted exactly rather than with toMatchObject for that reason —
+     * a missing key here is the bug, and toMatchObject would pass over it.
+     */
+    expect(body.rosters[0].players).toEqual([
+      {
+        id: 'synthetic-id-1',
+        name: 'synthetic-id-1',
+        position: null,
+        team: null,
+        imageUrl: null,
+        byeWeek: null,
+        injuryStatus: null,
+      },
+    ])
+  })
+})
+
+describe('🛑 the payload the picker renders from', () => {
+  /*
+   * WHY THIS EXISTS. `getNormalizedPlayerData` + `serializeUnifiedPlayerForApi` already returned
+   * team, headshot, bye week and injury status, and this route kept only `{ id, name, position }`.
+   * That single narrowing is why the asset picker had to be a search box: there was nothing on the
+   * wire to render as a browsable roster. These assert the fields survive the trip, because the
+   * failure mode is silent — the UI just looks sparse, and no test noticed for as long as the
+   * narrowing existed.
+   */
+  beforeEach(() => {
+    getServerSession.mockResolvedValue({ user: { id: 'u1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    findManyAppUser.mockResolvedValue([])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+  })
+
+  it('carries team, headshot, bye week and injury status through to the wire', async () => {
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1'] }, faabRemaining: 73 },
+    ])
+    findManyLeagueTeam.mockResolvedValue([
+      { platformUserId: 'user-a', teamName: 'Dynasty Dogs', externalId: '4', avatarUrl: 'https://x/a.png', wins: 6, losses: 2, ties: 0 },
+    ])
+    /*
+     * ⚠ NESTED UNDER `unified`, WHICH IS THE SHAPE THE SERIALIZER ACTUALLY READS. A flat fixture
+     * silently yields nulls for every field — the serializer finds nothing and returns its
+     * fallbacks, so the assertion fails against a plausible-looking payload rather than an error.
+     * `byeWeek` sits on the entry itself, not under `unified`; the serializer reads them from
+     * different levels and a fixture that guesses one shape for both proves nothing.
+     */
+    getNormalizedPlayerData.mockResolvedValue([
+      { id: 'p1', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: 'https://x/p1.png', byeWeek: 10, injuryStatus: 'Q' },
+    ])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as { rosters: Array<Record<string, unknown>> }
+    const roster = body.rosters[0]!
+    const player = (roster.players as Array<Record<string, unknown>>)[0]!
+
+    expect(player.team).toBe('GB')
+    expect(player.imageUrl).toBe('https://x/p1.png')
+    expect(player.byeWeek).toBe(10)
+    expect(player.injuryStatus).toBe('Q')
+  })
+
+  it('carries the manager avatar, record and FAAB', async () => {
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: [] }, faabRemaining: 73 },
+    ])
+    findManyLeagueTeam.mockResolvedValue([
+      { platformUserId: 'user-a', teamName: 'Dynasty Dogs', externalId: '4', avatarUrl: 'https://x/a.png', wins: 6, losses: 2, ties: 1 },
+    ])
+    getNormalizedPlayerData.mockResolvedValue([])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const roster = ((await res.json()) as { rosters: Array<Record<string, unknown>> }).rosters[0]!
+
+    expect(roster.avatarUrl).toBe('https://x/a.png')
+    expect(roster).toMatchObject({ wins: 6, losses: 2, ties: 1 })
+    expect(roster.faabRemaining).toBe(73)
+  })
+
+  it('🛑 a 0-0-0 record is reported, not omitted', async () => {
+    // Pre-season every team genuinely IS 0-0-0. Treating that as "unknown" and hiding it would
+    // make the picker look broken in exactly the month it gets the most use.
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: [] }, faabRemaining: null },
+    ])
+    findManyLeagueTeam.mockResolvedValue([
+      { platformUserId: 'user-a', teamName: 'T', externalId: '4', avatarUrl: null, wins: 0, losses: 0, ties: 0 },
+    ])
+    getNormalizedPlayerData.mockResolvedValue([])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const roster = ((await res.json()) as { rosters: Array<Record<string, unknown>> }).rosters[0]!
+
+    expect(roster).toMatchObject({ wins: 0, losses: 0, ties: 0 })
+    // Null FAAB means the league tracks none — distinct from $0 available to offer.
+    expect(roster.faabRemaining).toBeNull()
   })
 })

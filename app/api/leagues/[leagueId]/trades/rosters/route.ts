@@ -10,7 +10,33 @@ import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnified
 
 export const dynamic = 'force-dynamic'
 
-export type TradeableRosterPlayer = { id: string; name: string; position: string | null }
+/**
+ * A player the picker can offer.
+ *
+ * 🛑 EVERY FIELD BELOW `position` WAS ALREADY BEING FETCHED AND THEN THROWN AWAY. This route calls
+ * `getNormalizedPlayerData` and `serializeUnifiedPlayerForApi`, which return team, headshot, bye
+ * week and injury status — and the mapping below kept only `{ id, name, position }`, so the picker
+ * had nothing to render but a name and had to be a search box. Widening the type costs no extra
+ * query; it stops discarding a payload the request already paid for.
+ */
+export type TradeableRosterPlayer = {
+  id: string
+  name: string
+  position: string | null
+  /** NFL team abbreviation, for the logo beside the name. */
+  team: string | null
+  /** Headshot. Null is normal — many players have none, and the UI must not gap. */
+  imageUrl: string | null
+  /**
+   * Bye week, when known.
+   *
+   * ⚠ NULL IS NOT WEEK 0 AND NOT "NO BYE". It means we do not know, which a roster surface must
+   * render as absent rather than as a week the manager could plan around.
+   */
+  byeWeek: number | null
+  /** Designation when one is on file; absence is not a statement of health. */
+  injuryStatus: string | null
+}
 
 /**
  * A pick the picker may offer, already carrying the item type the trade engine
@@ -50,6 +76,22 @@ export type TradeableRoster = {
   teamExternalId: string | null
   /** Team name where the league has one, else the AllFantasy account's name. */
   ownerName: string | null
+  /** Manager avatar from `LeagueTeam`, so the picker can show whose roster it is. */
+  avatarUrl: string | null
+  /**
+   * This manager's record in the league.
+   *
+   * ⚠ ZEROS ARE REAL AND MEAN 0-0-0, not "unknown" — `LeagueTeam` defaults them, and pre-season
+   * every team genuinely is 0-0-0. A surface that hides a 0-0 record would hide the true state.
+   */
+  wins: number
+  losses: number
+  ties: number
+  /**
+   * FAAB left to spend, when the league tracks it. Null means this league has no FAAB budget on
+   * file — which the picker must render as "not available" rather than as $0 to offer.
+   */
+  faabRemaining: number | null
   /**
    * True only when `platformUserId` is an AllFantasy account id.
    *
@@ -82,7 +124,7 @@ export async function GET(
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId },
-    select: { id: true, platformUserId: true, playerData: true },
+    select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
   })
 
   /* The league's own season decides rookie-vs-future on every pick below. */
@@ -108,7 +150,11 @@ export async function GET(
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        select: { platformUserId: true, teamName: true, externalId: true },
+        select: {
+          platformUserId: true, teamName: true, externalId: true,
+          // Already one query; these ride along rather than costing another.
+          avatarUrl: true, wins: true, losses: true, ties: true,
+        },
       })
       .catch(() => []),
   ])
@@ -122,11 +168,20 @@ export async function GET(
   const externalIdByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), String(t.externalId)]),
   )
+  /** Manager identity and record, keyed the same way the name and external id already are. */
+  const teamMetaByPlatformId = new Map(
+    namedTeams.map((t) => [
+      String(t.platformUserId),
+      { avatarUrl: t.avatarUrl ?? null, wins: t.wins ?? 0, losses: t.losses ?? 0, ties: t.ties ?? 0 },
+    ]),
+  )
 
   const result: TradeableRoster[] = await Promise.all(
     rosters.map(async (r) => {
       const playerIds = getRosterPlayerIds(r.playerData)
-      let players: TradeableRosterPlayer[] = playerIds.map((id) => ({ id, name: id, position: null }))
+      let players: TradeableRosterPlayer[] = playerIds.map((id) => ({
+        id, name: id, position: null, team: null, imageUrl: null, byeWeek: null, injuryStatus: null,
+      }))
       try {
         const rows = await getNormalizedPlayerData({
           surface: 'roster',
@@ -140,16 +195,35 @@ export async function GET(
         }))
         players = playerIds.map((id) => {
           const enriched = byId.get(id)
-          return { id, name: enriched?.name ?? id, position: enriched?.position ?? null }
+          /*
+           * The serializer already carried every one of these; the previous version kept three and
+           * dropped the rest, which is why the picker could only be a search box. `?? null` on each
+           * because absent is a real state the UI renders differently from a value.
+           */
+          return {
+            id,
+            name: enriched?.name ?? id,
+            position: enriched?.position ?? null,
+            team: enriched?.team ?? null,
+            imageUrl: enriched?.imageUrl ?? enriched?.headshotUrl ?? null,
+            byeWeek: enriched?.byeWeek ?? null,
+            injuryStatus: enriched?.injuryStatus ?? null,
+          }
         })
       } catch {
         // Enrichment is best-effort; fall back to raw ids (matches the placeholder
         // convention already used elsewhere when player metadata isn't available).
       }
       const account = accountById.get(r.platformUserId)
+      const meta = teamMetaByPlatformId.get(String(r.platformUserId))
       return {
         rosterId: r.id,
         platformUserId: r.platformUserId,
+        avatarUrl: meta?.avatarUrl ?? null,
+        wins: meta?.wins ?? 0,
+        losses: meta?.losses ?? 0,
+        ties: meta?.ties ?? 0,
+        faabRemaining: r.faabRemaining ?? null,
         players,
         picks: listProposablePicks(r.playerData).map((p) => ({
           ...p,
