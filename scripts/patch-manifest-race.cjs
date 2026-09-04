@@ -52,6 +52,52 @@ function patchManifestRace(repoRoot) {
   const root = repoRoot || process.cwd()
   const pluginPath = path.join(root, PLUGIN_REL)
 
+  /*
+   * ⚠ NEVER PATCH A BUNDLER INTERNAL IN A PRODUCTION BUILD.
+   *
+   * This rewrites Next's `pages-manifest-plugin.js` — the plugin that writes
+   * BOTH `pages-manifest.json` AND `app-paths-manifest.json` — to wrap every
+   * write in an exclusive lock file that gives up after 400 x 25ms and throws.
+   * The merge is `{...existing, ...entries}`, so a write that never happens is
+   * not an error anyone sees: those entries are simply absent from the manifest.
+   *
+   * Measured on Railway production 2026-08-22, via /api/af-debug/headers?build=1:
+   *     layoutPresentInBuild:            true   (3 of 983 server chunks)
+   *     appBuildManifest.hasLayoutKey:   true
+   *     appPathsManifest.hasRootLayout:  FALSE
+   *
+   * The root layout compiled and is missing from app-paths-manifest. Without
+   * that entry the server renders pages with no root layout, which is both
+   * observed symptoms at once: HTML with no <html>/<body> (they come from the
+   * layout), and no <SessionProvider> (it is inside the layout), so every
+   * `useSession()` consumer gets `undefined` and blanks the page.
+   *
+   * This script's own docstring scopes it to "the dev server hangs compiling any
+   * route" on WINDOWS AND SLOW-DISK ENVIRONMENTS, and names its callers as
+   * postinstall and `vercel-next-build.cjs`. It was never meant to run inside a
+   * Linux production build — it reached Railway only because postinstall fires
+   * on `npm ci`. The lock it adds solves a problem Linux CI does not have, and
+   * can drop manifest entries, which is strictly worse than the race it prevents.
+   *
+   * Kept for local Windows development, where it earns its place. Skipped
+   * wherever a real build runs.
+   */
+  const isCi = process.env.CI === 'true' || process.env.CI === '1'
+  const isRailway = !!(
+    process.env.RAILWAY_PROJECT_ID ||
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.RAILWAY_SERVICE_ID ||
+    process.env.RAILWAY_DEPLOYMENT_ID ||
+    process.env.RAILWAY_GIT_COMMIT_SHA
+  )
+  if (process.platform !== 'win32' || isCi || isRailway) {
+    console.log(
+      `[patch-manifest-race] skipped (platform=${process.platform} ci=${isCi} railway=${isRailway}) — ` +
+        'the manifest lock is a Windows dev-server workaround and must not alter a production build',
+    )
+    return 'skipped-not-windows-dev'
+  }
+
   if (!fs.existsSync(pluginPath)) {
     return 'skipped-missing'
   }
