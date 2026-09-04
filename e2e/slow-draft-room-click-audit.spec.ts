@@ -447,6 +447,25 @@ async function mockSlowDraftRoomApis(page: Page, leagueId: string) {
   })
 
   return {
+    /*
+     * Drive the draft forward until the viewer (roster-1) is on the clock again.
+     *
+     * ⚠ NOTHING ELSE IN THIS MOCK EVER ADVANCES A PICK. `advanceTimer` only decrements
+     * the clock, and picks move only when the viewer picks or autopicks. So once the
+     * queue autopick consumes roster-1's turn, slot 2 is on the clock forever and the
+     * pool's Draft button is correctly `disabled title="Not your turn"` for the rest of
+     * the run. That is the product behaving properly; the spec simply had no way back.
+     *
+     * Filler names are deliberately NOT pool players, so row 0 of the player pool -- and
+     * therefore draft-player-button-0 -- is the same player before and after.
+     */
+    advanceToUserTurn: () => {
+      for (let guard = 0; guard <= slotOrder.length * 2; guard += 1) {
+        if (currentSlot().rosterId === 'roster-1') return
+        submitPickForCurrent(`Filler ${state.picks.length + 1}`, 'FLEX', null, 'cpu')
+      }
+      throw new Error('advanceToUserTurn: roster-1 never came back on the clock')
+    },
     getPickRequests: () => pickRequests,
     getAutopickRequests: () => autopickRequests,
     getControlsRequests: () => controlsRequests,
@@ -566,10 +585,25 @@ test.describe('@slow-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-board')).toContainText('Blaze Catcher')
 
     // Manual pick submission still works.
+    /*
+     * The queue autopick above consumed roster-1's own turn, so the viewer is no longer
+     * on the clock and the Draft button is disabled for a correct product reason. Walk
+     * the other slots through their picks, then resync so the client sees it.
+     */
+    mocks.advanceToUserTurn()
+    await openResyncMenu(page)
+    await clickHydrated(page.getByTestId('draft-resync-button'))
+    await expect(desktop.getByTestId('draft-player-button-0')).toBeEnabled({ timeout: 30_000 })
+    /*
+     * ⚠ NO CONFIRMATION STEP EXISTS ON A SNAKE DRAFT PICK -- `draft-pick-confirmation`
+     * IS THE AUCTION NOMINATION CONFIRM, MIS-NAMED.
+     * PlayerPanel renders it under `pendingNomination`, its copy reads "Confirm
+     * nomination:" and its button calls `onNominate`. A snake pick goes straight through
+     * `onDraftRequest`, so waiting for that panel here waits for something that is never
+     * built. The auction spec uses the same testid correctly, for an actual nomination.
+     */
     await clickHydrated(desktop.getByTestId('draft-player-button-0'))
-    await expect(desktop.getByTestId('draft-pick-confirmation')).toBeVisible()
-    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
-    expect(mocks.getPickRequests().length).toBeGreaterThan(0)
+    await expect.poll(() => mocks.getPickRequests().length, { timeout: 15_000 }).toBeGreaterThan(0)
     await expect(desktop.getByTestId('draft-board')).toContainText(/Atlas Runner|Blaze Catcher|Core Signal/i)
 
     // Resync should not leave stale on-the-clock state.
