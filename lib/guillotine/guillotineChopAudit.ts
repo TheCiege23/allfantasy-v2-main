@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { transitionToFinalStage } from './endgameEngine'
 
 /**
  * The audit half of a guillotine chop: the elimination record, the survival log, and the season
@@ -68,7 +69,7 @@ export interface ChopAuditInput {
 }
 
 export type ChopAuditResult =
-  | { recorded: true; seasonId: string; eliminations: number; survivalRows: number }
+  | { recorded: true; seasonId: string; eliminations: number; survivalRows: number; finalStageReached: boolean }
   | { recorded: false; reason: 'no_guillotine_season' | 'already_recorded' }
 
 /**
@@ -200,10 +201,41 @@ export async function recordChopAudit(input: ChopAuditInput): Promise<ChopAuditR
     })
   })
 
+  /*
+   * ── THE FINAL-STAGE TRANSITION, PORTED FROM THE ENGINE BEING DELETED ───────────────────────
+   *
+   * `eliminationEngine.ts` ended by re-reading the season and, when the surviving field had fallen
+   * to the league's endgame threshold, calling `transitionToFinalStage`. That call was its ONLY
+   * caller — deleting the engine without porting this would have left `transitionToFinalStage` with
+   * zero callers and no guillotine league would ever have entered its final stage again. Nothing
+   * would have failed; the season would simply never end.
+   *
+   * It belongs here because this module already owns `currentTeamsActive` — the number the
+   * threshold is compared against — so the check reads the value it just wrote rather than racing a
+   * separate reader.
+   *
+   * ⚠ AFTER the transaction, deliberately. The transition is a separate state change with its own
+   * meaning, and folding it in would make a threshold read inside the same transaction that wrote
+   * the counter it depends on.
+   */
+  const league = await prisma.league
+    .findUnique({ where: { id: input.leagueId }, select: { guillotineEndgameThreshold: true } })
+    .catch(() => null)
+  const after = await prisma.guillotineSeason
+    .findUnique({ where: { id: seasonId }, select: { currentTeamsActive: true, isInFinalStage: true } })
+    .catch(() => null)
+
+  let finalStageReached = false
+  if (after && !after.isInFinalStage && after.currentTeamsActive <= (league?.guillotineEndgameThreshold ?? 1)) {
+    await transitionToFinalStage(seasonId, input.scoringPeriod)
+    finalStageReached = true
+  }
+
   return {
     recorded: true,
     seasonId,
     eliminations: input.chopped.length,
     survivalRows: input.standings.length,
+    finalStageReached,
   }
 }

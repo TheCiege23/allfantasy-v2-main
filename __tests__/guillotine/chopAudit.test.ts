@@ -21,17 +21,23 @@ const h = vi.hoisted(() => ({
   survivalUpsert: vi.fn(),
   seasonUpdate: vi.fn(),
   transaction: vi.fn(),
+  seasonFindUnique: vi.fn(),
+  leagueFindUnique: vi.fn(),
+  transition: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    guillotineSeason: { findFirst: h.seasonFindFirst, update: h.seasonUpdate },
+    guillotineSeason: { findFirst: h.seasonFindFirst, update: h.seasonUpdate, findUnique: h.seasonFindUnique },
+    league: { findUnique: h.leagueFindUnique },
     guillotineElimination: { findFirst: h.elimFindFirst, create: h.elimCreate },
     guillotineSurvivalLog: { upsert: h.survivalUpsert },
     $transaction: h.transaction,
   },
 }))
+
+vi.mock('@/lib/guillotine/endgameEngine', () => ({ transitionToFinalStage: h.transition }))
 
 import {
   findGuillotineSeasonId,
@@ -74,6 +80,10 @@ beforeEach(() => {
   h.elimCreate.mockResolvedValue({})
   h.survivalUpsert.mockResolvedValue({})
   h.seasonUpdate.mockResolvedValue({})
+  h.transition.mockResolvedValue(undefined)
+  // Default: field still large, so no transition.
+  h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 10, isInFinalStage: false })
+  h.leagueFindUnique.mockResolvedValue({ guillotineEndgameThreshold: 2 })
 })
 
 describe('🛑 optional when there is no season row — the common case', () => {
@@ -127,7 +137,12 @@ describe('the audit itself', () => {
   it('writes an elimination row and a survival row per team', async () => {
     const out = await recordChopAudit(input())
 
-    expect(out).toEqual({ recorded: true, seasonId: 'gs1', eliminations: 1, survivalRows: 2 })
+    // `finalStageReached` is part of the result now that the endgame transition moved here from
+    // the deleted engine. Asserted exactly rather than loosened to toMatchObject: a result gaining
+    // a field silently is how a caller ends up reading one that was never set.
+    expect(out).toEqual({
+      recorded: true, seasonId: 'gs1', eliminations: 1, survivalRows: 2, finalStageReached: false,
+    })
     expect(h.elimCreate).toHaveBeenCalledTimes(1)
     expect(h.survivalUpsert).toHaveBeenCalledTimes(2)
     expect(h.elimCreate.mock.calls[0][0].data).toMatchObject({
@@ -200,5 +215,46 @@ describe('season lookup', () => {
   it('reports a period as unrecorded when nothing is there', async () => {
     h.elimFindFirst.mockResolvedValue(null)
     expect(await isPeriodAlreadyRecorded('gs1', 4)).toBe(false)
+  })
+})
+
+describe('🛑 the final-stage transition, ported from the engine that was deleted', () => {
+  beforeEach(() => {
+    h.seasonFindFirst.mockResolvedValue({ id: 'gs1' })
+    h.elimFindFirst.mockResolvedValue(null)
+  })
+
+  it('does not transition while the field is above the threshold', async () => {
+    h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 10, isInFinalStage: false })
+    const out = await recordChopAudit(input())
+    expect(h.transition).not.toHaveBeenCalled()
+    expect(out).toMatchObject({ recorded: true, finalStageReached: false })
+  })
+
+  it('🛑 transitions once the field reaches the threshold', async () => {
+    /*
+     * This is the capability the deletion would otherwise have taken with it. `eliminationEngine`
+     * was the ONLY caller of `transitionToFinalStage`; removing it without porting this would have
+     * left that function with zero callers, and no guillotine league would ever have entered its
+     * final stage again. Nothing would have failed — the season would simply never end.
+     */
+    h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 2, isInFinalStage: false })
+    const out = await recordChopAudit(input())
+    expect(h.transition).toHaveBeenCalledWith('gs1', 4)
+    expect(out).toMatchObject({ finalStageReached: true })
+  })
+
+  it('does not transition twice', async () => {
+    h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 1, isInFinalStage: true })
+    const out = await recordChopAudit(input())
+    expect(h.transition).not.toHaveBeenCalled()
+    expect(out).toMatchObject({ finalStageReached: false })
+  })
+
+  it('falls back to a threshold of 1 when the league sets none', async () => {
+    h.leagueFindUnique.mockResolvedValue({ guillotineEndgameThreshold: null })
+    h.seasonFindUnique.mockResolvedValue({ currentTeamsActive: 1, isInFinalStage: false })
+    await recordChopAudit(input())
+    expect(h.transition).toHaveBeenCalled()
   })
 })

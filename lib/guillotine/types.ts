@@ -81,7 +81,7 @@ export interface GuillotineChopResult {
    * not. Reported rather than swallowed so the difference is legible.
    */
   audit?:
-    | { recorded: true; seasonId: string; eliminations: number; survivalRows: number }
+    | { recorded: true; seasonId: string; eliminations: number; survivalRows: number; finalStageReached: boolean }
     | { recorded: false; reason: 'no_guillotine_season' | 'already_recorded' }
 }
 
