@@ -38,6 +38,7 @@
 import { prisma } from "@/lib/prisma"
 import { sendNotificationEmail } from "@/lib/resend-client"
 import { sendPushToUser } from "@/lib/push-notifications/push-service"
+import { decideFatigue } from "./fatigueBudget"
 
 /** Terminal-ish states this relay writes back. `pending` means "retry on the next pass". */
 export type RelayRowOutcome = "sent" | "retry" | "failed" | "skipped"
@@ -98,6 +99,24 @@ function actionLabelFrom(metadata: unknown): string | undefined {
  * sit in `pending` forever pretending it is queued.
  */
 async function deliver(row: OutboxRow): Promise<{ outcome: RelayRowOutcome; error?: string }> {
+  /*
+   * R7 — the fatigue budget, enforced HERE because this is the one point every channel passes
+   * through. Putting it in a producer would protect only that producer; the outbox is where
+   * waivers, trades, Chimmy alerts and marketing all converge.
+   *
+   * ⚠ IT WIDENS `skipped` SLIGHTLY, AND THAT IS DELIBERATE. Everything else marked `skipped`
+   * here can NEVER be delivered as addressed. A fatigue suppression could have been delivered
+   * yesterday and may be deliverable tomorrow. `retry` is the wrong outcome anyway — it would
+   * burn `attemptCount` on a row that is not failing, and eventually mark it `failed`, turning a
+   * deliberate policy decision into a fake error. Terminal-and-not-an-error is the honest shape,
+   * and the reason lands in `lastError` so the suppression is auditable rather than silent.
+   *
+   * ⚠ AND IT IS CHECKED BEFORE THE CHANNEL SWITCH, not inside one branch, so a user cannot be
+   * over budget on email and under it on push for the same flood.
+   */
+  const fatigue = await decideFatigue(row)
+  if (fatigue.suppress) return { outcome: "skipped", error: fatigue.reason }
+
   switch (row.channel) {
     case "email": {
       if (!row.userId) return { outcome: "skipped", error: "email row has no userId" }
