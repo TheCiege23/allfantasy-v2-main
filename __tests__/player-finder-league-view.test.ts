@@ -107,9 +107,10 @@ describe('getPlayerLeagueView', () => {
     expect(view?.ownership).toEqual({
       kind: 'other',
       slot: 'STARTER',
-      owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, record: '4-2', isCommissioner: false },
+      owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, externalId: '1', record: '4-2', isCommissioner: false },
     })
-    expect(view?.yourTeam).toEqual({ teamName: 'Cafe Con Chimmy' })
+    // Both platform team ids travel with the view — they are what a trade deep link needs.
+    expect(view?.yourTeam).toEqual({ teamName: 'Cafe Con Chimmy', externalId: '2' })
     expect(view?.leagueName).toBe('Gridiron Gang')
     expect(view?.platform).toBe('espn')
   })

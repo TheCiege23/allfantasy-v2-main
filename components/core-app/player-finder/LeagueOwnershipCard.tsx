@@ -54,6 +54,8 @@ export function LeagueOwnershipCard({
     platformLeagueId: view.platformLeagueId,
     season: view.season,
     name: view.leagueName,
+    teamId: view.yourTeam?.externalId ?? null,
+    partnerTeamId: view.ownership.kind === 'other' ? (view.ownership.owner?.externalId ?? null) : null,
   }
   const last = playerName.trim().split(/\s+/).slice(-1)[0] ?? playerName
   const o = view.ownership

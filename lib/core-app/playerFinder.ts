@@ -74,6 +74,8 @@ export type LeagueSlot = {
   /** The provider's league id and season, for "Open in <platform>" links. */
   platformLeagueId: string | null
   season: number | null
+  /** Your team's id on the platform in this league (LeagueTeam.externalId), when you have one. */
+  teamExternalId: string | null
   /** STARTER / BENCH / IR SLOT / TAXI / NOT YOURS */
   slot: string
   isYours: boolean
@@ -82,7 +84,7 @@ export type LeagueSlot = {
    * Null when he is yours, and null when he is on a roster we hold no team row
    * for (the row then reads "another manager" rather than inventing a name).
    */
-  owner: { teamName: string; ownerName: string; avatarUrl: string | null } | null
+  owner: { teamName: string; ownerName: string; avatarUrl: string | null; externalId: string } | null
 }
 
 /**
@@ -355,6 +357,9 @@ async function resolveLeagueSlots(
     for (const c of [t.platformUserId, t.externalId, userId]) if (c) set.add(c)
     candidatesByLeague.set(t.leagueId, set)
   }
+  // Your team's platform id per league — the ESPN teamId / Yahoo team number a deep link needs.
+  const teamExternalIdByLeague = new Map<string, string>()
+  for (const t of teams) if (t.externalId && !teamExternalIdByLeague.has(t.leagueId)) teamExternalIdByLeague.set(t.leagueId, t.externalId)
   const claimedLeagueIds = [...candidatesByLeague.keys()]
   const allCandidates = [...new Set([...candidatesByLeague.values()].flatMap((s) => [...s]))]
 
@@ -398,6 +403,7 @@ async function resolveLeagueSlots(
         format: league?.leagueType ?? null,
         platformLeagueId: league?.platformLeagueId ?? null,
         season: league?.season ?? null,
+        teamExternalId: teamExternalIdByLeague.get(r.leagueId) ?? null,
         slot: slotLabel(key),
         isYours: true,
         owner: null,
@@ -528,6 +534,7 @@ async function resolveLeagueSlots(
           format: league?.leagueType ?? null,
           platformLeagueId: league?.platformLeagueId ?? null,
           season: league?.season ?? null,
+          teamExternalId: teamExternalIdByLeague.get(leagueId) ?? null,
         }
         /*
          * If the holder is one of YOUR candidate ids after all — the first pass
@@ -549,7 +556,7 @@ async function resolveLeagueSlots(
           slot: 'NOT YOURS',
           isYours: false,
           owner: team
-            ? { teamName: team.teamName, ownerName: team.ownerName, avatarUrl: team.avatarUrl }
+            ? { teamName: team.teamName, ownerName: team.ownerName, avatarUrl: team.avatarUrl, externalId: team.externalId }
             : null,
         })
       }

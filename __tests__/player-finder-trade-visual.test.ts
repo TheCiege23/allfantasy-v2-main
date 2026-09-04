@@ -100,7 +100,8 @@ describe('getPlayerTradeVisual', () => {
     expect(state.available).toBe(true)
     if (!state.available) return
     const v = state.data
-    expect(v.partner).toMatchObject({ teamName: "Tasha's Titans", ownerName: 'tashaR' })
+    expect(v.partner).toMatchObject({ teamName: "Tasha's Titans", ownerName: 'tashaR', externalId: '1' })
+    expect(v.you).toMatchObject({ teamName: 'Cafe Con Chimmy', externalId: '2' })
     expect(v.target).toMatchObject({ name: 'Dalton Kincaid', position: 'TE', value: 3000 })
     expect(v.packages.length).toBeGreaterThan(0)
     expect(v.recommended).not.toBeNull()

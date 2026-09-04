@@ -1,8 +1,8 @@
 import {
-  isSafeProviderUrl,
   normalizeSourcePlatform,
-  PROVIDER_ALLOWED_HOSTS,
-  resolveSourceLink,
+  resolveSourceScreenLink,
+  type SourceScreen,
+  type SourceScreenLink,
 } from '@/lib/league-links/sourceLinkResolver'
 
 /**
@@ -15,16 +15,13 @@ import {
  *
  * ⚠ CLIENT-SAFE ON PURPOSE: no prisma, no 'server-only'. The screen component
  * is a client component and builds these at render time from fields the loader
- * already returned. `lib/shared-services/league-hub/replacementOptions.ts` has
- * `resolveLineupTarget` with the same Sleeper paths, but it imports prisma and
- * cannot be reached from the client bundle — see `playerRef.ts` for the build
- * failure that shape produces.
+ * already returned.
  *
- * ⚠ NEVER AN INVENTED ROUTE. Sleeper's `/team` and `/players` pages are the
- * ones the replacement engine already links to; ESPN and Yahoo have a VERIFIED
- * league-page format in `sourceLinkResolver` and nothing deeper, so those land
- * on the league page and say so in `screen`. Every external href passes the
- * resolver's exact-hostname HTTPS allowlist.
+ * ⚠ THE URL FORMATS LIVE IN ONE PLACE — `sourceLinkResolver`'s per-provider
+ * screen table — and a format is a live destination only once it is marked
+ * verified there. Until then this returns the league page (labelled as such in
+ * `screen`) and carries the unverified URL as `candidate`, which is what the
+ * verification pass clicks. Nothing here invents a route.
  */
 
 export type PlatformLink = {
@@ -33,9 +30,11 @@ export type PlatformLink = {
   label: string
   /** Human name of the platform — "Sleeper", "ESPN", "Yahoo", "AllFantasy". */
   platformLabel: string
-  /** The screen the link lands on — "Lineup", "Players", "League", "Trades". */
+  /** The screen the link lands on — "Lineup", "Waivers", "Trade", "League", or "<Provider> home". */
   screen: string
   external: boolean
+  /** The deep-link URL an unverified format would use; null when verified or absent. */
+  candidate?: string | null
 }
 
 export type LinkLeague = {
@@ -44,6 +43,10 @@ export type LinkLeague = {
   platformLeagueId?: string | null
   season?: number | string | null
   name?: string | null
+  /** The user's own team id on the platform (LeagueTeam.externalId), when known. */
+  teamId?: string | null
+  /** The counterparty's team id on the platform, for a trade screen. */
+  partnerTeamId?: string | null
 }
 
 const SHORT_LABEL: Record<string, string> = {
@@ -53,6 +56,13 @@ const SHORT_LABEL: Record<string, string> = {
   mfl: 'MFL',
   fantrax: 'Fantrax',
   fleaflicker: 'Fleaflicker',
+}
+
+const SCREEN_LABEL: Record<SourceScreen, string> = {
+  league: 'League',
+  lineup: 'Lineup',
+  waivers: 'Waivers',
+  trade: 'Trade',
 }
 
 /** "Sleeper", "ESPN", "Yahoo" — or "AllFantasy" for a native league. */
@@ -70,69 +80,86 @@ export function movePath(league: LinkLeague, screen: string): string {
   return [platformLabel(league.platform), (league.name ?? '').trim() || 'League', screen].join(' › ')
 }
 
-function external(href: string, platform: string, screen: string): PlatformLink {
-  const label = platformLabel(platform)
-  return { href, label: `Open in ${label}`, platformLabel: label, screen, external: true }
-}
-
 function internal(href: string, screen: string): PlatformLink {
-  return { href, label: 'Open in AllFantasy', platformLabel: 'AllFantasy', screen, external: false }
+  return { href, label: 'Open in AllFantasy', platformLabel: 'AllFantasy', screen, external: false, candidate: null }
 }
 
-/**
- * The provider's league page — the closest RELIABLE destination for ESPN and
- * Yahoo, and the fallback for any Sleeper league we hold no platform id for.
- */
-function leaguePage(league: LinkLeague, screen: string): PlatformLink | null {
-  const link = resolveSourceLink({
+function fromResolved(link: SourceScreenLink, platform: string | null | undefined): PlatformLink {
+  const label = platformLabel(platform)
+  const screen = link.verified
+    ? SCREEN_LABEL[link.screen]
+    : link.destinationType === 'homepage'
+      ? `${link.providerLabel} home`
+      : 'League'
+  return {
+    href: link.href,
+    label: `Open in ${label}`,
+    platformLabel: label,
+    screen,
+    external: true,
+    candidate: link.candidate,
+  }
+}
+
+function screenLink(league: LinkLeague, screen: SourceScreen): PlatformLink | null {
+  const resolved = resolveSourceScreenLink({
     platform: league.platform,
     sourceLeagueId: league.platformLeagueId ?? null,
     leagueName: league.name ?? null,
     season: league.season ?? null,
+    teamId: league.teamId ?? null,
+    partnerTeamId: league.partnerTeamId ?? null,
+    screen,
   })
-  if (!link) return null
-  // A homepage fallback is not "the league" — say where it actually lands.
-  return external(link.href, link.provider, link.isFallback ? `${link.providerLabel} home` : screen)
-}
-
-/*
- * ⚠ ONLY THE TWO SLEEPER PATHS THE REPLACEMENT ENGINE ALREADY LINKS TO. A
- * trades path was drafted here and removed: nothing in the repo has verified
- * it, and the module rule is that a link we cannot vouch for lands on the
- * league page rather than on a guess.
- */
-function sleeperPage(league: LinkLeague, path: 'team' | 'players', screen: string): PlatformLink | null {
-  const id = (league.platformLeagueId ?? '').trim()
-  if (!id) return null
-  const href = `https://sleeper.com/leagues/${encodeURIComponent(id)}/${path}`
-  return isSafeProviderUrl(href, PROVIDER_ALLOWED_HOSTS.sleeper) ? external(href, 'sleeper', screen) : null
+  return resolved ? fromResolved(resolved, league.platform) : null
 }
 
 /** Where a lineup change is made — the "Where to fix it" destination. */
 export function lineupLink(league: LinkLeague): PlatformLink | null {
-  const platform = normalizeSourcePlatform(league.platform)
-  if (!platform) return internal(`/core/my-team?league=${encodeURIComponent(league.id)}`, 'My team')
-  if (platform === 'sleeper') return sleeperPage(league, 'team', 'Lineup') ?? leaguePage(league, 'League')
-  return leaguePage(league, 'League')
+  if (!normalizeSourcePlatform(league.platform)) {
+    return internal(`/core/my-team?league=${encodeURIComponent(league.id)}`, 'My team')
+  }
+  return screenLink(league, 'lineup')
 }
 
 /** Where a free agent is claimed. */
 export function claimLink(league: LinkLeague): PlatformLink | null {
-  const platform = normalizeSourcePlatform(league.platform)
-  if (!platform) return internal(`/waiver-wire?leagueId=${encodeURIComponent(league.id)}`, 'Waivers')
-  if (platform === 'sleeper') return sleeperPage(league, 'players', 'Players') ?? leaguePage(league, 'League')
-  return leaguePage(league, 'League')
+  if (!normalizeSourcePlatform(league.platform)) {
+    return internal(`/waiver-wire?leagueId=${encodeURIComponent(league.id)}`, 'Waivers')
+  }
+  return screenLink(league, 'waivers')
 }
 
 /**
  * Where a trade for a player another manager owns starts.
  *
  * Always AllFantasy's own trade screen for that league — it is the one that
- * grades the offer — with the platform's page as the place the trade is
- * actually sent, when we can name it.
+ * grades the offer — with the platform's trade screen (or its league page,
+ * while the trade format is unverified) as the place the trade is sent.
  */
 export function tradeLink(league: LinkLeague): { here: PlatformLink; there: PlatformLink | null } {
   const here = internal(`/core/trades?league=${encodeURIComponent(league.id)}`, 'Trades')
-  const there = normalizeSourcePlatform(league.platform) ? leaguePage(league, 'League') : null
+  const there = normalizeSourcePlatform(league.platform) ? screenLink(league, 'trade') : null
   return { here, there }
+}
+
+/**
+ * Every screen for a league, with what the link resolves to today and the
+ * unverified URL each format would build — the verification pass's worksheet.
+ */
+export function deepLinkCandidates(league: LinkLeague): Array<{ screen: SourceScreen; href: string; verified: boolean; candidate: string | null }> {
+  const out: Array<{ screen: SourceScreen; href: string; verified: boolean; candidate: string | null }> = []
+  for (const screen of ['league', 'lineup', 'waivers', 'trade'] as const) {
+    const resolved = resolveSourceScreenLink({
+      platform: league.platform,
+      sourceLeagueId: league.platformLeagueId ?? null,
+      leagueName: league.name ?? null,
+      season: league.season ?? null,
+      teamId: league.teamId ?? null,
+      partnerTeamId: league.partnerTeamId ?? null,
+      screen,
+    })
+    if (resolved) out.push({ screen, href: resolved.href, verified: resolved.verified, candidate: resolved.candidate })
+  }
+  return out
 }

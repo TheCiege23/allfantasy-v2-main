@@ -83,6 +83,8 @@ export type TradeVisualGrade = {
 export type TradeVisualSide = {
   teamName: string
   ownerName: string | null
+  /** The team's id on the platform, for the trade deep link. Null when we hold no team row. */
+  externalId: string | null
   stance: TeamStance
   needs: string[]
   surpluses: string[]
@@ -377,9 +379,10 @@ export async function getPlayerTradeVisual(
     }
   }
 
-  const stanceOf = (r: DiscoveryRoster): TradeVisualSide => ({
+  const stanceOf = (r: DiscoveryRoster, externalId: string | null): TradeVisualSide => ({
     teamName: r.teamName,
     ownerName: r.managerDisplayName ?? null,
+    externalId,
     stance: r.stance,
     needs: r.weakPositions,
     surpluses: r.strongPositions,
@@ -399,8 +402,8 @@ export async function getPlayerTradeVisual(
         position: targetRow?.position ? normalizePosition(targetRow.position) : null,
         value: playerValue(values, targetSleeperId),
       },
-      you: stanceOf(me),
-      partner: stanceOf(partner),
+      you: stanceOf(me, yours?.externalId ?? null),
+      partner: stanceOf(partner, partnerTeam?.externalId ?? null),
       values: { mode: values.mode, source: values.source, fetchedAt: values.fetchedAt, ppr: values.ppr, numQbs: values.numQbs },
       packages,
       recommended,

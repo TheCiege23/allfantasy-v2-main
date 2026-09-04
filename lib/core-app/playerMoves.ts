@@ -88,6 +88,7 @@ export function composePlayerMoves(args: {
       platformLeagueId: im.platformLeagueId,
       season: im.season,
       name: im.leagueName,
+      teamId: im.teamExternalId,
     }
 
     if (im.slot === 'IR SLOT') {

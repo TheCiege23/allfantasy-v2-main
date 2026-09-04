@@ -56,6 +56,8 @@ export type LeagueImpact = {
    */
   platformLeagueId: string | null
   season: number | null
+  /** Your team's id on the platform (LeagueTeam.externalId) — what a lineup deep link needs. */
+  teamExternalId: string | null
   /** STARTER / BENCH / IR SLOT / TAXI — where this player sits in this league. */
   slot: string
   /**
@@ -435,6 +437,7 @@ export async function getPlayerImpact(
       platform: String(t.league?.platform ?? 'manual').toLowerCase(),
       platformLeagueId: t.league?.platformLeagueId ?? null,
       season: t.league?.season ?? null,
+      teamExternalId: t.externalId ?? null,
       slot: placed.slot,
       exactSlot,
       slotConfirmed: Boolean(exactSlot) || !placed.starting,

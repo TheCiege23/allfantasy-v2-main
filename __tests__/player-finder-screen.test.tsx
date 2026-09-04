@@ -118,7 +118,7 @@ const DETAIL: PlayerDetail = {
         season: 2026,
         slot: 'NOT YOURS',
         isYours: false,
-        owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null },
+        owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, externalId: '1' },
       },
     ],
   },
@@ -141,11 +141,11 @@ const LEAGUE_VIEW: PlayerLeagueView = {
   ownership: {
     kind: 'other',
     slot: 'STARTER',
-    owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, record: '4-2', isCommissioner: false },
+    owner: { teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, externalId: '1', record: '4-2', isCommissioner: false },
   },
   afPoints: { available: true, data: { points: 9.8, matchedKeys: 3, scoredKeys: 12, week: 12, season: '2026' } },
   positionRank: { available: true, data: { rank: 4, outOf: 61, position: 'TE' } },
-  yourTeam: { teamName: 'Cafe Con Chimmy' },
+  yourTeam: { teamName: 'Cafe Con Chimmy', externalId: '2' },
   rosterCount: 12,
   coverage: { sampled: 12, matched: 12, fraction: 1, usable: true },
 }

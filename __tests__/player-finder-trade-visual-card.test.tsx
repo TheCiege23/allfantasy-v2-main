@@ -29,8 +29,8 @@ const P2 = { id: 'p2', give: [STEVENSON], receive: [KINCAID], giveTotal: 2610, r
 const VISUAL: PlayerTradeVisual = {
   leagueId: 'L-gang', leagueName: 'Gridiron Gang', platform: 'espn', platformLeagueId: '888', season: 2026,
   target: { sleeperId: '10236', name: 'Dalton Kincaid', position: 'TE', value: 3010 },
-  you: { teamName: 'Cafe Con Chimmy', ownerName: 'guap', stance: 'contender', needs: ['TE'], surpluses: ['RB'] },
-  partner: { teamName: "Tasha's Titans", ownerName: 'tashaR', stance: 'middle', needs: ['RB'], surpluses: ['TE'] },
+  you: { teamName: 'Cafe Con Chimmy', ownerName: 'guap', externalId: '2', stance: 'contender', needs: ['TE'], surpluses: ['RB'] },
+  partner: { teamName: "Tasha's Titans", ownerName: 'tashaR', externalId: '1', stance: 'middle', needs: ['RB'], surpluses: ['TE'] },
   values: { mode: 'redraft', source: 'fantasycalc', fetchedAt: '2026-09-02T12:00:00Z', ppr: 0.5, numQbs: 1 },
   packages: [P1, P2],
   recommended: P1,

@@ -39,6 +39,8 @@ export type PlayerLeagueOwner = {
   teamName: string
   ownerName: string
   avatarUrl: string | null
+  /** Their team id on the platform — a trade deep link's counterparty. */
+  externalId: string
   /** "4-2" when the import carries results, else null. */
   record: string | null
   isCommissioner: boolean
@@ -66,8 +68,8 @@ export type PlayerLeagueView = {
    * 2026-09-02). Standard-scoring rank is the cross-league header's job.
    */
   positionRank: SectionState<{ rank: number; outOf: number; position: string }>
-  /** Your team in this league, when the claim predicate finds one. */
-  yourTeam: { teamName: string } | null
+  /** Your team in this league, when the claim predicate finds one. `externalId` is its platform id. */
+  yourTeam: { teamName: string; externalId: string } | null
   rosterCount: number
   /** Whether a Sleeper-id scan of this league's rosters can be trusted. */
   coverage: RosterIdCoverage
@@ -220,6 +222,7 @@ export async function getPlayerLeagueView(
             teamName: team.teamName,
             ownerName: team.ownerName,
             avatarUrl: team.avatarUrl,
+            externalId: team.externalId,
             record: recordOf(team),
             isCommissioner: Boolean(team.isCommissioner || team.isCoCommissioner),
           }
@@ -364,7 +367,7 @@ export async function getPlayerLeagueView(
     ownership,
     afPoints,
     positionRank,
-    yourTeam: yours ? { teamName: yours.teamName } : null,
+    yourTeam: yours ? { teamName: yours.teamName, externalId: yours.externalId } : null,
     rosterCount: rosters.length,
     coverage,
   }

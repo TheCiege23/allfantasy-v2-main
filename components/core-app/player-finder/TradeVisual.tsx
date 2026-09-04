@@ -67,6 +67,8 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
     platformLeagueId: v.platformLeagueId,
     season: v.season,
     name: v.leagueName,
+    teamId: v.you.externalId,
+    partnerTeamId: v.partner.externalId,
   })
   const others = v.packages.filter((p) => p.id !== rec?.id)
 
