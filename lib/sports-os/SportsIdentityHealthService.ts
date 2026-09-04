@@ -535,6 +535,56 @@ async function safeFindMany(modelName: string, args?: Record<string, unknown>): 
   }
 }
 
+/** Rows fetched at a time when paging through a population larger than one query should return. */
+const IDENTITY_HEALTH_PAGE_SIZE = 25_000
+
+/**
+ * A cap-free counterpart to safeFindMany, for reads whose CALLER counts every row rather than
+ * sampling some of them.
+ *
+ * 🛑 WITHOUT THIS, buildProviderMappingAggregate's mapped/unmapped figures were an ARBITRARY
+ * SLICE, NOT A COUNT. Its player/team fetches were `take: 10_000` / `take: 5_000`, unordered, with
+ * no relationship to the row's own true population size (which a SEPARATE, uncapped `safeCount`
+ * already computed correctly for `providerPlayerRows`/`providerTeamRows` -- proving the true count
+ * was available all along, just never used to size the fetch that actually got compared).
+ *
+ * MEASURED IN PRODUCTION 2026-09-03: NFL/Sleeper's true player count is 11,960; the capped fetch
+ * examined only 10,000 of them, and the displayed "unmapped" figure landed on EXACTLY 10,000 --
+ * the tell that it was reporting the query limit, not a count. NCAAF/Rolling Insights is worse:
+ * 68,641 true rows, only 14.6% ever examined. The dashboard's headline "435,003 identity/image
+ * issues" is a floor for every sport whose population exceeds these old caps, which is most of
+ * them -- NFL alone has 45,742 players, NCAAF 154,532.
+ *
+ * Paginates with a STABLE `orderBy: { id: "asc" }` (every model here has a uuid/cuid primary key)
+ * so offset pagination cannot skip or duplicate rows across pages -- these fetches never specified
+ * an orderBy before, which single-page reads could get away with but multi-page ones cannot.
+ * Bounded by `totalRows`, which the caller already has from its own `safeCount` -- a population
+ * under one page costs exactly the single query it always did; only the combinations that
+ * actually exceed the old caps pay for more.
+ */
+async function safeFindManyAll(
+  modelName: string,
+  args: Record<string, unknown>,
+  totalRows: number,
+  pageSize = IDENTITY_HEALTH_PAGE_SIZE
+): Promise<Array<Record<string, unknown>>> {
+  const model = delegate<FindManyDelegate>(modelName)
+  if (!model?.findMany) return []
+  const results: Array<Record<string, unknown>> = []
+  const pages = Math.max(1, Math.ceil(totalRows / pageSize))
+  for (let page = 0; page < pages; page += 1) {
+    let rows: Array<Record<string, unknown>>
+    try {
+      rows = await model.findMany({ ...args, orderBy: { id: "asc" }, take: pageSize, skip: page * pageSize })
+    } catch {
+      break // matches safeFindMany's fail-soft behaviour: return whatever pages already succeeded
+    }
+    results.push(...rows)
+    if (rows.length < pageSize) break // fewer than a full page -- there is nothing more to fetch
+  }
+  return results
+}
+
 async function duplicateGroupCount(modelName: string, field: string, where: Record<string, unknown>): Promise<number> {
   const model = delegate<GroupByDelegate>(modelName)
   if (!model?.groupBy) return 0
@@ -585,52 +635,44 @@ function providerSourceWhere(sport: string, aliases: readonly string[]) {
   }
 }
 
-async function buildProviderMappingAggregate(
+export async function buildProviderMappingAggregate(
   sport: string,
   mapping: (typeof PROVIDER_MAPPINGS)[number]
 ): Promise<SportsProviderMappingAggregate> {
   const where = providerSourceWhere(sport, mapping.aliases)
-  const [
-    providerPlayerRows,
-    playerRows,
-    identityRows,
-    duplicatePlayerMappingGroups,
-    providerTeamRows,
-    teamRows,
-    teamAssetRows,
-    duplicateTeamMappingGroups,
-  ] = await Promise.all([
+  const identityWhere = { sport, [mapping.playerField]: { not: null } }
+  const teamAssetWhere = { sport }
+
+  /*
+   * TRUE counts first, for every population this function reads -- not just the two
+   * (providerPlayerRows/providerTeamRows) the original code already counted. identityRows and
+   * teamAssetRows were fetched with the SAME `take` cap but no matching safeCount ever existed
+   * for their own populations, so there was no way to even notice they could be truncated too.
+   */
+  const [providerPlayerRows, identityRowCount, providerTeamRows, teamAssetRowCount] = await Promise.all([
     safeCount("sportsPlayer", { where }),
-    safeFindMany("sportsPlayer", {
-      where,
-      select: { externalId: true },
-      take: 10000,
-    }),
-    safeFindMany("playerIdentityMap", {
-      where: {
-        sport,
-        [mapping.playerField]: { not: null },
-      },
-      select: { [mapping.playerField]: true },
-      take: 10000,
-    }),
-    duplicateGroupCount("playerIdentityMap", mapping.playerField, {
-      sport,
-      [mapping.playerField]: { not: null },
-    }),
+    safeCount("playerIdentityMap", { where: identityWhere }),
     safeCount("sportsTeam", { where }),
-    safeFindMany("sportsTeam", {
-      where,
-      select: { externalId: true, name: true, shortName: true },
-      take: 5000,
-    }),
-    safeFindMany("teamAsset", {
-      where: { sport },
-      select: { teamCode: true, teamName: true },
-      take: 5000,
-    }),
-    duplicateGroupCount("sportsTeam", "name", where),
+    safeCount("teamAsset", { where: teamAssetWhere }),
   ])
+
+  const [playerRows, identityRows, duplicatePlayerMappingGroups, teamRows, teamAssetRows, duplicateTeamMappingGroups] =
+    await Promise.all([
+      safeFindManyAll("sportsPlayer", { where, select: { externalId: true } }, providerPlayerRows),
+      safeFindManyAll(
+        "playerIdentityMap",
+        { where: identityWhere, select: { [mapping.playerField]: true } },
+        identityRowCount
+      ),
+      duplicateGroupCount("playerIdentityMap", mapping.playerField, identityWhere),
+      safeFindManyAll(
+        "sportsTeam",
+        { where, select: { externalId: true, name: true, shortName: true } },
+        providerTeamRows
+      ),
+      safeFindManyAll("teamAsset", { where: teamAssetWhere, select: { teamCode: true, teamName: true } }, teamAssetRowCount),
+      duplicateGroupCount("sportsTeam", "name", where),
+    ])
 
   const mappedPlayerIds = new Set(
     identityRows
