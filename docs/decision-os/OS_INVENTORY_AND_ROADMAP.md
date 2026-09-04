@@ -166,6 +166,60 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.38 ⏸ R1.5 — REAL GAP, ZERO BENEFICIARIES, AND EVERY FIX COSTS SOMETHING
+
+**2026-09-03.** R1.5 says a C2C / devy-slot NFL dynasty league wants the devy board and the
+`sport === 'NCAAF'` test will not find it. The gap is real and the analysis stands. **Deferred,
+with the fix located precisely so nobody repeats the investigation.**
+
+### The board has data. The consumers do not exist.
+
+```
+DevyPlayer                              1,721 rows   (270 with stats)
+NCAAF leagues                               1
+devy_league_configs                         0
+devy_leagues                                0
+leagues with leagueVariant like '%devy%'    0
+non-NCAAF leagues wanting devy              0
+```
+
+⚠ **AND MY FIRST MEASUREMENT WAS IN THE WRONG PLACE, WHICH IS THE PART WORTH KEEPING.** I first
+counted `settings->>'devy_enabled'` and `settings->'devyConfig'` in the League JSON blob and got
+16 leagues carrying a config. All 16 read `devy: false`, `devyConfig.enabled: false`, `slots:
+null` — a default-off block, not a signal. The CANONICAL predicate is
+`lib/devy/DevyLeagueConfig.ts::isDevyLeague`, and it reads neither of those: it checks a
+`devy_league_configs` ROW, then falls back to `leagueVariant === 'devy_dynasty'`. Both are empty.
+Same answer, but the first route to it was luck — **find the predicate the code already uses
+before counting anything.**
+
+### Every correct fix costs something, and nothing is free in scope
+
+`want.devy` is decided by the ROUTE, at `app/api/chat/chimmy/route.ts:1713`, before the packet
+runs. Measured: there is **no league object, no `leagueVariant`, and no awaited context carrying
+either** anywhere before that line. So:
+
+| option | cost |
+|---|---|
+| call `isDevyLeague` in the route | a DB round-trip per chat turn, **and** it delays the packet kick, since the grounding task is constructed synchronously |
+| let the PACKET decide from rules it already loads | `canonicalLeagueRules` DOES carry `variant`, so the signal is free — but `devy` is kicked in the CONCURRENT WAVE, so gating it on rules makes it a serialized second hop like `idpKicker` |
+
+⚠ **THE SECOND OPTION IS THE ARCHITECTURALLY RIGHT ONE** and matches what the route's own comment
+already argues for `valueFormat`: derive it in the packet from rules already paid for, so there is
+no second read and no second derivation to drift. It may even be free in wall-clock — `devy` is
+not the packet's critical path, which is dominated by `savedAnalysis` — but that is a claim
+requiring a production measurement, and measuring it for zero users is not worth the run.
+
+### Trigger, so this is picked up at the right moment
+
+Build it when the FIRST devy league exists — `select count(*) from devy_league_configs` > 0, or any
+league with `leagueVariant = 'devy_dynasty'`. At that point prefer the packet-side derivation,
+reuse `isDevyLeague` rather than re-deriving the predicate, and measure whether devy's later start
+moves the packet's p95 before accepting the serialization.
+
+⚠ **UNTIL THEN THE CURRENT BEHAVIOUR IS CORRECT, NOT MERELY TOLERABLE.** With zero devy leagues,
+scoping devy to NCAAF requests the board exactly when it can be used and never raises a
+`no_producer` gap on an NFL answer. The bug is latent, not active.
+
 ## 0.37 🛑 SCOPING `tradeDecision` — THE ANSWER IS DO NOT BUILD IT, AND I RECOMMENDED IT WRONGLY
 
 **2026-09-03.** I proposed `tradeDecision` as the highest-value next build: the trade engine is
@@ -3429,6 +3483,8 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R1.2** Ask for the value lane (**G2**) | **Done 2026-09-02.** Gate was double-locked; packet now derives `valueFormat` + `leagueIdpRules` from rules it already loads. Red→green, 63/63. Typecheck deferred — machine contention. §0.10 |
 | ⬜ | **R1.5** 🆕 Devy for C2C / devy-slot NFL dynasty leagues | The NCAAF sport test will not find them. §0.10 |
 | ✅ | **R1.6** Collapse gaps that share one cause | **Done 2026-09-03.** `collapseGapsByCause` groups on reason+detail+remedy and names every affected fact in one line; presentation only, `packet.gaps` unchanged. 10 tests, mutation-verified. §0.33 |
+| ⏸ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Deferred 2026-09-03 — real gap, ZERO beneficiaries.** devy_league_configs, devy_leagues and leagueVariant~devy are all 0 rows; the board itself has 1,721 players. Every fix costs a per-turn query or serializes devy behind rules, and nothing carrying `leagueVariant` is in scope at the gate. Fix located and trigger recorded. §0.38 |
+| ⬜ | **R1.6** 🆕 Collapse gaps that share one cause | 8 identical `teams_rosters` lines crowd the prompt. §0.11 |
 | ⬜ | **R1.7** 🆕 `teams_rosters` scope is failing to sync on live leagues | Makes 8 slices inconclusive. Real import bug, correctly reported. §0.11 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
