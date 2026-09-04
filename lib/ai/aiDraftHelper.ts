@@ -7,7 +7,7 @@ import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai
 import { deepseekChat } from '@/lib/deepseek-client'
 import { computeDraftRecommendation, type RecommendationResult } from '@/lib/draft-helper/RecommendationEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import type { DraftAdvisorContext } from '@/lib/sports-os/DraftAdvisorContextService'
+import type { DraftAdvisorContext } from '@/lib/sports-reporting/DraftAdvisorContextService'
 
 export type WarRoomPlayer = {
   name: string

@@ -5,9 +5,9 @@ import NextLink from 'next/link'
 import { Download, Link as LinkIcon } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { downloadReportCsv, downloadReportPdf } from '@/lib/commissioner-os/reports/exportUtils'
+import { downloadReportCsv, downloadReportPdf } from '@/lib/commissioner-ui/reports/exportUtils'
 import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
-import type { GeneratedReport } from '@/lib/commissioner-os/reports/decision-os-client'
+import type { GeneratedReport } from '@/lib/commissioner-ui/reports/decision-os-client'
 
 export interface ReportDetailDialogProps {
   report: GeneratedReport | null
@@ -20,7 +20,7 @@ export interface ReportDetailDialogProps {
  * represented-but-unwired affordances — because both operate purely on
  * this report's own already-fetched metadata/summary. Neither needs a
  * Decision OS backend: exporting serializes data already in memory
- * (reusing the shared `lib/commissioner-os/utils/csv` primitives and
+ * (reusing the shared `lib/commissioner-ui/utils/csv` primitives and
  * `jspdf`, already a project dependency); sharing toggles local state
  * and copies an already-known link to the clipboard.
  */

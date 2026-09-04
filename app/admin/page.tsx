@@ -43,14 +43,14 @@ import type { AdminEmailStatus } from "@/lib/admin-dashboard/AdminEmailCenterSer
 import type {
   SportsOperatingSystemAudit,
   SportsOsStatus,
-} from "@/lib/sports-os/SportsOperatingSystemReadinessService"
+} from "@/lib/sports-reporting/SportsOperatingSystemReadinessService"
 import type {
   SportsIdentityHealthSnapshot,
   SportsIdentityHealthStatus,
-} from "@/lib/sports-os/SportsIdentityHealthService"
+} from "@/lib/sports-reporting/SportsIdentityHealthService"
 import type {
   ProviderTeamReconciliationSummary,
-} from "@/lib/sports-os/ProviderTeamReconciliationService"
+} from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 
 export const dynamic = "force-dynamic"
 

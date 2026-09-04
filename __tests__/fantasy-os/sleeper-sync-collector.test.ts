@@ -31,13 +31,13 @@ import {
   enumerateConnectedLeagues,
   enumerateConnectedSleeperLeagues,
   buildRunKey,
-} from '@/lib/fantasy-os/sync/collector/enumerate'
-import { createAutomationSyncLock } from '@/lib/fantasy-os/sync/collector/automationSyncLock'
-import { createSleeperScopeFetcher } from '@/lib/fantasy-os/sync/collector/sleeperScopeFetcher'
-import { manualRefreshConnectedSleeperLeague, getConnectedLeagueSyncState } from '@/lib/fantasy-os/sync/collector/manualRefresh'
-import { runSync, reconcileAccounting, type SyncStore, type SyncLock, type RunResult, type ScopeFetchResult } from '@/lib/fantasy-os/sync/runner'
+} from '@/lib/import-os/collector/enumerate'
+import { createAutomationSyncLock } from '@/lib/import-os/collector/automationSyncLock'
+import { createSleeperScopeFetcher } from '@/lib/import-os/collector/sleeperScopeFetcher'
+import { manualRefreshConnectedSleeperLeague, getConnectedLeagueSyncState } from '@/lib/import-os/collector/manualRefresh'
+import { runSync, reconcileAccounting, type SyncStore, type SyncLock, type RunResult, type ScopeFetchResult } from '@/lib/import-os/runner'
 import { fetchSleeperLeagueForImport } from '@/lib/league-import/sleeper/SleeperLeagueFetchService'
-import { createMemoizedNormalizedLoader } from '@/lib/fantasy-os/sync/collector/syncConnectedSleeperLeague'
+import { createMemoizedNormalizedLoader } from '@/lib/import-os/collector/syncConnectedSleeperLeague'
 import { assertIsolatedTestDatabase } from './fixtures/isolatedDbGuard'
 import { makeSleeperNormalized } from './fixtures/sleeperNormalizedFixture'
 

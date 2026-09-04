@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildFantasyValueSnapshot } from "@/lib/sports-os/FantasyValueSnapshotService"
+import { buildFantasyValueSnapshot } from "@/lib/sports-reporting/FantasyValueSnapshotService"
 
 describe("FantasyValueSnapshot contract", () => {
   it("builds a grounded snapshot from cached player value, stats, injury, and news data", () => {

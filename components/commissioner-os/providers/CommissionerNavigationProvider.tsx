@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { getActiveCommissionerModuleId, type CommissionerModuleId } from '@/lib/commissioner-os/navigation/moduleNav'
-import { resolveBreadcrumbs, type Breadcrumb } from '@/lib/commissioner-os/navigation/breadcrumbs'
+import { getActiveCommissionerModuleId, type CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
+import { resolveBreadcrumbs, type Breadcrumb } from '@/lib/commissioner-ui/navigation/breadcrumbs'
 
 interface CommissionerNavigationContextValue {
   activeModuleId: CommissionerModuleId | null

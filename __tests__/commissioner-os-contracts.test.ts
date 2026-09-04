@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CONTRACT_VERSION, isCommissionerResponseOk } from "@/lib/commissioner-os/contracts"
+import { CONTRACT_VERSION, isCommissionerResponseOk } from "@/lib/commissioner-ui/contracts"
 import type {
   CommissionerModuleId,
   CommissionerErrorContract,
@@ -9,9 +9,9 @@ import type {
   CommissionerSearchResultContract,
   CommissionerActivityEventContract,
   CommissionerModuleRegistration,
-} from "@/lib/commissioner-os/contracts"
-import { COMMISSIONER_ALL_NAV_ITEMS } from "@/lib/commissioner-os/navigation/moduleNav"
-import { DEFAULT_COMMISSIONER_MODULE_FLAGS } from "@/lib/commissioner-os/featureFlags"
+} from "@/lib/commissioner-ui/contracts"
+import { COMMISSIONER_ALL_NAV_ITEMS } from "@/lib/commissioner-ui/navigation/moduleNav"
+import { DEFAULT_COMMISSIONER_MODULE_FLAGS } from "@/lib/commissioner-ui/featureFlags"
 
 describe("commissioner-os platform contracts — versioning", () => {
   it("exposes a semantic contract version", () => {

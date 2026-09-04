@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { ActivityStreamView } from '@/components/commissioner-os/activity/ActivityStreamView'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
 /**
  * Server Component — fetches through the Decision OS Adapter Layer, same

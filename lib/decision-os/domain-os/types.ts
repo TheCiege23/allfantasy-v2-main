@@ -8,7 +8,7 @@ import 'server-only'
  * maintains the facts its decisions need, and Decision OS reads them. This module is the part all
  * of those feeds have in common; the domains themselves only declare WHAT they gather.
  *
- * ⚠ DIRECTION. These feed INTO Decision OS. `lib/commissioner-os/*` points the other way — its
+ * ⚠ DIRECTION. These feed INTO Decision OS. `lib/commissioner-ui/*` points the other way — its
  * `decision-os-client` modules call INTO Decision OS to render a surface. Same "OS" suffix,
  * opposite arrow.
  *

@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
-import type { SeverityTier } from '@/lib/commissioner-os/tokens/colors'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { getSeverityStyle } from './severityStyles'
 
 export interface KpiCardTrend {

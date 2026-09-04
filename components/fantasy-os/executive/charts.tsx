@@ -7,8 +7,8 @@
  * avoided. Each chart is deterministic, accessible (title/desc), and pairs with the ExecutiveChartCard chrome.
  */
 import type { ReactNode } from 'react'
-import type { YearlySeries, StackedYearlyPoint, Distribution } from '@/lib/fantasy-os/exec-intelligence/contracts'
-import type { TruthLabel } from '@/lib/fantasy-os/exec-intelligence/truth'
+import type { YearlySeries, StackedYearlyPoint, Distribution } from '@/lib/exec-reporting/exec-intelligence/contracts'
+import type { TruthLabel } from '@/lib/exec-reporting/exec-intelligence/truth'
 import { TruthLabelBadge, fmt } from './primitives'
 
 export function ExecutiveChartCard({

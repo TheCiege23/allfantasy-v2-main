@@ -5,17 +5,17 @@ import { Button } from '@/components/ui/button'
 import { KpiCard, RecommendationCard, SummaryCard, TimelineCard, StatusCard, type TimelineEntry } from '@/components/commissioner-os/cards'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { CommissionerRecommendationContract } from '@/lib/commissioner-os/contracts'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { CommissionerRecommendationContract } from '@/lib/commissioner-ui/contracts'
 import type {
   LeagueHealthSummary,
   ManagerHighlight,
   MissionControlKpis,
-} from '@/lib/commissioner-os/decision-os-client'
-import type { AutomationSummary } from '@/lib/commissioner-os/automations/decision-os-client'
-import type { AnalyticsSummary } from '@/lib/commissioner-os/analytics/decision-os-client'
-import type { ReportsSummary } from '@/lib/commissioner-os/reports/decision-os-client'
-import type { NotificationsSummary } from '@/lib/commissioner-os/notifications/decision-os-client'
+} from '@/lib/commissioner-ui/decision-os-client'
+import type { AutomationSummary } from '@/lib/commissioner-ui/automations/decision-os-client'
+import type { AnalyticsSummary } from '@/lib/commissioner-ui/analytics/decision-os-client'
+import type { ReportsSummary } from '@/lib/commissioner-ui/reports/decision-os-client'
+import type { NotificationsSummary } from '@/lib/commissioner-ui/notifications/decision-os-client'
 
 export interface MissionControlViewProps {
   leagueHealth: LeagueHealthSummary

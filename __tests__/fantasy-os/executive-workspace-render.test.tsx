@@ -6,9 +6,9 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ExecutiveWorkspace } from '@/components/fantasy-os/executive/ExecutiveWorkspace'
-import { deriveAll } from '@/lib/fantasy-os/exec-intelligence/derive'
-import { buildFreshness } from '@/lib/fantasy-os/sync/freshness'
-import type { ExecSnapshot, ExecLeagueRow, ExecManagerRow } from '@/lib/fantasy-os/exec-data/types'
+import { deriveAll } from '@/lib/exec-reporting/exec-intelligence/derive'
+import { buildFreshness } from '@/lib/import-os/freshness'
+import type { ExecSnapshot, ExecLeagueRow, ExecManagerRow } from '@/lib/exec-reporting/exec-data/types'
 
 const L = (o: Partial<ExecLeagueRow>): ExecLeagueRow => ({
   leagueId: 'x', season: '2025', name: 'n', status: 'complete', totalRosters: 12, previousLeagueId: null,

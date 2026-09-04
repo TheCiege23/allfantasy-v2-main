@@ -7,8 +7,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { EmptyState } from '@/components/commissioner-os/states'
 import { getSeverityStyle } from '@/components/commissioner-os/cards'
 import { AUTOMATION_RESULT_LABELS } from './automationLabels'
-import type { SeverityTier } from '@/lib/commissioner-os/tokens/colors'
-import type { AutomationCatalogEntry, AutomationExecutionEntry, AutomationExecutionResult } from '@/lib/commissioner-os/automations/decision-os-client'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
+import type { AutomationCatalogEntry, AutomationExecutionEntry, AutomationExecutionResult } from '@/lib/commissioner-ui/automations/decision-os-client'
 
 export interface AutomationHistoryDialogProps {
   automation: AutomationCatalogEntry | null

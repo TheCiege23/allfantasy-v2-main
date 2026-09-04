@@ -13,24 +13,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/commissioner-os/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
+vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
 
 const liveLeagueHealthClientMock = vi.hoisted(() => ({ getRisks: vi.fn() }))
-vi.mock("@/lib/commissioner-os/league-health/decision-os-client/live", () => ({ liveLeagueHealthClient: liveLeagueHealthClientMock }))
+vi.mock("@/lib/commissioner-ui/league-health/decision-os-client/live", () => ({ liveLeagueHealthClient: liveLeagueHealthClientMock }))
 
 const liveRecommendationsClientMock = vi.hoisted(() => ({ getQueue: vi.fn() }))
-vi.mock("@/lib/commissioner-os/recommendations/decision-os-client/live", () => ({ liveRecommendationsClient: liveRecommendationsClientMock }))
+vi.mock("@/lib/commissioner-ui/recommendations/decision-os-client/live", () => ({ liveRecommendationsClient: liveRecommendationsClientMock }))
 
 const liveAutomationClientMock = vi.hoisted(() => ({ getCatalog: vi.fn() }))
-vi.mock("@/lib/commissioner-os/automations/decision-os-client/live", () => ({ liveAutomationClient: liveAutomationClientMock }))
+vi.mock("@/lib/commissioner-ui/automations/decision-os-client/live", () => ({ liveAutomationClient: liveAutomationClientMock }))
 
 const liveReportsClientMock = vi.hoisted(() => ({ getHistory: vi.fn() }))
-vi.mock("@/lib/commissioner-os/reports/decision-os-client/live", () => ({ liveReportsClient: liveReportsClientMock }))
+vi.mock("@/lib/commissioner-ui/reports/decision-os-client/live", () => ({ liveReportsClient: liveReportsClientMock }))
 
 const liveWorkspaceClientMock = vi.hoisted(() => ({ getTasks: vi.fn() }))
-vi.mock("@/lib/commissioner-os/workspace/decision-os-client/live", () => ({ liveWorkspaceClient: liveWorkspaceClientMock }))
+vi.mock("@/lib/commissioner-ui/workspace/decision-os-client/live", () => ({ liveWorkspaceClient: liveWorkspaceClientMock }))
 
-import { liveActivityClient } from "@/lib/commissioner-os/activity/decision-os-client/live"
+import { liveActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/live"
 
 beforeEach(() => {
   vi.clearAllMocks()

@@ -7,8 +7,8 @@ import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { HelpArticleCard } from './HelpArticleCard'
 import { HELP_CATEGORY_LABELS, HELP_CATEGORY_ORDER } from './helpLabels'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { CommissionerHelpArticleContract, CommissionerGlossaryTermContract, CommissionerHelpCategory } from '@/lib/commissioner-os/contracts'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { CommissionerHelpArticleContract, CommissionerGlossaryTermContract, CommissionerHelpCategory } from '@/lib/commissioner-ui/contracts'
 
 export interface HelpCenterViewProps {
   articles: CommissionerHelpArticleContract[]

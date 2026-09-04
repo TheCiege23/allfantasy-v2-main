@@ -8,7 +8,7 @@ import type { TradeWorldFacts, TradeLeagueFacts } from '../trade/loader'
 /**
  * Trade OS — maintained fact state for `manager.trade.evaluate`.
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * WHAT IT GATHERS, AND AT WHICH LEVEL
  *

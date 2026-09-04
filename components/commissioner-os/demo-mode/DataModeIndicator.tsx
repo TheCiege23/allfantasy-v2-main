@@ -7,7 +7,7 @@ import {
   DEFAULT_DATA_MODE,
   normalizeDataMode,
   type CommissionerDataMode,
-} from '@/lib/commissioner-os/demo-mode/constants'
+} from '@/lib/commissioner-ui/demo-mode/constants'
 
 const ALL_MODES: CommissionerDataMode[] = ['stub', 'demo', 'live']
 

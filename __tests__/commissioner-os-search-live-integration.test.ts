@@ -12,29 +12,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/commissioner-os/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
+vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
 
 const liveRecommendationsClientMock = vi.hoisted(() => ({ getQueue: vi.fn() }))
-vi.mock("@/lib/commissioner-os/recommendations/decision-os-client/live", () => ({ liveRecommendationsClient: liveRecommendationsClientMock }))
+vi.mock("@/lib/commissioner-ui/recommendations/decision-os-client/live", () => ({ liveRecommendationsClient: liveRecommendationsClientMock }))
 
 const liveManagerIntelligenceClientMock = vi.hoisted(() => ({ getManagerDirectory: vi.fn() }))
-vi.mock("@/lib/commissioner-os/managers/decision-os-client/live", () => ({ liveManagerIntelligenceClient: liveManagerIntelligenceClientMock }))
+vi.mock("@/lib/commissioner-ui/managers/decision-os-client/live", () => ({ liveManagerIntelligenceClient: liveManagerIntelligenceClientMock }))
 
 const liveWorkspaceClientMock = vi.hoisted(() => ({ getTasks: vi.fn() }))
-vi.mock("@/lib/commissioner-os/workspace/decision-os-client/live", () => ({ liveWorkspaceClient: liveWorkspaceClientMock }))
+vi.mock("@/lib/commissioner-ui/workspace/decision-os-client/live", () => ({ liveWorkspaceClient: liveWorkspaceClientMock }))
 
 const liveAutomationClientMock = vi.hoisted(() => ({ getCatalog: vi.fn() }))
-vi.mock("@/lib/commissioner-os/automations/decision-os-client/live", () => ({ liveAutomationClient: liveAutomationClientMock }))
+vi.mock("@/lib/commissioner-ui/automations/decision-os-client/live", () => ({ liveAutomationClient: liveAutomationClientMock }))
 
 const liveReportsClientMock = vi.hoisted(() => ({ getTemplates: vi.fn() }))
-vi.mock("@/lib/commissioner-os/reports/decision-os-client/live", () => ({ liveReportsClient: liveReportsClientMock }))
+vi.mock("@/lib/commissioner-ui/reports/decision-os-client/live", () => ({ liveReportsClient: liveReportsClientMock }))
 
 const liveHelpClientMock = vi.hoisted(() => ({ getArticles: vi.fn() }))
-vi.mock("@/lib/commissioner-os/help/decision-os-client/live", () => ({ liveHelpClient: liveHelpClientMock }))
+vi.mock("@/lib/commissioner-ui/help/decision-os-client/live", () => ({ liveHelpClient: liveHelpClientMock }))
 
-import { liveSearchClient } from "@/lib/commissioner-os/search/decision-os-client/live"
-import { COMMISSIONER_ALL_NAV_ITEMS } from "@/lib/commissioner-os/navigation/moduleNav"
-import { SETTINGS_RESULTS } from "@/lib/commissioner-os/search/decision-os-client/settingsResults"
+import { liveSearchClient } from "@/lib/commissioner-ui/search/decision-os-client/live"
+import { COMMISSIONER_ALL_NAV_ITEMS } from "@/lib/commissioner-ui/navigation/moduleNav"
+import { SETTINGS_RESULTS } from "@/lib/commissioner-ui/search/decision-os-client/settingsResults"
 
 const NULL_RESULT = { data: null, error: { category: "upstream_unavailable" as const, message: "not yet integrated", moduleId: "recommendations" as const, retryable: false, timestamp: new Date().toISOString() } }
 

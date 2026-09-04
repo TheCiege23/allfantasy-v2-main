@@ -5,8 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { TrendIndicator } from '@/components/commissioner-os/primitives/TrendIndicator'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { ManagerDnaProfile } from '@/lib/commissioner-os/managers/decision-os-client'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { ManagerDnaProfile } from '@/lib/commissioner-ui/managers/decision-os-client'
 import { Users } from 'lucide-react'
 
 export interface ManagerIntelligenceViewProps {

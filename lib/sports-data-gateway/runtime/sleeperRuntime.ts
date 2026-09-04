@@ -8,8 +8,8 @@ import crypto from 'node:crypto'
  * changed records → emit only changed events → certify → runner advances checkpoint + freshness on success.
  * No unrestricted historical discovery.
  */
-import { runSync, type ScopeFetchResult, type ScopeFetcher, type SyncStore, type RunResult } from '@/lib/fantasy-os/sync/runner'
-import { resolveSeasonState } from '@/lib/fantasy-os/sync/season'
+import { runSync, type ScopeFetchResult, type ScopeFetcher, type SyncStore, type RunResult } from '@/lib/import-os/runner'
+import { resolveSeasonState } from '@/lib/import-os/season'
 import { SportsDataGateway } from '../gateway'
 import { SleeperAdapter } from '../providers/sleeper'
 import { resolveIdentity, type MappingSource } from '../resolution'

@@ -1,4 +1,4 @@
-import type { ReportCategory, ReportFormat, ReportFrequency, ReportStatus } from '@/lib/commissioner-os/reports/decision-os-client'
+import type { ReportCategory, ReportFormat, ReportFrequency, ReportStatus } from '@/lib/commissioner-ui/reports/decision-os-client'
 
 /** Workflow-neutral — status is never severity-colored, the same rule every other module's status vocabulary follows. */
 export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {

@@ -8,7 +8,7 @@ import {
   benchmarkTokens,
   cssVar,
   type SeverityTier,
-} from "@/lib/commissioner-os/tokens/colors"
+} from "@/lib/commissioner-ui/tokens/colors"
 import {
   spacingScale,
   radiusScale,
@@ -20,8 +20,8 @@ import {
   containerWidthScale,
   zIndexScale,
   opacityScale,
-} from "@/lib/commissioner-os/tokens/spacing"
-import { breakpoints, mediaQuery } from "@/lib/commissioner-os/tokens/breakpoints"
+} from "@/lib/commissioner-ui/tokens/spacing"
+import { breakpoints, mediaQuery } from "@/lib/commissioner-ui/tokens/breakpoints"
 
 const globalsCssPath = join(process.cwd(), "app/globals.css")
 const globalsCss = readFileSync(globalsCssPath, "utf-8")

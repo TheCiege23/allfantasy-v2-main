@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildSportsOperatingSystemAudit,
   type SportsOperatingSystemAudit,
-} from "@/lib/sports-os/SportsOperatingSystemReadinessService"
+} from "@/lib/sports-reporting/SportsOperatingSystemReadinessService"
 import type {
   DashboardAiToolAvailability,
   SportImportMatrixCell,

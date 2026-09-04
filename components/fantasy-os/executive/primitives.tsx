@@ -6,10 +6,10 @@
  * Truth labels are ALWAYS rendered adjacent to the value/section they describe (never blended/hidden).
  */
 import type { ReactNode } from 'react'
-import type { TruthLabel } from '@/lib/fantasy-os/exec-intelligence/truth'
-import type { Explanation, EvidenceItem, ConfidenceLevel } from '@/lib/fantasy-os/exec-intelligence/explanation'
-import type { FreshnessContract, SyncStatus } from '@/lib/fantasy-os/sync/freshness'
-import { ageMinutes } from '@/lib/fantasy-os/sync/freshness'
+import type { TruthLabel } from '@/lib/exec-reporting/exec-intelligence/truth'
+import type { Explanation, EvidenceItem, ConfidenceLevel } from '@/lib/exec-reporting/exec-intelligence/explanation'
+import type { FreshnessContract, SyncStatus } from '@/lib/import-os/freshness'
+import { ageMinutes } from '@/lib/import-os/freshness'
 
 export function fmt(n: number): string {
   return n.toLocaleString('en-US')

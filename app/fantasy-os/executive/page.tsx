@@ -4,12 +4,12 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { resolveTenantBrand } from '@/lib/white-label'
 import { canAccessFantasyOS } from '@/lib/fantasy-os/access'
-import { fetchExecSnapshot } from '@/lib/fantasy-os/exec-data/client'
-import { deriveAll } from '@/lib/fantasy-os/exec-intelligence/derive'
+import { fetchExecSnapshot } from '@/lib/exec-reporting/exec-data/client'
+import { deriveAll } from '@/lib/exec-reporting/exec-intelligence/derive'
 import { ExecutiveWorkspace } from '@/components/fantasy-os/executive/ExecutiveWorkspace'
-import { resolveSeasonState } from '@/lib/fantasy-os/sync/season'
-import { buildFreshness } from '@/lib/fantasy-os/sync/freshness'
-import { EXEC_SOURCE_PROVIDER } from '@/lib/fantasy-os/exec-intelligence/truth'
+import { resolveSeasonState } from '@/lib/import-os/season'
+import { buildFreshness } from '@/lib/import-os/freshness'
+import { EXEC_SOURCE_PROVIDER } from '@/lib/exec-reporting/exec-intelligence/truth'
 
 const BRAND = resolveTenantBrand()
 

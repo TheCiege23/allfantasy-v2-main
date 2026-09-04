@@ -7,7 +7,7 @@ import { loadImportAssertions, type ImportAssertions } from '../import/assertion
 /**
  * Import OS — maintained fact state for the four import assertions (2.5).
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * ── 🛑 FIVE MINUTES, AND THE SHORT TTL IS THE POINT RATHER THAN TIMIDITY ────────────────────
  * Every other source in this kernel trades staleness for cost. This one cannot, because THE FACT

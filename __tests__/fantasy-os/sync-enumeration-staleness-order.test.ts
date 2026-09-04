@@ -28,7 +28,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
 
-import { enumerateConnectedLeagues } from '@/lib/fantasy-os/sync/collector/enumerate'
+import { enumerateConnectedLeagues } from '@/lib/import-os/collector/enumerate'
 
 /** `n` sleeper leagues whose ids sort ascending: L000, L001, … — the old selection order. */
 function groupsInIdOrder(n: number) {

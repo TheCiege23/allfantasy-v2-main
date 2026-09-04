@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
-import type { SeverityTier } from '@/lib/commissioner-os/tokens/colors'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { getSeverityStyle, SEVERITY_LABELS } from './severityStyles'
 
 export interface AlertCardProps {

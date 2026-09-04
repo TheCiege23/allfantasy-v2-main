@@ -2,11 +2,11 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { CommissionerSearchPalette } from "@/components/commissioner-os/search/CommissionerSearchPalette"
 import { CommissionerPlatformProvider, useCommissionerPlatform } from "@/components/commissioner-os/providers/CommissionerPlatformProvider"
-import { stubSearchClient } from "@/lib/commissioner-os/search/decision-os-client/stub"
-import { demoSearchClient } from "@/lib/commissioner-os/search/decision-os-client/demo"
-import { liveSearchClient } from "@/lib/commissioner-os/search/decision-os-client/live"
-import { COMMISSIONER_ALL_NAV_ITEMS } from "@/lib/commissioner-os/navigation/moduleNav"
-import type { CommissionerSearchResultContract } from "@/lib/commissioner-os/contracts"
+import { stubSearchClient } from "@/lib/commissioner-ui/search/decision-os-client/stub"
+import { demoSearchClient } from "@/lib/commissioner-ui/search/decision-os-client/demo"
+import { liveSearchClient } from "@/lib/commissioner-ui/search/decision-os-client/live"
+import { COMMISSIONER_ALL_NAV_ITEMS } from "@/lib/commissioner-ui/navigation/moduleNav"
+import type { CommissionerSearchResultContract } from "@/lib/commissioner-ui/contracts"
 
 const pushMock = vi.hoisted(() => vi.fn())
 

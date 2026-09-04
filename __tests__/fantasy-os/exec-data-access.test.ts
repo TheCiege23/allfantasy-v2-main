@@ -22,7 +22,7 @@ describe('exec-data access boundary (fail-closed)', () => {
   })
 
   it('returns disabled + never constructs a pool when the flag is off', async () => {
-    const { fetchExecSnapshot } = await import('@/lib/fantasy-os/exec-data/client')
+    const { fetchExecSnapshot } = await import('@/lib/exec-reporting/exec-data/client')
     const res = await fetchExecSnapshot()
     expect(res.available).toBe(false)
     if (!res.available) expect(res.reason).toBe('disabled')
@@ -31,7 +31,7 @@ describe('exec-data access boundary (fail-closed)', () => {
 
   it('returns disabled when enabled but no URL is provided (no fallback to app DB)', async () => {
     process.env.FANTASY_OS_EXEC_ENABLED = 'true'
-    const { fetchExecSnapshot } = await import('@/lib/fantasy-os/exec-data/client')
+    const { fetchExecSnapshot } = await import('@/lib/exec-reporting/exec-data/client')
     const res = await fetchExecSnapshot()
     expect(res.available).toBe(false)
     if (!res.available) {

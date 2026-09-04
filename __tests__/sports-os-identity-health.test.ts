@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildSportsIdentityHealthSnapshot } from "@/lib/sports-os/SportsIdentityHealthService"
+import { buildSportsIdentityHealthSnapshot } from "@/lib/sports-reporting/SportsIdentityHealthService"
 
 describe("Sports OS identity and image health", () => {
   it("summarizes player/team identity gaps by sport from cached aggregate counts", () => {

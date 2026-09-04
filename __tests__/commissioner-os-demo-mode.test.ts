@@ -4,10 +4,10 @@ import {
   DATA_MODE_LABELS,
   isValidDataMode,
   normalizeDataMode,
-} from "@/lib/commissioner-os/demo-mode/constants"
-import { stubDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/stub"
-import { demoDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/demo"
-import { liveDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/live"
+} from "@/lib/commissioner-ui/demo-mode/constants"
+import { stubDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/stub"
+import { demoDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/demo"
+import { liveDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/live"
 
 describe("commissioner-os demo mode — constants", () => {
   it("defaults to demo mode", () => {

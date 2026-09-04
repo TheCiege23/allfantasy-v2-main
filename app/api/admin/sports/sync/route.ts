@@ -7,7 +7,7 @@ import {
   getDashboardAiToolAvailability,
   getSportImportMatrix,
 } from "@/lib/admin-dashboard/SportImportMatrixService"
-import { getPlayerGameLogHealthDashboard } from "@/lib/sports-os/PlayerGameLogImportService"
+import { getPlayerGameLogHealthDashboard } from "@/lib/sports-reporting/PlayerGameLogImportService"
 import { getSportsP0PipelineHealth } from "@/lib/admin-dashboard/SportsP0PipelineHealthService"
 
 export const dynamic = "force-dynamic"

@@ -21,12 +21,12 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
 const callDecisionOSMock = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/commissioner-os/adapter/transport", () => ({ callDecisionOS: callDecisionOSMock }))
+vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: callDecisionOSMock }))
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/commissioner-os/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
+vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
 
-import { liveDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/live"
+import { liveDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/live"
 
 beforeEach(() => {
   vi.clearAllMocks()

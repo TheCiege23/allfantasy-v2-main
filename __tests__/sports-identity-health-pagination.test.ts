@@ -50,7 +50,7 @@ describe("buildProviderMappingAggregate — identity health pagination", () => {
     prismaMock.playerIdentityMap.count.mockResolvedValue(20)
     prismaMock.playerIdentityMap.findMany.mockImplementation(pagedMock(identity))
 
-    const { buildProviderMappingAggregate } = await import("@/lib/sports-os/SportsIdentityHealthService")
+    const { buildProviderMappingAggregate } = await import("@/lib/sports-reporting/SportsIdentityHealthService")
     const result = await buildProviderMappingAggregate("NFL", SLEEPER)
 
     expect(result.providerPlayerRows).toBe(50)
@@ -72,7 +72,7 @@ describe("buildProviderMappingAggregate — identity health pagination", () => {
     prismaMock.playerIdentityMap.count.mockResolvedValue(10_000)
     prismaMock.playerIdentityMap.findMany.mockImplementation(pagedMock(identity))
 
-    const { buildProviderMappingAggregate } = await import("@/lib/sports-os/SportsIdentityHealthService")
+    const { buildProviderMappingAggregate } = await import("@/lib/sports-reporting/SportsIdentityHealthService")
     const result = await buildProviderMappingAggregate("NFL", SLEEPER)
 
     expect(result.providerPlayerRows).toBe(total)
@@ -91,7 +91,7 @@ describe("buildProviderMappingAggregate — identity health pagination", () => {
     prismaMock.playerIdentityMap.count.mockResolvedValue(0)
     prismaMock.playerIdentityMap.findMany.mockResolvedValue([])
 
-    const { buildProviderMappingAggregate } = await import("@/lib/sports-os/SportsIdentityHealthService")
+    const { buildProviderMappingAggregate } = await import("@/lib/sports-reporting/SportsIdentityHealthService")
     const result = await buildProviderMappingAggregate("NCAAF", {
       provider: "Rolling Insights",
       playerField: "rollingInsightsId",
@@ -113,7 +113,7 @@ describe("buildProviderMappingAggregate — identity health pagination", () => {
     prismaMock.playerIdentityMap.count.mockResolvedValue(0)
     prismaMock.playerIdentityMap.findMany.mockResolvedValue([])
 
-    const { buildProviderMappingAggregate } = await import("@/lib/sports-os/SportsIdentityHealthService")
+    const { buildProviderMappingAggregate } = await import("@/lib/sports-reporting/SportsIdentityHealthService")
     const result = await buildProviderMappingAggregate("NFL", SLEEPER)
 
     expect(prismaMock.sportsPlayer.findMany).toHaveBeenCalledTimes(1)
@@ -127,7 +127,7 @@ describe("buildProviderMappingAggregate — identity health pagination", () => {
     prismaMock.playerIdentityMap.count.mockResolvedValue(0)
     prismaMock.playerIdentityMap.findMany.mockResolvedValue([])
 
-    const { buildProviderMappingAggregate } = await import("@/lib/sports-os/SportsIdentityHealthService")
+    const { buildProviderMappingAggregate } = await import("@/lib/sports-reporting/SportsIdentityHealthService")
     await buildProviderMappingAggregate("NFL", SLEEPER)
 
     for (const call of prismaMock.sportsPlayer.findMany.mock.calls) {

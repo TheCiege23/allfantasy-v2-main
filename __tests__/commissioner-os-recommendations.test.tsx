@@ -1,10 +1,10 @@
 import { render, screen, within, fireEvent } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { RecommendationsView } from "@/components/commissioner-os/recommendations/RecommendationsView"
-import { stubRecommendationsClient } from "@/lib/commissioner-os/recommendations/decision-os-client/stub"
-import { demoRecommendationsClient } from "@/lib/commissioner-os/recommendations/decision-os-client/demo"
-import { liveRecommendationsClient } from "@/lib/commissioner-os/recommendations/decision-os-client/live"
-import type { CommissionerRecommendationContract } from "@/lib/commissioner-os/contracts"
+import { stubRecommendationsClient } from "@/lib/commissioner-ui/recommendations/decision-os-client/stub"
+import { demoRecommendationsClient } from "@/lib/commissioner-ui/recommendations/decision-os-client/demo"
+import { liveRecommendationsClient } from "@/lib/commissioner-ui/recommendations/decision-os-client/live"
+import type { CommissionerRecommendationContract } from "@/lib/commissioner-ui/contracts"
 
 const TERMINAL_FIXTURES: CommissionerRecommendationContract[] = [
   {

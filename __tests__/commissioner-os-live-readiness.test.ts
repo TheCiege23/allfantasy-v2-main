@@ -9,7 +9,7 @@ const prismaMock = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
-import { isLiveReady, setLiveReady } from "@/lib/commissioner-os/liveReadiness"
+import { isLiveReady, setLiveReady } from "@/lib/commissioner-ui/liveReadiness"
 
 describe("commissioner-os live readiness", () => {
   beforeEach(() => {

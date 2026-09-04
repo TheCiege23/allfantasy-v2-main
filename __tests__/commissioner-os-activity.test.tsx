@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { ActivityStreamView } from "@/components/commissioner-os/activity/ActivityStreamView"
-import { stubActivityClient } from "@/lib/commissioner-os/activity/decision-os-client/stub"
-import { demoActivityClient } from "@/lib/commissioner-os/activity/decision-os-client/demo"
-import { liveActivityClient } from "@/lib/commissioner-os/activity/decision-os-client/live"
-import type { CommissionerActivityEventContract } from "@/lib/commissioner-os/contracts"
+import { stubActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/stub"
+import { demoActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/demo"
+import { liveActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/live"
+import type { CommissionerActivityEventContract } from "@/lib/commissioner-ui/contracts"
 
 const EVENT_A: CommissionerActivityEventContract = {
   id: 'event-a', type: 'risk_detected', sourceModuleId: 'league-health', severity: 'warning', initiator: 'system',

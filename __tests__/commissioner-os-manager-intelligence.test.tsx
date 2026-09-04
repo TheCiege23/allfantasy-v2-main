@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { ManagerIntelligenceView } from "@/components/commissioner-os/managers/ManagerIntelligenceView"
-import { stubManagerIntelligenceClient } from "@/lib/commissioner-os/managers/decision-os-client/stub"
-import { demoManagerIntelligenceClient } from "@/lib/commissioner-os/managers/decision-os-client/demo"
-import { liveManagerIntelligenceClient } from "@/lib/commissioner-os/managers/decision-os-client/live"
+import { stubManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/stub"
+import { demoManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/demo"
+import { liveManagerIntelligenceClient } from "@/lib/commissioner-ui/managers/decision-os-client/live"
 
 describe("commissioner-os — Manager Intelligence client parity", () => {
   it("stub, demo, and live all satisfy the same method surface", () => {

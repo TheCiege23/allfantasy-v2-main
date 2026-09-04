@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { WorkspaceView } from "@/components/commissioner-os/workspace/WorkspaceView"
-import { stubWorkspaceClient } from "@/lib/commissioner-os/workspace/decision-os-client/stub"
-import { demoWorkspaceClient } from "@/lib/commissioner-os/workspace/decision-os-client/demo"
-import { liveWorkspaceClient } from "@/lib/commissioner-os/workspace/decision-os-client/live"
-import { WORKSPACE_QUEUES, getWorkspaceQueue } from "@/lib/commissioner-os/workspace/queues"
-import type { CommissionerTask } from "@/lib/commissioner-os/workspace/decision-os-client"
+import { stubWorkspaceClient } from "@/lib/commissioner-ui/workspace/decision-os-client/stub"
+import { demoWorkspaceClient } from "@/lib/commissioner-ui/workspace/decision-os-client/demo"
+import { liveWorkspaceClient } from "@/lib/commissioner-ui/workspace/decision-os-client/live"
+import { WORKSPACE_QUEUES, getWorkspaceQueue } from "@/lib/commissioner-ui/workspace/queues"
+import type { CommissionerTask } from "@/lib/commissioner-ui/workspace/decision-os-client"
 
 function makeTask(overrides: Partial<CommissionerTask> = {}): CommissionerTask {
   return {

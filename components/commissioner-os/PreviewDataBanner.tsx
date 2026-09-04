@@ -1,5 +1,5 @@
 import { Info } from 'lucide-react'
-import { DATA_MODE_LABELS, type CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
+import { DATA_MODE_LABELS, type CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 
 /**
  * Deliberately unmissable. Text is mode-aware — a hardcoded "stub" mention

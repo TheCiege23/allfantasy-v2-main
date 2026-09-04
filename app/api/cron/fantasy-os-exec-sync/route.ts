@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
-import { resolveCadence } from '@/lib/fantasy-os/sync/season'
+import { resolveCadence } from '@/lib/import-os/season'
 import {
   runDueLeagues,
   runExternalMatchupParity,
   runFantraxMatchupParity,
-} from '@/lib/fantasy-os/sync/collector'
+} from '@/lib/import-os/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
 

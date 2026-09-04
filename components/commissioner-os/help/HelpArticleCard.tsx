@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { HELP_CATEGORY_LABELS, HELP_CATEGORY_ICONS } from './helpLabels'
-import type { CommissionerHelpArticleContract } from '@/lib/commissioner-os/contracts'
+import type { CommissionerHelpArticleContract } from '@/lib/commissioner-ui/contracts'
 
 export interface HelpArticleCardProps {
   article: CommissionerHelpArticleContract

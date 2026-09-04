@@ -8,7 +8,7 @@ import { HOURS } from '../domain-os/types'
 /**
  * Draft OS — maintained fact state for the draft runtime.
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * 🛑 READ THIS BEFORE WIRING ANYTHING TO IT. `lib/decision-os/league-os/` HOLDS THE SAME FACT.
  *

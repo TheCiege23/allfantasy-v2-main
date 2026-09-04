@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { HelpCenterView } from '@/components/commissioner-os/help/HelpCenterView'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
 /**
  * Server Component — fetches through the Decision OS Adapter Layer, same

@@ -10,7 +10,7 @@
 /** The authoritative production scoring flow, stage by stage (verified in code, Phase 5H-f audit). */
 export const PRODUCTION_SCORING_AUTHORITY = {
   stages: [
-    { stage: 'raw_stat_ingest', table: 'PlayerGameLogCache', service: 'lib/sports-os/PlayerGameLogImportService.ts' },
+    { stage: 'raw_stat_ingest', table: 'PlayerGameLogCache', service: 'lib/sports-reporting/PlayerGameLogImportService.ts' },
     { stage: 'score_compute', table: 'PlayerWeeklyScore', service: 'lib/redraft/playerWeeklyScoreService.ts → calculateScoreFromSportConfig (lib/redraft/scoringEngine.ts)' },
     { stage: 'matchup_total', table: 'RedraftMatchup', service: 'lib/redraft/scoringEngine.ts::updateMatchupScores' },
     { stage: 'standings', table: 'RedraftRoster / FantasyStanding', service: 'lib/redraft/standingsEngine.ts::updateStandings' },

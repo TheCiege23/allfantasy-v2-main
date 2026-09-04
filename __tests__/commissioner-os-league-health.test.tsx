@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { LeagueHealthView } from "@/components/commissioner-os/league-health/LeagueHealthView"
-import { stubLeagueHealthClient } from "@/lib/commissioner-os/league-health/decision-os-client/stub"
-import { demoLeagueHealthClient } from "@/lib/commissioner-os/league-health/decision-os-client/demo"
-import { liveLeagueHealthClient } from "@/lib/commissioner-os/league-health/decision-os-client/live"
+import { stubLeagueHealthClient } from "@/lib/commissioner-ui/league-health/decision-os-client/stub"
+import { demoLeagueHealthClient } from "@/lib/commissioner-ui/league-health/decision-os-client/demo"
+import { liveLeagueHealthClient } from "@/lib/commissioner-ui/league-health/decision-os-client/live"
 
 async function loadAll(client: typeof stubLeagueHealthClient) {
   return Promise.all([client.getHealthDetail(), client.getRisks(), client.getEvidence(), client.getRecommendations()])

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards'
 import { TASK_STATUS_LABELS, TASK_NEXT_ACTION_LABEL } from './taskStatusLabels'
-import type { CommissionerTask } from '@/lib/commissioner-os/workspace/decision-os-client'
+import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
 
 export interface TaskDetailDrawerProps {
   task: CommissionerTask | null

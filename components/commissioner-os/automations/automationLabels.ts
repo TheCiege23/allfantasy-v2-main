@@ -1,4 +1,4 @@
-import type { AutomationCategory, AutomationExecutionResult, AutomationStatus } from '@/lib/commissioner-os/automations/decision-os-client'
+import type { AutomationCategory, AutomationExecutionResult, AutomationStatus } from '@/lib/commissioner-ui/automations/decision-os-client'
 
 /** Workflow-neutral — status is never severity-colored, the same rule every other module's status vocabulary follows. */
 export const AUTOMATION_STATUS_LABELS: Record<AutomationStatus, string> = {

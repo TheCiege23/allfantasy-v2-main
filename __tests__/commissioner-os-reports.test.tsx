@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ReportsView } from "@/components/commissioner-os/reports/ReportsView"
-import { stubReportsClient } from "@/lib/commissioner-os/reports/decision-os-client/stub"
-import { demoReportsClient } from "@/lib/commissioner-os/reports/decision-os-client/demo"
-import { liveReportsClient } from "@/lib/commissioner-os/reports/decision-os-client/live"
-import { buildReportCsv } from "@/lib/commissioner-os/reports/exportUtils"
-import type { GeneratedReport } from "@/lib/commissioner-os/reports/decision-os-client"
+import { stubReportsClient } from "@/lib/commissioner-ui/reports/decision-os-client/stub"
+import { demoReportsClient } from "@/lib/commissioner-ui/reports/decision-os-client/demo"
+import { liveReportsClient } from "@/lib/commissioner-ui/reports/decision-os-client/live"
+import { buildReportCsv } from "@/lib/commissioner-ui/reports/exportUtils"
+import type { GeneratedReport } from "@/lib/commissioner-ui/reports/decision-os-client"
 
 function makeReport(overrides: Partial<GeneratedReport> = {}): GeneratedReport {
   return {

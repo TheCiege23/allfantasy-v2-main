@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma'
  *
  * ── 🛑 POLARITY: A KILL SWITCH, NOT AN ENABLE SWITCH ────────────────────────────────────────
  * Only an explicit off value kills a feed. Unset means on. This is the opposite of
- * `lib/commissioner-os/liveReadiness.ts`, whose flags default to `false` because they answer "has
+ * `lib/commissioner-ui/liveReadiness.ts`, whose flags default to `false` because they answer "has
  * anyone written this integration yet" — a question where absence genuinely means no.
  *
  * The polarity matters more than it looks. `getBoolean` returns its default on a DB READ ERROR as

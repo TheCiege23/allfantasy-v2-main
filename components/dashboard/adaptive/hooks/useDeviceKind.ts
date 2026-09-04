@@ -18,7 +18,7 @@ export type DeviceOverride = 'auto' | DeviceKind
  * ⚠ Three breakpoint scales exist in this repo and they do NOT agree — stating the choice
  * explicitly so the next reader doesn't "fix" it toward the wrong one:
  *   - Tailwind (stock):                   640 / 768 / 1024 / 1280 / 1536
- *   - lib/commissioner-os/tokens/…:       640 / 1024 / 1440
+ *   - lib/commissioner-ui/tokens/…:       640 / 1024 / 1440
  *   - this dashboard (design contract):   768 / 1280
  *
  * The handoff pins its three layouts to 768/1280 and the sidebar→rail→tab-bar transitions

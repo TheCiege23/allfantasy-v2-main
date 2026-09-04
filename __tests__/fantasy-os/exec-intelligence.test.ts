@@ -6,10 +6,10 @@ import {
   deriveManager,
   reconcileAgainstManifest,
   pseudoRef,
-} from '@/lib/fantasy-os/exec-intelligence/derive'
-import { isRenderableInsight, confidenceFromSampleSize } from '@/lib/fantasy-os/exec-intelligence/explanation'
-import { EXEC_OFFSEASON_LIMITATION } from '@/lib/fantasy-os/exec-intelligence/truth'
-import type { ExecSnapshot, ExecLeagueRow, ExecManagerRow } from '@/lib/fantasy-os/exec-data/types'
+} from '@/lib/exec-reporting/exec-intelligence/derive'
+import { isRenderableInsight, confidenceFromSampleSize } from '@/lib/exec-reporting/exec-intelligence/explanation'
+import { EXEC_OFFSEASON_LIMITATION } from '@/lib/exec-reporting/exec-intelligence/truth'
+import type { ExecSnapshot, ExecLeagueRow, ExecManagerRow } from '@/lib/exec-reporting/exec-data/types'
 
 const L = (over: Partial<ExecLeagueRow>): ExecLeagueRow => ({
   leagueId: 'x', season: '2025', name: 'n', status: 'complete', totalRosters: 12, previousLeagueId: null,

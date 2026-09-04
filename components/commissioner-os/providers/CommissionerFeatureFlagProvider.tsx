@@ -5,8 +5,8 @@ import {
   DEFAULT_COMMISSIONER_MODULE_FLAGS,
   isCommissionerModuleEnabled,
   type CommissionerModuleFlags,
-} from '@/lib/commissioner-os/featureFlags'
-import type { CommissionerModuleId } from '@/lib/commissioner-os/navigation/moduleNav'
+} from '@/lib/commissioner-ui/featureFlags'
+import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 
 interface CommissionerFeatureFlagContextValue {
   flags: CommissionerModuleFlags

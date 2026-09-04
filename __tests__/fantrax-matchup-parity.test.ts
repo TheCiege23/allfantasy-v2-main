@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Guards `lib/fantasy-os/sync/collector/fantraxMatchupParity.ts` — the writer
+ * Guards `lib/import-os/collector/fantraxMatchupParity.ts` — the writer
  * Fantrax leagues never had.
  *
  * 🛑 WHAT WAS BROKEN. Every WeeklyMatchup-backed surface (current week,
@@ -46,7 +46,7 @@ vi.mock('@/lib/league-import/fantrax/fantraxApi', () => ({
   fetchFantraxScheduleWithScores: (...a: unknown[]) => fetchFantraxScheduleWithScores(...a),
 }))
 
-import { runFantraxMatchupParity } from '@/lib/fantasy-os/sync/collector/fantraxMatchupParity'
+import { runFantraxMatchupParity } from '@/lib/import-os/collector/fantraxMatchupParity'
 
 const NOW = new Date('2026-10-01T12:00:00Z')
 

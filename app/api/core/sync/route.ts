@@ -48,7 +48,7 @@ import {
   collectResyncCandidates,
   type ResyncCandidate,
 } from '@/lib/core-app/resyncableLeagues'
-import { manualRefreshConnectedSleeperLeague } from '@/lib/fantasy-os/sync/collector'
+import { manualRefreshConnectedSleeperLeague } from '@/lib/import-os/collector'
 import { resyncImportedLeague } from '@/lib/league-import/resyncImportUtility'
 import type { ImportProvider } from '@/lib/league-import/types'
 

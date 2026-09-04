@@ -8,7 +8,7 @@ import { HOURS, MINUTES } from '../domain-os/types'
 /**
  * Lineup OS — maintained fact state for `manager.lineup.set`.
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way — its `decision-os-client`
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way — its `decision-os-client`
  * modules call INTO Decision OS to render a surface. Same "OS" suffix, opposite arrow.
  *
  * WHY THIS DOMAIN IS THE ONE THAT PAYS

@@ -34,7 +34,7 @@ vi.mock("@/lib/provider-sync-logger", () => ({
   recordProviderSync: mocks.recordProviderSync,
 }))
 
-vi.mock("@/lib/sports-os/SportsIdentityHealthService", () => ({
+vi.mock("@/lib/sports-reporting/SportsIdentityHealthService", () => ({
   getSportsIdentityHealthSnapshot: mocks.getSportsIdentityHealthSnapshot,
 }))
 

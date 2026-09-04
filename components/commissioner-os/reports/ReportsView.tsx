@@ -9,8 +9,8 @@ import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanne
 import { ReportTemplateCard } from './ReportTemplateCard'
 import { ReportDetailDialog } from './ReportDetailDialog'
 import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { GeneratedReport, ReportTemplate } from '@/lib/commissioner-os/reports/decision-os-client'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { GeneratedReport, ReportTemplate } from '@/lib/commissioner-ui/reports/decision-os-client'
 
 export interface ReportsViewProps {
   templates: ReportTemplate[]

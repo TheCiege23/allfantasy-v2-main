@@ -6,8 +6,8 @@ import { runInjuryImporter } from "@/lib/workers/injury-importer"
 import { runNewsImporter } from "@/lib/workers/news-importer"
 import { runScheduleImporter } from "@/lib/workers/schedule-importer"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
-import { getSportsIdentityHealthSnapshot } from "@/lib/sports-os/SportsIdentityHealthService"
-import { importPlayerGameLogs } from "@/lib/sports-os/PlayerGameLogImportService"
+import { getSportsIdentityHealthSnapshot } from "@/lib/sports-reporting/SportsIdentityHealthService"
+import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImportService"
 
 export type AdminSportsSyncType =
   | "schedules"

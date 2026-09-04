@@ -3,7 +3,7 @@ import { requireAdminOrBearer } from "@/lib/adminAuth"
 import {
   getPlayerGameLogHealthDashboard,
   importPlayerGameLogs,
-} from "@/lib/sports-os/PlayerGameLogImportService"
+} from "@/lib/sports-reporting/PlayerGameLogImportService"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60

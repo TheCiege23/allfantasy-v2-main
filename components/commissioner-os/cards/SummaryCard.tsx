@@ -1,6 +1,6 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import type { LucideIcon } from 'lucide-react'
-import type { SeverityTier } from '@/lib/commissioner-os/tokens/colors'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import { getSeverityStyle, SEVERITY_LABELS } from './severityStyles'
 
 export interface SummaryCardProps {

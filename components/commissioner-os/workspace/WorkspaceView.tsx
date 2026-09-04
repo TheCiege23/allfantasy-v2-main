@@ -7,9 +7,9 @@ import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanne
 import { WorkQueueStrip } from './WorkQueueStrip'
 import { TaskListItem } from './TaskListItem'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
-import { WORKSPACE_QUEUES, DEFAULT_WORKSPACE_QUEUE_ID, getWorkspaceQueue } from '@/lib/commissioner-os/workspace/queues'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { CommissionerTask } from '@/lib/commissioner-os/workspace/decision-os-client'
+import { WORKSPACE_QUEUES, DEFAULT_WORKSPACE_QUEUE_ID, getWorkspaceQueue } from '@/lib/commissioner-ui/workspace/queues'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
 
 export interface WorkspaceViewProps {
   tasks: CommissionerTask[]

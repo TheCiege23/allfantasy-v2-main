@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards'
 import { AUTOMATION_STATUS_LABELS, AUTOMATION_CATEGORY_LABELS } from './automationLabels'
-import type { AutomationCatalogEntry } from '@/lib/commissioner-os/automations/decision-os-client'
+import type { AutomationCatalogEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
 
 export interface AutomationCatalogCardProps {
   automation: AutomationCatalogEntry

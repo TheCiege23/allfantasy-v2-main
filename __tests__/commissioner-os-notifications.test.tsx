@@ -2,10 +2,10 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it } from "vitest"
 import { NotificationPanel } from "@/components/commissioner-os/notifications/NotificationPanel"
 import { CommissionerPlatformProvider, useCommissionerPlatform } from "@/components/commissioner-os/providers/CommissionerPlatformProvider"
-import { stubNotificationsClient } from "@/lib/commissioner-os/notifications/decision-os-client/stub"
-import { demoNotificationsClient } from "@/lib/commissioner-os/notifications/decision-os-client/demo"
-import { liveNotificationsClient } from "@/lib/commissioner-os/notifications/decision-os-client/live"
-import type { CommissionerNotificationPayload } from "@/lib/commissioner-os/contracts"
+import { stubNotificationsClient } from "@/lib/commissioner-ui/notifications/decision-os-client/stub"
+import { demoNotificationsClient } from "@/lib/commissioner-ui/notifications/decision-os-client/demo"
+import { liveNotificationsClient } from "@/lib/commissioner-ui/notifications/decision-os-client/live"
+import type { CommissionerNotificationPayload } from "@/lib/commissioner-ui/contracts"
 
 function OpenNotificationsButton() {
   const { openService } = useCommissionerPlatform()

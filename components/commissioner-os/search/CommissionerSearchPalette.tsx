@@ -8,7 +8,7 @@ import { ErrorState } from '@/components/commissioner-os/states'
 import { useCommissionerPlatform } from '@/components/commissioner-os/providers/CommissionerPlatformProvider'
 import { useRecentSearches } from './useRecentSearches'
 import { SEARCH_CATEGORY_ICONS, SEARCH_CATEGORY_LABELS, SEARCH_CATEGORY_ORDER } from './searchLabels'
-import type { CommissionerSearchResultContract, CommissionerSearchResultCategory } from '@/lib/commissioner-os/contracts'
+import type { CommissionerSearchResultContract, CommissionerSearchResultCategory } from '@/lib/commissioner-ui/contracts'
 
 export interface CommissionerSearchPaletteProps {
   /** The full cross-module index, fetched once by the layout via adapter.search.getIndex(). Matching against the typed query is cmdk's own job (shouldFilter), not logic duplicated here. */

@@ -1,8 +1,8 @@
 import NextLink from 'next/link'
 import { User, Cpu } from 'lucide-react'
 import { getActivitySeverityStyle, ACTIVITY_SEVERITY_LABELS, getModuleLabel, ACTIVITY_SOURCE_ICONS } from './activityLabels'
-import { formatRelativeTime } from '@/lib/commissioner-os/utils/time'
-import type { CommissionerActivityEventContract } from '@/lib/commissioner-os/contracts'
+import { formatRelativeTime } from '@/lib/commissioner-ui/utils/time'
+import type { CommissionerActivityEventContract } from '@/lib/commissioner-ui/contracts'
 
 export interface ActivityEventRowProps {
   event: CommissionerActivityEventContract

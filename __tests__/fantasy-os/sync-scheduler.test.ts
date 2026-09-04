@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { resolveSeasonState, resolveCadence, cadenceForState } from '@/lib/fantasy-os/sync/season'
-import { computeSyncStatus, freshnessSeverity, buildFreshness, freshnessThresholds, isSyncDue } from '@/lib/fantasy-os/sync/freshness'
+import { resolveSeasonState, resolveCadence, cadenceForState } from '@/lib/import-os/season'
+import { computeSyncStatus, freshnessSeverity, buildFreshness, freshnessThresholds, isSyncDue } from '@/lib/import-os/freshness'
 import {
   runSync,
   reconcileAccounting,
@@ -9,7 +9,7 @@ import {
   type SyncStore,
   type RunResult,
   type ScopeFetchResult,
-} from '@/lib/fantasy-os/sync/runner'
+} from '@/lib/import-os/runner'
 
 const d = (iso: string) => new Date(iso)
 

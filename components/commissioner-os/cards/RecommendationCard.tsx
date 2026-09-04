@@ -1,8 +1,8 @@
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { SeverityTier } from '@/lib/commissioner-os/tokens/colors'
-import type { CommissionerConfidenceLevel, CommissionerRecommendationStatus } from '@/lib/commissioner-os/contracts'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
+import type { CommissionerConfidenceLevel, CommissionerRecommendationStatus } from '@/lib/commissioner-ui/contracts'
 import { getSeverityStyle, SEVERITY_LABELS } from './severityStyles'
 
 const CONFIDENCE_LABELS: Record<CommissionerConfidenceLevel, string> = {

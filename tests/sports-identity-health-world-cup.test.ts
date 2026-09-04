@@ -19,7 +19,7 @@ import { describe, it, expect } from "vitest"
 import {
   buildSportsIdentityHealthSnapshot,
   type SportsIdentityHealthAggregate,
-} from "@/lib/sports-os/SportsIdentityHealthService"
+} from "@/lib/sports-reporting/SportsIdentityHealthService"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

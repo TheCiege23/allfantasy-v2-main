@@ -6,9 +6,9 @@ import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { AutomationCatalogCard } from './AutomationCatalogCard'
 import { AutomationHistoryDialog } from './AutomationHistoryDialog'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { AutomationCatalogEntry, AutomationExecutionEntry } from '@/lib/commissioner-os/automations/decision-os-client'
-import type { SeverityTier } from '@/lib/commissioner-os/tokens/colors'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { AutomationCatalogEntry, AutomationExecutionEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 export interface AutomationCenterViewProps {
   catalog: AutomationCatalogEntry[]

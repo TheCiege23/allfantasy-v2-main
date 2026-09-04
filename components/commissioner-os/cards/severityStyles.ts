@@ -1,5 +1,5 @@
-import { severityTokens, cssVar, type SeverityTier } from '@/lib/commissioner-os/tokens/colors'
-import type { CommissionerNotificationSeverity } from '@/lib/commissioner-os/contracts'
+import { severityTokens, cssVar, type SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
+import type { CommissionerNotificationSeverity } from '@/lib/commissioner-ui/contracts'
 
 /** Reuses the Phase 0.1 severity tokens directly — never a second color mapping. */
 export function getSeverityStyle(tier: SeverityTier = 'standard') {

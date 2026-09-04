@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { CommissionerSearchResultContract } from '@/lib/commissioner-os/contracts'
+import type { CommissionerSearchResultContract } from '@/lib/commissioner-ui/contracts'
 
 const RECENT_SEARCHES_STORAGE_KEY = 'commissioner_os_recent_searches'
 const MAX_RECENT = 5

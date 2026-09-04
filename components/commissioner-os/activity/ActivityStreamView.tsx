@@ -6,9 +6,9 @@ import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ActivityEventRow } from './ActivityEventRow'
 import { getModuleLabel } from './activityLabels'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { CommissionerActivityEventContract } from '@/lib/commissioner-os/contracts'
-import type { CommissionerModuleId } from '@/lib/commissioner-os/navigation/moduleNav'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { CommissionerActivityEventContract } from '@/lib/commissioner-ui/contracts'
+import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 
 export interface ActivityStreamViewProps {
   events: CommissionerActivityEventContract[]

@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 /**
  * ⚠ THE JOIN THAT LOOKS RIGHT AND IS WRONG BY DESIGN.
  *
- * `lib/fantasy-os/sync/collector/applySleeperLeagueSync.ts` states the contract
+ * `lib/import-os/collector/applySleeperLeagueSync.ts` states the contract
  * in its own header, and `lib/sleeper-sync.ts` implements it as
  * `managerUserIds.get(ownerId) ?? ownerId`:
  *
@@ -33,7 +33,7 @@ const SCAN_DIRS = ['lib', 'app', 'server']
 const ALLOWED = new Set<string>([
   // The sync itself owns the contract and indexes rosters by canonical source
   // team id; its deleteMany fallback is deliberate and commented in place.
-  'lib/fantasy-os/sync/collector/applySleeperLeagueSync.ts',
+  'lib/import-os/collector/applySleeperLeagueSync.ts',
 ])
 
 function walk(dir: string, out: string[] = []): string[] {

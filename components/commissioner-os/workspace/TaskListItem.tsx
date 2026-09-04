@@ -2,7 +2,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards'
 import { TASK_STATUS_LABELS } from './taskStatusLabels'
-import type { CommissionerTask } from '@/lib/commissioner-os/workspace/decision-os-client'
+import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
 
 export interface TaskListItemProps {
   task: CommissionerTask

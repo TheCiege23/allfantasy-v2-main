@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { AutomationCenterView } from "@/components/commissioner-os/automations/AutomationCenterView"
-import { stubAutomationClient } from "@/lib/commissioner-os/automations/decision-os-client/stub"
-import { demoAutomationClient } from "@/lib/commissioner-os/automations/decision-os-client/demo"
-import { liveAutomationClient } from "@/lib/commissioner-os/automations/decision-os-client/live"
-import type { AutomationCatalogEntry, AutomationExecutionEntry } from "@/lib/commissioner-os/automations/decision-os-client"
+import { stubAutomationClient } from "@/lib/commissioner-ui/automations/decision-os-client/stub"
+import { demoAutomationClient } from "@/lib/commissioner-ui/automations/decision-os-client/demo"
+import { liveAutomationClient } from "@/lib/commissioner-ui/automations/decision-os-client/live"
+import type { AutomationCatalogEntry, AutomationExecutionEntry } from "@/lib/commissioner-ui/automations/decision-os-client"
 
 function makeAutomation(overrides: Partial<AutomationCatalogEntry> = {}): AutomationCatalogEntry {
   return {

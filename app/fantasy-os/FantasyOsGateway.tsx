@@ -19,8 +19,8 @@ type GatewayLeague = { id: string; name: string; isCommissioner: boolean; role: 
 
 /** The seven Operating Systems, in guided order: one question + where it lives. Provider-neutral. */
 const GUIDED_SEQUENCE: { key: string; os: string; question: string; href: string }[] = [
-  { key: 'platform', os: 'Platform OS', question: 'Where should I focus first?', href: '/manager-hub' },
-  { key: 'manager', os: 'Manager OS', question: 'What should I do for my team?', href: '/manager-hub' },
+  { key: 'platform', os: 'Start here', question: 'Where should I focus first?', href: '/manager-hub' },
+  { key: 'manager', os: 'My team', question: 'What should I do for my team?', href: '/manager-hub' },
   { key: 'commissioner', os: 'Commissioner OS', question: 'Is the league operating well?', href: '/commissioner-hub' },
   { key: 'league', os: 'League OS', question: 'What is happening across the ecosystem?', href: '/commissioner-hub' },
   { key: 'trade', os: 'Trade OS', question: 'Where are the trade opportunities?', href: '/commissioner-hub' },
@@ -93,7 +93,7 @@ export default function FantasyOsGateway({
               onChange={(e) => setContextId(e.target.value)}
               className="focus-ring mt-1 block w-full rounded-xl border border-subtle bg-surface-muted px-3 py-2.5 text-[14px] font-semibold text-primary"
             >
-              <option value="all">All leagues — Platform OS overview</option>
+              <option value="all">All leagues — overview</option>
               {leagues.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name} · {l.role}
@@ -108,7 +108,7 @@ export default function FantasyOsGateway({
             href={selected ? `/league/${selected.id}` : '/manager-hub'}
             className="focus-ring inline-flex items-center gap-2 rounded-xl bg-brand-primary/10 px-5 py-2.5 text-[14px] font-bold text-brand-primary transition hover:bg-brand-primary/15"
           >
-            {selected ? `Open ${selected.name}` : 'Enter Platform OS'}
+            {selected ? `Open ${selected.name}` : 'Enter your hub'}
             <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
           {hasCommissioner ? (

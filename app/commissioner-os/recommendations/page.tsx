@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { RecommendationsView } from '@/components/commissioner-os/recommendations/RecommendationsView'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
 export default async function RecommendationsPage() {
   const adapter = await getDecisionOSAdapter()

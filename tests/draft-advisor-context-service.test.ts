@@ -33,7 +33,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import type { FantasyValueSnapshot } from "@/lib/sports-os/FantasyValueSnapshotService"
+import type { FantasyValueSnapshot } from "@/lib/sports-reporting/FantasyValueSnapshotService"
 
 vi.mock("server-only", () => ({}))
 
@@ -374,7 +374,7 @@ describe("getDraftAdvisorContext integration", () => {
 
   it("18. empty candidates → confidence=0, empty enrichedCandidates", async () => {
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     const ctx = await getDraftAdvisorContext(
       { sport: "NFL", candidates: [] },
@@ -387,7 +387,7 @@ describe("getDraftAdvisorContext integration", () => {
 
   it("19. snapshots enrich candidates — playerName and position carried through", async () => {
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     const loader = vi
       .fn()
@@ -417,7 +417,7 @@ describe("getDraftAdvisorContext integration", () => {
   it("20. no schedule data → missingData includes bye_week_schedule", async () => {
     prismaMock.sportsGame.findMany.mockResolvedValue([])
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     const ctx = await getDraftAdvisorContext(
       { sport: "NFL", candidates: [{ playerName: "CeeDee Lamb" }] },
@@ -428,7 +428,7 @@ describe("getDraftAdvisorContext integration", () => {
 
   it("21. rosterNeeds computed from provided currentRoster", async () => {
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     // Roster already has QB + 2 RBs + TE + K + DEF — needs WR most urgently
     const ctx = await getDraftAdvisorContext(
@@ -449,7 +449,7 @@ describe("getDraftAdvisorContext integration", () => {
 
   it("22. sport normalised to upper-case, generatedAt is ISO string", async () => {
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     const ctx = await getDraftAdvisorContext(
       { sport: "nfl", candidates: [] },
@@ -462,7 +462,7 @@ describe("getDraftAdvisorContext integration", () => {
 
   it("23. snapshot loader that throws → candidate confidence=0 + missingData populated", async () => {
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     const loader = vi.fn().mockRejectedValue(new Error("DB timeout"))
     const ctx = await getDraftAdvisorContext(
@@ -477,7 +477,7 @@ describe("getDraftAdvisorContext integration", () => {
 
   it("24. confidence is mean of all candidate snapshot confidences", async () => {
     const { getDraftAdvisorContext } = await import(
-      "@/lib/sports-os/DraftAdvisorContextService"
+      "@/lib/sports-reporting/DraftAdvisorContextService"
     )
     const loader = vi
       .fn()

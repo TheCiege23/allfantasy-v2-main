@@ -1,13 +1,13 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { MissionControlView } from "@/components/commissioner-os/mission-control/MissionControlView"
-import { stubDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/stub"
-import { stubRecommendationsClient } from "@/lib/commissioner-os/recommendations/decision-os-client/stub"
-import { stubAutomationClient } from "@/lib/commissioner-os/automations/decision-os-client/stub"
-import { stubAnalyticsClient } from "@/lib/commissioner-os/analytics/decision-os-client/stub"
-import { stubReportsClient } from "@/lib/commissioner-os/reports/decision-os-client/stub"
-import { stubNotificationsClient } from "@/lib/commissioner-os/notifications/decision-os-client/stub"
-import { stubActivityClient } from "@/lib/commissioner-os/activity/decision-os-client/stub"
+import { stubDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/stub"
+import { stubRecommendationsClient } from "@/lib/commissioner-ui/recommendations/decision-os-client/stub"
+import { stubAutomationClient } from "@/lib/commissioner-ui/automations/decision-os-client/stub"
+import { stubAnalyticsClient } from "@/lib/commissioner-ui/analytics/decision-os-client/stub"
+import { stubReportsClient } from "@/lib/commissioner-ui/reports/decision-os-client/stub"
+import { stubNotificationsClient } from "@/lib/commissioner-ui/notifications/decision-os-client/stub"
+import { stubActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/stub"
 
 async function loadMissionControlData() {
   const [health, recs, highlights, kpis, activityEvents, automationSummary, analyticsSummary, reportsSummary, notificationsSummary] = await Promise.all([

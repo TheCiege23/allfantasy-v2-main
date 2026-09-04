@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react'
 import { RecommendationCard } from '@/components/commissioner-os/cards'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { CommissionerRecommendationContract, CommissionerRecommendationStatus } from '@/lib/commissioner-os/contracts'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { CommissionerRecommendationContract, CommissionerRecommendationStatus } from '@/lib/commissioner-ui/contracts'
 import { Lightbulb } from 'lucide-react'
 
 export interface RecommendationsViewProps {

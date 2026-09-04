@@ -11,7 +11,7 @@ import {
 /**
  * Projection OS — maintained fact state for AF Projections (2.5).
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * ── 🛑 THE SOURCE CACHES CANONICAL FACTS. THE LOADER RESCORES. ──────────────────────────────
  * This split is the whole reason the source is safe, and it was NOT free — `loadProjectionFacts`

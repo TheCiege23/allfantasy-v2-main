@@ -7,9 +7,9 @@ import { KpiCard, RecommendationCard, InfoCard } from '@/components/commissioner
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards/severityStyles'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
-import type { CommissionerRecommendationContract } from '@/lib/commissioner-os/contracts'
-import type { LeagueHealthDetail, LeagueHealthRisk, LeagueHealthEvidencePoint } from '@/lib/commissioner-os/league-health/decision-os-client'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
+import type { CommissionerRecommendationContract } from '@/lib/commissioner-ui/contracts'
+import type { LeagueHealthDetail, LeagueHealthRisk, LeagueHealthEvidencePoint } from '@/lib/commissioner-ui/league-health/decision-os-client'
 import { ShieldCheck } from 'lucide-react'
 
 export interface LeagueHealthViewProps {

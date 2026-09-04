@@ -19,7 +19,7 @@ vi.mock('@/lib/league-import/ImportedLeagueNormalizationPipeline', () => ({
 }))
 vi.mock('@/lib/league-import/canonicalImportNormalizer', () => ({ buildCanonicalImportBundle: h.buildBundle }))
 vi.mock('@/lib/league-import/importPersistenceService', () => ({ persistImportWithCanonicalAudit: h.persist }))
-vi.mock('@/lib/fantasy-os/sync/collector', () => ({ manualRefreshConnectedSleeperLeague: h.manualRefresh }))
+vi.mock('@/lib/import-os/collector', () => ({ manualRefreshConnectedSleeperLeague: h.manualRefresh }))
 
 import { resyncImportedLeague } from '@/lib/league-import/resyncImportUtility'
 

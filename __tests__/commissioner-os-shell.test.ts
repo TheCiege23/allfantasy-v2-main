@@ -6,12 +6,12 @@ import {
   COMMISSIONER_SEARCH_ROUTE,
   isCommissionerModuleActive,
   getActiveCommissionerModuleId,
-} from "@/lib/commissioner-os/navigation/moduleNav"
-import { resolveBreadcrumbs } from "@/lib/commissioner-os/navigation/breadcrumbs"
+} from "@/lib/commissioner-ui/navigation/moduleNav"
+import { resolveBreadcrumbs } from "@/lib/commissioner-ui/navigation/breadcrumbs"
 import {
   DEFAULT_COMMISSIONER_MODULE_FLAGS,
   isCommissionerModuleEnabled,
-} from "@/lib/commissioner-os/featureFlags"
+} from "@/lib/commissioner-ui/featureFlags"
 
 describe("commissioner-os shell — module navigation", () => {
   it("defines nine primary module nav items plus two secondary items", () => {

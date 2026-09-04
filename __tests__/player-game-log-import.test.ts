@@ -94,7 +94,7 @@ describe("PlayerGameLogImportService", () => {
   })
 
   it("imports NFL Sleeper game logs into PlayerGameLogCache and preserves raw payloads", async () => {
-    const { importPlayerGameLogs } = await import("@/lib/sports-os/PlayerGameLogImportService")
+    const { importPlayerGameLogs } = await import("@/lib/sports-reporting/PlayerGameLogImportService")
 
     const result = await importPlayerGameLogs({
       sport: "NFL",
@@ -143,7 +143,7 @@ describe("PlayerGameLogImportService", () => {
   })
 
   it("merges game logs idempotently and detects duplicate incoming rows", async () => {
-    const { mergeGameLogPayload } = await import("@/lib/sports-os/PlayerGameLogImportService")
+    const { mergeGameLogPayload } = await import("@/lib/sports-reporting/PlayerGameLogImportService")
     const row = {
       week: 1,
       gameId: "g-1",
@@ -207,7 +207,7 @@ describe("PlayerGameLogImportService", () => {
       },
     ])
 
-    const { getPlayerGameLogHealthDashboard } = await import("@/lib/sports-os/PlayerGameLogImportService")
+    const { getPlayerGameLogHealthDashboard } = await import("@/lib/sports-reporting/PlayerGameLogImportService")
     const health = await getPlayerGameLogHealthDashboard(["NFL"])
 
     expect(health.rows[0]).toMatchObject({

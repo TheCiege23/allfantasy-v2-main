@@ -24,15 +24,15 @@ import {
 import {
   buildSportsOperatingSystemAudit,
   type SportsOperatingSystemAudit,
-} from "@/lib/sports-os/SportsOperatingSystemReadinessService"
+} from "@/lib/sports-reporting/SportsOperatingSystemReadinessService"
 import {
   getSportsIdentityHealthSnapshot,
   type SportsIdentityHealthSnapshot,
-} from "@/lib/sports-os/SportsIdentityHealthService"
+} from "@/lib/sports-reporting/SportsIdentityHealthService"
 import {
   getProviderTeamReconciliationSummaries,
   type ProviderTeamReconciliationSummary,
-} from "@/lib/sports-os/ProviderTeamReconciliationService"
+} from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 
 type MetricValue = number | string

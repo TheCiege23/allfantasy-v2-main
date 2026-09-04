@@ -8,7 +8,7 @@ import type { WaiverWorldFacts, WaiverLeagueFacts } from '../waiver/loader'
 /**
  * Waiver OS — maintained fact state for `manager.waiver.claim`.
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * WHAT IT GATHERS, AND AT WHICH LEVEL
  * `loadWaiverWorldFacts` currently derives everything on every request, but the facts inside it

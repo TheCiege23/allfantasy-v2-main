@@ -3,7 +3,7 @@
  *
  * ⚠ `Roster.platformUserId` DOES NOT MATCH `LeagueTeam.platformUserId`, AND THAT
  * IS BY DESIGN. From the header of
- * `lib/fantasy-os/sync/collector/applySleeperLeagueSync.ts`:
+ * `lib/import-os/collector/applySleeperLeagueSync.ts`:
  *
  *   "LeagueTeam.platformUserId retains the RAW Sleeper manager id, while
  *    Roster.platformUserId may hold the RESOLVED AllFantasy AppUser id (when the

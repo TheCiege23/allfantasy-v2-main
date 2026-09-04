@@ -76,7 +76,7 @@ export async function resyncImportedLeague(input: {
      */
     let refresh: SleeperResyncRefresh = null
     if (persisted.league.id) {
-      const { manualRefreshConnectedSleeperLeague } = await import('@/lib/fantasy-os/sync/collector')
+      const { manualRefreshConnectedSleeperLeague } = await import('@/lib/import-os/collector')
       const out = await manualRefreshConnectedSleeperLeague({
         userId: input.userId,
         leagueId: persisted.league.id,

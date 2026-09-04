@@ -1,5 +1,5 @@
 import { Rocket, Workflow, BookOpen, LifeBuoy, Map, type LucideIcon } from 'lucide-react'
-import type { CommissionerHelpCategory } from '@/lib/commissioner-os/contracts'
+import type { CommissionerHelpCategory } from '@/lib/commissioner-ui/contracts'
 
 export const HELP_CATEGORY_LABELS: Record<CommissionerHelpCategory, string> = {
   'getting-started': 'Getting Started',

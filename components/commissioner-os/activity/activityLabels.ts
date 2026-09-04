@@ -1,5 +1,5 @@
 import { getEventSeverityStyle, EVENT_SEVERITY_LABELS } from '@/components/commissioner-os/cards/severityStyles'
-import { getModuleLabel } from '@/lib/commissioner-os/navigation/moduleNav'
+import { getModuleLabel } from '@/lib/commissioner-ui/navigation/moduleNav'
 import { MODULE_ICONS } from '@/components/commissioner-os/shell/CommissionerSidebar'
 
 /**

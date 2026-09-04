@@ -333,7 +333,7 @@ describe('every route jobName matches the freshness probe exactly', () => {
    */
   const DELEGATED_JOB_NAMES: Record<string, string> = {
     // The route hands off to the collector, which owns the withSyncJobRun call and the name.
-    '/api/cron/fantasy-os-exec-sync': 'lib/fantasy-os/sync/collector/prismaSyncStore.ts',
+    '/api/cron/fantasy-os-exec-sync': 'lib/import-os/collector/prismaSyncStore.ts',
   }
 
   const heartbeatProbes = Object.entries(PROBES).filter(([, v]) => Boolean(v.heartbeat)) as Array<

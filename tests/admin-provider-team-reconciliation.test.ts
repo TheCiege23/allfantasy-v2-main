@@ -18,7 +18,7 @@
 import { describe, it, expect } from "vitest"
 import type {
   ProviderTeamReconciliationSummary,
-} from "@/lib/sports-os/ProviderTeamReconciliationService"
+} from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 
 // ─── Status logic (mirrors panel implementation) ─────────────────────────────
 

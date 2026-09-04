@@ -1,13 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { HelpCenterView } from "@/components/commissioner-os/help/HelpCenterView"
-import { stubHelpClient } from "@/lib/commissioner-os/help/decision-os-client/stub"
-import { demoHelpClient } from "@/lib/commissioner-os/help/decision-os-client/demo"
-import { liveHelpClient } from "@/lib/commissioner-os/help/decision-os-client/live"
-import { stubDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/stub"
-import { demoActivityClient } from "@/lib/commissioner-os/activity/decision-os-client/demo"
-import { demoNotificationsClient } from "@/lib/commissioner-os/notifications/decision-os-client/demo"
-import type { CommissionerHelpArticleContract, CommissionerGlossaryTermContract } from "@/lib/commissioner-os/contracts"
+import { stubHelpClient } from "@/lib/commissioner-ui/help/decision-os-client/stub"
+import { demoHelpClient } from "@/lib/commissioner-ui/help/decision-os-client/demo"
+import { liveHelpClient } from "@/lib/commissioner-ui/help/decision-os-client/live"
+import { stubDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/stub"
+import { demoActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/demo"
+import { demoNotificationsClient } from "@/lib/commissioner-ui/notifications/decision-os-client/demo"
+import type { CommissionerHelpArticleContract, CommissionerGlossaryTermContract } from "@/lib/commissioner-ui/contracts"
 
 const ARTICLE_A: CommissionerHelpArticleContract = {
   id: 'article-a', slug: 'article-a', title: 'How League Health Scoring Works', category: 'workflows',

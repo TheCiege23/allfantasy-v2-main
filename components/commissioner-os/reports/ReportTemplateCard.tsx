@@ -2,7 +2,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { REPORT_CATEGORY_LABELS, REPORT_FREQUENCY_LABELS } from './reportsLabels'
-import type { ReportTemplate } from '@/lib/commissioner-os/reports/decision-os-client'
+import type { ReportTemplate } from '@/lib/commissioner-ui/reports/decision-os-client'
 
 export interface ReportTemplateCardProps {
   template: ReportTemplate

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { CommissionerModuleId } from '@/lib/commissioner-os/navigation/moduleNav'
+import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 
 const MUTED_MODULES_STORAGE_KEY = 'commissioner_os_notifications_muted_modules'
 

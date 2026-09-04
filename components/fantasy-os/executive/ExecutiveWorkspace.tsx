@@ -18,10 +18,10 @@ import type {
   DraftIntelligence,
   ManagerIntelligence,
   RankedLeague,
-} from '@/lib/fantasy-os/exec-intelligence/contracts'
-import { isRenderableInsight, type Explanation } from '@/lib/fantasy-os/exec-intelligence/explanation'
-import { EXEC_OFFSEASON_LIMITATION, sourceWindowLabel } from '@/lib/fantasy-os/exec-intelligence/truth'
-import type { FreshnessContract } from '@/lib/fantasy-os/sync/freshness'
+} from '@/lib/exec-reporting/exec-intelligence/contracts'
+import { isRenderableInsight, type Explanation } from '@/lib/exec-reporting/exec-intelligence/explanation'
+import { EXEC_OFFSEASON_LIMITATION, sourceWindowLabel } from '@/lib/exec-reporting/exec-intelligence/truth'
+import type { FreshnessContract } from '@/lib/import-os/freshness'
 import {
   ExecutiveKpiCard,
   ExecutiveKpiRow,

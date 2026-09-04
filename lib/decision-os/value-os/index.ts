@@ -9,7 +9,7 @@ import type { ValueLookup } from '../value/contract'
 /**
  * Value OS — maintained fact state for player valuations (2.5).
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * 2.2 built three adapters and 2.3 registered the domain, and for a while NOTHING WIRED THEM
  * INTO A FEED — the adapters were callable but outside the kernel, which is the

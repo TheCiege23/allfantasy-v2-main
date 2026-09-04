@@ -19,9 +19,9 @@ import {
   normalizeTimestamp,
   resetCommissionerAdapterLogger,
   setCommissionerAdapterLogger,
-} from "@/lib/commissioner-os/adapter/index"
-import { buildDecisionOSAdapter } from "@/lib/commissioner-os/adapter"
-import type { CommissionerRecommendationContract } from "@/lib/commissioner-os/contracts"
+} from "@/lib/commissioner-ui/adapter/index"
+import { buildDecisionOSAdapter } from "@/lib/commissioner-ui/adapter"
+import type { CommissionerRecommendationContract } from "@/lib/commissioner-ui/contracts"
 
 function makeRecommendation(overrides: Partial<CommissionerRecommendationContract> = {}): CommissionerRecommendationContract {
   return {
@@ -287,7 +287,7 @@ describe("commissioner-os adapter — buildDecisionOSAdapter composition", () =>
 })
 
 describe("commissioner-os adapter — no UI module imports Decision OS internals directly", () => {
-  const FORBIDDEN_IMPORT = /from ['"]@\/lib\/commissioner-os\/(?:decision-os-client|league-health\/decision-os-client|managers\/decision-os-client|recommendations\/decision-os-client|workspace\/decision-os-client|automations\/decision-os-client|analytics\/decision-os-client|reports\/decision-os-client|search\/decision-os-client|notifications\/decision-os-client|activity\/decision-os-client|help\/decision-os-client|demo-mode)['"]/
+  const FORBIDDEN_IMPORT = /from ['"]@\/lib\/commissioner-ui\/(?:decision-os-client|league-health\/decision-os-client|managers\/decision-os-client|recommendations\/decision-os-client|workspace\/decision-os-client|automations\/decision-os-client|analytics\/decision-os-client|reports\/decision-os-client|search\/decision-os-client|notifications\/decision-os-client|activity\/decision-os-client|help\/decision-os-client|demo-mode)['"]/
 
   const pageFiles = [
     'app/commissioner-os/page.tsx',
@@ -305,7 +305,7 @@ describe("commissioner-os adapter — no UI module imports Decision OS internals
 
   it.each(pageFiles)("%s only imports from the adapter, not a per-module client or Demo Mode directly", (relativePath) => {
     const source = readFileSync(join(process.cwd(), relativePath), 'utf8')
-    expect(source).toMatch(/from ['"]@\/lib\/commissioner-os\/adapter['"]/)
+    expect(source).toMatch(/from ['"]@\/lib\/commissioner-ui\/adapter['"]/)
     expect(source).not.toMatch(FORBIDDEN_IMPORT)
   })
 

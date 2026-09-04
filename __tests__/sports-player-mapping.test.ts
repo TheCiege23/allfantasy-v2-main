@@ -33,7 +33,7 @@ describe("sports provider player/team mapping", () => {
       canonicalName: "Patrick Mahomes",
     })
 
-    const { resolveProviderPlayerIdentity } = await import("@/lib/sports-os/PlayerGameLogImportService")
+    const { resolveProviderPlayerIdentity } = await import("@/lib/sports-reporting/PlayerGameLogImportService")
     const result = await resolveProviderPlayerIdentity({
       sport: "NFL",
       provider: "sleeper",
@@ -57,7 +57,7 @@ describe("sports provider player/team mapping", () => {
       { id: "identity-2", sleeperId: "p-2", canonicalName: "Mike Williams" },
     ])
 
-    const { resolveProviderPlayerIdentity } = await import("@/lib/sports-os/PlayerGameLogImportService")
+    const { resolveProviderPlayerIdentity } = await import("@/lib/sports-reporting/PlayerGameLogImportService")
     const result = await resolveProviderPlayerIdentity({
       sport: "NFL",
       provider: "sleeper",
@@ -79,7 +79,7 @@ describe("sports provider player/team mapping", () => {
       name: "Kansas City Chiefs",
     })
 
-    const { resolveProviderTeamIdentity } = await import("@/lib/sports-os/PlayerGameLogImportService")
+    const { resolveProviderTeamIdentity } = await import("@/lib/sports-reporting/PlayerGameLogImportService")
     await expect(
       resolveProviderTeamIdentity({
         sport: "NFL",

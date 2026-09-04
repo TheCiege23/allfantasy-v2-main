@@ -11,7 +11,7 @@
  * 6. Non-WC sports still use the full 9-column missing data list for AI grounding
  */
 import { describe, it, expect } from "vitest"
-import { buildSportsOperatingSystemAudit } from "@/lib/sports-os/SportsOperatingSystemReadinessService"
+import { buildSportsOperatingSystemAudit } from "@/lib/sports-reporting/SportsOperatingSystemReadinessService"
 import type { SportImportMatrixRow } from "@/lib/admin-dashboard/SportImportMatrixService"
 import type { LeagueFormatDefinition } from "@/lib/league/format-engine"
 

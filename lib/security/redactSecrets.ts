@@ -6,7 +6,7 @@
  * of, and none covering the others' cases:
  *
  *   lib/production-health/syncJobRunTelemetry.ts   sk- only
- *   lib/sports-os/PlayerGameLogImportService.ts    sk- only
+ *   lib/sports-reporting/PlayerGameLogImportService.ts    sk- only
  *   lib/sports-live-scores-service.ts              RSC_token= only
  *   app/api/brackets/playoffs/.../refresh-schedule Bearer + key= only
  *

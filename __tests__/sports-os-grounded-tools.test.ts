@@ -3,8 +3,8 @@ import {
   analyzeGroundedTrade,
   buildGroundedCommissionerReport,
   recommendGroundedDraftPicks,
-} from "@/lib/sports-os/GroundedSportsOsTools"
-import type { FantasyValueSnapshot } from "@/lib/sports-os/FantasyValueSnapshotService"
+} from "@/lib/sports-reporting/GroundedSportsOsTools"
+import type { FantasyValueSnapshot } from "@/lib/sports-reporting/FantasyValueSnapshotService"
 
 function snapshot(overrides: Partial<FantasyValueSnapshot> & { playerName: string }): FantasyValueSnapshot {
   return {

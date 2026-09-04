@@ -1,5 +1,5 @@
 import { Lightbulb, Users, Briefcase, FileText, Zap, Settings, Compass, HelpCircle, type LucideIcon } from 'lucide-react'
-import type { CommissionerSearchResultCategory } from '@/lib/commissioner-os/contracts'
+import type { CommissionerSearchResultCategory } from '@/lib/commissioner-ui/contracts'
 
 /** Same icon choices as CommissionerSidebar's per-module MODULE_ICONS, so a search result and its source module always match visually. `page` has no single owning module, so it gets its own (Compass). */
 export const SEARCH_CATEGORY_ICONS: Record<CommissionerSearchResultCategory, LucideIcon> = {

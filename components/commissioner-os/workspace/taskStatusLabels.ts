@@ -1,4 +1,4 @@
-import type { CommissionerTaskStatus } from '@/lib/commissioner-os/workspace/decision-os-client'
+import type { CommissionerTaskStatus } from '@/lib/commissioner-ui/workspace/decision-os-client'
 
 /** Workflow-neutral labels — status is never severity-colored, the same rule Recommendations Center's STATUS_LABELS follows. */
 export const TASK_STATUS_LABELS: Record<CommissionerTaskStatus, string> = {

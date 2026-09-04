@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { runDraftWarRoomRecommendation, type DraftWarRoomInput, type WarRoomPlayer } from '@/lib/ai/aiDraftHelper'
 import { assertLeagueAccess } from '@/lib/ai/league-settings-ai/access'
 import { getDraftEligiblePositionsFromPayload, getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
-import { getDraftAdvisorContext } from '@/lib/sports-os/DraftAdvisorContextService'
+import { getDraftAdvisorContext } from '@/lib/sports-reporting/DraftAdvisorContextService'
 
 export const dynamic = 'force-dynamic'
 

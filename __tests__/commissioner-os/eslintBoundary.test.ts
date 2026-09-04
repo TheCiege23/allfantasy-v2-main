@@ -121,7 +121,7 @@ describe('T-005 · the ESLint boundary actually fires', () => {
 
   it('does NOT flag Map/Set .delete()', async () => {
     // Ordinary JavaScript, and already present on this surface
-    // (lib/commissioner-os/platform/eventBus.ts calls set.delete(listener)).
+    // (lib/commissioner-ui/platform/eventBus.ts calls set.delete(listener)).
     // A property-only selector would flag it, the rule would be called noisy,
     // and a noisy rule gets removed — which is the real failure mode.
     const messages = await lint('set-delete-allowed.ts')
@@ -161,9 +161,9 @@ describe('T-005 · the migration debt is bounded and countable', () => {
     // are listed individually in .eslintrc.json rather than by directory, so a
     // FOURTH cannot appear without editing that file and explaining itself.
     const exempt = [
-      'lib/commissioner-os/decision-os-client/live.ts',
-      'lib/commissioner-os/managers/decision-os-client/live.ts',
-      'lib/commissioner-os/resolveActiveLeagueId.ts',
+      'lib/commissioner-ui/decision-os-client/live.ts',
+      'lib/commissioner-ui/managers/decision-os-client/live.ts',
+      'lib/commissioner-ui/resolveActiveLeagueId.ts',
     ]
     const results = await eslint.lintFiles(exempt.map((f) => path.resolve(process.cwd(), f)))
     const flagged = results
@@ -175,7 +175,7 @@ describe('T-005 · the migration debt is bounded and countable', () => {
   it('the rest of the surface is already clean', async () => {
     // If this goes red, someone added a fourth importer. That is the ratchet.
     const results = await eslint.lintFiles([
-      path.resolve(process.cwd(), 'lib/commissioner-os'),
+      path.resolve(process.cwd(), 'lib/commissioner-ui'),
       path.resolve(process.cwd(), 'app/commissioner-os'),
     ])
     const flagged = results

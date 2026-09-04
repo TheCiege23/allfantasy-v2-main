@@ -1,7 +1,7 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { MissionControlView } from '@/components/commissioner-os/mission-control/MissionControlView'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
-import { formatRelativeTime } from '@/lib/commissioner-os/utils/time'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
+import { formatRelativeTime } from '@/lib/commissioner-ui/utils/time'
 
 const LIVE_STATUSES = new Set(['new', 'viewed', 'in_progress', 'deferred', 'automated'])
 const RECENT_ACTIVITY_PREVIEW_COUNT = 5

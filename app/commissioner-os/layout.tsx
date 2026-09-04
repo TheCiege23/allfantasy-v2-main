@@ -5,7 +5,7 @@ import { CommissionerHeader } from '@/components/commissioner-os/shell/Commissio
 import { CommissionerBreadcrumbs } from '@/components/commissioner-os/shell/CommissionerBreadcrumbs'
 import { CommissionerSearchPalette } from '@/components/commissioner-os/search/CommissionerSearchPalette'
 import { NotificationPanel } from '@/components/commissioner-os/notifications/NotificationPanel'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
 export const metadata: Metadata = {
   title: 'Commissioner OS | AllFantasy',

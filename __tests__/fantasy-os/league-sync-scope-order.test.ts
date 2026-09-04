@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { LEAGUE_SYNC_SCOPES } from '@/lib/fantasy-os/sync/collector/types'
+import { LEAGUE_SYNC_SCOPES } from '@/lib/import-os/collector/types'
 
 /**
  * Pins the ORDER of LEAGUE_SYNC_SCOPES, not just its membership.

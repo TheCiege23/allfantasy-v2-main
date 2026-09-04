@@ -26,7 +26,7 @@ import { buildRosterIdMap, rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
  * ⚠ THIS DOES NOT MEAN MFL CAN WRITE MATCHUPS NOW. `MflAdapter` still stores
  * `source_team_id: team.franchiseId` verbatim, and the DECISION about what a real MFL writer
  * should store (padded, unpadded, or a schema change) is still open — see the note in
- * lib/fantasy-os/sync/collector/index.ts. Only one of that note's three costly options has
+ * lib/import-os/collector/index.ts. Only one of that note's three costly options has
  * actually been done; a second (the schema change) is now PREPARED but NOT APPLIED — see
  * prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text/README.md entry.
  * This file's job is now split in two: prove the read-side fix really works, and keep
@@ -138,7 +138,7 @@ describe('the absence of an MFL matchup writer is recorded, not accidental', () 
    * note above it is then wrong and must be updated in the same change. That is the point:
    * the constraint and its explanation move together, or neither moves.
    */
-  const index = read('lib/fantasy-os/sync/collector/index.ts')
+  const index = read('lib/import-os/collector/index.ts')
 
   it('exports the writers whose ids are safe', () => {
     expect(index).toContain('runExternalMatchupParity')

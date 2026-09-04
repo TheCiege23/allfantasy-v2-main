@@ -10,7 +10,7 @@ import {
   resolveDecisionOSAuthHeaders,
   callDecisionOS,
   type DecisionOSTransportConfig,
-} from "@/lib/commissioner-os/adapter/transport"
+} from "@/lib/commissioner-ui/adapter/transport"
 
 const ORIGINAL_ENV = { ...process.env }
 

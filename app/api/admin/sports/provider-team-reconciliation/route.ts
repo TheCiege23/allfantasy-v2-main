@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdminOrBearer } from "@/lib/adminAuth"
-import { getProviderTeamReconciliationReport } from "@/lib/sports-os/ProviderTeamReconciliationService"
+import { getProviderTeamReconciliationReport } from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 
 export const dynamic = "force-dynamic"
 

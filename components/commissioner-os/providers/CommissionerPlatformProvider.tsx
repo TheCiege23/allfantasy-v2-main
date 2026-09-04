@@ -1,9 +1,9 @@
 'use client'
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import { commissionerEventBus } from '@/lib/commissioner-os/platform/eventBus'
-import type { CommissionerPlatformEvent } from '@/lib/commissioner-os/platform/events'
-import type { CommissionerPlatformServiceId } from '@/lib/commissioner-os/platform/serviceRegistry'
+import { commissionerEventBus } from '@/lib/commissioner-ui/platform/eventBus'
+import type { CommissionerPlatformEvent } from '@/lib/commissioner-ui/platform/events'
+import type { CommissionerPlatformServiceId } from '@/lib/commissioner-ui/platform/serviceRegistry'
 
 interface CommissionerPlatformContextValue {
   /** At most one platform service overlay is open at a time. */

@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { LeagueHealthView } from '@/components/commissioner-os/league-health/LeagueHealthView'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
 export default async function LeagueHealthPage() {
   const adapter = await getDecisionOSAdapter()

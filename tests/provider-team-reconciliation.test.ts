@@ -32,7 +32,7 @@ import type {
   ProviderTeamReconciliationReport,
   ProviderTeamReconciliationSummary,
   TeamMappingStatus,
-} from "@/lib/sports-os/ProviderTeamReconciliationService"
+} from "@/lib/sports-reporting/ProviderTeamReconciliationService"
 
 // ─── Test harness ─────────────────────────────────────────────────────────────
 //

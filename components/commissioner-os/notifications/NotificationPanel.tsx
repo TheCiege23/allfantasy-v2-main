@@ -10,8 +10,8 @@ import { useNotificationReadState } from './useNotificationReadState'
 import { useNotificationPreferences } from './useNotificationPreferences'
 import { NotificationRow } from './NotificationRow'
 import { getModuleLabel, NOTIFICATION_SOURCE_ICONS } from './notificationLabels'
-import type { CommissionerNotificationPayload } from '@/lib/commissioner-os/contracts'
-import type { CommissionerModuleId } from '@/lib/commissioner-os/navigation/moduleNav'
+import type { CommissionerNotificationPayload } from '@/lib/commissioner-ui/contracts'
+import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 
 export interface NotificationPanelProps {
   notifications: CommissionerNotificationPayload[]

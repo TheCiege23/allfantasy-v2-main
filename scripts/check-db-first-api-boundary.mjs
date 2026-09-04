@@ -59,7 +59,7 @@ const DATA_API_HOST_PATTERNS = [
   //       and getWeekBoard are reached from app/api/league/live-roster and
   //       app/api/players/profile, both REQUEST PATHS, so a Sleeper outage or rate
   //       limit lands on a user waiting for a page.
-  //   lib/sports-os/PlayerGameLogImportService.ts — admin-only, reached from
+  //   lib/sports-reporting/PlayerGameLogImportService.ts — admin-only, reached from
   //       app/api/admin/sports/{game-logs,sync}. Same shape as lib/api-football.ts,
   //       which is allowlisted for exactly that reason.
   //   lib/player-game-stats/importPlayerGameStats.ts and lib/redraft/teamDefenseProvider.ts

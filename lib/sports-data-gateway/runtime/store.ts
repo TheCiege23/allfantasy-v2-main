@@ -7,7 +7,7 @@ import 'server-only'
  * fails closed. Invariants preserved: partial/failed scope never certifies; freshness advances only after a
  * completed run; reruns create no duplicate records/events (deterministic keys + ON CONFLICT).
  */
-import type { SyncLock, SyncStore, RunResult } from '@/lib/fantasy-os/sync/runner'
+import type { SyncLock, SyncStore, RunResult } from '@/lib/import-os/runner'
 import type { SnapshotDraft } from './snapshot'
 import { canCertify, countSnapshot } from './snapshot'
 import { diffSnapshot, type DiffEvent } from './events'

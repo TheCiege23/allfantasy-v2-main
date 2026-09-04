@@ -1,7 +1,7 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { AutomationCenterView } from '@/components/commissioner-os/automations/AutomationCenterView'
-import { getDecisionOSAdapter } from '@/lib/commissioner-os/adapter'
-import type { AutomationExecutionEntry } from '@/lib/commissioner-os/adapter'
+import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
+import type { AutomationExecutionEntry } from '@/lib/commissioner-ui/adapter'
 
 export default async function AutomationCenterPage() {
   const adapter = await getDecisionOSAdapter()

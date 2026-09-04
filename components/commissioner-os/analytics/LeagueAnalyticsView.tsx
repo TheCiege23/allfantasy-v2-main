@@ -6,21 +6,21 @@ import { Button } from '@/components/ui/button'
 import { InfoCard } from '@/components/commissioner-os/cards'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ErrorState } from '@/components/commissioner-os/states'
-import { downloadAnalyticsCsv } from '@/lib/commissioner-os/analytics/exportCsv'
+import { downloadAnalyticsCsv } from '@/lib/commissioner-ui/analytics/exportCsv'
 import {
   TIME_RANGES,
   applyTimeRange,
   describeRange,
   type AnalyticsTimeRange,
-} from '@/lib/commissioner-os/analytics/timeRange'
-import type { CommissionerDataMode } from '@/lib/commissioner-os/demo-mode/constants'
+} from '@/lib/commissioner-ui/analytics/timeRange'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type {
   LeagueAnalyticsSnapshot,
   LeagueHealthWeek,
   ManagerActivityEntry,
   TeamPointsEntry,
   TransactionWeek,
-} from '@/lib/commissioner-os/analytics/decision-os-client/types'
+} from '@/lib/commissioner-ui/analytics/decision-os-client/types'
 import './analytics-sheet.css'
 
 /**
@@ -377,7 +377,7 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
 
   /*
    * ONE filtered object. It is what renders and what exports — see
-   * lib/commissioner-os/analytics/timeRange.ts.
+   * lib/commissioner-ui/analytics/timeRange.ts.
    */
   const view = useMemo(() => (snapshot ? applyTimeRange(snapshot, range) : null), [snapshot, range])
 

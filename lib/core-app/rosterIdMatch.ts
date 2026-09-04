@@ -4,7 +4,7 @@
  * same id loses its leading zeros the moment it is written there — "0001"
  * becomes 1. Every reader that later does `String(rosterId)` to find a team
  * back by its `externalId` gets "1", which never matches the stored "0001"
- * again. See `lib/fantasy-os/sync/collector/index.ts` for the fuller writeup;
+ * again. See `lib/import-os/collector/index.ts` for the fuller writeup;
  * this file is the one place the comparison is done correctly, so it cannot
  * drift between the several call sites that each need it.
  *

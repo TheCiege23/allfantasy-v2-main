@@ -33,13 +33,13 @@ import {
   SyncCredentialsUnavailableError,
   SyncLeagueGoneError,
   MAX_USER_CANDIDATES,
-} from '@/lib/fantasy-os/sync/collector/normalizedLoader'
+} from '@/lib/import-os/collector/normalizedLoader'
 import {
   providerNeedsCredential,
   providerNeedsUser,
   SYNCABLE_PROVIDERS,
   type LeagueSyncConnection,
-} from '@/lib/fantasy-os/sync/collector/types'
+} from '@/lib/import-os/collector/types'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import type { ImportedLeagueNormalizationInput } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 
@@ -371,7 +371,7 @@ describe('runDueLeagues accounting', () => {
    * shape this codebase keeps paying for.
    */
   it('counts a credential skip as skipped, never as executed or completed', async () => {
-    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    const { runDueLeagues } = await import('@/lib/import-os/collector/runDueSleeperLeagues')
 
     // One importing user exists, but no leagueAuth row — so the pre-flight declines.
     h.prisma.league.findMany.mockResolvedValue([{ userId: 'u1' }] as never)
@@ -401,7 +401,7 @@ describe('runDueLeagues accounting', () => {
   })
 
   it('reports what it enumerated per provider', async () => {
-    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    const { runDueLeagues } = await import('@/lib/import-os/collector/runDueSleeperLeagues')
     h.prisma.league.findMany.mockResolvedValue([] as never)
 
     const summary = await runDueLeagues({
@@ -428,7 +428,7 @@ describe('a skipped connection is recorded, not silent', () => {
    * the time anyone investigated a stale league the explanation was gone.
    */
   it('writes a durable row naming the provider and the reason', async () => {
-    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    const { runDueLeagues } = await import('@/lib/import-os/collector/runDueSleeperLeagues')
     h.prisma.league.findMany.mockResolvedValue([{ userId: 'u1' }] as never)
     h.prisma.leagueAuth.findMany.mockResolvedValue([] as never)
     h.prisma.leagueSyncState.upsert.mockClear()
@@ -464,7 +464,7 @@ describe('a skipped connection is recorded, not silent', () => {
    * no provider call — so a new credential is picked up on the very next tick.
    */
   it('does not claim a run was attempted', async () => {
-    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    const { runDueLeagues } = await import('@/lib/import-os/collector/runDueSleeperLeagues')
     h.prisma.league.findMany.mockResolvedValue([{ userId: 'u1' }] as never)
     h.prisma.leagueAuth.findMany.mockResolvedValue([] as never)
     h.prisma.leagueSyncState.upsert.mockClear()
@@ -494,7 +494,7 @@ describe('a skipped connection is recorded, not silent', () => {
 
   /* A keyless provider never reaches the pre-flight, so it must never be recorded as skipped. */
   it('does not record a skip for a provider that needs no credential', async () => {
-    const { runDueLeagues } = await import('@/lib/fantasy-os/sync/collector/runDueSleeperLeagues')
+    const { runDueLeagues } = await import('@/lib/import-os/collector/runDueSleeperLeagues')
     h.prisma.leagueSyncState.upsert.mockClear()
 
     await runDueLeagues({

@@ -9,7 +9,7 @@ import { readLeagueTrajectories, summariseTrajectory, type TrajectorySummary } f
 /**
  * Psychology OS — maintained fact state for manager behavioural profiles (R4b).
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * ── 🛑 THE ENGINE WAS NEVER THE MISSING PIECE. THE SEAM WAS. ────────────────────────────────
  * `lib/psychological-profiles/` is 16 modules covering all seven sports, with migrated tables,

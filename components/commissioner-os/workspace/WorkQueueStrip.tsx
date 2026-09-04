@@ -1,7 +1,7 @@
 'use client'
 
-import type { WorkspaceQueueDefinition } from '@/lib/commissioner-os/workspace/queues'
-import type { CommissionerTask } from '@/lib/commissioner-os/workspace/decision-os-client'
+import type { WorkspaceQueueDefinition } from '@/lib/commissioner-ui/workspace/queues'
+import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
 
 export interface WorkQueueStripProps {
   queues: WorkspaceQueueDefinition[]

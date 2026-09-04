@@ -20,7 +20,7 @@ import {
   COMMISSIONER_SECONDARY_NAV_ITEMS,
   type CommissionerModuleId,
   type CommissionerModuleNavItem,
-} from '@/lib/commissioner-os/navigation/moduleNav'
+} from '@/lib/commissioner-ui/navigation/moduleNav'
 import { useCommissionerNavigation } from '@/components/commissioner-os/providers/CommissionerNavigationProvider'
 import { useCommissionerLayout } from '@/components/commissioner-os/providers/CommissionerLayoutProvider'
 import { useCommissionerFeatureFlags } from '@/components/commissioner-os/providers/CommissionerFeatureFlagProvider'

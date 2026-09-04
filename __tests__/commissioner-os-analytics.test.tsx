@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { LeagueAnalyticsView } from "@/components/commissioner-os/analytics/LeagueAnalyticsView"
-import { stubAnalyticsClient } from "@/lib/commissioner-os/analytics/decision-os-client/stub"
-import { demoAnalyticsClient } from "@/lib/commissioner-os/analytics/decision-os-client/demo"
-import { liveAnalyticsClient } from "@/lib/commissioner-os/analytics/decision-os-client/live"
-import { buildAnalyticsCsv } from "@/lib/commissioner-os/analytics/exportCsv"
-import type { LeagueAnalyticsSnapshot } from "@/lib/commissioner-os/analytics/decision-os-client"
+import { stubAnalyticsClient } from "@/lib/commissioner-ui/analytics/decision-os-client/stub"
+import { demoAnalyticsClient } from "@/lib/commissioner-ui/analytics/decision-os-client/demo"
+import { liveAnalyticsClient } from "@/lib/commissioner-ui/analytics/decision-os-client/live"
+import { buildAnalyticsCsv } from "@/lib/commissioner-ui/analytics/exportCsv"
+import type { LeagueAnalyticsSnapshot } from "@/lib/commissioner-ui/analytics/decision-os-client"
 
 describe("commissioner-os analytics — client parity", () => {
   it("stub, demo, and live all satisfy the same method surface", () => {

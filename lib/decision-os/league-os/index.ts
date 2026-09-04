@@ -9,7 +9,7 @@ import { MINUTES } from '../domain-os/types'
  * League OS — the canonical league ruleset, held briefly so one page load does not pay for it
  * repeatedly.
  *
- * ⚠ FEEDS Decision OS. `lib/commissioner-os/*` points the other way.
+ * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * WHY THIS EXISTS SEPARATELY FROM DRAFT OS, WHICH ALREADY DECLARES THE SAME FACT.
  * `draft-os` was built around `resolveNflRedraftDraftRuntime` and calls this fact "draft rules".

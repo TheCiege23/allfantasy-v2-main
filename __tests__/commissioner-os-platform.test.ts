@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import { CommissionerEventBus, commissionerEventBus } from "@/lib/commissioner-os/platform/eventBus"
-import type { CommissionerPlatformEvent } from "@/lib/commissioner-os/platform/events"
+import { CommissionerEventBus, commissionerEventBus } from "@/lib/commissioner-ui/platform/eventBus"
+import type { CommissionerPlatformEvent } from "@/lib/commissioner-ui/platform/events"
 import {
   COMMISSIONER_PLATFORM_SERVICE_CONTRACTS,
   getCommissionerPlatformService,
   type CommissionerPlatformServiceId,
-} from "@/lib/commissioner-os/platform/serviceRegistry"
+} from "@/lib/commissioner-ui/platform/serviceRegistry"
 
 describe("commissioner-os platform — event bus", () => {
   it("delivers a published event to a subscribed listener", () => {

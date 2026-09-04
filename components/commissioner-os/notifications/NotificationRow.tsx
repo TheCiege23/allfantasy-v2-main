@@ -1,7 +1,7 @@
 import NextLink from 'next/link'
 import { NOTIFICATION_SEVERITY_LABELS, NOTIFICATION_SOURCE_ICONS, getModuleLabel, getNotificationSeverityStyle } from './notificationLabels'
-import { formatRelativeTime } from '@/lib/commissioner-os/utils/time'
-import type { CommissionerNotificationPayload } from '@/lib/commissioner-os/contracts'
+import { formatRelativeTime } from '@/lib/commissioner-ui/utils/time'
+import type { CommissionerNotificationPayload } from '@/lib/commissioner-ui/contracts'
 
 export interface NotificationRowProps {
   notification: CommissionerNotificationPayload
