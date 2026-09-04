@@ -56,10 +56,15 @@ export async function googlePlayerStatusSearch(
     for (const it of items) {
       const blob = `${it.snippet ?? ''} ${it.title ?? ''}`
       if (!confirm.test(blob)) continue
+      /*
+       * Acronyms are matched case-SENSITIVELY with word boundaries. `/IR/i` over a
+       * search snippet matches "their" / "first" / "confirmed", which labelled
+       * healthy players as being on injured reserve. Same fix as NewsApiAdapter.
+       */
       let status = 'OUT'
       if (/suspended/i.test(blob)) status = 'SUSPENDED'
-      else if (/IR|injured reserve/i.test(blob)) status = 'IR'
-      else if (/IL|injured list/i.test(blob)) status = 'IL'
+      else if (/\bIR\b/.test(blob) || /injured reserve/i.test(blob)) status = 'IR'
+      else if (/\bIL\b/.test(blob) || /injured list/i.test(blob)) status = 'IL'
       return {
         status,
         confidence: 0.7,

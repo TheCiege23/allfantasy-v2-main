@@ -221,8 +221,17 @@ function parseMatchups(raw: unknown): LegacyMatchup[] {
 }
 
 /**
- * Split a team's players into the lineup and the bench, using Fantrax's own
- * `status`.
+ * Fantrax statuses that mean injured reserve rather than "on the bench".
+ *
+ * Deliberately narrow. Everything else non-ACTIVE is bench, so a status we have
+ * not seen is filed as bench — the direction that under-claims rather than
+ * inventing an injury.
+ */
+const FANTRAX_RESERVE_STATUSES = new Set(['INJURED_RESERVE', 'INJURED RESERVE', 'IR', 'IL', 'INJURED'])
+
+/**
+ * Split a team's players into the lineup, the bench and injured reserve, using
+ * Fantrax's own `status`.
  *
  * ⚠ NO STATUS MEANS NO CLAIM. A CSV-era snapshot carries no status at all, and
  * guessing — first N are starters, say — would put players in a lineup their
@@ -230,22 +239,33 @@ function parseMatchups(raw: unknown): LegacyMatchup[] {
  * caller keeps the previous "everything is bench" shape, which is honest about
  * not knowing rather than confidently wrong.
  *
- * ⚠ ANYTHING NOT `ACTIVE` IS BENCH, not just `RESERVE`. Fantrax also emits
- * injured-reserve and minor-league states; treating only the literal string
- * RESERVE as bench would silently promote those into the starting lineup.
+ * ⚠ ANYTHING NOT `ACTIVE` IS OFF THE FIELD, not just `RESERVE`. Fantrax also
+ * emits injured-reserve and minor-league states; treating only the literal
+ * string RESERVE as non-starting would silently promote those into the lineup.
+ *
+ * 🛑 BUT BENCH IS NOT `reserve_ids`. This used to return one non-ACTIVE list
+ * that the caller passed straight to `reservePlayerIds`, which every surface
+ * renders as "Injured Reserve" — so a Fantrax manager's whole bench was reported
+ * as hurt. Measured on production 2026-09-04: 29 of 39 players on the one
+ * imported Fantrax roster were filed as reserve. The two lists are separate now,
+ * and `bench` is the one that gets derived rather than persisted.
  */
-export function splitLineup(players: LegacyRosterPlayer[]): { starters: string[]; reserve: string[] } | null {
+export function splitLineup(
+  players: LegacyRosterPlayer[]
+): { starters: string[]; bench: string[]; reserve: string[] } | null {
   const starters: string[] = []
+  const bench: string[] = []
   const reserve: string[] = []
   for (const p of players) {
     const id = asString(p.fantraxId)
     if (!id) continue
     const status = asString(p.status).trim().toUpperCase()
     if (status === 'ACTIVE') starters.push(id)
-    else reserve.push(id)
+    else if (FANTRAX_RESERVE_STATUSES.has(status)) reserve.push(id)
+    else bench.push(id)
   }
   if (starters.length === 0) return null
-  return { starters, reserve }
+  return { starters, bench, reserve }
 }
 
 function parseRoster(raw: unknown): LegacyRosterPlayer[] {
@@ -626,7 +646,13 @@ export async function fetchFantraxLeagueForImport(
        * this line never filled it.
        */
       starterPlayerIds: lineup?.starters ?? [],
-      reservePlayerIds: lineup?.reserve ?? rosterPlayerIds,
+      /*
+       * 🛑 THE FALLBACK WAS `rosterPlayerIds` — THE WHOLE ROSTER, ONTO IR. When
+       * the split is refused (no statuses at all) the honest shape is "everything
+       * is bench", and bench is what an empty starters/reserve/taxi set derives
+       * to. Filing 39 healthy players as injured is not a safe default.
+       */
+      reservePlayerIds: lineup?.reserve ?? [],
       playerMap: teamPlayerMap,
     }
   })

@@ -83,9 +83,17 @@ export async function fetchBleacherReportInjuries(sport: string, gameDate: strin
       if (!INJURY_RE.test(text)) continue
       const playerName = guessPlayerName(it.title)
       if (!playerName) continue
+      /*
+       * 🛑 `/ir\b/i` HAS A TRAILING BOUNDARY BUT NO LEADING ONE, so it matches the
+       * END of ordinary words — "their", "air", "chair", "Blair" — and filed this
+       * item's guessed player onto injured reserve. `aggregatePlayerStatuses`
+       * writes the result straight onto `SportsPlayer.status`, so the cost is a
+       * healthy player shown as injured on every surface that reads it.
+       * Both boundaries, and the acronym is uppercase.
+       */
       let status = 'OUT'
       if (/suspended/i.test(text)) status = 'SUSPENDED'
-      else if (/ir\b|injured reserve/i.test(text)) status = 'IR'
+      else if (/\bIR\b/.test(text) || /injured reserve/i.test(text)) status = 'IR'
       else if (/scratch/i.test(text)) status = 'SCRATCHED'
 
       out.push({

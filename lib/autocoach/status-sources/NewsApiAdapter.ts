@@ -42,10 +42,20 @@ export async function fetchInjuryNewsArticles(sport: string, gameDate: string): 
       const playerName = candidates[0] ?? ''
       if (!playerName || playerName.length < 5) continue
 
+      /*
+       * 🛑 THE ACRONYMS NEED WORD BOUNDARIES AND MUST NOT BE CASE-INSENSITIVE.
+       * `/IR|injured reserve/i` matches the letter pair "ir" ANYWHERE in the
+       * headline — "their", "first", "confirmed", "Sirianni" — so essentially
+       * every article that cleared INJURY_RE above was classified IR. `/IL/i`
+       * has the same problem ("will", "questionable", "available").
+       * `aggregatePlayerStatuses` writes this straight onto `SportsPlayer.status`,
+       * so the cost is a healthy player shown on injured reserve league-wide.
+       * Uppercase + \b is how `lib/workers/x-news-ingestion.ts` already spells it.
+       */
       let status = 'OUT'
-      if (/IR|injured reserve/i.test(combined)) status = 'IR'
+      if (/\bIR\b/.test(combined) || /injured reserve/i.test(combined)) status = 'IR'
       else if (/suspended/i.test(combined)) status = 'SUSPENDED'
-      else if (/IL|injured list|10-day|60-day/i.test(combined)) status = 'IL'
+      else if (/\bIL\b/.test(combined) || /injured list|10-day|60-day/i.test(combined)) status = 'IL'
 
       const confidence = majorOutlet(sourceName) ? 0.85 : 0.6
       out.push({

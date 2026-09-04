@@ -19,7 +19,33 @@ import type {
 const YAHOO_API_BASE = 'https://fantasysports.yahooapis.com/fantasy/v2' // db-first-exception: ingestion service endpoint
 const YAHOO_LEAGUE_LIST_URL =
   `${YAHOO_API_BASE}/users;use_login=1/games;game_keys=nfl,nba,mlb,nhl/leagues?format=json`
-const YAHOO_RESERVE_POSITIONS = new Set(['BN', 'BE', 'IR', 'IL', 'NA', 'DL'])
+/**
+ * Yahoo's `selected_position` slots that are not a starting slot.
+ *
+ * 🛑 THE BENCH AND INJURED RESERVE ARE DIFFERENT SECTIONS. `reserve_ids` renders
+ * as "Injured Reserve" on every surface and the bench is derived as
+ * `players − starters − reserve − taxi`, so filing `BN` here empties the bench and
+ * reports healthy players as hurt. Same defect ESPN carried; see
+ * `EspnLeagueFetchService`'s slot constants for the measurement.
+ *
+ * `NON_STARTING` stays the union because that is the question `is_starting` falls
+ * back to — "is this a starting slot?" — and splitting it would change who counts
+ * as a starter, which is not what is being fixed here.
+ */
+const YAHOO_BENCH_POSITIONS = new Set(['BN', 'BE'])
+const YAHOO_IR_POSITIONS = new Set(['IR', 'IL', 'NA', 'DL'])
+const YAHOO_NON_STARTING_POSITIONS = new Set([...YAHOO_BENCH_POSITIONS, ...YAHOO_IR_POSITIONS])
+
+/**
+ * True for Yahoo's injured-reserve family, including the suffixed spellings
+ * (`IR+`, `IR-R`, `IL10`, `IL60`) that a bare set membership test misses.
+ */
+function isYahooReserveSlot(slot: string): boolean {
+  if (!slot) return false
+  const s = slot.toUpperCase()
+  if (YAHOO_IR_POSITIONS.has(s)) return true
+  return s.startsWith('IR') || s.startsWith('IL')
+}
 
 type YahooApiFetchContext = {
   userId: string
@@ -734,14 +760,24 @@ function parseYahooRoster(rosterData: any): {
     const playerId = String(player.player_key ?? player.player_id ?? '')
     if (!playerId) continue
 
+    /*
+     * ⚠ BOTH OF THESE ARRIVE AS AN ARRAY OF FRAGMENTS, NOT AS AN OBJECT. Yahoo
+     * sends `selected_position: [{ coverage_type }, { position: 'BN' }]`, and a
+     * direct `selectedPosition?.position` on an array is `undefined` — so the slot
+     * read as empty for every player, `isStarting` fell to its `false` branch, and
+     * the whole roster came through as non-starting. `getYahooProperty` is the
+     * file's own array-tolerant accessor and already handles both shapes.
+     */
     const selectedPosition = getYahooProperty(player, 'selected_position')
     const startingStatus = getYahooProperty(player, 'starting_status')
-    const selectedSlot = typeof selectedPosition?.position === 'string' ? selectedPosition.position : ''
+    const selectedPositionValue = getYahooProperty(selectedPosition, 'position')
+    const startingStatusValue = getYahooProperty(startingStatus, 'is_starting')
+    const selectedSlot = typeof selectedPositionValue === 'string' ? selectedPositionValue : ''
     const isStarting =
-      startingStatus?.is_starting != null
-        ? parseBoolean(startingStatus.is_starting)
+      startingStatusValue != null
+        ? parseBoolean(startingStatusValue)
         : selectedSlot
-          ? !YAHOO_RESERVE_POSITIONS.has(selectedSlot.toUpperCase())
+          ? !YAHOO_NON_STARTING_POSITIONS.has(selectedSlot.toUpperCase())
           : false
 
     const fullName =
@@ -762,8 +798,13 @@ function parseYahooRoster(rosterData: any): {
           : 'N/A'
 
     playerIds.push(playerId)
-    if (isStarting) starterIds.push(playerId)
-    if (!isStarting || YAHOO_RESERVE_POSITIONS.has(selectedSlot.toUpperCase())) reserveIds.push(playerId)
+    /*
+     * Reserve is tested FIRST because Yahoo does not let an IR slot start; a row
+     * carrying both `is_starting` and an `IR` slot is an IR row. Anything left —
+     * the bench — is pushed to neither list and derived downstream.
+     */
+    if (isYahooReserveSlot(selectedSlot)) reserveIds.push(playerId)
+    else if (isStarting) starterIds.push(playerId)
     playerMap[playerId] = {
       name: fullName,
       position,
@@ -1248,3 +1289,6 @@ export async function fetchYahooWeeklyMatchupsForSync(
       .map(([week, matchups]) => ({ week, season: seasonYear, matchups })),
   }
 }
+
+/** Test seam for the roster split — see `parseEspnRosterEntriesForTest`. */
+export { parseYahooRoster as parseYahooRosterForTest }

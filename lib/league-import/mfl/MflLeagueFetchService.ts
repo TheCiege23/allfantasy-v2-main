@@ -45,7 +45,9 @@ type ParsedMflRoster = {
   franchiseId: string
   playerIds: string[]
   starterIds: string[]
+  /** Injured reserve ONLY — never the bench, never the taxi squad. */
   reserveIds: string[]
+  taxiIds: string[]
   lineupBreakdownAvailable: boolean
 }
 
@@ -518,6 +520,7 @@ function parseMflRosters(rostersRaw: any): ParsedMflRoster[] {
       const playerIds: string[] = []
       const starterIds: string[] = []
       const reserveIds: string[] = []
+      const taxiIds: string[] = []
       let lineupBreakdownAvailable = false
 
       for (const playerEntry of playerEntries) {
@@ -531,19 +534,34 @@ function parseMflRosters(rostersRaw: any): ParsedMflRoster[] {
             normalizedStatus.includes('starter') ||
             normalizedStatus.includes('starting') ||
             normalizedStatus.includes('lineup')
+          /*
+           * 🛑 BENCH, TAXI AND INJURED RESERVE WERE ONE BUCKET, AND THAT BUCKET IS
+           * RENDERED AS "INJURED RESERVE". `reserve_ids` is the IR section on every
+           * surface, and the bench is derived as `players − starters − reserve − taxi`
+           * — so `TAXI_SQUAD` and MFL's plain `ROSTER` bench both arrived as injuries.
+           * `myTeam.ts` already carries the note that a taxi rookie shown on IR sends a
+           * manager to fix something that is not broken; this is where it was coming
+           * from for MFL.
+           */
+          const isTaxi = normalizedStatus.includes('taxi')
           const isReserve =
-            normalizedStatus.includes('bench') ||
-            normalizedStatus.includes('reserve') ||
-            normalizedStatus.includes('taxi') ||
-            normalizedStatus === 'ir'
-
+            !isTaxi && (normalizedStatus.includes('reserve') || normalizedStatus.includes('injured') || normalizedStatus === 'ir')
           playerIds.push(playerId)
+          /*
+           * ⚠ ONLY A STARTER PROVES THE BREAKDOWN. `lineupBreakdownAvailable`
+           * drives the adapter's `currentRosters` coverage claim, whose own note
+           * says "starter versus bench status" — so a payload that classifies a
+           * taxi or IR player but names no starter has not exposed a lineup, and
+           * reporting `full` there is a claim we cannot back. Bench is derived
+           * downstream, so it is pushed nowhere.
+           */
           if (isStarter) {
             starterIds.push(playerId)
             lineupBreakdownAvailable = true
+          } else if (isTaxi) {
+            taxiIds.push(playerId)
           } else if (isReserve) {
             reserveIds.push(playerId)
-            lineupBreakdownAvailable = true
           }
           continue
         }
@@ -554,15 +572,21 @@ function parseMflRosters(rostersRaw: any): ParsedMflRoster[] {
         }
       }
 
-      if (!lineupBreakdownAvailable && reserveIds.length === 0) {
-        reserveIds.push(...playerIds)
-      }
+      /*
+       * 🛑 THE OLD FALLBACK PUT THE WHOLE ROSTER ON INJURED RESERVE. When MFL
+       * returned no per-player status, every id was pushed into `reserveIds` — the
+       * IR section — so a franchise we knew nothing about was rendered as an
+       * entirely injured squad. Not knowing the lineup is honestly "everyone is on
+       * the bench", which is what an empty starters/reserve/taxi set derives to,
+       * and `lineupBreakdownAvailable` already reports the gap to the caller.
+       */
 
       return {
         franchiseId,
         playerIds,
         starterIds,
         reserveIds,
+        taxiIds,
         lineupBreakdownAvailable,
       }
     })
@@ -794,6 +818,7 @@ function buildMflTeams(args: {
       playerIds: [],
       starterIds: [],
       reserveIds: [],
+      taxiIds: [],
       lineupBreakdownAvailable: false,
     }
     lineupBreakdownAvailable ||= roster.lineupBreakdownAvailable
@@ -825,6 +850,7 @@ function buildMflTeams(args: {
       rosterPlayerIds: roster.playerIds,
       starterPlayerIds: roster.starterIds,
       reservePlayerIds: roster.reserveIds,
+      taxiPlayerIds: roster.taxiIds,
       playerMap: teamPlayerMap,
     }
   })
@@ -1159,3 +1185,6 @@ export async function fetchMflLeagueForImport(
     futureDraftPicks: parseMflFutureDraftPicks(futurePicksRaw),
   }
 }
+
+/** Test seam for the roster split — see `parseEspnRosterEntriesForTest`. */
+export { parseMflRosters as parseMflRostersForTest }

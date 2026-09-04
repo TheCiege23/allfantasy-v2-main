@@ -114,7 +114,25 @@ export const ESPN_TEAM_ABBREVIATIONS: Record<number, string> = {
   34: 'HOU',
 }
 
-const ESPN_RESERVE_SLOTS = new Set([20, 21])
+/**
+ * ESPN's `lineupSlotId` for the bench and for injured reserve.
+ *
+ * 🛑 THESE WERE ONE SET AND EVERY BENCH PLAYER WAS IMPORTED ONTO IR. `reserve_ids`
+ * is rendered as the "Injured Reserve" section by every consumer — My Team, the
+ * league home roster card, the canonical lineup bridge, the trade context
+ * assemblers — and the bench is derived as `players − starters − reserve − taxi`.
+ * So folding slot 20 in here did not merely mislabel a section: it emptied the
+ * bench and told managers their healthy players were hurt. Measured on production
+ * 2026-09-04, before the fix: ESPN rosters averaged 4.2 of 9.3 players filed as
+ * reserve (45%), and every sampled roster had `lineup_sections.bench = []` with
+ * the whole bench sitting under `ir`. Sleeper, which reports real IR, averaged 0.4.
+ *
+ * Only slot 21 is injured reserve. The bench belongs to neither list — it is
+ * derived — so a bench player is filed as a starter here by NOT being pushed
+ * anywhere.
+ */
+const ESPN_BENCH_SLOT = 20
+const ESPN_IR_SLOT = 21
 
 type EspnAuthContext = {
   swid: string | null
@@ -174,6 +192,25 @@ function parseNumber(value: unknown, fallback: number | null = null): number | n
 function toPositiveInt(value: unknown, fallback: number): number {
   const parsed = parseNumber(value, null)
   return parsed != null && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+/**
+ * A `lineupSlotId`, which is legitimately ZERO.
+ *
+ * 🛑 SLOT 0 IS QB — `ESPN_SLOT_LABELS` at the top of THIS FILE says so. Reading
+ * it with `toPositiveInt(…, 20)` rejected the 0 as falsy and handed back the
+ * BENCH slot instead, so every ESPN league's starting quarterback was imported as
+ * a non-starter — and, while the bench and IR shared one set above, shown on
+ * injured reserve. The table was right and the parser three hundred lines below
+ * it never asked.
+ *
+ * Kept separate from `toPositiveInt` on purpose: that helper's callers here read
+ * `defaultPositionId` and `proTeamId`, where 0 genuinely means "unknown" and the
+ * fallback is what makes the lookup miss cleanly.
+ */
+function toSlotId(value: unknown, fallback: number): number {
+  const parsed = parseNumber(value, null)
+  return parsed != null && parsed >= 0 ? Math.floor(parsed) : fallback
 }
 
 function buildEspnLeagueUrl(leagueId: string, season: number, views: string[] = ESPN_IMPORT_VIEWS): string {
@@ -607,8 +644,9 @@ function parseEspnRosterEntries(entries: unknown): {
     const playerId = String(entry.playerId ?? player.id ?? playerPoolEntry.id ?? '').trim()
     if (!playerId) continue
 
-    const lineupSlotId = toPositiveInt(entry.lineupSlotId, 20)
-    const isReserve = ESPN_RESERVE_SLOTS.has(lineupSlotId)
+    const lineupSlotId = toSlotId(entry.lineupSlotId, ESPN_BENCH_SLOT)
+    const isReserve = lineupSlotId === ESPN_IR_SLOT
+    const isBench = lineupSlotId === ESPN_BENCH_SLOT
     const playerName =
       typeof player.fullName === 'string' && player.fullName.trim()
         ? player.fullName.trim()
@@ -617,9 +655,12 @@ function parseEspnRosterEntries(entries: unknown): {
     const teamId = toPositiveInt(player.proTeamId, 0)
 
     playerIds.push(playerId)
+    // Bench is deliberately in neither list: consumers derive it as
+    // `players − starters − reserve − taxi`, so pushing it anywhere here is what
+    // put it on IR.
     if (isReserve) {
       reserveIds.push(playerId)
-    } else {
+    } else if (!isBench) {
       starterIds.push(playerId)
     }
     playerMap[playerId] = {
@@ -1266,3 +1307,10 @@ export async function fetchEspnScheduleForSync(
     parseNumber(raw?.scoringPeriodId, null)
   return parseEspnSchedule(raw, season, currentWeek)
 }
+
+/**
+ * Test seam for the roster-slot split. Exported rather than made public because
+ * the slot classification is where the bench/IR conflation lived and it needs a
+ * regression test that does not require a live ESPN league.
+ */
+export { parseEspnRosterEntries as parseEspnRosterEntriesForTest }

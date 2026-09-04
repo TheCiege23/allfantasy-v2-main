@@ -38,7 +38,9 @@ export interface MflImportTeam {
   waiverPriority: number | null
   rosterPlayerIds: string[]
   starterPlayerIds: string[]
+  /** Injured reserve ONLY. The bench is derived downstream and the taxi squad has its own list. */
   reservePlayerIds: string[]
+  taxiPlayerIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
 }
 

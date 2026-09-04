@@ -119,6 +119,25 @@ export interface NormalizedRoster {
   points_against?: number
   player_ids: string[]
   starter_ids: string[]
+  /**
+   * INJURED RESERVE ONLY — never the bench.
+   *
+   * 🛑 THERE IS NO `bench_ids`, AND THAT IS WHY THIS KEEPS GOING WRONG. The bench
+   * is DERIVED everywhere it is shown — `players − starters − reserve − taxi`, in
+   * `SleeperLeagueCreationBootstrapService`, `lib/core-app/myTeam.ts` and
+   * `lib/data/league-home.ts` alike — and `reserve_ids` is rendered as the
+   * "Injured Reserve" section. So an adapter that files bench players here does
+   * not just mislabel a list: it empties the bench and tells a manager his
+   * healthy players are hurt.
+   *
+   * Every non-Sleeper adapter had done exactly that. Measured on production
+   * 2026-09-04: ESPN rosters averaged 4.2 of 9.3 players in `reserve` (45%) with
+   * `lineup_sections.bench` empty on every sampled roster, Fantrax 29 of 39;
+   * Sleeper, which reports real IR, averaged 0.4 of 22.3.
+   *
+   * A provider that cannot distinguish IR from the bench must send `[]` here, not
+   * its non-starters.
+   */
   reserve_ids?: string[]
   taxi_ids?: string[]
   faab_remaining?: number | null
