@@ -166,6 +166,72 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.39 ✅ R7 — THE FATIGUE BUDGET. THE REST OF R7 WAS ALREADY BUILT.
+
+**2026-09-03.** R7 is filed as *"one outbox, four transports, one fatigue budget enforced in the
+outbox"* and labelled **"largest build, last"**. Measured before writing anything, that label is
+wrong: three of those four things already exist and work.
+
+### What was already there
+
+| piece | state |
+|---|---|
+| the outbox | ✅ `notification_outbox` + `outboxRelay.ts` + a relay cron. **It sent a notification the day this was written** (`sent`, 14:44). |
+| four transports | ✅ email, in-app, push, sms all implemented (`sendPushToUser`, `sendSms`). ⚠ sms has no configured provider and fails loudly by design. |
+| push infrastructure | ✅ VAPID keys in Preview and Production, `/api/push/subscribe`, `useWebPushSubscription`, service-worker registration, and **four** surfaces that prompt for permission. |
+| **the fatigue budget** | ❌ **nothing anywhere.** |
+
+⚠ **`web_push_subscriptions` HOLDS 0 ROWS.** Push is built, wired and surfaced in four places and
+nobody has opted in. That is adoption, not engineering — but it means R7's first transport
+currently reaches no one, and a green suite must not be read as a delivered feature.
+
+### The budget is not the cooldown that already existed
+
+`ChimmyAlertEngine` has `suppressDuplicateAlerts`, `repeatCooldownMinutes` and a per-preference
+cooldown multiplier. That is a **cooldown** — *"do not tell me about the same thing twice within N
+minutes"*. A **budget** answers *"do not send me more than N a day, whatever they are about"*. Ten
+DISTINCT alerts pass every cooldown check and still arrive as ten notifications.
+
+⚠ **And that suppression covers only Chimmy alerts.** Waiver results, trade events and marketing
+enqueue straight into the outbox and never pass through it. The outbox is where every path
+converges, which is exactly why R7 specifies the budget there and not in a producer.
+
+### 🛑 The default is EXEMPT, and that is the whole safety argument
+
+The relay drains oldest-first. A naive per-user cap would let a morning marketing batch consume
+the day's budget so that the afternoon **"your waiver claim won"** is the row that gets dropped —
+the budget suppressing precisely the notification the user was waiting for, silently.
+
+So classification is from `eventType`, and **an unrecognised type is NEVER suppressed**. Only
+explicitly listed bulk types are eligible. A transactional event added next year is therefore safe
+on the day it lands, without anyone remembering this file exists.
+
+⚠ **`notification_outbox` HAS NO CATEGORY COLUMN**, and that constraint is recorded rather than
+worked around. `NotificationCategoryId` exists with eighteen categories, but the row carries only a
+free-string `eventType`; mapping them properly wants a column, and **a migration is not something
+this change may add**. Classifying in code with a fail-safe default is the honest version of that.
+
+### Two smaller decisions, both recorded in the code
+
+- **It widens `skipped`.** Everything else marked `skipped` can never be delivered as addressed; a
+  fatigue suppression could have been delivered yesterday. `retry` would be worse — it burns
+  `attemptCount` on a row that is not failing and eventually marks it `failed`, turning a
+  deliberate policy decision into a fake error. The reason lands in `lastError`, so the suppression
+  is auditable rather than silent.
+- **Checked before the channel switch**, so a user cannot be over budget on email and under it on
+  push for the same flood. And it **fails open**, like every other guard in this relay: a budget
+  that cannot measure has no business refusing.
+
+9 tests, mutation-verified both ways: making every event type eligible fails exactly the three
+fail-safe tests; failing closed instead of open fails exactly the one that pins it. 35/35 across
+the new suite plus the existing relay and push-opt-in suites.
+
+### What R7 still does not have
+
+The **cap value is a flood guard, not an editorial policy** — deliberately generous, and tightening
+it is a product decision. The eligible set is two marketing types; widening it is also a product
+decision, and doing so safely is what the fail-safe default buys.
+
 ## 0.38 ✅ R1.5 — BUILT, AFTER BEING SCOPED AS A DEFER AND OVERRULED
 
 **2026-09-03.** R1.5 says a C2C / devy-slot NFL dynasty league wants the devy board and the
@@ -3536,7 +3602,7 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R4b** Manager Psychology OS into the hub | **Done 2026-09-03 — all of R4b.1–R4b.7.** §0.25, §0.26, §0.27. |
 | ⬜ | **R5** Commissioner OS transport decision | Owner |
 | ⬜ | **R6** Rename pass | R1–R4 |
-| ⬜ | **R7** Proactive alerts | R1, R2 |
+| ✅ | **R7** Proactive alerts | **Fatigue budget done 2026-09-03; the rest was ALREADY BUILT.** Outbox, all four transports and the full push flow already existed — the outbox sent a notification that day. Only the budget was missing. Default is EXEMPT so a marketing flood can never drop a waiver result. ⚠ `web_push_subscriptions` is 0 rows: built and surfaced, zero adoption. §0.39 |
 
 ---
 
