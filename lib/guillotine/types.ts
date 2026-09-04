@@ -60,6 +60,17 @@ export interface GuillotineChopResult {
   choppedRosterIds: string[]
   tiebreakStepUsed: TiebreakStep | null
   reason?: string
+  /**
+   * What became of the denormalized `RedraftRoster.isEliminated` flag for this chop.
+   *
+   * 🛑 REPORTED RATHER THAN ASSUMED, BECAUSE IT USED TO FAIL SILENTLY. The engine chops in
+   * `Roster` id space; the flag consumers read lives on `RedraftRoster`, and the two are linked
+   * only by platform user id, which resolves for roughly 83-87% of production rows. `unresolved`
+   * names the chopped rosters whose team will still show as active in standings.
+   *
+   * Optional because the early-return paths chop nobody and have nothing to report.
+   */
+  eliminationFlagged?: { marked: string[]; unresolved: string[] }
 }
 
 /** Danger tier for one roster. */

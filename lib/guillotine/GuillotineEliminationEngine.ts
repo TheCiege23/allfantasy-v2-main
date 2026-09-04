@@ -31,6 +31,64 @@ export interface RunEliminationInput {
 /**
  * Run elimination for the given period: evaluate, tiebreak, mark chopped, release rosters, log and notify.
  */
+/**
+ * Set `RedraftRoster.isEliminated` for chopped rosters, resolving across the two roster id spaces.
+ *
+ * Returns what actually happened. `unresolved` is not an error state to swallow — it is the honest
+ * report that a chopped team could not be matched to the roster row consumers read, so standings
+ * will still show them alive. A caller that ignores it reproduces the bug this replaced.
+ *
+ * ⚠ PER-ROSTER, NOT ALL-OR-NOTHING, ON PURPOSE. A chop is usually one team, so refusing the whole
+ * batch when one id fails to resolve would throw away a correct update to protect against a
+ * "half-marked league" that a single-roster batch cannot produce anyway.
+ */
+export async function markRedraftRostersEliminated(
+  leagueId: string,
+  rosterIds: string[],
+): Promise<{ marked: string[]; unresolved: string[] }> {
+  const marked: string[] = []
+  const unresolved: string[] = []
+  if (rosterIds.length === 0) return { marked, unresolved }
+
+  const rosters = await prisma.roster
+    .findMany({ where: { id: { in: rosterIds } }, select: { id: true, platformUserId: true } })
+    .catch(() => [] as Array<{ id: string; platformUserId: string }>)
+
+  const ownerByRoster = new Map(rosters.map((r) => [r.id, r.platformUserId]))
+  const owners = rosters.map((r) => r.platformUserId).filter(Boolean)
+
+  const redraft = owners.length
+    ? await prisma.redraftRoster
+        .findMany({ where: { leagueId, ownerId: { in: owners } }, select: { id: true, ownerId: true } })
+        .catch(() => [] as Array<{ id: string; ownerId: string }>)
+    : []
+  const redraftByOwner = new Map(redraft.map((r) => [r.ownerId, r.id]))
+
+  for (const rosterId of rosterIds) {
+    const owner = ownerByRoster.get(rosterId)
+    const redraftId = owner ? redraftByOwner.get(owner) : undefined
+    if (!redraftId) {
+      unresolved.push(rosterId)
+      continue
+    }
+    /*
+     * No cast and no swallow. `isEliminated` is a real field on this model, so TypeScript checks
+     * it — which is the property the old call gave up in order to compile. A genuine write failure
+     * should surface rather than be hidden a second time.
+     */
+    await prisma.redraftRoster.update({ where: { id: redraftId }, data: { isEliminated: true } })
+    marked.push(redraftId)
+  }
+
+  if (unresolved.length) {
+    console.warn(
+      '[guillotine] chopped rosters with no matching RedraftRoster — standings will still show them active',
+      JSON.stringify({ leagueId, unresolved }),
+    )
+  }
+  return { marked, unresolved }
+}
+
 export async function runElimination(input: RunEliminationInput): Promise<GuillotineChopResult | null> {
   const config = await getGuillotineConfig(input.leagueId)
   if (!config) return null
@@ -106,23 +164,66 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
         choppedReason: reason,
       },
     })
-    // Mark the roster eliminated so standings, scheduling, and endgame
-    // engine filters pick it up. The user remains in the league.
-    await (prisma.roster.update as (args: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>)({
-      where: { id: rosterId },
-      data: { isEliminated: true },
-    }).catch(() => {})
+  }
 
-    // Unclaim the visual/team ownership row so eliminated users no longer appear
-    // as active team owners in league surfaces.
-    await prisma.leagueTeam.updateMany({
-      where: { leagueId: input.leagueId, externalId: rosterId },
-      data: {
-        claimedByUserId: null,
-        platformUserId: null,
-        isOrphan: true,
-      },
-    }).catch(() => {})
+  /*
+   * ── 🛑 MARKING THE TEAM ELIMINATED, WHICH THIS ENGINE HAS NEVER ACTUALLY DONE ───────────────
+   *
+   * The line that used to sit here was:
+   *
+   *     await (prisma.roster.update as (args: {...}) => Promise<unknown>)({
+   *       where: { id: rosterId }, data: { isEliminated: true },
+   *     }).catch(() => {})
+   *
+   * `Roster` HAS NO `isEliminated` FIELD — verified against the generated client, not inferred.
+   * The `as` cast is what let it compile: it replaced Prisma's typed argument with
+   * `Record<string, unknown>`, so TypeScript could no longer object. At runtime Prisma rejects the
+   * unknown argument, and `.catch(() => {})` swallowed that. The comment above it said the write
+   * existed "so standings, scheduling, and endgame engine filters pick it up". It never once did.
+   *
+   * The field lives on `RedraftRoster`, which is also what consumers read — `leagueStandingsGrounding`
+   * selects `isEliminated` from there and renders "ELIMINATED" into Chimmy's context.
+   *
+   * ⚠ AND THE TWO MODELS DO NOT SHARE AN ID SPACE, WHICH IS WHY THIS IS A RESOLUTION AND NOT A
+   * RENAME. This engine works in `Roster` (uuid ids, `platformUserId`); the flag lives on
+   * `RedraftRoster` (cuid ids, `ownerId`). Measured across the 12 production guillotine leagues on
+   * 2026-09-04, the only semantic link is the platform user id, and it is not total:
+   *
+   *     rosters.platformUserId   202 sleeper-numeric · 23 app uuid · 6 neither   (231 rows)
+   *     resolves to a redraft roster                 ~83-87%
+   *
+   * So a chop can be unresolvable, and that case is REPORTED rather than swallowed. A silent skip
+   * here is what produced a standings table that quietly disagreed with the chop log.
+   */
+  const flagged = await markRedraftRostersEliminated(input.leagueId, choppedRosterIds)
+
+  for (const rosterId of choppedRosterIds) {
+    /*
+     * Unclaim the visual/team ownership row so eliminated users no longer appear as active owners.
+     *
+     * ⚠ THIS MATCHED NOTHING EITHER, AND STILL MIGHT. `LeagueTeam.externalId` holds the platform's
+     * SLOT NUMBER — the real values in these leagues are "1", "10", "11" — while `rosterId` is a
+     * uuid, so the filter compared a uuid against a slot label and updated 0 rows across all 12
+     * leagues. `updateMany` does not throw on no-match, so the old `.catch(() => {})` was not even
+     * the thing hiding it; nothing was ever going to be raised.
+     *
+     * The key is NOT corrected here because nothing in this engine holds a trustworthy slot for a
+     * roster — `getDraftSlotByRoster` returns a DRAFT slot, which is a different number and would
+     * be a guess. The count is captured instead, so a no-match is visible in the result and in the
+     * log rather than being indistinguishable from success.
+     */
+    const unclaimed = await prisma.leagueTeam
+      .updateMany({
+        where: { leagueId: input.leagueId, externalId: rosterId },
+        data: { claimedByUserId: null, platformUserId: null, isOrphan: true },
+      })
+      .catch(() => ({ count: 0 }))
+    if (unclaimed.count === 0) {
+      console.warn(
+        '[guillotine] leagueTeam unclaim matched no row',
+        JSON.stringify({ leagueId: input.leagueId, rosterId, reason: 'externalId is a slot number, not a roster id' }),
+      )
+    }
   }
 
   await appendEvent(input.leagueId, 'chop', {
@@ -162,6 +263,7 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
     choppedRosterIds,
     tiebreakStepUsed: stepUsed,
     reason,
+    eliminationFlagged: flagged,
   }
 }
 
