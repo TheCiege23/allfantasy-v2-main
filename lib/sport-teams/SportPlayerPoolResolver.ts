@@ -214,6 +214,44 @@ export async function getPlayerPoolForSport(
   // single indexed lookup on a hit. Safe to round-trip through JSON here only
   // because nothing below reads a Date-typed field off `rows` -- only name,
   // position, team, id, teamId, status, sleeperId, externalId, age, imageUrl.
+  //
+  // ⚠ NEVER CACHE AN EMPTY RESULT, per this repo's weather-geocode precedent:
+  // writing a miss turns one transient gap into a long-lived wrong answer for
+  // everyone on this key until the TTL expires -- here, an empty draft room and
+  // waiver wire for up to draftPoolCacheTtlSeconds where today it self-heals on
+  // the next request.
+  //
+  // 🛑 AND AN EMPTY-CHECK IS NECESSARY BUT NOT SUFFICIENT -- MEASURED, NOT
+  // ASSUMED. The dangerous window is a by-SOURCE delete, which leaves the pool
+  // POPULATED BUT INCOMPLETE, and `length > 0` waves that straight through.
+  // Every sport carries rows from 2-6 sources (production, 2026-09-04), and the
+  // largest single source is a large fraction of its sport:
+  //     NFL    sleeper           11,960 rows  49.6% of the sport
+  //     NCAAF  rolling_insights  68,642 rows  92.9% of the sport
+  // So a single-source delete window would cache a half-empty NFL pool, or a
+  // 7%-complete NCAAF one, and `length > 0` would not notice.
+  //
+  // A minimum-count guard is NOT the fix: this function is called with team and
+  // position filters whose legitimate results are genuinely small (one NFL team's
+  // kickers is a handful of rows), so any threshold that catches a half-deleted
+  // pool would also reject real narrow queries.
+  //
+  // WHAT MAKES THIS SAFE TODAY IS A PRECONDITION, SO STATE IT RATHER THAN IMPLY
+  // IT: no scheduled writer performs a by-source delete-then-recreate against
+  // this table. The one writer shaped that way, SleeperPlayerSeedService
+  // (deleteMany({sport, source}) then createMany, not in a transaction), has no
+  // caller at all -- no route, no cron, no script -- and
+  // __tests__/sleeper-player-row-refresh.test.ts exists to pin that, along with
+  // why it was never given one. The scheduled path (refreshSleeperPlayerRows)
+  // upserts per row and has its own test asserting its source never contains
+  // sportsPlayer.deleteMany. scripts/refresh-ncaaf-pool-cfbd.ts prunes by source
+  // only AFTER its upsert loop, and is not wired to any schedule.
+  //
+  // ⚠ IF THAT PRECONDITION EVER BREAKS -- if anyone gives a by-source
+  // delete-then-recreate writer a scheduled caller -- this cache must be
+  // revisited at the same time: make that writer transactional, or have it
+  // invalidate this key, or the pool it half-deletes gets frozen here for a full
+  // TTL. The empty guard below does not cover that case and is not meant to.
   const rows = await cachedFetch(
     cacheKey('sportsPlayerPool', where),
     dbFirstMode.draftPoolCacheTtlSeconds,
@@ -221,6 +259,7 @@ export async function getPlayerPoolForSport(
       where,
       orderBy: { name: 'asc' },
     }),
+    (result) => result.length > 0,
   )
 
   // De-dupe by (name, position, team), preferring rows that have real image URLs
