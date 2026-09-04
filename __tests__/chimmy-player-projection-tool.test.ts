@@ -28,6 +28,14 @@ const row = (over: Record<string, unknown> = {}) => ({
   afProjection: 14.2,
   baselineProjection: 15.0,
   weatherAdjustment: -0.8,
+  /*
+   * ⚠ THE FIXTURE DID NOT CARRY THIS AND THE SUITE STILL PASSED, WHICH IS WHY IT IS COMMENTED.
+   * `weatherConsidered` distinguishes "a forecast was consulted" from "nobody looked". Before it
+   * existed, the tool read a `weatherAdjustment` of 0 as the former and told users so; two tests
+   * here asserted that copy, so the suite was pinning the false claim in place. Both went red when
+   * the tool was fixed, which is the test doing its job.
+   */
+  weatherConsidered: true,
   rosProjection: 198.8,
   rosWeeksRemaining: 14,
   confidenceLevel: 'high',
@@ -136,6 +144,32 @@ describe('the derivation', () => {
     expect(out).toMatch(/15\.0 baseline, -0\.8 from weather/)
     expect(out).toMatch(/Confidence: high/)
     expect(out).toMatch(/Wind above 18mph/)
+  })
+
+  it('🛑 never claims weather was considered when no forecast was consulted', async () => {
+    /*
+     * The common case in production, and the one that used to lie. Nearly every row is written by
+     * the scheduled engine, which applies no weather layer at all — so a bare 0 must not be read
+     * out as "considered, no change".
+     */
+    h.find.mockResolvedValue({
+      rows: [row({ weatherAdjustment: 0, weatherConsidered: false })],
+      season: 2025,
+    })
+    const out = await buildPlayerProjectionContext({ playerName: 'Test Back' })
+    expect(out).not.toMatch(/considered/i)
+    expect(out).toMatch(/no forecast was consulted/i)
+  })
+
+  it('🛑 does not fall back to isOutdoorGame to claim consideration', async () => {
+    // `isOutdoorGame` defaults to true on the model and means "probably outdoors", never
+    // "we have a forecast". Outdoors plus no lookup must still refuse to claim one.
+    h.find.mockResolvedValue({
+      rows: [row({ weatherAdjustment: 0, weatherConsidered: false, isOutdoorGame: true })],
+      season: 2025,
+    })
+    expect(await buildPlayerProjectionContext({ playerName: 'Test Back' }))
+      .not.toMatch(/considered and moved it by nothing/)
   })
 
   it('distinguishes "weather moved it by nothing" from "indoors"', async () => {

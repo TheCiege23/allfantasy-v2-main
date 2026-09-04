@@ -38,8 +38,31 @@ export interface AfProjectionListRow {
   afProjection: number
   /** The projection before weather. Per game, same unit as `afProjection`. */
   baselineProjection: number
-  /** Points weather moved it by. Zero is a real value meaning "considered, no change". */
+  /**
+   * Points weather moved it by.
+   *
+   * 🛑 ZERO DOES NOT MEAN "CONSIDERED, NO CHANGE" — READ `weatherConsidered` FOR THAT. This comment
+   * previously said it did, and that was false for effectively every row: the scheduled engine
+   * (`writeAfProjectionSnapshots.ts`) writes `weatherAdjustment: 0` with no weather layer at all,
+   * and says so honestly at its own write site. Only the readers claimed otherwise, and Chimmy
+   * turned this line into a sentence users saw — "weather was considered and moved it by nothing".
+   *
+   * A 0 here means one of two things and by itself cannot distinguish them: nothing looked, or
+   * something looked and found no effect.
+   */
   weatherAdjustment: number
+  /**
+   * Whether a weather lookup genuinely happened for this row.
+   *
+   * True only when `weatherCacheId` is set, which `lib/weather/afProjectionService.ts` writes with
+   * the cache key of the forecast it used. False means no weather has ever been applied — the state
+   * of every row the scheduled engine writes, which today is nearly all of them.
+   *
+   * ⚠ Surfaces must not narrate weather off `isOutdoorGame`. That column defaults to `true` and is
+   * written `false` by exactly one unrelated service, so it says "this is probably outdoors", never
+   * "we checked the forecast".
+   */
+  weatherConsidered: boolean
   /**
    * REST OF SEASON, or null when it was never computed.
    *
@@ -150,6 +173,7 @@ export async function listAfProjections(
       confidenceLevel: true,
       adjustmentReason: true,
       isOutdoorGame: true,
+      weatherCacheId: true,
       computedAt: true,
     },
   })
@@ -159,7 +183,13 @@ export async function listAfProjections(
   for (const r of rows) {
     if (seen.has(r.playerId)) continue
     seen.add(r.playerId)
-    deduped.push(r)
+    /*
+     * `weatherCacheId` is the storage detail; `weatherConsidered` is the question every caller
+     * actually has. Translating here means no surface has to know that a null cache id is what
+     * distinguishes "no weather effect" from "no weather lookup".
+     */
+    const { weatherCacheId, ...rest } = r
+    deduped.push({ ...rest, weatherConsidered: weatherCacheId != null })
   }
 
   /*
@@ -241,6 +271,7 @@ export async function findAfProjectionsByName(args: {
       confidenceLevel: true,
       adjustmentReason: true,
       isOutdoorGame: true,
+      weatherCacheId: true,
       computedAt: true,
     },
   })
@@ -257,7 +288,13 @@ export async function findAfProjectionsByName(args: {
   for (const r of matched) {
     if (seen.has(r.playerId)) continue
     seen.add(r.playerId)
-    deduped.push(r)
+    /*
+     * `weatherCacheId` is the storage detail; `weatherConsidered` is the question every caller
+     * actually has. Translating here means no surface has to know that a null cache id is what
+     * distinguishes "no weather effect" from "no weather lookup".
+     */
+    const { weatherCacheId, ...rest } = r
+    deduped.push({ ...rest, weatherConsidered: weatherCacheId != null })
   }
 
   return { rows: deduped, season }

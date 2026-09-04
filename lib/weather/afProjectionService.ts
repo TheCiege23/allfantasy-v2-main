@@ -28,6 +28,64 @@ export type AFProjection = {
 
 const SNAPSHOT_TTL_MS = 30 * 60 * 1000
 
+/**
+ * The key weather's factors live under inside `adjustmentFactors`.
+ *
+ * 🛑 THIS EXISTS BECAUSE TWO SUBSYSTEMS WRITE ONE ROW AND ONE OF THEM WAS DESTROYING THE OTHER.
+ * `AFProjectionSnapshot` is upserted on `snapshotLookupKey` by BOTH this service (on demand, from
+ * `/api/weather/af-projection`) and by `lib/af-projections/writeAfProjectionSnapshots.ts` (the
+ * scheduled engine). The engine writes `adjustmentFactors` as an OBJECT —
+ * `{ basis, idpPreset, idp, kicker, perGameRates }` — and its rescore-at-read paths depend on it:
+ * `rescoreIdpForLeague` reads `idp.componentAmounts` to reprice a defender under a league's own
+ * tackle scoring, and `rescoreKickerForLeague` does the same for distance rules.
+ *
+ * This service used to write the column as a bare ARRAY of weather factors. Prisma replaces the
+ * whole JSON value, so one weather lookup erased the engine's object. Nothing threw:
+ * `rescoreIdpForLeague` reads `.idp` off an array, gets `undefined`, and returns null — which every
+ * caller correctly treats as "no better information available, keep the stored value". So the
+ * league's own IDP scoring silently stopped applying and the balanced-preset number stood in for
+ * it, roughly half right for a tackle-heavy league, with a weather request as the only cause.
+ *
+ * Nesting under one key means each subsystem writes only its own branch. See
+ * `__tests__/af-projections/weatherSnapshotCollision.test.ts`, which pins both directions.
+ */
+export const WEATHER_FACTORS_KEY = 'weather'
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+}
+
+/**
+ * Read weather factors out of whichever shape the row happens to carry.
+ *
+ * ⚠ THE BARE-ARRAY BRANCH IS FOR ROWS ALREADY IN THE DATABASE, not a supported shape to write.
+ * Any row this service wrote before the nesting fix holds an array and nothing else — the engine's
+ * object is already gone from it and cannot be recovered here. Reading it keeps those rows
+ * rendering their weather until the engine's next scheduled pass rewrites the row properly.
+ */
+export function readWeatherFactors(raw: unknown): WeatherAdjustmentFactor[] {
+  if (Array.isArray(raw)) return raw as WeatherAdjustmentFactor[]
+  if (isPlainObject(raw) && Array.isArray(raw[WEATHER_FACTORS_KEY])) {
+    return raw[WEATHER_FACTORS_KEY] as WeatherAdjustmentFactor[]
+  }
+  return []
+}
+
+/**
+ * Merge weather factors into the existing blob without disturbing anything else in it.
+ *
+ * ⚠ A bare array found in `existing` is DISCARDED rather than merged: it is this service's own
+ * pre-fix write, it carries no engine data, and preserving it would keep the broken shape alive.
+ */
+export function mergeWeatherFactors(
+  existing: unknown,
+  factors: WeatherAdjustmentFactor[],
+): Record<string, unknown> {
+  const base = isPlainObject(existing) ? { ...existing } : {}
+  base[WEATHER_FACTORS_KEY] = factors
+  return base
+}
+
 function buildSnapshotLookupKey(args: {
   playerId: string
   season: number
@@ -53,9 +111,7 @@ function mapRowToAf(row: {
   isOutdoorGame: boolean
   computedAt: Date
 }): AFProjection {
-  const factors = Array.isArray(row.adjustmentFactors)
-    ? (row.adjustmentFactors as WeatherAdjustmentFactor[])
-    : []
+  const factors = readWeatherFactors(row.adjustmentFactors)
   return {
     playerId: row.playerId,
     playerName: row.playerName,
@@ -93,10 +149,44 @@ async function persistSnapshot(
     adjustmentReason: string | null
     confidenceLevel: string
     isOutdoorGame: boolean
+    /**
+     * The weather cache key this projection was computed against, or null when no weather was
+     * consulted at all.
+     *
+     * 🛑 THIS IS WHAT MAKES A ZERO ADJUSTMENT HONEST. `weatherAdjustment` of 0 has two completely
+     * different meanings — "we looked and it changes nothing" and "nobody has ever looked" — and
+     * until now the row could not tell them apart. It mattered because the scheduled engine writes
+     * every row with `weatherAdjustment: 0` and no weather layer, while `readAfProjections`
+     * documented that same 0 as "considered, no change" and Chimmy read it out to users as
+     * "weather was considered and moved it by nothing". That sentence was false for every row.
+     *
+     * Non-null means a lookup genuinely happened. The column already existed on the model and had
+     * no writer, so this needs no migration.
+     */
+    weatherCacheId: string | null
   },
   computedAt: Date
 ): Promise<void> {
   try {
+    /*
+     * Read-modify-write, because Prisma replaces a JSON column wholesale and this row's
+     * `adjustmentFactors` belongs to the projection engine. One extra read on an on-demand path is
+     * the price of not erasing `idp.componentAmounts`; see WEATHER_FACTORS_KEY above.
+     *
+     * ⚠ Racy against a concurrent engine pass, and deliberately left so. The loser of that race
+     * writes a blob missing one subsystem's branch, which the next pass repairs — where the bug
+     * being fixed here destroyed the engine's branch on EVERY weather request, permanently until
+     * the next scheduled run.
+     */
+    const prior = await prisma.aFProjectionSnapshot.findUnique({
+      where: { snapshotLookupKey: lookupKey },
+      select: { adjustmentFactors: true },
+    })
+    const mergedFactors = mergeWeatherFactors(
+      prior?.adjustmentFactors,
+      body.adjustmentFactors,
+    ) as unknown as Prisma.InputJsonValue
+
     await prisma.aFProjectionSnapshot.upsert({
       where: { snapshotLookupKey: lookupKey },
       create: {
@@ -111,10 +201,11 @@ async function persistSnapshot(
         baselineProjection: body.baselineProjection,
         weatherAdjustment: body.weatherAdjustment,
         afProjection: body.afProjection,
-        adjustmentFactors: body.adjustmentFactors as unknown as Prisma.InputJsonValue,
+        adjustmentFactors: mergedFactors,
         adjustmentReason: body.adjustmentReason,
         confidenceLevel: body.confidenceLevel,
         isOutdoorGame: body.isOutdoorGame,
+        weatherCacheId: body.weatherCacheId,
         venueOverride: false,
         computedAt,
       },
@@ -125,10 +216,11 @@ async function persistSnapshot(
         baselineProjection: body.baselineProjection,
         weatherAdjustment: body.weatherAdjustment,
         afProjection: body.afProjection,
-        adjustmentFactors: body.adjustmentFactors as unknown as Prisma.InputJsonValue,
+        adjustmentFactors: mergedFactors,
         adjustmentReason: body.adjustmentReason,
         confidenceLevel: body.confidenceLevel,
         isOutdoorGame: body.isOutdoorGame,
+        weatherCacheId: body.weatherCacheId,
         computedAt,
       },
     })
@@ -246,6 +338,8 @@ export async function getAFProjection(
         adjustmentReason: null,
         confidenceLevel: 'unavailable',
         isOutdoorGame: true,
+        // Nothing was consulted: not a weather-sensitive sport, or no venue/kickoff was supplied.
+        weatherCacheId: null,
       },
       computedAt
     )
@@ -301,6 +395,13 @@ export async function getAFProjection(
       adjustmentReason: impact.shortReason,
       confidenceLevel: impact.confidenceLevel,
       isOutdoorGame: impact.isOutdoor,
+      /*
+       * A lookup happened. `meta.cacheKey` identifies WHICH forecast this number came from, so a
+       * disputed projection can be traced to its input rather than argued about. Falls back to the
+       * data source when the cache layer supplied no key — still non-null, which is the part every
+       * reader keys off.
+       */
+      weatherCacheId: weather ? weather.meta?.cacheKey ?? weather.dataSource ?? 'weather' : null,
     },
     computedAt
   )

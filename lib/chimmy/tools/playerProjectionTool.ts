@@ -112,11 +112,24 @@ export async function buildPlayerProjectionContext(args: {
     lines.push(`- Confidence: ${r.confidenceLevel}.`)
 
     /*
-     * The derivation, so the number can be argued with. `weatherAdjustment` of 0 is a real value
-     * meaning "considered, no change" — distinct from a projection nobody adjusted.
+     * The derivation, so the number can be argued with.
+     *
+     * 🛑 THE "NOT CONSIDERED" BRANCH IS FIRST BECAUSE IT IS THE COMMON ONE AND IT USED TO LIE.
+     * This block previously read a `weatherAdjustment` of 0 as "considered, no change" and told the
+     * user, in those words, that weather had been looked at. Nothing had looked: the scheduled
+     * engine writes every row with `weatherAdjustment: 0` and no weather layer, and only the
+     * on-demand weather service ever computes one. So Chimmy was asserting a check that had not
+     * run — worse than saying nothing, because a manager could act on it.
+     *
+     * ⚠ `isOutdoorGame` CANNOT STAND IN FOR IT. That column defaults to `true` and is written
+     * `false` by one unrelated service, so it means "probably outdoors", never "we have a forecast".
      */
     const w = r.weatherAdjustment
-    if (Math.abs(w) >= 0.05) {
+    if (!r.weatherConsidered) {
+      lines.push(
+        `- Basis: ${r.baselineProjection.toFixed(1)} baseline. No weather adjustment has been applied to this number — not "weather is neutral", but that no forecast was consulted for it.`,
+      )
+    } else if (Math.abs(w) >= 0.05) {
       lines.push(
         `- Basis: ${r.baselineProjection.toFixed(1)} baseline, ${w > 0 ? '+' : ''}${w.toFixed(1)} from weather.`,
       )
