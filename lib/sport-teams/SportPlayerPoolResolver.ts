@@ -11,6 +11,8 @@ import type { SportType, PoolPlayerRecord } from './types'
 import { leagueSportToSportType } from '@/lib/multi-sport/SportConfigResolver'
 import { getTeamIdByAbbreviationMap } from './SportTeamMetadataRegistry'
 import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
+import { cachedFetch, cacheKey } from '@/lib/api-cache'
+import { dbFirstMode } from '@/lib/db-first-mode'
 
 const SPORT_STR: Record<LeagueSport, string> = {
   NFL: 'NFL',
@@ -196,10 +198,30 @@ export async function getPlayerPoolForSport(
   // deduplicated, distinct-player result below. All real sport row counts are
   // bounded (largest measured: NCAAF at ~45,000 rows) -- a safe volume for a
   // single query.
-  const rows = await prisma.sportsPlayer.findMany({
-    where,
-    orderBy: { name: 'asc' },
-  })
+  //
+  // ⚠ CACHED (2026-09-04): this unbounded, no-select findMany was measured via
+  // pg_stat_statements firing ~2000 times in 15 minutes (several/sec, sustained)
+  // with zero caching -- the dominant, continuous load on a shared 2-CU Neon
+  // compute, and a plausible direct cause of unrelated requests (e.g. /admin)
+  // occasionally stalling for 8-12s. `where` has at most a few dozen distinct
+  // shapes in practice (7 sports x optional team/position), so a short TTL
+  // collapses the sustained call rate into a handful of DB reads per window.
+  // Uses the same AF_DRAFT_POOL_CACHE_TTL_SECONDS convention as the sibling
+  // draft-pool caches (mock-draft-pool-cache.ts, specialty-draft-pool-cache.ts,
+  // ensureDraftPoolReady.ts) rather than inventing a new knob. DB-backed (not
+  // in-memory): this process's memory usage is already under separate watch,
+  // and a DB-backed cache still turns a multi-thousand-row scan+sort into a
+  // single indexed lookup on a hit. Safe to round-trip through JSON here only
+  // because nothing below reads a Date-typed field off `rows` -- only name,
+  // position, team, id, teamId, status, sleeperId, externalId, age, imageUrl.
+  const rows = await cachedFetch(
+    cacheKey('sportsPlayerPool', where),
+    dbFirstMode.draftPoolCacheTtlSeconds,
+    () => prisma.sportsPlayer.findMany({
+      where,
+      orderBy: { name: 'asc' },
+    }),
+  )
 
   // De-dupe by (name, position, team), preferring rows that have real image URLs
   // and explicit sleeper IDs. Some imports write duplicate players across sources,
