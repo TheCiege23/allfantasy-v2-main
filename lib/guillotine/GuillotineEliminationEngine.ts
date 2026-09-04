@@ -9,7 +9,8 @@ import { evaluateWeek, getDraftSlotByRoster } from './GuillotineWeekEvaluator'
 import { releaseChoppedRosters } from './GuillotineRosterReleaseEngine'
 import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
-import { resolveRedraftRosterId } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
+import { resolveRedraftRosterId, resolveRedraftRosterIds } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
+import { recordChopAudit } from './guillotineChopAudit'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 
 export interface RunEliminationInput {
@@ -194,6 +195,92 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
    */
   const flagged = await markRedraftRostersEliminated(input.leagueId, choppedRosterIds)
 
+  /*
+   * ── THE MERGE: the audit half that only the manual engine ever had ─────────────────────────
+   *
+   * `lib/guillotine/eliminationEngine.ts` carried an idempotency guard, a transaction, the
+   * `GuillotineElimination` record, the survival log and the season counters — and was reachable
+   * only from a manual POST route. This engine had the week evaluator, the cutoff, the tiebreak
+   * resolver, roster release, chat and the event log, and is what specialty automation calls.
+   * Neither was a superset, which is why both survived. `recordChopAudit` is the second engine's
+   * half, lifted so this one can call it.
+   *
+   * ⚠ THE AUDIT TABLES ARE IN REDRAFT SPACE — `GuillotineSurvivalLog.rosterId` is a foreign key to
+   * `RedraftRoster` — while everything above this line is in `Roster` space. That mismatch is what
+   * made the two engines unmergeable until `Roster.redraftRosterId` existed. Every id handed to the
+   * audit is translated first, and a roster with no counterpart is dropped from the audit rather
+   * than passed through, because an untranslated id would violate that foreign key.
+   */
+  const scoredRosterIds = evalResult.scores.map((s) => s.rosterId)
+  const redraftById = await resolveRedraftRosterIds(input.leagueId, scoredRosterIds).catch(
+    () => new Map<string, string>(),
+  )
+
+  const ordered = [...evalResult.scores].sort((a, b) => b.periodPoints - a.periodPoints)
+  const chopSet = new Set(choppedRosterIds)
+  const chopLineScore =
+    [...evalResult.scores]
+      .sort((a, b) => a.periodPoints - b.periodPoints)
+      .find((s) => !chopSet.has(s.rosterId))?.periodPoints ?? minPoints
+
+  const redraftRows = await prisma.redraftRoster
+    .findMany({
+      where: { id: { in: [...redraftById.values()] } },
+      select: { id: true, teamName: true, ownerName: true, ownerId: true },
+    })
+    .catch(() => [] as Array<{ id: string; teamName: string | null; ownerName: string; ownerId: string }>)
+  const metaById = new Map(redraftRows.map((r) => [r.id, r]))
+
+  const auditChopped = choppedRosterIds.flatMap((rosterId) => {
+    const redraftRosterId = redraftById.get(rosterId)
+    if (!redraftRosterId) return []
+    const meta = metaById.get(redraftRosterId)
+    const score = evalResult.scores.find((s) => s.rosterId === rosterId)?.periodPoints ?? 0
+    return [
+      {
+        redraftRosterId,
+        teamName: meta?.teamName ?? meta?.ownerName ?? 'Team',
+        ownerId: meta?.ownerId ?? '',
+        score,
+        rankAmongActive: ordered.findIndex((s) => s.rosterId === rosterId) + 1,
+        marginBelowSafe: chopLineScore - score,
+      },
+    ]
+  })
+
+  const auditStandings = ordered.flatMap((s, i) => {
+    const redraftRosterId = redraftById.get(s.rosterId)
+    if (!redraftRosterId) return []
+    return [
+      {
+        redraftRosterId,
+        score: s.periodPoints,
+        rankAmongActive: i + 1,
+        eliminated: chopSet.has(s.rosterId),
+        marginAboveChopLine: s.periodPoints - chopLineScore,
+        /* Bottom quarter of the field and not chopped — the definition `GuillotineDangerEngine` uses. */
+        wasInDangerZone: !chopSet.has(s.rosterId) && i >= Math.floor(ordered.length * 0.75),
+      },
+    ]
+  })
+
+  const audit = await recordChopAudit({
+    leagueId: input.leagueId,
+    season: input.season,
+    scoringPeriod: input.weekOrPeriod,
+    chopped: auditChopped,
+    standings: auditStandings,
+    teamsActiveThisPeriod: evalResult.scores.length,
+    /* Real, where the manual engine hardcoded false — this engine knows whether a tie was broken. */
+    wasTiebreaker: stepUsed != null && stepUsed !== 'lowest_score',
+  }).catch((e) => {
+    console.warn(
+      '[guillotine] chop audit failed; the chop itself stands',
+      JSON.stringify({ leagueId: input.leagueId, week: input.weekOrPeriod, error: e instanceof Error ? e.message : String(e) }),
+    )
+    return { recorded: false, reason: 'no_guillotine_season' } as const
+  })
+
   for (const rosterId of choppedRosterIds) {
     /*
      * Unclaim the visual/team ownership row so eliminated users no longer appear as active owners.
@@ -261,6 +348,7 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
     tiebreakStepUsed: stepUsed,
     reason,
     eliminationFlagged: flagged,
+    audit,
   }
 }
 

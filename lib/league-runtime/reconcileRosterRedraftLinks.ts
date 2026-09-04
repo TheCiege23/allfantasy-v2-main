@@ -99,6 +99,39 @@ export async function reconcileRosterRedraftLinks(leagueId: string): Promise<Rec
 }
 
 /**
+ * Resolve many rosters at once, reconciling ONCE if any are missing.
+ *
+ * ⚠ THIS EXISTS SO A CHOP DOES NOT RECONCILE PER TEAM. `resolveRedraftRosterId` is the right shape
+ * for a single lookup, but a survival log covers every scored roster in the league — calling it in a
+ * loop would run the same league-wide reconcile up to twenty times for one week. One pass, then read.
+ *
+ * Rosters with no counterpart are simply absent from the returned map. A caller must treat a missing
+ * key as "no known redraft roster", never as "not eliminated".
+ */
+export async function resolveRedraftRosterIds(
+  leagueId: string,
+  rosterIds: string[],
+): Promise<Map<string, string>> {
+  if (rosterIds.length === 0) return new Map()
+
+  const read = async () =>
+    prisma.roster.findMany({
+      where: { id: { in: rosterIds } },
+      select: { id: true, redraftRosterId: true },
+    })
+
+  let rows = await read()
+  if (rows.some((r) => r.redraftRosterId == null)) {
+    await reconcileRosterRedraftLinks(leagueId)
+    rows = await read()
+  }
+
+  const out = new Map<string, string>()
+  for (const r of rows) if (r.redraftRosterId) out.set(r.id, r.redraftRosterId)
+  return out
+}
+
+/**
  * Reconcile, then read the link for one roster — the shape a caller that needs an answer NOW wants.
  *
  * 🛑 THIS EXISTS SO THE LINK CANNOT GO STALE WHERE IT MATTERS. A one-time backfill with no

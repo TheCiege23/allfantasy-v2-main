@@ -71,6 +71,18 @@ export interface GuillotineChopResult {
    * Optional because the early-return paths chop nobody and have nothing to report.
    */
   eliminationFlagged?: { marked: string[]; unresolved: string[] }
+  /**
+   * Whether the audit half ran — the `GuillotineElimination` record, survival log and season
+   * counters that only the manual engine used to write.
+   *
+   * ⚠ `recorded: false` IS AN ORDINARY OUTCOME, NOT A FAILURE. Production holds zero
+   * `GuillotineSeason` rows because only a manual route creates one, so `no_guillotine_season` is
+   * what almost every chop will report today. The chop itself still happened; the bookkeeping did
+   * not. Reported rather than swallowed so the difference is legible.
+   */
+  audit?:
+    | { recorded: true; seasonId: string; eliminations: number; survivalRows: number }
+    | { recorded: false; reason: 'no_guillotine_season' | 'already_recorded' }
 }
 
 /** Danger tier for one roster. */
