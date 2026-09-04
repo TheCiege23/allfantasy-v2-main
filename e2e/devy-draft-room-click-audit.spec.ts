@@ -120,7 +120,7 @@ async function mockDevyDraftRoomApis(
       orphanRosterIds: [],
       aiManagerEnabled: false,
       orphanDrafterMode: 'cpu',
-      devy: devyConfigState.enabled ? { enabled: true, devyRounds: devyConfigState.devyRounds } : undefined,
+      devy: { enabled: devyConfigState.enabled, devyRounds: devyConfigState.devyRounds },
     }
   }
 

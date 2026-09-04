@@ -307,6 +307,25 @@ export function NflRedraftPremiumServiceShell({
           setState({ status: 'error', message: !result.ok ? result.error.message : 'Service packet unavailable.' })
           return
         }
+        /*
+         * ⚠ VALIDATE THE PACKET BEFORE DECLARING IT READY — A PARTIAL RESPONSE HERE
+         * TOOK DOWN THE WHOLE PAGE.
+         *
+         * `result.ok` only rules out the error arm of the union. Anything else that
+         * parses as JSON and carries a truthy `ok` reaches ReadyShell, which reads
+         * `packet.accessStatus.allowed` unguarded (:171) and throws
+         * `TypeError: Cannot read properties of undefined (reading 'allowed')`. That
+         * escapes into the nearest error boundary, so a premium INFO panel replaced an
+         * entire draft room with "Something went wrong" — measured 2026-09-03, thrown
+         * 32 times in one run, and reported to the e2e suite only as a missing testid.
+         *
+         * This component already has an error state for exactly this situation. A
+         * malformed packet is a service problem, not a reason to lose the page.
+         */
+        if (!result.accessStatus) {
+          setState({ status: 'error', message: 'Service packet unavailable.' })
+          return
+        }
         setState({ status: 'ready', packet: result })
       })
       .catch(() => {

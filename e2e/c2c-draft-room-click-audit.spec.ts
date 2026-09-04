@@ -136,7 +136,7 @@ async function mockC2CDraftRoomApis(
       orphanRosterIds: [],
       aiManagerEnabled: false,
       orphanDrafterMode: 'cpu',
-      c2c: c2cConfigState.enabled ? { enabled: true, collegeRounds: c2cConfigState.collegeRounds } : undefined,
+      c2c: { enabled: c2cConfigState.enabled, collegeRounds: c2cConfigState.collegeRounds },
     }
   }
 

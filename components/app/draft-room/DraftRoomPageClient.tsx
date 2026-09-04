@@ -3688,19 +3688,35 @@ export function DraftRoomPageClient({
         aiAdpLowSampleWarning={aiAdpLowSampleWarning}
         canNominate={draftRoomState.isAuction ? draftRoomState.canNominate : false}
         onNominate={draftRoomState.isAuction ? handleAuctionNominate : undefined}
+        /*
+         * ⚠ FALL BACK ON THE SESSION CONFIG'S PRESENCE, NOT ON ITS `enabled`.
+         *
+         * These read `session.devy?.enabled ? {...} : undefined`, which is the same
+         * conflation fixed in getResolvedDraftPoolForLeague and the control center: a
+         * config that exists but is switched OFF was reported as no config at all, so
+         * the modal never rendered the section holding its enable toggle.
+         *
+         * This path matters on its own because a PRE-DRAFT room does not always fetch
+         * the pool, so `draftPool` is null and the session is the only source. That is
+         * exactly the state a commissioner is in when setting devy/C2C up.
+         */
         devyConfig={
-          draftPool?.devyConfig
-            ? draftPool.devyConfig
-            : (session as DraftSessionSnapshot | null)?.devy?.enabled
-              ? { enabled: true, devyRounds: (session as DraftSessionSnapshot).devy?.devyRounds ?? [] }
-              : undefined
+          draftPool?.devyConfig ??
+          ((session as DraftSessionSnapshot | null)?.devy
+            ? {
+                enabled: Boolean((session as DraftSessionSnapshot).devy?.enabled),
+                devyRounds: (session as DraftSessionSnapshot).devy?.devyRounds ?? [],
+              }
+            : undefined)
         }
         c2cConfig={
-          draftPool?.c2cConfig
-            ? draftPool.c2cConfig
-            : (session as DraftSessionSnapshot | null)?.c2c?.enabled
-              ? { enabled: true, collegeRounds: (session as DraftSessionSnapshot).c2c?.collegeRounds ?? [] }
-              : undefined
+          draftPool?.c2cConfig ??
+          ((session as DraftSessionSnapshot | null)?.c2c
+            ? {
+                enabled: Boolean((session as DraftSessionSnapshot).c2c?.enabled),
+                collegeRounds: (session as DraftSessionSnapshot).c2c?.collegeRounds ?? [],
+              }
+            : undefined)
         }
         currentRound={currentPick?.round}
         formatType={formatType === 'IDP' || Boolean((draftPool as { isIdp?: boolean } | null)?.isIdp) ? 'IDP' : undefined}
