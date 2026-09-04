@@ -56,7 +56,7 @@ async function main() {
 
   console.log(`${apply ? 'APPLY' : 'DRY RUN'} — ${leagues.length} league(s)\n`)
 
-  let totals = { leagues: 0, created: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0 }
+  let totals = { leagues: 0, created: 0, repaired: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0 }
 
   for (const l of leagues) {
     /*
@@ -78,11 +78,12 @@ async function main() {
     const r = await materializeRedraftRosterPlayersForLeague(l.id, { sport: l.sport })
     totals.leagues += 1
     totals.created += r.playersCreated
+    totals.repaired += r.playersRepaired
     totals.present += r.playersAlreadyPresent
     totals.noLink += r.rostersSkippedNoLink
     totals.noPlayers += r.rostersSkippedNoPlayers
     console.log(
-      `  ${l.id}  created ${String(r.playersCreated).padStart(4)}  ` +
+      `  ${l.id}  created ${String(r.playersCreated).padStart(4)}  repaired ${String(r.playersRepaired).padStart(4)}  ` +
         `linked ${r.rostersLinked}/${r.rostersConsidered}  ` +
         `no-link ${r.rostersSkippedNoLink}  no-players ${r.rostersSkippedNoPlayers}  ${l.name ?? ''}`,
     )
@@ -101,6 +102,13 @@ async function main() {
   } else {
     console.log(`leagues touched      ${totals.leagues}`)
     console.log(`players created      ${totals.created}`)
+    /*
+     * Repaired rows are reported SEPARATELY from created ones, because on the second run of
+     * this script they are the entire point and "created 0" would otherwise read as a no-op.
+     * The first run wrote 58,596 rows carrying the Sleeper id as the player's NAME; those rows
+     * exist, so a create-only pass skips them forever.
+     */
+    console.log(`players repaired     ${totals.repaired}`)
     console.log(`already present      ${totals.present}`)
     /*
      * ⚠ THESE TWO ARE REPORTED, NOT HIDDEN. A roster with no link has nowhere to write and stays

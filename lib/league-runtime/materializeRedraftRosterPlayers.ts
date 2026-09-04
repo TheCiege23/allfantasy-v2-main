@@ -2,9 +2,41 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
-import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { reconcileRosterRedraftLinks } from './reconcileRosterRedraftLinks'
+
+/** The columns the enrichment needs. Narrower than `SportsPlayer`, so the select is checked. */
+type EnrichedPlayer = {
+  sleeperId: string | null
+  name: string
+  position: string | null
+  team: string | null
+  sport: string
+  source: string
+}
+
+/*
+ * ⚠ ONE SLEEPER ID CAN MATCH SEVERAL `SportsPlayer` ROWS — one per source. Measured on NFL Dynasty
+ * 2026-09-04: 241 ids, 570 rows. They are the SAME PERSON here (unlike an `externalId` collision),
+ * but they disagree about SHAPE, and the shape is what the picker renders:
+ *
+ *     sleeper           "Aaron Rodgers"    QB              PIT
+ *     rolling_insights  "Austin Ekeler"    RB              Washington Commanders
+ *     thesportsdb       "Brian Robinson"   Running Back    Atlanta Falcons
+ *
+ * The team LOGO is looked up by abbreviation, and the position chips are two characters wide, so
+ * `sleeper` is preferred and `thesportsdb` is last. Lower rank wins.
+ */
+const SOURCE_RANK: Record<string, number> = {
+  sleeper: 0,
+  rolling_insights: 1,
+  cfbd: 2,
+  api_football: 3,
+  thesportsdb: 4,
+}
+function sourceRank(source: string | null | undefined): number {
+  return SOURCE_RANK[String(source ?? '').trim().toLowerCase()] ?? 9
+}
 
 /**
  * Give a league's `RedraftRoster` rows their players.
@@ -38,6 +70,14 @@ export interface MaterializeResult {
   /** Rosters that had a `redraftRosterId` to write against. */
   rostersLinked: number
   playersCreated: number
+  /**
+   * Rows that already existed carrying the id as the name, repaired in place.
+   *
+   * 🛑 THIS COUNTER EXISTS BECAUSE THE CREATE-ONLY VERSION COULD NOT SELF-HEAL. 58,596 rows were
+   * written by the first run with `playerName` set to the Sleeper id, and re-running skipped every
+   * one of them as "already present" -- so the bug was permanent until something updated them.
+   */
+  playersRepaired: number
   /** Already had a live row — the idempotent case, not a failure. */
   playersAlreadyPresent: number
   /** No `redraftRosterId`, so there is nowhere to write. Reported, never silently skipped. */
@@ -50,6 +90,7 @@ const EMPTY: MaterializeResult = {
   rostersConsidered: 0,
   rostersLinked: 0,
   playersCreated: 0,
+  playersRepaired: 0,
   playersAlreadyPresent: 0,
   rostersSkippedNoLink: 0,
   rostersSkippedNoPlayers: 0,
@@ -135,7 +176,53 @@ export async function materializeRedraftRosterPlayersForLeague(
   if (rosters.length === 0) return { ...EMPTY }
 
   const result: MaterializeResult = { ...EMPTY, rostersConsidered: rosters.length }
-  const sport = opts?.sport ?? 'NFL'
+  const league = await prisma.league
+    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true } })
+    .catch(() => null)
+  const sport = String(opts?.sport ?? league?.sport ?? 'NFL')
+  const platform = String(league?.platform ?? '').toLowerCase()
+
+  /*
+   * 🛑 THE ENRICHMENT IS ONE LOOKUP FOR THE WHOLE LEAGUE, AGAINST `sleeperId`, AND BOTH HALVES OF
+   * THAT MATTER.
+   *
+   * The first version asked `getNormalizedPlayerData({ surface: 'roster', leagueId, userId })`
+   * per roster inside a `try {} catch {}`. Measured on NFL Dynasty 2026-09-04 it returned ZERO
+   * rows, the bare catch said nothing, and `playerName: dto?.name ?? playerId` then wrote the
+   * Sleeper id as the player's name -- 58,596 rows, 96.2% of the table, every one counted as
+   * "created" and reported as success. Values are looked up BY NAME downstream, so nothing on
+   * those rosters could be priced and the trade verdict went on saying it had too little to judge.
+   *
+   * ⚠ AND THE OBVIOUS REPAIR IS THE ONE THAT HAS ALREADY SHIPPED WRONG DATA TWICE HERE. A Sleeper
+   * id must NEVER be looked up against `externalId`: three sources write bare numerics there, and
+   * `lib/player-identity/externalIdNamespace.ts` measured 42,032 numeric collisions of which
+   * 42,031 are a DIFFERENT PERSON. Probed on this league's own 241 ids:
+   *
+   *     sleeperIdWhere   241/241 matched   (100%)
+   *     bare externalId  121 matched, 0 of 121 the same person
+   *                      Justin Herbert -> "Damone Clark", Geno Smith -> an NBA player
+   *
+   * So this uses `sleeperIdWhere`, which queries the dedicated `sleeperId` column.
+   */
+  const bySleeperId = new Map<string, EnrichedPlayer>()
+  if (platform === 'sleeper') {
+    const allIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
+    if (allIds.length) {
+      const rows = await prisma.sportsPlayer
+        .findMany({
+          where: sleeperIdWhere(allIds, sport),
+          select: { sleeperId: true, name: true, position: true, team: true, sport: true, source: true },
+        })
+        .catch(() => [])
+      for (const row of rows) {
+        const key = String(row.sleeperId ?? '')
+        if (!key) continue
+        const held = bySleeperId.get(key)
+        if (held && sourceRank(held.source) <= sourceRank(row.source)) continue
+        bySleeperId.set(key, row)
+      }
+    }
+  }
 
   for (const r of rosters) {
     if (!r.redraftRosterId) {
@@ -160,30 +247,39 @@ export async function materializeRedraftRosterPlayersForLeague(
      * Enrichment is best-effort and the row is written either way. A player with no metadata still
      * belongs on the roster — `captureSnapshot` reads POSITIONS to judge depth, and an unknown
      * position is a worse profile than a known one but a far better one than a missing player.
-     * Failing the whole roster because one provider is down would keep the 97% at 97%.
      */
-    const byId = new Map<string, ReturnType<typeof serializeUnifiedPlayerForApi>>()
-    try {
-      const rows = await getNormalizedPlayerData({
-        surface: 'roster',
-        leagueId,
-        userId: r.platformUserId,
-        limit: 200,
-      })
-      for (const row of rows) {
-        const dto = serializeUnifiedPlayerForApi(row)
-        byId.set(dto.id, dto)
-      }
-    } catch {
-      // Fall through with an empty map; every field below already tolerates absence.
-    }
-
     for (const playerId of playerIds) {
+      const dto = bySleeperId.get(playerId)
+
       if (have.has(playerId)) {
-        result.playersAlreadyPresent += 1
+        /*
+         * 🛑 ALREADY PRESENT IS NOT ALREADY CORRECT, WHICH IS WHY THIS IS NOT A `continue`. The
+         * create-only version skipped every one of the 58,596 rows it had itself written with the
+         * id as the name, so re-running could never fix them. Repair only when we now hold
+         * something better, and only when the stored row still carries the id-as-name signature —
+         * a row someone else enriched properly is left alone.
+         */
+        if (dto?.name) {
+          const repaired = await prisma.redraftRosterPlayer.updateMany({
+            where: {
+              rosterId: r.redraftRosterId,
+              playerId,
+              droppedAt: null,
+              playerName: playerId,
+            },
+            data: {
+              playerName: dto.name,
+              position: dto.position ?? 'UNK',
+              team: dto.team ?? null,
+            },
+          })
+          result.playersRepaired += repaired.count
+          if (repaired.count === 0) result.playersAlreadyPresent += 1
+        } else {
+          result.playersAlreadyPresent += 1
+        }
         continue
       }
-      const dto = byId.get(playerId)
       const position = dto?.position ?? null
       await prisma.redraftRosterPlayer.create({
         data: {
@@ -196,16 +292,16 @@ export async function materializeRedraftRosterPlayersForLeague(
           team: dto?.team ?? null,
           sport: String(dto?.sport ?? sport),
           slotType: slotTypeFor(r.playerData, playerId, position),
-          injuryStatus: dto?.injuryStatus ?? null,
           /*
-           * 🛑 `byeWeek` IS NESTED UNDER `product`, AND GETTING THIS WRONG PERSISTS THE MISTAKE.
-           * `dto?.byeWeek` is `undefined`, `?? null` makes it `null`, and this row is written to
-           * `RedraftRosterPlayer.byeWeek` — a real `Int?` column. So every imported roster player
-           * lands with a permanently absent bye week that looks like the provider never supplied
-           * one, and nothing surfaces it: no crash, no empty state, and `ignoreBuildErrors` in
-           * next.config.js means the build never sees the type error either.
+           * ⚠ NEITHER COMES FROM THIS SOURCE, AND THAT IS A STATED GAP RATHER THAN A NULL THAT
+           * LOOKS LIKE AN ANSWER. `SportsPlayer` has no `byeWeek` column at all and no
+           * `injuryStatus` (it has `status`, which is roster/active state, not a game
+           * designation). The column was already null for 60,909 of 60,911 rows before this
+           * change, so nothing regresses here — but the picker's BYE chip is fed from this column,
+           * so it stays blank until a writer with a real bye source fills it.
            */
-          byeWeek: dto?.product?.byeWeek ?? null,
+          injuryStatus: null,
+          byeWeek: null,
           // Matches the 2,110 rows already in this table that came from an import.
           acquisitionType: 'imported',
         },
