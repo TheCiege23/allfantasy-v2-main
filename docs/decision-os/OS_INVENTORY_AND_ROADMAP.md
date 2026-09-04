@@ -166,6 +166,70 @@ Applying §10.1 is therefore the single largest available latency win, and R1.5'
 
 **Not pushed.** Working tree only, per **W1**.
 
+## 0.44 ✅ LEDGER CONSISTENCY PASS — THE TABLE SAID 10 OPEN; TWO ARE
+
+**2026-09-04.** The ledger is the first thing anyone reads and it was overstating the remaining
+work by a factor of five. Audited every row against the code on `main` and against production,
+rather than against this document's own prose.
+
+### Why it drifted — one mechanism, three instances
+
+An item gets filed as a `🆕` row. Later it is DONE, and the completion is recorded as a **new row**
+rather than by editing the filing row. Both rows then live in the same table, one `⬜` and one `✅`,
+and nothing reconciles them. R1.5 had reached **three** rows — a filing, a deferral, and a
+completion — all describing the same work in three different states.
+
+Deleted the three stale rows (R1.5 filing, R1.5 deferral, R1.6 filing). The completion rows already
+carried the full evidence.
+
+⚠ **The deferral row is the one worth thinking about**, because deleting it discards a real decision.
+R1.5 was deliberately deferred on 2026-09-03 as a *"real gap, ZERO beneficiaries"* — and the owner
+then said **build it anyway**, which was right: two genuine bugs surfaced during the build. Keeping
+a `⏸ Deferred` row next to a `✅ Done` row for one item does not preserve that history, it just makes
+the table lie. The decision and its reversal are recorded in §0.38, which is where they belong.
+
+### Five rows whose own text already said the work was finished
+
+`BUG-2`, `BUG-3`, `BUG-4`, `R0.13` and `R1.8` all carried `⚠`/`⏸`/`⬜` while their body text read
+"Fixed", "PREMISE DISPROVEN", "Closed" or similar. The status glyph is what a reader scans; leaving
+it stale means the prose has to be read to discover the row is done, which defeats the table.
+
+### Two of those were NOT clerical — they were measured today, on production
+
+🛑 **AND THE FIRST PROBE WENT TO THE WRONG DATABASE.** `scripts/db-readonly-probe.mjs` defaults to
+`--env=test`, which is a schema-identical Neon branch (`ep-muddy-leaf-adigvvph`). It answered
+`partial: 36` — consistent with the aftermath still being open. Production
+(`ep-curly-block-ad0dlt9o`, via `--env=local`) answers `partial: 4`. Same query, same schema,
+opposite conclusion. **Name the endpoint in any DB claim**, or the number is unattributable.
+
+- **BUG-2's aftermath is resolved.** §0.30's open half was *"no league in `partial`/`failed` has
+  EVER been retried — 0 of 37, ~78 missed cycles"*. Production now: `partial` **4**, and **all 4
+  attempted within 24h**; `completed` 197 of 197 attempted; newest attempt minutes before the
+  reading. It was fixed by the ENUMERATION fix (§0.31), not by any retry change — the same root
+  cause that dissolved R1.7. That makes three separate ledger rows closed by one commit.
+- **R1.8 is verified.** Exactly one `decision_os_feed_*` row exists on production: the deliberate
+  `savedAnalysis=false` kill. Every other feed is absent = fail-open = enabled, which is the
+  intended state the row asked someone to confirm.
+
+### What is actually left
+
+Two ledger rows, and one owner decision that was never a row — listed together because a reader
+asking "what is left" wants all three, and because the decision is the easiest of them to lose.
+
+| | |
+|---|---|
+| **R0.11** | ⏸ Deprioritised by measurement — ~50 ms against 1250 ms of headroom. A decision, not a queue item. |
+| **keeper semantics** | ⚠ Owner decision, surfaced by BUG-4 and not closed with it. `isKeeper` is now captured; what it should MEAN across the three subsystems that read it is unanswered. §0.29 |
+| **R6** identifier half | ⚠ Measured, not taken. **41** `@/lib/fantasy-os` importers (36 the same morning), and seven user-visible nav labels that are the owner's call, not a refactor. Needs a quiet tree. |
+
+Everything else on the table is `✅`. Two tripwires ride on closed rows and are the reason those
+rows keep their warning text: **un-kill `savedAnalysis` when Phase 3 lands** (R0.13), and the three
+non-code switches the manager DNA directory waits behind (§0.43).
+
+⚠ **This section will be wrong too, eventually.** The mechanism that produced the drift is still
+here: nothing tests a status glyph. The cheap habit that prevents it is to EDIT the filing row when
+work completes rather than appending a second row about the same item.
+
 ## 0.43 ✅ THE COMMISSIONER MANAGER DNA DIRECTORY — THE CLASSIFIER WAS NEVER THE GAP
 
 **2026-09-04.** The `managers` namespace has been returning an honest *"the Decision OS backend does
@@ -3870,31 +3934,28 @@ Updated **in the same change that does the work** (**W4**).
 | ✅ | **R0.9** Four context providers "timing out" | **Closed without work — dev artifact.** All four return `ok=true` in 566–1170 ms on production. §0.8 |
 | ⏸ | **R0.11** Two round-trip cuts | **Deprioritised.** Justified by a latency problem that does not exist in production; would buy ~50 ms against 1250 ms of headroom. §0.8 |
 | ✅ | **R0.12** Bound the unbounded `findMany` in `loadImportedActivityEvidence` | **Closed 2026-09-04 as NOT-A-DEFECT.** Max 364 rows for any one league (95 leagues, p95 290), three columns. And `take: N` would be WRONG — the rows are aggregated into counts, a managerCount Set and a content-based version string, so a cap silently corrupts totals and flaps the version. DB-side aggregation is the fix if it ever matters. §0.40 |
-| ⏸ | **R0.13** `savedAnalysis` returns `not_computed` | **Correct, not broken** — `decision_intelligence_runs` is 0 rows and refresh is inert until Phase 3 by design. But it costs **~1113ms of ~1250ms** headroom to reach a guaranteed answer, and the reorder that would avoid it is foreclosed (the lookup key derives from the evidence). **KILLED 2026-09-04** at the owner's direction — `decision_os_feed_savedAnalysis=false`, verified through the app's own resolver. ⚠ Must be UNKILLED when Phase 3 lands. §0.40 |
+| ✅ | **R0.13** `savedAnalysis` returns `not_computed` | **Closed 2026-09-04 as NOT-A-DEFECT, and the cost removed.** `decision_intelligence_runs` is 0 rows and refresh is inert until Phase 3 **by design**, so the slice was always going to answer `not_computed` — but it spent ~1113ms of ~1250ms headroom to get there, and the reorder that would avoid it is foreclosed (the lookup key derives from the evidence). KILLED at the owner's direction; verified on production `platform_config` 2026-09-04: `decision_os_feed_savedAnalysis=false` is the ONLY `decision_os_feed_*` row that exists. 🛑 **MUST BE UNKILLED WHEN PHASE 3 LANDS**, or the slice stays silent after the thing that fills it starts working. §0.40 |
 | ✅ | **R0.4** Hit `/api/cron/fantasy-os-exec-sync`, read `reason` | **Done 2026-09-03 — and it REFUTES §0.3.** Answered WITHOUT calling the endpoint: the collector demonstrably runs. 38 leagues attempted and 35 succeeded in two hours, newest success 81 seconds before the reading. The route returns the disabled `reason` and syncs NOTHING unless `FANTASY_OS_EXEC_SYNC_LIVE === 'true'`, so live writes prove the gate passes. **Import OS is not gated.** §0.35 |
 | ✅ | **R0.5** Confirm what `TRADE_OS_VALIDATION_DATABASE_URL` points at | **Done 2026-09-03. NOT usable for W2 — the endpoint is STALE.** Host `ep-hidden-block-ad77fprp` / db `mydb_shadow`, versus production `ep-curly-block-ad0dlt9o` / `neondb`. Genuinely a different database, but a dead one: `docs/redraft/PHASE_NEXT_BASELINE_AND_PATH_DECISION.md` already recorded it matching no live compute endpoint across the account's 5 Neon projects, and §0.18's endpoint census found exactly one active. Zero code reads it. §0.35 |
 | ✅ | **R1.1** Render slice values (**G11**) | **Done 2026-09-02.** Proved red→green, 48/48. Also added `playerName` to the anonymous value contract, and fixed an arbitrary-element `asOf`. Typecheck blocked by a peer's mid-edit file. §0.9 |
 | ✅ | **R1.4** Order the bounded rows by relevance | **Done 2026-09-03.** `orderByRosterRelevance` promotes the asker's own players (starters + bench, punctuation-normalised names) as a stable partition; no-op without a roster, nothing dropped, and the hidden-count line says the rows are roster-scoped rather than top-valued. 11 tests, mutation-verified. §0.34 |
 | ✅ | **R1.2** Ask for the value lane (**G2**) | **Done 2026-09-02.** Gate was double-locked; packet now derives `valueFormat` + `leagueIdpRules` from rules it already loads. Red→green, 63/63. Typecheck deferred — machine contention. §0.10 |
-| ⬜ | **R1.5** 🆕 Devy for C2C / devy-slot NFL dynasty leagues | The NCAAF sport test will not find them. §0.10 |
 | ✅ | **R1.6** Collapse gaps that share one cause | **Done 2026-09-03.** `collapseGapsByCause` groups on reason+detail+remedy and names every affected fact in one line; presentation only, `packet.gaps` unchanged. 10 tests, mutation-verified. §0.33 |
-| ⏸ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Deferred 2026-09-03 — real gap, ZERO beneficiaries.** devy_league_configs, devy_leagues and leagueVariant~devy are all 0 rows; the board itself has 1,721 players. Every fix costs a per-turn query or serializes devy behind rules, and nothing carrying `leagueVariant` is in scope at the gate. Fix located and trigger recorded. §0.38 |
 | ✅ | **R1.5** Devy for C2C / devy-slot NFL dynasty leagues | **Done 2026-09-03.** `deriveWantsDevyBoard` reads `general.variant` from rules the packet already loads — no new query, and the NCAAF path stays fully parallel. Population is still zero, so this closes a LATENT defect. 9 tests; two bugs caught during the build (resolution gate, and board-applies vs caller-asked). §0.38 |
-| ⬜ | **R1.6** 🆕 Collapse gaps that share one cause | 8 identical `teams_rosters` lines crowd the prompt. §0.11 |
 | ✅ | **R1.7** `teams_rosters` scope is failing to sync on live leagues | **RESOLVED 2026-09-04 by the enumeration fix (§0.31), measured in production:** teams_rosters-incomplete went ~35 → 3, partial 33 → 10, completed 146 → 191. They were never failing — 87% of the portfolio was never being ENUMERATED. Of the 3 left, 1 is a Fantrax credential prompt and 2 are orphaned rows for leagues deleted upstream. §0.41 |
 | ✅ | **R1.3** Turn `DECISION_OS_GROUNDING_ENABLED` on | **ALREADY DONE ~2026-09-01, on the live project** — `true`, Production and Preview. I reported it absent because I read the dead Vercel team. 🛑 It has therefore been running for a day WITHOUT the code that makes it useful, which is why (b) is urgent. §0.13 |
 | ✅ | **BUG-1** **Chimmy states league settings it never read** | **FIXED 2026-09-02 — `085c5bc85` on base `9b19a3d76`, accepted into batch 5.** Pair 145→145, **0 appeared / 0 disappeared**; 69/69 suites on the commit; 5 files, 0 D lines; MIGRATION no. Six tests, all red-first. **§0.15** |
-| ⚠ | **BUG-2** **25% of league syncs failing — `PostgresError 25006`** — **INCIDENT CLOSED, AFTERMATH OPEN** | **NOT live.** A 17-minute incident: 2026-09-02 05:00:21 → 05:17:47, zero since (~39 h). The open half is the AFTERMATH — no league in `partial`/`failed` has EVER been retried (0 of 37, ~78 missed cycles), so 20% of the portfolio serves data frozen at 09-02 04:01 while the serializer promises an automatic retry. **§0.30** supersedes §0.18. |
-| ⚠ | **BUG-3** ~~Duplicate league rows share one `platformLeagueId`~~ **— PREMISE DISPROVEN** | Not duplicates: a League row is per importing USER, by design (`enumerate.ts`), and there are THREE rows with three different userIds, not two. No fuzzy name-match serves them either — leagues resolve by `userId`. The real defect was 23 users served a blank while an identical sibling mirror held profiles. **Fixed read-side; §0.32.** |
-| ⚠ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it is a KEEPER bug** | Sleeper reports the example league as `settings.type = 1` = **KEEPER**, so `isDynasty=false` was CORRECT and dynasty capture is fine — `leagueType`/`isDynasty` agree on all 225 leagues (110 dynasty). The real defect was that KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues. **Fixed; §0.29** supersedes this row's original claim. |
-| ⬜ | **R1.8** 🆕 Re-check `DECISION_OS_FEED_*` kills on the LIVE project | Never verified there; absence = fail-open, which is intended. §0.13 |
+| ✅ | **BUG-2** **25% of league syncs failing — `PostgresError 25006`** | **INCIDENT CLOSED 2026-09-02; AFTERMATH RESOLVED 2026-09-04, re-measured on PRODUCTION** (`ep-curly-block-ad0dlt9o`, not the test branch): `partial` is **4** rows (was 33 at §0.30, 10 at §0.41) and **every one was attempted inside 24h**, against §0.30's open half of *"0 of 37 ever retried, ~78 missed cycles"*. completed 197/197 attempted; newest attempt minutes before the reading. Same root cause as R1.7 — the enumeration fix (§0.31), not a retry fix. §0.44 |
+| ✅ | **BUG-3** ~~Duplicate league rows share one `platformLeagueId`~~ **— PREMISE DISPROVEN, AND THE REAL DEFECT FIXED** | Not duplicates: a League row is per importing USER by design (`enumerate.ts`), and there were THREE rows with three userIds. The real defect — 23 users served a blank while an identical sibling mirror held profiles — was fixed read-side. §0.32 |
+| ✅ | **BUG-4** ~~`isDynasty` false on a dynasty league~~ **— PREMISE DISPROVEN; it was a KEEPER bug, and that is fixed** | Sleeper reports the example league as `settings.type = 1` = KEEPER, so `isDynasty=false` was CORRECT (`leagueType`/`isDynasty` agree on all 225 leagues, 110 dynasty). KEEPER was captured nowhere, leaving `isKeeper` false for 100% of leagues; the mapper now sets it. §0.29. ⚠ What KEEPER should MEAN downstream across the three subsystems is a SEPARATE open owner decision, recorded in §0.29 where it was found — it is not this bug, and closing this row does not close that. |
+| ✅ | **R1.8** Re-check `DECISION_OS_FEED_*` kills on the LIVE project | **Verified 2026-09-04 on PRODUCTION** (`ep-curly-block-ad0dlt9o`, named because schema-identical Neon branches are otherwise indistinguishable): exactly ONE `decision_os_feed_*` row exists — the deliberate `savedAnalysis=false` kill. Every other feed has no row, which is fail-open = enabled, which is the intended state. §0.44 |
 | ✅ | **R1.9** Re-check `FANTASY_OS_EXEC_SYNC_LIVE`'s VALUE on the live project | **Resolved 2026-09-03 by R0.4's evidence, not by reading the var.** It is encrypted and unreadable, but the collector's own writes settle it: syncs are landing, and they cannot land unless the value is exactly `'true'`. §0.35 |
 | ✅ | **R2** Bridge the 4 live engines into the packet | **Done 2026-09-03.** lineupDecision + commissionerHealthDecision producers, opt-in, wired end to end. §0.21 |
 | ✅ | **R3** Finish Player Value OS | **Done 2026-09-03.** R3.1 idpKicker (§0.22), R3.3 rosterValueGrade + the other two value questions (§0.23). |
 | ✅ | **R4** Identity OS | **Done 2026-09-03.** `playerIdentityCoverage` assertion + `minIdentityResolution` gating on lineupDecision. §0.24 |
 | ✅ | **R4b** Manager Psychology OS into the hub | **Done 2026-09-03 — all of R4b.1–R4b.7.** §0.25, §0.26, §0.27. |
 | ✅ | **R5** Commissioner OS transport decision | **Decided by owner 2026-09-04: keep the HTTP service (Option B)** — Decision OS is also going to third parties as an API, a widget and headless, so the transport IS the product boundary; direct imports would have to be torn back out. The follow-on capability gap is CLOSED: the manager DNA directory now has a route, gated on the existing `intelligence:league:read` scope. ⚠ Shipped switched OFF — `commissioner_os_live_ready_managers` defaults false. §0.43 |
-| ⚠ | **R6** Rename pass | **Docs half DONE 2026-09-04 — the three lists are now one table (§0.42).** Found List 2 had already drifted (OsDomain is 9, doc said 8; `psychology` added by R4b). Identifier half measured and NOT taken: `OsDomain` 4 files, commissioner-os/sports-os 11 each, **fantasy-os 36**, and the seven marketed labels are user-visible product copy = owner's call. Needs a quiet tree, not discovery. §0.42 |
+| ⚠ | **R6** Rename pass | **Docs half DONE 2026-09-04 — the three lists are now one table (§0.42).** Found List 2 had already drifted (OsDomain is 9, doc said 8; `psychology` added by R4b). Identifier half measured and NOT taken: `OsDomain` 4 files, commissioner-os/sports-os 11 each, **fantasy-os 41** (was 36 on 2026-09-04 — re-measured the same day; the rename gets more expensive the longer it waits), and the seven marketed labels are user-visible product copy = owner's call. Needs a quiet tree, not discovery. §0.42 |
 | ✅ | **R7** Proactive alerts | **Fatigue budget done 2026-09-03; the rest was ALREADY BUILT.** Outbox, all four transports and the full push flow already existed — the outbox sent a notification that day. Only the budget was missing. Default is EXEMPT so a marketing flood can never drop a waiver result. ⚠ `web_push_subscriptions` is 0 rows: built and surfaced, zero adoption. §0.39 |
 
 ---
