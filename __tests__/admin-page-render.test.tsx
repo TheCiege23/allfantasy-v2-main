@@ -420,6 +420,10 @@ function metricsFixture() {
     recentSubscriptions: [],
     recentPayments: [],
     recentTokenActivity: [],
+    leaguesByPlatform: [
+      { platform: "sleeper", label: "Sleeper", count: 227 },
+      { platform: "espn", label: "ESPN", count: 5 },
+    ],
   }
 }
 

@@ -138,6 +138,7 @@ export type AdminCommandCenterMetrics = {
   activeWorldCupPools: AdminActivePoolRow[]
   recentUsers: AdminRecentUserRow[]
   waitlist: AdminWaitlistSummary
+  leaguesByPlatform: AdminLeaguesByPlatformRow[]
   recentSubscriptions: AdminRecentSubscriptionRow[]
   recentPayments: AdminRecentPaymentRow[]
   recentTokenActivity: AdminRecentTokenActivityRow[]
@@ -260,6 +261,58 @@ async function loadWaitlist(): Promise<AdminWaitlistSummary> {
   } catch {
     // The admin page must render even if this one table is unavailable.
     return empty
+  }
+}
+
+/**
+ * `League.platform` values that are NOT an external platform a league was imported from, and
+ * must not be counted alongside Sleeper/ESPN/etc. when the question is "which platform brings
+ * the most users" — measured 2026-09-04 against real production rows:
+ *   manual                    — commissioner-entered by hand, no external platform involved
+ *   native                    — created directly on AllFantasy
+ *   allfantasy_test_adp_seed  — synthetic seed data for ADP testing, not a real user's league
+ * An explicit list rather than a "looks like a real platform" pattern match, matching how
+ * PROVIDER_MAPPINGS/SUPPORTED_SPORTS are already fixed lists elsewhere in this directory —
+ * a fuzzy filter risks silently swallowing a genuine future platform whose name happens to
+ * contain "test", which is a worse failure than this list going stale and needing an addition.
+ */
+const NON_PLATFORM_LEAGUE_VALUES = new Set(["manual", "native", "allfantasy_test_adp_seed"])
+
+const PLATFORM_LABELS: Record<string, string> = {
+  sleeper: "Sleeper",
+  espn: "ESPN",
+  yahoo: "Yahoo",
+  mfl: "MFL",
+  fantrax: "Fantrax",
+  fleaflicker: "Fleaflicker",
+}
+
+function platformLabel(platform: string): string {
+  return PLATFORM_LABELS[platform] ?? platform.charAt(0).toUpperCase() + platform.slice(1)
+}
+
+export type AdminLeaguesByPlatformRow = { platform: string; label: string; count: number }
+
+/**
+ * How many leagues have been imported from each external platform — a proxy for which
+ * platform's users AllFantasy is actually reaching. Fetched separately from the main
+ * Promise.all for the same reason waitlist is (see the comment above loadWaitlist's call site):
+ * that array is positional, and adding a 78th entry is exactly where an off-by-one silently
+ * assigns the wrong table to the wrong field.
+ */
+export async function loadLeaguesByPlatform(): Promise<AdminLeaguesByPlatformRow[]> {
+  try {
+    const rows = await prisma.league.groupBy({
+      by: ["platform"],
+      _count: { _all: true },
+    })
+    return rows
+      .filter((r) => !NON_PLATFORM_LEAGUE_VALUES.has(r.platform))
+      .map((r) => ({ platform: r.platform, label: platformLabel(r.platform), count: r._count._all }))
+      .sort((a, b) => b.count - a.count)
+  } catch {
+    // The admin page must render even if this query fails.
+    return []
   }
 }
 
@@ -822,6 +875,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
    * that class of bug.
    */
   const waitlist = await loadWaitlist()
+  const leaguesByPlatform = await loadLeaguesByPlatform()
 
   // Login counts are only meaningful once IdentitySignal has captured at least one
   // login. Before that, a "0" would be indistinguishable from the old silent-zero
@@ -1060,6 +1114,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     activeWorldCupPools,
     recentUsers,
     waitlist,
+    leaguesByPlatform,
     recentSubscriptions,
     recentPayments,
     recentTokenActivity,

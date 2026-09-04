@@ -1703,6 +1703,24 @@ export default async function AdminPage({
 
         <Section id="morning-dashboard" title="Morning Dashboard" items={data.morning} />
         <Section title="Users" items={data.users} />
+        <AccordionSection
+          id="leagues-by-platform"
+          title="Leagues by Platform"
+          eyebrow="Imported leagues — a proxy for which platform brings the most users"
+        >
+          {data.leaguesByPlatform.length > 0 ? (
+            <ul className="space-y-1 text-sm text-white/70">
+              {data.leaguesByPlatform.map((row) => (
+                <li key={row.platform} className="flex justify-between gap-3">
+                  <span className="truncate">{row.label}</span>
+                  <span className="font-black text-white">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-white/50">No imported leagues yet.</p>
+          )}
+        </AccordionSection>
         <Section title="Payments & Subscriptions" items={data.subscriptions} />
         <Section title="Tokens & AI" items={[...data.tokens, ...data.ai]} />
         <Section title="World Cup" items={data.worldCup} />
