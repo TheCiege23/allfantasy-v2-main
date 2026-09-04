@@ -164,9 +164,21 @@ function getAllSourceFiles(rootDir) {
 }
 
 function getChangedFiles(base, head) {
-  const output = execSync(`git diff --name-only --diff-filter=ACMRTUXB ${base}..${head}`, {
-    encoding: "utf8",
-  }).trim();
+  let output;
+  try {
+    output = execSync(`git diff --name-only --diff-filter=ACMRTUXB ${base}..${head}`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (err) {
+    // A ref that will not resolve must name itself rather than dump a node stack. Exit 2, not 1:
+    // this is neither a pass nor a violation, and the difference matters — the same three-valued
+    // discipline this repo already applies to `merge-base --is-ancestor`, where a status that is
+    // neither 0 nor 1 is not a verdict.
+    console.error(`Decision-engine boundary: cannot diff ${base}..${head}`);
+    console.error(String(err?.stderr || err?.message || err).trim());
+    process.exit(2);
+  }
   if (!output) return [];
   return output
     .split(/\r?\n/)
@@ -205,11 +217,35 @@ function collectViolations(rootDir, files) {
 function main() {
   const rootDir = process.cwd();
   const changedOnly = hasFlag("--changed");
-  const base = argAfter("--changed");
-  const head = process.argv[process.argv.indexOf("--changed") + 2] ?? "HEAD";
+
+  // TWO invocation forms, deliberately. The sibling guard
+  // (scripts/check-db-first-api-boundary.mjs) takes `--base X --head Y`, and its workflow is the
+  // obvious thing to copy when wiring this one up. Accepting only the positional form meant a
+  // copied workflow parsed the literal string "--base" AS the base ref.
+  const namedBase = argAfter("--base");
+  const namedHead = argAfter("--head");
+  const posBase = argAfter("--changed");
+  const posHead = process.argv[process.argv.indexOf("--changed") + 2] ?? null;
+  const notAFlag = (v) => (v && !v.startsWith("--") ? v : null);
+
+  const base = namedBase ?? notAFlag(posBase);
+  const head = namedHead ?? notAFlag(posHead) ?? "HEAD";
+
+  // 🛑 `--changed` WITH NO BASE USED TO MEAN "EVERYTHING CHANGED". It fell through to the full
+  // scan, then skipped the backlog branch below because `changedOnly` was set, and printed all 30
+  // pre-existing violations under the heading "violation(s) in changed files" with exit 1. A
+  // malformed invocation produced a confident, specific, wrong red — and the fix a reader would
+  // reach for is to allowlist history that was never the problem. Refuse the run instead.
+  if (changedOnly && !base) {
+    console.error("Decision-engine boundary: --changed requires a base commit.");
+    console.error("  usage: --changed --base <sha> --head <sha>");
+    console.error("     or: --changed <base> <head>");
+    console.error("Omit --changed entirely for a full backlog scan.");
+    process.exit(2);
+  }
 
   let files;
-  if (changedOnly && base) {
+  if (changedOnly) {
     files = getChangedFiles(base, head);
     if (files.length === 0) {
       console.log("Decision-engine boundary: no changed source files.");
