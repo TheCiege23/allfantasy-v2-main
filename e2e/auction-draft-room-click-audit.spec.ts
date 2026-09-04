@@ -746,6 +746,24 @@ async function openResyncMenu(page: Page) {
   await expect(resync).toBeVisible({ timeout: 15_000 })
 }
 
+/**
+ * Select the right-dock Chat tab, which holds the per-message AI handoff button.
+ *
+ * ⚠ THE BUTTON IS IN THE DOM BUT HIDDEN UNTIL THIS RUNS, WHICH IS WHY A PLAIN
+ * `toBeVisible` FAILS WITH "Received: hidden" RATHER THAN "not found".
+ * DraftRoomPageClient mounts the chat as one tab of DraftRightDockTabs with
+ * `defaultTab="queue"`, so the chat panel renders unselected. It also mounts a SECOND
+ * copy of the same panel in an `xl:hidden` container, so at this spec's 1280px width
+ * two copies of draft-chat-open-ai-helper exist and BOTH are hidden — the tabbed one
+ * because its tab is not selected, the other because its container is display:none.
+ * Selecting the tab reveals the first, which is the one `.first()` resolves to.
+ */
+async function openChatTab(page: Page) {
+  const chatTab = page.getByTestId('draft-right-dock-tab-chat').first()
+  await clickHydrated(chatTab)
+  await expect(page.getByTestId('draft-right-dock-panel-chat').first()).toBeVisible({ timeout: 15_000 })
+}
+
 async function openDraftRoomHarness(page: Page) {
   const enter = page.getByTestId('draft-enter-room-button')
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -879,6 +897,7 @@ test.describe('@auction-draft-room click audit', () => {
       .not.toBe(timerBefore)
 
     // AI helper surface opens and recommendation refresh is wired.
+    await openChatTab(page)
     const openAiHelper = desktop.getByTestId('draft-chat-open-ai-helper').first()
     await expect(openAiHelper).toBeVisible()
     await clickHydrated(openAiHelper)
