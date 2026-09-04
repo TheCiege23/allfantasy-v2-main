@@ -21,10 +21,20 @@ export async function POST(req: NextRequest) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.res
 
-  const isProduction = process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production"
+  /*
+   * 🛑 WAS `NODE_ENV === "production" && VERCEL_ENV === "production"`. Production moved to
+   * Railway on 2026-09-02, and Railway never sets VERCEL_ENV — so that second clause was always
+   * false there, and this gate never fired in real production. Any admin could run the full
+   * create -> exercise -> resolve -> cleanup cycle against the live DB with no opt-in flag.
+   *
+   * NODE_ENV alone is the same signal nonprodValidationGuard.ts and telemetryDebugAccess.ts
+   * already use correctly for this exact question elsewhere in this repo — Railway has no
+   * documented preview/staging environment for this app, so there is no second signal to add.
+   */
+  const isProduction = process.env.NODE_ENV === "production"
   if (isProduction && process.env.ALLOW_DUPLICATE_MANAGER_VERIFY_EXECUTE !== "true") {
     return NextResponse.json(
-      { ok: false, error: "Execute mode is disabled in production. Set ALLOW_DUPLICATE_MANAGER_VERIFY_EXECUTE=true in Vercel to enable it, then remove it again afterward." },
+      { ok: false, error: "Execute mode is disabled in production. Set ALLOW_DUPLICATE_MANAGER_VERIFY_EXECUTE=true in Railway to enable it, then remove it again afterward." },
       { status: 403 }
     )
   }
