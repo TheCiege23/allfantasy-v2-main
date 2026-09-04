@@ -25,7 +25,7 @@ import { buildRosterIdMap } from './rosterIdMatch'
  */
 
 export type ScoreboardTeam = {
-  rosterId: number
+  rosterId: string
   teamName: string | null
   managerName: string | null
   avatarUrl: string | null
@@ -139,7 +139,7 @@ export async function getLeagueScoreboard(args: {
   seasonYear: number
   week: number
   /** The viewer's roster id, so their row can be marked. Null is fine. */
-  yourRosterId: number | null
+  yourRosterId: string | null
   scoringSettings: Record<string, unknown> | null
   projectionWeek: { season: string; week: number } | null
 }): Promise<LeagueScoreboard | null> {
@@ -216,7 +216,7 @@ export async function getLeagueScoreboard(args: {
   }
 
   // Starters for every team, so the whole board can be projected in one read.
-  const startersBy = new Map<number, string[]>()
+  const startersBy = new Map<string, string[]>()
   for (const r of rows) {
     const t = teamBy.get(String(r.rosterId))
     const roster = t ? rosterFor(t) : null
@@ -241,7 +241,7 @@ export async function getLeagueScoreboard(args: {
       }).catch(() => new Map())
     : new Map()
 
-  function build(rosterId: number, points: number | null): ScoreboardTeam {
+  function build(rosterId: string, points: number | null): ScoreboardTeam {
     const t = teamBy.get(String(rosterId))
     const starters = startersBy.get(rosterId) ?? []
 
@@ -282,7 +282,7 @@ export async function getLeagueScoreboard(args: {
    * `.catch(() => [])`, so its inferred type collapses to `never[]` on the
    * failure branch and every push into these becomes an error.
    */
-  type Row = { rosterId: number; matchupId: number | null; pointsFor: number; win: number }
+  type Row = { rosterId: string; matchupId: number | null; pointsFor: number; win: number }
   const byMatchup = new Map<number, Row[]>()
   const unpairedRows: Row[] = []
   for (const r of rows) {

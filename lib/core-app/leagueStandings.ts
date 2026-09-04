@@ -27,7 +27,7 @@ import { isScored, resolveCurrentWeekFrom, type WeekScoreRow } from './currentWe
  */
 
 export type StandingRow = {
-  rosterId: number
+  rosterId: string
   name: string | null
   isYou: boolean
   /** Rank by points for, 1 = most. */
@@ -148,12 +148,12 @@ export type LeagueStandingsResult =
 /** Below this, a per-week average is noise rather than a pace. */
 const MIN_WEEKS_TO_PROJECT = 3
 
-type Row = WeekScoreRow & { rosterId: number; win: number }
+type Row = WeekScoreRow & { rosterId: string; win: number }
 
 /** Rank a set of point totals, highest first. Ties share the better rank. */
-function rankBy(totals: Map<number, number>): Map<number, number> {
+function rankBy(totals: Map<string, number>): Map<string, number> {
   const ordered = [...totals.entries()].sort((a, b) => b[1] - a[1])
-  const ranks = new Map<number, number>()
+  const ranks = new Map<string, number>()
   let lastValue: number | null = null
   let lastRank = 0
   ordered.forEach(([rosterId, value], i) => {
@@ -341,19 +341,17 @@ export async function getLeagueStandings(
 
   const seasonRows = rows.filter((r) => r.seasonYear === resolved.season)
 
-  const nameByRoster = new Map<number, string>()
+  const nameByRoster = new Map<string, string>()
   for (const t of teams) {
-    const roster = Number(t.externalId)
-    if (!Number.isFinite(roster)) continue
+    if (!t.externalId) continue
     // teamName is what the platform's own UI shows; ownerName is the person.
     const label = t.teamName?.trim() || t.ownerName?.trim()
-    if (label) nameByRoster.set(roster, label)
+    if (label) nameByRoster.set(t.externalId, label)
   }
 
-  const myRosters = new Set<number>()
+  const myRosters = new Set<string>()
   for (const t of mine) {
-    const roster = Number(t.externalId)
-    if (Number.isFinite(roster)) myRosters.add(roster)
+    if (t.externalId) myRosters.add(t.externalId)
   }
 
   /*
@@ -362,15 +360,15 @@ export async function getLeagueStandings(
    * flatten an average or invent a rank change.
    */
   const scoredWeeks = [...new Set(seasonRows.filter(isScored).map((r) => r.week))].sort((a, b) => a - b)
-  const cumulative = new Map<number, number>()
-  const weeksPlayed = new Map<number, number>()
-  const record = new Map<number, { wins: number; losses: number }>()
-  const perWeekPoints = new Map<number, Map<number, number>>()
-  const ranksByWeek = new Map<number, Map<number, number>>()
+  const cumulative = new Map<string, number>()
+  const weeksPlayed = new Map<string, number>()
+  const record = new Map<string, { wins: number; losses: number }>()
+  const perWeekPoints = new Map<number, Map<string, number>>()
+  const ranksByWeek = new Map<number, Map<string, number>>()
 
   for (const week of scoredWeeks) {
     const weekRows = seasonRows.filter((r) => r.week === week && isScored(r))
-    const thisWeek = new Map<number, number>()
+    const thisWeek = new Map<string, number>()
     for (const r of weekRows) {
       cumulative.set(r.rosterId, (cumulative.get(r.rosterId) ?? 0) + r.pointsFor)
       weeksPlayed.set(r.rosterId, (weeksPlayed.get(r.rosterId) ?? 0) + 1)
@@ -386,7 +384,7 @@ export async function getLeagueStandings(
 
   const latestWeek = scoredWeeks[scoredWeeks.length - 1]
   const priorWeek = scoredWeeks.length > 1 ? scoredWeeks[scoredWeeks.length - 2] : null
-  const finalRanks = ranksByWeek.get(latestWeek) ?? new Map<number, number>()
+  const finalRanks = ranksByWeek.get(latestWeek) ?? new Map<string, number>()
   const priorRanks = priorWeek != null ? ranksByWeek.get(priorWeek) ?? null : null
 
   const teamRows: StandingRow[] = [...cumulative.entries()]

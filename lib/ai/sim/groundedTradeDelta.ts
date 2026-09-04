@@ -99,7 +99,11 @@ export async function computeGroundedTradeDelta(args: {
   if (!myTeam?.externalId) {
     return refuse('we cannot tell which team in this league is yours')
   }
-  const myRosterId = Number.parseInt(String(myTeam.externalId), 10)
+  // WeeklyMatchup.rosterId is String now, matching LeagueTeam.externalId
+  // directly -- was Number.parseInt(...), which stopped matching the moment
+  // rosterId became a native string instead of an Int this always had to
+  // round-trip through.
+  const myRosterId = myTeam.externalId
 
   // ⚠ WeeklyMatchup.leagueId IS THE PLATFORM LEAGUE ID (two-id-space trap —
   // see lib/core-app/matchup.ts).
@@ -118,7 +122,7 @@ export async function computeGroundedTradeDelta(args: {
   // Remaining schedule = weeks where MY row exists, is unscored (a 0-0 row is a
   // scheduled week, not a result — same stance as lib/core-app/matchup.ts), and
   // an opponent shares the matchupId.
-  const remaining: Array<{ week: number; opponentRosterId: number }> = []
+  const remaining: Array<{ week: number; opponentRosterId: string }> = []
   const weekNumbers = [...new Set(rows.map((r) => r.week))].sort((a, b) => a - b)
   for (const week of weekNumbers) {
     const weekRows = rows.filter((r) => r.week === week)

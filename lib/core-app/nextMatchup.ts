@@ -24,7 +24,7 @@ import { lookupProjections } from './playerProjections'
  */
 
 export type MatchupSide = {
-  rosterId: number
+  rosterId: string
   teamName: string | null
   managerName: string | null
   avatarUrl: string | null
@@ -74,8 +74,11 @@ export async function getNextMatchup(args: {
   const { leagueId, platformLeagueId, myExternalId, seasonYear, week } = args
   if (!platformLeagueId || !myExternalId) return null
 
-  const myRosterId = Number(myExternalId)
-  if (!Number.isFinite(myRosterId)) return null
+  // WeeklyMatchup.rosterId is String now, matching LeagueTeam.externalId
+  // directly -- was Number(myExternalId), which stopped matching the moment
+  // rosterId became a native string instead of an Int this always had to
+  // round-trip through.
+  const myRosterId = myExternalId
 
   const rows = await prisma.weeklyMatchup
     .findMany({
@@ -103,7 +106,7 @@ export async function getNextMatchup(args: {
   // LeagueTeam.externalId is the platform roster id, stored as a string.
   const teams = await prisma.leagueTeam
     .findMany({
-      where: { leagueId, externalId: { in: rosterIds.map((n) => String(n)) } },
+      where: { leagueId, externalId: { in: rosterIds } },
       select: {
         externalId: true,
         teamName: true,
@@ -137,7 +140,7 @@ export async function getNextMatchup(args: {
    * normally-keyed roster still wins, and the user uuid is offered ONLY for the
    * caller's own team — an opponent's roster is never ours to find that way.
    */
-  const candidatesFor = (rosterId: number): string[] => {
+  const candidatesFor = (rosterId: string): string[] => {
     const team = teamBy.get(String(rosterId))
     const keys = [
       team?.platformUserId,
@@ -160,7 +163,7 @@ export async function getNextMatchup(args: {
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
 
   // One projection lookup for both lineups.
-  const allStarters = new Map<number, string[]>()
+  const allStarters = new Map<string, string[]>()
   for (const id of rosterIds) {
     const roster = candidatesFor(id)
       .map((key) => rosterBy.get(key))
@@ -179,7 +182,7 @@ export async function getNextMatchup(args: {
       }).catch(() => new Map())
     : new Map()
 
-  function side(rosterId: number): MatchupSide {
+  function side(rosterId: string): MatchupSide {
     const team = teamBy.get(String(rosterId))
     const starters = allStarters.get(rosterId) ?? []
 

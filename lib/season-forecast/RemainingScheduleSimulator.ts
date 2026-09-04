@@ -62,11 +62,14 @@ export async function getRemainingSchedule(
   })
 
   const teamIdSet = new Set(teamIds)
-  const rosterIdToTeamId = (r: number) => String(r)
+  // WeeklyMatchup.rosterId is String now (see the migration's README entry), so
+  // this is an identity function -- kept so the pairing logic below reads the
+  // same regardless of which id space `r` happens to be in.
+  const rosterIdToTeamId = (r: string) => r
 
   // Group past by week and matchupId; each group of 2 rosterIds = one pairing
   const pairingsByWeek = new Map<number, [string, string][]>()
-  const weekMatchupToRosters = new Map<string, number[]>()
+  const weekMatchupToRosters = new Map<string, string[]>()
   for (const row of past) {
     const key = `${row.week}:${row.matchupId ?? row.rosterId}`
     const list = weekMatchupToRosters.get(key) ?? []

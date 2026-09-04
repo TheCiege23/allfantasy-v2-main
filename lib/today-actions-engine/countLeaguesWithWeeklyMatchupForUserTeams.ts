@@ -11,11 +11,8 @@ export async function countLeaguesWithWeeklyMatchupForUserTeams(userId: string):
   })
 
   const pairs = teams
-    .map((t) => {
-      const rosterId = Number.parseInt(String(t.externalId), 10)
-      return Number.isFinite(rosterId) ? { leagueId: t.leagueId, rosterId } : null
-    })
-    .filter((p): p is { leagueId: string; rosterId: number } => p !== null)
+    .map((t) => (t.externalId ? { leagueId: t.leagueId, rosterId: t.externalId } : null))
+    .filter((p): p is { leagueId: string; rosterId: string } => p !== null)
 
   if (pairs.length === 0) return 0
 

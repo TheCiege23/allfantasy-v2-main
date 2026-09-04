@@ -113,11 +113,17 @@ export async function enumerateExternalMatchupConnections(): Promise<ExternalMat
  * Provider team id → WeeklyMatchup.rosterId. ESPN team ids are numeric
  * strings; Yahoo team keys carry the numeric id after `.t.`. Anything
  * non-numeric is rejected (the row is dropped, never invented).
+ *
+ * Still validates as an integer even though the column is now String: ESPN and
+ * Yahoo ids are never zero-padded (unlike MFL's), so canonicalizing through
+ * `String(n)` strips incidental whitespace/formatting and keeps their id space
+ * exactly as plain-unpadded as it always was -- this function is not where a
+ * zero-padded id would ever appear.
  */
-function toRosterId(provider: ExternalMatchupProvider, sourceTeamId: string): number | null {
+function toRosterId(provider: ExternalMatchupProvider, sourceTeamId: string): string | null {
   const raw = provider === 'yahoo' ? sourceTeamId.split('.t.')[1] ?? '' : sourceTeamId
   const n = Number(String(raw).trim())
-  return Number.isInteger(n) && n >= 0 ? n : null
+  return Number.isInteger(n) && n >= 0 ? String(n) : null
 }
 
 export type ScheduleWeekInput = {
@@ -144,7 +150,7 @@ export type ScheduleWeekInput = {
  * who won. One definition, one resolver argument.
  */
 export async function applySchedule(
-  toRoster: (sourceTeamId: string) => number | null,
+  toRoster: (sourceTeamId: string) => string | null,
   externalLeagueId: string,
   schedule: ScheduleWeekInput[]
 ): Promise<{ weeksWritten: number; weeksUnchanged: number }> {
@@ -153,7 +159,7 @@ export async function applySchedule(
 
   for (const weekEntry of schedule) {
     const rows: Array<{
-      rosterId: number
+      rosterId: string
       matchupId: number
       pointsFor: number
       pointsAgainst: number

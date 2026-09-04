@@ -121,14 +121,13 @@ export async function getPublicLeagueStandings(
 
   const seasonRows = rows.filter((r) => r.seasonYear === resolved.season && isScored(r))
 
-  const nameByRoster = new Map<number, string>()
+  const nameByRoster = new Map<string, string>()
   for (const t of teams) {
-    const roster = Number(t.externalId)
     const label = t.teamName?.trim()
-    if (Number.isFinite(roster) && label) nameByRoster.set(roster, label)
+    if (t.externalId && label) nameByRoster.set(t.externalId, label)
   }
 
-  const totals = new Map<number, { pf: number; games: number; wins: number; losses: number }>()
+  const totals = new Map<string, { pf: number; games: number; wins: number; losses: number }>()
   for (const r of seasonRows) {
     const acc = totals.get(r.rosterId) ?? { pf: 0, games: 0, wins: 0, losses: 0 }
     acc.pf += r.pointsFor

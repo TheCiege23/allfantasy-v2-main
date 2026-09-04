@@ -105,7 +105,7 @@ export type TradeSimResult = {
 /** One priced week of the real remaining schedule. */
 export type GroundedWeekDelta = {
   week: number
-  opponentRosterId: number
+  opponentRosterId: string
   pWinBefore: number
   pWinAfter: number
 }

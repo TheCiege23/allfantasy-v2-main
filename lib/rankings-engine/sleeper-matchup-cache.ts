@@ -12,7 +12,7 @@ import { getLeagueMatchups } from '@/lib/sleeper-client'
 
 interface CachedWeekStat {
   week: number
-  rosterId: number
+  rosterId: string
   pointsFor: number
   pointsAgainst: number
   win: number
@@ -108,7 +108,9 @@ export async function ensureMatchupsCached(
         leagueId,
         seasonYear,
         week,
-        rosterId: m.roster_id,
+        // Was a bare number: WeeklyMatchup.rosterId is now String, matching every
+        // other provider's LeagueTeam.externalId -- see the migration's README entry.
+        rosterId: String(m.roster_id),
         matchupId: m.matchup_id || null,
         pointsFor: pts,
         pointsAgainst: oppPoints,
@@ -131,8 +133,8 @@ export async function getWeekStatsFromCache(
   seasonYear: number,
 ): Promise<{
   weekStats: CachedWeekStat[]
-  weeklyPointsByRoster: Map<number, number[]>
-  weeklyOpponentPointsByRoster: Map<number, number[]>
+  weeklyPointsByRoster: Map<string, number[]>
+  weeklyOpponentPointsByRoster: Map<string, number[]>
 }> {
   await ensureMatchupsCached(leagueId, maxWeek, seasonYear)
 
@@ -142,8 +144,8 @@ export async function getWeekStatsFromCache(
   })
 
   const weekStats: CachedWeekStat[] = []
-  const weeklyPointsByRoster = new Map<number, number[]>()
-  const weeklyOpponentPointsByRoster = new Map<number, number[]>()
+  const weeklyPointsByRoster = new Map<string, number[]>()
+  const weeklyOpponentPointsByRoster = new Map<string, number[]>()
 
   for (const r of rows) {
     weekStats.push({

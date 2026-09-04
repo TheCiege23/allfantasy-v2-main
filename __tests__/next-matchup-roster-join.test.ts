@@ -42,8 +42,8 @@ const USER_ID = 'af-user-uuid-1'
 
 /** My roster id is 3; the opponent's is 7. */
 const MATCHUP_ROWS = [
-  { rosterId: 3, matchupId: 1 },
-  { rosterId: 7, matchupId: 1 },
+  { rosterId: '3', matchupId: 1 },
+  { rosterId: '7', matchupId: 1 },
 ]
 
 const TEAMS = [

@@ -195,7 +195,11 @@ export interface WeeklyAward {
     | 'points_against_victim'
     | 'boss_win'
   week: number
-  rosterId: number
+  /** WeeklyMatchup.rosterId (String) -- NOT the same id space as TeamScore.rosterId
+   *  below, which is Sleeper's own numeric roster_id. Nothing in this file or its
+   *  consumers currently cross-references the two; keep it that way rather than
+   *  assuming they match. */
+  rosterId: string
   title: string
   subtitle: string
   value: number
@@ -532,8 +536,8 @@ async function fetchRosterRecords(leagueId: string): Promise<Map<number, RosterR
 
 
 function computeExpectedWins(
-  rosterId: number,
-  weeklyPointsByRoster: Map<number, number[]>,
+  rosterId: string,
+  weeklyPointsByRoster: Map<string, number[]>,
   maxWeek: number,
 ): number {
   let expectedWins = 0
@@ -568,9 +572,9 @@ function computeStreak(weeklyPoints: number[], weeklyOpponentPoints: number[]): 
 }
 
 function computeSOS(
-  rosterId: number,
-  weekStats: { week: number; rosterId: number; matchupId: number | null }[],
-  rosterRecords: Map<number, { wins: number; total: number }>,
+  rosterId: string,
+  weekStats: { week: number; rosterId: string; matchupId: number | null }[],
+  rosterRecords: Map<string, { wins: number; total: number }>,
 ): number {
   let oppWinPctSum = 0
   let oppCount = 0
@@ -2238,7 +2242,7 @@ function getWeekValue(arr: number[], week: number): number | null {
 
 interface CachedWeekStat {
   week: number
-  rosterId: number
+  rosterId: string
   pointsFor: number
   pointsAgainst: number
   win: number
@@ -2274,8 +2278,8 @@ function resolveAwardsWeek(args: {
 function computeWeeklyAwards(args: {
   week: number
   weekStats: CachedWeekStat[]
-  weeklyPointsByRoster: Map<number, number[]>
-  weeklyOpponentPointsByRoster: Map<number, number[]>
+  weeklyPointsByRoster: Map<string, number[]>
+  weeklyOpponentPointsByRoster: Map<string, number[]>
 }): WeeklyAwardsPayload | null {
   const { week, weekStats } = args
 
@@ -2292,7 +2296,7 @@ function computeWeeklyAwards(args: {
   const ranked = [...rows].sort((a, b) => b.pointsFor - a.pointsFor)
   const awards: WeeklyAward[] = []
 
-  const rankOf = (rid: number) => ranked.findIndex(r => r.rosterId === rid) + 1
+  const rankOf = (rid: string) => ranked.findIndex(r => r.rosterId === rid) + 1
 
   const top = ranked[0]
   awards.push({
@@ -2935,9 +2939,11 @@ export async function computeLeagueRankingsV2(
     Number(season)
   )
 
-  const rosterRecords = new Map<number, { wins: number; total: number }>()
+  // Keyed as a string to match weekStats[].rosterId (WeeklyMatchup, String now) --
+  // both name the same Sleeper roster_id space, just via two different sources.
+  const rosterRecords = new Map<string, { wins: number; total: number }>()
   for (const r of rosters) {
-    rosterRecords.set(r.roster_id, {
+    rosterRecords.set(String(r.roster_id), {
       wins: r.settings.wins,
       total: r.settings.wins + r.settings.losses + r.settings.ties,
     })
@@ -3075,10 +3081,10 @@ export async function computeLeagueRankingsV2(
   for (const roster of rosters) {
     const user = userMap.get(roster.owner_id)
     const rosterValues = computeRosterValues(roster, valueMap, isDynasty)
-    const weeklyPts = weeklyPointsByRoster.get(roster.roster_id) || []
-    const weeklyOppPts = weeklyOpponentPointsByRoster.get(roster.roster_id) || []
-    const expectedWins = computeExpectedWins(roster.roster_id, weeklyPointsByRoster, maxWeek)
-    const sos = computeSOS(roster.roster_id, weekStats, rosterRecords)
+    const weeklyPts = weeklyPointsByRoster.get(String(roster.roster_id)) || []
+    const weeklyOppPts = weeklyOpponentPointsByRoster.get(String(roster.roster_id)) || []
+    const expectedWins = computeExpectedWins(String(roster.roster_id), weeklyPointsByRoster, maxWeek)
+    const sos = computeSOS(String(roster.roster_id), weekStats, rosterRecords)
     const tradeEff = tradeEfficiency.get(roster.roster_id) || { tradeCount: 0, avgPremium: 0 }
 
     const wins = roster.settings.wins ?? 0
@@ -3355,7 +3361,7 @@ export async function computeLeagueRankingsV2(
 
   const allTeamsForOdds = rawTeams.map(t => ({
     rosterId: t.rosterId,
-    weeklyPts: weeklyPointsByRoster.get(t.rosterId) ?? [],
+    weeklyPts: weeklyPointsByRoster.get(String(t.rosterId)) ?? [],
     record: t.record,
   }))
   const forwardOddsMap = computeAllForwardOdds(allTeamsForOdds, rosters.length)
@@ -3428,7 +3434,7 @@ export async function computeLeagueRankingsV2(
 
   const weeklyPointsDistribution = rosters.map(r => ({
     rosterId: r.roster_id,
-    weeklyPoints: weeklyPointsByRoster.get(r.roster_id) || [],
+    weeklyPoints: weeklyPointsByRoster.get(String(r.roster_id)) || [],
   }))
 
   const marketInsights: MarketInsight[] = []

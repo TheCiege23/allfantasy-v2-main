@@ -76,7 +76,7 @@ export function isEliminationFormat(leagueType: string | null | undefined): bool
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type WeekOpponent = {
-  rosterId: number
+  rosterId: string
   /** Null when no LeagueTeam row names this roster — never a made-up name. */
   name: string | null
 }
@@ -110,8 +110,8 @@ export type WeekMatchup = {
 
 /** One matchup in the focused league that the user is NOT playing in. */
 export type LeagueSideline = {
-  a: { rosterId: number; name: string | null; projected: number | null }
-  b: { rosterId: number; name: string | null; projected: number | null }
+  a: { rosterId: string; name: string | null; projected: number | null }
+  b: { rosterId: string; name: string | null; projected: number | null }
   /** Probability side A wins. Null when either side is unprojectable. */
   aWinProbability: number | null
 }
@@ -155,9 +155,9 @@ export type LeagueWeekBoard = {
    * record yet — printing 0-0 beside a team name would state a fact that does
    * not exist. The screen renders nothing for an absent roster.
    */
-  records: Record<number, { wins: number; losses: number }>
+  records: Record<string, { wins: number; losses: number }>
   /** The user's roster in this league, for looking up their own record. */
-  yourRosterId: number | null
+  yourRosterId: string | null
   /** The team name the platform published, when it published one. */
   yourTeamName: string | null
 }
@@ -284,7 +284,7 @@ type MatchupRow = {
   leagueId: string
   seasonYear: number
   week: number
-  rosterId: number
+  rosterId: string
   matchupId: number | null
   pointsFor: number
   pointsAgainst: number
@@ -297,7 +297,7 @@ type History = {
   /** platformLeagueId → league metadata. */
   leagueByPlatformId: Map<string, { id: string; name: string; platform: string; elimination: boolean }>
   /** "platformLeagueId:rosterId" → the user owns this roster. */
-  myRosters: Map<string, number>
+  myRosters: Map<string, string>
   /** "platformLeagueId:rosterId" → team name, when one is on file. */
   rosterNames: Map<string, string>
   latest: { season: number; week: number } | null
@@ -365,20 +365,18 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
   const rosterNames = new Map<string, string>()
   for (const t of teams) {
     const pid = t.league?.platformLeagueId
-    const roster = Number(t.externalId)
-    if (!pid || !Number.isFinite(roster)) continue
+    if (!pid || !t.externalId) continue
     // teamName is what shows in the platform's own UI; ownerName is the person.
     // Prefer the team, fall back to the person, never to a placeholder.
     const label = t.teamName?.trim() || t.ownerName?.trim()
-    if (label) rosterNames.set(`${pid}:${roster}`, label)
+    if (label) rosterNames.set(`${pid}:${t.externalId}`, label)
   }
 
-  const myRosters = new Map<string, number>()
+  const myRosters = new Map<string, string>()
   for (const t of mine) {
     const pid = t.league?.platformLeagueId
-    const roster = Number(t.externalId)
-    if (!pid || !Number.isFinite(roster)) continue
-    myRosters.set(`${pid}:${roster}`, roster)
+    if (!pid || !t.externalId) continue
+    myRosters.set(`${pid}:${t.externalId}`, t.externalId)
   }
 
   /*
@@ -599,7 +597,7 @@ export async function getWeekBoard(
       const yours =
         [...coinFlips, ...leaning, ...unprojected].find((c) => c.leagueId === meta.id) ?? null
 
-      const projectedOf = (rosterId: number): number | null =>
+      const projectedOf = (rosterId: string): number | null =>
         profiles.get(`${pid}:${rosterId}`)?.mu ?? null
 
       const sidelines: LeagueSideline[] = leaguePairs
@@ -686,7 +684,7 @@ export async function getWeekBoard(
        * are counted, which is why a preseason league correctly shows nothing
        * here rather than a wall of zeros.
        */
-      const records: Record<number, { wins: number; losses: number }> = {}
+      const records: Record<string, { wins: number; losses: number }> = {}
       for (const pair of pairRows(
         history.rows.filter((r) => r.leagueId === pid && r.seasonYear === latest.season),
       )) {
@@ -703,7 +701,7 @@ export async function getWeekBoard(
         for (const [rid, won] of [
           [pair.a.rosterId, aWon],
           [pair.b.rosterId, !aWon],
-        ] as Array<[number, boolean]>) {
+        ] as Array<[string, boolean]>) {
           const rec = (records[rid] ??= { wins: 0, losses: 0 })
           if (won) rec.wins += 1
           else rec.losses += 1

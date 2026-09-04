@@ -63,7 +63,7 @@ function initials(name: string | null): string {
   return (first + second).toUpperCase()
 }
 
-function recordOf(board: LeagueWeekBoard, rosterId: number | null | undefined): string | null {
+function recordOf(board: LeagueWeekBoard, rosterId: string | null | undefined): string | null {
   if (rosterId == null) return null
   const r = board.records[rosterId]
   // Absent means "no scored games". That is not 0-0 and must not render as it.

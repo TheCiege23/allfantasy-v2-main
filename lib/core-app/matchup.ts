@@ -356,7 +356,11 @@ export async function getMatchupData(
     }
   }
 
-  const myRosterId = Number.parseInt(String(myTeam.externalId), 10)
+  // WeeklyMatchup.rosterId is String now, matching LeagueTeam.externalId
+  // directly -- was Number.parseInt(...), which stopped matching the moment
+  // rosterId became a native string instead of an Int this always had to
+  // round-trip through.
+  const myRosterId = myTeam.externalId
   const mine = rows.find((r) => r.rosterId === myRosterId)
 
   if (!mine) {

@@ -17,11 +17,24 @@ function isPlainDigits(value: string): boolean {
   return /^\d+$/.test(value)
 }
 
-/** True when `externalId` and `rosterId` name the same team, padding included. */
-export function rosterIdsMatch(externalId: string | null | undefined, rosterId: number): boolean {
+/**
+ * True when `externalId` and `rosterId` name the same team, padding included.
+ *
+ * `rosterId` accepts `number | string` because `WeeklyMatchup.rosterId` itself
+ * is mid-migration from Int to Text (see the schema comment and
+ * prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text) —
+ * some callers still hand this a number, others already hand it the raw
+ * string. Both are coerced to a string before comparing, so this keeps
+ * working unchanged either way.
+ */
+export function rosterIdsMatch(
+  externalId: string | null | undefined,
+  rosterId: number | string,
+): boolean {
   if (externalId == null) return false
-  if (externalId === String(rosterId)) return true
-  return isPlainDigits(externalId) && Number(externalId) === rosterId
+  const rid = String(rosterId)
+  if (externalId === rid) return true
+  return isPlainDigits(externalId) && isPlainDigits(rid) && Number(externalId) === Number(rid)
 }
 
 /**

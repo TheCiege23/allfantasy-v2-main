@@ -24,7 +24,7 @@ import { buildRosterIdMap } from './rosterIdMatch'
  */
 
 export type AllPlayRow = {
-  rosterId: number
+  rosterId: string
   teamName: string | null
   managerName: string | null
   avatarUrl: string | null
@@ -64,8 +64,8 @@ export type AllPlayBoard = {
 
 /** Rank teams by all-play win rate, then by points. Returns rosterId -> rank. */
 function rankBy(
-  scores: Map<number, { apw: number; apl: number; pf: number }>,
-): Map<number, number> {
+  scores: Map<string, { apw: number; apl: number; pf: number }>,
+): Map<string, number> {
   const ordered = [...scores.entries()].sort((a, b) => {
     const aRate = a[1].apw + a[1].apl > 0 ? a[1].apw / (a[1].apw + a[1].apl) : 0
     const bRate = b[1].apw + b[1].apl > 0 ? b[1].apw / (b[1].apw + b[1].apl) : 0
@@ -108,11 +108,11 @@ export async function getAllPlayBoard(args: {
     apt: number
     pf: number
   }
-  const acc = new Map<number, Acc>()
+  const acc = new Map<string, Acc>()
   const blank = (): Acc => ({ wins: 0, losses: 0, ties: 0, apw: 0, apl: 0, apt: 0, pf: 0 })
 
   /** Power rank after each scored week, so movement is real history. */
-  const rankHistory: Array<Map<number, number>> = []
+  const rankHistory: Array<Map<string, number>> = []
   let weeksCounted = 0
 
   for (const week of [...byWeek.keys()].sort((a, b) => a - b)) {

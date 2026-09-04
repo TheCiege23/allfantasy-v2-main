@@ -305,8 +305,9 @@ export async function getRivalRecords(
     const mine = leagueTeams.find((t) => t.claimedByUserId === userId)
     if (!mine?.externalId) continue
 
-    const myRosterId = Number.parseInt(String(mine.externalId), 10)
-    if (!Number.isFinite(myRosterId)) continue
+    // WeeklyMatchup.rosterId is String now, matching LeagueTeam.externalId
+    // directly -- was Number.parseInt(String(mine.externalId), 10).
+    const myRosterId = mine.externalId
 
     const rows = rowsByPlatformLeague.get(platformLeagueId) ?? []
     if (rows.length === 0) continue
@@ -324,7 +325,7 @@ export async function getRivalRecords(
     type WeekRowLite = {
       seasonYear: number
       week: number
-      rosterId: number
+      rosterId: string
       matchupId: number | null
       pointsFor: number
     }

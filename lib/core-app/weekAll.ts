@@ -98,13 +98,13 @@ export async function getWeekAll(
     }),
   ])
 
-  // Sleeper roster ids are numeric on WeeklyMatchup and strings on LeagueTeam.
+  // WeeklyMatchup.rosterId and LeagueTeam.externalId are both String now (see the
+  // migration's README entry) -- was a number/string mismatch bridged by Number().
   const mine = new Map<string, { leagueId: string; name: string; platform: string | null }>()
   for (const team of myTeams) {
     const platformLeagueId = team.league?.platformLeagueId
-    const roster = Number(team.externalId)
-    if (!platformLeagueId || !Number.isFinite(roster)) continue
-    mine.set(`${platformLeagueId}:${roster}`, {
+    if (!platformLeagueId || !team.externalId) continue
+    mine.set(`${platformLeagueId}:${team.externalId}`, {
       leagueId: team.league!.id,
       name: team.league?.name?.trim() || 'League',
       platform: team.league?.platform ?? null,

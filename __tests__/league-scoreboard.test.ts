@@ -23,7 +23,7 @@ const BASE = {
   platformLeagueId: '99887766',
   seasonYear: 2026,
   week: 1,
-  yourRosterId: 1,
+  yourRosterId: '1',
   scoringSettings: { rec: 1, pass_td: 4 } as Record<string, unknown>,
   projectionWeek: { season: '2026', week: 1 },
 }
@@ -68,10 +68,10 @@ describe('getLeagueScoreboard', () => {
     // The league home rendered one matchup — the viewer's — on a screen whose
     // whole subject is the league.
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 118.2, win: 1 },
-      { rosterId: 2, matchupId: 1, pointsFor: 101.4, win: 0 },
-      { rosterId: 3, matchupId: 2, pointsFor: 96.0, win: 0 },
-      { rosterId: 4, matchupId: 2, pointsFor: 133.7, win: 1 },
+      { rosterId: '1', matchupId: 1, pointsFor: 118.2, win: 1 },
+      { rosterId: '2', matchupId: 1, pointsFor: 101.4, win: 0 },
+      { rosterId: '3', matchupId: 2, pointsFor: 96.0, win: 0 },
+      { rosterId: '4', matchupId: 2, pointsFor: 133.7, win: 1 },
     ])
     fourTeams()
 
@@ -83,10 +83,10 @@ describe('getLeagueScoreboard', () => {
 
   it('puts your own game first, and marks it', async () => {
     matchupFindMany.mockResolvedValue([
-      { rosterId: 3, matchupId: 1, pointsFor: 96.0, win: 0 },
-      { rosterId: 4, matchupId: 1, pointsFor: 133.7, win: 1 },
-      { rosterId: 1, matchupId: 2, pointsFor: 118.2, win: 1 },
-      { rosterId: 2, matchupId: 2, pointsFor: 101.4, win: 0 },
+      { rosterId: '3', matchupId: 1, pointsFor: 96.0, win: 0 },
+      { rosterId: '4', matchupId: 1, pointsFor: 133.7, win: 1 },
+      { rosterId: '1', matchupId: 2, pointsFor: 118.2, win: 1 },
+      { rosterId: '2', matchupId: 2, pointsFor: 101.4, win: 0 },
     ])
     fourTeams()
 
@@ -101,8 +101,8 @@ describe('getLeagueScoreboard', () => {
      * the board reports six ties in August.
      */
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     fourTeams()
     pricedAll()
@@ -116,8 +116,8 @@ describe('getLeagueScoreboard', () => {
 
   it('scores projections under the LEAGUE rules, not generic PPR', async () => {
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     fourTeams()
     pricedAll()
@@ -130,8 +130,8 @@ describe('getLeagueScoreboard', () => {
 
   it('falls back to the generic number when the league has no scoring on file', async () => {
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     fourTeams()
     pricedAll()
@@ -147,8 +147,8 @@ describe('getLeagueScoreboard', () => {
      * margin invites someone to read a data hole as a lead.
      */
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     teamFindMany.mockResolvedValue([
       { externalId: '1', teamName: 'Yours', ownerName: 'a', avatarUrl: null, platformUserId: 'u1', claimedByUserId: null },
@@ -171,8 +171,8 @@ describe('getLeagueScoreboard', () => {
 
   it('reports a margin once a week is genuinely scored', async () => {
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 118.2, win: 1 },
-      { rosterId: 2, matchupId: 1, pointsFor: 101.4, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 118.2, win: 1 },
+      { rosterId: '2', matchupId: 1, pointsFor: 101.4, win: 0 },
     ])
     fourTeams()
 
@@ -184,8 +184,8 @@ describe('getLeagueScoreboard', () => {
     // A league that recorded the week without pairing teams is common before a
     // season starts. Silently dropping those rows loses half the league.
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: null, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: null, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: null, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: null, pointsFor: 0, win: 0 },
     ])
     fourTeams()
     pricedAll()
@@ -212,8 +212,8 @@ describe('getLeagueScoreboard', () => {
      * The worst possible row to lose.
      */
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     teamFindMany.mockResolvedValue([
       {
@@ -233,15 +233,15 @@ describe('getLeagueScoreboard', () => {
     pricedAll()
 
     const sb = await getLeagueScoreboard(BASE)
-    const yours = sb!.games[0].teams.find((t) => t.rosterId === 1)!
+    const yours = sb!.games[0].teams.find((t) => t.rosterId === '1')!
     expect(yours.projected).not.toBeNull()
     expect(yours.starterCount).toBe(2)
   })
 
   it('falls back to the external id when a roster is stored under it', async () => {
     matchupFindMany.mockResolvedValue([
-      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
-      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
     ])
     teamFindMany.mockResolvedValue([
       {
@@ -260,6 +260,6 @@ describe('getLeagueScoreboard', () => {
     pricedAll()
 
     const sb = await getLeagueScoreboard(BASE)
-    expect(sb!.games[0].teams.find((t) => t.rosterId === 1)!.projected).not.toBeNull()
+    expect(sb!.games[0].teams.find((t) => t.rosterId === '1')!.projected).not.toBeNull()
   })
 })

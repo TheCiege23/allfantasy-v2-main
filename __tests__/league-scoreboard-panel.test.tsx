@@ -7,7 +7,7 @@ import type { LeagueScoreboard, ScoreboardTeam } from '@/lib/core-app/leagueScor
 
 function team(over: Partial<ScoreboardTeam> = {}): ScoreboardTeam {
   return {
-    rosterId: 1,
+    rosterId: '1',
     teamName: 'Yours',
     managerName: 'chxnk',
     avatarUrl: null,
@@ -33,8 +33,8 @@ function board(over: Partial<LeagueScoreboard> = {}): LeagueScoreboard {
         margin: 16.8,
         winProbability: null,
         teams: [
-          team({ rosterId: 1, teamName: 'Yours', points: 118.2, isYou: true }),
-          team({ rosterId: 2, teamName: 'DynastyDan', points: 101.4 }),
+          team({ rosterId: '1', teamName: 'Yours', points: 118.2, isYou: true }),
+          team({ rosterId: '2', teamName: 'DynastyDan', points: 101.4 }),
         ],
       },
       {
@@ -43,8 +43,8 @@ function board(over: Partial<LeagueScoreboard> = {}): LeagueScoreboard {
         margin: 37.7,
         winProbability: null,
         teams: [
-          team({ rosterId: 3, teamName: 'Third', points: 96.0 }),
-          team({ rosterId: 4, teamName: 'Fourth', points: 133.7 }),
+          team({ rosterId: '3', teamName: 'Third', points: 96.0 }),
+          team({ rosterId: '4', teamName: 'Fourth', points: 133.7 }),
         ],
       },
     ],
@@ -86,8 +86,8 @@ describe('LeagueScoreboardPanel', () => {
             margin: null,
             winProbability: null,
             teams: [
-              team({ rosterId: 1, projected: 118.2, isYou: true }),
-              team({ rosterId: 2, teamName: 'DynastyDan', projected: 101.4 }),
+              team({ rosterId: '1', projected: 118.2, isYou: true }),
+              team({ rosterId: '2', teamName: 'DynastyDan', projected: 101.4 }),
             ],
           },
         ],
@@ -107,7 +107,7 @@ describe('LeagueScoreboardPanel', () => {
               matchupId: 1,
               unplayed: true,
               margin: null,
-              teams: [team({ projected: 118.2 }), team({ rosterId: 2, projected: 101.4 })],
+              teams: [team({ projected: 118.2 }), team({ rosterId: '2', projected: 101.4 })],
             },
           ],
         })}
@@ -128,7 +128,7 @@ describe('LeagueScoreboardPanel', () => {
             winProbability: null,
             teams: [
               team({ projected: 80, projectedFrom: 5, starterCount: 9 }),
-              team({ rosterId: 2, projected: 101.4 }),
+              team({ rosterId: '2', projected: 101.4 }),
             ],
           },
         ],
@@ -149,7 +149,7 @@ describe('LeagueScoreboardPanel', () => {
             unplayed: true,
             margin: null,
             winProbability: null,
-            teams: [team({ projected: null }), team({ rosterId: 2, projected: null })],
+            teams: [team({ projected: null }), team({ rosterId: '2', projected: null })],
           },
         ],
       }),
@@ -162,7 +162,7 @@ describe('LeagueScoreboardPanel', () => {
     const t = text(
       board({
         games: [],
-        unpaired: [team({ rosterId: 5, teamName: 'Fifth' }), team({ rosterId: 6, teamName: 'Sixth' })],
+        unpaired: [team({ rosterId: '5', teamName: 'Fifth' }), team({ rosterId: '6', teamName: 'Sixth' })],
       }),
     )
     expect(t).toContain('Not paired into a game yet')
@@ -179,7 +179,7 @@ describe('LeagueScoreboardPanel', () => {
             unplayed: false,
             margin: 0,
             winProbability: null,
-            teams: [team({ points: 100 }), team({ rosterId: 2, points: 100 })],
+            teams: [team({ points: 100 }), team({ rosterId: '2', points: 100 })],
           },
         ],
       }),
@@ -197,8 +197,8 @@ describe('LeagueScoreboardPanel', () => {
             margin: null,
             winProbability: null,
             teams: [
-              team({ rosterId: 9, teamName: null, managerName: null, points: 100 }),
-              team({ rosterId: 2, points: 90 }),
+              team({ rosterId: '9', teamName: null, managerName: null, points: 100 }),
+              team({ rosterId: '2', points: 90 }),
             ],
           },
         ],
@@ -232,7 +232,7 @@ describe('LeagueScoreboardPanel', () => {
               unplayed: true,
               margin: 12,
               winProbability: 0.62,
-              teams: [team({ projected: 118 }), team({ rosterId: 2, projected: 106 })],
+              teams: [team({ projected: 118 }), team({ rosterId: '2', projected: 106 })],
             },
           ],
         })}

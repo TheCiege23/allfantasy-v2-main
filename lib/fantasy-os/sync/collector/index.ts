@@ -114,8 +114,11 @@ export {
  *   - unpad `externalId` at MFL import → changes team IDENTITY for existing MFL leagues, and
  *     `traded_picks` joins on that same identity (see MflAdapter's own note about it) — STILL OPEN
  *   - pad in the readers → RESOLVED 2026-09-03, see above
- *   - a text rosterId column → a migration plus every reader — STILL OPEN, and a migration is not
- *     a decision this collector (or any single session) makes unilaterally
+ *   - a text rosterId column → PREPARED, NOT APPLIED. The SQL and the matching writer/reader
+ *     code (all three writers, every reader whose lookup would otherwise break, tests) are
+ *     written — see prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text/
+ *     and its README.md entry for the full census. Applying it, flipping schema.prisma, and
+ *     shipping the code together is still not this collector's call, or any single session's.
  * The remaining two are a real decision about one identity for a league's teams, not a collector
  * task. They belong with that work, not smuggled in beside a sync writer.
  *

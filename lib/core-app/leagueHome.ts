@@ -669,7 +669,7 @@ export async function getLeagueHomeData(
           platformLeagueId: league.platformLeagueId,
           seasonYear: league.season,
           week: viewWeek,
-          yourRosterId: yours?.externalId != null ? Number(yours.externalId) : null,
+          yourRosterId: yours?.externalId ?? null,
           scoringSettings: extractScoringSettings(league.settings),
           projectionWeek: await latestProjectionWeek().catch(() => null),
         }).catch(() => null)

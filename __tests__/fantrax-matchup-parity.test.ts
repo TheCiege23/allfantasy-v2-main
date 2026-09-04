@@ -104,12 +104,12 @@ describe('writing a scored Fantrax week', () => {
       expect.arrayContaining([
         expect.objectContaining({
           leagueId: 'league-uuid',
-          rosterId: 1483920211,
+          rosterId: '1483920211',
           pointsFor: 118.4,
           pointsAgainst: 96.2,
           win: 1,
         }),
-        expect.objectContaining({ rosterId: 77120044, pointsFor: 96.2, pointsAgainst: 118.4, win: 0 }),
+        expect.objectContaining({ rosterId: '77120044', pointsFor: 96.2, pointsAgainst: 118.4, win: 0 }),
       ]),
     )
   })

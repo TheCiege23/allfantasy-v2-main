@@ -394,7 +394,11 @@ export async function getMatchupPulse(
       continue
     }
 
-    const myRosterId = Number(c.externalId)
+    // WeeklyMatchup.rosterId is String now, matching LeagueTeam.externalId
+    // directly -- was Number(c.externalId), which stopped matching the moment
+    // rosterId became a native string instead of an Int this always had to
+    // round-trip through.
+    const myRosterId = c.externalId
     const mineRow = weekRows.find((r) => r.rosterId === myRosterId)
     const oppRow =
       mineRow?.matchupId != null

@@ -27,8 +27,10 @@ import { buildRosterIdMap, rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
  * `source_team_id: team.franchiseId` verbatim, and the DECISION about what a real MFL writer
  * should store (padded, unpadded, or a schema change) is still open — see the note in
  * lib/fantasy-os/sync/collector/index.ts. Only one of that note's three costly options has
- * actually been done. This file's job is now split in two: prove the read-side fix really
- * works, and keep confirming the writer itself is still, correctly, absent.
+ * actually been done; a second (the schema change) is now PREPARED but NOT APPLIED — see
+ * prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text/README.md entry.
+ * This file's job is now split in two: prove the read-side fix really works, and keep
+ * confirming the writer itself is still, correctly, absent.
  *
  * This file exists because everything needed to BUILD that collector already exists —
  * getMflAuthForUser, the TYPE=schedule fetch, parseMflSchedule, applySchedule — so the next
@@ -96,6 +98,22 @@ describe('rosterIdMatch.ts actually resolves a zero-padded id, not just in theor
     expect(rosterIdsMatch('1', 2)).toBe(false)
     expect(rosterIdsMatch(null, 1)).toBe(false)
     expect(rosterIdsMatch(undefined, 1)).toBe(false)
+  })
+
+  /**
+   * ⚠ `rosterId` ALSO ARRIVES AS A STRING NOW, from any reader sourced off
+   * `AllPlayBoard`/`WeeklyMatchup` post text-column migration — not just as the
+   * legacy Int this function was originally written against. A version that
+   * only coerced `externalId` and compared it to the raw `rosterId` number
+   * would silently return false for every one of these once `rosterId` is a
+   * string (`1 === "1"` is false), which is exactly the bug this locks in.
+   */
+  it('rosterIdsMatch agrees when rosterId itself is already a string', () => {
+    expect(rosterIdsMatch('0001', '1')).toBe(true)
+    expect(rosterIdsMatch('12', '12')).toBe(true)
+    expect(rosterIdsMatch('1', '2')).toBe(false)
+    expect(rosterIdsMatch(null, '1')).toBe(false)
+    expect(rosterIdsMatch(undefined, '1')).toBe(false)
   })
 
   it('and the four readers actually call it, not a reintroduced naive join', () => {

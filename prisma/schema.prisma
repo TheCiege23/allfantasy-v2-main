@@ -2970,7 +2970,11 @@ model WeeklyMatchup {
   leagueId      String   @db.VarChar(64)
   seasonYear    Int
   week          Int
-  rosterId      Int
+  /// Was Int. MFL franchise ids are zero-padded strings ("0001"); an Int column
+  /// silently drops the leading zeros on write, which is why MFL has never had a
+  /// WeeklyMatchup writer. See prisma/migrations-pending/README.md's entry for
+  /// this migration and lib/fantasy-os/sync/collector/index.ts for the full history.
+  rosterId      String
   matchupId     Int?
   pointsFor     Float
   pointsAgainst Float

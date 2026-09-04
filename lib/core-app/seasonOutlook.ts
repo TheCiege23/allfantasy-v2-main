@@ -77,7 +77,7 @@ const MIN_WEEKS = 3
 const DEFAULT_PLAYOFF_TEAMS = 6
 
 export type OutlookTeam = {
-  rosterId: number
+  rosterId: string
   name: string | null
   isYou: boolean
   wins: number
@@ -222,10 +222,10 @@ function gaussian(rng: () => number, mu: number, sigma: number): number {
 
 type Profile = { mu: number; sigma: number; n: number }
 
-type Game = { week: number; a: number; b: number }
+type Game = { week: number; a: string; b: string }
 
 type TeamState = {
-  rosterId: number
+  rosterId: string
   wins: number
   losses: number
   pointsFor: number
@@ -256,17 +256,17 @@ function simulate(
    * into "you need Thunderbolts to lose", and it costs one extra callback per
    * run rather than a second set of simulations.
    */
-  onRun?: (field: Set<number>) => void,
-): Map<number, { playoff: number; title: number }> {
-  const tally = new Map<number, { playoff: number; title: number }>()
+  onRun?: (field: Set<string>) => void,
+): Map<string, { playoff: number; title: number }> {
+  const tally = new Map<string, { playoff: number; title: number }>()
   for (const t of teams) tally.set(t.rosterId, { playoff: 0, title: 0 })
 
   const byId = new Map(teams.map((t) => [t.rosterId, t]))
 
   for (let it = 0; it < iterations; it += 1) {
     const rng = createRng(seed + it * 9973)
-    const wins = new Map<number, number>()
-    const points = new Map<number, number>()
+    const wins = new Map<string, number>()
+    const points = new Map<string, number>()
     for (const t of teams) {
       wins.set(t.rosterId, t.wins)
       points.set(t.rosterId, t.pointsFor)
@@ -301,7 +301,7 @@ function simulate(
     // Single elimination over the seeded field.
     let bracket = [...field]
     while (bracket.length > 1) {
-      const next: number[] = []
+      const next: string[] = []
       // Odd field: the top seed gets the bye.
       if (bracket.length % 2 === 1) next.push(bracket[0])
       const contenders = bracket.length % 2 === 1 ? bracket.slice(1) : bracket
@@ -339,7 +339,7 @@ type OutlookMatchupRow = {
   leagueId: string
   seasonYear: number
   week: number
-  rosterId: number
+  rosterId: string
   matchupId: number | null
   pointsFor: number
   pointsAgainst: number
@@ -416,8 +416,13 @@ function mergeImportedMatchupHistory(
       { team: fact.teamB, pointsFor: fact.scoreB, pointsAgainst: fact.scoreA },
     ]
     for (const side of sides) {
-      const rosterId = Number(side.team)
-      if (!Number.isFinite(rosterId)) continue
+      // Kept as the string LeagueTeam.externalId form (was Number(side.team)):
+      // resolution still requires it to look like a real numeric team id -- an
+      // unresolved historical roster falls back to a raw id that fails this same
+      // check -- but the VALUE stored must match what WeeklyMatchup.rosterId
+      // natively holds now, not a parsed-and-truncated number.
+      const rosterId = side.team
+      if (!Number.isFinite(Number(rosterId))) continue
       const key = `${platformLeagueId}|${fact.season}|${fact.weekOrPeriod}|${rosterId}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -631,18 +636,16 @@ export async function getSeasonOutlook(
   const nameByRoster = new Map<string, string>()
   for (const t of teams) {
     const pid = t.league?.platformLeagueId
-    const roster = Number(t.externalId)
-    if (!pid || !Number.isFinite(roster)) continue
+    if (!pid || !t.externalId) continue
     const label = t.teamName?.trim() || t.ownerName?.trim()
-    if (label) nameByRoster.set(`${pid}:${roster}`, label)
+    if (label) nameByRoster.set(`${pid}:${t.externalId}`, label)
   }
 
   const myRosters = new Set<string>()
   for (const t of mine) {
     const pid = t.league?.platformLeagueId
-    const roster = Number(t.externalId)
-    if (!pid || !Number.isFinite(roster)) continue
-    myRosters.add(`${pid}:${roster}`)
+    if (!pid || !t.externalId) continue
+    myRosters.add(`${pid}:${t.externalId}`)
   }
 
   const out: OutlookLeague[] = []
@@ -699,7 +702,7 @@ export async function getSeasonOutlook(
      * scoring distribution that carries over, which is what preseason odds are
      * built on everywhere.
      */
-    const scores = new Map<number, number[]>()
+    const scores = new Map<string, number[]>()
     for (const r of leagueRows) {
       if (r.pointsFor <= 0 && r.pointsAgainst <= 0) continue
       const list = scores.get(r.rosterId)
@@ -740,7 +743,7 @@ export async function getSeasonOutlook(
     }
 
     // The REAL remaining schedule: unscored rows, paired on matchupId.
-    const pairs = new Map<string, number[]>()
+    const pairs = new Map<string, string[]>()
     for (const r of seasonRows) {
       if (r.matchupId == null) continue
       if (r.pointsFor > 0 || r.pointsAgainst > 0) continue
@@ -912,7 +915,7 @@ export async function getSeasonOutlook(
       profile: null,
     }))
     // Re-derive profiles for the forced runs from the same season rows.
-    const scores = new Map<number, number[]>()
+    const scores = new Map<string, number[]>()
     for (const r of leagueRows) {
       if (r.pointsFor <= 0 && r.pointsAgainst <= 0) continue
       const list = scores.get(r.rosterId)
@@ -927,7 +930,7 @@ export async function getSeasonOutlook(
       s.profile = { mu, sigma: Math.max(SIGMA_FLOOR, Math.sqrt(variance)), n: values.length }
     }
 
-    const restPairs = new Map<string, number[]>()
+    const restPairs = new Map<string, string[]>()
     for (const r of unscored) {
       if (r.week === nextWeek && r.matchupId === mineRow.matchupId) continue
       const key = `${r.week}|${r.matchupId}`
@@ -973,8 +976,8 @@ export async function getSeasonOutlook(
      * at all. The ratio is P(you in | they miss).
      */
     let loseRunsMeIn = 0
-    const rivalOut = new Map<number, number>()
-    const rivalOutMeIn = new Map<number, number>()
+    const rivalOut = new Map<string, number>()
+    const rivalOutMeIn = new Map<string, number>()
 
     const loseTally = simulate(
       loseStates,

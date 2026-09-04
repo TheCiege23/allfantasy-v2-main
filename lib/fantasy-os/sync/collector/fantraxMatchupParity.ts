@@ -117,18 +117,21 @@ export async function enumerateFantraxMatchupConnections(): Promise<FantraxMatch
  */
 async function readRosterIdsByTeamName(
   leaguePlatformId: string,
-): Promise<Map<string, number> | null> {
+): Promise<Map<string, string> | null> {
   const teams = await prisma.leagueTeam.findMany({
     where: { league: { platformLeagueId: leaguePlatformId } },
     select: { externalId: true, teamName: true, ownerName: true },
   })
-  const map = new Map<string, number>()
+  const map = new Map<string, string>()
   for (const t of teams) {
+    // WeeklyMatchup.rosterId is String now, but the validation stays: still reject
+    // anything that is not the plain-integer fantraxTeamHash form this map has
+    // always held, rather than writing a row keyed on garbage.
     const roster = Number(String(t.externalId ?? '').trim())
     if (!Number.isInteger(roster) || roster < 0) continue
     const label = normalizeFantraxTeamName(t.teamName?.trim() || t.ownerName?.trim() || '')
     if (!label) continue
-    map.set(label, roster)
+    map.set(label, String(roster))
   }
   return map.size > 0 ? map : null
 }
@@ -247,8 +250,8 @@ export async function runFantraxMatchupParity(input?: {
           byWeek.set(row.week, week)
         }
         week.matchups.push({
-          teamId1: String(away),
-          teamId2: String(home),
+          teamId1: away,
+          teamId2: home,
           points1: row.awayScore,
           points2: row.homeScore,
         })
@@ -269,7 +272,7 @@ export async function runFantraxMatchupParity(input?: {
       const { weeksWritten, weeksUnchanged } = await applySchedule(
         (id) => {
           const n = Number(id)
-          return Number.isInteger(n) && n >= 0 ? n : null
+          return Number.isInteger(n) && n >= 0 ? String(n) : null
         },
         connection.platformLeagueId,
         schedule,

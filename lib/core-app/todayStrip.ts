@@ -186,13 +186,13 @@ async function resolveRecord(
       .catch(() => []),
   ])
 
-  // Sleeper roster ids are numeric on WeeklyMatchup and strings on LeagueTeam.
+  // WeeklyMatchup.rosterId and LeagueTeam.externalId are both String now (see the
+  // migration's README entry) -- was a number/string mismatch bridged by Number().
   const mine = new Set<string>()
   for (const team of myTeams) {
     const platformLeagueId = team.league?.platformLeagueId
-    const roster = Number(team.externalId)
-    if (!platformLeagueId || !Number.isFinite(roster)) continue
-    mine.add(`${platformLeagueId}:${roster}`)
+    if (!platformLeagueId || !team.externalId) continue
+    mine.add(`${platformLeagueId}:${team.externalId}`)
   }
 
   let wins = 0
