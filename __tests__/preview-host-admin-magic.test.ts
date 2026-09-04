@@ -114,10 +114,16 @@ describe("admin magic link uses the preview-aware origin, and post-auth stays on
     expect(request).not.toContain('process.env.PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || ""')
   })
 
-  it("consume redirects to a sanitized RELATIVE next on the request origin (stays on the preview)", () => {
-    // new URL(next, url) with next sanitized to an /admin path keeps the redirect on the
-    // same origin the magic link was on — so a preview link lands on the preview /admin.
-    expect(consume).toMatch(/new URL\(next, url\)/)
+  it("consume redirects using getDeploymentLinkOrigin, not req.url's origin", () => {
+    // req.url's host is the Node process's own bind address on Railway (0.0.0.0:8080), not
+    // the public-facing host a reverse proxy actually served the request on -- confirmed live
+    // 2026-09-04, an admin's magic-link click landed on https://0.0.0.0:8080/admin.
+    // getDeploymentLinkOrigin() makes the SAME preview-stays-on-preview guarantee via Vercel's
+    // own env vars (VERCEL_BRANCH_URL/VERCEL_URL) instead of trusting req.url, and it is what
+    // the sibling /request route already uses for the emailed link itself.
+    expect(consume).toContain("getDeploymentLinkOrigin()")
+    expect(consume).toMatch(/new URL\(next, baseUrl\)/)
+    expect(consume).not.toMatch(/new URL\(next, url\)/)
     expect(consume).toContain("sanitizeNext")
   })
 
