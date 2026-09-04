@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800;900&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+:root{
+  --bg:#06070f; --surface:#0d1020; --surface2:#0a0c1a;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.14);
+  --text:#eef0fa; --text2:#c3c9e6; --muted:#8f97bd; --faint:#5d648a;
+  --accent:#22d3ee; --accent-ink:#04050c; --accent-soft:rgba(34,211,238,.09); --accent-line:rgba(34,211,238,.3);
+  --good:#34d399; --warn:#fbbf24; --bad:#fb5b78; --violet:#a78bfa; --orange:#fb923c;
+  --good-soft:rgba(52,211,153,.1); --warn-soft:rgba(251,191,36,.1); --bad-soft:rgba(251,91,120,.1);
+  --violet-soft:rgba(167,139,250,.1); --orange-soft:rgba(251,146,60,.1);
+  --chip:rgba(255,255,255,.05); --chip-line:rgba(255,255,255,.1);
+  --p-sleeper-bg:rgba(226,66,66,.16); --p-sleeper-fg:#f28b8b;
+  --p-yahoo-bg:rgba(124,58,237,.16); --p-yahoo-fg:#b79bfa;
+  --p-espn-bg:rgba(217,41,41,.16); --p-espn-fg:#f28080;
+}
+html{background:var(--bg)} body{margin:0;background:var(--bg);color:var(--text);font-family:'Archivo',system-ui,sans-serif}
+h1,h2,h3{margin:0;font-weight:900;letter-spacing:-.03em}
+a{color:var(--accent)} a:hover{color:var(--accent)}
+</style>
+</helmet>
+
+<div style="padding:56px 72px;display:flex;flex-direction:column;gap:36px;background:var(--bg)">
+
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="font:700 12px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--accent-ink);background:var(--accent);padding:7px 10px;border-radius:6px">Trades</div>
+    <h2 style="font-size:22px">Two surfaces, same pricing engine</h2>
+    <div style="font:400 14px/1 'Archivo',sans-serif;color:var(--muted);max-width:760px">Dashboard shows every pending trade across your leagues. The league tab shows only this league's — with the actions you can actually take.</div>
+  </div>
+
+  <!-- ================= ROW 1: DASHBOARD ================= -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">STATE 1 — MAIN DASHBOARD · ALL PENDING TRADES</div>
+    <div style="display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap">
+
+      <!-- DASHBOARD DESKTOP -->
+      <div style="position:relative;flex:none;width:1400px;height:1280px;background:var(--bg);border:1px solid var(--line2);border-radius:14px;overflow:hidden;display:flex;flex-direction:column" data-screen-label="Dashboard trades — desktop">
+        <div style="height:64px;flex:none;display:flex;align-items:center;gap:14px;padding:0 28px;background:var(--surface2);border-bottom:1px solid var(--line2)">
+          <div style="width:26px;height:26px;flex:none;border-radius:7px;background:var(--accent)"></div>
+          <div style="font:900 16px/1 'Archivo',sans-serif;letter-spacing:-.02em">ALLFANTASY</div>
+          <div style="flex:1"></div>
+          <div style="display:flex;gap:4px;padding:4px;background:var(--chip);border:1px solid var(--chip-line);border-radius:10px">
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--bg);background:var(--accent);padding:9px 13px;border-radius:7px">Dashboard</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">My Team</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">Leagues</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">Tools</div>
+          </div>
+          <div style="width:40px;height:40px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--violet);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">Y</div></div>
+        </div>
+
+        <div style="flex:1;overflow:auto;padding:26px 28px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">DASHBOARD · PENDING TRADES</div>
+            <h1 style="font-size:26px">6 trades waiting on you or your leaguemates</h1>
+            <div style="font:400 13px/1.5 'Archivo',sans-serif;color:var(--muted)">Every pending offer across all connected leagues, priced the same way regardless of platform.</div>
+          </div>
+
+          <!-- compact proposal card (feed/notification format) -->
+          <div style="display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line2);border-radius:16px;padding:18px 20px;max-width:420px">
+            <div style="font:600 12px/1.4 'Archivo',sans-serif;color:var(--text2)"><span style="color:var(--accent);font-weight:800">@casonpb</span> proposed a trade in <span style="font-weight:800;color:var(--text)">Last League Left</span></div>
+            <div style="display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--surface2);border:1px solid var(--line);border-radius:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:38px;height:38px;flex:none;border-radius:9px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--accent);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">P</div></div>
+                <div style="display:flex;flex-direction:column;gap:1px"><div style="font:800 12px/1.2 'Archivo',sans-serif;color:var(--text)">Perry Vance</div><div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--faint)">WR · GB</div></div>
+                <div style="flex:1"></div>
+                <div style="font:900 12px/1 'JetBrains Mono',monospace;color:var(--accent)">6,552</div>
+              </div>
+              <div style="height:1px;background:var(--line)"></div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:28px;height:28px;flex:none;border-radius:50%;background:var(--good);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">PICK</div>
+                <div style="display:flex;flex-direction:column;gap:1px"><div style="font:800 12px/1.2 'Archivo',sans-serif;color:var(--text)">2027 2nd</div><div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.04em;color:var(--faint)">@TheCiege24</div></div>
+                <div style="flex:1"></div>
+                <div style="font:900 12px/1 'JetBrains Mono',monospace;color:var(--accent)">1,832</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--good)">86<span style="font:700 9px/1 'Archivo',sans-serif;color:var(--faint)">/100 fairness</span></div>
+              <div style="width:1px;height:12px;background:var(--line2)"></div>
+              <div style="font:600 10px/1.3 'Archivo',sans-serif;color:var(--faint)">Priced from projection + pick value — not just raw name value</div>
+            </div>
+          </div>
+
+          <!-- expanded row -->
+          <div style="display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--accent-line);border-radius:16px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;cursor:pointer">
+              <div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--p-sleeper-fg);background:var(--p-sleeper-bg);padding:6px 9px;border-radius:6px">SLEEPER</div>
+              <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">Last League Left</div>
+              <div style="width:1px;height:14px;background:var(--line2)"></div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="width:26px;height:26px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--good);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">C</div></div>
+                <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Casey <span style="color:var(--faint);font-weight:500">· Dynasty Dogs</span></div>
+                <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--faint)">&#8646;</div>
+                <div style="width:26px;height:26px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--violet);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">J</div></div>
+                <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Jordan <span style="color:var(--faint);font-weight:500">· Gridiron Vultures</span></div>
+              </div>
+              <div style="flex:1"></div>
+              <div style="font:600 11px/1 'Archivo',sans-serif;color:var(--muted)">9,672 <span style="color:var(--faint)">for</span> 7,412</div>
+              <div style="font:900 14px/1 'JetBrains Mono',monospace;color:var(--good)">86<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100</span></div>
+              <div style="font:800 10px/1 'JetBrains Mono',monospace;color:var(--accent)">&#9662; hide breakdown</div>
+            </div>
+
+            <div style="padding:0 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px;border-top:1px solid var(--line)">
+              <div style="display:flex;flex-direction:column;gap:8px;padding-top:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:800 12px/1 'Archivo',sans-serif;color:var(--text)">Casey sends</div><div style="font:900 15px/1 'JetBrains Mono',monospace;color:var(--accent)">9,672</div></div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--accent);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">P</div></div><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">WR</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">Perry Vance</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">6,552</div></div>
+                  <div style="margin-left:61px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--accent)">PROJECTION</span> — rest-of-season, scaled for position scarcity in this league.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--orange);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">D</div></div><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--orange);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">LB</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">Dana Okoye</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">3,120</div></div>
+                  <div style="margin-left:61px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--orange)">IDP SCARCITY</span> — computed vs. this league's own defensive slots; no market ranks defenders.</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;padding-top:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:800 12px/1 'Archivo',sans-serif;color:var(--text)">Jordan sends</div><div style="font:900 15px/1 'JetBrains Mono',monospace;color:var(--accent)">7,412</div></div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--violet);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">M</div></div><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--violet);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">RB</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">Marcus Feld</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">5,400</div></div>
+                  <div style="margin-left:61px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--violet)">MARKET</span> — no projection available; falls back to market price.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--good);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 8px/1 'Archivo',sans-serif">PICK</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">2027 2nd + $18 FAAB</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">2,012</div></div>
+                  <div style="margin-left:29px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--good)">DRAFT PICK · FAAB</span> — priced from where the pick falls and the bid amount itself.</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:12px;margin:0 20px 20px;padding:16px 18px;background:var(--surface2);border:1px solid rgba(56,189,248,.22);border-radius:14px">
+              <div style="display:flex;align-items:center;gap:9px"><div style="width:20px;height:20px;border-radius:6px;background:var(--accent);flex:none"></div><div style="font:800 10px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--accent)">DECISION OS · THIS DEAL</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div style="border-radius:10px;background:var(--bg);border:1px solid var(--line);padding:11px"><div style="font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--faint);margin-bottom:4px">WINS NOW</div><div style="font:800 13px/1.3 'Archivo',sans-serif;color:var(--text)">Jordan — WR2 rest-of-season upgrade lands immediately</div></div>
+                <div style="border-radius:10px;background:var(--bg);border:1px solid var(--line);padding:11px"><div style="font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--faint);margin-bottom:4px">WINS LONG TERM</div><div style="font:800 13px/1.3 'Archivo',sans-serif;color:var(--text)">Casey — 2027 2nd plus FAAB flexibility</div></div>
+              </div>
+              <div style="font:500 11px/1.55 'Archivo',sans-serif;color:var(--text2)">Casey is 2-6 and rebuilding — sending IDP scarcity value for a pick fits that plan. Jordan is 6-2 and buys a starter with draft capital he won't use this year.</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <div style="cursor:pointer;display:flex;align-items:center;gap:7px;font:800 11px/1 'Archivo',sans-serif;color:var(--bg);background:var(--accent);padding:10px 14px;border-radius:9px">Ask Chimmy about this trade</div>
+                <div style="cursor:pointer;display:flex;align-items:center;gap:7px;font:800 11px/1 'Archivo',sans-serif;color:var(--text2);background:var(--chip);border:1px solid var(--chip-line);padding:10px 14px;border-radius:9px">View in Last League Left &rarr;</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- collapsed rows -->
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--surface);border:1px solid var(--line2);border-radius:14px;cursor:pointer">
+            <div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--p-yahoo-fg);background:var(--p-yahoo-bg);padding:6px 9px;border-radius:6px">YAHOO</div>
+            <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">Keeper League Classic</div>
+            <div style="width:1px;height:14px;background:var(--line2)"></div>
+            <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Casey &#8646; Jordan</div>
+            <div style="flex:1"></div>
+            <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--bad);background:var(--bad-soft);padding:5px 8px;border-radius:6px">1 UNPRICED ASSET</div>
+            <div style="font:900 14px/1 'JetBrains Mono',monospace;color:var(--warn)">62<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100</span></div>
+            <div style="font:800 10px/1 'JetBrains Mono',monospace;color:var(--muted)">&#9656; show breakdown</div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--surface);border:1px solid var(--line2);border-radius:14px;cursor:pointer">
+            <div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--p-espn-fg);background:var(--p-espn-bg);padding:6px 9px;border-radius:6px">ESPN</div>
+            <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">Trade War Vets</div>
+            <div style="width:1px;height:14px;background:var(--line2)"></div>
+            <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">You &#8646; Priya</div>
+            <div style="flex:1"></div>
+            <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--bad);background:var(--bad-soft);padding:5px 8px;border-radius:6px">GUILLOTINE -47%</div>
+            <div style="font:900 14px/1 'JetBrains Mono',monospace;color:var(--good)">91<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100</span></div>
+            <div style="font:800 10px/1 'JetBrains Mono',monospace;color:var(--muted)">&#9656; show breakdown</div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--surface);border:1px solid var(--line2);border-radius:14px;cursor:pointer;opacity:.75">
+            <div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--p-sleeper-fg);background:var(--p-sleeper-bg);padding:6px 9px;border-radius:6px">SLEEPER</div>
+            <div style="font:800 13px/1.2 'Archivo',sans-serif;color:var(--text)">Ice Kings</div>
+            <div style="width:1px;height:14px;background:var(--line2)"></div>
+            <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Priya &#8646; Sam</div>
+            <div style="flex:1"></div>
+            <div style="font:900 14px/1 'JetBrains Mono',monospace;color:var(--good)">78<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100</span></div>
+            <div style="font:800 10px/1 'JetBrains Mono',monospace;color:var(--muted)">&#9656; show breakdown</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DASHBOARD MOBILE -->
+      <div style="position:relative;flex:none;width:390px;height:844px;background:var(--bg);border:1px solid var(--line2);border-radius:32px;overflow:hidden;display:flex;flex-direction:column" data-screen-label="Dashboard trades — mobile">
+        <div style="height:46px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px"><div style="font:700 13px/1 'Archivo',sans-serif">8:14</div><div style="width:22px"></div></div>
+        <div style="flex:none;padding:2px 16px 12px;display:flex;flex-direction:column;gap:2px">
+          <div style="font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">DASHBOARD · TRADES</div>
+          <div style="font:900 19px/1.1 'Archivo',sans-serif">6 pending trades</div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+
+          <div style="display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--accent-line);border-radius:14px;overflow:hidden">
+            <div style="display:flex;flex-direction:column;gap:6px;padding:14px 14px 12px">
+              <div style="display:flex;align-items:center;gap:8px"><div style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--p-sleeper-fg);background:var(--p-sleeper-bg);padding:5px 7px;border-radius:5px">SLEEPER</div><div style="font:800 12px/1.2 'Archivo',sans-serif">Last League Left</div></div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:700 11px/1.2 'Archivo',sans-serif;color:var(--text2)">Casey &#8646; Jordan</div><div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--good)">86/100</div></div>
+            </div>
+            <div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line)">
+              <div style="padding-top:12px;display:flex;flex-direction:column;gap:3px;padding-left:10px;padding-right:10px;padding-bottom:9px;background:var(--surface2);border:1px solid var(--line);border-radius:9px">
+                <div style="display:flex;align-items:center;gap:8px"><div style="flex:none;width:18px;height:18px;border-radius:5px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 8px/1 'Archivo',sans-serif">WR</div><div style="flex:1;font:800 11px/1.2 'Archivo',sans-serif">Perry Vance</div><div style="flex:none;font:900 11px/1 'JetBrains Mono',monospace">6,552</div></div>
+                <div style="margin-left:26px;font:500 9px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;color:var(--accent)">PROJECTION</span> · scaled for scarcity</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;background:var(--surface2);border:1px solid var(--line);border-radius:9px">
+                <div style="display:flex;align-items:center;gap:8px"><div style="flex:none;width:18px;height:18px;border-radius:5px;background:var(--violet);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 8px/1 'Archivo',sans-serif">RB</div><div style="flex:1;font:800 11px/1.2 'Archivo',sans-serif">Marcus Feld</div><div style="flex:none;font:900 11px/1 'JetBrains Mono',monospace">5,400</div></div>
+                <div style="margin-left:26px;font:500 9px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;color:var(--violet)">MARKET</span> · no projection, falls back</div>
+              </div>
+              <div style="font:800 9px/1 'JetBrains Mono',monospace;color:var(--accent);text-align:center;padding-top:2px">&#9662; hide 2 more</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;padding:14px;background:var(--surface);border:1px solid var(--line2);border-radius:14px">
+            <div style="display:flex;align-items:center;gap:8px"><div style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--p-yahoo-fg);background:var(--p-yahoo-bg);padding:5px 7px;border-radius:5px">YAHOO</div><div style="font:800 12px/1.2 'Archivo',sans-serif">Keeper League Classic</div></div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:700 11px/1.2 'Archivo',sans-serif;color:var(--text2)">Casey &#8646; Jordan</div><div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--warn)">62/100</div></div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--bad)">1 UNPRICED ASSET</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;padding:14px;background:var(--surface);border:1px solid var(--line2);border-radius:14px">
+            <div style="display:flex;align-items:center;gap:8px"><div style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--p-espn-fg);background:var(--p-espn-bg);padding:5px 7px;border-radius:5px">ESPN</div><div style="font:800 12px/1.2 'Archivo',sans-serif">Trade War Vets</div></div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:700 11px/1.2 'Archivo',sans-serif;color:var(--text2)">You &#8646; Priya</div><div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--good)">91/100</div></div>
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--bad)">GUILLOTINE -47%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ROW 2: LEAGUE TAB ================= -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">STATE 2 — INSIDE A LEAGUE · THIS LEAGUE'S TRADES ONLY</div>
+    <div style="display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap">
+
+      <!-- LEAGUE DESKTOP -->
+      <div style="position:relative;flex:none;width:1400px;height:1280px;background:var(--bg);border:1px solid var(--line2);border-radius:14px;overflow:hidden;display:flex;flex-direction:column" data-screen-label="League trades — desktop">
+        <div style="height:64px;flex:none;display:flex;align-items:center;gap:14px;padding:0 28px;background:var(--surface2);border-bottom:1px solid var(--line2)">
+          <div style="width:48px;height:48px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--p-sleeper-fg);display:flex;align-items:center;justify-content:center;font:800 9px/1 'Archivo',sans-serif;color:var(--accent-ink)">LL</div></div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <div style="font:900 16px/1 'Archivo',sans-serif;letter-spacing:-.02em">LAST LEAGUE LEFT</div>
+            <div style="font:600 10px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">SLEEPER · DYNASTY · TRADE WINDOW · 4 DAYS LEFT</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;gap:4px;padding:4px;background:var(--chip);border:1px solid var(--chip-line);border-radius:10px">
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">Roster</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--bg);background:var(--accent);padding:9px 13px;border-radius:7px">Trades</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">Waivers</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">Rankings</div>
+            <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint);padding:9px 13px;border-radius:7px">Standings</div>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow:auto;padding:26px 28px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">LEAGUE · TRADES</div>
+            <h1 style="font-size:26px">2 trades pending in Last League Left</h1>
+            <div style="font:400 13px/1.5 'Archivo',sans-serif;color:var(--muted)">Only this league — no cross-league noise. You can act directly from here.</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--accent-line);border-radius:16px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:16px 20px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:26px;height:26px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--good);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">C</div></div>
+                <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Casey <span style="color:var(--faint);font-weight:500">· Dynasty Dogs</span></div>
+                <div style="font:700 11px/1 'Archivo',sans-serif;color:var(--faint)">sends to</div>
+                <div style="width:26px;height:26px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--violet);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">J</div></div>
+                <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Jordan <span style="color:var(--faint);font-weight:500">· Gridiron Vultures</span></div>
+              </div>
+              <div style="flex:1"></div>
+              <div style="font:600 11px/1 'Archivo',sans-serif;color:var(--muted)">9,672 <span style="color:var(--faint)">for</span> 7,412</div>
+              <div style="font:900 14px/1 'JetBrains Mono',monospace;color:var(--good)">86<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100</span></div>
+              <div style="font:800 10px/1 'JetBrains Mono',monospace;color:var(--accent)">&#9662; hide breakdown</div>
+            </div>
+            <div style="padding:0 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px;border-top:1px solid var(--line)">
+              <div style="display:flex;flex-direction:column;gap:8px;padding-top:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:800 12px/1 'Archivo',sans-serif;color:var(--text)">Casey sends</div><div style="font:900 15px/1 'JetBrains Mono',monospace;color:var(--accent)">9,672</div></div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--accent);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">P</div></div><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">WR</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">Perry Vance</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">6,552</div></div>
+                  <div style="margin-left:61px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--accent)">PROJECTION</span> — rest-of-season, scaled for position scarcity.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--orange);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">D</div></div><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--orange);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">LB</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">Dana Okoye</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">3,120</div></div>
+                  <div style="margin-left:61px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--orange)">IDP SCARCITY</span> — computed vs. this league's own defensive slots.</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;padding-top:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:800 12px/1 'Archivo',sans-serif;color:var(--text)">Jordan sends</div><div style="font:900 15px/1 'JetBrains Mono',monospace;color:var(--accent)">7,412</div></div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="width:32px;height:32px;flex:none;border-radius:8px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--violet);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">M</div></div><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--violet);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 9px/1 'Archivo',sans-serif">RB</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">Marcus Feld</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">5,400</div></div>
+                  <div style="margin-left:61px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--violet)">MARKET</span> — no projection available; falls back to market price.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding:10px 11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><div style="flex:none;width:20px;height:20px;border-radius:5px;background:var(--good);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 8px/1 'Archivo',sans-serif">PICK</div><div style="flex:1;font:800 12px/1.2 'Archivo',sans-serif">2027 2nd + $18 FAAB</div><div style="flex:none;font:900 12px/1 'JetBrains Mono',monospace">2,012</div></div>
+                  <div style="margin-left:29px;font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--good)">DRAFT PICK · FAAB</span> — priced from where the pick falls and the bid itself.</div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin:0 20px 20px;padding:16px 18px;background:var(--surface2);border:1px solid rgba(56,189,248,.22);border-radius:14px">
+              <div style="display:flex;align-items:center;gap:9px"><div style="width:20px;height:20px;border-radius:6px;background:var(--accent);flex:none"></div><div style="font:800 10px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--accent)">DECISION OS · THIS DEAL</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div style="border-radius:10px;background:var(--bg);border:1px solid var(--line);padding:11px"><div style="font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--faint);margin-bottom:4px">WINS NOW</div><div style="font:800 13px/1.3 'Archivo',sans-serif;color:var(--text)">Jordan — WR2 upgrade lands immediately</div></div>
+                <div style="border-radius:10px;background:var(--bg);border:1px solid var(--line);padding:11px"><div style="font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--faint);margin-bottom:4px">WINS LONG TERM</div><div style="font:800 13px/1.3 'Archivo',sans-serif;color:var(--text)">Casey — pick plus FAAB flexibility</div></div>
+              </div>
+              <div style="font:500 11px/1.55 'Archivo',sans-serif;color:var(--text2)">Casey is rebuilding — this fits. Jordan buys a starter with capital he won't use this year.</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <div style="cursor:pointer;font:800 12px/1 'Archivo',sans-serif;color:var(--bg);background:var(--accent);padding:11px 18px;border-radius:9px">Accept</div>
+                <div style="cursor:pointer;font:800 12px/1 'Archivo',sans-serif;color:var(--text2);background:var(--chip);border:1px solid var(--chip-line);padding:11px 18px;border-radius:9px">Counter</div>
+                <div style="cursor:pointer;font:800 12px/1 'Archivo',sans-serif;color:var(--faint);padding:11px 18px;border-radius:9px">Decline</div>
+                <div style="flex:1"></div>
+                <div style="cursor:pointer;font:800 11px/1 'Archivo',sans-serif;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);padding:10px 14px;border-radius:9px">Ask Chimmy about this trade</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--surface);border:1px solid var(--line2);border-radius:14px;cursor:pointer">
+            <div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Sam sends to Priya</div>
+            <div style="flex:1"></div>
+            <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--bad);background:var(--bad-soft);padding:5px 8px;border-radius:6px">1 UNPRICED ASSET</div>
+            <div style="font:900 14px/1 'JetBrains Mono',monospace;color:var(--warn)">62<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100</span></div>
+            <div style="font:800 10px/1 'JetBrains Mono',monospace;color:var(--muted)">&#9656; show breakdown</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--line)">
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">TRADE HISTORY &amp; GRADES</div>
+              <div style="font:400 12px/1.5 'Archivo',sans-serif;color:var(--muted)">Graded once results are in, using how each asset actually performed. Only visible to the managers in the trade.</div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;background:var(--surface);border:1px solid var(--line2);border-radius:14px">
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1"><div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Casey &#8646; Jordan</div><div style="font:600 10px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--faint)">WEEK 4 · SETTLED</div></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:40px;height:40px;border-radius:10px;background:var(--good-soft);border:1px solid rgba(52,211,153,.3);display:flex;align-items:center;justify-content:center;font:900 17px/1 'Archivo',sans-serif;color:var(--good)">A-</div><div style="font:700 8px/1 'JetBrains Mono',monospace;color:var(--faint)">CASEY</div></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:40px;height:40px;border-radius:10px;background:var(--warn-soft);border:1px solid rgba(251,191,36,.3);display:flex;align-items:center;justify-content:center;font:900 17px/1 'Archivo',sans-serif;color:var(--warn)">C+</div><div style="font:700 8px/1 'JetBrains Mono',monospace;color:var(--faint)">JORDAN</div></div>
+              <div style="font:500 11px/1.5 'Archivo',sans-serif;color:var(--faint);max-width:220px">Vance outproduced projection by 22%; Feld missed 3 games.</div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;background:var(--surface);border:1px solid var(--line2);border-radius:14px">
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1"><div style="font:700 12px/1.3 'Archivo',sans-serif;color:var(--text2)">Sam &#8646; Priya</div><div style="font:600 10px/1 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--faint)">WEEK 1 · SETTLED</div></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:40px;height:40px;border-radius:10px;background:var(--good-soft);border:1px solid rgba(52,211,153,.3);display:flex;align-items:center;justify-content:center;font:900 17px/1 'Archivo',sans-serif;color:var(--good)">B+</div><div style="font:700 8px/1 'JetBrains Mono',monospace;color:var(--faint)">SAM</div></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:40px;height:40px;border-radius:10px;background:var(--good-soft);border:1px solid rgba(52,211,153,.3);display:flex;align-items:center;justify-content:center;font:900 17px/1 'Archivo',sans-serif;color:var(--good)">B</div><div style="font:700 8px/1 'JetBrains Mono',monospace;color:var(--faint)">PRIYA</div></div>
+              <div style="font:500 11px/1.5 'Archivo',sans-serif;color:var(--faint);max-width:220px">Even deal — both sides got roughly what was projected.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LEAGUE MOBILE -->
+      <div style="position:relative;flex:none;width:390px;height:844px;background:var(--bg);border:1px solid var(--line2);border-radius:32px;overflow:hidden;display:flex;flex-direction:column" data-screen-label="League trades — mobile">
+        <div style="height:46px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px"><div style="font:700 13px/1 'Archivo',sans-serif">8:14</div><div style="width:22px"></div></div>
+        <div style="flex:none;padding:2px 16px 10px;display:flex;align-items:center;gap:8px">
+          <div style="width:40px;height:40px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--p-sleeper-fg);display:flex;align-items:center;justify-content:center;font:800 9px/1 'Archivo',sans-serif;color:var(--accent-ink)">LL</div></div>
+          <div style="display:flex;flex-direction:column;gap:1px"><div style="font:900 15px/1.1 'Archivo',sans-serif">Last League Left</div><div style="font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">TRADES · 4 DAYS LEFT</div></div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
+
+          <div style="display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--accent-line);border-radius:14px;overflow:hidden">
+            <div style="display:flex;flex-direction:column;gap:6px;padding:14px 14px 12px">
+              <div style="font:700 11px/1.2 'Archivo',sans-serif;color:var(--text2)">Casey sends to Jordan</div>
+              <div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--good)">86/100 fairness</div>
+            </div>
+            <div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line)">
+              <div style="padding-top:12px;display:flex;flex-direction:column;gap:3px;padding-left:10px;padding-right:10px;padding-bottom:9px;background:var(--surface2);border:1px solid var(--line);border-radius:9px">
+                <div style="display:flex;align-items:center;gap:8px"><div style="flex:none;width:18px;height:18px;border-radius:5px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font:900 8px/1 'Archivo',sans-serif">WR</div><div style="flex:1;font:800 11px/1.2 'Archivo',sans-serif">Perry Vance</div><div style="flex:none;font:900 11px/1 'JetBrains Mono',monospace">6,552</div></div>
+                <div style="margin-left:26px;font:500 9px/1.4 'Archivo',sans-serif;color:var(--faint)"><span style="font:800 8px/1 'JetBrains Mono',monospace;color:var(--accent)">PROJECTION</span> · scaled for scarcity</div>
+              </div>
+              <div style="font:800 9px/1 'JetBrains Mono',monospace;color:var(--accent);text-align:center">&#9662; hide 3 more</div>
+              <div style="display:flex;gap:8px;padding-top:2px">
+                <div style="flex:1;text-align:center;cursor:pointer;font:800 11px/1 'Archivo',sans-serif;color:var(--bg);background:var(--accent);padding:11px;border-radius:9px">Accept</div>
+                <div style="flex:1;text-align:center;cursor:pointer;font:800 11px/1 'Archivo',sans-serif;color:var(--text2);background:var(--chip);border:1px solid var(--chip-line);padding:11px;border-radius:9px">Counter</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;padding:14px;background:var(--surface);border:1px solid var(--line2);border-radius:14px">
+            <div style="font:700 11px/1.2 'Archivo',sans-serif;color:var(--text2)">Sam sends to Priya</div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.05em;color:var(--bad)">1 UNPRICED ASSET</div><div style="font:900 13px/1 'JetBrains Mono',monospace;color:var(--warn)">62/100</div></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px;padding-top:10px;border-top:1px solid var(--line)">
+            <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint)">TRADE HISTORY · VISIBLE TO YOU ONLY</div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--surface);border:1px solid var(--line2);border-radius:12px">
+              <div style="font:700 11px/1.2 'Archivo',sans-serif;color:var(--text2)">Casey &#8646; Jordan · Week 4</div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div style="width:32px;height:32px;border-radius:8px;background:var(--good-soft);border:1px solid rgba(52,211,153,.3);display:flex;align-items:center;justify-content:center;font:900 13px/1 'Archivo',sans-serif;color:var(--good)">A-</div><div style="font:700 7px/1 'JetBrains Mono',monospace;color:var(--faint)">CASEY</div></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div style="width:32px;height:32px;border-radius:8px;background:var(--warn-soft);border:1px solid rgba(251,191,36,.3);display:flex;align-items:center;justify-content:center;font:900 13px/1 'Archivo',sans-serif;color:var(--warn)">C+</div><div style="font:700 7px/1 'JetBrains Mono',monospace;color:var(--faint)">JORDAN</div></div>
+                <div style="font:500 10px/1.4 'Archivo',sans-serif;color:var(--faint)">Vance outproduced projection by 22%.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ROW 3: NOTIFICATIONS ================= -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="font:700 10px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">STATE 3 — HOW THIS SAME TRADE SHOWS UP OUTSIDE THE APP</div>
+    <div style="display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap">
+
+      <!-- PHONE NOTIFICATION -->
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint);text-align:center">PUSH NOTIFICATION</div>
+        <div style="position:relative;flex:none;width:390px;height:844px;background:linear-gradient(160deg,#1a1f33,#06070f);border:1px solid var(--line2);border-radius:32px;overflow:hidden;display:flex;flex-direction:column" data-screen-label="Trade — push notification">
+          <div style="height:46px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px"><div style="font:700 13px/1 'Archivo',sans-serif;color:#fff">8:14</div><div style="width:22px"></div></div>
+          <div style="flex:none;padding:52px 0 0;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font:800 46px/1 'Archivo',sans-serif;color:#fff">8:14</div>
+            <div style="font:600 14px/1 'Archivo',sans-serif;color:rgba(255,255,255,.75)">Tuesday, September 3</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:10px;padding:36px 14px">
+
+            <div style="display:flex;flex-direction:column;gap:6px;background:rgba(20,22,36,.82);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:14px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:22px;height:22px;flex:none;border-radius:6px;background:var(--accent)"></div>
+                <div style="flex:1;font:800 12px/1 'Archivo',sans-serif;color:#fff">AllFantasy</div>
+                <div style="font:500 11px/1 'Archivo',sans-serif;color:rgba(255,255,255,.5)">now</div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:flex-start">
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                  <div style="font:800 13px/1.3 'Archivo',sans-serif;color:#fff">New trade proposed — Last League Left</div>
+                  <div style="font:500 12px/1.45 'Archivo',sans-serif;color:rgba(255,255,255,.75)">Jordan offers Perry Vance + Dana Okoye for Marcus Feld, a 2027 2nd and $18 FAAB. Fairness: 86/100.</div>
+                </div>
+                <div style="width:48px;height:48px;flex:none;border-radius:10px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--accent);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">P</div></div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:6px;background:rgba(20,22,36,.6);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:14px;opacity:.7">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:22px;height:22px;flex:none;border-radius:6px;background:var(--accent)"></div>
+                <div style="flex:1;font:800 12px/1 'Archivo',sans-serif;color:#fff">AllFantasy</div>
+                <div style="font:500 11px/1 'Archivo',sans-serif;color:rgba(255,255,255,.5)">1h</div>
+              </div>
+              <div style="font:800 13px/1.3 'Archivo',sans-serif;color:#fff">Trade window closes in 4 days</div>
+              <div style="font:500 12px/1.45 'Archivo',sans-serif;color:rgba(255,255,255,.75)">2 trades still pending in Last League Left.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EMAIL NOTIFICATION -->
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.12em;color:var(--faint);text-align:center">EMAIL NOTIFICATION</div>
+        <div style="flex:none;width:640px;background:#0b0d14;border:1px solid rgba(255,255,255,.09);border-radius:16px;overflow:hidden" data-screen-label="Trade — email notification">
+          <div style="padding:22px 26px 18px;display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(255,255,255,.07)">
+            <div style="width:44px;height:44px;flex:none"><div style="width:100%;height:100%;border-radius:50%;background:var(--p-sleeper-fg);display:flex;align-items:center;justify-content:center;font:800 9px/1 'Archivo',sans-serif;color:var(--accent-ink)">LL</div></div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.14em;color:var(--faint)">TRADE PROPOSED · LAST LEAGUE LEFT</div>
+              <div style="font:900 20px/1.2 'Archivo',sans-serif;color:var(--text)">Jordan sent you a trade offer</div>
+            </div>
+          </div>
+          <div style="padding:22px 26px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:0;background:var(--surface);border:1px solid var(--line2);border-radius:13px;overflow:hidden">
+              <div style="display:grid;grid-template-columns:1fr 1fr">
+                <div style="display:flex;flex-direction:column;gap:8px;padding:16px;border-right:1px solid var(--line)">
+                  <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">CASEY · DYNASTY DOGS GETS</div>
+                  <div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;flex:none;border-radius:7px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--violet);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">M</div></div><div style="font:700 13px/1.3 'Archivo',sans-serif;color:var(--text)">Marcus Feld <span style="color:var(--faint);font-weight:500">RB</span></div></div>
+                  <div style="font:700 13px/1.3 'Archivo',sans-serif;color:var(--text)">2027 2nd + $18 FAAB</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;padding:16px">
+                  <div style="font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">JORDAN · GRIDIRON VULTURES GETS</div>
+                  <div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;flex:none;border-radius:7px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--accent);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">P</div></div><div style="font:700 13px/1.3 'Archivo',sans-serif;color:var(--text)">Perry Vance <span style="color:var(--faint);font-weight:500">WR</span></div></div>
+                  <div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;flex:none;border-radius:7px;overflow:hidden"><div style="width:100%;height:100%;border-radius:20%;background:var(--orange);display:flex;align-items:center;justify-content:center;font:800 12px/1 'Archivo',sans-serif;color:var(--accent-ink)">D</div></div><div style="font:700 13px/1.3 'Archivo',sans-serif;color:var(--text)">Dana Okoye <span style="color:var(--faint);font-weight:500">LB</span></div></div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);background:var(--surface2)">
+                <div style="font:900 15px/1 'JetBrains Mono',monospace;color:var(--good)">86<span style="font:700 10px/1 'Archivo',sans-serif;color:var(--faint)">/100 fairness</span></div>
+                <div style="flex:1;font:500 11px/1.4 'Archivo',sans-serif;color:var(--faint)">Priced from projections, IDP scarcity, pick value and FAAB — not raw name value.</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;padding:14px 16px;background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:12px">
+              <div style="display:flex;align-items:center;gap:8px"><div style="width:16px;height:16px;border-radius:5px;background:var(--accent);flex:none"></div><div style="font:800 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--accent)">DECISION OS</div></div>
+              <div style="font:500 12px/1.55 'Archivo',sans-serif;color:var(--text2)">Casey is rebuilding, so trading scarce IDP value for a pick fits the plan — Jordan buys a starter with capital he won't use this year.</div>
+            </div>
+            <div style="display:flex;gap:11px">
+              <div style="flex:1;text-align:center;font:800 13px/1 'Archivo',sans-serif;color:var(--accent-ink);background:var(--accent);padding:15px;border-radius:10px">Open the trade in AllFantasy</div>
+              <div style="flex:none;text-align:center;font:800 13px/1 'Archivo',sans-serif;color:var(--text2);background:var(--surface);border:1px solid var(--line2);padding:15px 20px;border-radius:10px">See the league</div>
+            </div>
+            <div style="font:400 10px/1.6 'Archivo',sans-serif;color:var(--faint);text-align:center">You get this because trade alerts are on for Last League Left. Change what you're emailed · Mute this league · Unsubscribe from all</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

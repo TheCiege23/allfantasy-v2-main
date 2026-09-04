@@ -77,6 +77,73 @@ rows; I was one edit from publishing "no league has ever carried an alias tag". 
 
 ---
 
+## 🎨 2026-09-03 — the Trade Price Transparency design handoff
+
+Supplied by you. Committed to
+[`design-refs/trade-price-transparency/`](../design-refs/trade-price-transparency/) — README,
+the `.dc.html` design source, and six screenshots (dashboard desktop/mobile, league
+desktop/mobile, push, email).
+
+🛑 **THE DESIGN IS A UI FOR THE ENGINE THAT LANDED TONIGHT, WHICH IS EITHER LUCK OR GOOD
+INSTINCT, BUT IT IS WORTH SAYING PLAINLY.** Its "pricing model reference" lists six sources an
+asset's value must resolve through, and the UI must name which. Those are exactly the branches of
+`valueBasisFor` in `lib/trade-value/valueEngine.ts`. And its central rule —
+
+> format-specific modifiers show as a separate adjustment layer next to — **never blended into** —
+> the base price
+
+— is verbatim the decision `applyFormatFit` was built on, pinned by
+`__tests__/trade-value/formatFitWiring.test.ts` under the header "🛑 the base price is untouched".
+
+### What the design needs vs. what exists
+
+| design element | engine/UI counterpart | status |
+|---|---|---|
+| `PROJECTION` source + copy | `valueBasisFor → 'projection'` | ✅ shipped `307eb9d3e` |
+| `MARKET` fallback | `→ 'market'` | ✅ |
+| `IDP SCARCITY` | `→ 'idp'` | ✅ |
+| `DRAFT PICK` priced by where it falls | `normalizedPickValue` (league-size aware) | ✅ |
+| `FAAB` priced from the bid | `normalizedFaabValue` | ✅ |
+| **Not priced → a sentence, never a bare `0`** | `basis: 'none'` + `grade.insufficientData` | ✅ data **and** copy |
+| fairness `/100`, side totals `9,672 for 7,412` | `grade.fairnessScore`, `SideTotals.total` | ✅ |
+| format modifier as its own signed `%` line | `formatFit.fit.multiplier` + `reason` | ✅ path · ⚠️ see below |
+| per-asset basis sub-line, rendered | `components/trade-value/TradeValueBreakdown.tsx` | ⚠️ **league modal only** |
+| `1 UNPRICED ASSET` chip + amber banner | derivable from `basis === 'none'` | ⚠️ data ✅, no UI |
+| **cross-league dashboard with pricing** | `app/dashboard/components/PendingTradesModal.tsx` | 🛑 **renders no pricing at all** |
+| Accept / Counter / Decline in-league | `TradeCenter.tsx` | ⬜ unaudited |
+| Decision OS wins-now / wins-long-term | `winNowScore`/`futureValueScore` exist in `lib/ai-memory.ts` | ⬜ not wired to a trade |
+| **Trade History & Grades** (settled: actual vs projection, per-manager letter, visible only to the two managers) | — | 🛑 **does not exist** |
+| push + email for a trade | `lib/notifications/NotificationDispatcher.ts`, `designedEmail.ts` | ⬜ infra yes, trade templates unaudited |
+| platform badge (Sleeper/Yahoo/ESPN) | import metadata carries `importSource` | ⬜ not surfaced |
+
+### The three real gaps, in the order they cost
+
+1. 🛑 **`PendingTradesModal` shows no prices.** 192 lines, takes a `TradesDashboardResponse`, renders
+   league name and a relative date. The design's entire dashboard frame — per-asset values, basis
+   sub-lines, fairness, flag chips — has no counterpart. **This is the largest single gap and the
+   data for all of it already exists.**
+2. 🛑 **Trade History & Grades is genuinely new work.** Grading a settled trade on how assets
+   *actually performed vs. projection* needs a post-settlement scorer and a store for the result.
+   Nothing in the repo does this — `LeagueTradeHistory` counts imported trades, it does not grade
+   them. Note the design scopes visibility to the two managers in the trade, which is an
+   authorization requirement, not just a UI one.
+3. ⚠️ **The format-modifier line will render for almost nobody**, and that is the census finding
+   above, not a design problem. The `GUILLOTINE −47%` chip needs `guillotine_seasons` rows, and
+   there are none; the taxi-squad exemption needs a `four_horsemen` league, and there are none.
+   **The design's two worked examples of the modifier layer are the two formats with no live data.**
+   Worth deciding before building that row: it is correct, and today it would never appear.
+
+### How this changes the plan
+
+The design supersedes "Phase 6 — make it user-facing" with something far more specific, and it
+mostly asks for **rendering data that already exists** rather than new engine work. Suggested order,
+cheapest-first: (a) basis sub-lines into `PendingTradesModal`, (b) the unpriced chip + amber banner,
+(c) Decision OS panel, (d) Trade History & Grades, (e) notifications.
+
+⚠️ **Not started — this section is a map, not work in progress.** Phase 3 is the current task.
+
+---
+
 ## ✅ LANDED ON MAIN — 2026-09-02
 
 All work is on `origin/main`, verified **by patch-id** rather than by ancestry (a cherry-pick
