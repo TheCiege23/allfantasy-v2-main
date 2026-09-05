@@ -18,12 +18,27 @@ import { describe, it, expect, vi } from 'vitest'
 /*
  * Only the reads the credential pre-flight and the due-check make. The loader tests below take
  * their dependencies by injection and never reach any of this.
+ *
+ * 🛑 EVERY MOCK WHOSE ARGUMENTS ARE LATER READ MUST DECLARE THEM. `vi.fn(async () => ...)` infers a
+ * ZERO-ARGUMENT call signature, so `mock.calls[0]` types as the empty tuple `[]` and every
+ * `calls[0][0]` below is `TS2493: Tuple type '[]' of length '0' has no element at index '0'` —
+ * which then makes the `as {...}` cast a `TS2352` conversion from `undefined`. Seven errors in this
+ * file came from exactly that, and NOTHING REPORTED THEM: tsconfig excludes `__tests__`, so
+ * `npm run typecheck` never compiles a test file. They surfaced only under a scoped config that
+ * deliberately included tests.
+ *
+ * The tests passed the whole time — the assertions are correct at runtime. Declaring the parameter
+ * is what makes them correct at compile time too, so a signature change to `upsert` breaks them
+ * loudly instead of silently reading a wrong index.
  */
 const h = vi.hoisted(() => ({
   prisma: {
     league: { findMany: vi.fn(async () => []), groupBy: vi.fn(async () => []) },
     leagueAuth: { findMany: vi.fn(async () => []) },
-    leagueSyncState: { findUnique: vi.fn(async () => null), upsert: vi.fn(async () => ({})) },
+    leagueSyncState: {
+      findUnique: vi.fn(async () => null),
+      upsert: vi.fn(async (_args: unknown) => ({})),
+    },
   },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
@@ -236,7 +251,8 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
 
 describe('fetchNormalizedForConnection — keyless providers', () => {
   it('reads without resolving any user, and never passes a userId', async () => {
-    const runPipeline = vi.fn(async () => ok())
+    /* Declares its argument because the assertion below reads it — see the note on `h.prisma`. */
+    const runPipeline = vi.fn(async (_args: ImportedLeagueNormalizationInput) => ok())
     const resolveCandidates = vi.fn(async () => ['should-not-be-called'])
 
     const out = await fetchNormalizedForConnection(
