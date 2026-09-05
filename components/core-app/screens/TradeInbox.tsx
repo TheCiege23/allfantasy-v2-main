@@ -22,14 +22,31 @@ import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker
  * true. Getting this wrong tells a Yahoo manager their inbox is clear when we
  * have never once read it.
  *
- * ⚠ READ-ONLY, BY THE PROVIDER'S CONSTRUCTION. Sleeper's public API has no
- * write endpoint, so there is no accept, no reject and no counter here — those
- * controls would be lies with buttons on them. What we can do is price the
- * offer, which is the point: "Load into builder" drops it into the analyzer on
- * this page, and the manager acts on Sleeper.
+ * ⚠ PROVIDER OFFERS ARE READ-ONLY, BY THE PROVIDER'S CONSTRUCTION. Sleeper's
+ * public API has no write endpoint, so a Sleeper offer gets no accept, no reject
+ * and no counter — those controls would be lies with buttons on them. What we can
+ * do is price it: "Load into builder" drops it into the analyzer on this page, and
+ * the manager acts on Sleeper.
+ *
+ * ⚠ AF-NATIVE OFFERS ARE A DIFFERENT STREAM AND THIS DISTINCTION IS THE WHOLE
+ * REASON BOTH LISTS EXIST HERE. A native offer lives in our own tables, so it CAN
+ * be answered — and incoming ones now carry a Counter control that arms the builder
+ * below. The sentence above used to read "no counter here" without qualification,
+ * which was true when nothing could be countered and became a false absence claim
+ * the moment the native path shipped.
  *
  * ⚠ NO NEW API ROUTE. Reads the existing `/api/league/trades-panel`.
  */
+
+/** One row of `AfLeagueTradeItem` as `GET /api/leagues/<id>/trades/<tradeId>` returns it. */
+export type NativeTradeItem = {
+  itemType: string
+  itemReference: string | null
+  fromRosterId: string
+  toRosterId: string
+  faabAmount?: number | null
+  metadata?: unknown
+}
 
 type OfferAsset = {
   playerId: string | null
@@ -51,11 +68,23 @@ type Offer = {
   get: OfferAsset[]
 }
 
+/**
+ * An `activeTrades` row as `/api/league/trades-panel` returns it.
+ *
+ * ⚠ THIS TYPE IS A HAND-WRITTEN MIRROR OF THE WIRE SHAPE, so it drifts silently:
+ * nothing links it to the route, and a field the route sends is simply absent here
+ * until someone needs it. `sent` and `received` were exactly that — returned by
+ * `buildNativeActiveTrades` since it was written, undeclared here, and so unusable
+ * without a type error the moment the counter row tried to count them.
+ */
 type NativeRow = {
   id: string
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
   status?: string
+  /** Leaving the viewer's roster / arriving on it. Labels only — see `assetLabel`. */
+  sent: Array<{ id: string; label: string }>
+  received: Array<{ id: string; label: string }>
 }
 
 type PanelResponse = {
@@ -141,15 +170,101 @@ function assetLine(a: OfferAsset): string {
   return meta ? `${a.name} — ${meta}` : a.name
 }
 
+/**
+ * Rebuild a NATIVE trade's items as builder assets, seen from the roster that
+ * received the offer.
+ *
+ * 🛑 THIS IS NOT `toPickedAssets`, AND THE DIFFERENCE IS WHAT MAKES A COUNTER
+ * SENDABLE. That converter reads a PROVIDER offer, where the only identifier is a
+ * Sleeper id we deliberately do not pass on, so it rebuilds players by NAME and
+ * drops picks entirely — fine for pricing, useless for proposing.
+ *
+ * A native trade stores our own identifiers in `itemReference`: a player id the
+ * reconciler can match against the roster, and for a pick the stored pick id the
+ * engine matches on. Carrying those through is why the counter arrives as a
+ * complete deal instead of tripping the panel's partial-deal refusal.
+ */
+export function nativeItemsToAssets(
+  items: NativeTradeItem[],
+  receiverRosterId: string,
+): { give: PickedAsset[]; get: PickedAsset[] } {
+  const give: PickedAsset[] = []
+  const get: PickedAsset[] = []
+
+  for (const it of items) {
+    // Seen from the receiver: leaving their roster is a give, arriving is a get.
+    const bucket = it.fromRosterId === receiverRosterId ? give : it.toRosterId === receiverRosterId ? get : null
+    if (!bucket) continue
+
+    if (it.itemType === 'faab' && it.faabAmount != null) {
+      bucket.push({ kind: 'faab', amount: it.faabAmount })
+      continue
+    }
+
+    const meta = it.metadata && typeof it.metadata === 'object' ? (it.metadata as Record<string, unknown>) : {}
+    const str = (k: string): string | null => (typeof meta[k] === 'string' && meta[k] ? (meta[k] as string) : null)
+
+    if (it.itemType === 'rookie_pick' || it.itemType === 'future_pick') {
+      const year = Number(meta.pickYear)
+      const round = Number(meta.pickRound)
+      bucket.push({
+        kind: 'pick',
+        year: Number.isFinite(year) ? year : 0,
+        round: Number.isFinite(round) ? round : 0,
+        label: str('playerName') ?? (Number.isFinite(year) && Number.isFinite(round) ? `${year} round ${round}` : 'Pick'),
+        // The stored id is the whole point — a pick without one cannot be proposed.
+        pickId: it.itemReference,
+        itemType: it.itemType,
+      })
+      continue
+    }
+
+    bucket.push({
+      kind: 'player',
+      playerId: it.itemReference,
+      name: str('playerName') ?? it.itemReference ?? 'Player',
+      position: str('position'),
+      team: str('team'),
+      value: null,
+    })
+  }
+
+  return { give, get }
+}
+
 export function TradeInbox(props: {
   leagueId: string | null
   /** Hands a whole offer to the builder on this page. */
   onLoad: (give: PickedAsset[], get: PickedAsset[], note: string | null) => void
+  /**
+   * Hands a NATIVE offer to the builder in counter mode. Absent means the screen
+   * cannot counter, and no counter control is rendered — a button that cannot
+   * finish what it starts is the thing this panel already refuses to draw.
+   */
+  onCounter?: (input: {
+    tradeId: string
+    give: PickedAsset[]
+    get: PickedAsset[]
+    partnerRosterId: string
+    label: string
+  }) => void
+  /**
+   * Bumped by the screen after a send lands. Sending a counter CLOSES the offer it
+   * answers, so without a refetch that offer keeps its Counter button and a second
+   * press answers a trade the engine has already moved on from.
+   *
+   * ⚠ Forced past the share window on purpose. `fetchTradesPanel` collapses reads
+   * inside 5s so this component and the league strip make one request — correct on
+   * load, wrong here, because the write that just happened is exactly what the
+   * cached response predates.
+   */
+  reloadToken?: number
 }) {
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
+  const [countering, setCountering] = useState<{ id: string; state: 'loading' | 'failed' } | null>(null)
 
-  const { leagueId, onLoad } = props
+  const { leagueId, onLoad, onCounter, reloadToken = 0 } = props
 
   const load = useCallback(async () => {
     if (!leagueId) return
@@ -158,8 +273,10 @@ export function TradeInbox(props: {
       /*
        * ⚠ SHARED WITH TradeLeagueStrip, which also reads this league's panel on the same
        * load. Two components, one request — see tradesPanelFetch for the measurement.
+       * A non-zero reloadToken means a write just landed, so that sharing is skipped:
+       * the cached response is older than the change we are refetching to see.
        */
-      const r = await fetchTradesPanel(leagueId)
+      const r = await fetchTradesPanel(leagueId, reloadToken > 0 ? { force: true } : undefined)
       const j = r.data as PanelResponse
       if (!r.ok) {
         setData(null)
@@ -172,7 +289,8 @@ export function TradeInbox(props: {
       setData(null)
       setState('failed')
     }
-  }, [leagueId])
+    // reloadToken is a dependency, not decoration: bumping it is what re-runs the read.
+  }, [leagueId, reloadToken])
 
   useEffect(() => {
     void load()
@@ -194,6 +312,47 @@ export function TradeInbox(props: {
     [onLoad],
   )
 
+  /*
+   * ⚠ THE PANEL'S OWN ASSET SHAPE IS NOT ENOUGH TO COUNTER WITH, so this re-reads
+   * the trade. `assetLabel` in the panel route keeps a label and a position and
+   * DISCARDS `itemReference` — fine for a list, fatal for a proposal, because the
+   * engine matches players and picks by that id. The detail route returns the raw
+   * items, so the counter is built from identifiers rather than from display text.
+   */
+  const counterOffer = useCallback(
+    async (t: { id: string; partnerName?: string | null }) => {
+      if (!leagueId || !onCounter) return
+      setCountering({ id: t.id, state: 'loading' })
+      try {
+        const r = await fetch(
+          `/api/leagues/${encodeURIComponent(leagueId)}/trades/${encodeURIComponent(t.id)}`,
+          { cache: 'no-store' },
+        )
+        const j = (await r.json().catch(() => ({}))) as {
+          trade?: { items?: NativeTradeItem[]; receiverRosterId?: string; proposerRosterId?: string }
+        }
+        const trade = j.trade
+        if (!r.ok || !trade?.items || !trade.receiverRosterId || !trade.proposerRosterId) {
+          setCountering({ id: t.id, state: 'failed' })
+          return
+        }
+        const { give, get } = nativeItemsToAssets(trade.items, trade.receiverRosterId)
+        onCounter({
+          tradeId: t.id,
+          give,
+          get,
+          /* The viewer received this offer, so the counterparty is whoever proposed it. */
+          partnerRosterId: trade.proposerRosterId,
+          label: t.partnerName ? `${t.partnerName}’s offer` : 'their offer',
+        })
+        setCountering(null)
+      } catch {
+        setCountering({ id: t.id, state: 'failed' })
+      }
+    },
+    [leagueId, onCounter],
+  )
+
   if (!leagueId) return null
 
   const offers = data?.pendingOffers ?? []
@@ -209,6 +368,14 @@ export function TradeInbox(props: {
   const nativeOpen = (data?.activeTrades ?? []).filter(
     (t) => t.status !== 'pending_on_sleeper' && t.direction !== 'complete',
   )
+
+  /*
+   * ⚠ ONLY INCOMING OFFERS CAN BE COUNTERED, and the restriction is the engine's,
+   * not a UI preference: countering marks the offer you are answering 'countered'.
+   * Offering that on your OWN outgoing proposal would let you close your own offer
+   * and call it a negotiation — `cancel` is the control for that, and it exists.
+   */
+  const nativeIncoming = nativeOpen.filter((t) => t.direction === 'incoming')
 
   const column = (title: string, rows: Offer[], emptyWhenScanned: string) => (
     <section className="af-tc-inbox-col">
@@ -303,10 +470,40 @@ export function TradeInbox(props: {
       {column('Inbox', inbox, 'Nothing waiting on you right now.')}
       {column('Sent', sent, 'You have no offers out.')}
 
-      {nativeOpen.length > 0 ? (
+      {/*
+        🛑 THIS NOTE USED TO SAY "accept, reject and counter live on the league page".
+        Accept and reject do. Counter did not live anywhere — the route existed with
+        zero UI callers, so the sentence sent people looking for a control nobody had
+        built. Countering is now done here, and the note claims only what is true.
+      */}
+      {nativeIncoming.length > 0 && onCounter ? (
+        <div className="af-tc-inbox-native">
+          <div className="af-label">Open AllFantasy offers</div>
+          {nativeIncoming.map((t) => (
+            <div key={t.id} className="af-tc-offer-actions af-tc-native-row">
+              <span className="af-tc-row-sub">
+                {t.partnerName ?? 'A manager'} — {t.received.length} for {t.sent.length}
+              </span>
+              <button
+                type="button"
+                className="af-btn af-btn--ghost"
+                onClick={() => void counterOffer(t)}
+                disabled={countering?.id === t.id && countering.state === 'loading'}
+              >
+                {countering?.id === t.id && countering.state === 'loading' ? 'Loading…' : 'Counter'}
+              </button>
+              {countering?.id === t.id && countering.state === 'failed' ? (
+                <span className="af-tc-nosignal">Could not load that offer to counter it.</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {nativeOpen.length > nativeIncoming.length || (nativeOpen.length > 0 && !onCounter) ? (
         <p className="af-tc-row-sub af-tc-inbox-note">
           {nativeOpen.length} open {nativeOpen.length === 1 ? 'proposal' : 'proposals'} made inside
-          AllFantasy — accept, reject and counter live on the league page.
+          AllFantasy — accept and reject live on the league page.
         </p>
       ) : null}
     </div>

@@ -18,12 +18,13 @@ import {
   buildTradeAssetsForRoster,
   scanPendingSleeperTrades,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
-import { toPickedAssets } from '@/components/core-app/screens/TradeInbox'
+import { toPickedAssets, nativeItemsToAssets } from '@/components/core-app/screens/TradeInbox'
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8')
 
 const INBOX = read('components/core-app/screens/TradeInbox.tsx')
 const CENTER = read('components/core-app/screens/TradeCenter.tsx')
+const PROPOSE = read('components/core-app/screens/TradeProposePanel.tsx')
 const ROUTE = read('app/api/league/trades-panel/route.ts')
 const SCANNER = read('lib/provider-trades/scanPendingSleeperTrades.ts')
 
@@ -270,7 +271,141 @@ describe('⚠ loading an offer into the builder analyses THAT offer', () => {
 
   it('replaces the board and clears the verdict rather than merging', () => {
     expect(CENTER).toContain('REPLACES, NEVER APPENDS')
-    expect(CENTER).toContain('<TradeInbox leagueId={props.league?.id ?? null} onLoad={loadOffer} />')
+    /*
+     * ⚠ ASSERTS THE WIRING, NOT THE WHOLE TAG. This pinned the complete JSX element
+     * as one literal, so adding ANY prop to <TradeInbox> failed it — which is what
+     * happened when the counter control was added. The claim worth keeping is that
+     * the inbox hands offers to `loadOffer` (the handler that replaces rather than
+     * appends); how many other props the element carries is not part of it.
+     */
+    expect(CENTER).toMatch(/<TradeInbox[\s\S]{0,240}?onLoad=\{loadOffer\}/)
+  })
+
+  it('🛑 the counter control is wired to a handler, not left as a dead button', () => {
+    /*
+     * `/trades/<id>/counter` shipped with ZERO UI callers — the route worked and no
+     * screen could reach it, so the inbox told people counters "live on the league
+     * page" where nothing existed. These pin both ends of the connection: the inbox
+     * receives a handler, and the propose panel knows how to send to the counter
+     * route. Either one alone can go green while the feature is unreachable.
+     */
+    expect(CENTER).toMatch(/<TradeInbox[\s\S]{0,240}?onCounter=\{startCounter\}/)
+    expect(CENTER).toContain('counteringTradeId={countering?.tradeId ?? null}')
+    expect(PROPOSE).toContain('/counter')
+  })
+
+  it('🛑 a sent counter disarms counter mode and refetches the offer it closed', () => {
+    /*
+     * Two failures this prevents, both silent:
+     *
+     * Leaving counter mode armed points the NEXT send at a trade the engine has
+     * already flipped to 'countered', so the second attempt fails with a message
+     * about a trade the manager considers finished.
+     *
+     * Not refetching leaves the answered offer in the list with its Counter button
+     * still on it — the panel says "their offer is now closed" while the list beside
+     * it says otherwise.
+     */
+    expect(CENTER).toContain('setCountering(null)')
+    expect(CENTER).toContain('setInboxReloadToken((n) => n + 1)')
+    expect(CENTER).toContain('reloadToken={inboxReloadToken}')
+    /*
+     * And the panel must only fire it after a confirmed write, never on the attempt.
+     *
+     * ⚠ ASSERTED BY ORDER, NOT BY A REGEX WINDOW. The first version of this matched
+     * `ok: true … onSent?.()` within 400 characters and failed the moment a comment
+     * was written between them — a test that breaks on how far apart two lines sit is
+     * measuring formatting, not behaviour. Position is the actual claim: the call
+     * happens after the success branch and before the catch.
+     */
+    const okIdx = PROPOSE.indexOf('ok: true,')
+    const sentIdx = PROPOSE.indexOf('onSent?.()')
+    const catchIdx = PROPOSE.indexOf('} catch {')
+    expect(okIdx).toBeGreaterThan(-1)
+    expect(sentIdx).toBeGreaterThan(okIdx)
+    expect(catchIdx).toBeGreaterThan(sentIdx)
+  })
+
+  it('⚠ the refetch skips the 5s share window, or it reads a response older than the write', () => {
+    /*
+     * `fetchTradesPanel` collapses reads inside 5s so the inbox and the league strip
+     * make one request. Correct on load; wrong straight after a write, because the
+     * cached response is exactly the state the write just changed.
+     */
+    expect(INBOX).toContain('reloadToken > 0 ? { force: true } : undefined')
+  })
+})
+
+describe('🛑 rebuilding a NATIVE offer to counter it keeps the identifiers', () => {
+  /*
+   * The whole reason this converter exists beside `toPickedAssets` rather than
+   * reusing it. That one reads a PROVIDER offer, where the only id is a Sleeper id
+   * we deliberately do not pass on — so it rebuilds players by NAME and drops picks
+   * outright. Priced fine, unsendable.
+   *
+   * A counter has to survive `reconcileProposal`, which matches players against the
+   * roster and picks by stored pick id. Rebuild by name and every counter comes back
+   * as a partial deal the propose panel then refuses — a button that looks wired and
+   * never completes.
+   */
+  const RECEIVER = 'roster-me'
+  const PROPOSER = 'roster-them'
+
+  const items = [
+    { itemType: 'player', itemReference: 'p-mine', fromRosterId: RECEIVER, toRosterId: PROPOSER, metadata: { playerName: 'Kenneth Walker', position: 'RB', team: 'SEA' } },
+    { itemType: 'player', itemReference: 'p-theirs', fromRosterId: PROPOSER, toRosterId: RECEIVER, metadata: { playerName: 'Deebo Samuel', position: 'WR' } },
+    { itemType: 'future_pick', itemReference: 'pick-77', fromRosterId: PROPOSER, toRosterId: RECEIVER, metadata: { playerName: '2027 round 2', pickYear: 2027, pickRound: 2 } },
+    { itemType: 'faab', itemReference: null, fromRosterId: RECEIVER, toRosterId: PROPOSER, faabAmount: 12, metadata: {} },
+  ]
+
+  it('splits give and get from the RECEIVER’s side, not the proposer’s', () => {
+    // Countering means answering, so the board must open as the answerer sees it.
+    const { give, get } = nativeItemsToAssets(items, RECEIVER)
+    expect(give.map((a) => (a.kind === 'player' ? a.name : a.kind))).toEqual(['Kenneth Walker', 'faab'])
+    expect(get.map((a) => (a.kind === 'player' ? a.name : a.kind))).toEqual(['Deebo Samuel', 'pick'])
+  })
+
+  it('🛑 carries playerId from itemReference — a name would not reconcile', () => {
+    const { get } = nativeItemsToAssets(items, RECEIVER)
+    expect(get[0]).toMatchObject({ kind: 'player', playerId: 'p-theirs', name: 'Deebo Samuel', position: 'WR' })
+  })
+
+  it('🛑 carries pickId, which is the only thing that makes a pick proposable', () => {
+    /*
+     * TradeAssetPicker says it outright: a hand-typed year and round "can be priced
+     * but never proposed — the trade engine matches a pick by its stored id". Drop
+     * the id and the counter silently loses the pick.
+     */
+    const { get } = nativeItemsToAssets(items, RECEIVER)
+    const pick = get.find((a) => a.kind === 'pick')
+    expect(pick).toMatchObject({ kind: 'pick', pickId: 'pick-77', year: 2027, round: 2, itemType: 'future_pick' })
+  })
+
+  it('keeps FAAB as an amount rather than turning it into a player', () => {
+    const { give } = nativeItemsToAssets(items, RECEIVER)
+    expect(give.find((a) => a.kind === 'faab')).toEqual({ kind: 'faab', amount: 12 })
+  })
+
+  it('⚠ ignores an item touching neither roster instead of guessing a side', () => {
+    // Three-way rows should not silently land on the answerer's board.
+    const { give, get } = nativeItemsToAssets(
+      [{ itemType: 'player', itemReference: 'p-other', fromRosterId: 'roster-c', toRosterId: 'roster-d', metadata: {} }],
+      RECEIVER,
+    )
+    expect(give).toEqual([])
+    expect(get).toEqual([])
+  })
+
+  it('[control] the converter is reached and can differ — swapping perspective swaps the sides', () => {
+    /*
+     * Without this, every assertion above would also hold for a converter that
+     * ignored `receiverRosterId` entirely and always bucketed the same way.
+     */
+    const asReceiver = nativeItemsToAssets(items, RECEIVER)
+    const asProposer = nativeItemsToAssets(items, PROPOSER)
+    expect(asProposer.give.map((a) => (a.kind === 'player' ? a.name : a.kind))).toEqual(
+      asReceiver.get.map((a) => (a.kind === 'player' ? a.name : a.kind)),
+    )
   })
 })
 

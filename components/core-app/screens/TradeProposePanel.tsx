@@ -143,8 +143,24 @@ export function TradeProposePanel(props: {
   /** The counterparty chosen in the builder. One selection, one meaning. */
   partnerRosterId: string | null
   onChoosePartner: (rosterId: string) => void
+  /**
+   * When set, sending posts a COUNTER to this trade instead of creating a fresh
+   * one — `/trades/<id>/counter` rather than `/trades`.
+   *
+   * ⚠ A COUNTER IS A WHOLE NEW DEAL, NOT A VERDICT ON THE OLD ONE. The route takes
+   * the same body as a proposal; the parent id is what makes the engine flip the
+   * offer being answered to 'countered' and chain the two together. So everything
+   * below — reconciliation, the partial-deal refusal, the blocked list — applies
+   * unchanged, and the only difference is the URL and what the button says.
+   */
+  counteringTradeId?: string | null
+  /** Label of the offer being answered, for the line above the button. */
+  counteringLabel?: string | null
+  onCancelCounter?: () => void
+  /** Fired after the league accepts the write, so the screen can refetch what changed. */
+  onSent?: () => void
 }) {
-  const { leagueId, give, get } = props
+  const { leagueId, give, get, counteringTradeId = null, onSent } = props
 
   const [sending, setSending] = useState(false)
   const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
@@ -175,7 +191,15 @@ export function TradeProposePanel(props: {
     setSending(true)
     setOutcome(null)
     try {
-      const r = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades`, {
+      /*
+       * The counter route is the same contract with a parent attached. Building the
+       * URL here rather than branching the whole call keeps one reconciliation, one
+       * refusal path, and one place that reads the server's error text.
+       */
+      const url = counteringTradeId
+        ? `/api/leagues/${encodeURIComponent(leagueId)}/trades/${encodeURIComponent(counteringTradeId)}/counter`
+        : `/api/leagues/${encodeURIComponent(leagueId)}/trades`
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,20 +221,51 @@ export function TradeProposePanel(props: {
       }
       setOutcome({
         ok: true,
-        message: `Sent to ${partner.ownerName ?? 'them'}. It is pending until they answer, and it expires in 48 hours.`,
+        message: counteringTradeId
+          ? `Counter sent to ${partner.ownerName ?? 'them'}. Their original offer is now closed, and yours expires in 48 hours.`
+          : `Sent to ${partner.ownerName ?? 'them'}. It is pending until they answer, and it expires in 48 hours.`,
       })
+      /*
+       * Only after a confirmed 200. Firing this on the attempt would refetch a panel
+       * that has not changed and, worse, would clear counter mode on a send the
+       * league refused — leaving the manager looking at a deal they think went out.
+       */
+      onSent?.()
     } catch {
-      setOutcome({ ok: false, message: 'The proposal did not reach the league.' })
+      setOutcome({
+        ok: false,
+        message: counteringTradeId
+          ? 'The counter did not reach the league.'
+          : 'The proposal did not reach the league.',
+      })
     } finally {
       setSending(false)
     }
-  }, [leagueId, mine, partner, reconciled])
+  }, [leagueId, mine, partner, reconciled, counteringTradeId, onSent])
 
   if (!leagueId || !hasDeal) return null
 
   return (
     <section className="af-tc-propose">
-      <div className="af-label">Send this as a proposal</div>
+      <div className="af-label">{counteringTradeId ? 'Send this as a counter' : 'Send this as a proposal'}</div>
+
+      {counteringTradeId ? (
+        /*
+         * ⚠ SAYING WHICH OFFER THIS ANSWERS IS NOT DECORATION. Sending a counter
+         * CLOSES the offer being answered — the engine flips it to 'countered'. A
+         * manager who thinks they are building a second, independent proposal would
+         * be destroying the first one without being told. The way out is next to the
+         * claim, so backing out costs one click rather than a reload.
+         */
+        <p className="af-tc-row-sub">
+          Answering {props.counteringLabel ?? 'their offer'}. Sending this closes theirs.{' '}
+          {props.onCancelCounter ? (
+            <button type="button" className="af-tc-linklike" onClick={props.onCancelCounter}>
+              Send as a new proposal instead.
+            </button>
+          ) : null}
+        </p>
+      ) : null}
 
       {props.rosters == null ? (
         <p className="af-tc-row-sub">Checking who can receive it&hellip;</p>
@@ -327,7 +382,13 @@ export function TradeProposePanel(props: {
               outcome?.ok === true
             }
           >
-            {sending ? 'Sending…' : outcome?.ok ? 'Sent' : 'Propose this trade'}
+            {sending
+              ? 'Sending…'
+              : outcome?.ok
+                ? 'Sent'
+                : counteringTradeId
+                  ? 'Send counter'
+                  : 'Propose this trade'}
           </button>
         </>
       ) : null}

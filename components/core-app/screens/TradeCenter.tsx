@@ -285,6 +285,14 @@ export function TradeCenter(props: {
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   const [draftNote, setDraftNote] = useState<string | null>(null)
+  /*
+   * Non-null means the next send ANSWERS that offer rather than opening a new one.
+   * Held here rather than in the propose panel because the inbox arms it and the
+   * panel consumes it, and a value two siblings both need belongs to the parent.
+   */
+  const [countering, setCountering] = useState<{ tradeId: string; label: string } | null>(null)
+  /** Bumped after a send lands, so the inbox refetches what the write changed. */
+  const [inboxReloadToken, setInboxReloadToken] = useState(0)
 
   /*
    * ── Who you are trading with ──────────────────────────────────────────
@@ -436,6 +444,35 @@ export function TradeCenter(props: {
       setResult(null)
       setError(null)
       setDraftNote(note ?? 'Offer loaded — analyse it to get a verdict.')
+      /*
+       * Loading a PROVIDER offer is not answering an AllFantasy one, so it leaves
+       * counter mode. Without this, a counter armed a moment ago would still be
+       * armed, and the next send would close an offer the manager is no longer
+       * looking at.
+       */
+      setCountering(null)
+    },
+    [],
+  )
+
+  /**
+   * Arm counter mode: the builder holds their deal, seen from this manager, and the
+   * send goes to `/counter` with the parent attached.
+   *
+   * ⚠ THE COUNTERPARTY IS SET HERE TOO, deliberately. `TradeProposePanel` sends to
+   * whoever the builder has selected; if that still pointed at the last person a
+   * manager was browsing, the counter would answer one offer and be addressed to
+   * someone else entirely — a wrong trade with no error anywhere.
+   */
+  const startCounter = useCallback(
+    (input: { tradeId: string; give: PickedAsset[]; get: PickedAsset[]; partnerRosterId: string; label: string }) => {
+      setGiveAssets(input.give)
+      setGetAssets(input.get)
+      setResult(null)
+      setError(null)
+      setPartnerRosterId(input.partnerRosterId)
+      setCountering({ tradeId: input.tradeId, label: input.label })
+      setDraftNote(`Countering ${input.label} — change it, analyse it, then send it back.`)
     },
     [],
   )
@@ -788,7 +825,12 @@ export function TradeCenter(props: {
         job: read what was offered, then price it. Below the builder they would
         be a footnote to a deal the manager had already hand-built.
       */}
-      <TradeInbox leagueId={props.league?.id ?? null} onLoad={loadOffer} />
+      <TradeInbox
+        leagueId={props.league?.id ?? null}
+        onLoad={loadOffer}
+        onCounter={startCounter}
+        reloadToken={inboxReloadToken}
+      />
 
       {/*
         Naming the other side is not decoration. It is what turns on the whole
@@ -1323,6 +1365,19 @@ export function TradeCenter(props: {
         viewerRosterId={rosterData?.viewerRosterId ?? null}
         partnerRosterId={partnerRosterId}
         onChoosePartner={setPartnerRosterId}
+        counteringTradeId={countering?.tradeId ?? null}
+        counteringLabel={countering?.label ?? null}
+        onCancelCounter={() => setCountering(null)}
+        onSent={() => {
+          /*
+           * Counter mode is armed for ONE send. Leaving it armed after a successful
+           * counter would point the next send at a trade the engine has already
+           * closed, and the second attempt would fail with a message about a trade
+           * the manager thinks they are done with.
+           */
+          setCountering(null)
+          setInboxReloadToken((n) => n + 1)
+        }}
       />
 
       <TradeFinderPanel leagueId={props.league?.id ?? null} />
