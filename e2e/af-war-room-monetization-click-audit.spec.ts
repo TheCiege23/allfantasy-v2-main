@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 function featureFromRequestUrl(url: string): string {
   const parsed = new URL(url)
@@ -125,6 +126,23 @@ async function mockAfWarRoomMonetization(page: Page) {
 test.describe('@monetization af war room monetization click audit', () => {
   test('war room spotlight plus draft and strategy upgrade routes are wired', async ({ page }) => {
     await mockAfWarRoomMonetization(page)
+    /*
+     * ⚠ SIGN IN — A GUEST IS SHOWN "Sign up free", NEVER AN UPGRADE CTA, BY DESIGN.
+     * FeatureGate branches on `accessTier.isGuest` and its own comment says why: "Guests
+     * (no account) never get an 'upgrade' CTA — there's nothing to upgrade yet." It then
+     * renders LockedFeatureCard with `isGuestLocked`, which emits
+     * locked-feature-signup-link instead of locked-feature-upgrade-link.
+     *
+     * lib/access/accessTier.ts:38 returns isGuest:true for an unauthenticated visitor, so
+     * this spec — which asserts UPGRADE hrefs — was reading the guest surface and failing
+     * on a link the product deliberately does not render for guests. Mocking
+     * /api/guest-mode/status to `isGuest:false` does not help: LockedFeatureCard takes
+     * isGuestLocked as a PROP from FeatureGate, which reads the session, not that route.
+     *
+     * A session makes this a signed-in, unentitled user — the state whose upgrade routes
+     * this test exists to audit.
+     */
+    await signInAs(page, { id: 'e2e-af-war-room-user' })
     await page.goto('/e2e/af-war-room-monetization', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { name: /e2e af war room monetization harness/i })).toBeVisible()

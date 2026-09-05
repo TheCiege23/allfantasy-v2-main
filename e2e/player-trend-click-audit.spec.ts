@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -247,6 +248,20 @@ test.describe('@player-trend full click audit', () => {
     await page.getByRole('button', { name: 'Refresh' }).click()
     await expect(page.getByRole('link', { name: 'Back to app home' })).toHaveAttribute('href', '/dashboard')
 
+    /*
+     * ⚠ SIGN IN FIRST — /waiver-ai IS NO LONGER A PUBLIC PAGE.
+     * This step was written when the page rendered for anyone: the pre-rebuild file had
+     * no auth branch at all, just `return (`. 0c141a3c6 ("rebuild waiver AI with league
+     * gate...") added `if (status === 'unauthenticated') return <LoginRequiredState />`
+     * ABOVE everything, so an anonymous visit renders the login state and every locator
+     * on the real page misses. That reads as a deleted link rather than as a gate the
+     * visitor never passed.
+     *
+     * Signed in only for this step. The earlier steps in this test genuinely are public
+     * and still pass anonymously, and authenticating the whole test would stop exercising
+     * that.
+     */
+    await signInAs(page, { id: 'e2e-player-trend-user' })
     await page.goto('/waiver-ai')
     await expect(page.getByRole('link', { name: 'Meta insights' })).toHaveAttribute(
       'href',

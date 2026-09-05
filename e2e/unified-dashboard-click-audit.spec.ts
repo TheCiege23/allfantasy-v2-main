@@ -39,8 +39,26 @@ test.describe("@dashboard unified dashboard click audit", () => {
     await expect(page.getByTestId("manager-dna-card-commissioner")).toHaveCount(0)
     await expect(page.getByTestId("decision-recommendations-card-commissioner")).toHaveCount(0)
 
-    // With no commissioner leagues there is nothing to select, and the switcher says so
-    // rather than rendering an empty list.
-    await expect(page.getByTestId("league-switcher-empty")).toBeVisible()
+    /*
+     * ⚠ `league-switcher-empty` CANNOT RENDER, SO THIS ASSERTED UNREACHABLE CODE.
+     * CommissionerCommandCenterSection returns EARLY when there are no leagues
+     * (`if (demoMode || !hasLeagues) return <DecisionOsEmptyState .../>`, line ~128),
+     * and <CommissionerLeagueSwitcher> is mounted further down at line ~203 — inside the
+     * branch that only runs when hasLeagues is TRUE. The switcher's own
+     * `leagues.length === 0` arm is therefore dead from its single call site: it is
+     * reachable only when the caller has already proved the list is non-empty.
+     *
+     * So the empty message the user actually sees belongs to the SECTION, not the
+     * switcher, and it says more than the switcher's line did. Asserting the real one
+     * keeps the intent of this test — nothing is auto-selected, and the page says why —
+     * against markup that exists.
+     *
+     * The dead arm in CommissionerLeagueSwitcher.tsx is left in place deliberately:
+     * removing it is a product decision, not something a failing e2e assertion should
+     * force, and it is harmless where it sits.
+     */
+    await expect(page.getByTestId("commissioner-command-center-section")).toContainText(
+      /multi-league overview will appear here/i
+    )
   })
 })

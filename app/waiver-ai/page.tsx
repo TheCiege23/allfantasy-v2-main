@@ -1441,6 +1441,40 @@ export default function WaiverAIPage() {
         meta={{ product: 'legacy', sport: activeSport }}
       />
 
+      {/*
+        * ⚠ RESTORED. This nav cluster was dropped by 0c141a3c6 ("rebuild waiver AI"),
+        * verified by before/after rather than by the pickaxe alone:
+        *   8fe1b640c  meta-insights in this file  0 -> 1   (added)
+        *   0c141a3c6  meta-insights in this file  1 -> 0   (removed)
+        * Both links went, not just one, so both come back.
+        *
+        * It sits ABOVE the selectedLeague gate on purpose, which is where the original
+        * was: these are cross-tool links, useful before a league is chosen, and
+        * e2e/player-trend-click-audit.spec.ts reaches them with a bare goto('/waiver-ai')
+        * and no league selected. Putting them inside the gated branch would leave that
+        * assertion failing for a second, subtler reason.
+        *
+        * The href carries ?sport= because the destinations are sport-scoped; dropping the
+        * param lands the user on someone else's default sport.
+        */}
+      <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-4 px-4 pt-3 sm:px-6">
+        <Link href="/" className="text-sm text-cyan-300 hover:text-cyan-200">
+          &larr; Back to Home
+        </Link>
+        <Link
+          href={`/app/trend-feed?sport=${encodeURIComponent(activeSport)}`}
+          className="text-sm text-violet-300 hover:text-violet-200"
+        >
+          Trending players
+        </Link>
+        <Link
+          href={`/app/meta-insights?sport=${encodeURIComponent(activeSport)}`}
+          className="text-sm text-indigo-300 hover:text-indigo-200"
+        >
+          Meta insights
+        </Link>
+      </div>
+
       {!selectedLeague ? (
         <LeagueGate leagues={leagues} loading={leagueLoading} error={leagueError} onSelect={setSelectedLeague} />
       ) : (

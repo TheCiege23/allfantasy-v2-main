@@ -187,6 +187,25 @@ test.describe('@prestige Prompt43 integration click audit', () => {
       })
     })
 
+    /*
+     * ⚠ SIGN IN, OR FeatureGate NEVER LEAVES ITS LOADING BRANCH AND THE PANEL NEVER MOUNTS.
+     * AICommissionerPanel sits inside <FeatureGate featureId="commissioner_automation">
+     * (CommissionerTab.tsx:373). FeatureGate renders `<p>Checking premium access...</p>`
+     * while `loading || accessTier.loading`, and useAccessTier.ts:68 computes that as:
+     *
+     *   status === 'loading' || (isAuthenticated ? entitlements.loading : guestLoading)
+     *
+     * Unauthenticated, it therefore waits on `guestLoading`, which is cleared by a fetch to
+     * /api/guest-mode/status — a route this spec does not mock. So the gate stayed in its
+     * loading state forever and rendered NEITHER the panel NOR a locked card: measured on
+     * the harness, 43 testids present and not one ai-commissioner-* or locked-feature-*,
+     * with body text containing "Checking premium access".
+     *
+     * That is why this read as a deleted testid. The sibling test lower in this file already
+     * signs in (line ~349); this one was simply missed. Authenticating makes `loading` follow
+     * entitlements.loading, which the mock above already satisfies.
+     */
+    await signInAs(page, { id: 'e2e-prestige-commissioner-user' })
     await gotoWithRetry(page, `/e2e/commissioner?leagueId=${leagueId}`)
     await expect(page.getByRole('heading', { name: /e2e commissioner harness/i })).toBeVisible()
     await expect(page.getByText(/coverage: reputation 2, legacy 2, hall of fame 3/i)).toBeVisible()
