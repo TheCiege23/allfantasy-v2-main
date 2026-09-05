@@ -10,10 +10,34 @@
  */
 export type SeasonState = 'preseason' | 'regular_season' | 'postseason' | 'offseason' | 'unknown'
 
+/**
+ * Per-league minimum interval between syncs, by season state.
+ *
+ * 🛑 THIS IS THE KNOB THAT CONTROLS FRESHNESS — NOT THE CRON EXPRESSION. `syncConnectedLeague`
+ * skips any league whose last attempt is inside its cadence (`isSyncDue`), so tightening the cron
+ * alone changes NOTHING: the fire happens, every league reports "not due for this season cadence",
+ * and the run does no work. Both have to move together, and the cron is the cheaper half to get
+ * wrong unnoticed.
+ *
+ * ⚠ IN-SEASON WENT 30 -> 10 ON 2026-09-05, WITH THE TRADE SCOPE. The pairing is the point: a trade
+ * now lands within one cadence window instead of waiting on the 4-hourly historical backfill's
+ * ~1.6-day rotation, so the cadence IS the visible trade latency. 10 minutes was the user's ask
+ * against a product promise that trades appear without pressing Sync.
+ *
+ * ⚠ AND IT TRIPLES PROVIDER LOAD, WHICH IS THE COST TO KNOW BEFORE TUNING IT FURTHER.
+ * `SleeperLeagueFetchService` pulls 18 transaction weeks + 18 matchup weeks per league per sync, so
+ * a 10-minute cadence is ~3x the Sleeper calls of a 30-minute one across the whole rotation. The
+ * standing follow-up is to plumb `maxTransactionWeeks` through the pipeline so the LIVE sync asks
+ * for the current week rather than all 18 — that alone would make 10 minutes cheaper than 30 is
+ * today. Until then, this constant is the dial: raise it back and the load falls with it.
+ *
+ * Offseason stays at 4 hours. Nothing trades at 3am in June, and the same multiplier applied there
+ * would be pure spend.
+ */
 export const CADENCE_MINUTES: Record<SeasonState, number> = {
-  preseason: 30,
-  regular_season: 30,
-  postseason: 30,
+  preseason: 10,
+  regular_season: 10,
+  postseason: 10,
   offseason: 240,
   unknown: 240,
 }

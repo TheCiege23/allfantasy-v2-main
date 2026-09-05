@@ -15,10 +15,10 @@ const d = (iso: string) => new Date(iso)
 
 // ── Season resolver + cadence ──────────────────────────────────────────────────
 describe('season-aware cadence', () => {
-  it('in-season (regular season) resolves to 30 minutes', () => {
+  it('in-season (regular season) resolves to 10 minutes', () => {
     const r = resolveCadence({ sport: 'nfl', provider: 'sleeper', now: d('2025-11-15T18:00:00Z') })
     expect(r.state).toBe('regular_season')
-    expect(r.cadenceMinutes).toBe(30)
+    expect(r.cadenceMinutes).toBe(10)
   })
   it('offseason resolves to 4 hours (240 min)', () => {
     const r = resolveCadence({ sport: 'nfl', now: d('2025-05-01T12:00:00Z') })
@@ -28,8 +28,8 @@ describe('season-aware cadence', () => {
   it('preseason and postseason resolve to 30 minutes', () => {
     expect(resolveSeasonState({ sport: 'nfl', now: d('2025-08-15T00:00:00Z') }).state).toBe('preseason')
     expect(resolveSeasonState({ sport: 'nfl', now: d('2026-01-25T00:00:00Z') }).state).toBe('postseason')
-    expect(cadenceForState('preseason')).toBe(30)
-    expect(cadenceForState('postseason')).toBe(30)
+    expect(cadenceForState('preseason')).toBe(10)
+    expect(cadenceForState('postseason')).toBe(10)
   })
   it('unknown sport/provider falls back safely to 4h + warning', () => {
     const s = resolveSeasonState({ sport: 'quidditch', now: d('2025-11-15T00:00:00Z') })
@@ -45,7 +45,7 @@ describe('season-aware cadence', () => {
     const b = resolveCadence({ sport: 'nfl', now: d('2025-11-02T08:30:00Z') })
     expect(a.state).toBe(b.state)
     expect(a.cadenceMinutes).toBe(b.cadenceMinutes)
-    expect(a.cadenceMinutes).toBe(30)
+    expect(a.cadenceMinutes).toBe(10)
   })
 })
 
@@ -79,7 +79,7 @@ describe('freshness contract', () => {
       sourceWindowStart: '2019', sourceWindowEnd: '2025',
     })
     expect(f.syncStatus).toBe('delayed')
-    expect(f.refreshCadenceMinutes).toBe(30)
+    expect(f.refreshCadenceMinutes).toBe(10)
     expect(f.nextScheduledSyncAt).toBeTruthy()
   })
 })

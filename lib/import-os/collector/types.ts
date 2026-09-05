@@ -115,11 +115,13 @@ export function providerNeedsUser(provider: ImportProvider): boolean {
  * The mutable "current state" scopes this batch synchronizes, mapped to real canonical persistence.
  * Immutable historical scopes (completed drafts, prior-season snapshots) are owned by the existing
  * `SleeperHistorical*` backfill services and are checkpoint-skipped here — never refetched. Scopes with
- * no canonical destination table (e.g. transactions) are intentionally NOT synced (no fabrication).
+ * no canonical destination table are intentionally NOT synced (no fabrication) — see the note on
+ * LEAGUE_SYNC_SCOPES for why `transactions` no longer qualifies for that exclusion.
  *
  * What each scope actually writes:
  *  - `league_state`      → League row + settings + current LeagueSeason
  *  - `traded_picks`      → future_draft_picks
+ *  - `transactions`      → LeagueTrade (+ LeagueTradeHistory) for COMPLETED trades
  *  - `teams_rosters`     → LeagueTeam / Roster / TeamPerformance (rosters, recent matchups, standings)
  *
  * ⚠ THIS USED TO READ "Mapping to `runner.INCREMENTAL_SCOPES`" AND POINTED AT A LIST NOTHING USED.
@@ -161,7 +163,34 @@ export function providerNeedsUser(provider: ImportProvider): boolean {
  * test; it is a freshness-reporting coverage set, not an execution order, and is deliberately
  * left alone.
  */
-export const LEAGUE_SYNC_SCOPES = ['league_state', 'traded_picks', 'teams_rosters'] as const
+/*
+ * 🛑 `transactions` ADDED 2026-09-05, AND THE NOTE ABOVE THAT EXCLUDED IT WAS THE BUG.
+ *
+ * It read: "Scopes with no canonical destination table (e.g. transactions) are intentionally NOT
+ * synced (no fabrication)." True when written; false by the time it bit. `LeagueTrade` IS that
+ * table — 18,147 rows, written by `persistTradesForSeason` — so the premise had rotted while the
+ * conclusion kept being honoured.
+ *
+ * The cost of the gap: trades reached the database ONLY via `sleeper-historical-refresh`, which
+ * takes 25 leagues per fire every 4 hours against a 235-league rotation — a ~1.6-DAY lap. Measured
+ * 2026-09-05, the newest trade in production was 42 hours old while this sync had run four times
+ * in the preceding two hours. A user's trade from 20 minutes earlier was simply not there, and the
+ * product's headline promise is that it notices trades without being asked.
+ *
+ * ⚠ IT COSTS NO NEW PROVIDER CALL. `SleeperLeagueFetchService` already fetches 18 weeks of
+ * transactions on EVERY sync and the pipeline already carries them; only the write was missing.
+ *
+ * ⚠ ITS POSITION IS THE LOAD-BEARING PART — read the order rule above before moving it. It sits
+ * ahead of `teams_rosters` (the expensive scope, and the intended budget casualty) and behind
+ * `traded_picks`, so it STARTS inside the budget on essentially every run. Putting it last would
+ * recreate exactly the starvation `traded_picks` was moved to escape.
+ */
+export const LEAGUE_SYNC_SCOPES = [
+  'league_state',
+  'traded_picks',
+  'transactions',
+  'teams_rosters',
+] as const
 export type LeagueSyncScope = (typeof LEAGUE_SYNC_SCOPES)[number]
 
 /**

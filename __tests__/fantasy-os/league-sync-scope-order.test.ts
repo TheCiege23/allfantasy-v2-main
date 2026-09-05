@@ -34,12 +34,36 @@ describe('LEAGUE_SYNC_SCOPES order', () => {
     expect(LEAGUE_SYNC_SCOPES[0]).toBe('league_state')
   })
 
-  it('pins the exact order, so a reorder is a deliberate edit rather than a silent one', () => {
-    expect([...LEAGUE_SYNC_SCOPES]).toEqual(['league_state', 'traded_picks', 'teams_rosters'])
+  /*
+   * `transactions` added 2026-09-05. It sits ahead of `teams_rosters` for the same budget reason
+   * `traded_picks` does: a trade that lands only when the run has spare time is the bug this scope
+   * exists to fix, so it must not become the new permanent casualty.
+   */
+  it('runs transactions before teams_rosters, so a trade is not dropped on a slow league', () => {
+    const order = [...LEAGUE_SYNC_SCOPES]
+    expect(order.indexOf('transactions')).toBeLessThan(order.indexOf('teams_rosters'))
   })
 
-  it('still covers exactly the three scopes, with none dropped or duplicated', () => {
+  it('keeps teams_rosters LAST — it is the expensive scope and the intended casualty', () => {
+    expect(LEAGUE_SYNC_SCOPES[LEAGUE_SYNC_SCOPES.length - 1]).toBe('teams_rosters')
+  })
+
+  it('pins the exact order, so a reorder is a deliberate edit rather than a silent one', () => {
+    expect([...LEAGUE_SYNC_SCOPES]).toEqual([
+      'league_state',
+      'traded_picks',
+      'transactions',
+      'teams_rosters',
+    ])
+  })
+
+  it('covers exactly the four scopes, with none dropped or duplicated', () => {
     expect(new Set(LEAGUE_SYNC_SCOPES).size).toBe(LEAGUE_SYNC_SCOPES.length)
-    expect([...LEAGUE_SYNC_SCOPES].sort()).toEqual(['league_state', 'teams_rosters', 'traded_picks'])
+    expect([...LEAGUE_SYNC_SCOPES].sort()).toEqual([
+      'league_state',
+      'teams_rosters',
+      'traded_picks',
+      'transactions',
+    ])
   })
 })

@@ -51,6 +51,19 @@ function checkpointForScope(scope: SleeperSyncScope, n: NormalizedImportResult):
           .map((p) => `${p.season}:${p.round}:${p.original_roster_id}:${p.current_owner_roster_id}`)
           .sort(),
       )
+    /*
+     * ⚠ COMPLETED TRADES ONLY, MATCHING WHAT THE APPLY STEP ACTUALLY WRITES. Hashing every
+     * transaction would make the checkpoint move on waiver churn and free-agent adds, so the scope
+     * would re-apply constantly while changing nothing — the checkpoint's whole job is to say
+     * "nothing to do". Sorted because Sleeper's per-week ordering is not stable across fetches.
+     */
+    case 'transactions':
+      return hash(
+        (n.transactions ?? [])
+          .filter((t) => t.type === 'trade' && String(t.status).toLowerCase() === 'complete')
+          .map((t) => `${t.source_transaction_id}:${t.week ?? ''}`)
+          .sort(),
+      )
     default:
       return hash(scope)
   }
@@ -67,6 +80,10 @@ function recordsForScope(scope: SleeperSyncScope, n: NormalizedImportResult): { 
       return (n.traded_picks ?? []).map((p) => ({
         id: `pick:${p.season}:${p.round}:${p.original_roster_id}`,
       }))
+    case 'transactions':
+      return (n.transactions ?? [])
+        .filter((t) => t.type === 'trade' && String(t.status).toLowerCase() === 'complete')
+        .map((t) => ({ id: `trade:${t.source_transaction_id}` }))
     default:
       return []
   }

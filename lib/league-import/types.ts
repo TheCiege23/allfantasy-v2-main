@@ -196,6 +196,17 @@ export interface NormalizedTransaction {
   drops?: Record<string, string>
   roster_ids: string[]
   draft_picks?: unknown[]
+  /**
+   * Scoring week the transaction belongs to, stamped from the FETCH LOOP rather than read off the
+   * payload. Sleeper's transactions endpoint is per-week (`/league/{id}/transactions/{week}`), so
+   * the week is authoritative at the call site and needs no field on the provider's response.
+   *
+   * ⚠ IT IS OPTIONAL BECAUSE ONLY SLEEPER CARRIES IT TODAY. ESPN, Fantrax, MFL and Yahoo build
+   * this type too, and none of them fetches per week; a required field would make them all lie by
+   * defaulting to 0. `persistLiveTrades` treats an absent week as unknown and writes 0, which is
+   * what the historical importer already stores for a trade whose week it could not establish.
+   */
+  week?: number
 }
 
 /**

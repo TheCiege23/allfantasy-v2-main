@@ -28,6 +28,7 @@ export const SleeperHistoryMapper: IExternalHistoryMapper<SleeperImportPayload> 
       drops: t.drops,
       roster_ids: (t.roster_ids ?? []).map(String),
       draft_picks: t.draft_picks,
+      week: t.week,
     }))
 
     const rosters = source.rosters ?? []

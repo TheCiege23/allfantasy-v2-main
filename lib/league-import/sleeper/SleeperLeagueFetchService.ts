@@ -321,9 +321,22 @@ export async function fetchSleeperLeagueForImport(
     ),
   ])
 
+  /*
+   * ⚠ STAMP THE WEEK HERE, WHERE IT IS AUTHORITATIVE, BECAUSE THE FLATTEN DESTROYS IT.
+   *
+   * The endpoint is per-week, so `week` is known at the call site — but this loop used to
+   * concatenate the arrays and drop it, leaving downstream code with no way to tell which week a
+   * transaction belonged to. `persistTradesForSeason` writes `LeagueTrade.week`, and the
+   * historical importer only has that column filled because IT keeps its own loop variable
+   * (`sleeper-historical.ts` iterates weeks for exactly this reason).
+   *
+   * Deliberately not read off the payload: Sleeper does return a `leg` field, but nothing in this
+   * repo's contracts pins it and CLAUDE.md forbids probing a provider to establish a shape. The
+   * loop variable needs no such evidence.
+   */
   let transactions: SleeperImportPayload['transactions'] = []
-  for (const { wk } of txResults) {
-    if (wk?.length) transactions = transactions.concat(wk)
+  for (const { week, wk } of txResults) {
+    if (wk?.length) transactions = transactions.concat(wk.map((t) => ({ ...t, week })))
   }
 
   let draftPicks: NonNullable<SleeperImportPayload['draftPicks']> = currentDraftPicks ?? []

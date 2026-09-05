@@ -72,6 +72,13 @@ export interface SleeperTransactionRaw {
   draft_picks?: unknown[]
   roster_ids?: number[]
   /**
+   * Scoring week, stamped by `SleeperLeagueFetchService` from its per-week fetch loop — NOT a
+   * field Sleeper is relied on to return. The endpoint is `/transactions/{week}`, so the caller
+   * always knows it; reading it off the payload instead would be a provider-shape assumption with
+   * no contract behind it.
+   */
+  week?: number
+  /**
    * Per-transaction settings. On a waiver claim this is where the winning bid
    * lives (`waiver_bid`). Left as an open record rather than a narrow shape:
    * the emitter copies it wholesale and the reader picks out what it

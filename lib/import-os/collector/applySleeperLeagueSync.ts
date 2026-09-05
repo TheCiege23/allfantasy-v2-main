@@ -30,6 +30,7 @@ import {
   persistTradedPicks,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
+import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
 
 export interface ApplyLeagueSyncOptions {
@@ -410,6 +411,49 @@ async function applyTradedPicks(
  * Apply one scope's fresh normalized data to one canonical League row. Dispatches to the scope handler.
  * `imported` counts new/changed records; `unchanged` counts confirmed no-ops (idempotency proof).
  */
+/**
+ * `transactions` — write completed trades to `LeagueTrade` so they appear without a manual Sync.
+ *
+ * ⚠ THE PAYLOAD IS ALREADY IN HAND; THIS ADDS NO PROVIDER CALL. `SleeperLeagueFetchService`
+ * fetches 18 weeks of transactions on every sync regardless, and until now every one of them was
+ * discarded. See `persistLiveTrades.ts` for why the scope did not exist before.
+ *
+ * ⚠ `removed` STAYS 0 AND THAT IS DELIBERATE. Every other scope here reconciles: a row the
+ * provider stops returning is retired. A trade is an EVENT, not current state — Sleeper only
+ * serves the weeks this sync asked for, so an older trade being absent from the payload means
+ * "not in range", never "undone". Reconciling here would delete real history on every sync.
+ */
+async function applyTransactions(
+  normalized: NormalizedImportResult,
+): Promise<ApplyScopeResult> {
+  const out = emptyApplyResult()
+  const platformLeagueId = normalized.source?.source_league_id
+  if (!platformLeagueId) {
+    out.notes.push('transactions: no source_league_id on payload (skipped)')
+    return out
+  }
+
+  const result = await persistLiveTrades({
+    platformLeagueId,
+    season: seasonYearOf(normalized),
+    normalized,
+  })
+
+  out.imported = result.rowsWritten
+  out.rejected = result.skippedNoOwner
+  if (result.tradesSeen > 0) {
+    out.notes.push(
+      `transactions: ${result.tradesSeen} completed trade(s) -> ${result.rowsWritten} row(s)`,
+    )
+  }
+  if (result.skippedNoOwner > 0) {
+    out.notes.push(
+      `transactions: ${result.skippedNoOwner} trade(s) had no roster matching a known owner`,
+    )
+  }
+  return out
+}
+
 export async function applySleeperScopeToLeague(input: {
   leagueId: string
   scope: SleeperSyncScope
@@ -424,6 +468,8 @@ export async function applySleeperScopeToLeague(input: {
       return applyTeamsRosters(input.leagueId, input.normalized, reconcileRemovals)
     case 'traded_picks':
       return applyTradedPicks(input.leagueId, input.normalized)
+    case 'transactions':
+      return applyTransactions(input.normalized)
     default:
       return emptyApplyResult()
   }
