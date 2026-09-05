@@ -1,5 +1,7 @@
 'use client'
 
+import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
+
 import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 
@@ -153,8 +155,12 @@ export function TradeInbox(props: {
     if (!leagueId) return
     setState('loading')
     try {
-      const r = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(leagueId)}`)
-      const j = (await r.json().catch(() => ({}))) as PanelResponse
+      /*
+       * ⚠ SHARED WITH TradeLeagueStrip, which also reads this league's panel on the same
+       * load. Two components, one request — see tradesPanelFetch for the measurement.
+       */
+      const r = await fetchTradesPanel(leagueId)
+      const j = r.data as PanelResponse
       if (!r.ok) {
         setData(null)
         setState('failed')

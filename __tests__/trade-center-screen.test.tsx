@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { render, screen, waitFor } from '@testing-library/react'
 import { TradeLeagueStrip } from '@/components/core-app/screens/TradeLeagueStrip'
+import { __resetTradesPanelShare } from '@/components/core-app/screens/tradesPanelFetch'
 import React from 'react'
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
@@ -442,13 +443,26 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     // The same rule TradeInbox carries, for the same reason.
     expect(STRIP).toContain('NOT SCANNED IS CHECKED BEFORE EMPTY')
     expect(STRIP).toContain("if (panel.pending && !panel.pending.scanned)")
-    expect(STRIP).toContain('/api/league/trades-panel?leagueId=')
+    /*
+     * ⚠ ASSERTS THAT IT READS THE PANEL, NOT WHERE THE URL LITERAL LIVES. This used to pin
+     * '/api/league/trades-panel?leagueId=' in this file; the literal moved into the shared
+     * `tradesPanelFetch` module and the test went red while the RULE was untouched. A test that
+     * fails on a refactor it does not care about is noise the next person deletes.
+     */
+    expect(STRIP).toMatch(/fetchTradesPanel\(|\/api\/league\/trades-panel/)
   })
 
   it('caps how many leagues it reads at once', () => {
     // Each read may sweep a provider's pending transactions.
     expect(STRIP).toContain('MAX_LEAGUES_READ')
   })
+
+  /*
+   * 🛑 THE PANEL FETCH IS DEDUPED BEHIND A MODULE-LEVEL SHARE WINDOW, so a league read by an
+   * EARLIER case in this file is still shared when a later one runs — which showed up as
+   * "expected 6 calls, got 5". Production wants that sharing; tests want isolation.
+   */
+  beforeEach(() => __resetTradesPanelShare())
 
   it('🛑 does not fire a single request on mount — the current league goes first', async () => {
     /*

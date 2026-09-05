@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch'
 
 /**
  * Offers across your leagues — the strip above the Trade Center's league
@@ -116,10 +117,14 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
     const runOne = async (id: string) => {
       let next: TileState
       try {
-        const r = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(id)}`)
+        /*
+         * ⚠ SHARED. The ACTIVE league is in this list and TradeInbox reads it too, so on
+         * every load one league was fetched twice — a full panel read, provider scan
+         * included. The other leagues are unaffected; they have only this caller.
+         */
+        const r = await fetchTradesPanel(id)
         if (!r.ok) throw new Error(String(r.status))
-        const j = (await r.json().catch(() => ({}))) as PanelLite
-        next = stateOf(j)
+        next = stateOf(r.data as PanelLite)
       } catch {
         next = { kind: 'failed' }
       }

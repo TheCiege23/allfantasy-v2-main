@@ -287,6 +287,13 @@ describe('⚠ the analyze call was failing zod before any analysis ran', () => {
 
   it('still posts to the existing route rather than a new one', () => {
     expect(CENTER).toContain("'/api/trade-value/analyze'")
-    expect(INBOX).toContain('/api/league/trades-panel?leagueId=')
+    /*
+     * ⚠ ASSERTS THAT THE INBOX READS THE PANEL, NOT WHERE THE URL LITERAL LIVES. This pinned
+     * '/api/league/trades-panel?leagueId=' in this file; the literal moved into the shared
+     * `tradesPanelFetch` module — which reads the SAME existing route, so the rule this test
+     * exists for is untouched — and the assertion went red on a refactor it does not care about.
+     * Third time tonight a test has broken on the location of a string rather than on behaviour.
+     */
+    expect(INBOX).toMatch(/fetchTradesPanel\(|\/api\/league\/trades-panel/)
   })
 })
