@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { render } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { TradeLeagueStrip } from '@/components/core-app/screens/TradeLeagueStrip'
 import React from 'react'
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
@@ -447,6 +448,52 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
   it('caps how many leagues it reads at once', () => {
     // Each read may sweep a provider's pending transactions.
     expect(STRIP).toContain('MAX_LEAGUES_READ')
+  })
+
+  it('🛑 one slow league does not hold the other tiles on "Checking…"', async () => {
+    /*
+     * Guap: "it takes anywhere from 10-30 seconds to load". Part of that was real work, and part
+     * was this: the strip awaited `Promise.allSettled` over ALL leagues and called `setStates`
+     * ONCE, so every tile sat on "Checking…" until the SLOWEST league returned. Measured on the
+     * dev server, panel reads in a single page load ranged 506ms to 23,534ms — so seven answers
+     * existed and were invisible for twenty-odd seconds.
+     *
+     * The fan-out is unchanged; only the reporting is. This test fails if anyone re-batches it.
+     */
+    const never = new Promise<Response>(() => {})
+    const fetchMock = vi.fn((url: string) =>
+      url.includes('slow-league')
+        ? never
+        : Promise.resolve({
+            ok: true,
+            json: async () => ({ pending: { scanned: true }, pendingOffers: [], activeTrades: [] }),
+          } as Response),
+    )
+    const original = globalThis.fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    try {
+      render(
+        <TradeLeagueStrip
+          leagues={[
+            { id: 'fast-league', name: 'Fast', platform: 'sleeper' },
+            { id: 'slow-league', name: 'Slow', platform: 'sleeper' },
+          ] as never}
+          activeLeagueId={null}
+        />,
+      )
+      /* The fast league answers "no offers waiting" while the slow one is still outstanding. */
+      await waitFor(() => {
+        expect(screen.getByText('Fast')).toBeTruthy()
+        expect(document.body.textContent).toContain('Checking')
+      })
+      await waitFor(() => {
+        const body = document.body.textContent ?? ''
+        /* Exactly one tile still checking — the slow one — not both. */
+        expect((body.match(/Checking/g) ?? []).length).toBe(1)
+      })
+    } finally {
+      globalThis.fetch = original
+    }
   })
 
   it('does not render the strip without a leagues list', () => {

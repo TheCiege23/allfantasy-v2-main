@@ -102,22 +102,35 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
     const ids = leagues.map((l) => l.id)
     setStates(Object.fromEntries(ids.map((id) => [id, { kind: 'checking' as const }])))
 
-    void Promise.allSettled(
-      ids.map(async (id) => {
-        const r = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(id)}`)
-        if (!r.ok) throw new Error(String(r.status))
-        const j = (await r.json().catch(() => ({}))) as PanelLite
-        return [id, stateOf(j)] as const
-      }),
-    ).then((results) => {
-      if (cancelled) return
-      const next: Record<string, TileState> = {}
-      results.forEach((res, i) => {
-        const id = ids[i]!
-        next[id] = res.status === 'fulfilled' ? res.value[1] : { kind: 'failed' }
-      })
-      setStates(next)
-    })
+    /*
+     * 🛑 EACH TILE SETTLES ON ITS OWN. This used to be one `Promise.allSettled(...).then()` that
+     * called `setStates` ONCE, with every tile's answer, after the LAST league returned — so a
+     * single slow league held all eight on "Checking…". Measured on the dev server, panel reads
+     * ranged 506ms to 23,534ms in one page load, which meant the fast seven were finished and
+     * invisible for twenty-odd seconds while the slowest one decided.
+     *
+     * ⚠ THE FAN-OUT IS UNCHANGED — same requests, same count, same cap. This is purely about
+     * showing an answer the moment it exists instead of banking them all against the worst case.
+     */
+    for (const id of ids) {
+      void (async () => {
+        let next: TileState
+        try {
+          const r = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(id)}`)
+          if (!r.ok) throw new Error(String(r.status))
+          const j = (await r.json().catch(() => ({}))) as PanelLite
+          next = stateOf(j)
+        } catch {
+          next = { kind: 'failed' }
+        }
+        if (cancelled) return
+        /*
+         * Merge, never replace: a whole-object `setStates` here would drop the tiles that have
+         * already answered, which is the bug this shape exists to avoid.
+         */
+        setStates((prev) => ({ ...prev, [id]: next }))
+      })()
+    }
 
     return () => {
       cancelled = true
