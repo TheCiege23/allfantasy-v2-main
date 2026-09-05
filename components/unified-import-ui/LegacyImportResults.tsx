@@ -122,7 +122,25 @@ export function LegacyImportResults({
     markDashboardRankRefreshPending()
     router.refresh()
     const target = onCompleteRedirect?.startsWith('/') ? onCompleteRedirect : returnTo
-    router.push(`${target}${target.includes('?') ? '&' : '?'}rankSync=1`)
+    /*
+     * 🛑 THE PARAM IS `league`, NOT `leagueId`. Blocker B7 prescribed "append
+     * ?leagueId= and honor it in selection"; writing that name would have satisfied
+     * the blocker's wording and changed nothing a user sees.
+     *
+     * `/dashboard` is retired — app/dashboard/page.tsx redirects to `/core`
+     * preserving the query — and `/core` reads `sp.league`
+     * (app/core/[[...screen]]/page.tsx:366). Nothing reads `leagueId` from the URL:
+     * lib/dashboard/dashboard-league-selection.ts is written for it but has ZERO
+     * callers. B7 was authored when /dashboard owned its own selection.
+     *
+     * Omitted for the legacy_sleeper variant, which imports a career profile and
+     * has no league to select. /core treats an absent `league` as "no selection"
+     * and an id it cannot find as null, so leaving it out is the honest signal.
+     */
+    const qs = new URLSearchParams()
+    qs.set('rankSync', '1')
+    if (leagueSuccess?.leagueId) qs.set('league', leagueSuccess.leagueId)
+    router.push(`${target}${target.includes('?') ? '&' : '?'}${qs.toString()}`)
   }
 
   const tierName =
