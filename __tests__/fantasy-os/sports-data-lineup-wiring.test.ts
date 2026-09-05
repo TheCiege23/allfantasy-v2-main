@@ -8,7 +8,7 @@ const root = process.cwd()
 const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8')
 const LOCK_STATE = 'app/api/leagues/[leagueId]/roster/lineup/lock-state/route.ts'
 const AUTO_SUB = 'app/api/lineup/auto-sub/route.ts'
-const INTEGRATION = 'lib/fantasy-os/sports-runtime/lineupIntegration.ts'
+const INTEGRATION = 'lib/sports-evidence/lineupIntegration.ts'
 
 describe('live Lineup call-graph wiring (Parts 6, 8, 15)', () => {
   it('lock-state route imports the shared integration service + gate', () => {
@@ -52,7 +52,7 @@ describe('direct-provider import guard (Part 12)', () => {
 
 describe('extractPlayerRefs (defensive roster parsing)', () => {
   it('extracts sleeper ids from arrays and objects; bounds the result', async () => {
-    const { extractPlayerRefs } = await import('@/lib/fantasy-os/sports-runtime/lineupIntegration')
+    const { extractPlayerRefs } = await import('@/lib/sports-evidence/lineupIntegration')
     expect(extractPlayerRefs(['1', '2'])).toEqual([{ canonicalPlayerId: '1', providerSleeperId: '1' }, { canonicalPlayerId: '2', providerSleeperId: '2' }])
     expect(extractPlayerRefs({ starters: [{ playerId: '4046' }] })).toEqual([{ canonicalPlayerId: '4046', providerSleeperId: '4046' }])
     expect(extractPlayerRefs(null)).toEqual([])

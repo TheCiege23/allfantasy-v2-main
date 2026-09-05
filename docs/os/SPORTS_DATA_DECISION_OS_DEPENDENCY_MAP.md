@@ -3,7 +3,7 @@
 ## Core invariant — VERIFIED & now enforced
 **Decision OS never fetches a sports provider directly.** Audit result: **0** files in `lib/decision-os/**` and **0** routes in `app/api/decision-os/**` import any provider client (`espn-data`, `fantasycalc`, `upstream-apis`, `sleeper-sync`, `api-football`, `cfb-player-data`, `sports-live-scores-service`, `thesportsdb`, `clearsports`, `unified-player-service`, `ri-players-server`). Locked in by `__tests__/fantasy-os/unified-plane-provider-boundary.test.ts`.
 
-The same holds for the certified sports-runtime integration services (`lib/fantasy-os/sports-runtime/*`): **0** provider imports, **0** provider URLs — they consume gateway runtime ports only.
+The same holds for the certified sports-evidence integration services (`lib/sports-evidence/*`): **0** provider imports, **0** provider URLs — they consume gateway runtime ports only.
 
 ## How Decision OS gets sports facts today
 Decision OS assemblers (e.g. `WaiverContextAssembler`, trade/lineup context builders, `GameDayContextAssembler`) read from:

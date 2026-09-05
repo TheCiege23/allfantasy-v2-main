@@ -6,8 +6,8 @@ import { assertValidMatchupPayload } from '@/lib/matchup-center/validateMatchupP
 import { dedupeLeagueRequest } from '@/lib/league-engine-performance/leagueRequestDedupe'
 import { withLeagueEngineTimedOperation } from '@/lib/league-engine-performance/jobRunner'
 import { DEFAULT_SLOW_ROUTE_MS } from '@/lib/league-engine-performance/observability'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedMatchupIntegrationService, type CertifiedMatchupContext } from '@/lib/fantasy-os/sports-runtime/matchupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedMatchupIntegrationService, type CertifiedMatchupContext } from '@/lib/sports-evidence/matchupIntegration'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'

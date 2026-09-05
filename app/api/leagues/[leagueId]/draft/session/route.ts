@@ -37,9 +37,9 @@ import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEven
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { logStructured } from '@/lib/logging/structured'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedDraftIntegrationService, type CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/draftIntegration'
-import { extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedDraftIntegrationService, type CertifiedScheduleDescription } from '@/lib/sports-evidence/draftIntegration'
+import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 import { prisma } from '@/lib/prisma'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 

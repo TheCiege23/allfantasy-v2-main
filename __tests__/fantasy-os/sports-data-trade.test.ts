@@ -4,8 +4,8 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedTradeIntegrationService, extractTradePlayerRefs } from '@/lib/fantasy-os/sports-runtime/tradeIntegration'
-import type { CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { CertifiedTradeIntegrationService, extractTradePlayerRefs } from '@/lib/sports-evidence/tradeIntegration'
+import type { CertifiedScheduleDescription } from '@/lib/sports-evidence/lineupIntegration'
 
 const descWith = (available: boolean, freshness: string, players: CertifiedScheduleDescription['players']): CertifiedScheduleDescription => ({
   available, freshnessStatus: freshness, identityStatus: available ? 'resolved' : 'unresolved', snapshotVersion: available ? 'v1' : null, players,
@@ -20,8 +20,8 @@ const PROPOSAL = 'app/api/leagues/[leagueId]/trades/handler.ts'
 const ACCEPT = 'app/api/leagues/[leagueId]/trades/[tradeId]/accept/route.ts'
 const PROCESS = 'app/api/leagues/[leagueId]/trades/[tradeId]/process/route.ts'
 const DETAIL = 'app/api/leagues/[leagueId]/trades/[tradeId]/route.ts'
-const SERVICE = 'lib/fantasy-os/sports-runtime/tradeIntegration.ts'
-const GUARD = 'lib/fantasy-os/sports-runtime/tradeSettlementGuard.ts'
+const SERVICE = 'lib/sports-evidence/tradeIntegration.ts'
+const GUARD = 'lib/sports-evidence/tradeSettlementGuard.ts'
 const noProvider = (src: string) => /(from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn|sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com)/.test(src)
 
 describe('5E-f Trade — service (informational + reject-only, grounded)', () => {

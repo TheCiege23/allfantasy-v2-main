@@ -5,7 +5,7 @@ Injects certified sports-data evidence into the real Lineup **lock-state** and *
 ## Authority contract (unchanged)
 Decision order stays: authenticate → authorize league/roster → roster ownership → slot/roster eligibility → **load certified evidence** → freshness/identity → **existing lock authority (`lineupLockService`)** → roster legality → persist → audit. The Sports Data Gateway supplies **facts only**; it is never authoritative for authorization, membership, ownership, slot/roster construction, league lock settings, commissioner overrides, or final approval. It can only make an automatic action **stricter**, never more permissive.
 
-## Shared integration service (`lib/fantasy-os/sports-runtime/lineupIntegration.ts`)
+## Shared integration service (`lib/sports-evidence/lineupIntegration.ts`)
 `CertifiedLineupIntegrationService` composes: certified player + games snapshots, cross-provider team identity, player→game resolution, freshness, and the 5D-c auto-switch safety contract. It does **not** duplicate lock policy. Fails closed to `unavailable`; returns no raw provider fields. `extractPlayerRefs` defensively parses roster player ids (bounded).
 
 ## Wired routes

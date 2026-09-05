@@ -8,8 +8,8 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedIntelligenceIntegrationService } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import {
   validateToolRequest,
   requestContractToUnified,

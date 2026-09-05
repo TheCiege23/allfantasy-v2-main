@@ -46,9 +46,10 @@ header calls it out.** Same suffix, opposite direction:
 | Module | Direction | Note |
 |---|---|---|
 | `lib/decision-os/*-os/` | **FEEDS →** Decision OS | The eight domain producers. |
-| `lib/commissioner-os/` | **← CONSUMES** Decision OS | Its `*/decision-os-client/` modules call *into* Decision OS to render a surface. |
-| `lib/fantasy-os/` | **FEEDS →** (via import) | Sleeper/Fantrax sync collector, exec intelligence, sports-runtime integrations. |
-| `lib/sports-os/` | Sideways | Readiness / identity-health / reconciliation services. Reporting, not a feed. |
+| `lib/commissioner-ui/` | **← CONSUMES** Decision OS | Its `*/decision-os-client/` modules call *into* Decision OS to render a surface. |
+| `lib/fantasy-os/` | **FEEDS →** (via import) | Now holds only `access.ts` + `demoTruthModel.ts`. R6 moved the sync collector to `lib/import-os/` and exec intelligence to `lib/exec-reporting/`; the certified integration services moved to `lib/sports-evidence/`. This residual still needs its own naming decision. |
+| `lib/sports-reporting/` | Sideways | Readiness / identity-health / reconciliation services. Reporting, not a feed. |
+| `lib/sports-evidence/` | **FEEDS →** (via import) | Certified schedule/game/freshness evidence for the wired lineup, waiver, trade, draft, matchup, scoring and intelligence paths. Evidence only — it never decides. |
 | `lib/decision-os-core/` | Pure | Primitives, sport-adapter and provider-adapter registries. No IO — has a `no-live-imports` test. |
 
 ### 1.3 The producers you asked about

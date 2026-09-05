@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildRuntimeContext, identityStatusFrom, unavailableRuntimeContext } from '@/lib/fantasy-os/sports-runtime/context'
+import { buildRuntimeContext, identityStatusFrom, unavailableRuntimeContext } from '@/lib/sports-evidence/context'
 import type { SportsDataContext } from '@/lib/sports-data-gateway/contracts'
 
 vi.mock('server-only', () => ({}))
@@ -37,15 +37,15 @@ describe('runtime feature gates (Stop-gate 2)', () => {
   afterEach(() => { process.env = { ...OLD } })
 
   it('disabled by default; enabled only when explicitly "true"', async () => {
-    const { isSportsDataEnabled } = await import('@/lib/fantasy-os/sports-runtime/gates')
+    const { isSportsDataEnabled } = await import('@/lib/sports-evidence/gates')
     expect(isSportsDataEnabled('lineup')).toBe(false)
     process.env.FANTASY_OS_SPORTS_DATA_LINEUP_ENABLED = 'true'
-    const mod = await import('@/lib/fantasy-os/sports-runtime/gates')
+    const mod = await import('@/lib/sports-evidence/gates')
     expect(mod.isSportsDataEnabled('lineup')).toBe(true)
     expect(mod.isSportsDataEnabled('waiver')).toBe(false)
   })
   it('diagnostics expose names + booleans only (no values)', async () => {
-    const { sportsDataGateDiagnostics } = await import('@/lib/fantasy-os/sports-runtime/gates')
+    const { sportsDataGateDiagnostics } = await import('@/lib/sports-evidence/gates')
     const d = sportsDataGateDiagnostics()
     expect(d).toHaveLength(9) // 5E-g added scoring, 5E-h added observability
     expect(d.some((x) => x.subsystem === 'scoring' && x.envKey === 'FANTASY_OS_SPORTS_DATA_SCORING_ENABLED')).toBe(true)
@@ -61,7 +61,7 @@ describe('call-graph proof + direct-provider-import guard (Parts 14, 17)', () =>
 
   it('the real lineup-context route imports the runtime ports (not a parallel interface)', () => {
     const src = read(routeFile)
-    expect(src).toMatch(/sports-runtime\/gates/)
+    expect(src).toMatch(/sports-evidence\/gates/)
     expect(src).toMatch(/runtime\/playerGameResolution/)
     expect(src).toMatch(/runtime\/lineupSafety/)
     expect(src).toMatch(/runtime\/scheduleRuntime/)
@@ -69,7 +69,7 @@ describe('call-graph proof + direct-provider-import guard (Parts 14, 17)', () =>
 
   it('the wired route + runtime consumer layer do NOT import a provider client or hit a provider URL directly', () => {
     // Allowlist for direct provider access: gateway adapters + sync fetchers only.
-    const wired = [routeFile, 'lib/fantasy-os/sports-runtime/gates.ts', 'lib/fantasy-os/sports-runtime/context.ts', 'lib/sports-data-gateway/runtime/certifiedReads.ts', 'lib/sports-data-gateway/ports/runtimePortsDb.ts']
+    const wired = [routeFile, 'lib/sports-evidence/gates.ts', 'lib/sports-evidence/context.ts', 'lib/sports-data-gateway/runtime/certifiedReads.ts', 'lib/sports-data-gateway/ports/runtimePortsDb.ts']
     const FORBIDDEN = /(sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com|from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn)/
     for (const f of wired) {
       const src = read(f)

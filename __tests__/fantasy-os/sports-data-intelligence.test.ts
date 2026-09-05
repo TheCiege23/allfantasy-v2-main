@@ -4,7 +4,7 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedIntelligenceIntegrationService, INTELLIGENCE_UNSUPPORTED } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration'
+import { CertifiedIntelligenceIntegrationService, INTELLIGENCE_UNSUPPORTED } from '@/lib/sports-evidence/intelligenceIntegration'
 
 const meta = (ageMin: number | null) => ageMin == null ? null : ({ version: 'nfl-games-2026-w1', generatedAt: new Date(Date.now() - ageMin * 60000).toISOString(), provider: 'espn', limitations: [], unresolvedCount: 0, rejectedCount: 0 })
 const fakeStore = (gamesMeta: unknown, playersMeta: unknown) => ({
@@ -15,7 +15,7 @@ const svc = () => new CertifiedIntelligenceIntegrationService(fakeStore(meta(180
 
 const root = process.cwd()
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
-const SERVICE = 'lib/fantasy-os/sports-runtime/intelligenceIntegration.ts'
+const SERVICE = 'lib/sports-evidence/intelligenceIntegration.ts'
 const COACH = 'app/api/coach/advice/route.ts'
 const CHIMMY = 'app/api/ai/chimmy/route.ts'
 const MANAGER = 'app/api/decision-os/manager-command-center/route.ts'

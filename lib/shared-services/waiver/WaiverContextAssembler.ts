@@ -46,9 +46,9 @@ import type { LeagueSport } from '@prisma/client'
 import type { WaiverAIEngineInput, WaiverRosterPlayer, UserGoal } from './types'
 import { resolvePlayers } from '@/lib/shared-services/player-identity'
 import { IMPORT_PROVIDERS, type ImportProvider } from '@/lib/league-import/types'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedWaiverIntegrationService, type CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/waiverIntegration'
-import { extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedWaiverIntegrationService, type CertifiedScheduleDescription } from '@/lib/sports-evidence/waiverIntegration'
+import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 
 /** Same conservative flat fallback used by tradeLearningCapture.ts's live capture — not a new invention. */
 const UNMATCHED_PLAYER_FALLBACK_VALUE = 200

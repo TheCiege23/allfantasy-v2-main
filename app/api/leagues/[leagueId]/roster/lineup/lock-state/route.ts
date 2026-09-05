@@ -6,8 +6,8 @@ import {
   resolveFullLineupLockContext,
   loadLeagueWeekContext,
 } from '@/lib/roster-lineup-engine/lineupLockService'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 
 function weekFromLeagueSettings(settings: unknown): number {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1

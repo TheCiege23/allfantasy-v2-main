@@ -7,8 +7,8 @@ import {
   runAutoSubLineupEngine,
   type AutoSubLineupEngineInput,
 } from '@/lib/auto-sub-lineup-engine'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 
 export const dynamic = 'force-dynamic'
 

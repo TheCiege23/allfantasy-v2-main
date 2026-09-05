@@ -25,8 +25,8 @@ import { buildMatchupCenterPayload } from '@/server/services/matchupCenterServic
 import { resolveCurrentWeek } from '@/lib/chimmy-context/providers/_helpers/currentWeek'
 import { normalizeMatchupState, type CertifiedMatchupEvidenceInput } from './MatchupStateNormalizer'
 import type { LeagueGameDayContext } from './types'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedMatchupIntegrationService } from '@/lib/fantasy-os/sports-runtime/matchupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedMatchupIntegrationService } from '@/lib/sports-evidence/matchupIntegration'
 
 export interface BuildLeagueGameDayContextInput {
   leagueId: string

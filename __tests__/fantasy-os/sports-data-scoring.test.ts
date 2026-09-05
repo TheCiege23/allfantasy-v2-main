@@ -4,9 +4,9 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedScoringIntegrationService } from '@/lib/fantasy-os/sports-runtime/scoringIntegration'
-import { CertifiedMatchupIntegrationService } from '@/lib/fantasy-os/sports-runtime/matchupIntegration'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
+import { CertifiedMatchupIntegrationService } from '@/lib/sports-evidence/matchupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 
 const game = (id: string, status: string) => ({ canonicalGameId: id, homeTeamId: 'nfl:KC', awayTeamId: 'nfl:BUF', scheduledStart: '2026-09-10T00:20Z', status })
 const meta = (ageMin: number) => ({ version: 'nfl-games-2026-w1', generatedAt: new Date(Date.now() - ageMin * 60000).toISOString(), provider: 'espn', limitations: [], unresolvedCount: 0, rejectedCount: 0 })
@@ -14,9 +14,9 @@ const scoringSvc = (games: unknown[], m: unknown) => new CertifiedScoringIntegra
 
 const root = process.cwd()
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
-const SERVICE = 'lib/fantasy-os/sports-runtime/scoringIntegration.ts'
+const SERVICE = 'lib/sports-evidence/scoringIntegration.ts'
 const ENGINE = 'lib/redraft/scoringEngine.ts'
-const GATES = 'lib/fantasy-os/sports-runtime/gates.ts'
+const GATES = 'lib/sports-evidence/gates.ts'
 const noProvider = (src: string) => /(from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn|sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com)/.test(src)
 
 describe('5E-g Scoring — honest capability + finality evidence', () => {

@@ -5,7 +5,7 @@ import path from 'node:path'
 /**
  * Phase 5H — unified sports-data-plane provider boundary enforcement.
  *
- * Certifies the audited invariant: Decision OS and the certified sports-runtime integration services never call
+ * Certifies the audited invariant: Decision OS and the certified sports-evidence integration services never call
  * a sports-data PROVIDER directly. All sports facts must flow through the canonical/gateway runtime ports. This
  * locks in the "no direct-provider bypass" boundary permanently (product runtime is provider-agnostic).
  */
@@ -48,11 +48,11 @@ describe('5H — Decision OS is provider-agnostic (no direct provider bypass)', 
   })
 })
 
-describe('5H — certified sports-runtime integration services are provider-agnostic', () => {
-  it('no lib/fantasy-os/sports-runtime service imports a provider client or hits a provider URL', () => {
-    const importV = scan('lib/fantasy-os/sports-runtime')
+describe('5H — certified sports-evidence integration services are provider-agnostic', () => {
+  it('no lib/sports-evidence service imports a provider client or hits a provider URL', () => {
+    const importV = scan('lib/sports-evidence')
     expect(importV, JSON.stringify(importV)).toEqual([])
-    for (const file of walk(path.join(root, 'lib/fantasy-os/sports-runtime'))) {
+    for (const file of walk(path.join(root, 'lib/sports-evidence'))) {
       const src = fs.readFileSync(file, 'utf8')
       expect(FORBIDDEN_URL.test(src), `${path.relative(root, file)} hits a provider URL`).toBe(false)
     }

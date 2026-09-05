@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { acceptAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
-import { evaluateTradeSettlementGuard } from '@/lib/fantasy-os/sports-runtime/tradeSettlementGuard'
+import { evaluateTradeSettlementGuard } from '@/lib/sports-evidence/tradeSettlementGuard'
 
 export const dynamic = 'force-dynamic'
 

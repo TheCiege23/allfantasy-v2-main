@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/adminAuth'
-import { isSportsDataEnabled, sportsDataGateDiagnostics } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedIntelligenceIntegrationService } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration'
+import { isSportsDataEnabled, sportsDataGateDiagnostics } from '@/lib/sports-evidence/gates'
+import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { describeEspnIdentityCoverage } from '@/lib/sports-data-gateway/runtime/espnIdentityPopulation'
 
 export const dynamic = 'force-dynamic'

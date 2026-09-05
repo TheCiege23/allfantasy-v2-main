@@ -13,8 +13,8 @@ import type { ScoringCategory } from '@/lib/sportConfig/types'
 import { bridgeUiRulesToEngineCategoryPoints } from '@/lib/nfl-scoring/scoringKeyBridge'
 import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedScoringIntegrationService } from '@/lib/fantasy-os/sports-runtime/scoringIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedScoringIntegrationService } from '@/lib/sports-evidence/scoringIntegration'
 
 export function calculateFantasyPoints(
   rawStats: Record<string, number>,

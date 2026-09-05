@@ -4,8 +4,8 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedWaiverIntegrationService } from '@/lib/fantasy-os/sports-runtime/waiverIntegration'
-import type { CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { CertifiedWaiverIntegrationService } from '@/lib/sports-evidence/waiverIntegration'
+import type { CertifiedScheduleDescription } from '@/lib/sports-evidence/lineupIntegration'
 
 // Stub the composed lineup schedule primitive (single source of truth for schedule evidence).
 const descWith = (available: boolean, freshness: string, players: CertifiedScheduleDescription['players']): CertifiedScheduleDescription => ({
@@ -23,7 +23,7 @@ const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
 const CLAIMS = 'app/api/waiver-wire/leagues/[leagueId]/claims/route.ts'
 const ELIG = 'app/api/waiver-wire/leagues/[leagueId]/eligibility/route.ts'
 const ASSEMBLER = 'lib/shared-services/waiver/WaiverContextAssembler.ts'
-const SERVICE = 'lib/fantasy-os/sports-runtime/waiverIntegration.ts'
+const SERVICE = 'lib/sports-evidence/waiverIntegration.ts'
 const noProvider = (src: string) => /(from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn|sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com)/.test(src)
 
 describe('5E-e — CertifiedWaiverIntegrationService (reject-only + informational)', () => {

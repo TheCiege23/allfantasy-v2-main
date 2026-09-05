@@ -16,8 +16,8 @@ import {
   buildPersistedRosterDataFromRosterState,
   weekFromLeagueSettingsForLineup,
 } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 
 // Guillotine: chopped (eliminated) rosters cannot change lineup/roster.
 // Salary cap: when persisting roster changes for a salary_cap league, call

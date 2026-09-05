@@ -4,7 +4,7 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedMatchupIntegrationService, MATCHUP_UNSUPPORTED } from '@/lib/fantasy-os/sports-runtime/matchupIntegration'
+import { CertifiedMatchupIntegrationService, MATCHUP_UNSUPPORTED } from '@/lib/sports-evidence/matchupIntegration'
 import { normalizeMatchupState } from '@/lib/shared-services/game-day/MatchupStateNormalizer'
 import type { MatchupCenterPayload } from '@/lib/matchup-center/types'
 
@@ -14,7 +14,7 @@ const svc = (games: unknown[], m: unknown) => new CertifiedMatchupIntegrationSer
 
 const root = process.cwd()
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
-const SERVICE = 'lib/fantasy-os/sports-runtime/matchupIntegration.ts'
+const SERVICE = 'lib/sports-evidence/matchupIntegration.ts'
 const NORMALIZER = 'lib/shared-services/game-day/MatchupStateNormalizer.ts'
 const ASSEMBLER = 'lib/shared-services/game-day/GameDayContextAssembler.ts'
 const ROUTE = 'app/api/leagues/[leagueId]/matchup-center/route.ts'

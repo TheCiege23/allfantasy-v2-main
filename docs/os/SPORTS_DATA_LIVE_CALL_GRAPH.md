@@ -17,7 +17,7 @@
 
 ## Delivered this increment (Phase 5E-a)
 The **safe foundation + first compile-graph wiring**:
-- **Runtime feature gates** (`lib/fantasy-os/sports-runtime/gates.ts`) — 7 server-only gates, **disabled by default**, secret-safe diagnostics, no customer override.
+- **Runtime feature gates** (`lib/sports-evidence/gates.ts`) — 7 server-only gates, **disabled by default**, secret-safe diagnostics, no customer override.
 - **Shared runtime context envelope** (`context.ts`) — one envelope; stale stays stale; `unavailable` never empty-but-current; provider fields never cross; identities visible.
 - **First live route** `POST /api/fantasy-os/sports/lineup-context` — read-only, gated, session-guarded. Imports the Lineup runtime ports (`playerGameResolution`, `lineupSafety`, `scheduleRuntime`) → **the integration layer now enters the production compile graph via a real route**. Returns canonical game/lock **evidence**; decides nothing about roster mutation (lock authority stays final). Fails closed to `unavailable`; never fabricates.
 - **Direct-provider-import guard** (test) — the wired route + consumer layer must not import a provider client or hit a provider URL directly (allowlist: gateway adapters + sync fetchers).

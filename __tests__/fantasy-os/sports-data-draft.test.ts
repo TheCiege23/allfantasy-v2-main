@@ -4,8 +4,8 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedDraftIntegrationService } from '@/lib/fantasy-os/sports-runtime/draftIntegration'
-import type { CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { CertifiedDraftIntegrationService } from '@/lib/sports-evidence/draftIntegration'
+import type { CertifiedScheduleDescription } from '@/lib/sports-evidence/lineupIntegration'
 
 const descWith = (available: boolean, freshness: string, players: CertifiedScheduleDescription['players']): CertifiedScheduleDescription => ({
   available, freshnessStatus: freshness, identityStatus: available ? 'resolved' : 'unresolved', snapshotVersion: available ? 'v1' : null, players,
@@ -18,7 +18,7 @@ const root = process.cwd()
 const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8')
 const PICK = 'app/api/leagues/[leagueId]/draft/pick/route.ts'
 const SESSION = 'app/api/leagues/[leagueId]/draft/session/route.ts'
-const SERVICE = 'lib/fantasy-os/sports-runtime/draftIntegration.ts'
+const SERVICE = 'lib/sports-evidence/draftIntegration.ts'
 const noProvider = (src: string) => /(from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn|sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com)/.test(src)
 
 describe('5E-f Draft — service (evidence only, never a Draft legality rule)', () => {

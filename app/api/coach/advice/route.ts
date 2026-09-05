@@ -5,8 +5,8 @@ import { assertLeagueMember } from '@/lib/league-access';
 import { logAiOutput } from '@/lib/ai/output-logger';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { getAICoachResponse, normalizeAdviceType } from '@/lib/ai-coach';
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates';
-import { CertifiedIntelligenceIntegrationService } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration';
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates';
+import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration';
 
 export const dynamic = 'force-dynamic';
 

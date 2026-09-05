@@ -15,9 +15,9 @@ import { logAction } from '@/server/services/auditService'
 import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTransactionGates'
 import { getLeagueRole } from "@/lib/league/permissions"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedWaiverIntegrationService } from '@/lib/fantasy-os/sports-runtime/waiverIntegration'
-import { extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedWaiverIntegrationService } from '@/lib/sports-evidence/waiverIntegration'
+import { extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 function waiverClaimErrorCode(message: string): string {

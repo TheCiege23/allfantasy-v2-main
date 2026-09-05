@@ -3,7 +3,7 @@
 Injects certified sports context into the real Waiver decision flow behind `FANTASY_OS_SPORTS_DATA_WAIVER_ENABLED` (**off by default**), additive and reject-only / informational. The deterministic waiver engine, eligibility, and roster legality remain the final authorities. Follows the Lineup-family pattern (5E-b…5E-d).
 
 ## Shared service (no duplicated rules)
-`lib/fantasy-os/sports-runtime/waiverIntegration.ts` — `CertifiedWaiverIntegrationService` **composes** the existing `CertifiedLineupIntegrationService` schedule primitive (`describeScheduleForPlayers`); it does not reimplement schedule/identity/lock logic (single source of truth). Two methods:
+`lib/sports-evidence/waiverIntegration.ts` — `CertifiedWaiverIntegrationService` **composes** the existing `CertifiedLineupIntegrationService` schedule primitive (`describeScheduleForPlayers`); it does not reimplement schedule/identity/lock logic (single source of truth). Two methods:
 - `evaluateWaiverClaimSafety({season, week, addRefs, dropRefs})` — **reject-only**: blocks only on **current** certified evidence an add/drop player's game is locked/started/final/postponed; **fails open** on stale/unavailable. Never approves.
 - `describeWaiverScheduleContext({season, week, players})` — **informational**: kickoff/status/lock/freshness/identity; injuries/projections/availability/rankings surfaced as explicitly `unavailable` (never fabricated).
 

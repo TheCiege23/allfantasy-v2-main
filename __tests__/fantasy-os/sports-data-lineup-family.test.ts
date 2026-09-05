@@ -4,7 +4,7 @@ import path from 'node:path'
 
 vi.mock('server-only', () => ({}))
 
-import { CertifiedLineupIntegrationService } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { CertifiedLineupIntegrationService } from '@/lib/sports-evidence/lineupIntegration'
 import type { LiveLineupSportsContext } from '@/lib/sports-data-gateway/runtime/lineupSafety'
 
 const ctx = (id: string, lock: LiveLineupSportsContext['sportsDataLockEvidence'], start = '2026-09-10T00:20Z'): LiveLineupSportsContext => ({

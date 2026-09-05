@@ -9,8 +9,8 @@ import { estimateNextWaiversProcessUTC } from '@/lib/time-engine/estimateWaiverR
 import type { FantasyTimeEngineExtras } from '@/lib/time-engine/fantasyTimePayload'
 import { getServerNowUTC } from '@/lib/time-engine/serverClock'
 import { prisma } from '@/lib/prisma'
-import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
-import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/sports-evidence/lineupIntegration'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 export const dynamic = 'force-dynamic'
