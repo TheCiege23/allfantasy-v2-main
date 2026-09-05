@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const { resolveSnapshotMock } = vi.hoisted(() => ({ resolveSnapshotMock: vi.fn() }))
 
@@ -83,5 +85,41 @@ describe('canAccessFantasyOS — enterprise workspace access boundary', () => {
   it('fails closed when the entitlement resolver throws', async () => {
     resolveSnapshotMock.mockRejectedValue(new Error('db down'))
     expect(await canAccessFantasyOS({ userId: 'u1' })).toBe(false)
+  })
+})
+
+/**
+ * Static wiring guard on the boundary itself.
+ *
+ * Until 2026-09-05 `app/fantasy-os/page.tsx` made ZERO calls into the access module and
+ * `middleware.ts` named no fantasy-os path, so `executive/page.tsx` — whose own comment called its
+ * check "defense in depth" — was the only lock, with nothing behind it. The unit tests above prove
+ * the resolver decides correctly; they cannot prove anyone ASKS it. That is what these assert.
+ *
+ * ⚠ These read their SUBJECT with no `fs.existsSync` guard, deliberately. If a page is moved or
+ * renamed this must fail loudly with ENOENT — a guard here would make it scan nothing and pass,
+ * which is the exact failure mode that let the gap exist.
+ */
+describe('both /fantasy-os surfaces ask the resolver (static wiring)', () => {
+  const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), 'utf8')
+
+  it.each([['app/fantasy-os/page.tsx'], ['app/fantasy-os/executive/page.tsx']])(
+    '%s imports and calls canAccessFantasyOS',
+    (file) => {
+      const src = read(file)
+      expect(src).toMatch(/from '@\/lib\/fantasy-os\/access'/)
+      expect(src).toMatch(/canAccessFantasyOS\(/)
+    },
+  )
+
+  it('the gateway redirects an authenticated viewer who is not entitled', () => {
+    expect(read('app/fantasy-os/page.tsx')).toMatch(/if \(!allowed\) redirect\(/)
+  })
+
+  it('the gateway does NOT redirect a signed-out visitor — it is the sign-in funnel', () => {
+    // The access call is nested inside `if (isAuthenticated)`, so a signed-out visitor still gets
+    // the gateway's own signed-out branch and its callbackUrl instead of being bounced.
+    expect(read('app/fantasy-os/page.tsx')).toMatch(/if \(isAuthenticated\) \{[\s\S]*?canAccessFantasyOS/)
+    expect(read('app/fantasy-os/FantasyOsGateway.tsx')).toContain('/login?callbackUrl=/fantasy-os')
   })
 })

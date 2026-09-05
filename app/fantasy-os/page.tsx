@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { canAccessFantasyOS } from '@/lib/fantasy-os/access'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import type { UserLeague } from '@/app/dashboard/types'
 import { resolveTenantBrand } from '@/lib/white-label'
@@ -25,9 +27,26 @@ export const dynamic = 'force-dynamic'
  * active white-label tenant are preserved; no provider branding appears on this executive surface.
  */
 export default async function FantasyOsPage() {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null; role?: string | null }
+  } | null
   const userId = typeof session?.user?.id === 'string' ? session.user.id.trim() : ''
   const isAuthenticated = userId.length > 0
+
+  // Entitlement gate. An AUTHENTICATED viewer must hold admin/owner/enterprise, exactly as
+  // /fantasy-os/executive requires — this is what makes that page's check defence in depth rather
+  // than the only lock. An UNAUTHENTICATED visitor is deliberately NOT redirected: this page is the
+  // sign-in funnel for the workspace and renders its own signed-out branch linking to
+  // /login?callbackUrl=/fantasy-os. Bouncing them to /dashboard would drop that callback and strand
+  // them somewhere they cannot act. Nothing entitlement-gated renders before this check.
+  if (isAuthenticated) {
+    const allowed = await canAccessFantasyOS({
+      userId,
+      email: session?.user?.email ?? null,
+      role: session?.user?.role ?? null,
+    })
+    if (!allowed) redirect('/dashboard')
+  }
 
   const payload = isAuthenticated ? await getDashboardLeagueListForUser(userId).catch(() => null) : null
   const leaguesRaw = (payload?.leagues ?? []) as UserLeague[]

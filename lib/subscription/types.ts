@@ -5,7 +5,8 @@
 
 /** Feature IDs used for hasAccess(featureId). Matches useEntitlement plan mapping. */
 export type SubscriptionFeatureId =
-  /** Enterprise Fantasy OS executive workspace access — gates the /fantasy-os route + nav. */
+  /** Enterprise Fantasy OS executive workspace — gates /fantasy-os and /fantasy-os/executive. No nav
+   *  entry consumes it; that half of this comment was untrue and is not restored. */
   | 'fantasy_os_workspace'
   | 'trade_analyzer'
   | 'manager_psychology'

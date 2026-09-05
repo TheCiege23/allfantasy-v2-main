@@ -23,7 +23,9 @@ export const dynamic = 'force-dynamic'
 /**
  * Executive Intelligence workspace — enterprise-gated deep surface under /fantasy-os.
  *
- * Security: re-checks canAccessFantasyOS (defense in depth over the /fantasy-os guard). Data: reads the
+ * Security: re-checks canAccessFantasyOS — genuine defence in depth, since /fantasy-os now runs the
+ * same check for an authenticated viewer (it did not until 2026-09-05, when this was the only lock).
+ * Keep both: this page is reachable directly by URL, not only through the gateway. Data: reads the
  * certified NON-PRODUCTION `fos_phase4` portfolio through the env-gated, read-only data-access boundary.
  * Fails CLOSED with an explicit unavailable state — never fabricates data to populate the UI.
  */

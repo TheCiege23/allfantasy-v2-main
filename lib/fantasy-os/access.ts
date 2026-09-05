@@ -6,9 +6,18 @@
  *   2. the owner,
  *   3. an active `enterprise` entitlement.
  *
- * The `/fantasy-os` route guard consumes this as the SECURITY boundary. The dashboard
- * nav entry and launch card are convenience surfaces that consume the same resolver — they
- * are never the boundary. Fails closed on any error: never grants access on failure.
+ * TWO consumers, and both are real boundaries — verified by census, because this comment previously
+ * described a guard that did not exist:
+ *   app/fantasy-os/page.tsx            the gateway, for an AUTHENTICATED viewer
+ *   app/fantasy-os/executive/page.tsx  the enterprise workspace
+ * Until 2026-09-05 the first of those made zero calls into this module and `middleware.ts` named no
+ * fantasy-os path, so the executive page — which calls itself "defence in depth" — was the only
+ * lock, with nothing behind it. The gateway check was added rather than the comment softened.
+ *
+ * ⚠ There is NO dashboard nav entry or launch card consuming this resolver; an earlier version of
+ * this comment claimed both. Do not restore that claim without a consumer to point at.
+ *
+ * Fails closed on any error: never grants access on failure.
  *
  * Customer-facing rule: this gates the "Fantasy OS" workspace. The internal engine name
  * ("Decision OS") must never appear on any surface reached through here.
