@@ -33,20 +33,59 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))
 }
 
-/** Confidence = share of player assets that carried a real projection (data completeness). */
+/**
+ * Confidence = share of player assets THE ENGINE COULD ACTUALLY PRICE (data completeness).
+ *
+ * 🛑 THIS COUNTED PROJECTIONS ONLY, AND THE ENGINE DOES NOT PRICE ON PROJECTIONS ONLY.
+ * `normalizedPlayerValue` takes an IDP value FIRST (it outranks a projection outright), then a
+ * projection, then market value as a documented fallback basis. A trade priced entirely off
+ * FantasyCalc market values therefore produced a real total, a real fairness score and a real
+ * letter grade while reporting `confidence: 0` — the engine saying it had nothing to go on about
+ * a number it had just confidently produced.
+ *
+ * That is not cosmetic. `consoleShadowCompare` withdraws the agreement claim at `confidence <= 0`
+ * ("ZERO CONFIDENCE IS NOT AGREEMENT"), which is right given the number it is handed and wrong
+ * given what the number meant — so every market-priced trade was verdictless BY CONSTRUCTION and
+ * could never reach the Phase 3 flip gate no matter how much traffic arrived. Measured against
+ * production: all four `manager.trade.evaluate` observations (2026-09-04/05) carried
+ * `confidenceScore: 0` beside grades of A+, A+, C+ and B- and fairness of 100, 72 and 76 —
+ * fairness that is only computable when a side actually resolved to value.
+ *
+ * ⚠ THE BASIS IS READ, NOT RE-DERIVED. `valuationBasis` comes from `valueBasisFor`, which is the
+ * same function the engine branches on, so this cannot drift out of step with what actually priced
+ * the asset. `'none'` is a REFUSAL — no usable input reached the engine — and is the only string
+ * that does not count.
+ *
+ * ⚠ NO WEIGHTS. A market-priced asset counts the same as a projected one, because any weighting
+ * would be an invented number and this repo has been bitten by invented floors before. Confidence
+ * answers "could we price it", not "how good was the input"; `valuationBasis` is preserved per
+ * asset for anyone who needs the second question.
+ */
 export function computeConfidence(sides: SideTotals[]): number {
   let players = 0
-  let withProjection = 0
+  let priced = 0
   for (const side of sides) {
     for (const a of side.assets) {
-      if (a.kind === 'player') {
-        players += 1
-        if (a.sources.projectionValue != null) withProjection += 1
+      if (a.kind !== 'player') continue
+      players += 1
+      const basis = a.valuationBasis
+      if (basis === 'idp' || basis === 'projection' || basis === 'market') {
+        priced += 1
+      } else if (basis === undefined && a.sources.projectionValue != null) {
+        /*
+         * Snapshots written before `valuationBasis` existed do not carry it, and absent must not
+         * be read as any particular basis. Falling back to the old projection test keeps those
+         * scoring exactly as they did rather than silently re-rating history.
+         */
+        priced += 1
       }
     }
   }
-  if (players === 0) return 60 // picks/FAAB only — moderate confidence
-  return Math.round((withProjection / players) * 100)
+  // Picks/FAAB only. Left at 60 deliberately: it is a pre-existing assertion about a trade with no
+  // player assets at all, it is unchanged by this fix, and moving it would shift every consumer's
+  // numbers for a different reason than the one being fixed here.
+  if (players === 0) return 60
+  return Math.round((priced / players) * 100)
 }
 
 export function gradeTrade(
@@ -123,7 +162,9 @@ export function gradeTrade(
     }
   }
   if (confidenceScore < 60) {
-    bullets.push('Some assets lacked projection data — confidence reduced')
+    // Wording follows the measure: confidence now counts assets the engine could price by ANY
+    // basis, so "lacked projection data" would name a narrower cause than the one being reported.
+    bullets.push('Some assets could not be priced from any source — confidence reduced')
   }
 
   const commissionerReview: CommissionerReview = {
