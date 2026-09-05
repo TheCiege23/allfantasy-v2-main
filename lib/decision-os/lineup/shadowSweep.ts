@@ -17,11 +17,26 @@ import type { LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
  *     /api/today/lineup-actions       0 requests
  *     /api/redraft/trade-proposals    0 requests
  *
- * That is not "no users" -- over the same window `/` served 1575 and `/dashboard` 864. The cause
- * is a client orphan: `DashboardOverview` still fetches `/api/dashboard/today-actions`, but the
- * only component importing it is `DashboardShell`, which `/dashboard` stopped rendering in
- * 85aae2df2 (2026-07-18) when it cut over to the Nocturne dashboard. No lineup parity evidence
- * has been produced since that date, and organic traffic will never accumulate the gate's 50.
+ * That is not "no users" -- over the same window `/` served 1575 and `/dashboard` 864. Organic
+ * traffic will never accumulate the gate's 50.
+ *
+ * ⚠ THE CAUSE IS NOT A CLIENT ORPHAN, AND THIS COMMENT SAID IT WAS. The original text blamed one
+ * component: "`DashboardOverview` still fetches it, but its only importer is `DashboardShell`,
+ * which `/dashboard` stopped rendering in 85aae2df2 (2026-07-18) when it cut over to the Nocturne
+ * dashboard." That reads as an accident with a small repair behind it. Re-censused 2026-09-05:
+ *
+ *   - `/dashboard` is RETIRED ON PURPOSE. Middleware 307s every hit to `/core` and the page is a
+ *     redirect stub -- so `/dashboard` serving 864 is 864 redirects, not 864 renders.
+ *   - THREE dashboards fetch `/api/dashboard/today-actions` -- `DashboardOverview`,
+ *     `NocturneDashboard` and `AdaptiveDashboard` -- and NONE of them is rendered by anything.
+ *     That includes Nocturne, which the sentence above names as the replacement.
+ *   - `/core`, the one signed-in home, never implemented lineup actions at all.
+ *
+ * So there is no fetch to repoint. There is a completed routing cutover and a feature that was not
+ * rebuilt at the destination, which is a product decision rather than a repair -- and deleting the
+ * ~24,500 lines of unrendered dashboard would restore no evidence, because dead code was never
+ * producing any. Anyone reaching for "just fix the orphan" should read this list first; the wrong
+ * diagnosis costs more than the missing one, because it looks actionable.
  *
  * A schedule does not care whether a screen is wired. This is the cheapest way to make the gate
  * evaluable again, and it is honest about what it finds: when the shadow cannot run for a league
