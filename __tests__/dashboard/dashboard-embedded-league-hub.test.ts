@@ -7,30 +7,10 @@ function read(rel: string): string {
 }
 
 describe('dashboard embedded league hub', () => {
-  it('SelectedLeagueHomePanel loads full hub via embed iframe without extra header chrome', () => {
-    const src = read('app/dashboard/components/SelectedLeagueHomePanel.tsx')
-    expect(src).toContain('?embed=1')
-    expect(src).toContain('dashboard-embedded-league-hub-iframe')
-    expect(src).not.toMatch(/Dashboard home/)
-    expect(src).not.toMatch(/Open full page/)
-    expect(src).toContain('onDraftOverlayOpen')
-  })
-
   it('LeagueEmbedGate skips ProductShell when embed=1', () => {
     const src = read('components/navigation/LeagueEmbedGate.tsx')
     expect(src).toContain('isEmbedModeFromSearchParams')
     expect(src).toContain('data-af-league-embed-chrome-off')
-  })
-
-  it('DashboardShell uses Floating Communications (no permanent chat column) when a league is selected', () => {
-    const src = read('app/dashboard/DashboardShell.tsx')
-    expect(src).toContain('SelectedLeagueHomePanel')
-    // Phase 2.5 Unified Communications: the permanent LeftChatPanel column was replaced by the
-    // FloatingCommunications hub (hideLeftRail / leftPanel={null}); the RightControlPanel is retained.
-    expect(src).not.toContain('<LeftChatPanel')
-    expect(src).toContain('<FloatingCommunications')
-    expect(src).toContain('hideLeftRail')
-    expect(src).toContain('<RightControlPanel')
   })
 
   it('League page passes embedMode from ?embed=1 into LeagueShell', () => {

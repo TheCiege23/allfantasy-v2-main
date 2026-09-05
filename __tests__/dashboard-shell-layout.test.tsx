@@ -7,23 +7,19 @@ function read(rel: string): string {
   return readFileSync(resolve(root, rel), 'utf8')
 }
 
-describe('Dashboard shell layout preset', () => {
+/**
+ * Trimmed when the three unrendered dashboards were retired. Three tests here read
+ * `app/dashboard/DashboardShell.tsx` and asserted how IT consumed the shell (the balanced
+ * three-panel preset, `leftPanel={null}` + FloatingCommunications, `hideRightRail={!isLeagueRoute}`).
+ * That file is gone, so those assertions describe nothing.
+ *
+ * The three kept below are about `AppShell` itself and are unaffected: they pin `hideLeftRail` and
+ * `hideRightRail` as ADDITIVE, which is what keeps the league route, matchups, standings, survivor
+ * and ProductShell rendering their rails by default. That guarantee outlived the dashboard that
+ * prompted it.
+ */
+describe('AppShell layout preset — rail flags stay additive', () => {
   const appShell = read('app/components/AppShell.tsx')
-  const dashboardShell = read('app/dashboard/DashboardShell.tsx')
-
-  it('opts the dashboard into the balanced three-panel preset', () => {
-    expect(dashboardShell).toContain('layoutMode="balanced-three-panel"')
-    expect(dashboardShell).toContain('rightRailCollapsed={myLeaguesRail.collapsed}')
-    expect(dashboardShell).toContain('rightPanel={')
-  })
-
-  it('replaces the permanent left chat column with floating Communications (Phase 2.5)', () => {
-    // The dashboard no longer mounts a persistent left chat column; it hides the left rail and
-    // moves chat into the on-demand FloatingCommunications panel instead.
-    expect(dashboardShell).toContain('hideLeftRail')
-    expect(dashboardShell).toContain('leftPanel={null}')
-    expect(dashboardShell).toContain('<FloatingCommunications')
-  })
 
   it('keeps the shared shell adjacent and full width on desktop', () => {
     expect(appShell).toContain('data-af-layout-mode={balancedDesktopLayout ? \'balanced-three-panel\' : \'legacy-rail-clamp\'}')
@@ -44,14 +40,5 @@ describe('Dashboard shell layout preset', () => {
     expect(appShell).toContain('hideRightRail = false')
     expect(appShell).toContain('{hideRightRail ? null : (')
     expect(appShell).toContain("noLeftNoRight: 'md:[grid-template-columns:minmax(0,1fr)]'")
-  })
-
-  it('the dashboard overview drops its right rail and rehomes the rail affordances into the header (Phase 3.8D)', () => {
-    // Rail removed on the dashboard overview only — the embedded league route keeps its right panel.
-    expect(dashboardShell).toContain('hideRightRail={!isLeagueRoute}')
-    // rightPanel is still passed (the rail remains for the embedded league route + mobile drawer).
-    expect(dashboardShell).toContain('rightPanel={')
-    // Create/Import + profile/plan/account are rehomed into the desktop header.
-    expect(dashboardShell).toContain('<DashboardHeaderControls')
   })
 })

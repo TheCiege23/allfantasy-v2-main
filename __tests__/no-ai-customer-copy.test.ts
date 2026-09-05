@@ -36,9 +36,6 @@ const EXCLUDED_SEGMENTS = ['admin', 'dev', 'internal', '__tests__', 'node_module
 /** Individual files that are dev/ops-only despite not living under an excluded directory —
  *  e.g. flag-gated debug panels. Reviewed case by case, not a blanket filename pattern. */
 const EXCLUDED_FILES = new Set([
-  // Gated by NEXT_PUBLIC_CHIMMY_INTELLIGENCE_DEBUG=1, returns null otherwise; own header comment
-  // calls it a "Developer/admin debug surface." Never rendered to a customer in production.
-  'app/dashboard/components/DashboardIntelligenceDebugPanel.tsx',
 ])
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -113,8 +110,6 @@ const ALLOWLIST: Record<string, string[]> = {
   // — these read like established feature names, not a generic AI label that clearly should say
   // Chimmy instead. Open product-naming question, not fixed in this pass; allowlisted rather than
   // guessed at.
-  'app/dashboard/components/AIToolsModal.tsx': ['Pick a league for waiver AI targets.', 'Open AI Trade Analyzer'],
-  'app/dashboard/components/LegacyToolsetGrid.tsx': ['Waiver AI'],
 }
 
 function isAllowlisted(file: string, quoted: string): boolean {

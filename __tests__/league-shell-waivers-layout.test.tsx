@@ -13,7 +13,6 @@ describe('League shell layout and waivers integration', () => {
   const leagueShellClient = read('app/league/[leagueId]/LeagueShellClient.tsx')
   const appShell = read('app/components/AppShell.tsx')
   const leagueTabs = read('app/league/[leagueId]/LeagueTabs.tsx')
-  const dashboardShell = read('app/dashboard/DashboardShell.tsx')
   const waiverWire = read('components/waiver-wire/WaiverWirePage.tsx')
   const waiverAiPanel = read('components/waivers/AIWaiverRecommendationsPanel.tsx')
   const commissionerPanel = read('components/waivers/CommissionerWaiverInsightsPanel.tsx')
@@ -27,7 +26,6 @@ describe('League shell layout and waivers integration', () => {
     expect(appShell).toContain('minmax(0,35fr)')
     expect(appShell).toContain('minmax(240px,25fr)')
     expect(appShell).toContain("data-af-layout-mode={balancedDesktopLayout ? 'balanced-three-panel' : 'legacy-rail-clamp'}")
-    expect(dashboardShell).toContain('layoutMode="balanced-three-panel"')
     expect(leagueShell).toContain('layoutMode="balanced-three-panel"')
   })
 

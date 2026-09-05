@@ -149,27 +149,6 @@ describe('Mobile drawers — unchanged, still overlay-based', () => {
   })
 })
 
-// ─── Dashboard layout: unaffected ─────────────────────────────────────────────
-
-describe('Dashboard layout — side panels unaffected by league changes', () => {
-  const dashSrc = read('app/dashboard/DashboardShell.tsx')
-
-  it('DashboardShell does not use league-specific storage key', () => {
-    expect(dashSrc).not.toContain('af-league-myleagues-rail-collapsed')
-  })
-
-  it('DashboardShell still uses balanced-three-panel layout mode', () => {
-    expect(dashSrc).toContain('balanced-three-panel')
-  })
-
-  it('useMyLeaguesRailCollapse without options still uses default storage key behavior', () => {
-    // Dashboard calls hook with no options — must still work correctly
-    const dashHookCall = dashSrc.match(/useMyLeaguesRailCollapse\([^)]*\)/)
-    // Dashboard should call it without storageKey override
-    expect(dashHookCall?.[0]).not.toContain('af-league')
-  })
-})
-
 // ─── query params: do not force 3-column layout ───────────────────────────────
 
 describe('Query params — openChat/showInvite do not force permanent 3-column layout', () => {
