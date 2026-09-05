@@ -8,7 +8,6 @@
 import type { RedraftLineupPlayer } from '@/lib/redraft/lineupValidation'
 import type { LineupActionItem, LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
 import type { Decision } from '@/lib/decision-os/core/decision'
-import { emitShadowParity } from '@/lib/decision-os/core/parity'
 import { resolveLineupWorld, type LineupWorld, type LineupWorldDeps } from './world'
 import { buildLineupDCO, type LineupDCO } from './dco'
 import { decideLineupSet, type LineupDecisionDeps } from './decision'
@@ -79,12 +78,26 @@ export async function runLineupSetDecision(input: RunLineupSetInput, deps: RunLi
   let parity: LineupParityResult | undefined
   if (deps.shadow) {
     const legacy = await deps.shadow.legacyRecommend(input.userId)
+    // 🛑 THE PARITY RESULT IS RETURNED, NOT EMITTED. This used to also fire `emitShadowParity` with
+    // `{ legacy_shadow_compared: true, parity_passed }` and NO `ran` key. `runLineupShadow` is the
+    // only caller that passes `deps.shadow`, and it emits its own `ran: true` event immediately
+    // afterwards from this very `parity` object under the same `decision_id` — so every row this
+    // wrote was the second copy of a verdict already counted.
+    //
+    // It was not merely redundant. `flipReadiness` counts a comparison only when `flags.ran === true`;
+    // everything else falls to the skip branch under reason 'unknown'. Measured in production before
+    // removal: 2,813 lineup decisions each held exactly two rows, and 2,815 real verdicts sat in the
+    // skip bucket, making 2/3 of the reported skips fiction and doubling the table.
+    //
+    // ⚠ Removing the emit does NOT change the gate's arithmetic — the twin was never counted as a
+    // comparison, so agreements, disagreements and the agreement rate are untouched. What changes is
+    // that `skips` stops lying and the row count halves.
+    //
+    // ⚠ The other caller, `grounding/decisionBridge`, passes no `shadow` at all (see its header), so
+    // nothing else ever reached this line. If a future caller wants telemetry, it emits its own with
+    // `ran` set — an emit buried in the orchestrator cannot know the surface or the input source, and
+    // that is exactly why this one carried neither.
     parity = compareLineupParity(decision, legacy, input.leagueId)
-    emitShadowParity(
-      'manager.lineup.set',
-      { legacy_shadow_compared: true, parity_passed: parity.passed, parity_failed: !parity.passed },
-      decision.decision_id,
-    )
   }
 
   return { world, dco, decision, parity }

@@ -15,6 +15,9 @@ const input = (leagueId = 'L1'): RunLineupSetInput => ({
   players: [],
 })
 
+/** Only the two fields the flip gate reads; the sink is untyped, so narrow at the assertion. */
+type ParityEvent = { event: string; flags?: { ran?: unknown; parity_passed?: unknown } }
+
 afterEach(() => registerDecisionTelemetrySink(null))
 
 describe('shouldRunLineupShadow (feature flag)', () => {
@@ -71,6 +74,36 @@ describe('runLineupShadow — beside legacy, never affecting it', () => {
       { loadInputs: async () => input('L1'), ruleDeps: { validateRedraft: fakeValidate() } },
     )
     expect(events.some((e) => (e as { event: string }).event === 'decision.shadow_parity')).toBe(true)
+  })
+
+  it('emits exactly ONE shadow_parity event — the orchestrator must not emit a second for the same decision', async () => {
+    const events: ParityEvent[] = []
+    registerDecisionTelemetrySink((e) => events.push(e as ParityEvent))
+    await runLineupShadow(
+      { userId: 'u1', leagueId: 'L1', legacySummary: payload('L1', [action('L1')]) },
+      { loadInputs: async () => input('L1'), ruleDeps: { validateRedraft: fakeValidate() } },
+    )
+    const parity = events.filter((e) => e.event === 'decision.shadow_parity')
+    expect(parity).toHaveLength(1)
+    expect(parity[0]?.flags?.ran).toBe(true)
+  })
+
+  it('every emitted verdict carries `ran`, so flipReadiness counts it as a comparison rather than a skip', async () => {
+    // Deliberately re-implements the gate's own predicate (`flags?.ran === true`, flipReadiness.ts)
+    // rather than trusting that "one event" is the same question. A verdict-bearing event WITHOUT
+    // `ran` is not counted as a comparison at all — it falls to the skip branch under reason
+    // 'unknown', which is how 2,815 real lineup verdicts were filed as skips in production.
+    const events: ParityEvent[] = []
+    registerDecisionTelemetrySink((e) => events.push(e as ParityEvent))
+    await runLineupShadow(
+      { userId: 'u1', leagueId: 'L1', legacySummary: payload('L1', [action('L1')]) },
+      { loadInputs: async () => input('L1'), ruleDeps: { validateRedraft: fakeValidate() } },
+    )
+    const withVerdict = events.filter(
+      (e) => e.event === 'decision.shadow_parity' && typeof e.flags?.parity_passed === 'boolean',
+    )
+    expect(withVerdict).toHaveLength(1)
+    expect(withVerdict.every((e) => e.flags?.ran === true)).toBe(true)
   })
 })
 
