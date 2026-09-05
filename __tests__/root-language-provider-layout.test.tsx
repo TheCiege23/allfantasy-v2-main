@@ -59,6 +59,8 @@ const loginPageSource = fs.readFileSync(path.join(process.cwd(), "app", "login",
 const loginContentSource = fs.readFileSync(path.join(process.cwd(), "app", "login", "LoginContent.tsx"), "utf8")
 const signinPageSource = fs.readFileSync(path.join(process.cwd(), "app", "signin", "page.tsx"), "utf8")
 const authPageShellSource = fs.readFileSync(path.join(process.cwd(), "components", "auth", "AuthPageShell.tsx"), "utf8")
+// The live auth surface on both /login and /signup since the AuthV4 cutover.
+const authV4Source = fs.readFileSync(path.join(process.cwd(), "components", "core-app", "screens", "AuthV4.tsx"), "utf8")
 const clientOnlyAuthPageSource = fs.readFileSync(path.join(process.cwd(), "components", "auth", "ClientOnlyAuthPage.tsx"), "utf8")
 const authRouteGlobalChromeSource = fs.readFileSync(path.join(process.cwd(), "components", "auth", "AuthRouteGlobalChrome.tsx"), "utf8")
 const safeGlobalChromeSource = fs.readFileSync(path.join(process.cwd(), "components", "shell", "SafeGlobalChrome.tsx"), "utf8")
@@ -90,6 +92,35 @@ const nextConfigSource = fs.readFileSync(path.join(process.cwd(), "next.config.j
  * `prebuild` in particular runs before EVERY build.
  */
 const railwayStartSource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-next-start.cjs"), "utf8")
+/*
+ * ⚠ THE GUARD WAS FAILING ON ITS OWN DOCUMENTATION. railway-next-start.cjs must
+ * not fabricate HTML — it used to run Next behind a proxy that wrapped
+ * shell-less responses in a hand-built document, which React could not hydrate.
+ * That code is long gone; what remains is a header comment EXPLAINING it, and
+ * the comment necessarily quotes the very strings the test bans. Measured: all
+ * four hits (`<!DOCTYPE html>`, `<html`, `<body`, `</head>`) are on lines 8-19,
+ * inside the opening block comment, and `createServer`/`upstreamRes` do not
+ * appear in the file at all.
+ *
+ * So the assertions run against the CODE. Deleting the comment would have made
+ * the test pass by removing the only record of why the rule exists — the exact
+ * trade this repo keeps refusing to make.
+ *
+ * Block comments and whole-line `//` only: an inline `//` is left alone so a
+ * URL cannot swallow the rest of its line and hide a real violation behind it.
+ */
+function codeOnly(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "")
+}
+const railwayStartCode = codeOnly(railwayStartSource)
+/*
+ * The layout with its comments removed, for assertions about STRUCTURE.
+ * app/layout.tsx documents its own chrome in a JSDoc block that writes
+ * `<SafeGlobalChrome />` in prose, so an indexOf for the tag finds the
+ * explanation ~21KB before the element and concludes the chrome is mounted
+ * outside AppProviders. Ordering checks read this; text checks read the source.
+ */
+const layoutCode = codeOnly(layoutSource)
 const railwayCleanSource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-clean-next-build.cjs"), "utf8")
 const railwayVerifySource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-verify-next-build.cjs"), "utf8")
 const railwayPrebuildSource = fs.readFileSync(path.join(process.cwd(), "scripts", "railway-tailwind-prebuild.cjs"), "utf8")
@@ -109,9 +140,26 @@ describe("root language provider layout", () => {
   }
 
   it("wraps global controls and children with AppProviders unconditionally", () => {
-    const providersStart = layoutSource.indexOf("<AppProviders ")
-    const chromeGate = layoutSource.indexOf("<SafeGlobalChrome metaPixelId")
-    const providersEnd = layoutSource.indexOf("</AppProviders>")
+    const providersStart = layoutCode.indexOf("<AppProviders ")
+    /*
+     * ⚠ MATCHED ON THE TAG, NOT ON A PROP. This read `<SafeGlobalChrome metaPixelId`
+     * and had been failing since the pixel moved out of SafeGlobalChrome into
+     * <MetaPixelPageViewTracker>: indexOf returned -1, so the assertion below
+     * compared -1 against a real offset and reported the chrome as mounted
+     * OUTSIDE AppProviders, which was never true.
+     *
+     * What this test is for is the ORDER — chrome inside the provider — and the
+     * prop list is not part of that. Pinning a prop here means every future
+     * signature change reads as a layout regression.
+     *
+     * ⚠ AND IT READS `layoutCode`, NOT `layoutSource`. The tag appears in this
+     * file's own JSDoc too ("delegate every piece of route-sensitive chrome …
+     * to `<SafeGlobalChrome />`"), ~21KB above the element — so a prop-agnostic
+     * match against the raw source finds the sentence, not the JSX, and the
+     * ordering assertion fails on a layout that is correct.
+     */
+    const chromeGate = layoutCode.indexOf("<SafeGlobalChrome")
+    const providersEnd = layoutCode.indexOf("</AppProviders>")
 
     expect(providersStart).toBeGreaterThan(-1)
     expect(chromeGate).toBeGreaterThan(providersStart)
@@ -138,11 +186,37 @@ describe("root language provider layout", () => {
     expect(safeGlobalChromeSource).toContain('"/signin"')
     expect(safeGlobalChromeSource).toContain('"/auth"')
     expect(safeGlobalChromeSource).toContain("return null")
-    // Volatile chrome lives inside SafeGlobalChrome, not the root layout.
+    /*
+     * Volatile chrome lives inside SafeGlobalChrome, not the root layout.
+     *
+     * ⚠ THE FACEBOOK SDK IS THE THING THAT HAS TO BE HERE, and it is named
+     * exactly now. This block used to assert a bare "connect.facebook.net",
+     * which both this file and the layout satisfy for DIFFERENT scripts —
+     * measured: SafeGlobalChrome loads sdk.js (1 occurrence), the layout loads
+     * fbevents.js (4). A host-level match cannot tell those apart, so it would
+     * pass while the SDK sat in the wrong file.
+     *
+     * The SDK specifically must be route-gated: it needs the #fb-root div, and
+     * mounting it on /login rendered a second copy of that id.
+     */
     expect(safeGlobalChromeSource).toContain('id="fb-root"')
-    expect(safeGlobalChromeSource).toContain("connect.facebook.net")
-    expect(safeGlobalChromeSource).toContain('id="meta-pixel"')
+    expect(safeGlobalChromeSource).toContain("connect.facebook.net/en_US/sdk.js")
     expect(safeGlobalChromeSource).toContain("<AuthRouteGlobalChrome />")
+    /*
+     * ⚠ `id="meta-pixel"` WAS ASSERTED HERE AND HAS NOT EXISTED SINCE THE PIXEL
+     * MOVED. The page-view tracker is its own client component now, mounted from
+     * the layout. Re-pointed rather than deleted, because the property worth
+     * guarding survived the move: it calls useSearchParams(), which de-opts
+     * everything above it to the nearest Suspense boundary — and in the ROOT
+     * layout, with no boundary, that is the whole document. The layout stopped
+     * emitting <!DOCTYPE html> on every App Router route the last time this was
+     * unguarded, so the boundary is the assertion, not the id.
+     */
+    const trackerAt = layoutSource.indexOf("<MetaPixelPageViewTracker")
+    const suspenseAt = layoutSource.lastIndexOf("<Suspense", trackerAt)
+    expect(trackerAt).toBeGreaterThan(-1)
+    expect(suspenseAt).toBeGreaterThan(-1)
+    expect(layoutSource.slice(suspenseAt, trackerAt)).not.toContain("</Suspense>")
   })
 
   it("keeps root layout free of pre-hydration document mutations", () => {
@@ -158,17 +232,54 @@ describe("root language provider layout", () => {
     // document root and attempts to append a second <html>.
     expect(layoutSource).not.toContain("af-init-mode")
     expect(layoutSource).not.toContain("af-init-lang")
-    expect(layoutSource).not.toContain("beforeInteractive")
     expect(layoutSource).not.toContain("buildThemeInitScript")
     expect(layoutSource).not.toContain("buildLanguageInitScript")
     expect(layoutSource).not.toContain('id="af-body-start"')
-    // Route-sensitive chrome must NOT appear directly in the root layout
-    // — it must be reached only via <SafeGlobalChrome />.
+    /*
+     * ⚠ THIS BANNED THE WORD `beforeInteractive`, WHICH IS NOT THE HAZARD.
+     * The hazard is writing <html>'s attributes from stored state before React
+     * hydrates; `beforeInteractive` was standing in for it, and the proxy broke
+     * the moment a script used that strategy for something harmless. Measured:
+     * the only one in the layout is
+     *     <Script id="gtm-init" strategy="beforeInteractive">
+     *       window.dataLayer = window.dataLayer || [];
+     * — one assignment to a JS global, touching no DOM at all. Next also
+     * REQUIRES beforeInteractive scripts to live in the root layout, so the old
+     * assertion banned the only legal place to put one.
+     *
+     * Named directly instead, which is strictly stronger: it holds for every
+     * script strategy, not just this one. `documentElement` itself is not
+     * banned — the pixel loader legitimately reads
+     * `(b.head || b.body || b.documentElement).appendChild(t)` to inject a
+     * <script>, which appends a node React does not own rather than changing an
+     * attribute React will diff.
+     */
+    expect(layoutSource).not.toMatch(/documentElement\s*\.\s*setAttribute/)
+    expect(layoutSource).not.toMatch(/documentElement\s*\.\s*(lang|dir|className)\s*=/)
+    expect(layoutSource).not.toMatch(/documentElement\s*\.\s*(dataset|classList)\s*\./)
+    /*
+     * Route-sensitive chrome must NOT appear directly in the root layout — it
+     * must be reached only via <SafeGlobalChrome />.
+     *
+     * ⚠ "connect.facebook.net" WAS BANNED WHOLESALE AND THAT IS NOT THE RULE.
+     * Two different Facebook scripts share that host and only one of them is
+     * route-sensitive:
+     *   sdk.js      — the SDK. Needs #fb-root, is gated on the pathname, and
+     *                 belongs in SafeGlobalChrome. Still banned here.
+     *   fbevents.js — the Pixel bootstrap. Deliberately ungated: it is gated
+     *                 only on the NEXT_PUBLIC_META_PIXEL_ID env var, so it
+     *                 renders identically on server and client on every route.
+     *                 That makes it not a hydration hazard, which is what this
+     *                 test is about. Added on purpose in 8d62d3525 to fire the
+     *                 pixel as early as possible.
+     * The old blanket ban could only be satisfied by deleting deliberate
+     * analytics, so it sat red instead — and a red test guards nothing.
+     */
     expect(layoutSource).not.toContain('id="meta-pixel"')
     expect(layoutSource).not.toContain('id="af-register-sw"')
     expect(layoutSource).not.toContain('id="af-unregister-sw"')
     expect(layoutSource).not.toContain('id="fb-root"')
-    expect(layoutSource).not.toContain("connect.facebook.net")
+    expect(layoutSource).not.toContain("connect.facebook.net/en_US/sdk.js")
   })
 
   it("preloads the NextAuth session unconditionally (no auth-route bypass)", () => {
@@ -292,10 +403,33 @@ describe("root language provider layout", () => {
 
   it("uses optional language only for auth and global toggle fallbacks", () => {
     expect(languageProviderSource).toContain("export function useOptionalLanguage")
-    expect(signupContentSource).toContain("useOptionalLanguage")
-    expect(loginContentSource).toContain("useOptionalLanguage")
     expect(modeToggleSource).toContain("useOptionalLanguage")
     expect(languageToggleSource).toContain("useOptionalLanguage")
+    /*
+     * ⚠ THE TWO ASSERTIONS REMOVED HERE PINNED FILES THAT NOTHING RENDERS ANY
+     * MORE. LoginContent and SignupContent were replaced by <AuthV4> on both
+     * auth pages; a caller census in all four import forms finds them named
+     * only inside the rollback COMMENTS in app/login/page.tsx and
+     * app/signup/page.tsx, nowhere in code. (app/admin-login imports its own
+     * AdminLoginContent, a different file — the near-identical name is why this
+     * looked reachable.) `loginContentSource` had 0 occurrences of the hook, so
+     * this test could never pass while it pointed there.
+     *
+     * The invariant is about the LIVE auth path, so it is asserted against the
+     * live auth path below. AuthV4 satisfies it the strongest way available: it
+     * calls neither hook, so it cannot throw on a missing provider at all.
+     * Asserted as "does not call the strict hook" rather than "calls the
+     * optional one", or this goes red again the day it starts translating.
+     */
+    expect(authV4Source).not.toMatch(/\buseLanguage\s*\(/)
+    for (const [file, source] of [
+      ["app/login/page.tsx", loginPageSource],
+      ["app/signup/page.tsx", signupPageSource],
+    ] as const) {
+      expect(source, `${file} must not call the strict language hook`).not.toMatch(
+        /\buseLanguage\s*\(/
+      )
+    }
   })
 
   it("keeps dashboard and league error fallbacks provider-safe", () => {
@@ -379,18 +513,38 @@ describe("root language provider layout", () => {
     expect(signupPageSource).toContain("<AuthPageShell>")
   })
 
-  it("renders auth content as client-only islands with ssr:false dynamic imports", () => {
-    // login/page.tsx must dynamic-import LoginContent with ssr:false
-    expect(loginPageSource).toContain('from "next/dynamic"')
-    expect(loginPageSource).toContain('import("./LoginContent")')
-    expect(loginPageSource).toContain("ssr: false")
-    expect(loginPageSource).toContain("<ClientOnlyAuthPage>")
+  it("renders auth content as client-only islands", () => {
+    /*
+     * ⚠ RENAMED FROM "...with ssr:false dynamic imports", BECAUSE THE MECHANISM
+     * CHANGED AND THE REQUIREMENT DID NOT. Both pages used to reach their form
+     * through `dynamic(() => import("./LoginContent"), { ssr: false })`; since
+     * the AuthV4 cutover they import <AuthV4> directly and get the client-only
+     * boundary from <ClientOnlyAuthPage> instead. Asserting `next/dynamic` was
+     * asserting the old plumbing, so it failed on a page that still satisfies
+     * the rule perfectly.
+     *
+     * What must stay true is that no auth FORM is server-rendered — that is
+     * what stopped a real hydration crash on these routes. So the boundary is
+     * asserted directly, including that ClientOnlyAuthPage still defers (it
+     * renders a boot shell until a mount effect flips it), because a component
+     * of that name that forgot to defer would satisfy a name-only check.
+     */
+    for (const [file, source] of [
+      ["app/login/page.tsx", loginPageSource],
+      ["app/signup/page.tsx", signupPageSource],
+    ] as const) {
+      expect(source, `${file} must wrap its auth form in the client-only boundary`).toContain(
+        "<ClientOnlyAuthPage>"
+      )
+      const boundaryAt = source.indexOf("<ClientOnlyAuthPage>")
+      const formAt = source.indexOf("<AuthV4")
+      expect(formAt, `${file} should render the AuthV4 form`).toBeGreaterThan(-1)
+      expect(formAt, `${file} must render the form INSIDE the boundary`).toBeGreaterThan(boundaryAt)
+    }
 
-    // signup/page.tsx must dynamic-import SignupContent with ssr:false
-    expect(signupPageSource).toContain('from "next/dynamic"')
-    expect(signupPageSource).toContain('import("./SignupContent")')
-    expect(signupPageSource).toContain("ssr: false")
-    expect(signupPageSource).toContain("<ClientOnlyAuthPage>")
+    expect(clientOnlyAuthPageSource).toContain('"use client"')
+    expect(clientOnlyAuthPageSource).toMatch(/useState\s*\(\s*false\s*\)/)
+    expect(clientOnlyAuthPageSource).toMatch(/if\s*\(\s*!\s*mounted\s*\)/)
   })
 
   it("keeps ClientOnlyAuthPage provider-free and global-chrome-free", () => {
@@ -413,6 +567,10 @@ describe("root language provider layout", () => {
       ["app/login/page.tsx", loginPageSource],
       ["app/login/LoginContent.tsx", loginContentSource],
       ["app/signup/page.tsx", signupPageSource],
+      // Symmetric with LoginContent above. Both are now rollback-only files
+      // (see the language-hook test), but while they sit on disk they are one
+      // import away from being live again, so they are held to the same rule.
+      ["app/signup/SignupContent.tsx", signupContentSource],
     ] as const) {
       expect(source, `${file} should not import GlobalShellClient`).not.toContain("GlobalShellClient")
       expect(source, `${file} should not import ModeToggle`).not.toContain("ModeToggle")
@@ -493,16 +651,20 @@ describe("root language provider layout", () => {
     // <html>/<body>, which React could not hydrate: #418 escalated to #423 and
     // the client re-render tore the document down, so every page flashed and
     // then went blank. Anything that rewrites HTML here brings that back.
-    expect(railwayStartSource).toContain("'start'")
-    expect(railwayStartSource).toContain("'-H'")
-    expect(railwayStartSource).not.toContain("createServer")
-    expect(railwayStartSource).not.toContain("restoreDocumentShellIfNeeded")
-    expect(railwayStartSource).not.toContain("x-af-railway-proxy")
-    expect(railwayStartSource).not.toContain("x-af-railway-shell-normalized")
-    expect(railwayStartSource).not.toContain("<!DOCTYPE html>")
-    expect(railwayStartSource).not.toContain('href="/railway-styles.css"')
-    expect(railwayStartSource).not.toContain("delete headers['accept-encoding']")
-    expect(railwayStartSource).not.toContain("useLanguage")
+    expect(railwayStartCode).toContain("'start'")
+    expect(railwayStartCode).toContain("'-H'")
+    expect(railwayStartCode).not.toContain("createServer")
+    expect(railwayStartCode).not.toContain("restoreDocumentShellIfNeeded")
+    expect(railwayStartCode).not.toContain("x-af-railway-proxy")
+    expect(railwayStartCode).not.toContain("x-af-railway-shell-normalized")
+    expect(railwayStartCode).not.toContain("<!DOCTYPE html>")
+    expect(railwayStartCode).not.toContain('href="/railway-styles.css"')
+    expect(railwayStartCode).not.toContain("delete headers['accept-encoding']")
+    expect(railwayStartCode).not.toContain("useLanguage")
+    // The stripper must actually be stripping. Without this, a change that
+    // emptied `railwayStartCode` would turn every `not.toContain` above green
+    // for the worst possible reason — the file-that-cannot-fail, in a helper.
+    expect(railwayStartCode).toContain("spawn")
   })
 
   it("serves Next's HTML unmodified", () => {
@@ -510,17 +672,43 @@ describe("root language provider layout", () => {
     // patched in transit. Fabricating <html>/<body> the server never rendered is
     // a hydration mismatch at the document root, and the page ends up blank
     // rather than merely unstyled.
-    expect(railwayStartSource).not.toMatch(/http\.createServer|createServer\(/)
-    expect(railwayStartSource).not.toContain("upstreamRes")
-    expect(railwayStartSource).not.toContain("<body")
-    expect(railwayStartSource).not.toContain("<html")
-    expect(railwayStartSource).not.toContain("</head>")
+    expect(railwayStartCode).not.toMatch(/http\.createServer|createServer\(/)
+    expect(railwayStartCode).not.toContain("upstreamRes")
+    expect(railwayStartCode).not.toContain("<body")
+    expect(railwayStartCode).not.toContain("<html")
+    expect(railwayStartCode).not.toContain("</head>")
+    // Same positive control as above: prove the stripped source is still real.
+    expect(railwayStartCode).toContain("spawn")
   })
 
   it("cleans stale Railway build artifacts before Next builds", () => {
-    expect(packageJsonSource).toContain('"prebuild": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs"')
-    expect(packageJsonSource).toContain('"build": "next build"')
-    expect(packageJsonSource).toContain('"build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && next build"')
+    /*
+     * ⚠ THESE PINNED WHOLE SCRIPT STRINGS AND BROKE ON EVERY LEGITIMATE
+     * ADDITION. What they guard is that the clean step runs BEFORE the tailwind
+     * prebuild, and both before the build — an ordering. Spelling the command
+     * out end to end also asserts that nothing else may ever be added, which is
+     * a different and much stronger claim, and it is the one that failed:
+     *   prebuild      gained `node scripts/verify-node-modules.cjs &&` in front
+     *   build         gained the --max-old-space-size + readlink-shim wrapper
+     *                 that exists because next build OOMs at the default heap
+     *   build:railway gained the loader-cache purge and the postbuild CSS audit
+     * Every one of those is deliberate, so the assertions were demanding a
+     * revert. Parsed and ordered instead, which still catches a dropped or
+     * reordered step.
+     */
+    const scripts = (JSON.parse(packageJsonSource) as { scripts: Record<string, string> }).scripts
+    for (const key of ["prebuild", "build:railway"] as const) {
+      const cleanAt = scripts[key].indexOf("railway-clean-next-build.cjs")
+      const tailwindAt = scripts[key].indexOf("railway-tailwind-prebuild.cjs")
+      expect(cleanAt, `${key} must run the Railway clean step`).toBeGreaterThan(-1)
+      expect(tailwindAt, `${key} must run the tailwind prebuild`).toBeGreaterThan(cleanAt)
+    }
+    // The build must end at `next build`, however it is wrapped to get there.
+    expect(scripts.build).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
+    expect(scripts["build:railway"]).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
+    expect(scripts["build:railway"].indexOf("railway-tailwind-prebuild.cjs")).toBeLessThan(
+      scripts["build:railway"].search(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
+    )
     /*
      * ⚠ THE ROOT LAYOUT NO LONGER CARRIES ANYTHING RAILWAY-SPECIFIC, and these
      * two assertions were what pinned it there. The unconditional
@@ -536,7 +724,44 @@ describe("root language provider layout", () => {
      * The rest of this block still guards the Railway build scripts, which are
      * retained and inert: they self-disable unless RAILWAY_* is set.
      */
-    expect(railwayPrebuildSource).toContain("AF_RAILWAY_TAILWIND_PREBUILD")
+    /*
+     * 🛑 THREE ASSERTIONS HERE PINNED THE SHAPE THAT CAUSED AN INCIDENT, and
+     * this is the one worth reading twice. They required
+     *     AF_RAILWAY_TAILWIND_PREBUILD
+     *     "committed Railway fallback CSS"
+     *     fs.copyFileSync(railwayStylesOut, globalsIn)
+     * — the old prebuild, which opened by copying the committed
+     * public/railway-styles.css over globals.css and exiting WITHOUT COMPILING
+     * whenever that file cleared 100KB. It is committed and was 671KB, so the
+     * branch fired on every build: Railway shipped CSS frozen at 2026-05-31 for
+     * nearly three months and the site rendered essentially unstyled.
+     *
+     * The script was rewritten on 2026-08-25 to fix exactly that, and these
+     * assertions have been red ever since — so the guard was sitting here
+     * demanding the regression back, and nobody could see it, because a test
+     * that is already failing reports nothing new.
+     *
+     * Replaced with the rule the incident produced, in the script's own words:
+     * A CACHED ARTIFACT IS NOT EVIDENCE THAT COMPILATION SUCCEEDED. It may only
+     * be used when compilation has been attempted and has actually failed.
+     */
+    // Compilation is attempted: the Tailwind CLI runs as its own process.
+    expect(railwayPrebuildSource).toContain("'node_modules', '.bin', 'tailwindcss'")
+    expect(railwayPrebuildSource).toMatch(/execSync\(\s*cmd/)
+    // The fallback still exists and is still known about.
+    expect(railwayPrebuildSource).toContain("railway-styles.css")
+    // ...but shipping it is reachable ONLY behind the explicit escape hatch,
+    // and exactly once. A second copy site is how the shortcut comes back.
+    expect(railwayPrebuildSource).toContain("AF_ALLOW_STALE_RAILWAY_CSS")
+    const staleCopies = railwayPrebuildSource.match(/copyFileSync\(\s*fallbackCss\s*,\s*globalsCss\s*\)/g) ?? []
+    expect(staleCopies).toHaveLength(1)
+    expect(railwayPrebuildSource.indexOf("allowStaleFallback")).toBeLessThan(
+      railwayPrebuildSource.indexOf("copyFileSync(fallbackCss, globalsCss)")
+    )
+    // The fallback is refreshed only FROM a compile that already succeeded.
+    expect(railwayPrebuildSource).toContain("copyFileSync(compiledTmp, fallbackCss)")
+    // And a compile that produces too little CSS is a failure, not a pass.
+    expect(railwayPrebuildSource).toContain("MIN_RAILWAY_CSS_BYTES = 100_000")
     expect(railwayCleanSource).toContain("path.join(repoRoot, '.next')")
     expect(railwayCleanSource).toContain("removePath(nextDir)")
     expect(railwayCleanSource).not.toContain("'.next', 'cache', 'webpack'")
@@ -549,8 +774,6 @@ describe("root language provider layout", () => {
     expect(railwayVerifySource).toContain("MIN_TOTAL_CSS_BYTES = 100_000")
     expect(railwayVerifySource).not.toContain("public/railway-styles.css")
     expect(railwayVerifySource).not.toContain("hasLargeRailwayFallbackCss")
-    expect(railwayPrebuildSource).toContain("committed Railway fallback CSS")
-    expect(railwayPrebuildSource).toContain("fs.copyFileSync(railwayStylesOut, globalsIn)")
     expect(railwayPrebuildSource).toContain("RAILWAY_GIT_COMMIT_SHA")
     expect(railwayPrebuildSource).toContain("AF_NEXT_DIST_DIR?.startsWith('.next-railway')")
     expect(railwayPrebuildSource).not.toContain("AF_NEXT_DIST_DIR === '.next-railway'")
