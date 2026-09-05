@@ -95,7 +95,9 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   matchup_results: "Matchup results",
   waiver_processing: "Waiver processing",
   trade_proposals: "Trade proposals",
-  trade_accept_reject: "Trade accept / reject",
+  // Counters route here too — a toggle that governs an outcome it does not name
+  // is invisible in exactly the way this category's missing notifications were.
+  trade_accept_reject: "Trade accept / reject / counter",
   chat_mentions: "Chat mentions",
   league_announcements: "League announcements & @all",
   bracket_updates: "Bracket updates",

@@ -77,6 +77,106 @@ async function notifyProposerOfDecision(input: {
   ).catch(() => {})
 }
 
+type PlannedTradeNotice = {
+  userId: string
+  type: 'trade_proposed' | 'trade_countered'
+  title: string
+  body: string
+}
+
+/**
+ * Creation-time direct notices. Up to two DIFFERENT people can need telling when
+ * a trade is created:
+ *
+ *   the receiver of the new offer                 ->  trade_proposed
+ *   the proposer of the offer this one COUNTERS   ->  trade_countered
+ *
+ * Before this, neither fired. `createAfLeagueTrade` sent one league-wide
+ * `af_trade_proposed` fanout to `all_members` and nothing addressed to anyone —
+ * so a countered proposer watched their offer go to status 'countered' with no
+ * notice at all, and `trade_proposed` was a settings category no code fired.
+ * That is the same defect `notifyProposerOfDecision` above was written to fix
+ * for accept/reject.
+ *
+ * 🛑 THE TWO RULES NORMALLY SELECT THE SAME PERSON, AND THAT IS THE DIFFICULTY.
+ * You counter whoever offered to you, so a naive implementation pushes twice for
+ * one action by one person at one instant.
+ *
+ * ⚠ AND `if (isCounter) skip the proposal notice` IS THE WRONG FIX, which is why
+ * this dedupes instead. The counter route takes proposerRosterId/receiverRosterId
+ * from the REQUEST BODY rather than deriving them from the parent, so a counter
+ * aimed at a third roster is reachable — and there, two notices to two different
+ * people is the correct outcome. Deduping by userId is right in both cases; a
+ * branch on "is this a counter" is right only in the common one.
+ *
+ * ⚠ ORDER IS THE TIE-BREAK, NOT DECORATION. `trade_countered` is planned FIRST so
+ * it wins when both rules name one person: it is the more specific fact, and the
+ * only one that explains why that person's own offer just disappeared. Swap the
+ * two pushes and the common case silently degrades to a generic "new offer".
+ *
+ * Fire-and-forget, like every other notify path here: a notification failure must
+ * never fail the trade itself.
+ */
+async function notifyOnTradeCreated(input: {
+  leagueId: string
+  newTradeId: string
+  actorUserId: string
+  receiverUserId: string | null
+  counteredProposerUserId: string | null
+}) {
+  const planned: PlannedTradeNotice[] = []
+
+  if (input.counteredProposerUserId) {
+    planned.push({
+      userId: input.counteredProposerUserId,
+      type: 'trade_countered',
+      title: 'Your trade offer was countered',
+      body: 'They sent one back — open it to accept, counter again, or decline.',
+    })
+  }
+  if (input.receiverUserId) {
+    planned.push({
+      userId: input.receiverUserId,
+      type: 'trade_proposed',
+      title: 'New trade offer',
+      body: 'Someone in your league sent you a trade offer.',
+    })
+  }
+
+  /*
+   * Seeded with the actor: countering your own offer, or proposing to a roster you
+   * own, must not notify you about your own action. An unclaimed roster has a null
+   * platformUserId and is simply absent from `planned`.
+   */
+  const claimed = new Set<string>([input.actorUserId])
+  const recipients: PlannedTradeNotice[] = []
+  for (const notice of planned) {
+    if (claimed.has(notice.userId)) continue
+    claimed.add(notice.userId)
+    recipients.push(notice)
+  }
+  if (recipients.length === 0) return
+
+  const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+  for (const notice of recipients) {
+    await ingest(
+      tradeEvent({
+        userIds: [notice.userId],
+        leagueId: input.leagueId,
+        type: notice.type,
+        /*
+         * Always the NEW trade. For a counter the parent is already dead (status
+         * 'countered'), so carrying its id would point the recipient at the one
+         * offer they can no longer act on.
+         */
+        tradeId: input.newTradeId,
+        title: notice.title,
+        body: notice.body,
+      }),
+    ).catch(() => {})
+  }
+}
+
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { currentWeek?: number | null }): Promise<{ id: string }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
@@ -205,6 +305,22 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
     actorUserId: input.proposedByUserId,
     meta: { tradeId: trade.id },
     dedupeKey: `af_trade:${trade.id}:created`,
+  })
+
+  /*
+   * The fanout above is `league_announcements` / `all_members` — every manager gets
+   * the same unaddressed line. These are the addressed notices: they name a person
+   * and land in the trade categories that person's settings actually govern.
+   *
+   * `parent` is non-null exactly when this creation countered something: a set
+   * `parentTradeId` that does not resolve throws above, so there is no third state.
+   */
+  await notifyOnTradeCreated({
+    leagueId: input.leagueId,
+    newTradeId: trade.id,
+    actorUserId: input.proposedByUserId,
+    receiverUserId: receiver.platformUserId ?? null,
+    counteredProposerUserId: parent?.proposedByUserId ?? null,
   })
 
   return { id: trade.id }

@@ -25,6 +25,7 @@ export type NotificationEventType =
   | 'trade_proposed'
   | 'trade_accepted'
   | 'trade_rejected'
+  | 'trade_countered'
   | 'waiver_processed'
   | 'waiver_claim'
   | 'storyline_generated'
@@ -67,6 +68,14 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, NotificationCategoryId> 
   trade_proposed: 'trade_proposals',
   trade_accepted: 'trade_accept_reject',
   trade_rejected: 'trade_accept_reject',
+  /*
+   * Deliberately NOT a new category. `trade_accept_reject` is the toggle a user
+   * flips to hear what became of an offer they sent, and a counter is exactly
+   * that. A fresh category would need a default for every existing settings row,
+   * and whichever default were chosen would be wrong for someone — silently off
+   * is the failure this notification exists to fix.
+   */
+  trade_countered: 'trade_accept_reject',
   waiver_processed: 'waiver_processing',
   waiver_claim: 'waiver_processing',
   storyline_generated: 'league_announcements',
@@ -87,6 +96,13 @@ const DEFAULT_SEVERITY: Record<NotificationEventType, NotificationSeverity> = {
   trade_proposed: 'medium',
   trade_accepted: 'high',
   trade_rejected: 'medium',
+  /*
+   * HIGH, matching accepted rather than rejected. A rejection is over and needs
+   * nothing from you; a counter is a live offer against the 48h default expiry
+   * (`expiresInHours ?? 48` in createAfLeagueTrade), so it is the one trade
+   * outcome that lapses into a loss if it goes unseen.
+   */
+  trade_countered: 'high',
   waiver_processed: 'medium',
   waiver_claim: 'low',
   storyline_generated: 'low',
@@ -311,7 +327,7 @@ export function scoreSwing(opts: {
 export function tradeEvent(opts: {
   userIds: string[]
   leagueId: string
-  type: 'trade_proposed' | 'trade_accepted' | 'trade_rejected'
+  type: 'trade_proposed' | 'trade_accepted' | 'trade_rejected' | 'trade_countered'
   tradeId: string
   title: string
   body?: string
