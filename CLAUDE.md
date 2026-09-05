@@ -442,6 +442,67 @@ both in one command.
 grepping push output: a rejected push prints `-> main` too, and a pipe (`| tail`)
 reports the PIPE's exit code, so `$?` reads 0 over a failed push.
 
+#### The collision you cause BEFORE there is a conflict
+
+Every rule above starts at a conflict, a handover, or a resolve. This one starts
+earlier and produces **no conflict at all**: you build a fix on a base that
+predates someone else's fix to the same lines, and it lands as a clean
+fast-forward. Git has nothing to object to. Your bytes replace theirs.
+
+Measured 2026-09-05. A test assertion had rotted on a copy relabel and two
+sessions repaired it independently. Theirs landed as `9c51a1e0e`. The second was
+built from a branch whose parent predated it and landed as `2511dd801` — one
+file, 15 insertions / 2 deletions, `merge-base --is-ancestor` rc=0, no conflict,
+no failing test, nothing red anywhere. Nothing was lost only because the second
+version happened to **subsume** the first. That was luck, not a check.
+
+**The check is two lines, and it belongs BEFORE you build, not at handover:**
+
+```bash
+git rev-parse <yourBase>:<path>    # the file you started from
+git rev-parse origin/main:<path>   # the file that is there now
+```
+
+Different blobs mean someone has changed your file since your base — read
+`git log <yourBase>..origin/main -- <path>` before writing anything. **A
+fast-forward is not evidence that nobody else worked on the file.** It is
+evidence only that git could apply your bytes without having to ask a question.
+
+🛑 **AND THE TREE-HASH SHORTCUT IS A CONFIDENT FALSE NEGATIVE ACROSS A
+CHERRY-PICK. THIS FILE ASSERTS IT TWICE AND BOTH NEED THIS QUALIFIER** — once
+above ("WHERE BOTH SHAs ARE IN THE OBJECT STORE, THE TREE HASH IS STRONGER
+STILL") and once in the push-queue section ("the tree hash is stronger still").
+Both are true only when the two commits **share a base**. Measured on the pair
+above, which did not:
+
+```
+patch-id  3c20f34a2 == 2511dd801    b4637a54005e2aa08390fc029a3940916e336f22
+blob      the file, both sides      6db37dc5740d6a004423978dc219c9e2e3aec81b
+tree      3c20f34a2^{tree}          f1512696835ca256f7952a8fc2d68b789e0e2e65
+          2511dd801^{tree}          2168b32e1bc716c9123471caa90b85498de1ca06  DIFFER
+```
+
+Same change, same file content, different trees — one sits on `1df7621f4`, the
+other on thirteen further commits. A tree hash answers "is the entire repository
+identical", which is never the question during a landing. **Across a pick, use
+patch-id and the per-file blob.**
+
+⚠ **THE GATE IS NOT A BACKSTOP FOR THIS.** On this occasion the pusher picked
+the superseding commit itself, then told the author the work was unlanded and
+parked pending the user's decision — in a message whose own header read
+`origin/main 2511dd801`, the landed SHA of the commit it was calling unlanded.
+It was testing ancestry against a tip that its own cherry-pick had renamed, and
+it repeated "parked" in four further messages before a peer caught it by
+patch-id. All of that in the same message where it correctly told the author to
+use patch-id against the range rather than ancestry — it had the right rule and
+did not apply it to its own bookkeeping.
+
+**The lesson worth keeping:** a supersede trips nothing. Not a conflict marker,
+not a test, not a typecheck, not the gate. The author is the only party
+positioned to notice, and only if they look before building. Having superseded
+landed work, say so to its author and let the user rule — here the ruling was
+that it stands, but that was a decision, not a default.
+
 ### ⚠ A CHECK THAT CANNOT FAIL READS AS A PASS
 
 Three sessions hit this in one day, each in a different tool, each believing
