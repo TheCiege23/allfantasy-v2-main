@@ -1,6 +1,9 @@
 -- WeeklyMatchup.rosterId: Int -> Text.
 --
--- Root fix for the MFL zero-padding trap documented in lib/fantasy-os/sync/collector/index.ts
+-- Root fix for the MFL zero-padding trap documented in lib/import-os/collector/index.ts
+-- (this file was written as lib/fantasy-os/sync/collector/index.ts; that namespace was renamed
+-- by 80849f9c5 and the old path no longer resolves -- a file-existence check on it reports
+-- "absent" when the truth is "renamed")
 -- and lib/core-app/rosterIdMatch.ts. MFL franchise ids are zero-padded strings ("0001"); every
 -- other provider currently writing this column (Sleeper, ESPN, Yahoo, Fantrax) already uses a
 -- plain unpadded integer string, so this is lossless for all four of them -- see the census in

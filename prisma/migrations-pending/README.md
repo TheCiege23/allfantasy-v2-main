@@ -326,7 +326,9 @@ intact) via direct query against production.
 `LeagueTeam.externalId`, they lose their leading zeros the moment they pass through
 this `Int` column — `Number('0001')` is `1`, `String(1)` is `"1"`, which never
 matches "0001" again. This is why MFL has no `WeeklyMatchup` writer at all; see
-`lib/fantasy-os/sync/collector/index.ts`'s own note. Four readers
+`lib/import-os/collector/index.ts`'s own note (this entry was written as
+`lib/fantasy-os/sync/collector/index.ts`; that namespace was renamed by `80849f9c5`
+and the old path no longer resolves). Four readers
 (`lib/core-app/leagueScoreboard.ts`, `allPlay.ts`, `dash3aPanels.ts`, `leagueHome.ts`)
 were already patched around the *symptom* via `lib/core-app/rosterIdMatch.ts`
 (`buildRosterIdMap`/`rosterIdsMatch`, a numeric-normalized-alias map) — that fix
