@@ -9,6 +9,7 @@ import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleepe
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
+import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +39,21 @@ export type TradeableRosterPlayer = {
   byeWeek: number | null
   /** Designation when one is on file; absence is not a statement of health. */
   injuryStatus: string | null
+  /**
+   * Which way this player's market value has moved over thirty days.
+   *
+   * ⚠ NULL IS "WE HAVE NOT MEASURED HIM", NOT "HE HAS NOT MOVED". The two render differently: a
+   * player with no reading shows nothing, a player who genuinely held station shows the flat mark.
+   * Collapsing them would state a fact about a kicker nobody tracks.
+   *
+   * ⚠ OPTIONAL BECAUSE IT IS NEW ON THE WIRE, not because the route is lax about setting it. This
+   * is an exported response type read by a browser that may still be talking to the previous
+   * deploy, and an older server omits the KEY — `undefined`, not `null`. Declaring it required
+   * would state that every response carries it, which is false for the length of a rollout.
+   */
+  stock?: StockDirection | null
+  /** The 30-day delta itself, so the arrow can carry a number rather than only a colour. */
+  stockDelta?: number | null
   /**
    * Market value on the 0-10000 FantasyCalc convention, or null when the player is not on the
    * board.
@@ -241,6 +257,8 @@ export async function GET(
            */
           byeWeek: byeForTeam(byeByTeam, hit?.team),
           injuryStatus: null,
+        stock: null,
+        stockDelta: null,
           // Filled in one batch below — see the value pass.
           value: null,
         }
@@ -355,6 +373,28 @@ export async function GET(
    * `sportsDataCache` rather than the vendor. It returns an empty map on failure, so an outage
    * costs values and nothing else.
    */
+  /*
+   * ── THIRTY-DAY STOCK, ONE QUERY FOR THE WHOLE LEAGUE ───────────────────────────────────────
+   *
+   * ⚠ THE FORMAT MATCHES THE VALUE PASS BELOW ON PURPOSE. Values here are pinned to dynasty
+   * one-QB so a player cannot carry two different numbers on one screen; an arrow drawn from the
+   * superflex series would contradict the number it sits beside, which is worse than no arrow.
+   */
+  const stockIds = result.flatMap((r) => r.players.map((p) => p.id)).filter(Boolean)
+  if (stockIds.length > 0) {
+    const stock = await resolvePlayerStock(stockIds, { format: 'DYNASTY', qbFormat: 'ONE_QB' }).catch(
+      () => new Map(),
+    )
+    for (const r of result) {
+      for (const p of r.players) {
+        const s = stock.get(p.id)
+        if (!s) continue
+        p.stock = s.direction
+        p.stockDelta = s.trend30d
+      }
+    }
+  }
+
   const allNames = result.flatMap((r) => r.players.map((p) => p.name)).filter(Boolean)
   if (allNames.length > 0) {
     const values = await getPlayerValuesForNamesDbFirst(allNames, {

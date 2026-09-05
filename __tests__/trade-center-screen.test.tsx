@@ -5,6 +5,7 @@ import { render } from '@testing-library/react'
 import React from 'react'
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
+import { StockMark } from '@/components/core-app/screens/TradeAssetPicker'
 
 const SRC = readFileSync(
   resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
@@ -507,3 +508,102 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     expect(faabBranch![1].trim()).toBe('null')
   })
 })
+
+describe('🛑 a trade line shows the player, not just his name', () => {
+  const SRC = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
+    'utf8',
+  )
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
+  it('the scan is reading the right file', () => {
+    expect(code).toContain('af-tc-row-value')
+    expect(code).toContain('glyphFor')
+  })
+
+  it('🛑 the headshot does not REPLACE the glyph, it falls back to it', () => {
+    /*
+     * Every pick, every FAAB line and every player added by search has no image. Replacing the
+     * glyph outright would leave those rows with a hole where the others have a face, on the same
+     * side of the same trade.
+     */
+    expect(code).toContain('af-tc-headshot')
+    expect(code).toMatch(/l\.imageUrl \?[\s\S]{0,400}?glyphFor\(l\)/)
+  })
+
+  it('carries imageUrl onto the line rather than dropping it at the boundary', () => {
+    // Threading it into the type but not the builder is a silent no-op, which is how the pick
+    // VALUE was lost for the total earlier in this same file.
+    expect(code).toMatch(/imageUrl: a\.imageUrl \?\? null/)
+  })
+
+  it('🛑 reuses the picker’s logo resolver instead of adding a sixth', () => {
+    /*
+     * This repo already carries five team-logo functions. The logo beside a player in the builder
+     * must be the same asset as the logo beside him in the list he was picked from.
+     */
+    expect(code).toContain('resolveTeamLogoUrlSync')
+    expect(code).not.toMatch(/function\s+\w*[tT]eamLogo\w*\s*\(/)
+  })
+
+  it('renders the abbreviation beside the logo, not instead of it', () => {
+    // An unknown team resolves to null; the row must still say which team it is.
+    expect(code).toMatch(/af-tc-row-team[\s\S]{0,320}?\{l\.team\}/)
+  })
+})
+
+describe('🛑 the stock mark says which way, and says nothing when it does not know', () => {
+  function mark(stock: 'up' | 'down' | 'flat' | null, delta?: number | null) {
+    return render(<StockMark stock={stock} delta={delta} />).container
+  }
+
+  it('draws a distinct glyph for each of the three directions', () => {
+    /*
+     * ⚠ COLOUR IS NOT THE ONLY CHANNEL. Green-up and red-down are the SAME mark to a colour-blind
+     * manager and in a monochrome screenshot, so the assertion that matters is that the three
+     * characters differ from each other — not that any particular arrow was chosen.
+     */
+    const up = mark('up').textContent
+    const down = mark('down').textContent
+    const flat = mark('flat').textContent
+    expect(new Set([up, down, flat]).size).toBe(3)
+    expect(up).toBeTruthy()
+    expect(down).toBeTruthy()
+    expect(flat).toBeTruthy()
+  })
+
+  it('tags the direction on the element so the stylesheet can colour it', () => {
+    expect(mark('up').querySelector('.af-tc-stock')?.getAttribute('data-dir')).toBe('up')
+    expect(mark('down').querySelector('.af-tc-stock')?.getAttribute('data-dir')).toBe('down')
+    expect(mark('flat').querySelector('.af-tc-stock')?.getAttribute('data-dir')).toBe('flat')
+  })
+
+  it('🛑 renders NOTHING when there is no reading — unmeasured is not unmoved', () => {
+    /*
+     * This is the case a pick, a kicker and a team defence all land in. A mark here would state a
+     * fact about a player nobody tracks.
+     */
+    expect(mark(null).textContent).toBe('')
+    expect(mark(null).querySelector('.af-tc-stock')).toBeNull()
+  })
+
+  it('says in words what the arrow means, for a screen reader', () => {
+    const el = mark('up', 1200).querySelector('.af-tc-stock')
+    expect(el?.getAttribute('aria-label')).toContain('up')
+    // The flat mark must not describe itself as a rise or a fall.
+    const flat = mark('flat').querySelector('.af-tc-stock')?.getAttribute('aria-label') ?? ''
+    expect(flat).toContain('no real change')
+  })
+
+  it('carries the number when it has one, and stays legible when it does not', () => {
+    expect(mark('up', 1200).querySelector('.af-tc-stock')?.getAttribute('aria-label')).toContain(
+      '1,200',
+    )
+    // A direction with no delta is still a direction; it must not render "undefined".
+    const noDelta = mark('down').querySelector('.af-tc-stock')?.getAttribute('aria-label') ?? ''
+    expect(noDelta).toContain('down')
+    expect(noDelta).not.toContain('undefined')
+    expect(noDelta).not.toContain('NaN')
+  })
+})
+

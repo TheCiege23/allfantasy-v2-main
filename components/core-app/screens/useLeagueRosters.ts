@@ -34,6 +34,14 @@ export type RosterPlayer = {
   injuryStatus: string | null
   /** ⚠ NULL IS "NOT PRICED", NEVER 0 — an unpriced asset is why a verdict declines to judge. */
   value: number | null
+  /**
+   * 30-day direction. Null means unmeasured, which is not the same as unmoved.
+   *
+   * ⚠ OPTIONAL, LIKE ITS COUNTERPART ON THE ROUTE. This mirrors a response body, and a browser
+   * holding this bundle can be talking to the previous deploy, which omits the key entirely.
+   */
+  stock?: 'up' | 'down' | 'flat' | null
+  stockDelta?: number | null
 }
 
 export type RosterPick = {

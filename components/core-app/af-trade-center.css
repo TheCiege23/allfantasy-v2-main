@@ -1376,3 +1376,25 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/*
+ * The stock mark. Appended at the END of this file deliberately: it carries several `@media`
+ * blocks, and inserting a rule inside one silently moves every rule below it into the narrower
+ * query — brace balance stays 0 and nothing throws. `af-matchup.css` has already been bitten by
+ * exactly that.
+ *
+ * ⚠ COLOUR IS NOT THE ONLY CHANNEL. The glyph differs per direction as well, so the mark still
+ * reads for a colour-blind manager and in a monochrome screenshot.
+ */
+.af-tc-stock {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.af-tc-stock[data-dir='up'] { color: #34d399; }
+.af-tc-stock[data-dir='down'] { color: #f87171; }
+/* Measured and unmoved: present, but never competing with a real move for attention. */
+.af-tc-stock[data-dir='flat'] { color: var(--faint); }
+

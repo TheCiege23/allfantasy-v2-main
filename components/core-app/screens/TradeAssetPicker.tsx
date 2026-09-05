@@ -19,7 +19,25 @@ import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-r
  */
 
 export type PickedAsset =
-  | { kind: 'player'; playerId: string | null; name: string; position: string | null; team: string | null; value: number | null; sportHint?: string }
+  | {
+      kind: 'player'
+      playerId: string | null
+      name: string
+      position: string | null
+      team: string | null
+      value: number | null
+      /**
+       * ⚠ OPTIONAL AND OFTEN ABSENT, WHICH IS WHY THE GLYPH SURVIVES. A player picked off a
+       * roster has one — the rosters route resolves it for 241 of 241. A player found by
+       * SEARCH does not: `SearchRow` carries no image, so those rows keep the coloured
+       * initial rather than rendering a broken frame.
+       */
+      imageUrl?: string | null
+      /** 30-day direction. Null is unmeasured; 'flat' is measured and unmoved. */
+      stock?: 'up' | 'down' | 'flat' | null
+      stockDelta?: number | null
+      sportHint?: string
+    }
   /**
    * `pickId` is present only when the pick came off a real roster. A hand-typed
    * year and round can be priced but never proposed — the trade engine matches a
@@ -54,6 +72,33 @@ type SearchRow = {
 /** Long enough that a fast typist does not fire a request per keystroke. */
 const DEBOUNCE_MS = 250
 const MIN_QUERY = 2
+
+/**
+ * The stock mark: a direction and nothing else.
+ *
+ * 🛑 THREE STATES, NOT TWO, AND THE THIRD IS THE ONE THAT EARNS ITS PLACE. Up and down are easy.
+ * `flat` means MEASURED AND UNMOVED, which is a real answer a manager can act on. A player with no
+ * reading at all renders NOTHING — collapsing the two would state a fact about a kicker nobody
+ * tracks.
+ *
+ * Exported so the trade builder renders the identical mark from the identical rule: the same
+ * player must not be rising in the picker and flat two inches away in the deal.
+ */
+export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?: number | null }) {
+  if (!props.stock) return null
+  const glyph = props.stock === 'up' ? '\u2191' : props.stock === 'down' ? '\u2193' : '\u2194'
+  const label =
+    props.stock === 'flat'
+      ? '30-day value: no real change'
+      : `30-day value ${props.stock === 'up' ? 'up' : 'down'}${
+          typeof props.delta === 'number' ? ` ${Math.abs(Math.round(props.delta)).toLocaleString()}` : ''
+        }`
+  return (
+    <span className="af-tc-stock" data-dir={props.stock} title={label} aria-label={label}>
+      {glyph}
+    </span>
+  )
+}
 
 export function TradeAssetPicker(props: {
   onPick: (asset: PickedAsset) => void
@@ -274,6 +319,9 @@ export function TradeAssetPicker(props: {
                       position: p.position,
                       team: p.team,
                       value: p.value,
+                      imageUrl: p.imageUrl,
+                      stock: p.stock,
+                      stockDelta: p.stockDelta,
                       sportHint: props.sport ?? undefined,
                     })
                   }
@@ -328,6 +376,7 @@ export function TradeAssetPicker(props: {
                   </span>
 
                   {/* Unpriced shows an em dash. The picker must never imply zero. */}
+                  <StockMark stock={p.stock} delta={p.stockDelta} />
                   <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
                     {p.value == null ? '—' : p.value.toLocaleString()}
                   </span>

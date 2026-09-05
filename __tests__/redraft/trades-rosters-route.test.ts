@@ -128,10 +128,14 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     const body = (await res.json()) as { rosters: Array<{ players: Array<{ id: string; name: string }> }> }
     /*
      * ⚠ THE FALLBACK MUST CARRY EVERY FIELD, NOT A NARROWER OBJECT. The picker renders a headshot
-     * slot, a team logo, a bye week and an injury chip from this shape; a fallback that omitted
-     * them would make the enrichment failure a RENDER failure too, on a row that should simply
-     * show a name and blanks. Asserted exactly rather than with toMatchObject for that reason —
-     * a missing key here is the bug, and toMatchObject would pass over it.
+     * slot, a team logo, a bye week, an injury chip and a stock mark from this shape; a fallback
+     * that omitted them would make the enrichment failure a RENDER failure too, on a row that
+     * should simply show a name and blanks. Asserted exactly rather than with toMatchObject for
+     * that reason — a missing key here is the bug, and toMatchObject would pass over it.
+     *
+     * 🛑 AND THE STRICTNESS EARNED ITSELF: adding `stock`/`stockDelta` to the response turned this
+     * red, which is exactly the job. Extend the expectation when the shape genuinely grows; do
+     * NOT relax it to toMatchObject to make a real shape change stop reporting.
      */
     expect(body.rosters[0].players).toEqual([
       {
@@ -142,6 +146,9 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
         imageUrl: null,
         byeWeek: null,
         injuryStatus: null,
+        /* Enrichment failed, so nothing was measured — null, never a 'flat' arrow. */
+        stock: null,
+        stockDelta: null,
         value: null,
       },
     ])

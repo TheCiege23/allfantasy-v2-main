@@ -1,7 +1,15 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { StockMark, TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+/*
+ * ⚠ THE SAME RESOLVER THE PICKER USES, DELIBERATELY. This repo already carries FIVE
+ * team-logo functions (`getTeamLogo`, three separate `getTeamLogoUrl`s, and
+ * `getTeamLogoCandidates`); a sixth spelling of the rule is the last thing it needs. The
+ * picker calls this one, so the logo beside a player in the builder is the same asset as
+ * the logo beside him in the list he was picked from.
+ */
+import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
@@ -129,6 +137,15 @@ type Line = {
   team?: string | null
   marketValue?: number | null
   pricedSource?: string | null
+  /** Absent for a searched player, a pick and FAAB — the glyph covers all three. */
+  imageUrl?: string | null
+  /**
+   * ⚠ A PICK HAS NO STOCK AND THAT IS NOT AN OVERSIGHT. `PlayerValueSnapshot` holds players only,
+   * and a pick's price comes from a static curve whose anchor is not re-solved on a schedule, so
+   * there is no thirty-day movement to report. It renders nothing rather than a fabricated `flat`.
+   */
+  stock?: 'up' | 'down' | 'flat' | null
+  stockDelta?: number | null
 }
 
 type AnalyzeResult = {
@@ -297,6 +314,9 @@ export function TradeCenter(props: {
               team: a.team,
               /* Engine price wins; the search value is the fallback. */
               marketValue: pricedBy.get(a.name.toLowerCase()) ?? a.value ?? null,
+              imageUrl: a.imageUrl ?? null,
+              stock: a.stock ?? null,
+              stockDelta: a.stockDelta ?? null,
             }
           : a.kind === 'pick'
             ? {
@@ -803,9 +823,22 @@ export function TradeCenter(props: {
                   className="af-tc-row"
                   data-kind={kindOf(l)}
                 >
-                  <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
-                    {glyphFor(l).glyph}
-                  </span>
+                  {/*
+                    ⚠ THE GLYPH IS THE FALLBACK, NOT THE LOSER. A headshot is absent for every pick,
+                    every FAAB line and every player added by search, so replacing the glyph
+                    outright would leave those rows with a hole where the others have a face. The
+                    two occupy the same slot and the same size, so a mixed side stays aligned.
+                  */}
+                  {l.imageUrl ? (
+                    <span className="af-tc-headshot" aria-hidden="true">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={l.imageUrl} alt="" loading="lazy" />
+                    </span>
+                  ) : (
+                    <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
+                      {glyphFor(l).glyph}
+                    </span>
+                  )}
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{l.name}</span>
                     <span className="af-tc-row-sub">
@@ -814,7 +847,15 @@ export function TradeCenter(props: {
                           {l.position}
                         </span>
                       ) : null}
-                      {l.team ? <span>{l.team}</span> : null}
+                      {l.team ? (
+                        <span className="af-tc-row-team">
+                          {resolveTeamLogoUrlSync(l.team, 'NFL') ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={resolveTeamLogoUrlSync(l.team, 'NFL') as string} alt="" loading="lazy" />
+                          ) : null}
+                          {l.team}
+                        </span>
+                      ) : null}
                       {/*
                         A player the feed could not price gets a tag, not a zero.
                         ⚠ THIS COMMENT USED TO SAY "picks and FAAB are unpriced by nature". FAAB
@@ -830,6 +871,7 @@ export function TradeCenter(props: {
                       ) : null}
                     </span>
                   </span>
+                  <StockMark stock={l.stock} delta={l.stockDelta} />
                   <span
                     className="af-tc-row-value"
                     data-unpriced={l.marketValue == null ? 'true' : undefined}
