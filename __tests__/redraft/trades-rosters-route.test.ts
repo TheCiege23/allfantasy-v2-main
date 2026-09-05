@@ -119,6 +119,36 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     expect(body.rosters[1].players.map((p) => p.id)).toEqual(['p3'])
   })
 
+  it('🛑 resolves every roster in ONE query, not one query per roster', async () => {
+    /*
+     * 🛑 THE N+1 BEHIND "the assets load in slow". `resolveSleeperRosterPlayers` sat INSIDE the
+     * per-roster map, so a twelve-team league fired TWELVE concurrent `sportsPlayer.findMany`
+     * queries — each an IN-list of ~15 ids against a ~42,000-row table — to answer one question.
+     *
+     * ⚠ COUNTS THE DB CALL, NOT THE RESOLVER. Asserting on a mocked resolver would pass if
+     * someone reintroduced a second query by another route; `prisma.sportsPlayer.findMany` is the
+     * thing that actually costs a round trip.
+     */
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      { id: 'r1', platformUserId: 'u1', playerData: { players: ['p1', 'p2'] } },
+      { id: 'r2', platformUserId: 'u2', playerData: { players: ['p3', 'p4'] } },
+      { id: 'r3', platformUserId: 'u3', playerData: { players: ['p5'] } },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    expect(res.status).toBe(200)
+
+    /* Three rosters, five players, ONE query. */
+    expect(findManySportsPlayer).toHaveBeenCalledTimes(1)
+
+    /* And it asked about all five in that one call, rather than quietly dropping four. */
+    const arg = findManySportsPlayer.mock.calls[0]?.[0] as { where?: unknown }
+    expect(JSON.stringify(arg)).toContain('p5')
+    expect(JSON.stringify(arg)).toContain('p1')
+  })
+
   it('falls back to raw player ids as the name when enrichment fails (matches the placeholder convention used elsewhere)', async () => {
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
     findManyRoster.mockResolvedValue([{ id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['synthetic-id-1'] } }])

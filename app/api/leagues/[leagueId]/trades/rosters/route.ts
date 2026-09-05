@@ -221,6 +221,25 @@ export async function GET(
    */
   const byeByTeam = await resolveTeamByeWeeks(String(league?.sport ?? 'NFL'), league?.season)
 
+  /*
+   * 🛑 ONE RESOLVE FOR THE WHOLE LEAGUE, NOT ONE PER ROSTER. This call used to sit INSIDE the
+   * per-roster map below, so a twelve-team league fired TWELVE concurrent `sportsPlayer`
+   * findMany queries — each an IN-list of ~15 ids against a ~42,000-row table — to answer one
+   * question. The resolver has always taken an array; nothing in it had to change.
+   *
+   * ⚠ DEDUPED ACROSS ROSTERS. The same id cannot appear on two rosters in a healthy league, but
+   * a mid-trade snapshot can show one on both, and asking twice for the same player is the
+   * habit this commit exists to remove.
+   *
+   * ⚠ THE MAP IS SHARED AND READ-ONLY. Every roster looks up its own ids and writes nothing
+   * back, which is what makes one map safe for all of them.
+   */
+  const allRosterPlayerIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
+  const resolvedForLeague = await resolveSleeperRosterPlayers(
+    allRosterPlayerIds,
+    String(league?.sport ?? 'NFL'),
+  )
+
   const result: TradeableRoster[] = await Promise.all(
     rosters.map(async (r) => {
       const playerIds = getRosterPlayerIds(r.playerData)
@@ -239,7 +258,7 @@ export async function GET(
        * this route reads `Roster.playerData` and resolved it separately, so the picker went on
        * showing "11619" while pricing worked. One rule written twice, fixed once.
        */
-      const resolved = await resolveSleeperRosterPlayers(playerIds, String(league?.sport ?? 'NFL'))
+      const resolved = resolvedForLeague
       players = playerIds.map((id) => {
         const hit = resolved.get(id)
         return {
@@ -381,34 +400,40 @@ export async function GET(
    * superflex series would contradict the number it sits beside, which is worse than no arrow.
    */
   const stockIds = result.flatMap((r) => r.players.map((p) => p.id)).filter(Boolean)
-  if (stockIds.length > 0) {
-    const stock = await resolvePlayerStock(stockIds, { format: 'DYNASTY', qbFormat: 'ONE_QB' }).catch(
-      () => new Map(),
-    )
-    for (const r of result) {
-      for (const p of r.players) {
-        const s = stock.get(p.id)
-        if (!s) continue
+  const allNames = result.flatMap((r) => r.players.map((p) => p.name)).filter(Boolean)
+
+  /*
+   * ⚠ THESE TWO LOOKUPS ARE INDEPENDENT AND WERE PAID FOR IN SERIES. The stock read keys on
+   * `sleeperId` and the value read keys on NAME; neither consumes the other's output, so the
+   * request was simply waiting twice. Both still degrade to an empty map on their own, which is
+   * what keeps a missing snapshot table from costing the rosters.
+   */
+  const [stock, values] = await Promise.all([
+    stockIds.length > 0
+      ? resolvePlayerStock(stockIds, { format: 'DYNASTY', qbFormat: 'ONE_QB' }).catch(
+          () => new Map(),
+        )
+      : Promise.resolve(new Map()),
+    allNames.length > 0
+      ? getPlayerValuesForNamesDbFirst(allNames, {
+          isDynasty: true,
+          numQbs: 1,
+          numTeams: 12,
+          ppr: 1,
+        }).catch(() => new Map())
+      : Promise.resolve(new Map()),
+  ])
+
+  for (const r of result) {
+    for (const p of r.players) {
+      const s = stock.get(p.id)
+      if (s) {
         p.stock = s.direction
         p.stockDelta = s.trend30d
       }
-    }
-  }
-
-  const allNames = result.flatMap((r) => r.players.map((p) => p.name)).filter(Boolean)
-  if (allNames.length > 0) {
-    const values = await getPlayerValuesForNamesDbFirst(allNames, {
-      isDynasty: true,
-      numQbs: 1,
-      numTeams: 12,
-      ppr: 1,
-    }).catch(() => new Map())
-    for (const r of result) {
-      for (const p of r.players) {
-        // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
-        // which the picker renders differently from a low value.
-        p.value = values.get(p.name.toLowerCase())?.value ?? null
-      }
+      // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
+      // which the picker renders differently from a low value.
+      p.value = values.get(p.name.toLowerCase())?.value ?? null
     }
   }
 
