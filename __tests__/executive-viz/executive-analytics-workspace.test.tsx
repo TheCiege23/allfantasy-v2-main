@@ -96,10 +96,23 @@ describe('buildLeagueHealthBreakdown (Phase V2.1)', () => {
   it('lists the 4 real sub-scores weakest-first and names the weakest', () => {
     const model = buildLeagueHealthBreakdown(makeSnapshot())
     expect(model.items).toHaveLength(4)
+    // The KEY is a machine identifier and is deliberately still `engagement`. 68613818d
+    // relabelled the display copy Engagement -> Activity across the surfaces that render the
+    // health composite's activity term, and explicitly did NOT rename the machine keys —
+    // platform-pulse matches on `engagement` in a KNOWN_METRICS set.
     expect(model.items[0].key).toBe('engagement') // 45 is lowest
+
     expect(model.items.every((i) => i.max === 100)).toBe(true)
-    // Label reads 'Activity' since the 6.1 relabel (commit 68613818); key stays 'engagement'.
-    expect(model.headline).toContain('Activity')
+
+    /*
+     * ⚠ THIS ASSERTED THE KEY'S OLD NAME AGAINST USER-FACING TEXT AND SO ROTTED ON A COPY
+     * CHANGE. The contract is that the headline NAMES the weakest dimension; which word it
+     * uses is copy. Asserting the label by reference states the contract, and the second
+     * line pins today's copy separately — so a future relabel fails one obvious assertion
+     * instead of an assertion that reads like the ranking broke.
+     */
+    expect(model.headline).toContain(model.items[0].label)
+    expect(model.items[0].label).toBe('Activity')
   })
 })
 
