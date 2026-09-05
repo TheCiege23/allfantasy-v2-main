@@ -16,8 +16,9 @@ const findManyAppUser = vi.fn()
 const findManyLeagueTeam = vi.fn()
 const findFirstLeagueTeam = vi.fn()
 const findUniqueUserProfile = vi.fn()
-const getNormalizedPlayerData = vi.fn()
+const findManySportsPlayer = vi.fn()
 const getPlayerValues = vi.fn()
+const resolveTeamByeWeeks = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -39,24 +40,28 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: (...args: unknown[]) => findFirstLeagueTeam(...args),
     },
     userProfile: { findUnique: (...args: unknown[]) => findUniqueUserProfile(...args) },
+    /*
+     * 🛑 THE DELEGATE THE SHARED RESOLVER READS. Absent, `prisma.sportsPlayer.findMany`
+     * throws a synchronous TypeError that no `.catch` converts, because the property access
+     * happens before any promise exists.
+     */
+    sportsPlayer: { findMany: (...args: unknown[]) => findManySportsPlayer(...args) },
   },
 }))
+/*
+ * The derivation has its own suite (`__tests__/schedule/teamByeWeeks.test.ts`), which owns the
+ * 2099 guard, the regular-season filter and the canonical-abbreviation check. What matters HERE is
+ * only that the route asks for it once and puts the answer on the right player.
+ *
+ * `byeForTeam` is NOT mocked — it is pure, and it is the half that decides a player with no team
+ * gets null rather than someone else's week.
+ */
+vi.mock('@/lib/schedule/teamByeWeeks', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/schedule/teamByeWeeks')>('@/lib/schedule/teamByeWeeks')
+  return { ...actual, resolveTeamByeWeeks: (...args: unknown[]) => resolveTeamByeWeeks(...args) }
+})
 vi.mock('@/lib/league/league-access', () => ({
   assertLeagueMember: (...args: unknown[]) => assertLeagueMember(...args),
-}))
-vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({
-  getNormalizedPlayerData: (...args: unknown[]) => getNormalizedPlayerData(...args),
-}))
-/*
- * ⚠ THE SERIALIZER IS MOCKED AS IDENTITY, DELIBERATELY. What is under test here is that the ROUTE
- * stops discarding fields — its previous mapping kept `{ id, name, position }` and dropped the
- * rest. Driving the real serializer instead means the fixture has to satisfy its whole
- * `UnifiedPlayerProductView` contract, and an incomplete one makes it throw into the route's
- * `catch`, which falls back to raw ids — so the test fails with nulls that look like the bug it is
- * checking for rather than like a bad fixture. Two different things, identical symptom.
- */
-vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi', () => ({
-  serializeUnifiedPlayerForApi: (row: Record<string, unknown>) => row,
 }))
 /*
  * Values come from the DB-first FantasyCalc snapshot. Mocked so these tests assert the ROUTE's
@@ -87,6 +92,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     findFirstLeagueTeam.mockResolvedValue(null)
     findUniqueUserProfile.mockResolvedValue(null)
     getPlayerValues.mockResolvedValue(new Map())
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
   })
 
   it('rejects a non-member (403), matching every other trade route\'s access gate', async () => {
@@ -101,14 +107,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
       { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1', 'p2'] } },
       { id: 'roster-b', platformUserId: 'user-b', playerData: { players: ['p3'] } },
     ])
-    getNormalizedPlayerData.mockImplementation(async ({ userId }: { userId: string }) => {
-      if (userId === 'user-a') {
-        return [
-          { unified: {}, display: {} } as never, // enrichment lookup is best-effort; id mapping below covers the assertion
-        ]
-      }
-      return []
-    })
+    findManySportsPlayer.mockResolvedValue([])
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const body = (await res.json()) as { rosters: Array<{ rosterId: string; platformUserId: string; players: Array<{ id: string }> }> }
@@ -123,7 +122,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
   it('falls back to raw player ids as the name when enrichment fails (matches the placeholder convention used elsewhere)', async () => {
     assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
     findManyRoster.mockResolvedValue([{ id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['synthetic-id-1'] } }])
-    getNormalizedPlayerData.mockRejectedValue(new Error('provider down'))
+    findManySportsPlayer.mockRejectedValue(new Error('provider down'))
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const body = (await res.json()) as { rosters: Array<{ players: Array<{ id: string; name: string }> }> }
@@ -151,7 +150,8 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
 
 describe('🛑 the payload the picker renders from', () => {
   /*
-   * WHY THIS EXISTS. `getNormalizedPlayerData` + `serializeUnifiedPlayerForApi` already returned
+   * WHY THIS EXISTS. The enrichment (once `getNormalizedPlayerData`, now the shared Sleeper
+   * resolver) already returned
    * team, headshot, bye week and injury status, and this route kept only `{ id, name, position }`.
    * That single narrowing is why the asset picker had to be a search box: there was nothing on the
    * wire to render as a browsable roster. These assert the fields survive the trip, because the
@@ -182,8 +182,8 @@ describe('🛑 the payload the picker renders from', () => {
      * `byeWeek` sits on the entry itself, not under `unified`; the serializer reads them from
      * different levels and a fixture that guesses one shape for both proves nothing.
      */
-    getNormalizedPlayerData.mockResolvedValue([
-      { id: 'p1', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: 'https://x/p1.png', byeWeek: 10, injuryStatus: 'Q' },
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'p1', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: 'https://x/p1.png', sport: 'NFL', source: 'sleeper' },
     ])
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
@@ -193,8 +193,20 @@ describe('🛑 the payload the picker renders from', () => {
 
     expect(player.team).toBe('GB')
     expect(player.imageUrl).toBe('https://x/p1.png')
-    expect(player.byeWeek).toBe(10)
-    expect(player.injuryStatus).toBe('Q')
+    /*
+     * ⚠ WAS `toBe(10)`. `SportsPlayer` has no `byeWeek` column, so this route cannot supply one
+     * and asserting a number here would pin a value nothing can produce. The gap is real and
+     * the picker renders the chip blank; see the route comment.
+     */
+    expect(player.byeWeek).toBeNull()
+    /*
+     * ⚠ WAS `toBe('Q')`. `SportsPlayer` carries `status` — roster/active state — and no game
+     * designation, so this route cannot supply one. It was already null for all 241 players
+     * on the measured league, because the previous source returned nothing either, so this
+     * is a gap being stated rather than a capability being lost. The picker renders the chip
+     * when a value exists; nothing currently writes one.
+     */
+    expect(player.injuryStatus).toBeNull()
   })
 
   it('carries the manager avatar, record and FAAB', async () => {
@@ -204,7 +216,7 @@ describe('🛑 the payload the picker renders from', () => {
     findManyLeagueTeam.mockResolvedValue([
       { platformUserId: 'user-a', teamName: 'Dynasty Dogs', externalId: '4', avatarUrl: 'https://x/a.png', wins: 6, losses: 2, ties: 1 },
     ])
-    getNormalizedPlayerData.mockResolvedValue([])
+    findManySportsPlayer.mockResolvedValue([])
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const roster = ((await res.json()) as { rosters: Array<Record<string, unknown>> }).rosters[0]!
@@ -223,7 +235,7 @@ describe('🛑 the payload the picker renders from', () => {
     findManyLeagueTeam.mockResolvedValue([
       { platformUserId: 'user-a', teamName: 'T', externalId: '4', avatarUrl: null, wins: 0, losses: 0, ties: 0 },
     ])
-    getNormalizedPlayerData.mockResolvedValue([])
+    findManySportsPlayer.mockResolvedValue([])
 
     const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     const roster = ((await res.json()) as { rosters: Array<Record<string, unknown>> }).rosters[0]!
@@ -231,6 +243,94 @@ describe('🛑 the payload the picker renders from', () => {
     expect(roster).toMatchObject({ wins: 0, losses: 0, ties: 0 })
     // Null FAAB means the league tracks none — distinct from $0 available to offer.
     expect(roster.faabRemaining).toBeNull()
+  })
+})
+
+describe('🛑 the id must never be served as the name', () => {
+  it('resolves through the shared Sleeper resolver, and by sleeperId not externalId', async () => {
+    /*
+     * This route had the SAME bug as the materializer and was fixed separately from it: both turned
+     * `Roster.playerData` ids into metadata through `getNormalizedPlayerData`, which returns ZERO
+     * rows, and both fell back to `name: id`. Repairing 58,559 database rows did not fix the
+     * picker, because the picker is fed by THIS copy. One rule, two implementations.
+     *
+     * 42,031 of 42,032 numeric ids that exist in both the Sleeper and a provider space are a
+     * DIFFERENT PERSON, so the lookup must never reach `externalId` with a bare id.
+     */
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['11619'] }, faabRemaining: null },
+    ])
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: '11619', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: null, sport: 'NFL', source: 'sleeper' },
+    ])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as { rosters: Array<{ players: Array<{ id: string; name: string; position: string | null }> }> }
+    const player = body.rosters[0]!.players[0]!
+
+    expect(player.name).toBe('Perry Vance')
+    expect(player.name).not.toBe('11619')
+    expect(player.position).toBe('WR')
+
+    const where = JSON.stringify(findManySportsPlayer.mock.calls[0][0].where)
+    expect(where).toContain('sleeperId')
+    const bare = /"externalId":\{"in":\[([^\]]*)\]/.exec(where)
+    if (bare) {
+      expect(bare[1]).not.toMatch(/"11619"/)
+      expect(bare[1]).toContain('sleeper:')
+    }
+  })
+})
+
+describe('🛑 the bye week, which no column supplies', () => {
+  it('puts the derived week on the player whose team has it', async () => {
+    /*
+     * There is no bye-week column anywhere that holds data — `RedraftRosterPlayer.byeWeek` was null
+     * for 60,909 of 60,911 rows and `fantasy_players` has none. It is derived from the schedule
+     * instead: a team's bye is the regular-season week it has no game.
+     */
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1', 'p2'] }, faabRemaining: null },
+    ])
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'p1', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: null, sport: 'NFL', source: 'sleeper' },
+      { sleeperId: 'p2', name: 'Free Agent', position: 'RB', team: null, imageUrl: null, sport: 'NFL', source: 'sleeper' },
+    ])
+    resolveTeamByeWeeks.mockResolvedValue(new Map([['GB', 11]]))
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const players = ((await res.json()) as { rosters: Array<{ players: Array<Record<string, unknown>> }> }).rosters[0]!.players
+
+    expect(players[0]!.byeWeek).toBe(11)
+    /*
+     * 🛑 AND A PLAYER WITH NO TEAM GETS NULL, NOT A WEEK. 9 of 214 players on the measured league
+     * carry `team = null` — free agents, the same names that carry no dynasty value. Inventing a
+     * bye for them would be a fact a manager plans around.
+     */
+    expect(players[1]!.byeWeek).toBeNull()
+  })
+
+  it('derives once for the whole request, not once per player', async () => {
+    // The bye is a property of the TEAM; 32 rows answer it for every player on every roster.
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1', 'p2'] }, faabRemaining: null },
+      { id: 'roster-b', platformUserId: 'user-b', playerData: { players: ['p3'] }, faabRemaining: null },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    /*
+     * ⚠ CLEARED HERE, NOT IN `beforeEach`. Call counts accumulate across this file, and the raw
+     * count read 7 — one per preceding test — which is a count answering a different question.
+     * `mockClear` drops the calls and keeps the resolved value.
+     */
+    resolveTeamByeWeeks.mockClear()
+
+    await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+
+    expect(resolveTeamByeWeeks).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -253,9 +353,9 @@ describe('🛑 market value on the roster rows', () => {
     findManyRoster.mockResolvedValue([
       { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1', 'p2'] }, faabRemaining: null },
     ])
-    getNormalizedPlayerData.mockResolvedValue([
-      { id: 'p1', name: 'Perry Vance', position: 'WR' },
-      { id: 'p2', name: 'Nobody Onboard', position: 'RB' },
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'p1', name: 'Perry Vance', position: 'WR', team: null, imageUrl: null, sport: 'NFL', source: 'sleeper' },
+      { sleeperId: 'p2', name: 'Nobody Onboard', position: 'RB', team: null, imageUrl: null, sport: 'NFL', source: 'sleeper' },
     ])
   })
 

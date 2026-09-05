@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationService'
-import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
-import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
+import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 
 export const dynamic = 'force-dynamic'
@@ -137,9 +137,15 @@ export async function GET(
     select: { id: true, platformUserId: true, playerData: true, faabRemaining: true },
   })
 
-  /* The league's own season decides rookie-vs-future on every pick below. */
+  /*
+   * The league's own season decides rookie-vs-future on every pick below.
+   *
+   * ⚠ `sport` IS SELECTED TOO, AND IT IS LOAD-BEARING. `SportsPlayer.externalId` is unique only
+   * WITHIN a sport, and a bare Sleeper id collides across them — one measured id resolved to an NFL
+   * receiver, an NBA guard and an NCAAB player. The resolver is scoped by this value.
+   */
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { season: true } })
+    .findUnique({ where: { id: leagueId }, select: { season: true, sport: true } })
     .catch(() => null)
   const currentSeason = Number(league?.season) || null
 
@@ -186,6 +192,12 @@ export async function GET(
     ]),
   )
 
+  /*
+   * One derivation for the whole request. The bye is a property of the TEAM, so 32 rows answer
+   * it for every player on every roster; doing it per player would be the same query 241 times.
+   */
+  const byeByTeam = await resolveTeamByeWeeks(String(league?.sport ?? 'NFL'), league?.season)
+
   const result: TradeableRoster[] = await Promise.all(
     rosters.map(async (r) => {
       const playerIds = getRosterPlayerIds(r.playerData)
@@ -193,47 +205,39 @@ export async function GET(
         id, name: id, position: null, team: null, imageUrl: null, byeWeek: null,
         injuryStatus: null, value: null,
       }))
-      try {
-        const rows = await getNormalizedPlayerData({
-          surface: 'roster',
-          leagueId,
-          userId: r.platformUserId,
-          limit: 200,
-        })
-        const byId = new Map(rows.map((row) => {
-          const dto = serializeUnifiedPlayerForApi(row)
-          return [dto.id, dto] as const
-        }))
-        players = playerIds.map((id) => {
-          const enriched = byId.get(id)
+      /*
+       * 🛑 THE SAME RULE AS THE MATERIALIZER, AND NOW THE SAME IMPLEMENTATION. This block used to
+       * call `getNormalizedPlayerData({ surface: 'roster', … })` and fall back to `name: id`. That
+       * source returns ZERO rows — measured for every call shape — so every player on an imported
+       * roster arrived here named by their Sleeper id, with no position, team or image.
+       *
+       * ⚠ AND REPAIRING THE DATABASE DID NOT FIX IT, WHICH IS HOW THE SECOND COPY WAS FOUND. The
+       * 58,559-row repair corrected `RedraftRosterPlayer`, which is what the trade VERDICT reads;
+       * this route reads `Roster.playerData` and resolved it separately, so the picker went on
+       * showing "11619" while pricing worked. One rule written twice, fixed once.
+       */
+      const resolved = await resolveSleeperRosterPlayers(playerIds, String(league?.sport ?? 'NFL'))
+      players = playerIds.map((id) => {
+        const hit = resolved.get(id)
+        return {
+          id,
+          // Absent stays absent: the picker renders "unknown" differently from a value, and an id
+          // masquerading as a name is exactly the bug this replaced.
+          name: hit?.name ?? id,
+          position: hit?.position ?? null,
+          team: hit?.team ?? null,
+          imageUrl: hit?.imageUrl ?? null,
           /*
-           * The serializer already carried every one of these; the previous version kept three and
-           * dropped the rest, which is why the picker could only be a search box. `?? null` on each
-           * because absent is a real state the UI renders differently from a value.
+           * DERIVED FROM THE SCHEDULE, not read from a column — there is no bye-week column
+           * anywhere that holds data. A team with an incomplete schedule yields null rather than a
+           * guess, so blank still means "we do not know" and never "week 0".
            */
-          return {
-            id,
-            name: enriched?.name ?? id,
-            position: enriched?.position ?? null,
-            team: enriched?.team ?? null,
-            imageUrl: enriched?.imageUrl ?? enriched?.headshotUrl ?? null,
-            /*
-             * ⚠ `byeWeek` IS NESTED UNDER `product`, NOT TOP-LEVEL, and reading it from the top
-             * level is silent rather than loud: `enriched?.byeWeek` is `undefined`, `?? null`
-             * turns that into `null`, and the row renders as "no bye week" for every player.
-             * `serializeUnifiedPlayerForApi` populates `product.byeWeek` from `entry.byeWeek`,
-             * so the value was available the whole time.
-             */
-            byeWeek: enriched?.product?.byeWeek ?? null,
-            injuryStatus: enriched?.injuryStatus ?? null,
-            // Filled in one batch below — see the value pass.
-            value: null,
-          }
-        })
-      } catch {
-        // Enrichment is best-effort; fall back to raw ids (matches the placeholder
-        // convention already used elsewhere when player metadata isn't available).
-      }
+          byeWeek: byeForTeam(byeByTeam, hit?.team),
+          injuryStatus: null,
+          // Filled in one batch below — see the value pass.
+          value: null,
+        }
+      })
       const account = accountById.get(r.platformUserId)
       const meta = teamMetaByPlatformId.get(String(r.platformUserId))
       return {

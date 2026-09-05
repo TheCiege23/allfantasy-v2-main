@@ -2,41 +2,15 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import {
+  resolveSleeperRosterPlayers,
+  type ResolvedSleeperPlayer,
+} from '@/lib/player-identity/resolveSleeperRosterPlayers'
+import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
+import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
+import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { reconcileRosterRedraftLinks } from './reconcileRosterRedraftLinks'
 
-/** The columns the enrichment needs. Narrower than `SportsPlayer`, so the select is checked. */
-type EnrichedPlayer = {
-  sleeperId: string | null
-  name: string
-  position: string | null
-  team: string | null
-  sport: string
-  source: string
-}
-
-/*
- * ⚠ ONE SLEEPER ID CAN MATCH SEVERAL `SportsPlayer` ROWS — one per source. Measured on NFL Dynasty
- * 2026-09-04: 241 ids, 570 rows. They are the SAME PERSON here (unlike an `externalId` collision),
- * but they disagree about SHAPE, and the shape is what the picker renders:
- *
- *     sleeper           "Aaron Rodgers"    QB              PIT
- *     rolling_insights  "Austin Ekeler"    RB              Washington Commanders
- *     thesportsdb       "Brian Robinson"   Running Back    Atlanta Falcons
- *
- * The team LOGO is looked up by abbreviation, and the position chips are two characters wide, so
- * `sleeper` is preferred and `thesportsdb` is last. Lower rank wins.
- */
-const SOURCE_RANK: Record<string, number> = {
-  sleeper: 0,
-  rolling_insights: 1,
-  cfbd: 2,
-  api_football: 3,
-  thesportsdb: 4,
-}
-function sourceRank(source: string | null | undefined): number {
-  return SOURCE_RANK[String(source ?? '').trim().toLowerCase()] ?? 9
-}
 
 /**
  * Give a league's `RedraftRoster` rows their players.
@@ -177,10 +151,17 @@ export async function materializeRedraftRosterPlayersForLeague(
 
   const result: MaterializeResult = { ...EMPTY, rostersConsidered: rosters.length }
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true } })
+    .findUnique({ where: { id: leagueId }, select: { sport: true, platform: true, season: true } })
     .catch(() => null)
   const sport = String(opts?.sport ?? league?.sport ?? 'NFL')
   const platform = String(league?.platform ?? '').toLowerCase()
+
+  /*
+   * The bye is a property of the TEAM and this table has a real `Int?` column for it that
+   * nothing has ever filled — 60,909 of 60,911 rows null. Derived once per league here so a
+   * materialised row carries it, rather than being re-derived on every read.
+   */
+  const byeByTeam = await resolveTeamByeWeeks(sport, league?.season)
 
   /*
    * 🛑 THE ENRICHMENT IS ONE LOOKUP FOR THE WHOLE LEAGUE, AGAINST `sleeperId`, AND BOTH HALVES OF
@@ -204,24 +185,10 @@ export async function materializeRedraftRosterPlayersForLeague(
    *
    * So this uses `sleeperIdWhere`, which queries the dedicated `sleeperId` column.
    */
-  const bySleeperId = new Map<string, EnrichedPlayer>()
+  let bySleeperId = new Map<string, ResolvedSleeperPlayer>()
   if (platform === 'sleeper') {
     const allIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
-    if (allIds.length) {
-      const rows = await prisma.sportsPlayer
-        .findMany({
-          where: sleeperIdWhere(allIds, sport),
-          select: { sleeperId: true, name: true, position: true, team: true, sport: true, source: true },
-        })
-        .catch(() => [])
-      for (const row of rows) {
-        const key = String(row.sleeperId ?? '')
-        if (!key) continue
-        const held = bySleeperId.get(key)
-        if (held && sourceRank(held.source) <= sourceRank(row.source)) continue
-        bySleeperId.set(key, row)
-      }
-    }
+    bySleeperId = await resolveSleeperRosterPlayers(allIds, sport)
   }
 
   for (const r of rosters) {
@@ -248,8 +215,38 @@ export async function materializeRedraftRosterPlayersForLeague(
      * belongs on the roster — `captureSnapshot` reads POSITIONS to judge depth, and an unknown
      * position is a worse profile than a known one but a far better one than a missing player.
      */
+    /*
+     * ⚠ A SECOND, SUPPLEMENTARY SOURCE, AND IT EXISTS FOR EXACTLY TWO FIELDS. `SportsPlayer` has
+     * no `byeWeek` column and no `injuryStatus` — only the unified product view carries those, and
+     * de3ade5bf fixed the path to the bye (`product.byeWeek`, not the top level, which had been
+     * persisting null over a real value).
+     *
+     * 🛑 IT IS THE SUPPLEMENT AND NOT THE PRIMARY BECAUSE IT RETURNS NOTHING HERE. Measured on
+     * NFL Dynasty 2026-09-04, `getNormalizedPlayerData` returned ZERO rows for every call shape
+     * tried — with `userId`, without it, and without `leagueId`. That is consistent with
+     * production: 60,909 of 60,911 rows carry a null bye. So de3ade5bf's path fix is correct and
+     * currently inert, and keeping this call is what lets it start working the moment that source
+     * does, rather than deleting a peer's fix because it happens to be dormant today.
+     */
+    const byUnifiedId = new Map<string, ReturnType<typeof serializeUnifiedPlayerForApi>>()
+    try {
+      const unified = await getNormalizedPlayerData({
+        surface: 'roster',
+        leagueId,
+        userId: r.platformUserId,
+        limit: 200,
+      })
+      for (const row of unified) {
+        const d = serializeUnifiedPlayerForApi(row)
+        byUnifiedId.set(d.id, d)
+      }
+    } catch {
+      // Dormant is the normal case; an outage here must not keep the roster empty.
+    }
+
     for (const playerId of playerIds) {
       const dto = bySleeperId.get(playerId)
+      const extra = byUnifiedId.get(playerId)
 
       if (have.has(playerId)) {
         /*
@@ -271,6 +268,8 @@ export async function materializeRedraftRosterPlayersForLeague(
               playerName: dto.name,
               position: dto.position ?? 'UNK',
               team: dto.team ?? null,
+              // A repaired row gets its bye too; it had none for the same reason it had no name.
+              byeWeek: byeForTeam(byeByTeam, dto.team),
             },
           })
           result.playersRepaired += repaired.count
@@ -292,16 +291,25 @@ export async function materializeRedraftRosterPlayersForLeague(
           team: dto?.team ?? null,
           sport: String(dto?.sport ?? sport),
           slotType: slotTypeFor(r.playerData, playerId, position),
+          injuryStatus: extra?.injuryStatus ?? null,
           /*
-           * ⚠ NEITHER COMES FROM THIS SOURCE, AND THAT IS A STATED GAP RATHER THAN A NULL THAT
-           * LOOKS LIKE AN ANSWER. `SportsPlayer` has no `byeWeek` column at all and no
-           * `injuryStatus` (it has `status`, which is roster/active state, not a game
-           * designation). The column was already null for 60,909 of 60,911 rows before this
-           * change, so nothing regresses here — but the picker's BYE chip is fed from this column,
-           * so it stays blank until a writer with a real bye source fills it.
+           * 🛑 NESTED UNDER `product`, PER de3ade5bf. `extra?.byeWeek` is `undefined`, `?? null`
+           * makes it null, and this writes to a real `Int?` column — so the flat read persisted a
+           * permanent absence that looked like the provider never supplied one. Nothing surfaced
+           * it: no crash, no empty state, and `ignoreBuildErrors` means the build never saw the
+           * type error.
+           *
+           * ⚠ THE VALUE IS STILL NULL IN PRACTICE, and that is the supplement being dormant rather
+           * than this path being wrong. See the comment above the lookup.
            */
-          injuryStatus: null,
-          byeWeek: null,
+          /*
+           * ⚠ TWO SOURCES, SUPPLEMENT FIRST. de3ade5bf established that the unified view keeps
+           * the bye at `product.byeWeek`, not the top level; that path is kept and preferred
+           * because it is per-PLAYER and so survives a mid-season trade the team map cannot see.
+           * It is dormant today (zero rows), which is why the schedule derivation is behind it
+           * rather than instead of it.
+           */
+          byeWeek: extra?.product?.byeWeek ?? byeForTeam(byeByTeam, dto?.team) ?? null,
           // Matches the 2,110 rows already in this table that came from an import.
           acquisitionType: 'imported',
         },

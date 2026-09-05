@@ -33,6 +33,7 @@ const h = vi.hoisted(() => ({
   rrpCreate: vi.fn(),
   rrpUpdateMany: vi.fn(),
   reconcile: vi.fn(),
+  unified: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -55,6 +56,13 @@ vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks', () => ({
  * `externalIdNamespace` is deliberately NOT mocked. It is pure, and it is the thing whose contract
  * this module got wrong — mocking it would let the impostor lookup back in under a green test.
  */
+vi.mock('@/lib/player-data/getNormalizedPlayerData', () => ({
+  getNormalizedPlayerData: h.unified,
+}))
+/* Identity: what is under test is the projection, not the serializer's product-view contract. */
+vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi', () => ({
+  serializeUnifiedPlayerForApi: (row: Record<string, unknown>) => row,
+}))
 
 import { materializeRedraftRosterPlayersForLeague } from '@/lib/league-runtime/materializeRedraftRosterPlayers'
 
@@ -66,6 +74,8 @@ beforeEach(() => {
   h.rrpUpdateMany.mockResolvedValue({ count: 0 })
   h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'sleeper' })
   h.sportsPlayerFindMany.mockResolvedValue([])
+  // Dormant by default, which is what it measures as in production.
+  h.unified.mockResolvedValue([])
 })
 
 const roster = (over: Record<string, unknown> = {}) => ({
@@ -234,6 +244,51 @@ describe('🛑 the lookup is by sleeperId, and that is the whole point', () => {
     h.rosterFindMany.mockResolvedValue([roster(), roster({ id: 'roster-b', redraftRosterId: 'rr-b' })])
     await materializeRedraftRosterPlayersForLeague('L1')
     expect(h.sportsPlayerFindMany).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('🛑 the supplement, which is the only source for bye week', () => {
+  it('reads byeWeek from product, not the top level', async () => {
+    /*
+     * de3ade5bf. `dto.byeWeek` is undefined and `?? null` turns that into a null written to a real
+     * `Int?` column — a permanent absence indistinguishable from "the provider has none". Both
+     * spellings are supplied here, so a regression to the flat read produces 99 and fails rather
+     * than producing null and passing by accident.
+     */
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['p1'] } })])
+    h.sportsPlayerFindMany.mockResolvedValue([sp()])
+    h.unified.mockResolvedValue([{ id: 'p1', byeWeek: 99, product: { byeWeek: 10 }, injuryStatus: 'Q' }])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({ byeWeek: 10, injuryStatus: 'Q' })
+  })
+
+  it('🛑 name, position and team still come from the PRIMARY when both sources answer', async () => {
+    /*
+     * The supplement returning nothing is what left 58,596 rows named by id. It must never become
+     * the source of the fields the primary is there to provide.
+     */
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['p1'] } })])
+    h.sportsPlayerFindMany.mockResolvedValue([sp({ name: 'Perry Vance', position: 'WR', team: 'GB' })])
+    h.unified.mockResolvedValue([{ id: 'p1', name: 'WRONG', position: 'XX', team: 'ZZZ', product: { byeWeek: 10 } }])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({
+      playerName: 'Perry Vance', position: 'WR', team: 'GB', byeWeek: 10,
+    })
+  })
+
+  it('a dormant supplement does not stop the row being written', async () => {
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['p1'] } })])
+    h.sportsPlayerFindMany.mockResolvedValue([sp()])
+    h.unified.mockRejectedValue(new Error('surface unavailable'))
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(out.playersCreated).toBe(1)
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({ playerName: 'Perry Vance', byeWeek: null })
   })
 })
 
