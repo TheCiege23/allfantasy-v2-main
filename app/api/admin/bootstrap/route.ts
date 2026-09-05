@@ -4,11 +4,23 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { signAdminSessionCookie } from "@/lib/adminSession"
 import { validateUsername } from "@/lib/auth/username-validation"
+import { getClientIp, rateLimit } from "@/lib/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const BOOTSTRAP_SESSION_TTL_SECONDS = 60 * 60 * 24
+
+// This endpoint compares credentials with no prior authentication, and the repository is public,
+// so the route and its comparison logic are published. Cap attempts per IP so the window in which
+// ADMIN_BOOTSTRAP_ENABLED is true cannot be brute-forced. Budget matches the signup limiter in
+// app/api/auth/register/route.ts.
+//
+// `rateLimit` is used rather than `consumeRateLimit`: the latter only puts the IP in its bucket key
+// when `includeIpInKey` is literally true, and otherwise collapses to one global window for the
+// whole deployment. `rateLimit` takes the finished key, so the per-IP bucket is explicit here.
+const BOOTSTRAP_MAX_ATTEMPTS = 5
+const BOOTSTRAP_ATTEMPT_WINDOW_MS = 10 * 60 * 1000
 
 function isBootstrapEnabled(): boolean {
   return process.env.ADMIN_BOOTSTRAP_ENABLED === "true"
@@ -66,6 +78,18 @@ async function resolveBootstrapUsername(email: string): Promise<string> {
 export async function POST(request: Request) {
   if (!isBootstrapEnabled()) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  // Deliberately AFTER the enablement gate. A disabled endpoint must stay indistinguishable from a
+  // missing one, so it never spends limiter budget and can never answer anything but 404.
+  const ip = getClientIp(request)
+  const attempt = rateLimit(`admin-bootstrap:${ip}`, BOOTSTRAP_MAX_ATTEMPTS, BOOTSTRAP_ATTEMPT_WINDOW_MS)
+  if (!attempt.success) {
+    // One fixed body for every throttled attempt: it reveals nothing about which field was wrong.
+    return NextResponse.json(
+      { error: "Too many bootstrap attempts. Please wait a few minutes." },
+      { status: 429 }
+    )
   }
 
   const configuredEmail = normalizeEmail(process.env.ADMIN_BOOTSTRAP_EMAIL)

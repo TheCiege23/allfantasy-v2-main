@@ -41,6 +41,23 @@ describe("admin bootstrap route", () => {
     mocks.signAdminSessionCookie.mockReturnValue("signed-admin-session")
   })
 
+  /** Mirrors BOOTSTRAP_MAX_ATTEMPTS in the route. */
+  const MAX_ATTEMPTS = 5
+
+  const bootstrapRequest = (ip: string, body: Record<string, unknown>) =>
+    new Request("http://localhost/api/admin/bootstrap", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify(body),
+    })
+
+  function enableBootstrap() {
+    process.env.ADMIN_BOOTSTRAP_ENABLED = "true"
+    process.env.ADMIN_BOOTSTRAP_EMAIL = "founder@example.com"
+    process.env.ADMIN_BOOTSTRAP_PASSWORD = "long-secret-password"
+    process.env.ADMIN_SESSION_SECRET = "signed-session-secret"
+  }
+
   it("is unavailable unless explicitly enabled", async () => {
     const { POST } = await import("@/app/api/admin/bootstrap/route")
 
@@ -124,5 +141,84 @@ describe("admin bootstrap route", () => {
     expect(body.error).toContain("ADMIN_SESSION_SECRET")
     expect(mocks.appUserUpdate).not.toHaveBeenCalled()
     expect(mocks.signAdminSessionCookie).not.toHaveBeenCalled()
+  })
+
+  it("stops the credential comparison after the attempt budget is spent from one IP", async () => {
+    enableBootstrap()
+    const { POST } = await import("@/app/api/admin/bootstrap/route")
+
+    const statuses: number[] = []
+    for (let i = 0; i <= MAX_ATTEMPTS; i++) {
+      const res = await POST(
+        bootstrapRequest("203.0.113.7", { email: "founder@example.com", password: `guess-${i}` })
+      )
+      statuses.push(res.status)
+    }
+
+    // The first MAX_ATTEMPTS must reach the comparison — asserting them proves the limiter did not
+    // simply fire early, which a too-tight budget would look identical to.
+    expect(statuses.slice(0, MAX_ATTEMPTS)).toEqual(Array(MAX_ATTEMPTS).fill(401))
+    expect(statuses[MAX_ATTEMPTS]).toBe(429)
+    expect(mocks.appUserUpdate).not.toHaveBeenCalled()
+    expect(mocks.appUserCreate).not.toHaveBeenCalled()
+  })
+
+  it("budgets attempts per IP rather than in one global window", async () => {
+    enableBootstrap()
+    const { POST } = await import("@/app/api/admin/bootstrap/route")
+
+    for (let i = 0; i <= MAX_ATTEMPTS; i++) {
+      await POST(bootstrapRequest("203.0.113.8", { email: "founder@example.com", password: `guess-${i}` }))
+    }
+
+    const exhaustedIp = await POST(
+      bootstrapRequest("203.0.113.8", { email: "founder@example.com", password: "one-more" })
+    )
+    const untouchedIp = await POST(
+      bootstrapRequest("198.51.100.4", { email: "founder@example.com", password: "wrong-password" })
+    )
+
+    // A limiter keyed on a constant would lock out the second IP too. Asserting the second caller
+    // still reaches the comparison is what separates a per-IP bucket from a shared one.
+    expect(exhaustedIp.status).toBe(429)
+    expect(untouchedIp.status).toBe(401)
+  })
+
+  it("returns an identical 429 whether the email or the password was wrong", async () => {
+    enableBootstrap()
+    const { POST } = await import("@/app/api/admin/bootstrap/route")
+
+    const exhaust = async (ip: string, body: Record<string, unknown>) => {
+      const responses = []
+      for (let i = 0; i <= MAX_ATTEMPTS; i++) responses.push(await POST(bootstrapRequest(ip, body)))
+      return responses[responses.length - 1]!
+    }
+
+    const wrongEmail = await exhaust("203.0.113.21", {
+      email: "intruder@example.com",
+      password: "long-secret-password",
+    })
+    const wrongPassword = await exhaust("203.0.113.22", {
+      email: "founder@example.com",
+      password: "not-the-real-password",
+    })
+
+    expect(wrongEmail.status).toBe(429)
+    expect(wrongPassword.status).toBe(429)
+    expect(await wrongEmail.json()).toEqual(await wrongPassword.json())
+  })
+
+  it("never answers 429 while disabled, so the endpoint stays indistinguishable from a missing one", async () => {
+    const { POST } = await import("@/app/api/admin/bootstrap/route")
+
+    const statuses: number[] = []
+    for (let i = 0; i < MAX_ATTEMPTS * 2 + 2; i++) {
+      const res = await POST(
+        bootstrapRequest("203.0.113.9", { email: "founder@example.com", password: `guess-${i}` })
+      )
+      statuses.push(res.status)
+    }
+
+    expect(Array.from(new Set(statuses))).toEqual([404])
   })
 })
