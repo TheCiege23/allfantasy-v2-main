@@ -36,6 +36,13 @@ const FETCH_TIMEOUT_MS = 12000
  * instances share the same quota and Sleeper's limit is account-wide, not ours to see.
  * Backoff stays.
  */
+import {
+  isCircuitFailureStatus,
+  isProviderCircuitOpen,
+  recordProviderFailure,
+  recordProviderSuccess,
+} from '@/lib/providers/provider-circuit'
+
 const sleeperRequestLimit = pLimit(10)
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -130,6 +137,26 @@ async function fetchSleeperJson<T>(
   url: string,
   ctx?: SleeperFetchContext,
 ): Promise<T | null> {
+  /*
+   * 🛑 FAIL FAST WHILE THE CIRCUIT IS OPEN. pLimit(10) bounds how many requests are in
+   * flight; it does nothing about how many are MADE. One league fans out ~40 requests,
+   * each retried 3x, and the durable sync sweeps 235 leagues every 10 minutes — so a
+   * Sleeper outage costs ~28,000 requests per lap, with the retries making it worse.
+   * Returning null here is the same shape a caller already handles for a failed fetch,
+   * so partial data still flows and the warning still lands.
+   */
+  if (isProviderCircuitOpen('sleeper')) {
+    ctx?.warnings.push(
+      `${ctx.label}: skipped — Sleeper is failing repeatedly and calls are paused briefly. Data may be incomplete.`,
+    )
+    ctx?.failures.push({
+      label: ctx?.label ?? 'sleeper',
+      status: null,
+      message: 'Sleeper circuit open — request not attempted',
+    })
+    return null
+  }
+
   for (let attempt = 0; attempt < FETCH_RETRIES; attempt++) {
     try {
       /*
@@ -152,12 +179,19 @@ async function fetchSleeperJson<T>(
           clearTimeout(timer)
         }
       })
-      if (res.status === 404) return null // legitimate no-data
+      if (res.status === 404) {
+        // A 404 is a completed round-trip: the provider is UP and said 'no such thing'.
+        // Counting it would open the circuit during normal syncs, since every week past
+        // the end of a season answers this way.
+        recordProviderSuccess('sleeper')
+        return null // legitimate no-data
+      }
       if (!res.ok) {
         if (attempt < FETCH_RETRIES - 1) {
           await delay(300 * 2 ** attempt)
           continue
         }
+        if (isCircuitFailureStatus(res.status)) recordProviderFailure('sleeper')
         ctx?.warnings.push(
           `${ctx.label}: Sleeper returned ${res.status} after ${FETCH_RETRIES} attempts — data may be incomplete.`,
         )
@@ -168,12 +202,14 @@ async function fetchSleeperJson<T>(
         })
         return null
       }
+      recordProviderSuccess('sleeper')
       return (await res.json()) as T
     } catch (err) {
       if (attempt < FETCH_RETRIES - 1) {
         await delay(300 * 2 ** attempt)
         continue
       }
+      recordProviderFailure('sleeper')
       const detail = err instanceof Error ? err.message : 'network error'
       ctx?.warnings.push(
         `${ctx.label}: Sleeper request failed after ${FETCH_RETRIES} attempts (${detail}) — data may be incomplete.`,
