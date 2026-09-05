@@ -150,3 +150,12 @@ app/globals-compiled.css
 # `git add -A` would have published the key. Nothing matching has ever been
 # committed on any ref — checked — and this keeps it that way.
 certificates/
+
+# ESLint report output. `lint-report.json` was COMMITTED and carried a live
+# Google API key into this PUBLIC repo — the source file (components/bracket/
+# PoolChat.tsx) had been cleaned, but the lint report that quoted the offending
+# line was never cleaned, so the report about the leak preserved the leak.
+# Found 2026-09-05 by GitHub secret scanning, within minutes of enabling it.
+# The key has been rotated. A lint report is regenerable build output and must
+# never be tracked.
+lint-report.json
