@@ -4,6 +4,7 @@ import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdenti
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
+import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 
 export type RedraftDraftFinalizationSummary = {
@@ -382,6 +383,30 @@ export async function syncCompletedDraftToRedraftSeason(
 
   const { season } = await ensureRedraftSeason(leagueId)
 
+  /*
+   * 🛑 THE PICK'S OWN `byeWeek` IS NOT A SOURCE, IT IS PASSTHROUGH. `PickSubmissionService` writes
+   * whatever `input.byeWeek` the caller sent; nothing looks one up. Measured on production
+   * 2026-09-05: of 5,652 draft picks, TWO carried a bye — and both disagreed with the schedule
+   * (ATL said 5 against a derived 11, PHI said 9 against a derived 10). Both were unmatched picks
+   * in a manual draft, carrying a synthetic `draft:<session>:<n>:<slug>:<pos>` player id, so the
+   * team and the week came in as free text.
+   *
+   * So the schedule leads and the pick is the fallback, which is the opposite order to the
+   * materializer's. There the per-player source is a real product view that survives a mid-season
+   * trade; here it is unvalidated input with a 0-for-2 record.
+   *
+   * ⚠ THE LEAGUE'S SPORT, NOT `season.sport`. `season.sport` is the CONFIG key —
+   * `leagueSportToConfigSport` maps NCAAF to "NCAAFB" — and `SportsGame.sport` stores "NCAAF".
+   * Passing the config key would silently match nothing for the one NCAAF league on file.
+   */
+  const leagueForBye = await prisma.league
+    .findUnique({ where: { id: leagueId }, select: { sport: true } })
+    .catch(() => null)
+  const byeByTeam = await resolveTeamByeWeeks(
+    String(leagueForBye?.sport ?? 'NFL'),
+    season.season,
+  )
+
   let redraftRostersCreated = 0
   let redraftPlayersCreated = 0
   let redraftPlayersAlreadyPresent = 0
@@ -444,7 +469,7 @@ export async function syncCompletedDraftToRedraftSeason(
         team: pick.team ?? null,
         sport: season.sport || String(session.sportType ?? 'NFL'),
         slotType,
-        byeWeek: pick.byeWeek ?? null,
+        byeWeek: byeForTeam(byeByTeam, pick.team) ?? pick.byeWeek ?? null,
         acquisitionType: 'drafted',
       },
     })
