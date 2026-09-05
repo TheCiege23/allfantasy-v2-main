@@ -237,17 +237,83 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
 }
 
 /** Sweep every imported Sleeper league (bounded), one contained result each. */
+/**
+ * Where the last sweep stopped, so the next one starts after it.
+ *
+ * One cache row for the whole job. The alternative — stamping a "last checked" on every league —
+ * would cost 50 upserts per run, 14,400 a day, to store something one row can hold.
+ */
+const CURSOR_KEY = 'trade-notify:cursor:v1'
+const CURSOR_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+async function readCursor(): Promise<string> {
+  const row = await prisma.sportsDataCache
+    .findUnique({ where: { cacheKey: CURSOR_KEY } })
+    .catch(() => null)
+  const after = (row?.data as { after?: unknown } | null)?.after
+  return typeof after === 'string' ? after : ''
+}
+
+async function writeCursor(after: string): Promise<void> {
+  await prisma.sportsDataCache
+    .upsert({
+      where: { cacheKey: CURSOR_KEY },
+      update: { data: { after }, expiresAt: new Date(Date.now() + CURSOR_TTL_MS) },
+      create: { cacheKey: CURSOR_KEY, data: { after }, expiresAt: new Date(Date.now() + CURSOR_TTL_MS) },
+    })
+    .catch(() => undefined)
+}
+
+/**
+ * Sweep every Sleeper league, a page at a time.
+ *
+ * 🛑 THIS USED TO TAKE 50 WITH NO `orderBy` AND NO CURSOR, WHICH IS NOT A SAMPLE — IT IS THE SAME
+ * 50 FOREVER. Measured on production 2026-09-05: 202 distinct Sleeper leagues, `take: 50`, and the
+ * returned order byte-identical across calls. So 152 leagues — 75% of them — had never been checked
+ * by ANY of the 1,610 runs this job has recorded, and never would be. The job reported `success`
+ * every time, because it did exactly what it was asked.
+ *
+ * ⚠ THE PAGE SIZE IS DELIBERATELY UNCHANGED. Raising it to cover everything in one run is the
+ * obvious move and the wrong one: `scripts/cron-fast-tier-loop.mjs` already records this job at p99
+ * 359s against its own 300s maxDuration, so a 4x page would trade a coverage bug for a timeout.
+ * Keyset pagination keeps each run the same size it is today and covers all 202 in ~5 runs, about
+ * 25 minutes at the 300s cadence.
+ *
+ * ⚠ KEYSET, NOT OFFSET. `skip`/`take` drifts when a league is added or removed mid-cycle — rows
+ * shift under the offset and one gets silently skipped. Ordering by `platformLeagueId` and asking
+ * for the next ids greater than the last one processed cannot skip a row, only revisit one.
+ */
 export async function detectAndNotifyAll(limit = 50): Promise<LeagueNotifyResult[]> {
-  const leagues = await prisma.league.findMany({
-    where: { platform: 'sleeper', platformLeagueId: { not: '' } },
-    select: { platformLeagueId: true },
-    distinct: ['platformLeagueId'],
-    take: limit,
-  })
+  const after = await readCursor()
+  const page = async (from: string) =>
+    prisma.league.findMany({
+      where: { platform: 'sleeper', platformLeagueId: { not: '', gt: from } },
+      select: { platformLeagueId: true },
+      distinct: ['platformLeagueId'],
+      orderBy: { platformLeagueId: 'asc' },
+      take: limit,
+    })
+
+  let leagues = await page(after)
+  /*
+   * The tail is shorter than a page, so the cycle ends here and the next run starts over. Wrapping
+   * inside this run rather than next time keeps a full page of work per fire even at the boundary.
+   */
+  if (leagues.length === 0 && after !== '') leagues = await page('')
+
   const results: LeagueNotifyResult[] = []
   for (const l of leagues) {
     if (!l.platformLeagueId) continue
     results.push(await detectAndNotifyLeague(l.platformLeagueId))
   }
+
+  /*
+   * A short page means the end of the list: reset so the next run wraps. The cursor advances even
+   * when a league errors, because a league that fails every time must not wedge the cycle and
+   * starve the other 201 — the exact failure this change exists to remove.
+   */
+  const last = leagues.at(-1)?.platformLeagueId ?? ''
+  await writeCursor(leagues.length < limit ? '' : last)
+
   return results
 }
