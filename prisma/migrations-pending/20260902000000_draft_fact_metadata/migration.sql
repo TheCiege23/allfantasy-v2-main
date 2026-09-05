@@ -1,0 +1,44 @@
+-- `dw_draft_facts.metadata` — somewhere to put what a draft pick was, beyond who took whom.
+--
+-- 🛑 PARKED, NOT APPLIED. `prisma migrate deploy` reads a DIRECTORY rather than git, so
+-- anything sitting in prisma/migrations/ rides along on the next person's deploy. This lives
+-- in migrations-pending/ until Guap explicitly authorises applying it. Moving it is the
+-- deliberate act; writing it is not.
+--
+-- ── WHY IT IS NEEDED ──────────────────────────────────────────────────────────────────────
+-- `SleeperHistoricalDraftSyncService` already fetches `/v1/draft/{id}/traded_picks` for every
+-- draft it walks. It then does this with the answer:
+--
+--     console.info(`[SleeperHistoricalDraftSync] draft ${id} traded_picks count=${n}`)
+--
+-- and throws it away, with a comment saying why: "DraftFact schema has no metadata column
+-- today, so results are logged for future use." The request is already paid for; the data is
+-- already in memory; there is simply nowhere to put it. This is that column.
+--
+-- Draft-day pick trades are the highest-value thing a dynasty league does that AllFantasy
+-- currently cannot see: `future_draft_picks` holds picks traded BETWEEN drafts, and nothing
+-- holds picks that changed hands DURING one.
+--
+-- ── WHY JSONB AND NULLABLE ────────────────────────────────────────────────────────────────
+-- Nullable so the migration is pure addition — every existing row stays valid, no backfill,
+-- no default to rewrite 100% of the table. JSONB rather than a set of typed columns because
+-- what a provider says about a pick differs per provider, and inventing columns for Sleeper's
+-- shape would misfit the next one. The shape is the writer's contract, not the schema's.
+--
+-- ⚠ IT IS ADDITIVE AND STILL NOT FREE TO SHIP AHEAD OF. Adding this column to
+-- prisma/schema.prisma makes the generated client include `metadata` in its DEFAULT SELECT
+-- for every DraftFact read. Against a production database that lacks the column, that is
+-- P2022 on `findMany` — not a no-op, and not confined to code that wants the new field.
+-- So the order is: apply this migration, THEN update schema.prisma, THEN ship code that
+-- writes it. Never the reverse.
+--
+-- ⚠ NO INDEX ON IT. Nothing queries by metadata contents and a GIN index on a column with no
+-- readers is write cost for nothing. Add one when a real query needs it.
+--
+-- ── SAFETY ────────────────────────────────────────────────────────────────────────────────
+-- `IF NOT EXISTS` is load-bearing rather than defensive habit: without it, a re-run fails,
+-- writes a `finished_at IS NULL` row into `_prisma_migrations`, and every later migration
+-- aborts with P3009 until someone resolves it by hand — the exact failure the README beside
+-- this file exists to prevent.
+
+ALTER TABLE "dw_draft_facts" ADD COLUMN IF NOT EXISTS "metadata" JSONB;
