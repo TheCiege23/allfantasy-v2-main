@@ -38,13 +38,18 @@ anywhere" — which was wrong about one of them. Re-measured 2026-09-04:
 
 | added 2026-09-02 | on production | `_prisma_migrations` row | `migration.sql` on `main` |
 |---|---|---|---|
-| `draft_fact_metadata` | ✅ **column IS live** | ❌ absent — see *A THIRD CASE* | ❌ **branch only** |
-| `fact_table_uniqueness` | ❌ nothing applied | ❌ absent | ❌ branch only |
+| `draft_fact_metadata` | ✅ column live | ✅ recorded 2026-09-05 01:41:00Z | ✅ (`644ef25c0`) |
+| `fact_table_uniqueness` | ❌ nothing applied | ❌ absent | ✅ (`644ef25c0`) |
 | `yahoo_connection_identity` | ✅ all six statements | ✅ recorded 2026-09-04 16:22:59Z | ✅ |
 
-🛑 **Read the first row across.** A schema change is live in production whose SQL
-exists only on `commish-os/phase-0-1b` (`d65c84c7a`, never merged). Auditing the
-schema from `main` cannot explain where `dw_draft_facts.metadata` came from.
+✅ **The first row used to be the alarming one and is now closed.** For about three
+days a schema change was live in production whose SQL existed only on
+`commish-os/phase-0-1b` (`d65c84c7a`, never merged), so auditing the schema from
+`main` could not explain where `dw_draft_facts.metadata` came from. Both halves are
+fixed: the files were recovered onto `main` in `644ef25c0`, and the migration was
+recorded in `_prisma_migrations` on 2026-09-05. Kept here rather than deleted
+because the failure mode is reusable — a migration can be applied out of band and
+leave no trace in the mainline history, and nothing in the tooling notices.
 
 `yahoo_connection_identity` is recorded by hand with the real `sha256` of its
 `migration.sql` (`4b82763b…`), so a later `migrate deploy` matches and skips.
@@ -132,24 +137,41 @@ creating the table fixes today, not the next drift.
 
 ### `20260902000000_draft_fact_metadata`
 
-🛑 **THE COLUMN IS ON PRODUCTION. THE MIGRATION FILE IS NOT ON `main`.** Both
-halves are measured, and together they are the reason this section exists.
+✅ **APPLIED AND NOW RECORDED. `dw_draft_facts.metadata JSONB` is live on
+production, and as of 2026-09-05 01:41:00Z it finally has a `_prisma_migrations`
+row.** The next `migrate deploy` matches the checksum and SKIPS, rather than
+re-running the file.
 
-`dw_draft_facts.metadata JSONB` is live on production with no `_prisma_migrations`
-row — the same case as `domain_os_facts` above. But `d65c84c7a`, the only commit
-that has ever contained this `migration.sql`, is on branch
-`commish-os/phase-0-1b` and **has never landed on `main`** (`merge-base
---is-ancestor` rc=1; no patch-id match in main's last 80 commits). So
-`prisma/migrations-pending/20260902000000_draft_fact_metadata/` does not exist in a
-fresh clone, and the schema change that IS in production came from SQL that is not
-in the mainline history.
+    checksum  db0fe2033dec05393e3cfb3622785946cdaf31a23f86c5befbd616e8cbfafbf9
 
-⚠ **That ordering is the thing to notice.** A migration parked here is meant to be
-reviewable-but-unreachable. This one became unreviewable-and-applied: the file sits
-on one branch, the column sits in production, and `main` records neither. Anyone
-auditing the schema from `main` cannot see where that column came from.
+That is the SHA-256 of the **LF** bytes of this directory's `migration.sql` (git
+blob `9ea16c4a…`, 3288 bytes, 0 CR bytes). 🛑 **Editing `migration.sql` now breaks
+the match** and Prisma will report a modified applied migration — the same caveat
+`_t101` carries.
 
-Evidence, since the line this replaces also claimed a verification:
+⚠ **Hash the LF bytes, not the working copy.** Prisma's checksum is the plain
+SHA-256 of the file as the Linux build checks it out. Verified against two rows
+Prisma itself wrote — `devy_passing_profile` (`242a721e…`) and
+`recent_player_searches` (`22c730a7…`) both match their LF blob exactly, while the
+same files hashed from a Windows CRLF working copy give `0be1601d…` and
+`8791f5f1…`, which match nothing. A checksum taken from the working copy guarantees
+the failure it is meant to prevent.
+
+🛑 **HOW IT GOT HERE, KEPT BECAUSE THE FAILURE MODE IS REUSABLE.** For three days
+the column was live in production while `d65c84c7a` — the only commit that had ever
+contained this `migration.sql` — sat unmerged on `commish-os/phase-0-1b`. The
+directory did not exist in a fresh clone. A migration parked here is meant to be
+reviewable-but-unreachable; this one became **unreviewable-and-applied**, and
+nothing in the tooling noticed. `main` recovered the files in `644ef25c0`.
+
+⚠ **And note which check found it and which one lied.** `merge-base --is-ancestor`
+answered "not on main" about BOTH the original branch commit (true) and, later,
+about the recovered commits after the pusher cherry-picked them (false — a
+cherry-pick renames the commit). Only `git patch-id --stable` distinguished the
+two cases.
+
+Evidence that the column was applied at all, since the line this replaces claimed
+the opposite and claimed to have verified it:
 
 - `pg_attribute` on production puts `metadata jsonb` at **ordinal 10**, immediately
   after `createdAt` at 9. The `20260407024117_init` `CREATE TABLE` ends at
@@ -157,15 +179,22 @@ Evidence, since the line this replaces also claimed a verification:
 - The only `ALTER` in the repo that adds it is this file.
 - Absent on the test branch (`ep-muddy-leaf`), present on production
   (`ep-curly-block`) — the same query in the same run, so the lookup discriminates.
-- 132,325 rows, **0 with `metadata` populated**, which matches the writer change
-  not having shipped.
+- 132,325 rows at the time of that probe, **0 with `metadata` populated**. (The row
+  count moves — ordinary draft ingestion — so it is the ZERO that carries the
+  meaning here, not the total.)
 
-⚠ **Two consequences.** A future `migrate deploy` **RUNS** this file rather than
-skipping it; that is safe because the statement is `ADD COLUMN IF NOT EXISTS`, so
-the run is a no-op that finally writes the missing row — self-healing, exactly like
-`domain_os_facts`. And `schema.prisma`'s `model DraftFact` still does not declare
-`metadata`, so the README's own stated order — apply, then update `schema.prisma`,
-then ship writers — is stopped at step one.
+⚠ **ONE CONSEQUENCE REMAINS, AND IT IS THE ONE STILL OPEN.** `schema.prisma`'s
+`model DraftFact` does not declare `metadata`, so this file's own stated order —
+apply, then update `schema.prisma`, then ship writers — is stopped at step one.
+Harmless today: 132,963 rows and **0 with `metadata` populated**, because the
+writer change has not shipped.
+
+> The other consequence used to read "a future `migrate deploy` **RUNS** this file
+> rather than skipping it — safe, because `ADD COLUMN IF NOT EXISTS` makes the run
+> a self-healing no-op." That was true until the row was written on 2026-09-05.
+> It now matches on checksum and skips, which is why the row was written: relying
+> on self-healing works until someone edits the file, and then the checksum that
+> would have saved you is the one that never existed.
 
 **Why the column is wanted at all:** `SleeperHistoricalDraftSyncService` already
 fetches `/v1/draft/{id}/traded_picks` for every draft it walks, `console.info`s the
@@ -230,25 +259,22 @@ not the same as serving. And note it does not weaken the invariant meanwhile:
 
 ### `20260902010000_fact_table_uniqueness`
 
-🛑 **NEVER APPLIED ANYWHERE — confirmed, not assumed. AND THIS FILE IS NOT ON
-`main` EITHER.** Re-measured on production 2026-09-04: both discriminator columns
-absent (`dw_draft_facts.sourceDraftId`, `dw_transaction_facts.sourceTransactionId`),
-all three indexes absent (`dw_matchup_facts_natural_key`,
+🛑 **PARKED. NEVER APPLIED ANYWHERE — confirmed, not assumed.** Re-measured on
+production 2026-09-04: both discriminator columns absent
+(`dw_draft_facts.sourceDraftId`, `dw_transaction_facts.sourceTransactionId`), all
+three indexes absent (`dw_matchup_facts_natural_key`,
 `dw_draft_facts_source_pick_key`, `dw_transaction_facts_source_key`), no
 `_prisma_migrations` row. Same on test.
 
-Like `draft_fact_metadata` above, its `migration.sql` exists only in `d65c84c7a` on
-branch `commish-os/phase-0-1b` and is absent from `main` and from a fresh clone.
-Unlike that one, nothing from it has been applied, so file and database agree —
-this is the state the parking convention is supposed to produce.
+**Nothing applied and the file is on `main` (`644ef25c0`) — so file and database
+agree. This is the state the parking convention is supposed to produce**, and it is
+the contrast that makes the `draft_fact_metadata` entry above legible: same author,
+same commit, same day, one of them applied out of band and one of them not.
 
 > This section and the `draft_fact_metadata` one were **deleted from this file** by
 > the rewrite that added `weekly_matchup_roster_id_text`, leaving one line that made
-> a false claim about both. Restored 2026-09-04. They are documented here even
-> though their directories are not on `main`, because the README is the ledger of
-> what is applied WHERE — and for `draft_fact_metadata` the answer is "production,
-> from a branch", which is exactly the case a reader must not have to discover
-> themselves.
+> a false claim about both. Restored 2026-09-04, when both `migration.sql` files
+> were still absent from `main`; recovered onto `main` in `644ef25c0` the same day.
 
 Gives the three warehouse fact tables the uniqueness they have never had.
 `dw_draft_facts`, `dw_transaction_facts` and `dw_matchup_facts` are written as
