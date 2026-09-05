@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { buildSurvivorStateForUser } from '@/lib/survivor/survivorStateService'
 import { resolveSurvivorAccessContext } from '@/lib/survivor/survivorAccessControl'
 import {
@@ -95,7 +96,16 @@ async function updateFoundationSettings(leagueId: string, body: JsonRecord) {
   await prisma.league.update({
     where: { id: leagueId },
     data: {
-      settings: { ...current, ...settingsPatch },
+      /*
+       * A Prisma Json column takes `InputJsonValue`, not `Record<string, unknown>` — `unknown`
+       * admits values JSON cannot hold. Both halves ARE json here: `current` was read straight
+       * back out of this column, and `settingsPatch` is a built snapshot. The cast asserts
+       * something already true rather than papering over a shape mismatch.
+       *
+       * Plain cast, not the JSON round-trip used in writeAfProjectionSnapshots.ts — that one
+       * exists for a nested bare `null`, which this object does not carry.
+       */
+      settings: { ...current, ...settingsPatch } as Prisma.InputJsonValue,
       ...columnPatch,
     },
   })

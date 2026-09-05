@@ -45,6 +45,7 @@
     "instrumentation.ts",
     "pages/**/*.ts",
     "pages/**/*.tsx",
+    "server/**/*.ts",
     ".next/types/**/*.ts",
     ".next-dev-local/types/**/*.ts",
     ".next-playwright-3101/types/**/*.ts",
