@@ -31,11 +31,22 @@ never has to fire.
 
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
-Of the seven, `t101b` below is still parked, as are two of the three added
-2026-09-02 — `draft_fact_metadata` and `fact_table_uniqueness`, verified against
-production 2026-09-04 as never applied anywhere. The third,
-`yahoo_connection_identity`, **WAS applied to production on 2026-09-04** and is
-recorded in `_prisma_migrations` by hand with the real `sha256` of its
+Of the seven, `t101b` below is still parked. The three added 2026-09-02 are in
+three DIFFERENT states, and an earlier version of this paragraph lumped two of
+them together as "verified against production 2026-09-04 as never applied
+anywhere" — which was wrong about one of them. Re-measured 2026-09-04:
+
+| added 2026-09-02 | on production | `_prisma_migrations` row | `migration.sql` on `main` |
+|---|---|---|---|
+| `draft_fact_metadata` | ✅ **column IS live** | ❌ absent — see *A THIRD CASE* | ❌ **branch only** |
+| `fact_table_uniqueness` | ❌ nothing applied | ❌ absent | ❌ branch only |
+| `yahoo_connection_identity` | ✅ all six statements | ✅ recorded 2026-09-04 16:22:59Z | ✅ |
+
+🛑 **Read the first row across.** A schema change is live in production whose SQL
+exists only on `commish-os/phase-0-1b` (`d65c84c7a`, never merged). Auditing the
+schema from `main` cannot explain where `dw_draft_facts.metadata` came from.
+
+`yahoo_connection_identity` is recorded by hand with the real `sha256` of its
 `migration.sql` (`4b82763b…`), so a later `migrate deploy` matches and skips.
 Its directory deliberately stays here rather than moving to `prisma/migrations/`,
 per the note on that migration below. Everything else in this directory has been
@@ -53,9 +64,18 @@ re-running:
 | `…_t112_key_role` | TenantApiKey.role (**needed a fix — see below**) |
 | `…_t201_binding` | LeagueBinding, SyncJob |
 
-Verified on production by effect: 7 recorded, **0 rows with `finished_at IS NULL`**
-(so no P3009 landmine), 9 tables with RLS, 27 policies, the audit trigger present,
-5 `app.*` functions, and `leagues` still readable at 116 rows.
+Verified on production by effect: 7 recorded, **no P3009 landmine**, 9 tables with
+RLS, 27 policies, the audit trigger present, 5 `app.*` functions, and `leagues`
+still readable at 116 rows.
+
+⚠ **`finished_at IS NULL` ALONE IS NOT THE P3009 PREDICATE, and this paragraph
+used to say it was.** Production carries **5** rows with `finished_at IS NULL`
+(failures from May and 30 August) and has done throughout — but every one also has
+`rolled_back_at` SET, which is how a failed migration is marked resolved. P3009
+fires on `finished_at IS NULL **AND** rolled_back_at IS NULL`, and that count is
+**0**. Anyone re-running this check with the shorter predicate gets 5 and reports a
+landmine that is not there; that mistake was made on 2026-09-04 and caught only by
+reading the rows instead of counting them.
 
 **T-001's second half is also done.** All 688 public tables are now owned by
 `commish_migrate`; `commish_app` owns 0. `neondb_owner` — the role the running app
@@ -110,6 +130,51 @@ the same change that staged this file (`OsStore.write` now returns `boolean`;
 `refresh` reports `'write_failed'`), and that fix is **required independently** —
 creating the table fixes today, not the next drift.
 
+### `20260902000000_draft_fact_metadata`
+
+🛑 **THE COLUMN IS ON PRODUCTION. THE MIGRATION FILE IS NOT ON `main`.** Both
+halves are measured, and together they are the reason this section exists.
+
+`dw_draft_facts.metadata JSONB` is live on production with no `_prisma_migrations`
+row — the same case as `domain_os_facts` above. But `d65c84c7a`, the only commit
+that has ever contained this `migration.sql`, is on branch
+`commish-os/phase-0-1b` and **has never landed on `main`** (`merge-base
+--is-ancestor` rc=1; no patch-id match in main's last 80 commits). So
+`prisma/migrations-pending/20260902000000_draft_fact_metadata/` does not exist in a
+fresh clone, and the schema change that IS in production came from SQL that is not
+in the mainline history.
+
+⚠ **That ordering is the thing to notice.** A migration parked here is meant to be
+reviewable-but-unreachable. This one became unreviewable-and-applied: the file sits
+on one branch, the column sits in production, and `main` records neither. Anyone
+auditing the schema from `main` cannot see where that column came from.
+
+Evidence, since the line this replaces also claimed a verification:
+
+- `pg_attribute` on production puts `metadata jsonb` at **ordinal 10**, immediately
+  after `createdAt` at 9. The `20260407024117_init` `CREATE TABLE` ends at
+  `createdAt`, so this column was appended by an `ALTER`, not created with the table.
+- The only `ALTER` in the repo that adds it is this file.
+- Absent on the test branch (`ep-muddy-leaf`), present on production
+  (`ep-curly-block`) — the same query in the same run, so the lookup discriminates.
+- 132,325 rows, **0 with `metadata` populated**, which matches the writer change
+  not having shipped.
+
+⚠ **Two consequences.** A future `migrate deploy` **RUNS** this file rather than
+skipping it; that is safe because the statement is `ADD COLUMN IF NOT EXISTS`, so
+the run is a no-op that finally writes the missing row — self-healing, exactly like
+`domain_os_facts`. And `schema.prisma`'s `model DraftFact` still does not declare
+`metadata`, so the README's own stated order — apply, then update `schema.prisma`,
+then ship writers — is stopped at step one.
+
+**Why the column is wanted at all:** `SleeperHistoricalDraftSyncService` already
+fetches `/v1/draft/{id}/traded_picks` for every draft it walks, `console.info`s the
+count and throws the answer away, with a comment saying why — "DraftFact schema has
+no metadata column today". The request is already paid for and the data is already
+in memory. Draft-day pick trades are the one dynasty asset AllFantasy cannot see:
+`future_draft_picks` holds picks traded BETWEEN drafts, and nothing holds picks that
+changed hands DURING one.
+
 ## Currently parked
 
 ### `20260831120000_commissioner_os_t101`
@@ -162,6 +227,65 @@ Apply this only once the tenant-aware build is **serving traffic** — merged is
 not the same as serving. And note it does not weaken the invariant meanwhile:
 `schema.prisma` still carries no `@default`, so the generated client makes
 `tenantId` required and application code cannot omit it.
+
+### `20260902010000_fact_table_uniqueness`
+
+🛑 **NEVER APPLIED ANYWHERE — confirmed, not assumed. AND THIS FILE IS NOT ON
+`main` EITHER.** Re-measured on production 2026-09-04: both discriminator columns
+absent (`dw_draft_facts.sourceDraftId`, `dw_transaction_facts.sourceTransactionId`),
+all three indexes absent (`dw_matchup_facts_natural_key`,
+`dw_draft_facts_source_pick_key`, `dw_transaction_facts_source_key`), no
+`_prisma_migrations` row. Same on test.
+
+Like `draft_fact_metadata` above, its `migration.sql` exists only in `d65c84c7a` on
+branch `commish-os/phase-0-1b` and is absent from `main` and from a fresh clone.
+Unlike that one, nothing from it has been applied, so file and database agree —
+this is the state the parking convention is supposed to produce.
+
+> This section and the `draft_fact_metadata` one were **deleted from this file** by
+> the rewrite that added `weekly_matchup_roster_id_text`, leaving one line that made
+> a false claim about both. Restored 2026-09-04. They are documented here even
+> though their directories are not on `main`, because the README is the ledger of
+> what is applied WHERE — and for `draft_fact_metadata` the answer is "production,
+> from a branch", which is exactly the case a reader must not have to discover
+> themselves.
+
+Gives the three warehouse fact tables the uniqueness they have never had.
+`dw_draft_facts`, `dw_transaction_facts` and `dw_matchup_facts` are written as
+`deleteMany` then `create` with no unique key, so two concurrent runs duplicate
+every row and a crash between the two steps leaves a league with nothing.
+`dw_season_standing_facts` already has a natural key and uses `upsert` — it is
+the worked example the other three should match.
+
+⚠ **It is not the one-line change the finding implied, and the reason is worth
+reading before applying.** Two of the three tables have no natural key to put a
+constraint on:
+
+* `dw_draft_facts` — the writer dedupes in memory on `sourceDraftId` and then
+  **strips that column before persisting**, because none exists. A key without
+  it is not merely weaker but wrong: a league with a startup *and* a rookie
+  draft in one season has two legitimate rows at the same
+  `(leagueId, season, round, pickNumber)`.
+* `dw_transaction_facts` — has no source transaction id at all, so a duplicate
+  is indistinguishable from a manager adding the same player twice in different
+  weeks.
+
+So it adds the missing discriminator columns first, and their indexes are
+**partial** (`WHERE … IS NOT NULL`). Legacy rows are never touched — the ids
+cannot be backfilled because they were never stored — and only rows written
+after the writers populate them are protected. The constraint is therefore inert
+until that writer change ships, which is the safe order.
+
+⚠ **One statement removes data**: the `dw_matchup_facts` dedupe, which is the
+only table with a complete natural key. Run the counting query in the migration's
+header first — zero means the dedupe is a no-op, and a large number is itself the
+evidence for the defect.
+
+⚠ **`schema.prisma` is deliberately NOT updated by this file.** Adding these
+columns there makes the generated client include them in its DEFAULT SELECT for
+every read of those models; against a database that lacks them that is P2022 on
+`findMany`, not confined to code that wants the new fields. The order is: apply,
+then update `schema.prisma`, then ship writers.
 
 ### `20260903222531_weekly_matchup_roster_id_text`
 
@@ -253,7 +377,23 @@ then update `schema.prisma`, then ship writers.
 
 ### `20260902020000_yahoo_connection_identity`
 
-🛑 **PARKED. NEVER APPLIED ANYWHERE.**
+✅ **APPLIED TO PRODUCTION 2026-09-04 16:22:59Z, and recorded.** This section said
+"PARKED. NEVER APPLIED ANYWHERE" while the paragraph at the top of this file said
+the opposite — the header was updated and the body was not. Verified by effect on
+production, not by the record: all three token columns read `is_nullable=YES`,
+`userId` exists, `YahooConnection_userId_key` exists, and
+`YahooConnection_userId_fkey` exists. It is the most recent row in
+`_prisma_migrations` (169 rows).
+
+🛑 **`schema.prisma` HAS NOT CAUGHT UP, AND THAT IS THE LIVE RISK.** The model still
+declares `accessToken`/`refreshToken` as `String` and `tokenExpiresAt` as
+`DateTime` — all required — and has no `userId` field at all. Production has all
+four changes. `migrate deploy` does not drift-check so deploys are unaffected, but
+**`prisma migrate dev` or `prisma db push` will read the database as drifted and
+offer to restore `NOT NULL` and drop `userId`** — undoing a deliberate change. This
+is harmless only while `YahooConnection` holds 0 rows, which it does today. The
+order this file states elsewhere — apply, then `schema.prisma`, then writers — is
+stopped at step one.
 
 Demotes `YahooConnection` from a rival CREDENTIAL store to an identity record:
 its three token columns become nullable, and it gains the `userId` link to
