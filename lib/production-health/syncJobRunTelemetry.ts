@@ -182,6 +182,52 @@ export async function reapAbandonedRuns(
   }
 }
 
+/**
+ * The gap `reapAbandonedRuns` cannot close, swept across EVERY job name.
+ *
+ * The per-job reaper above runs from `withSyncJobRun`, so a job only self-heals **on its next
+ * fire**. A job that never fires again — removed from the schedule, renamed, or dead because the
+ * thing that fires it broke — keeps its `running` row forever, and that row is exactly the one
+ * that matters: `computeJobHealth` checks `runningTooLong` BEFORE its freshness branches, so the
+ * deadest job on the board reports amber "appears stuck" and can never escalate to red.
+ *
+ * The 30-minute cutoff is inherited deliberately. It is justified by the longest `maxDuration`
+ * declared anywhere in this repo (300s, verified across `app/**`), not by the per-job scoping —
+ * no invocation can outlive that ceiling, so a `running` row older than 30 minutes is abandoned
+ * whoever owns it. Widening the sweep therefore does not require widening the window.
+ *
+ * ⚠ Returns `available: false` when the Prisma model is missing, because `reaped: 0` alone is
+ * ambiguous — it reads identically for "nothing was stale" and "we could not look". The caller
+ * needs to tell a healthy sweep from a blind one.
+ */
+export async function reapAllAbandonedRuns(
+  options: { now?: number; abandonedAfterMs?: number } = {},
+): Promise<{ available: boolean; reaped: number; cutoff: string }> {
+  const now = options.now ?? Date.now()
+  const cutoff = new Date(now - (options.abandonedAfterMs ?? ABANDONED_AFTER_MS))
+  const model = getModel()
+  if (!model || typeof model.updateMany !== "function") {
+    return { available: false, reaped: 0, cutoff: cutoff.toISOString() }
+  }
+  try {
+    const { count } = await model.updateMany({
+      // No `jobName` — that omission IS the feature. Scoping this would reproduce the per-job
+      // reaper and leave the never-fires-again case exactly as broken as it was.
+      where: { status: "running", startedAt: { lt: cutoff } },
+      data: {
+        status: "failed",
+        errorMessage:
+          "abandoned: run never reported a terminal status (function killed at maxDuration, or the process died). Marked failed by the scheduled cross-job reaper.",
+        completedAt: new Date(now),
+      },
+    })
+    return { available: true, reaped: count ?? 0, cutoff: cutoff.toISOString() }
+  } catch {
+    // Best-effort, like its sibling — but report it as unavailable rather than as a clean zero.
+    return { available: false, reaped: 0, cutoff: cutoff.toISOString() }
+  }
+}
+
 /** Best-effort: write the initial `running` row. Returns its id or null. */
 async function startRun(ctx: SyncJobContext): Promise<string | null> {
   const model = getModel()
@@ -237,10 +283,13 @@ export async function withSyncJobRun<T>(
 ): Promise<T> {
   const startedAt = Date.now()
   // Close out any previous invocation of THIS job that was killed before it could report a
-  // terminal status (see `reapAbandonedRuns`). Doing it here rather than from a dedicated route
-  // means every instrumented job self-heals on its next fire — this repo sits at Vercel's
-  // 2048-route ceiling, so a new maintenance endpoint is not an option. Best-effort by design:
-  // a reaper failure must never stop the job from running.
+  // terminal status (see `reapAbandonedRuns`), so every instrumented job self-heals on its next
+  // fire. Best-effort by design: a reaper failure must never stop the job from running.
+  //
+  // This covers only jobs that DO fire again. `/api/cron/reap-sync-runs` sweeps the rest on a
+  // schedule via `reapAllAbandonedRuns`. (That route was previously impossible: the repo sat at
+  // Vercel's 2048-route ceiling and carried a standing rule against new routes. Production moved
+  // to Railway on 2026-09-02 and the rule was retired on 2026-09-05, so it exists now.)
   await reapAbandonedRuns(ctx.jobName)
   const id = await startRun(ctx)
   try {

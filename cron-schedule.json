@@ -219,6 +219,10 @@
     {
       "path": "/api/cron/sleeper-historical-refresh",
       "schedule": "20 */4 * * *"
+    },
+    {
+      "path": "/api/cron/reap-sync-runs",
+      "schedule": "0 * * * *"
     }
   ]
 }
