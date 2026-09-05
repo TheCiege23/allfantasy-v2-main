@@ -19,6 +19,7 @@ import { AIToolModalShell } from '../AIToolModalShell'
 import { getChimmyChatHrefWithPrompt } from '@/lib/ai-product-layer/UnifiedChimmyEntryResolver'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { buildLeagueFormatLabel } from '@/lib/leagues/leagueFormatLabel'
+import { describeTradeCanonicalOpinion } from '@/lib/decision-os/trade/canonicalVisibility'
 
 type SportFilter = 'ALL' | (typeof SUPPORTED_SPORTS)[number]
 
@@ -464,6 +465,12 @@ export function TradeValueModal({
         agreesWithConsole: boolean | null
       }
     | undefined
+  /**
+   * The three honesty states, resolved by a tested pure function rather than decided in JSX. The
+   * previous version named all three in a comment and branched on `grade` alone, so `confidence: 0`
+   * — which is EVERY trade observation production has recorded — rendered as a confident grade.
+   */
+  const decisionOsState = describeTradeCanonicalOpinion(decisionOs ?? null)
   const secondary = result?.secondary as Record<string, unknown> | undefined
   const evaluation = result?.evaluation as { bullets?: string[]; sensitivity?: string } | undefined
   const chimmyPayload = result?.chimmyPayload as Record<string, unknown> | undefined
@@ -893,29 +900,35 @@ export function TradeValueModal({
         </p>
         {/*
           * A SECOND OPINION, NEVER THE VERDICT. The console's own answer above is unchanged; this
-          * sits beneath it, clearly attributed. Three states, and the two quiet ones matter more:
-          *   grade null      -> the engine could not price the deal. Say so; never print a grade.
-          *   agreement null  -> no verdict to compare. Never render that as agreement; that exact
-          *                      conflation is what the flip gate exists to prevent.
-          *   confidence 0    -> nothing to go on, which is not the same as "even".
+          * sits beneath it, clearly attributed.
+          *
+          * ⚠ The three states are resolved by `describeTradeCanonicalOpinion`, NOT here. An earlier
+          * version listed all three in this comment and then branched on `grade` alone — the
+          * comment was right and the code was wrong, and nothing caught it because this modal has
+          * no test. Keep the branching in the tested function; this block only chooses words.
           */}
-        {decisionOs ? (
+        {decisionOsState ? (
           <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#9ba3bf]">
             <span className="rounded-[3px] bg-[#1b2030] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-[#7c88ad]">
               Decision OS
             </span>
-            {decisionOs.grade ? (
+            {decisionOsState?.kind === 'opinion' ? (
               <>
-                <span className="font-semibold text-[#c8d4f0]">Grade {decisionOs.grade}</span>
-                <span className="text-[#5c6480]">{'·'} confidence {decisionOs.confidence}/100</span>
-                {decisionOs.agreesWithConsole === true ? (
+                <span className="font-semibold text-[#c8d4f0]">Grade {decisionOsState.grade}</span>
+                <span className="text-[#5c6480]">{'·'} confidence {decisionOsState.confidence}/100</span>
+                {decisionOsState.agreesWithConsole === true ? (
                   <span className="text-[#00d4aa]">{'·'} agrees with the console</span>
-                ) : decisionOs.agreesWithConsole === false ? (
+                ) : decisionOsState.agreesWithConsole === false ? (
                   <span className="text-[#d98b7c]">{'·'} disagrees with the console</span>
                 ) : (
                   <span className="text-[#5c6480]">{'·'} not comparable to the console verdict</span>
                 )}
               </>
+            ) : decisionOsState?.kind === 'no_signal' ? (
+              <span className="text-[#5c6480]">
+                nothing in this deal could be priced {'·'} confidence 0/100, so there is no second
+                opinion {'—'} not a neutral one
+              </span>
             ) : (
               <span className="text-[#5c6480]">
                 could not price this deal {'·'} no second opinion, not a neutral one

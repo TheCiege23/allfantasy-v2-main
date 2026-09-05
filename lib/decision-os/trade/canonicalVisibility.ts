@@ -64,3 +64,50 @@ export function toTradeCanonicalOpinion(
     agreesWithConsole: comparison.agreement,
   }
 }
+
+/**
+ * 🛑 THE THIRD STATE, WHICH WAS DECLARED IN A COMMENT AND NOT IMPLEMENTED.
+ *
+ * Phase 3B's render carried a comment naming three honesty states — grade null, agreement null, and
+ * confidence 0 — and then branched on `grade` alone. Nothing caught it, because the modal has no
+ * test of any kind. Production says that omission is not theoretical: EVERY trade observation
+ * recorded so far (4 of 4, 2026-09-04 to 09-05, all authenticated and league-scoped) carries
+ * `confidenceScore: 0` while still producing a grade — A+, A+, C+, B-. Rendering those by the old
+ * branch reads "Grade A+ · confidence 0/100", leading in bright text with a grade for a deal in
+ * which nothing could be priced.
+ *
+ * That is the same conflation `consoleShadowCompare` already refuses at line 169 ("ZERO CONFIDENCE
+ * IS NOT AGREEMENT"), reached one layer further out. The engine withdraws the agreement claim; the
+ * UI must withdraw the grade claim for the same reason and on the same threshold.
+ *
+ * Returned as a state rather than decided in JSX SO THAT IT CAN BE TESTED. A comment above a ternary
+ * is exactly what failed here.
+ */
+export type TradeCanonicalDisplayState =
+  /** The engine could not price the trade at all. Never print a grade. */
+  | { kind: 'unpriced' }
+  /** A grade exists but rests on nothing. Never lead with it; it is not a neutral verdict. */
+  | { kind: 'no_signal'; grade: string }
+  /** A real second opinion, with some signal behind it. */
+  | { kind: 'opinion'; grade: string; confidence: number; agreesWithConsole: boolean | null }
+
+/**
+ * Zero is the line, matching `consoleShadowCompare`'s own boundary rather than inventing a floor:
+ * any positive confidence is some signal and is shown, with its number, for the reader to weigh.
+ * Non-finite or negative confidence is treated as no signal — a NaN must not pass as a number.
+ */
+export function describeTradeCanonicalOpinion(
+  opinion: TradeCanonicalOpinion | null,
+): TradeCanonicalDisplayState | null {
+  if (!opinion) return null
+  if (opinion.grade == null) return { kind: 'unpriced' }
+  if (!Number.isFinite(opinion.confidence) || opinion.confidence <= 0) {
+    return { kind: 'no_signal', grade: opinion.grade }
+  }
+  return {
+    kind: 'opinion',
+    grade: opinion.grade,
+    confidence: opinion.confidence,
+    agreesWithConsole: opinion.agreesWithConsole,
+  }
+}
