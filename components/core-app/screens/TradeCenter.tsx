@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { StockMark, TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 /*
  * ⚠ THE SAME RESOLVER THE PICKER USES, DELIBERATELY. This repo already carries FIVE
  * team-logo functions (`getTeamLogo`, three separate `getTeamLogoUrl`s, and
@@ -324,18 +325,35 @@ export function TradeCenter(props: {
                 position: 'PICK',
                 team: null,
                 /*
-                 * 🛑 THIS WAS HARDCODED `null`, WHICH IS WHY A SIDE HOLDING A FIRST-ROUND PICK
-                 * REPORTED "1 unpriced" AND A TOTAL THAT UNDERSTATED ITSELF BY A WHOLE PICK. The
-                 * curve to price it has been in `lib/pick-curve.ts` all along; nothing called it.
+                 * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
                  *
-                 * ⚠ STILL NULL WHEN THE ROUTE COULD NOT PRICE IT — a hand-typed pick, or one with
-                 * no round. Absent stays absent; only the hardcoding is gone.
+                 * This field has now been fixed three times in three places — the rosters route,
+                 * the hand-typed pick, and here — because pricing at PICK time bakes a number into
+                 * stored state, so every path that creates a pick has to remember to set it. Any
+                 * path that forgets produces an em dash on the row and "1 unpriced" on a total
+                 * that then understates itself by a whole first-rounder.
+                 *
+                 * The round is all the curve needs and every pick carries one, so deriving it here
+                 * makes ONE rule serve every path — including a draft serialized into localStorage
+                 * before the rule existed, which no amount of fixing creation sites can reach.
+                 *
+                 * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
+                 * slot it projects to; the curve here only knows the round, so it is the fallback
+                 * and not the override.
                  */
-                marketValue: a.value ?? null,
+                marketValue:
+                  a.value ??
+                  (Number.isFinite(a.round) && a.round >= 1
+                    ? pickValueByOverall({
+                        round: a.round,
+                        teams: props.league?.teamCount ?? null,
+                        firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
+                      })
+                    : null),
               }
             : { name: `$${a.amount} FAAB`, position: 'FAAB', team: null, marketValue: null },
       ),
-    [pricedBy],
+    [pricedBy, props.league?.teamCount],
   )
 
   const give = toLines(giveAssets)

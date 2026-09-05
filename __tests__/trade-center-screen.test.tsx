@@ -507,6 +507,46 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     expect(faabBranch).not.toBeNull()
     expect(faabBranch![1].trim()).toBe('null')
   })
+
+  it('🛑 DERIVES the price from the round rather than trusting what the asset carries', () => {
+    /*
+     * This field was fixed three times in three places — the rosters route, the hand-typed pick,
+     * and here — because pricing at CREATION time bakes a number into stored state, so every path
+     * that makes a pick has to remember to set it. One that forgets shows an em dash and a total
+     * short by a whole first-rounder.
+     *
+     * Deriving at render makes one rule serve every path, including a draft serialized into
+     * localStorage BEFORE the rule existed — which no amount of fixing creation sites can reach,
+     * because those assets are already on disk.
+     */
+    const pickBranch = /position: 'PICK'[\s\S]{0,600}?marketValue:([\s\S]{0,420}?)\n\s*\}/.exec(code)
+    expect(pickBranch).not.toBeNull()
+    expect(pickBranch![1]).toContain('pickValueByOverall')
+    expect(pickBranch![1]).toContain('a.round')
+  })
+
+  it('⚠ a STORED price still wins over the derived one', () => {
+    /*
+     * The route prices a roster pick against the slot it projects to; the curve here knows only
+     * the round. Derived is the fallback, never the override — `a.value ??` has to come first.
+     */
+    const pickBranch = /position: 'PICK'[\s\S]{0,600}?marketValue:([\s\S]{0,420}?)\n\s*\}/.exec(code)
+    const body = pickBranch![1]
+    /*
+     * ⚠ PRESENCE FIRST, THEN ORDER. Asserting only the order passes when `a.value` is DELETED —
+     * `indexOf` returns -1, which is dutifully "less than" the other index. A mutation control
+     * removing the fallback left this green, which is how the hole was found.
+     */
+    expect(body).toContain('a.value')
+    expect(body.indexOf('a.value')).toBeGreaterThanOrEqual(0)
+    expect(body.indexOf('a.value')).toBeLessThan(body.indexOf('pickValueByOverall'))
+  })
+
+  it('prices against the real league size, and the memo depends on it', () => {
+    // A stale memo would keep a 12-team price after switching to a 10-team league.
+    expect(code).toContain('teams: props.league?.teamCount ?? null')
+    expect(code).toContain('[pricedBy, props.league?.teamCount]')
+  })
 })
 
 describe('🛑 a trade line shows the player, not just his name', () => {
