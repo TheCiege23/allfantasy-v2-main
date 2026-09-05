@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
+import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
 
 /**
@@ -67,6 +68,15 @@ type SearchRow = {
   position: string | null
   team: string | null
   value: number | null
+  /**
+   * ⚠ THE ROUTE ALWAYS SENT A headshotUrl FIELD; THIS TYPE DID NOT DECLARE IT, SO THE CLIENT
+   * DROPPED IT. That is why a searched player showed a coloured initial while the same player
+   * picked off a roster showed a face. A type that omits a field the server sends is not a
+   * smaller contract, it is a silent discard.
+   */
+  headshotUrl?: string | null
+  stock?: 'up' | 'down' | 'flat' | null
+  stockDelta?: number | null
 }
 
 /** Long enough that a fast typist does not fire a request per keystroke. */
@@ -115,6 +125,14 @@ export function TradeAssetPicker(props: {
   rosterLabel?: string | null
   /** True once a counterparty is chosen, so "we do not know" can be said precisely. */
   rosterKnown?: boolean
+  /**
+   * League size, used only to price a hand-typed pick.
+   *
+   * ⚠ ABSENT IS FINE: `pickValueByOverall` falls back to its reference league size, so a
+   * missing count costs precision, never the price. Refusing to price without it would
+   * reproduce the exact blank this field exists to remove.
+   */
+  teamCount?: number | null
   /**
    * The players on the roster this side sends from.
    *
@@ -417,16 +435,26 @@ export function TradeAssetPicker(props: {
                   position: r.position,
                   team: r.team,
                   value: r.value,
+                  imageUrl: r.headshotUrl ?? null,
+                  stock: r.stock ?? null,
+                  stockDelta: r.stockDelta ?? null,
                   sportHint: r.sport,
                 })
               }
             >
+              {r.headshotUrl ? (
+                <span className="af-tc-headshot" aria-hidden="true">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={r.headshotUrl} alt="" loading="lazy" />
+                </span>
+              ) : null}
               <span className="af-tc-row-body">
                 <span className="af-tc-row-name">{r.name}</span>
                 <span className="af-tc-row-sub">
                   {[r.position, r.team].filter(Boolean).join(' · ')}
                 </span>
               </span>
+              <StockMark stock={r.stock} delta={r.stockDelta} />
               {/* Unpriced shows an em dash here too — the picker must not imply zero. */}
               <span className="af-tc-row-value" data-unpriced={r.value == null ? 'true' : undefined}>
                 {r.value == null ? '—' : r.value.toLocaleString()}
@@ -519,6 +547,22 @@ export function TradeAssetPicker(props: {
                 year: pickYear,
                 round: pickRound,
                 label: `${pickYear} round ${pickRound}`,
+                /*
+                 * 🛑 THIS WAS null AND THE REASONING FOR IT WAS WRONG. The old comment said a
+                 * hand-typed pick "has no round we can trust" — but the round comes from a
+                 * number input the manager fills in themselves, so it is the one thing we DO
+                 * know. Leaving it unpriced put an em dash on the screen and an asterisk on the
+                 * total, on the most common way to add a pick.
+                 *
+                 * ⚠ STILL NOT PROPOSABLE, and that is a different question from priced. Without
+                 * a pickId the engine has nothing to point an offer at; the copy below already
+                 * says so and is unchanged.
+                 */
+                value: pickValueByOverall({
+                  round: pickRound,
+                  teams: props.teamCount ?? null,
+                  firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
+                }),
               })
             }
           >

@@ -904,6 +904,7 @@ export function TradeCenter(props: {
                   side.side === 'give' ? myRoster?.picks ?? [] : partnerRoster?.picks ?? []
                 }
                 rosterLabel={side.side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
+                teamCount={props.league?.teamCount ?? null}
                 rosterKnown={Boolean(side.side === 'give' ? myRoster : partnerRoster)}
                 /*
                   Same rule as the picks directly above, for the same reason: each column sends

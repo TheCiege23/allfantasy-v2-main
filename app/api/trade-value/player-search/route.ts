@@ -3,6 +3,8 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { searchPlayers } from '@/lib/data/players'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { resolveHeadshotUrl } from '@/lib/draft-sports-models/player-asset-resolver'
+import { directionFor } from '@/lib/trade-intel/playerStock'
 
 let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
@@ -22,11 +24,25 @@ async function searchNflFantasyCalc(q: string) {
     .map((p) => ({
       kind: 'player' as const,
       sport: 'NFL' as const,
-      playerId: null as string | null,
+      /*
+       * 🛑 THESE THREE WERE HARDCODED null AND THE DATA WAS ALREADY IN HAND.
+       * `FantasyCalcPlayerIdentity` carries `sleeperId`, and `FantasyCalcPlayer` carries
+       * `trend30Day` — the same number `ingestPlayerValues` writes into
+       * `PlayerValueSnapshot.trend30d`, so a player shows the SAME arrow whether he was
+       * picked off a roster or found by search. No name-join, no extra query.
+       */
+      playerId: p.player.sleeperId || null,
       name: p.player.name,
       position: p.player.position,
       team: p.player.maybeTeam ?? '',
-      headshotUrl: null as string | null,
+      headshotUrl: resolveHeadshotUrl(p.player.sleeperId || null, 'NFL'),
+      /*
+       * ⚠ NULL WHEN THERE IS NO READING, never 'flat'. `directionFor` answers 'flat' for a
+       * non-finite input, which is the right answer for a measured zero and the WRONG answer
+       * for a player nobody has measured — so the finite check happens here, not there.
+       */
+      stock: Number.isFinite(p.trend30Day) ? directionFor(p.trend30Day, p.value) : null,
+      stockDelta: Number.isFinite(p.trend30Day) ? p.trend30Day : null,
       value: p.value,
       rank: p.overallRank,
       source: 'fantasycalc',
