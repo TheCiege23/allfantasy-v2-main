@@ -112,7 +112,23 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
           leagueId: { in: leagueIds },
           isPrivate: false,
           createdAt: { gte: since },
-          NOT: [{ source: "draft" }, { source: { startsWith: "tribe_" } }],
+          /*
+           * ⚠ NULL-SAFE ON PURPOSE. A bare `NOT` renders as `NOT "source" = 'draft'`, which
+           * is UNKNOWN — not TRUE — for a NULL source, and NULL is what an ordinary league
+           * message carries. Written as a bare NOT this filter excluded EVERY chat row from
+           * the feed, broadcasts included, which is the same silence the comment below
+           * describes and a second cause of it. Measured on the test branch: 0 rows before,
+           * 4 after, with draft rows still excluded. Same fix as
+           * lib/league-chat/LeagueChatMessageService.ts.
+           */
+          AND: [
+            {
+              OR: [
+                { source: null },
+                { NOT: [{ source: "draft" }, { source: { startsWith: "tribe_" } }] },
+              ],
+            },
+          ],
           /*
            * ⚠ COMMISSIONER BROADCASTS WERE FALLING THROUGH THIS FILTER ENTIRELY.
            * `/api/commissioner/broadcast` writes its message with `type: "broadcast"` and leaves

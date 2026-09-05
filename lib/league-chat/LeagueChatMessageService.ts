@@ -86,9 +86,23 @@ export async function getLeagueChatMessages(
      * Tribe sources stay excluded either way — those are a different product's
      * private channels, not a view preference.
      */
-    where.NOT = options.includeDraftRoom
+    const excluded = options.includeDraftRoom
       ? [{ source: { startsWith: 'tribe_' } }]
       : [{ source: 'draft' }, { source: { startsWith: 'tribe_' } }]
+    /*
+     * ⚠ `NOT` ON ITS OWN DROPPED EVERY ORDINARY LEAGUE MESSAGE. Prisma renders
+     * it as `NOT "source" = 'draft'`, which in SQL is UNKNOWN — not TRUE — when
+     * `source` is NULL, and NULL is exactly what a league message carries (see
+     * the column's own comment in schema.prisma). So the exclusive filter
+     * excluded the rows it exists to KEEP: `/api/league/chat` returned an empty
+     * transcript for every league while POST went on storing messages, 200 each
+     * time. Write-only chat, with nothing red anywhere.
+     *
+     * The NULL branch has to be spelled out. Measured on a dev server against
+     * the test branch: 63 rows in one league, 2 with source NULL, and this
+     * WHERE returned 0 before the OR and 2 after.
+     */
+    where.AND = [{ OR: [{ source: null }, { NOT: excluded }] }]
   }
   const requestingUserId = options.requestingUserId
   if (requestingUserId) {
