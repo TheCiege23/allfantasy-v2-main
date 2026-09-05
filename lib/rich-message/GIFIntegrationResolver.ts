@@ -3,17 +3,58 @@
  * Graceful fallback when API keys are not set.
  */
 
+/*
+ * ⚠ `??` IS THE WRONG OPERATOR FOR ENV VARS AND THAT IS WHY THIS HELPER EXISTS.
+ * These three getters each read `A ?? B ?? ""`, and `??` only falls through on
+ * null/undefined — an env var that is PRESENT BUT EMPTY is the string `""`,
+ * which is not nullish, so it wins and the later name is never consulted.
+ * `KEY=` in a .env file is exactly that case, and blanking a key you no longer
+ * want is exactly how someone writes it. The result is a key that is set,
+ * correct, and silently unreachable.
+ *
+ * Picking the first NON-EMPTY value instead is what every caller here already
+ * assumes: `getGifProviderName()` and `isGifSearchConfigured()` both test these
+ * for truthiness, so `""` and undefined already mean the same thing to them.
+ * Trimming too — a trailing space in a .env line is otherwise a "set" key that
+ * builds a malformed request URL.
+ */
+function firstNonEmptyEnv(...values: Array<string | undefined>): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim() !== "") return value.trim()
+  }
+  return ""
+}
+
 function getKlipyKey(): string {
   if (typeof process === "undefined") return ""
-  return process.env.VITE_KLIPY_API_KEY ?? process.env.KLIPY_API_KEY ?? ""
+  return firstNonEmptyEnv(process.env.VITE_KLIPY_API_KEY, process.env.KLIPY_API_KEY)
 }
 function getTenorKey(): string {
   if (typeof process === "undefined") return ""
-  return process.env.TENOR_API_KEY ?? process.env.NEXT_PUBLIC_TENOR_API_KEY ?? ""
+  return firstNonEmptyEnv(process.env.TENOR_API_KEY, process.env.NEXT_PUBLIC_TENOR_API_KEY)
 }
+/*
+ * GIPHY_SDK_KEY is accepted here alongside GIPHY_API_KEY. The developer
+ * dashboard issues a separate key for SDK-type apps, and it was already sitting
+ * in .env.local with nothing in the repo reading it.
+ *
+ * ⚠ VERIFIED AGAINST THE REST ENDPOINT RATHER THAN ASSUMED, because "SDK key"
+ * reads like it belongs to a different surface: GET /v1/gifs/search with the
+ * SDK key returned 200 OK with 3 results carrying image payloads, and a
+ * deliberately malformed key returned 401 — so the 200 means the key was
+ * accepted, not that the endpoint answers anything.
+ *
+ * Ordered AFTER the server-side API key and BEFORE the NEXT_PUBLIC_ one, which
+ * is inlined into client bundles at build time; when both exist, the two that
+ * stay server-side should win.
+ */
 function getGiphyKey(): string {
   if (typeof process === "undefined") return ""
-  return process.env.GIPHY_API_KEY ?? process.env.NEXT_PUBLIC_GIPHY_API_KEY ?? ""
+  return firstNonEmptyEnv(
+    process.env.GIPHY_API_KEY,
+    process.env.GIPHY_SDK_KEY,
+    process.env.NEXT_PUBLIC_GIPHY_API_KEY,
+  )
 }
 
 export function isGifSearchConfigured(): boolean {
