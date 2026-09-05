@@ -675,6 +675,15 @@ export function buildTradeGradeEmail(params: {
   leagueName: string
   trade: GradedTrade
   ledgerUrl: string
+  /**
+   * ⚠ AN OFFER IS NOT A COMPLETED TRADE, AND THE SUBJECT LINE IS WHERE THAT MATTERS MOST. The
+   * subject deliberately carries the news so a manager at 61 leagues need not open the mail — which
+   * means saying "completed" about a deal still awaiting their own answer actively misinforms them,
+   * and they will not open the one email that needed them to.
+   *
+   * Optional and defaulting to 'complete', so every existing caller is unchanged.
+   */
+  status?: 'complete' | 'pending'
   /** League/scoring/prior-season/roster context. Omit and the email says only what points prove. */
   expectation?: TradeExpectation | null
   /**
@@ -743,15 +752,20 @@ export function buildTradeGradeEmail(params: {
 
   // The subject must carry the same caveat as the body. A letter that looks
   // realized in the inbox is not rescued by a disclaimer further down.
+  /*
+   * "offered" vs "completed". The grade that follows is the same question either way — was this
+   * balanced on the day — but only one of these describes something the reader still has to act on.
+   */
+  const verb = params.status === 'pending' ? 'offered' : 'completed'
   const subjectCore = !provisional
-    ? `Trade completed in ${leagueName} — initial grades: ${trade.sides
+    ? `Trade ${verb} in ${leagueName} — initial grades: ${trade.sides
         .map((s) => `${s.managerName} ${s.initialGrade}`)
         .join(', ')}`
     : projections.length === trade.sides.length && expectation?.priorSeason
-      ? `Trade completed in ${leagueName} — projected on ${expectation.priorSeason}: ${projections
+      ? `Trade ${verb} in ${leagueName} — projected on ${expectation.priorSeason}: ${projections
           .map((x) => `${x.name} ${x.p.letter}`)
           .join(', ')}`
-      : `Trade completed in ${leagueName} — too early to grade (no games played yet)`
+      : `Trade ${verb} in ${leagueName} — too early to grade (no games played yet)`
   const subject = `${subjectCore}${namePart}`
   const cards = trade.sides
     .map((s) => sideCard(s, provisional, provisional ? bySideId.get(s.rosterId) : undefined))

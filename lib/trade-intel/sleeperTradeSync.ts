@@ -45,7 +45,23 @@ export type SleeperRoster = { roster_id: number; players?: string[] | null }
  * Completed trade ids in the CURRENT season's feed (cheap: 18 week fetches).
  * Null means the feed itself was unavailable — distinct from "no trades".
  */
-export async function currentCompletedTradeIds(sleeperLeagueId: string): Promise<string[] | null> {
+/**
+ * Trade ids in this league's transaction feed, with the status each one carries.
+ *
+ * 🛑 THIS USED TO BE `currentCompletedTradeIds` AND KEPT ONLY `status === 'complete'`. That is the
+ * reason a manager was never told a trade had been OFFERED to them: an offer awaiting their answer
+ * is `pending`, so the one notification they actually need — the one with a decision attached —
+ * was the one filtered out. A completed trade is news; a pending one is a request.
+ *
+ * ⚠ `failed` IS STILL EXCLUDED. A withdrawn or rejected offer is not something to buzz a phone
+ * about, and treating an unknown status as notifiable would turn any future Sleeper vocabulary
+ * change into a spam incident. The allow-list is explicit for that reason.
+ */
+export type FeedTrade = { id: string; status: 'complete' | 'pending' }
+
+const NOTIFIABLE_STATUSES = new Set(['complete', 'pending'])
+
+export async function currentTradeIds(sleeperLeagueId: string): Promise<FeedTrade[] | null> {
   const weeks = await Promise.all(
     Array.from({ length: MAX_WEEKS }, (_, i) =>
       j<{ transaction_id: string; type: string; status: string }[]>(
@@ -54,13 +70,15 @@ export async function currentCompletedTradeIds(sleeperLeagueId: string): Promise
     ),
   )
   if (weeks.every((w) => w == null)) return null
-  const ids: string[] = []
+  const out: FeedTrade[] = []
   for (const w of weeks) {
     for (const t of w ?? []) {
-      if (t.type === 'trade' && t.status === 'complete') ids.push(t.transaction_id)
+      if (t.type !== 'trade') continue
+      if (!NOTIFIABLE_STATUSES.has(t.status)) continue
+      out.push({ id: t.transaction_id, status: t.status as FeedTrade['status'] })
     }
   }
-  return ids
+  return out
 }
 
 /** Current rosters, for roster-need analysis. Null when unavailable. */

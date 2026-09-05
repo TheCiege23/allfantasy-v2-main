@@ -10,7 +10,7 @@ import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
 import { canAccessForUser } from '@/lib/access/canAccessForUser'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
-import { currentCompletedTradeIds } from '@/lib/trade-intel/sleeperTradeSync'
+import { currentTradeIds, type FeedTrade } from '@/lib/trade-intel/sleeperTradeSync'
 import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 
 /**
@@ -37,19 +37,31 @@ import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 const SEEN_PREFIX = 'trade-notify:v1:'
 const SEEN_TTL_MS = 2 * 365 * 24 * 60 * 60 * 1000
 
-type SeenRecord = { version: 1; seen: string[]; lastRunIso: string }
+/**
+ * ⚠ VERSION 2, AND THE BUMP IS THE MIGRATION.
+ *
+ * A v1 record was built from COMPLETED trades only. If v2 simply started reading pending ones
+ * against it, every offer already sitting open in every league would look brand new on the first
+ * run — a retro-spam burst of emails and push notifications about trades days or weeks old, which
+ * is exactly what the bootstrap path below exists to prevent.
+ *
+ * `readSeen` accepts only version 2, so a v1 record reads as ABSENT, the existing bootstrap records
+ * everything currently in the feed and notifies nothing, and the league is live from its second
+ * run. One quiet run per league, no migration script, no burst.
+ */
+type SeenRecord = { version: 2; seen: string[]; lastRunIso: string }
 
 async function readSeen(sleeperLeagueId: string): Promise<SeenRecord | null> {
   const row = await prisma.sportsDataCache
     .findUnique({ where: { cacheKey: `${SEEN_PREFIX}${sleeperLeagueId}` } })
     .catch(() => null)
   const data = row?.data as unknown as SeenRecord | null
-  return data?.version === 1 && Array.isArray(data.seen) ? data : null
+  return data?.version === 2 && Array.isArray(data.seen) ? data : null
 }
 
 async function writeSeen(sleeperLeagueId: string, seen: string[]): Promise<void> {
   const cacheKey = `${SEEN_PREFIX}${sleeperLeagueId}`
-  const data = { version: 1, seen: seen.slice(-500), lastRunIso: new Date().toISOString() } as unknown as object
+  const data = { version: 2, seen: seen.slice(-500), lastRunIso: new Date().toISOString() } as unknown as object
   const expiresAt = new Date(Date.now() + SEEN_TTL_MS)
   await prisma.sportsDataCache
     .upsert({ where: { cacheKey }, update: { data, expiresAt }, create: { cacheKey, data, expiresAt } })
@@ -75,9 +87,17 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     emailsSent: 0,
   }
   try {
-    const currentIds = await currentCompletedTradeIds(sleeperLeagueId)
-    if (currentIds == null) return { ...base, error: 'transaction feed unavailable' }
+    const feed = await currentTradeIds(sleeperLeagueId)
+    if (feed == null) return { ...base, error: 'transaction feed unavailable' }
     base.checked = true
+    const currentIds = feed.map((f) => f.id)
+    /*
+     * The status a trade carried WHEN WE FIRST SAW IT, which is what the copy has to describe.
+     * A pending offer that is accepted later keeps its transaction id, so it is already `seen` and
+     * never notifies twice — the manager was told when the decision was theirs to make, which is
+     * the moment that mattered.
+     */
+    const statusById = new Map<string, FeedTrade['status']>(feed.map((f) => [f.id, f.status]))
 
     const seenRecord = await readSeen(sleeperLeagueId)
     if (!seenRecord) {
@@ -157,6 +177,11 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     const leagueName = afLeagues[0].name ?? 'your league'
     const ledgerUrl = `${getBaseUrl()}/league/${afLeagues[0].id}?view=legacy`
     for (const trade of newTrades) {
+      /*
+       * The graded ledger keys a trade as `<something>:<transactionId>`, which is how `newTrades`
+       * was matched above. The same suffix recovers the status the feed reported for it.
+       */
+      const isOffer = statusById.get(trade.id.split(':').pop() ?? '') === 'pending'
       // League shape, scoring settings, last season's real production and roster
       // needs. Optional by design: if any of it is unavailable the email falls
       // back to what realized points alone can prove.
@@ -182,6 +207,7 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
           leagueName,
           trade,
           ledgerUrl,
+          status: isOffer ? 'pending' : 'complete',
           expectation,
           psychology: entitled ? psychology : null,
           /*
@@ -219,8 +245,13 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
          * filters that decide whether this person hears about this trade at
          * all. No subscription is the normal case and costs one indexed read.
          */
+        /*
+         * ⚠ THE COPY FOLLOWS THE STATUS, same as the subject line above. "Trade accepted" on an
+         * offer still awaiting your answer is worse than no notification: it tells a manager a
+         * decision was made that was in fact left to them, and they will not open it.
+         */
         await sendPushToUser(recipient.id, {
-          title: `Trade accepted in ${leagueName}`,
+          title: isOffer ? `Trade offer in ${leagueName}` : `Trade accepted in ${leagueName}`,
           body: subject,
           href: `/league/${afLeagues[0].id}?view=legacy`,
           tag: `trade:${afLeagues[0].id}:${trade.id}`,
