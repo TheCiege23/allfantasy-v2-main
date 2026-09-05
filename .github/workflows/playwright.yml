@@ -192,6 +192,28 @@ jobs:
         # (e2e/helpers/admin-timezone-smoke.ts). The real admin password lives in
         # Vercel's project settings and never appears in this repo.
         ADMIN_PASSWORD: admin123
+        # ⚠ THE CORE SHARDS WERE NOT FAILING ON THEIR ASSERTIONS -- THE DEV SERVER
+        # WAS RESTARTING UNDERNEATH THEM. Measured on run 33936366794:
+        #
+        #   "Server is approaching the used memory threshold, restarting..."
+        #   15 restarts across the run, and TWELVE were in these three shards
+        #   (core 1/3: 4, core 2/3: 3, core 3/3: 5). Every job that PASSED had 1.
+        #
+        # A restarting server produces net::ERR_CONNECTION_REFUSED,
+        # ERR_EMPTY_RESPONSE and ECONNRESET -- 7 tests in that run died on exactly
+        # those -- plus an unknown share of the 27 timeouts, because a navigation
+        # issued into the restart window simply never answers.
+        #
+        # scripts/playwright-dev-server.cjs defaults the child to
+        # `--max-old-space-size=4096` and honours this variable when set, so this
+        # raises the CI server only. It is deliberately NOT changed in the script:
+        # ~9 sessions share one local box, and an 8GB default there starves peers.
+        #
+        # Next restarts when the heap APPROACHES the limit, so this buys headroom
+        # rather than removing the mechanism -- it should cut the restarts, not
+        # guarantee zero. If they persist, the next lever is fewer specs per shard,
+        # not more memory.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:core -- --shard=${{ matrix.shard }}
     - name: Run Playwright tests (retention engagement)
       if: matrix.lane == 'retention-engagement'
