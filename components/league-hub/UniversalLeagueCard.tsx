@@ -4,13 +4,11 @@
  * Universal League Hub — canonical dashboard card (Part 3).
  *
  * One card, driven entirely by `LeagueHubEntry` — no per-provider branch.
- * Audit finding (this phase): the existing Dashboard cards
- * (`app/dashboard/components/LeagueHubCard.tsx`, `.../warroom/MyLeagueCard.tsx`)
- * were already provider-agnostic (keyed off a shared `UserLeague` type, not
- * duplicated per provider) — there was no actual per-provider duplication to
- * "replace." This component is the new canonical reference implementation,
- * intended to be swapped in for those once the League Hub is the home
- * screen; see `UNIVERSAL_LEAGUE_HUB_ARCHITECTURE.md` for why that swap is
+ * Audit finding (that phase): the then-existing Dashboard cards — LeagueHubCard and
+ * warroom/MyLeagueCard, both since DELETED with the unrendered dashboards — were already
+ * provider-agnostic (keyed off a shared `UserLeague` type, not duplicated per provider), so
+ * there was no actual per-provider duplication to "replace." Those cards are gone, which
+ * makes this the only implementation rather than a candidate to swap in for them; see `UNIVERSAL_LEAGUE_HUB_ARCHITECTURE.md` for why that swap is
  * deliberately not done in this same phase (identical reasoning to the
  * Rankings-rewrite deferral earlier in this program: a shallow swap into an
  * already-live, heavily-used surface is a real regression risk that

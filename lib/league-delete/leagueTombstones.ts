@@ -8,10 +8,11 @@
  * next import, the next manual sync, or a cron-driven background import step
  * recreates it and the user watches a league they deleted reappear.
  *
- * It was already a felt problem before this module: `app/dashboard/DashboardShell.tsx`
- * carries a `sessionStorage` tombstone set for exactly this reason. That one
- * dies at tab close, does not cross devices, and cannot stop a server-side
- * recreate — it only hides the row after the fact.
+ * It was already a felt problem before this module: the old `DashboardShell` carried a
+ * `sessionStorage` tombstone set for exactly this reason. That one died at tab close, did
+ * not cross devices, and could not stop a server-side recreate — it only hid the row after
+ * the fact. That screen has since been deleted as unreachable, which removes the workaround
+ * but not the problem, and is one more reason this module is server-side.
  *
  * ⚠ MATCHING IS ON THE EXTERNAL IDENTITY, NOT `League.id`. A re-import mints a
  * brand new `League.id`, so an id-keyed tombstone would never match the thing

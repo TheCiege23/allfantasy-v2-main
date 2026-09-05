@@ -24,11 +24,17 @@ export async function POST(req: Request) {
    * switch off to stop abuse would also have taken the feature away from paying users,
    * which is not a lever anyone wants to pull on a Sunday.
    *
-   * The gate is free here because the ONLY caller is <StartSitPopup>, mounted through
-   * StartSitLauncher on the dashboard (app/dashboard/DashboardShell.tsx and
-   * components/dashboard/nocturne/NocturneDashboard.tsx) — and /dashboard already
-   * redirects anonymous visitors to /login. Every real user of this endpoint is signed
-   * in already; only a direct caller was not.
+   * The gate was free when it was added: the ONLY caller was <StartSitPopup>, mounted through
+   * StartSitLauncher on the dashboard, and /dashboard already redirected anonymous visitors to
+   * /login. Every real user was signed in already; only a direct caller was not.
+   *
+   * ⚠ THAT CALLER IS NO LONGER MOUNTED, so today this endpoint has no reachable caller at all.
+   * StartSitLauncher's only mounts were DashboardShell and NocturneDashboard, and BOTH WERE
+   * ALREADY UNREACHABLE before those files were deleted — measured with a before/after
+   * reachability walk, so the deletion did not cause this, it only removed the last copies.
+   * components/dashboard/StartSitLauncher.tsx and components/StartSitPopup/ still exist and are
+   * dead. The 401 below stays regardless: an endpoint with no caller should be harder to reach,
+   * not easier.
    *
    * Checked against a live probe first: anonymous POST returned 200, not 401.
    */

@@ -10,8 +10,9 @@ import { getFirstStatedKickoff } from './seasonPhase'
  * ⚠ THIS PAGE EXISTS BECAUSE THE OLD ENTRY POINT WENT SOMEWHERE ELSE ENTIRELY.
  * "Season Outlook" in the dashboard tools grid pointed at `/af-legacy?tab=pulse`
  * — the Legacy import board's market tab, which has nothing to do with playoff
- * odds. That href is fixed in the same change that adds this file; see
- * `components/dashboard/nocturne/NocturneDashboard.tsx`. If you are reading this
+ * odds. That href was fixed in the same change that added this file, in the Nocturne
+ * dashboard — a screen since deleted as unreachable, so the fix now lives only in history
+ * (git log --diff-filter=D -- components/dashboard/nocturne/). If you are reading this
  * because odds look wrong, check first that you are on THIS route and not back
  * on the Legacy board.
  *
