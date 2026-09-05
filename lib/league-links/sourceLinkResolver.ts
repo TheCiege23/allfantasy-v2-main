@@ -428,12 +428,14 @@ export function resolveSourceScreenLink(
  * come with the league and team id it was opened on.
  */
 export const VERIFIED_SCREENS: Readonly<Record<SourcePlatform, readonly SourceScreen[]>> = Object.freeze(
-  Object.fromEntries(
-    (Object.keys(PROVIDERS) as SourcePlatform[]).map((k) => {
+  (Object.keys(PROVIDERS) as SourcePlatform[]).reduce(
+    (acc, k) => {
       const cfg = PROVIDERS[k]
       const screens: SourceScreen[] = cfg.buildLeagueUrl ? ['league'] : []
       for (const s of ['lineup', 'waivers', 'trade'] as const) if (cfg.screens?.[s]?.verified) screens.push(s)
-      return [k, screens]
-    }),
-  ) as Record<SourcePlatform, readonly SourceScreen[]>,
+      acc[k] = screens
+      return acc
+    },
+    {} as Record<SourcePlatform, readonly SourceScreen[]>,
+  ),
 )
