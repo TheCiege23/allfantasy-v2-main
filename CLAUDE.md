@@ -1032,6 +1032,49 @@ mock still matched. Compare the blob of BOTH the test and the module across
 branches before concluding anything; the branch that is wrong is usually the one
 where everything is green.
 
+#### A search hit is not attribution
+
+The shapes above are a check that cannot fail, one that fails and hands back a
+plausible value, and one that passes against an artifact you did not ship. Here
+is a fourth: **the search ran, the hit was real, the text was genuinely there —
+and it did not mean what it was read to mean.**
+
+Measured 2026-09-05, and it nearly put a false statement about a named peer into
+this file permanently. A full-text search across session transcripts was used to
+work out who had authored `9c51a1e0e`. It returned that commit's `git commit`
+output sitting inside the pusher's transcript, and that was read as *the pusher
+created it*. Every mechanical part of the search was correct. The inference was
+not: **a session transcript records what a session SAW as readily as what it
+DID** — a `git log`, a `git show`, a pasted message from somebody else. The same
+holds for any corpus where "X appears in Y's output" gets silently promoted to
+"Y produced X": build logs, CI output, scrollback.
+
+**Authorship and timing have an authoritative source, and it costs one command:**
+
+```bash
+git log -1 --format='%an %ad %cn %cd' --date=iso <sha>
+```
+
+That settled it: `9c51a1e0e` was committed **2026-09-03 17:52**, two days before
+the session it was being attributed to existed.
+
+⚠ **AND THE DISCONFIRMING FACT WAS INSIDE THE SNIPPET ALREADY BEING QUOTED.** The
+search result read `… [detached HEAD 9c51a1e0e] test(executive-viz): update stale
+label assertion to Activity Date: Thu Sep 3 …`. **`Date: Thu Sep 3` was right
+there**, in the very evidence being relied on, and was read straight past because
+the rest of the line agreed with what was already believed. When a snippet
+carries a date, a SHA or a path, read the parts that could refute you BEFORE the
+parts that confirm you — the cheapest disconfirming evidence you will ever get is
+the evidence already in your hand.
+
+🛑 **AND IT WAS CAUGHT BY THE SESSION IT ACCUSED, NOT BY ITS AUTHOR.** That is the
+governing fact for this whole shape. An attribution error is close to invisible
+from the outside and obvious from the inside, so **name the party you are
+describing when you write it down, and give them the chance to answer before it
+lands.** Had that claim been phrased impersonally it would have shipped, and the
+strongest sentence in a permanent incident record would have been its only false
+one.
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 User's decision, 2026-08-29, and the larger half of the build bill. The
