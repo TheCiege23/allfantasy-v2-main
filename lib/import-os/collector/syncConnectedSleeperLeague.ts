@@ -53,8 +53,15 @@ const realSleep: Sleep = (ms) => new Promise((r) => setTimeout(r, ms))
  */
 async function fetchNormalizedForLeague(
   connection: LeagueSyncConnection,
+  now: Date,
 ): Promise<NormalizedImportResult> {
-  return fetchNormalizedForConnection(connection)
+  /*
+   * ⚠ THE RUN'S CLOCK, NOT A FRESH ONE. The loader derives its transaction-week window from this
+   * instant, and `resolveCadence` above already decided the run was due against the same `now`.
+   * Letting the loader call `new Date()` would put two clocks in one run for no benefit and make
+   * the window untestable from here.
+   */
+  return fetchNormalizedForConnection(connection, { now })
 }
 
 /**
@@ -243,7 +250,7 @@ export async function syncConnectedLeague(
   const loadNormalized = createMemoizedNormalizedLoader(() =>
     deps.fetchNormalized
       ? deps.fetchNormalized(connection.externalLeagueId, connection)
-      : fetchNormalizedForLeague(connection),
+      : fetchNormalizedForLeague(connection, now),
   )
   const store = createPrismaSleeperSyncStore({
     connection,

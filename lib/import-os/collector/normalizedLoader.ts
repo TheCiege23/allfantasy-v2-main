@@ -48,6 +48,7 @@
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
+import { resolveTransactionWeekWindow } from '@/lib/import-os/season'
 /*
  * BOTH questions are asked in this file, deliberately: `providerNeedsUser` decides whether to
  * attribute the read to an importing user at all, `providerNeedsCredential` decides whether a
@@ -193,10 +194,34 @@ export async function fetchNormalizedForConnection(
     runPipeline?: typeof runImportedLeagueNormalizationPipeline
     resolveCandidates?: (c: LeagueSyncConnection) => Promise<string[]>
     maxCandidates?: number
+    /** Injectable clock; the window below is calendar-derived, so tests must be able to pin it. */
+    now?: Date
   } = {},
 ): Promise<NormalizedImportResult> {
   const runPipeline = deps.runPipeline ?? runImportedLeagueNormalizationPipeline
   const maxCandidates = deps.maxCandidates ?? MAX_USER_CANDIDATES
+
+  /*
+   * ⚠ NARROW THE TRANSACTION FETCH TO THE WEEKS A LIVE REFRESH CAN LEARN ANYTHING FROM.
+   *
+   * `currentStateOnly` above already stops this path chasing prior SEASONS. It does not stop it
+   * re-reading the whole current season's transaction log: Sleeper's endpoint is per-week, so the
+   * default is 18 requests per league per sync, and at a 10-minute cadence across the rotation
+   * that is the single largest provider cost the collector carries.
+   *
+   * ⚠ `null` MEANS "FETCH THEM ALL", AND PASSING IT ON UNCHANGED IS THE POINT. Offseason and
+   * unknown-sport both answer null, because the calendar cannot name a week it is confident about
+   * and a dynasty offseason is when trading is heaviest. `undefined` reaches the pipeline as "no
+   * window", which restores the full sweep — the safe direction. Cutting cost is worth doing only
+   * where it cannot cost a trade.
+   */
+  const weekWindow =
+    resolveTransactionWeekWindow({
+      sport: connection.sport,
+      provider: connection.provider,
+      now: deps.now ?? new Date(),
+      season: connection.season,
+    }) ?? undefined
 
   /*
    * An UNOWNED provider takes the no-user path directly. Resolving candidates for it would be a
@@ -208,6 +233,7 @@ export async function fetchNormalizedForConnection(
       provider: connection.provider,
       sourceId: connection.externalLeagueId,
       currentStateOnly: true,
+      transactionWeeks: weekWindow,
     })
     if (result.success) return result.normalized
     if (result.code === 'LEAGUE_NOT_FOUND') {
@@ -235,6 +261,7 @@ export async function fetchNormalizedForConnection(
       sourceId: connection.externalLeagueId,
       userId,
       currentStateOnly: true,
+      transactionWeeks: weekWindow,
     })
     if (result.success) return result.normalized
 

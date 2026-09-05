@@ -68,6 +68,24 @@ export interface ImportedLeagueNormalizationInput {
    * rows; a true here would silently record every imported league as having no history.
    */
   currentStateOnly?: boolean
+  /**
+   * Which `/transactions/{week}` weeks to fetch (Sleeper only). Omit for the full 1..18 sweep.
+   *
+   * ⚠ THE SAME ARGUMENT AS `currentStateOnly`, ONE LEVEL DOWN, AND IT SURVIVED THE FIRST PASS.
+   * That flag stopped the refresh chasing prior SEASONS; this stops it re-reading the whole
+   * current season's transaction log every ten minutes. `SleeperLeagueFetchService` issues one
+   * request per week, so the 1..18 default is 18 requests per league per sync — and in week 1,
+   * seventeen of them are for weeks that have not happened.
+   *
+   * ⚠ IT IS DELIBERATELY SEPARATE FROM `currentStateOnly` RATHER THAN IMPLIED BY IT. A caller can
+   * want current-season-only with the FULL transaction history (the offseason case, where the
+   * calendar cannot name a week), and coupling the two would remove that option silently.
+   *
+   * ⚠ IMPORT AND MANUAL RE-SYNC MUST NOT SET THIS, for the same reason they must not set
+   * `currentStateOnly`: they persist the season's trades, and a windowed fetch would record a
+   * league as having only the last three weeks of transactions.
+   */
+  transactionWeeks?: number[]
 }
 
 export interface ImportedLeagueNormalizationResult {
@@ -111,6 +129,8 @@ export async function runImportedLeagueNormalizationPipeline(
   const sourceId = typeof input === 'string' ? input : input.sourceId
   /* Legacy string input is an import call site, so it keeps the full-history default. */
   const currentStateOnly = typeof input === 'string' ? false : input.currentStateOnly === true
+  /* Legacy string input is an import call site, so it keeps the full 1..18 transaction sweep too. */
+  const transactionWeeks = typeof input === 'string' ? undefined : input.transactionWeeks
 
   try {
     let payload: unknown
@@ -118,7 +138,7 @@ export async function runImportedLeagueNormalizationPipeline(
     if (provider === 'sleeper') {
       payload = await fetchSleeperLeagueForImport(
         sourceId,
-        currentStateOnly ? { maxPreviousSeasons: 0 } : {},
+        currentStateOnly ? { maxPreviousSeasons: 0, transactionWeeks } : {},
       )
       if (!(payload as any)?.league?.league_id) {
         return {

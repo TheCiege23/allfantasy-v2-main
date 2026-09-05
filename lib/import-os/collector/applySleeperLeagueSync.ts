@@ -415,8 +415,11 @@ async function applyTradedPicks(
  * `transactions` — write completed trades to `LeagueTrade` so they appear without a manual Sync.
  *
  * ⚠ THE PAYLOAD IS ALREADY IN HAND; THIS ADDS NO PROVIDER CALL. `SleeperLeagueFetchService`
- * fetches 18 weeks of transactions on every sync regardless, and until now every one of them was
- * discarded. See `persistLiveTrades.ts` for why the scope did not exist before.
+ * fetches the transaction weeks this refresh asked for regardless, and until this scope existed
+ * every one of them was discarded. See `persistLiveTrades.ts` for why the scope did not exist
+ * before. (That sweep was 18 weeks when this was written; the live path now asks for a window
+ * around the current week — see `resolveTransactionWeekWindow`. The "already in hand" property is
+ * what matters here and is unchanged.)
  *
  * ⚠ `removed` STAYS 0 AND THAT IS DELIBERATE. Every other scope here reconciles: a row the
  * provider stops returning is retired. A trade is an EVENT, not current state — Sleeper only

@@ -2,10 +2,16 @@
  * Persist trades seen by the LIVE sync, so a trade shows up without anyone pressing Sync.
  *
  * 🛑 WHY THIS EXISTS. The 30-minute collector FETCHED transactions and then dropped them on the
- * floor. `SleeperLeagueFetchService` pulls `/league/{id}/transactions/{week}` for 18 weeks on every
- * single sync, the normalization pipeline carries them into `NormalizedImportResult.transactions`,
- * and `LEAGUE_SYNC_SCOPES` had no scope that wrote them anywhere. The cost was already being paid;
- * only the write was missing.
+ * floor. `SleeperLeagueFetchService` pulled `/league/{id}/transactions/{week}` for all 18 weeks on
+ * every single sync, the normalization pipeline carried them into
+ * `NormalizedImportResult.transactions`, and `LEAGUE_SYNC_SCOPES` had no scope that wrote them
+ * anywhere. The cost was already being paid; only the write was missing.
+ *
+ * ⚠ THE FETCH IS NO LONGER 18 WEEKS ON THE LIVE PATH, AND THIS FILE MUST NOT ASSUME IT IS.
+ * `resolveTransactionWeekWindow` narrows a live refresh to a window around the current week, so
+ * `normalized.transactions` now carries only those weeks. Nothing here depends on the width — the
+ * filter below is over whatever arrived — but a reader reasoning about "why is an old trade
+ * missing" should know the live payload is windowed and the historical backfill owns the rest.
  *
  * The scope list's own note said transactions were skipped because they had "no canonical
  * destination table (no fabrication)". That was true when written and is not true now:

@@ -24,12 +24,16 @@ export type SeasonState = 'preseason' | 'regular_season' | 'postseason' | 'offse
  * ~1.6-day rotation, so the cadence IS the visible trade latency. 10 minutes was the user's ask
  * against a product promise that trades appear without pressing Sync.
  *
- * ⚠ AND IT TRIPLES PROVIDER LOAD, WHICH IS THE COST TO KNOW BEFORE TUNING IT FURTHER.
- * `SleeperLeagueFetchService` pulls 18 transaction weeks + 18 matchup weeks per league per sync, so
- * a 10-minute cadence is ~3x the Sleeper calls of a 30-minute one across the whole rotation. The
- * standing follow-up is to plumb `maxTransactionWeeks` through the pipeline so the LIVE sync asks
- * for the current week rather than all 18 — that alone would make 10 minutes cheaper than 30 is
- * today. Until then, this constant is the dial: raise it back and the load falls with it.
+ * ⚠ THE 3x LOAD THIS ORIGINALLY CARRIED HAS BEEN PAID DOWN — AND THE TRANSACTION HALF IS NOW
+ * CHEAPER AT 10 MINUTES THAN IT WAS AT 30. `resolveTransactionWeekWindow` below narrows the LIVE
+ * refresh from 18 `/transactions/{week}` requests to at most 3, so per sync that half is 6x
+ * cheaper; at 3x the frequency the net is ~half the transaction requests of the old 30-minute
+ * behaviour. The follow-up this comment used to name as standing is done.
+ *
+ * ⚠ THE MATCHUP HALF IS UNTOUCHED AND IS NOW THE LARGER COST. `maxMatchupWeeks` still defaults to
+ * 18 on every sync, and unlike transactions those weeks ARE read — `teams_rosters` persists recent
+ * matchups and standings from them, so narrowing that window is a real behavioural question rather
+ * than the pure waste the transaction sweep was. It has not been attempted here.
  *
  * Offseason stays at 4 hours. Nothing trades at 3am in June, and the same multiplier applied there
  * would be pure spend.
@@ -113,4 +117,66 @@ export function resolveCadence(input: SeasonInput): { state: SeasonState; cadenc
 /** True for the frequent-refresh states (everything except offseason/unknown). */
 export function isInSeason(state: SeasonState): boolean {
   return state === 'preseason' || state === 'regular_season' || state === 'postseason'
+}
+
+/** Sleeper serves `/transactions/{week}` for weeks 1..18; there is no week 0 and no week 19. */
+export const MAX_TRANSACTION_WEEK = 18
+
+/**
+ * Weeks either side of the computed week that are fetched anyway.
+ *
+ * 🛑 THIS IS NOT PADDING, IT IS THE ERROR BUDGET, AND REMOVING IT MAKES A MISS SILENT. The week
+ * below is derived from a CALENDAR; Sleeper's own `leg` advances on Sleeper's schedule, and the
+ * two need not agree at a boundary. A window that is wrong by one and has no margin fetches a week
+ * with nothing in it, writes nothing, and reports a completed scope — the exact shape of failure
+ * this subsystem has already paid for twice. One extra request per league per sync buys immunity
+ * to an off-by-one in EITHER direction, which is why the margin is symmetric even though only the
+ * backward half looks useful.
+ */
+export const TRANSACTION_WEEK_MARGIN = 1
+
+/**
+ * NFL scoring week for a UTC instant, by the same calendar `SPORT_CALENDARS` uses.
+ *
+ * Week 1 opens on Sep 4 (`regular_season.startMd`), so this and the segment table cannot drift
+ * apart — a season boundary edited in one place moves both. Clamped to 1..18: a date past week 18
+ * is still inside the wrapping regular-season segment (to Jan 6) and answers 18, which is correct
+ * for a league still transacting in the final week.
+ */
+export function nflWeekForDate(now: Date): number {
+  const month = now.getUTCMonth() + 1
+  /* The segment wraps the year end, so Jan belongs to the season that began the PREVIOUS September. */
+  const seasonStartYear = month <= 6 ? now.getUTCFullYear() - 1 : now.getUTCFullYear()
+  const start = Date.UTC(seasonStartYear, 8, 4) // month is 0-based: 8 = September
+  const days = Math.floor((now.getTime() - start) / 86_400_000)
+  const week = Math.floor(days / 7) + 1
+  return Math.min(MAX_TRANSACTION_WEEK, Math.max(1, week))
+}
+
+/**
+ * Which `/transactions/{week}` weeks a LIVE refresh needs — or `null` for "cannot say, fetch them all".
+ *
+ * 🛑 NULL IS A REAL ANSWER AND MUST NOT BE COLLAPSED TO A DEFAULT WEEK. Offseason is when dynasty
+ * leagues trade hardest, and the calendar cannot say which week Sleeper files an offseason trade
+ * under — so this returns null and the caller keeps the full 1..18 sweep. That costs nothing worth
+ * saving, because `CADENCE_MINUTES.offseason` is 240: a 4-hourly full sweep is ~1/24th the load of
+ * the in-season cadence this exists to cut. Narrowing where we are confident and refusing to guess
+ * where we are not is the whole design.
+ *
+ * ⚠ PRESEASON IS WEEK 1, MEASURED RATHER THAN ASSUMED. The four rows the live writer first
+ * ingested on production (2026-09-05 13:32Z) carried `week = 1` with `tradeDate` 2026-08-30 and
+ * 08-31 — dates BEFORE the Sep 4 opener. Sleeper files a preseason trade under week 1, so that is
+ * the window; week 2 rides along on the standard margin.
+ */
+export function resolveTransactionWeekWindow(input: SeasonInput): number[] | null {
+  const { state } = resolveSeasonState(input)
+  if (state === 'offseason' || state === 'unknown') return null
+
+  const centre = state === 'preseason' ? 1 : nflWeekForDate(input.now)
+  const lo = Math.max(1, centre - TRANSACTION_WEEK_MARGIN)
+  const hi = Math.min(MAX_TRANSACTION_WEEK, centre + TRANSACTION_WEEK_MARGIN)
+
+  const weeks: number[] = []
+  for (let w = lo; w <= hi; w += 1) weeks.push(w)
+  return weeks
 }

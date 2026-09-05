@@ -177,8 +177,11 @@ export function providerNeedsUser(provider: ImportProvider): boolean {
  * in the preceding two hours. A user's trade from 20 minutes earlier was simply not there, and the
  * product's headline promise is that it notices trades without being asked.
  *
- * ⚠ IT COSTS NO NEW PROVIDER CALL. `SleeperLeagueFetchService` already fetches 18 weeks of
- * transactions on EVERY sync and the pipeline already carries them; only the write was missing.
+ * ⚠ IT COSTS NO NEW PROVIDER CALL. `SleeperLeagueFetchService` already fetches this refresh's
+ * transaction weeks and the pipeline already carries them; only the write was missing. (It swept
+ * all 18 weeks when this scope was added; the live path now asks for a window around the current
+ * week via `resolveTransactionWeekWindow`, which changed the cost of the fetch and not this
+ * scope's relationship to it.)
  *
  * ⚠ ITS POSITION IS THE LOAD-BEARING PART — read the order rule above before moving it. It sits
  * ahead of `teams_rosters` (the expensive scope, and the intended budget casualty) and behind

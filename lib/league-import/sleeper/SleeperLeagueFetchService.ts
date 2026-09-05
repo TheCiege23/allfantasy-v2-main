@@ -17,7 +17,9 @@ const FETCH_TIMEOUT_MS = 12000
  * 🛑 WITHOUT THIS, A BULK IMPORT IS A BURST OF ~288 SIMULTANEOUS REQUESTS.
  * `fetchSleeperLeagueForImport` fans out 18 transaction weeks and 18 matchup weeks
  * through `Promise.all` — ~40 requests for one league, past 70 for a ten-year dynasty
- * chain. `/api/import-sleeper` then runs 8 leagues concurrently (`pLimit(8)`), so the
+ * chain. (Those are the IMPORT defaults and still apply here; a live refresh passes
+ * `transactionWeeks` and fans out ~3 of the first 18. The ceiling exists for the import
+ * case, which is the one that bursts.) `/api/import-sleeper` then runs 8 leagues concurrently (`pLimit(8)`), so the
  * two multiply: the per-league fan-out was bounded and the number of leagues was
  * bounded, and nobody bounded the product.
  *
@@ -201,6 +203,20 @@ export interface SleeperFetchOptions {
   maxMatchupWeeks?: number
   maxTransactionWeeks?: number
   maxPreviousSeasons?: number
+  /**
+   * EXPLICIT transaction weeks to fetch. Wins over `maxTransactionWeeks` when present.
+   *
+   * 🛑 A CAP CANNOT EXPRESS WHAT A LIVE REFRESH NEEDS, WHICH IS WHY THIS IS A LIST.
+   * `maxTransactionWeeks: N` means weeks 1..N — anchored at week 1 forever. That is right for an
+   * IMPORT, which wants the season from its start, and useless for a live sync, which wants the
+   * week we are in: in week 12 the cheapest cap that still covers the current week is 12, so it
+   * saves nothing exactly when the season is longest. A window says what is meant.
+   *
+   * Callers pass `resolveTransactionWeekWindow` from `@/lib/import-os/season`. An empty array is
+   * treated as "not specified" rather than "fetch nothing", because a caller that computes an
+   * empty window has a bug and silently fetching zero weeks would hide it behind a green run.
+   */
+  transactionWeeks?: number[]
 }
 
 const DEFAULTS: SleeperFetchOptions = {
@@ -299,7 +315,20 @@ export async function fetchSleeperLeagueForImport(
   // Phase 2.3 — weekly matchup + transaction fetches run in parallel (were sequential,
   // up to 36 blocking round-trips). Promise.all preserves order; a failed week records a
   // warning via the resilient fetcher rather than being silently skipped.
-  const txWeeks = Array.from({ length: opts.maxTransactionWeeks ?? 18 }, (_, i) => i + 1)
+  /*
+   * An explicit window wins; otherwise fall back to the 1..N cap the import path has always used.
+   * Sanitised rather than trusted: only whole weeks inside 1..18 survive, deduplicated and sorted,
+   * so a caller's arithmetic slip becomes a smaller fetch and never a request for `/transactions/0`
+   * or `/transactions/NaN`. An empty result after filtering falls back to the cap — see the note on
+   * `transactionWeeks`, where fetching nothing would be a silent no-op.
+   */
+  const requestedWeeks = (opts.transactionWeeks ?? [])
+    .filter((w) => Number.isInteger(w) && w >= 1 && w <= 18)
+    .sort((a, b) => a - b)
+  const windowWeeks = Array.from(new Set(requestedWeeks))
+  const txWeeks = windowWeeks.length
+    ? windowWeeks
+    : Array.from({ length: opts.maxTransactionWeeks ?? 18 }, (_, i) => i + 1)
   const matchupWeeks = Array.from({ length: opts.maxMatchupWeeks ?? 18 }, (_, i) => i + 1)
 
   const [txResults, matchupResults] = await Promise.all([

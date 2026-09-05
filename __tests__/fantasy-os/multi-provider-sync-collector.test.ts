@@ -58,6 +58,16 @@ function connection(overrides: Partial<LeagueSyncConnection> = {}): LeagueSyncCo
 const NORMALIZED = { source: { source_league_id: '123' } } as unknown as NormalizedImportResult
 
 const ok = () => ({ success: true as const, normalized: NORMALIZED })
+
+/**
+ * Pinned clock, because the loader now derives a transaction-week window from the CALENDAR.
+ *
+ * ⚠ WITHOUT THIS THESE ASSERTIONS WOULD PASS TODAY AND FAIL IN JANUARY, which is the worst kind
+ * of test: it dates rather than fails. 2026-10-15 is 41 days after the Sep 4 opener, so week 6,
+ * so the window is the week either side of it.
+ */
+const NOW = new Date('2026-10-15T12:00:00.000Z')
+const WEEK_WINDOW = [5, 6, 7]
 const fail = (code: string, error = 'nope') => ({ success: false as const, code, error })
 
 describe('provider credential classification', () => {
@@ -119,7 +129,7 @@ describe('needs a USER vs needs a CREDENTIAL — the distinction Fantrax lives i
     const runPipeline = vi.fn(async () => ok())
     const out = await fetchNormalizedForConnection(
       connection({ provider: 'fantrax', runKey: 'fantrax:abc:2026', externalLeagueId: 'abc' }),
-      { runPipeline: runPipeline as never, resolveCandidates: async () => ['owner-1'] },
+      { runPipeline: runPipeline as never, resolveCandidates: async () => ['owner-1'], now: NOW },
     )
 
     expect(out).toBe(NORMALIZED)
@@ -128,6 +138,7 @@ describe('needs a USER vs needs a CREDENTIAL — the distinction Fantrax lives i
       sourceId: 'abc',
       userId: 'owner-1',
       currentStateOnly: true,
+      transactionWeeks: WEEK_WINDOW,
     })
   })
 
@@ -176,12 +187,14 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
     await fetchNormalizedForConnection(connection({ provider: 'espn', externalLeagueId: '123' }), {
       runPipeline: runPipeline as never,
       resolveCandidates: async () => ['u1'],
+      now: NOW,
     })
     expect(runPipeline).toHaveBeenCalledWith({
       provider: 'espn',
       sourceId: '123',
       userId: 'u1',
       currentStateOnly: true,
+      transactionWeeks: WEEK_WINDOW,
     })
   })
 
@@ -189,12 +202,13 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
     const runPipeline = vi.fn(async () => ok())
     await fetchNormalizedForConnection(
       connection({ provider: 'sleeper', runKey: 'sleeper:123:2026' }),
-      { runPipeline: runPipeline as never },
+      { runPipeline: runPipeline as never, now: NOW },
     )
     expect(runPipeline).toHaveBeenCalledWith({
       provider: 'sleeper',
       sourceId: '123',
       currentStateOnly: true,
+      transactionWeeks: WEEK_WINDOW,
     })
   })
 
@@ -222,7 +236,7 @@ describe('fetchNormalizedForConnection — keyless providers', () => {
 
     const out = await fetchNormalizedForConnection(
       connection({ provider: 'sleeper', runKey: 'sleeper:123:2026' }),
-      { runPipeline: runPipeline as never, resolveCandidates },
+      { runPipeline: runPipeline as never, resolveCandidates, now: NOW },
     )
 
     expect(out).toBe(NORMALIZED)
@@ -231,6 +245,7 @@ describe('fetchNormalizedForConnection — keyless providers', () => {
       provider: 'sleeper',
       sourceId: '123',
       currentStateOnly: true,
+      transactionWeeks: WEEK_WINDOW,
     })
     expect(runPipeline.mock.calls[0][0]).not.toHaveProperty('userId')
   })
