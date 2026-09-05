@@ -90,7 +90,13 @@ export const GET = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooLe
     }
     
     let accessToken = decryptTokenOrRaw(connection.accessToken)
-    if (new Date() >= connection.tokenExpiresAt) {
+    /*
+     * ⚠ A NULL EXPIRY MEANS REFRESH, NOT "NOT YET EXPIRED". These three columns are
+     * nullable in production — YahooConnection was demoted to an identity record — and
+     * `new Date() >= null` is FALSE, so the previous form skipped the refresh and used a
+     * stale token instead. Absent is the one state that most needs a refresh.
+     */
+    if (!connection.tokenExpiresAt || new Date() >= connection.tokenExpiresAt) {
       accessToken = await refreshAccessToken(connection)
     }
     
@@ -209,7 +215,13 @@ export const POST = withApiUsage({ endpoint: "/api/yahoo/leagues", tool: "YahooL
     }
     
     let accessToken = decryptTokenOrRaw(connection.accessToken)
-    if (new Date() >= connection.tokenExpiresAt) {
+    /*
+     * ⚠ A NULL EXPIRY MEANS REFRESH, NOT "NOT YET EXPIRED". These three columns are
+     * nullable in production — YahooConnection was demoted to an identity record — and
+     * `new Date() >= null` is FALSE, so the previous form skipped the refresh and used a
+     * stale token instead. Absent is the one state that most needs a refresh.
+     */
+    if (!connection.tokenExpiresAt || new Date() >= connection.tokenExpiresAt) {
       accessToken = await refreshAccessToken(connection)
     }
     

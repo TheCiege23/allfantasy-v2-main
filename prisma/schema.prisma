@@ -1947,9 +1947,19 @@ model YahooConnection {
   yahooUserId    String        @unique
   displayName    String?
   email          String?
-  accessToken    String
-  refreshToken   String
-  tokenExpiresAt DateTime
+  /// ⚠ NULLABLE BECAUSE THIS TABLE IS AN IDENTITY RECORD, NOT A CREDENTIAL STORE.
+  /// Yahoo accepts exactly one registered redirect URI, so only one of the two Yahoo
+  /// stores can ever be written in production; this one was demoted rather than made
+  /// to hold a second copy of a token. Applied to production 2026-09-04 and recorded
+  /// in `_prisma_migrations` at 16:22:59Z — SQL in
+  /// `prisma/migrations-pending/20260902020000_yahoo_connection_identity`.
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  /// The app user this Yahoo identity belongs to. Unique, so one Yahoo identity maps
+  /// to at most one account; `onDelete: Cascade` matches the production FK.
+  userId         String?       @unique
+  user           AppUser?      @relation("AppUserYahooConnection", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   leagues        YahooLeague[]
@@ -3709,6 +3719,9 @@ model AppUser {
   payoutApprovals                          PayoutApproval[]
   financeAuditEvents                       FinanceAuditEvent[]                    @relation("FinanceAuditActor")
   userMusicFavorites                       UserMusicFavorite[]
+  /// Back-relation for `YahooConnection.userId`. Singular, because that column is
+  /// `@unique` — one Yahoo identity per account.
+  yahooConnection                          YahooConnection?                       @relation("AppUserYahooConnection")
   worldCupBracketChallengesOwned           WorldCupBracketChallenge[]             @relation("WorldCupBracketChallengeOwner")
   worldCupBracketParticipants              WorldCupBracketParticipant[]           @relation("WorldCupBracketParticipantUser")
   worldCupBracketInvitesCreated            WorldCupBracketInvite[]                @relation("WorldCupBracketInviteCreator")
@@ -13321,6 +13334,16 @@ model DraftFact {
   managerId  String?  @db.VarChar(64)
   season     Int?
   createdAt  DateTime @default(now())
+  /// What a pick WAS, beyond who took whom — traded-pick provenance the Sleeper
+  /// historical sync already fetches and currently discards.
+  ///
+  /// ⚠ DECLARED HERE BECAUSE THE COLUMN IS ALREADY LIVE, NOT TO CREATE IT. Applied by
+  /// hand to production and recorded in `_prisma_migrations` on 2026-09-05 01:41:00Z;
+  /// the SQL is `prisma/migrations-pending/20260902000000_draft_fact_metadata`. Until
+  /// this line existed, `schema.prisma` and production disagreed — harmless for
+  /// `migrate deploy`, which does not drift-check, but `prisma migrate dev` or
+  /// `db push` reads that disagreement as drift and offers to DROP the column.
+  metadata   Json?
 
   @@index([leagueId])
   @@index([leagueId, round])
