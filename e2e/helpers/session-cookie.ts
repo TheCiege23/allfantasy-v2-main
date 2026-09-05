@@ -19,6 +19,13 @@ import { resolveAuthSecret } from '@/lib/auth/resolve-auth-secret'
  *
  * Playwright's webServer forwards process.env to the server, so the spec process
  * and the app agree on the secret without any extra wiring.
+ *
+ * ⚠ AMENDED: the sentence above about there being no test-only branch is true of the
+ * TOKEN and was never true of the user. The session needs an `AppUser` row to exist or
+ * every user-owned write fails P2003, and that row is created through the e2e-gated
+ * `PUT /api/e2e/run-relay`, which IS a test-only surface. It is header-gated and lives in
+ * a directory the production build excludes, but calling it a bypass-free helper would be
+ * wrong now — the token is genuine, the account is seeded.
  */
 export async function signInAs(
   page: Page,
@@ -29,6 +36,46 @@ export async function signInAs(
     throw new Error(
       'signInAs needs NEXTAUTH_SECRET (or AUTH_SECRET) set for the test process — ' +
         'without it the token cannot be signed with the key middleware verifies against.'
+    )
+  }
+
+  /*
+   * 🛑 THE ROW FIRST, THEN THE COOKIE. A signed cookie alone produces a session that is real
+   * to middleware and to `getServerSession()` and absent from the database, so the first write
+   * that foreign-keys to the user fails P2003 — and the symptom appears nowhere near here.
+   *
+   * Measured in CI run 33967522140: `<AgeConfirmationPrompt>` (rendered globally by
+   * SafeGlobalChrome on every non-auth path) reads `/api/auth/confirm-age`, gets
+   * `confirmed: false` because there is no UserProfile, and opens a modal. Its own dismiss
+   * POST then dies on `user_profiles_userId_fkey` — 16 P2003s in that run — so the modal is
+   * permanent, and Playwright retries a click 244 times against a button it reports as
+   * "visible, enabled and stable" until the test times out at 180s. Three specs failed exactly
+   * that way and read as hanging UI.
+   *
+   * ⚠ Ensured through the server rather than with prisma here ON PURPOSE: importing
+   * `@prisma/client` into the spec process populates `process.env` from `.env`, and this
+   * repo's `.env` points at PRODUCTION.
+   */
+  const ensured = await page.request.put(`${baseUrl()}/api/e2e/run-relay`, {
+    headers: { 'x-allfantasy-e2e': '1', 'content-type': 'application/json' },
+    data: {
+      id: user.id,
+      email: user.email ?? `${user.id}@allfantasy.test`,
+      name: user.name ?? 'E2E User',
+      username: user.username ?? user.id,
+    },
+  })
+  if (!ensured.ok()) {
+    /*
+     * Loud on purpose. Swallowing this restores the exact bug it was written to fix: the spec
+     * would carry on with a session backed by no row and fail 180 seconds later on a click,
+     * which is the least legible failure this suite produces.
+     */
+    throw new Error(
+      `signInAs could not create the AppUser row for '${user.id}': ` +
+        `PUT /api/e2e/run-relay returned ${ensured.status()} — ${(await ensured.text()).slice(0, 300)}\n` +
+        'A 404 means the server was started without e2e seeding enabled ' +
+        '(NODE_ENV=production without ALLOW_E2E_SEED=1).'
     )
   }
 
