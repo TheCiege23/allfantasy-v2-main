@@ -48,40 +48,61 @@ describe('resolveSourceScreenLink', () => {
   it('an unverified format falls back to the league page and carries its candidate', () => {
     const trade = resolveSourceScreenLink({ ...sleeper, screen: 'trade' })
     expect(trade).toMatchObject({ href: 'https://sleeper.com/leagues/123456/league', verified: false, destinationType: 'league', candidate: 'https://sleeper.com/leagues/123456/trades' })
-
-    const espnWaivers = resolveSourceScreenLink({ ...espn, screen: 'waivers' })
-    expect(espnWaivers).toMatchObject({
-      href: 'https://fantasy.espn.com/football/league?leagueId=888&seasonId=2026',
-      verified: false,
-      candidate: 'https://fantasy.espn.com/football/players/add?leagueId=888&seasonId=2026',
-    })
-
-    const yahooWaivers = resolveSourceScreenLink({ ...yahoo, screen: 'waivers' })
-    expect(yahooWaivers).toMatchObject({
-      href: 'https://football.fantasysports.yahoo.com/f1/1361311',
-      verified: false,
-      candidate: 'https://football.fantasysports.yahoo.com/f1/1361311/players',
-    })
-    const yahooTrade = resolveSourceScreenLink({ ...yahoo, screen: 'trade', partnerTeamId: '449.l.1361311.t.7' })
-    expect(yahooTrade?.candidate).toBe('https://football.fantasysports.yahoo.com/f1/1361311/3/proposetrade?tid=7')
   })
 
   /*
-   * Verified 2026-09-05 against Guap's own team pages, pasted from his browser:
-   * ESPN league 919055222 team 7 season 2026, Yahoo league 1361311 team 10.
-   * The expected hrefs below ARE those pasted URLs.
+   * Verified 2026-09-05 on Guap's own leagues, each opened signed in and the
+   * settled URL pasted back: ESPN league 919055222 team 7 season 2026, Yahoo
+   * league 1361311 team 10. The expected hrefs below ARE those settled URLs.
    */
-  it('ESPN and Yahoo lineup are verified and land on the team page', () => {
-    const espnLineup = resolveSourceScreenLink({ platform: 'espn', sourceLeagueId: '919055222', season: 2026, teamId: '7', screen: 'lineup' })
-    expect(espnLineup).toMatchObject({
+  it('ESPN lineup and waivers are verified and land on the team page and the free-agent list', () => {
+    const real = { platform: 'espn', sourceLeagueId: '919055222', season: 2026, teamId: '7' }
+    expect(resolveSourceScreenLink({ ...real, screen: 'lineup' })).toMatchObject({
       href: 'https://fantasy.espn.com/football/team?leagueId=919055222&teamId=7&seasonId=2026',
       verified: true,
       screen: 'lineup',
       destinationType: 'action',
       candidate: null,
     })
-    const yahooLineup = resolveSourceScreenLink({ platform: 'yahoo', sourceLeagueId: 'https://football.fantasysports.yahoo.com/f1/1361311/10', teamId: '10', screen: 'lineup' })
-    expect(yahooLineup).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/1361311/10', verified: true, screen: 'lineup' })
+    expect(resolveSourceScreenLink({ ...real, screen: 'waivers' })).toMatchObject({
+      href: 'https://fantasy.espn.com/football/players/add?leagueId=919055222&seasonId=2026',
+      verified: true,
+      screen: 'waivers',
+    })
+  })
+
+  /*
+   * ESPN has no standalone trade URL: `/football/trade?…` returned "Page not
+   * found" on league 919055222. A trade is proposed from the other manager's
+   * team page, so the trade link is the verified team-page format with the
+   * PARTNER's id — and with no partner known, the league page.
+   */
+  it('ESPN trade lands on the partner’s team page, and on the league page without a partner', () => {
+    const real = { platform: 'espn', sourceLeagueId: '919055222', season: 2026, teamId: '7' }
+    expect(resolveSourceScreenLink({ ...real, screen: 'trade', partnerTeamId: '3' })).toMatchObject({
+      href: 'https://fantasy.espn.com/football/team?leagueId=919055222&teamId=3&seasonId=2026',
+      verified: true,
+      screen: 'trade',
+    })
+    expect(resolveSourceScreenLink({ ...real, screen: 'trade' })).toMatchObject({
+      href: 'https://fantasy.espn.com/football/league?leagueId=919055222&seasonId=2026',
+      verified: false,
+      candidate: null,
+    })
+  })
+
+  it('Yahoo lineup, waivers and trade are verified, from any stored id shape', () => {
+    const fromUrl = { platform: 'yahoo', sourceLeagueId: 'https://football.fantasysports.yahoo.com/f1/1361311/10', teamId: '10' }
+    expect(resolveSourceScreenLink({ ...fromUrl, screen: 'lineup' })).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/1361311/10', verified: true })
+    expect(resolveSourceScreenLink({ ...fromUrl, screen: 'waivers' })).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/1361311/players', verified: true })
+    // Verified without a counterparty parameter; none is appended even when a partner is known.
+    expect(resolveSourceScreenLink({ ...fromUrl, screen: 'trade', partnerTeamId: '449.l.1361311.t.7' })).toMatchObject({
+      href: 'https://football.fantasysports.yahoo.com/f1/1361311/10/proposetrade',
+      verified: true,
+      screen: 'trade',
+    })
+    const fromKey = { platform: 'yahoo', sourceLeagueId: '449.l.1361311', teamId: '449.l.1361311.t.10' }
+    expect(resolveSourceScreenLink({ ...fromKey, screen: 'trade' })?.href).toBe('https://football.fantasysports.yahoo.com/f1/1361311/10/proposetrade')
   })
 
   it('a format that needs a team id builds no candidate without one', () => {
@@ -118,9 +139,10 @@ describe('VERIFIED_SCREENS census', () => {
   it('pins which formats are live destinations today', () => {
     expect(VERIFIED_SCREENS).toEqual({
       sleeper: ['league', 'lineup', 'waivers'],
-      // lineup verified 2026-09-05 on league 919055222 / team 7 (ESPN) and 1361311 / team 10 (Yahoo).
-      espn: ['league', 'lineup'],
-      yahoo: ['league', 'lineup'],
+      // Verified 2026-09-05 by Guap on league 919055222 / team 7 (ESPN) and 1361311 / team 10 (Yahoo).
+      // ESPN "trade" is the partner's team page — /football/trade 404s.
+      espn: ['league', 'lineup', 'waivers', 'trade'],
+      yahoo: ['league', 'lineup', 'waivers', 'trade'],
       mfl: [],
       fantrax: [],
       fleaflicker: [],

@@ -178,9 +178,12 @@ describe('platform links', () => {
   const native = { id: 'L2', platform: 'manual', platformLeagueId: null, season: 2026, name: 'House League' }
   const sleeperNoId = { id: 'L3', platform: 'sleeper', platformLeagueId: null, season: 2026, name: 'Old Import' }
 
-  it('sends Yahoo to its verified league page, over https only', () => {
-    expect(lineupLink(yahoo)).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/55', external: true })
-    expect(claimLink(yahoo)?.href).toBe('https://football.fantasysports.yahoo.com/f1/55')
+  it('sends Yahoo to its verified screens over https — waivers needs no team id, lineup does', () => {
+    // No team id in this fixture, so the lineup link falls back to the league page.
+    expect(lineupLink(yahoo)).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/55', external: true, screen: 'League' })
+    // Waivers verified 2026-09-05 on league 1361311; the format needs only the league number.
+    expect(claimLink(yahoo)).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/55/players', screen: 'Waivers' })
+    expect(lineupLink({ ...yahoo, teamId: '10' })).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/55/10', screen: 'Lineup' })
   })
 
   it('keeps a native league inside AllFantasy', () => {

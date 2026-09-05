@@ -175,20 +175,30 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
           )
         },
       },
-      // Candidates only, pending Guap opening them on league 919055222.
+      // VERIFIED 2026-09-05: Guap opened it on league 919055222 and landed on
+      // the free-agent list, settled URL identical to this format.
       waivers: {
-        verified: false,
+        verified: true,
         build: ({ leagueId, season }) =>
           `https://fantasy.espn.com/football/players/add?leagueId=${encodeURIComponent(leagueId)}` +
           (season ? `&seasonId=${encodeURIComponent(season)}` : ''),
       },
+      /*
+       * ⚠ ESPN HAS NO STANDALONE TRADE URL WE KNOW OF. The candidate
+       * `/football/trade?leagueId=…&teamId=…&seasonId=…` was opened by Guap on
+       * league 919055222 on 2026-09-05 and returned ESPN's "Page not found".
+       * On ESPN a trade is proposed FROM THE OTHER MANAGER'S TEAM PAGE, which
+       * is the team-page format verified above with the partner's team id in
+       * it — so that is where the trade link lands. Without a partner id there
+       * is no destination and the caller falls back to the league page.
+       */
       trade: {
-        verified: false,
-        build: ({ leagueId, teamId, season }) => {
-          const t = numericId(teamId)
-          if (!t) return null
+        verified: true,
+        build: ({ leagueId, partnerTeamId, season }) => {
+          const p = numericId(partnerTeamId)
+          if (!p) return null
           return (
-            `https://fantasy.espn.com/football/trade?leagueId=${encodeURIComponent(leagueId)}&teamId=${t}` +
+            `https://fantasy.espn.com/football/team?leagueId=${encodeURIComponent(leagueId)}&teamId=${p}` +
             (season ? `&seasonId=${encodeURIComponent(season)}` : '')
           )
         },
@@ -212,22 +222,24 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
           return l && t ? `https://football.fantasysports.yahoo.com/f1/${l}/${t}` : null
         },
       },
-      // Candidates only, pending Guap opening them on league 1361311.
+      // VERIFIED 2026-09-05: Guap opened both on league 1361311 (team 10) and
+      // landed on the player list and the propose-a-trade screen; settled URLs
+      // identical to these formats. The trade URL was verified WITHOUT a
+      // counterparty parameter, so none is appended — the partner is chosen on
+      // Yahoo's own screen.
       waivers: {
-        verified: false,
+        verified: true,
         build: ({ leagueId }) => {
           const l = normalizeYahooLeagueId(leagueId)
           return l ? `https://football.fantasysports.yahoo.com/f1/${l}/players` : null
         },
       },
       trade: {
-        verified: false,
-        build: ({ leagueId, teamId, partnerTeamId }) => {
+        verified: true,
+        build: ({ leagueId, teamId }) => {
           const l = normalizeYahooLeagueId(leagueId)
           const t = normalizeYahooTeamId(teamId)
-          const p = normalizeYahooTeamId(partnerTeamId)
-          if (!l || !t) return null
-          return `https://football.fantasysports.yahoo.com/f1/${l}/${t}/proposetrade${p ? `?tid=${p}` : ''}`
+          return l && t ? `https://football.fantasysports.yahoo.com/f1/${l}/${t}/proposetrade` : null
         },
       },
     },

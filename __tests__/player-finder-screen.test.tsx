@@ -250,9 +250,10 @@ describe('Player Finder — league in context', () => {
     expect(within(card).getByText('THEY START HIM')).toBeInTheDocument()
     expect(within(card).getByText('9.8')).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: /Trade for Kincaid/ })).toHaveAttribute('href', '/core/trades?league=L-gang')
+    // ESPN has no trade URL; a trade is proposed from the other manager's team page (team 1 = Tasha).
     expect(within(card).getByRole('link', { name: 'Open in ESPN' })).toHaveAttribute(
       'href',
-      'https://fantasy.espn.com/football/league?leagueId=888&seasonId=2026',
+      'https://fantasy.espn.com/football/team?leagueId=888&teamId=1&seasonId=2026',
     )
   })
 

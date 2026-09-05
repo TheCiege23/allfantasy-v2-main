@@ -60,7 +60,8 @@ describe('TradeVisual', () => {
     expect(screen.queryByText('Tony Pollard for Dalton Kincaid')).not.toBeInTheDocument()
 
     // Hand-off inside the card: the platform, then our own Trade Center.
-    expect(screen.getByRole('link', { name: 'Send it on ESPN' })).toHaveAttribute('href', 'https://fantasy.espn.com/football/league?leagueId=888&seasonId=2026')
+    // ESPN has no trade URL; the send lands on the partner's team page, where Propose Trade lives.
+    expect(screen.getByRole('link', { name: 'Send it on ESPN' })).toHaveAttribute('href', 'https://fantasy.espn.com/football/team?leagueId=888&teamId=1&seasonId=2026')
     expect(screen.getByRole('link', { name: 'Open Trade Center' })).toHaveAttribute('href', '/core/trades?league=L-gang')
     expect(screen.getByText(/AllFantasy never sends a trade/)).toBeInTheDocument()
   })
