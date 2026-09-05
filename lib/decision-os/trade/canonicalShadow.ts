@@ -179,6 +179,22 @@ function buildMovements(assets: TradeAssetSummary[], origin: string | null): Tra
 function toShadowParityFlags(t: CanonicalTradeShadowTelemetry, proposalId: string): Record<string, unknown> {
   return {
     shadow: true,
+    /**
+     * 🛑 THE FLIP GATE GROUPS BY THIS, AND WITHOUT IT THESE VERDICTS LAND UNDER 'default'.
+     *
+     * `flipReadiness` keys each summary on `flags.surface`, falling back to the literal string
+     * 'default' when absent. This path emitted no surface, so its comparisons would accumulate
+     * under a name that says nothing about where they came from — and the Phase 3 bar is fifty of
+     * them, so by the time anyone read the bucket the label would be load-bearing and wrong.
+     *
+     * 'proposal' is the term this codebase already uses for this path: `surfaceShadow.ts` returns
+     * `full_inputs_available_use_proposal_shadow` when it defers to exactly this shadow. The
+     * distinction it marks is real and is the whole reason to label it — the trade CONSOLE surface
+     * is fed the console's own numbers and its agreement is partly tautological, whereas this path
+     * reads its own ADP and position through `resolveTradeEnrichment`. Two buckets, two different
+     * strengths of evidence; one bucket would have hidden that.
+     */
+    surface: 'proposal',
     source: t.source,
     ran: t.ran,
     proposalId,

@@ -155,6 +155,49 @@ describe('Phase E.4 — runCanonicalTradeShadowAttempt: runs when inputs exist',
     expect(typeof flags.completeness).toBe('number')
     expect(flags.uncertainty_count).toBe(res.telemetry.uncertainty_count)
   })
+
+  /**
+   * 🛑 THE FLIP GATE GROUPS ON THIS STRING, SO IT IS NOT A LABEL, IT IS A KEY.
+   *
+   * `flipReadiness` reads `flags.surface` and falls back to the literal 'default' when it is
+   * absent. This path emitted none, so its comparisons accumulated under 'default' — and the
+   * Phase 3 bar is fifty of them, meaning the name only becomes load-bearing once it is too late
+   * to reinterpret the bucket.
+   *
+   * It also has to stay DISTINCT from 'console'. That surface is fed the console's own market
+   * value and its agreement is partly tautological; this one reads its own ADP and position via
+   * `resolveTradeEnrichment`. Collapsing the two would let weaker evidence top up the stronger
+   * bucket to fifty — exactly the conflation the gate exists to prevent.
+   */
+  it('labels the surface as "proposal" so the flip gate does not bucket it as "default"', async () => {
+    const events: DecisionTelemetryEvent[] = []
+    registerDecisionTelemetrySink((e) => events.push(e))
+    await runCanonicalTradeShadowAttempt(baseAttemptArgs(), worldDeps())
+
+    const flags = events.find((e) => e.event === 'decision.shadow_parity')!.flags as Record<string, unknown>
+    expect(flags.surface).toBe('proposal')
+    // The gate's own fallback expression, asserted rather than assumed.
+    const bucket = typeof flags.surface === 'string' && flags.surface ? flags.surface : 'default'
+    expect(bucket).toBe('proposal')
+    expect(bucket).not.toBe('default')
+    expect(bucket).not.toBe('console')
+  })
+
+  it('labels the SKIP path too — a skipped comparison must not land in another bucket', async () => {
+    const events: DecisionTelemetryEvent[] = []
+    registerDecisionTelemetrySink((e) => events.push(e))
+    // No world ⇒ the early-return skip path, which emits through the same flag builder.
+    await runCanonicalTradeShadowAttempt(baseAttemptArgs(), {
+      ...worldDeps(),
+      resolveWorld: async () => null,
+    })
+
+    const parity = events.filter((e) => e.event === 'decision.shadow_parity')
+    expect(parity).toHaveLength(1)
+    const flags = parity[0].flags as Record<string, unknown>
+    expect(flags.surface).toBe('proposal')
+    expect(flags.ran).toBe(false)
+  })
 })
 
 // ──────────────────────────────────────────────────────────────────────────
