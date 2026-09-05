@@ -450,6 +450,67 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     expect(STRIP).toContain('MAX_LEAGUES_READ')
   })
 
+  it('🛑 does not fire a single request on mount — the current league goes first', async () => {
+    /*
+     * 🛑 THE STRIP IS DECORATION AND IT WAS OUTRANKING THE LEAGUE ON SCREEN. Eight panel reads
+     * fired the instant the page mounted. A browser allows ~6 connections per host and each read
+     * can take tens of seconds, so THIS league's own roster request queued behind seven leagues
+     * nobody asked about — a large part of "the managers load in slow, the assets load in slow".
+     */
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: async () => ({ pending: { scanned: true } }) } as Response),
+    )
+    const original = globalThis.fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    try {
+      render(
+        <TradeLeagueStrip
+          leagues={[{ id: 'a', name: 'A', platform: 'sleeper' }] as never}
+          activeLeagueId={null}
+        />,
+      )
+      /* Synchronously after mount: nothing has gone out yet. */
+      expect(fetchMock).not.toHaveBeenCalled()
+      /* But "later" must mean later, not never. */
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it('⚠ never runs more than two league reads at once', async () => {
+    /*
+     * Bounded so the strip can never own the connection pool. Unbounded is what let eight
+     * decorative reads starve the page's own data.
+     */
+    let inFlight = 0
+    let maxInFlight = 0
+    const fetchMock = vi.fn(async () => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight -= 1
+      return { ok: true, json: async () => ({ pending: { scanned: true } }) } as Response
+    })
+    const original = globalThis.fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    try {
+      render(
+        <TradeLeagueStrip
+          leagues={
+            ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, name: id, platform: 'sleeper' })) as never
+          }
+          activeLeagueId={null}
+        />,
+      )
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6))
+      expect(maxInFlight).toBeGreaterThan(0)
+      expect(maxInFlight).toBeLessThanOrEqual(2)
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
   it('🛑 one slow league does not hold the other tiles on "Checking…"', async () => {
     /*
      * Guap: "it takes anywhere from 10-30 seconds to load". Part of that was real work, and part
