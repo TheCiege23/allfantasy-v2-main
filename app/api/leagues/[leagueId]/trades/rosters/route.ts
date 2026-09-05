@@ -7,6 +7,7 @@ import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
+import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 
 export const dynamic = 'force-dynamic'
@@ -64,6 +65,12 @@ export type TradeableRosterPick = {
   round: number | null
   label: string
   itemType: 'rookie_pick' | 'future_pick'
+  /**
+   * ⚠ NULL IS "NOT PRICED", exactly as it is on a player — never 0. A pick with no round cannot be
+   * placed on the curve, and the builder renders that as an em dash and counts it toward
+   * "N unpriced" rather than quietly adding nothing to a total.
+   */
+  value: number | null
 }
 export type TradeableRoster = {
   rosterId: string
@@ -255,6 +262,31 @@ export async function GET(
             currentSeason != null && p.season != null && p.season > currentSeason
               ? ('future_pick' as const)
               : ('rookie_pick' as const),
+          /*
+           * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
+           * "1 unpriced" on a side whose total then understated it by a first-round pick. The curve
+           * to price it has existed in `lib/pick-curve.ts` the whole time — it was simply never
+           * called from here.
+           *
+           * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS
+           * ANYTHING. Player values on this route come from `getPlayerValuesForNamesDbFirst`, i.e.
+           * FantasyCalc dynasty units, and `FIRST_ROUND_IN_MARKET_UNITS` is the first-round anchor
+           * SOLVED in those same units across 771 real trades. Anchoring to any other number would
+           * put picks and players on two scales inside one sum.
+           *
+           * ⚠ AND THE SLOT IS DELIBERATELY OMITTED. A future pick has no draft position yet, so
+           * `pickValueByOverall` defaults it to the middle of the round rather than assuming a
+           * favourable one. A 2027 1st prices as a MID first, not an early one — the honest read
+           * when the order is unknown.
+           */
+          value:
+            p.round != null && Number.isFinite(p.round)
+              ? pickValueByOverall({
+                  round: p.round,
+                  teams: rosters.length || null,
+                  firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
+                })
+              : null,
         })),
         teamExternalId: externalIdByPlatformId.get(r.platformUserId) ?? null,
         ownerName:

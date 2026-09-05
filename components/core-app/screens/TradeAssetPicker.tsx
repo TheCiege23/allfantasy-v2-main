@@ -32,6 +32,12 @@ export type PickedAsset =
       label: string
       pickId?: string | null
       itemType?: 'rookie_pick' | 'future_pick'
+      /**
+       * ⚠ NULL IS "NOT PRICED", never 0 — the same contract a player carries. A pick typed by
+       * hand has no round we can trust and stays null; one taken off a roster is priced by
+       * `lib/pick-curve.ts` on the route.
+       */
+      value?: number | null
     }
   | { kind: 'faab'; amount: number }
 
@@ -406,12 +412,21 @@ export function TradeAssetPicker(props: {
                       label: p.label,
                       pickId: p.pickId,
                       itemType: p.itemType,
+                      value: p.value,
                     })
                   }
                 >
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{p.label}</span>
                     <span className="af-tc-row-sub">On the roster — can be proposed</span>
+                  </span>
+                  {/*
+                    A pick is priced in the SAME cell and the same units as a player, because the
+                    two are summed into one total. Rendering it anywhere else would invite the
+                    reading that picks are a separate currency.
+                  */}
+                  <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
+                    {p.value == null ? '—' : p.value.toLocaleString()}
                   </span>
                 </button>
               ))}

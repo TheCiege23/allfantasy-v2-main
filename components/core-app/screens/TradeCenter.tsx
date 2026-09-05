@@ -299,7 +299,20 @@ export function TradeCenter(props: {
               marketValue: pricedBy.get(a.name.toLowerCase()) ?? a.value ?? null,
             }
           : a.kind === 'pick'
-            ? { name: a.label, position: 'PICK', team: null, marketValue: null }
+            ? {
+                name: a.label,
+                position: 'PICK',
+                team: null,
+                /*
+                 * 🛑 THIS WAS HARDCODED `null`, WHICH IS WHY A SIDE HOLDING A FIRST-ROUND PICK
+                 * REPORTED "1 unpriced" AND A TOTAL THAT UNDERSTATED ITSELF BY A WHOLE PICK. The
+                 * curve to price it has been in `lib/pick-curve.ts` all along; nothing called it.
+                 *
+                 * ⚠ STILL NULL WHEN THE ROUTE COULD NOT PRICE IT — a hand-typed pick, or one with
+                 * no round. Absent stays absent; only the hardcoding is gone.
+                 */
+                marketValue: a.value ?? null,
+              }
             : { name: `$${a.amount} FAAB`, position: 'FAAB', team: null, marketValue: null },
       ),
     [pricedBy],
@@ -803,8 +816,12 @@ export function TradeCenter(props: {
                       ) : null}
                       {l.team ? <span>{l.team}</span> : null}
                       {/*
-                        A player the feed could not price gets a tag, not a
-                        zero. Picks and FAAB are unpriced by nature, so no tag.
+                        A player the feed could not price gets a tag, not a zero.
+                        ⚠ THIS COMMENT USED TO SAY "picks and FAAB are unpriced by nature". FAAB
+                        still is. PICKS ARE NOT, and have not been since they were put on the
+                        curve — a pick now carries a real value in the same units as the players
+                        beside it. The tag stays player-only because an unpriced PICK is now the
+                        rare case (no round, or hand-typed) rather than the norm it used to be.
                       */}
                       {l.marketValue == null && kindOf(l) === 'player' ? (
                         <span className="af-tc-tag" data-tone="bad">

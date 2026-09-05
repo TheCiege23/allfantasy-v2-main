@@ -334,6 +334,57 @@ describe('🛑 the bye week, which no column supplies', () => {
   })
 })
 
+describe('🛑 draft picks carry a value, in the players\' own units', () => {
+  it('prices a pick off the curve instead of returning nothing', async () => {
+    /*
+     * Guap's report: "the draft pick has no shown value". The route built picks as
+     * `{ ...p, itemType }` with no `value` at all, so the builder rendered an em dash and reported
+     * "1 unpriced" on a side holding a first-round pick — a total understated by a whole pick.
+     * `lib/pick-curve.ts` has existed the entire time; nothing called it from here.
+     */
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      {
+        id: 'roster-a',
+        platformUserId: 'user-a',
+        faabRemaining: null,
+        // ⚠ AN `id` IS REQUIRED: `listProposablePicks` drops a pick with no stored id, because the
+        // trade engine matches a pick by that id and an offer would have nothing to point at.
+        playerData: { players: [], draftPicks: [{ id: 'p2027r1', season: 2027, round: 1 }] },
+      },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const picks = ((await res.json()) as { rosters: Array<{ picks: Array<Record<string, unknown>> }> }).rosters[0]!.picks
+
+    expect(picks.length).toBeGreaterThan(0)
+    expect(picks[0]!.value).toBeGreaterThan(0)
+  })
+
+  it('🛑 a pick with no round stays NULL, never 0', async () => {
+    /*
+     * Same contract as an unpriced player. A 0 reads as a worthless asset; null is why the verdict
+     * declines to judge. The curve cannot place a pick with no round, so it must not pretend to.
+     */
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyRoster.mockResolvedValue([
+      {
+        id: 'roster-a',
+        platformUserId: 'user-a',
+        faabRemaining: null,
+        playerData: { players: [], draftPicks: [{ id: 'p-noround', season: 2027, round: null }] },
+      },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const picks = ((await res.json()) as { rosters: Array<{ picks: Array<Record<string, unknown>> }> }).rosters[0]!.picks
+
+    for (const pk of picks) expect(pk.value).toBeNull()
+  })
+})
+
 describe('🛑 market value on the roster rows', () => {
   beforeEach(() => {
     /*

@@ -16,7 +16,7 @@ import { fireEvent, render, within } from '@testing-library/react'
 import React from 'react'
 
 import { TradeAssetPicker } from '@/components/core-app/screens/TradeAssetPicker'
-import type { RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
+import type { RosterPlayer, RosterPick } from '@/components/core-app/screens/useLeagueRosters'
 
 const player = (over: Partial<RosterPlayer> = {}): RosterPlayer => ({
   id: 'p1',
@@ -207,5 +207,50 @@ describe('🛑 FAAB — null and zero are different claims', () => {
     expect(btn.disabled).toBe(true)
     fireEvent.click(btn)
     expect(onPick).not.toHaveBeenCalled()
+  })
+})
+
+describe('🛑 a draft pick shows a value like everything else', () => {
+  const pick = (over: Partial<RosterPick> = {}): RosterPick => ({
+    pickId: 'k1',
+    season: 2027,
+    round: 1,
+    label: '2027 round 1',
+    itemType: 'future_pick',
+    value: 950,
+    ...over,
+  })
+
+  /* Picks are on their own tab; rendering the picker does not show them until it is selected. */
+  const pickTab = (ui: ReturnType<typeof open>) => {
+    fireEvent.click(within(ui.container).getByText('Pick'))
+    return ui.container
+  }
+
+  it('renders the number, not a blank', () => {
+    /*
+     * The reported bug: a 2027 1st sat in the builder with an em dash while every player beside it
+     * had a number, and the side total said "1 unpriced".
+     */
+    const container = pickTab(open({ rosterPicks: [pick()] }))
+    expect((container.textContent ?? '').replace(/\s+/g, ' ')).toContain('950')
+  })
+
+  it('🛑 hands the value back on pick, so the builder can total it', () => {
+    // Without this the route's price is thrown away at the click and the total stays wrong.
+    const onPick = vi.fn()
+    const ui = open({ rosterPicks: [pick()], onPick })
+    const container = pickTab(ui)
+
+    fireEvent.click(within(container).getByText('2027 round 1').closest('button')!)
+
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pick', value: 950 }))
+  })
+
+  it('🛑 an unpriced pick renders an em dash, never 0', () => {
+    const container = pickTab(open({ rosterPicks: [pick({ value: null })] }))
+    const cell = container.querySelector('[data-unpriced="true"]')
+    expect(cell).not.toBeNull()
+    expect(cell!.textContent).toBe('\u2014')
   })
 })

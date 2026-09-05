@@ -42,6 +42,8 @@ export type RosterPick = {
   round: number | null
   label: string
   itemType: 'rookie_pick' | 'future_pick'
+  /** ⚠ NULL IS "NOT PRICED", never 0 — the same contract `RosterPlayer.value` carries. */
+  value: number | null
 }
 
 export type LeagueRoster = {

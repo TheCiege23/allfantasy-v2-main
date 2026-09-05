@@ -471,3 +471,39 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     expect(SRC).toContain('Rebuilder read')
   })
 })
+
+describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
+  const SRC = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeCenter.tsx'),
+    'utf8',
+  )
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
+  it('the scan is reading the right file', () => {
+    // Positive control: a scan matching nothing satisfies the assertions below vacuously.
+    expect(code).toContain('unpricedCount')
+    expect(code).toContain("position: 'PICK'")
+  })
+
+  it("🛑 the pick line does not hardcode marketValue: null", () => {
+    /*
+     * Guap's report was about the TOTAL: "Total · 1 unpriced · 3,183" on a side holding a
+     * first-round pick. The row and the total are separate paths — pricing the row while the
+     * builder still stamped `marketValue: null` would have looked fixed and summed wrong.
+     *
+     * A mutation control proved this was needed: reverting the builder to the hardcoded null left
+     * all 71 tests in this area GREEN. Nothing covered the total.
+     */
+    const pickBranch = /position: 'PICK'[\s\S]{0,220}?marketValue:\s*([^,}]+)/.exec(code)
+    expect(pickBranch).not.toBeNull()
+    expect(pickBranch![1].trim()).not.toBe('null')
+    expect(pickBranch![1]).toContain('a.value')
+  })
+
+  it('FAAB is still deliberately unpriced', () => {
+    // Only picks changed. FAAB has no market value and must not acquire a fake one.
+    const faabBranch = /position: 'FAAB'[\s\S]{0,160}?marketValue:\s*([^,}]+)/.exec(code)
+    expect(faabBranch).not.toBeNull()
+    expect(faabBranch![1].trim()).toBe('null')
+  })
+})
