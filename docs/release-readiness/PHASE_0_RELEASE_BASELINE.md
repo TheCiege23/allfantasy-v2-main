@@ -33,7 +33,7 @@ AllFantasy is a **large, mostly-built platform whose launch gap is certification
 
 **Branch divergence that drives the whole strategy:**
 - `origin/main` **HAS**: pricing catalog + payment-link registry, durable Sleeper sync engine (PR #345, OFF by flag), Decision OS Phase-0 audit (#349).
-- `origin/main` **LACKS**: closed-beta invite gate (`lib/beta-invite/betaAdmissionService.ts` **absent**), governed attribution/funnel (PR #339), centralized shadow-league Write Authority (#337 **absent**), import certification (#336), async resync + drain cron (#347).
+- `origin/main` **LACKS**: closed-beta invite gate (`lib/beta-invite/betaAdmissionService.ts` **absent**), governed attribution/funnel (PR #339), centralized shadow-league Write Authority (#337 **absent** — reconciled onto current `main` as `6d6050d1a`, 2026-09-05), import certification (#336), async resync + drain cron (#347).
 - Branch-of-record `feat/launch-phase0-truth-attribution` **HAS** the beta gate + attribution but is **8 behind main** (missing #345 sync + #349).
 
 ---
@@ -46,7 +46,7 @@ Full metadata captured via `gh pr list`. Classified below; large stacked chains 
 |---|---|---|---|---|
 | **#339** | Launch Phase 0: truthful deployment identity + governed attribution + **closed-beta gate** | main | Draft, MERGEABLE | **REQUIRES REVIEW** (branch-of-record; needs rebase onto `main` @ 8c6947a9) |
 | **#351** | Decision OS canonical contract + shadow persistence | main | Draft | **SECURITY FOLLOW-UP / BLOCKED** (paused; canonical dormant; migration not applied — keep unmerged) |
-| **#337** | Shadow-league centralized Write Authority (imported read-only enforcement) | main | Draft, MERGEABLE | **MERGE CANDIDATE** (launch-relevant; absent on main) |
+| **#337** | Shadow-league centralized Write Authority (imported leagues stay EDITABLE — labelled, never propagated upstream) | main | **CLOSED**, CONFLICTING, branch 1,827 commits behind | **RECONCILED 2026-09-05** — do not reopen; ported onto current `main` as `6d6050d1a` |
 | **#336** | Import certification — provider truth + safety | main | MERGEABLE | **MERGE CANDIDATE** (import truth) |
 | **#347** | DB-first background Sleeper current-state refresh (async job + drain cron) | main | MERGEABLE | **REQUIRES REVIEW** (files absent on main; import freshness) |
 | **#348** | Safe source-platform deep links for imported leagues | #347 | Draft | **DEFER / REQUIRES REBASE** (stacked on #347) |
@@ -131,7 +131,7 @@ Audited against the branch-of-record + `origin/main` where they differ.
 
 ## 6. Truthful launch-scope contract (Task 5)
 
-**Launch product (frozen):** Create account → connect Sleeper/ESPN/Yahoo league (read-only) → persistent DB-first dashboard → prioritized manager/commissioner decisions → Chimmy explanation → paid upgrade. **Sports:** NFL, NCAAF. **Contexts:** Global Command Center, Team Focus, Commissioner Focus. **Imported leagues:** read-only, DB-first, persistent, resumable, source-linked, per-user isolated, never written upstream. **Revenue:** Stripe subs (monthly+annual), token purchases, entitlement activation, cancellation/renewal, no token charge on failed work.
+**Launch product (frozen):** Create account → connect Sleeper/ESPN/Yahoo league (read-only) → persistent DB-first dashboard → prioritized manager/commissioner decisions → Chimmy explanation → paid upgrade. **Sports:** NFL, NCAAF. **Contexts:** Global Command Center, Team Focus, Commissioner Focus. **Imported leagues:** **Shadow Leagues — fully EDITABLE digital twins**, DB-first, persistent, resumable, source-linked, per-user isolated, clearly labelled, and never written upstream. ⚠ NOT read-only: Guap’s explicit decision of 2026-07-23, because read-only would gut Decision OS simulation. Writes are real in AllFantasy and stop there. **Revenue:** Stripe subs (monthly+annual), token purchases, entitlement activation, cancellation/renewal, no token charge on failed work.
 **Deferred (must not expand this launch):** AF-native league hosting, autonomous agents, 7-sport parity, social network, agent marketplace, devy system, reputation/reviews, native draft rooms for every format, B2B data products, AF Legacy (F1–H2), Fantasy OS Phase 5x suite.
 
 **Claims to remove or qualify before launch:**
@@ -159,7 +159,7 @@ Audited against the branch-of-record + `origin/main` where they differ.
 | B7 | **S3** | Imported league not auto-selected on dashboard; "Go to dashboard" drops `leagueId` | Post-import | `LegacyImportResults.tsx:121`; `dashboard-league-selection.ts` | missing URL param | Append `?leagueId=` and honor it in selection | e2e: import → dashboard highlights new league | S |
 | B8 | **S3** | Notification placeholder injects fake alerts on empty | Notifications / trust | `lib/notifications/placeholder.ts:8` | dev placeholder | Disable in prod (env guard) | empty state renders no fake alerts | XS |
 | B9 | **S3** | Supreme token claim mismatch (1,500/18,000 vs 1,000/15,000) | Claims | `planIncludes.ts:38` vs `catalog.ts` | stale copy | Correct the bullet | unit: planIncludes == catalog tokens | XS |
-| B10 | **S3** | Centralized imported-league Write Authority absent on `main` | Imported read-only | `lib/league/write-authority.ts` absent; #337 unmerged | not reconciled | Reconcile #337; assert read-only at the gate | negative test: imported mutation refused server-side | M |
+| B10 | ~~S3~~ **CLOSED 2026-09-05** | Centralized imported-league Write Authority absent on `main` | Imported leagues — **Shadow, editable** (NOT read-only) | `lib/league/write-authority.ts` was absent; #337 was CLOSED and 1,827 commits stale | not reconciled | Reconciled onto current `main` as `6d6050d1a`: `write-authority.ts` is the ONE predicate; every mutation surface emits the envelope | `__tests__/league/write-authority.test.ts` — 25/25, mutation-controlled (stripping `writeAuthority` from a route turns that assertion red) | M |
 | B11 | **S4** | Durable Sleeper sync shipped OFF; async drain unmerged | Data freshness | `FANTASY_OS_EXEC_SYNC_LIVE` off; #347 open | flag + unmerged | Enable flag after load test; reconcile #347 | cron runs; freshness advances; no provider hammering | M |
 | B12 | **S4** | OAuth providers unverifiable (env-gated); provider budget/circuit-breaker absent for fantasy providers | Auth / reliability | `SocialProviderResolver.ts`; `PHASE1_CLOSED_BETA_AUDIT §5,P0-2` | prod env + missing gateway | Confirm creds in Vercel; add provider budget/breaker before real traffic | OAuth walk per provider; breaker open/half/closed | M–L |
 
@@ -173,7 +173,7 @@ Audited against the branch-of-record + `origin/main` where they differ.
 - **Proposed branch:** `release/closed-beta-v1` (cut from `8c6947a97`).
 - **Merge order (launch-critical only):**
   1. **#339** governed attribution + **closed-beta gate** (rebased onto `8c6947a9`) — foundational; enables invite control.
-  2. **#337** shadow-league Write Authority — imported read-only enforcement (B10).
+  2. ~~#337~~ **DONE** — shadow-league Write Authority, reconciled onto `main` as `6d6050d1a` (B10). ⚠ It is DISCLOSURE, not read-only enforcement: imported leagues stay editable and the envelope tells the user the write stops at AllFantasy.
   3. **#336** import certification — provider truth/safety (B5 support).
   4. **#347** async resync + drain cron — freshness (B11).
   5. Security: **#282** (admin token identity), **#279/#281** (guard + CI security tests), then rebase **#278** (rate-limit), **#243** (db-guard inversion).
