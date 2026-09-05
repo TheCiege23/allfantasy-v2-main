@@ -89,14 +89,37 @@ function isRootLayoutEntry(entryKey) {
   return /(?:^|[\\/])app[\\/]layout$/.test(entryKey)
 }
 
+/*
+ * Derives the root-layout entry key from a sibling entry, for manifests that
+ * carry no `app/layout` key of their own.
+ *
+ * ⚠ THE PREFIX COMES FROM `entryKey`, NOT FROM `normalized`. It used to slice
+ * the normalized copy — all forward slashes — and then re-join it with a
+ * backslash separator, so a Windows key
+ *     C:\srv\app\page   ->   C:/srv\app\layout
+ * came back with mixed separators. Next resolves entryCSSFiles by exact string,
+ * so the CSS was attached under a key nothing reads: the page ships with no
+ * stylesheet link, which is the failure this whole script exists to prevent,
+ * reached quietly and with the script reporting success.
+ *
+ * Latent rather than live — Railway builds on Linux, where the two branches
+ * agree — but only because of where it runs, not because of what it does.
+ *
+ * `replace(/\\/g, '/')` is one character for one character, so `appIndex` is a
+ * valid index into the ORIGINAL string too, and `entryKey[appIndex]` is the
+ * separator this key actually uses at the boundary that matched. Reading it
+ * there rather than sniffing the whole string also fixes the case of a key that
+ * mixes both: the rebuild now follows the local separator instead of letting a
+ * single stray backslash anywhere in the path pick for the entire result.
+ */
 function inferRootLayoutEntry(entryKeys) {
   for (const entryKey of entryKeys) {
     const normalized = entryKey.replace(/\\/g, '/')
     const appIndex = normalized.lastIndexOf('/app/')
     if (appIndex === -1) continue
 
-    const separator = entryKey.includes('\\') ? '\\' : '/'
-    const prefix = normalized.slice(0, appIndex)
+    const separator = entryKey[appIndex]
+    const prefix = entryKey.slice(0, appIndex)
     return `${prefix}${separator}app${separator}layout`
   }
 

@@ -70,25 +70,34 @@ describe('railway patch app-build-manifest', () => {
 
     const explicitManifest = path.join(serverAppDir, 'page_client-reference-manifest.js')
     const inferredManifest = path.join(serverAppDir, 'dashboard', 'page_client-reference-manifest.js')
+    const win32Manifest = path.join(serverAppDir, 'settings', 'page_client-reference-manifest.js')
 
     /*
      * Next writes these keys as ABSOLUTE, platform-separated paths — on Windows
-     * "C:\\repo\\app\\layout", on Linux "/repo/app/layout". The two files below
-     * use different separator styles on purpose:
+     * "C:\\repo\\app\\layout", on Linux "/repo/app/layout". The three files
+     * below use different separator styles on purpose:
      *
      *   explicit — native separators, so isRootLayoutEntry's [\\/] class is
      *              exercised against whatever platform the suite runs on.
-     *   inferred — POSIX separators, because that branch REBUILDS the key. On a
-     *              backslash key inferRootLayoutEntry joins a forward-slash
-     *              prefix to backslash segments and yields a mixed path, so
-     *              pinning an exact key there would encode a Windows-only quirk.
-     *              Railway (where this script runs) is Linux, and this is the
-     *              shape it sees.
+     *   inferred — POSIX separators. The shape Railway (Linux) actually emits.
+     *   win32    — HARDCODED backslashes, on every platform. This branch
+     *              REBUILDS the key rather than reusing it, and it used to build
+     *              the prefix from the forward-slash-normalized copy while
+     *              joining it with a backslash separator — producing
+     *              "C:/srv\app\layout", which matches nothing Next looks up.
+     *
+     * ⚠ THE BACKSLASHES HERE ARE NOT "THE WINDOWS CASE", THEY ARE THE ONLY WAY
+     * TO SEE THE BUG AT ALL. It is unreachable on Linux, so a fixture using
+     * native separators is green on CI no matter what the function does, and the
+     * defect stayed latent exactly that way. Hardcoding the separator is what
+     * makes a Linux CI able to fail on it.
      */
     const nativeLayoutEntry = path.join(fixtureRoot, 'app', 'layout')
     const nativePageEntry = path.join(fixtureRoot, 'app', 'page')
     const posixPageEntry = '/srv/app/page'
     const posixLayoutEntry = '/srv/app/layout'
+    const win32PageEntry = 'C:\\srv\\app\\page'
+    const win32LayoutEntry = 'C:\\srv\\app\\layout'
 
     fs.rmSync(fixtureRoot, { recursive: true, force: true })
     try {
@@ -119,6 +128,9 @@ describe('railway patch app-build-manifest', () => {
       })
       // Has NO root-layout entry, so the key has to be inferred from a sibling.
       writeClientReferenceManifest(inferredManifest, { [posixPageEntry]: [] })
+      // Same, but with Windows-style keys, so the rebuilt key's separators are
+      // observable on any platform.
+      writeClientReferenceManifest(win32Manifest, { [win32PageEntry]: [] })
 
       execSync('node scripts/railway-patch-app-build-manifest.cjs', {
         cwd: process.cwd(),
@@ -139,6 +151,20 @@ describe('railway patch app-build-manifest', () => {
       const inferredEntries = readClientReferenceManifest(inferredManifest)
       expect(Object.keys(inferredEntries)).toContain(posixLayoutEntry)
       expect(inferredEntries[posixLayoutEntry]).toContain(CSS_ASSET)
+
+      /*
+       * ...and the inferred key keeps the separators the key it came from used.
+       * A mixed "C:/srv\app\layout" is not a near-miss that degrades gracefully:
+       * Next looks the entry up by exact string, so the CSS is attached under a
+       * key nothing reads and the page ships with no stylesheet link — the same
+       * end state this whole script exists to prevent, reached quietly.
+       */
+      const win32Entries = readClientReferenceManifest(win32Manifest)
+      expect(Object.keys(win32Entries)).toContain(win32LayoutEntry)
+      expect(win32Entries[win32LayoutEntry]).toContain(CSS_ASSET)
+      for (const key of Object.keys(win32Entries)) {
+        expect(key, 'a rebuilt key must not mix separators').not.toMatch(/\/.*\\|\\.*\//)
+      }
     } finally {
       /*
        * ⚠ IN A `finally` BECAUSE IT WAS NOT. Cleanup used to sit after the last
