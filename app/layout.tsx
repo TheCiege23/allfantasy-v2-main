@@ -336,7 +336,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 window.gtag = window.gtag || gtag;
                 gtag('js', new Date());
                 gtag('config', '${gaMeasurementId}', { send_page_view: true });
-                gtag('config', 'AW-17768764414');
               `}
             </Script>
           </>
@@ -345,14 +344,33 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/*
           Google Tag Manager.
 
-          🛑 THIS CONTAINER MUST NOT CARRY A META PIXEL BASE TAG OR A GOOGLE TAG.
-          Both are already installed directly above — `meta-pixel-base` calls
-          fbq('init') + fbq('track','PageView'), and `google-gtag` calls
-          gtag('config') for the GA4 property AND for AW-17768764414. Adding the
-          usual "base pixels fire on Initialization – All Pages" tags in GTM
-          double-initialises both vendors and double-counts every PageView.
-          TikTok and Reddit have no in-repo install, so their base tags DO belong
-          in the container.
+          🛑 EVERY BASE PIXEL LIVES IN THE CONTAINER, NOT HERE — AND THE COMMENT
+          THAT USED TO SIT IN THIS SPOT SAID THE OPPOSITE. It read "this container
+          must not carry a Meta Pixel base tag or a Google tag, both are already
+          installed directly above". That was true of the SOURCE and false of
+          PRODUCTION, and acting on it cost a real defect: measured 2026-09-04,
+          `fbq` was `undefined` on the live site and all five Meta conversion tags
+          threw `ReferenceError: fbq is not defined` on every conversion.
+
+          The reason is the guards. `metaPixelId` and `gaMeasurementId` come from
+          NEXT_PUBLIC_META_PIXEL_ID and NEXT_PUBLIC_GA_MEASUREMENT_ID, and BOTH ARE
+          EMPTY IN RAILWAY — so neither block above renders, and neither fbq nor
+          gtag has ever existed on allfantasy.ai. Reading the JSX and concluding
+          "already installed" is the trap; read the served page instead.
+
+          So GTM-MF55JF4R carries the Meta Pixel base (dataset 1595613188959043),
+          TikTok and Reddit bases, and a Google tag belongs there too once the new
+          Ads account has a conversion id. The double-count warning is still real
+          but INVERTED: it only bites if someone POPULATES those env vars, which
+          would give a second fbq/gtag init alongside the container's. Set the
+          pixel in one place or the other, never both.
+
+          ⚠ The `gtag('config','AW-17768764414')` that used to sit in the block
+          above is gone: it belonged to Google Ads account 677-276-4341, which is
+          paused and is no longer where AllFantasy advertises (874-315-8568 is).
+          It had never fired — it sat inside the empty `gaMeasurementId` guard —
+          so removing it changes no behaviour and stops the file asserting a wrong
+          account id.
 
           The init script is `beforeInteractive` on purpose: `dataLayer` has to be
           an array before the container script runs, and before any component
