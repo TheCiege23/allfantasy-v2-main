@@ -4,6 +4,22 @@ const requireVerifiedUserMock = vi.fn()
 const lookupSleeperUserMock = vi.fn()
 const getUserLeaguesMock = vi.fn()
 
+/*
+ * ⚠ THE DISCOVER ROUTE NOW READS TOMBSTONES (de9bda225), so it needs prisma.
+ * Without this the route's lookup throws "Cannot read properties of null (reading
+ * 'deletedLeagueTombstone')", is caught, and silently defaults previouslyDeleted to
+ * false — so the assertion below would pass through the ERROR path rather than the real
+ * one. Mocking it means the field is measured, not defaulted.
+ */
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    deletedLeagueTombstone: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+  },
+}))
+
 vi.mock('@/lib/auth-guard', () => ({
   requireVerifiedUser: requireVerifiedUserMock,
 }))
@@ -72,6 +88,7 @@ describe('POST /api/leagues/import/discover Sleeper account discovery', () => {
       },
       leagues: [
         {
+          previouslyDeleted: false,
           sourceId: 'league-123',
           name: 'Main Event',
           sport: 'nfl',

@@ -22,6 +22,17 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   prisma: {
+    /*
+     * ⚠ ADDED FOR THE TOMBSTONE FEATURE (de9bda225, "a deleted league stays deleted").
+     * The delete/import paths now call prisma.deletedLeagueTombstone, and a mock without
+     * it fails as "Cannot read properties of undefined (reading 'upsert'/'findUnique')" —
+     * which reads as a broken route rather than a mock that has not kept up.
+     */
+    deletedLeagueTombstone: {
+      upsert: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     league: { findFirst: vi.fn() },
     leagueTeam: { findFirst: vi.fn(), update: vi.fn(async () => ({})) },
     leagueManagerClaim: { create: vi.fn(async () => ({})) },

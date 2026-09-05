@@ -22,7 +22,14 @@ describe('Fantasy OS gateway — entry + routing', () => {
   it('renders the product brand and routes into Platform OS by default', () => {
     render(<FantasyOsGateway leagues={mixed} isAuthenticated />)
     expect(screen.getByRole('heading', { level: 1 })).toBeTruthy()
-    const enter = screen.getByRole('link', { name: /Enter Platform OS/i })
+    /*
+     * ⚠ THE LABEL CHANGED, THE ROUTING DID NOT. The default entry CTA is now
+     * "Enter your hub" (FantasyOsGateway.tsx:111), not "Enter Platform OS" — the gateway
+     * moved to plainer, provider-neutral language. The href it must produce is unchanged
+     * at /manager-hub, which is the part this test actually protects, so the assertion
+     * follows the rename rather than being weakened.
+     */
+    const enter = screen.getByRole('link', { name: /Enter your hub/i })
     expect(enter.getAttribute('href')).toBe('/manager-hub')
   })
 
@@ -73,7 +80,14 @@ describe('Fantasy OS gateway — entry + routing', () => {
     const rail = screen.getByRole('region', { name: /Guided tour/i })
     const items = within(rail).getAllByRole('listitem')
     expect(items).toHaveLength(7)
-    expect(within(rail).getByText('Platform OS')).toBeTruthy()
+    /*
+     * ⚠ 'Platform OS' IS NOW 'Start here'. GUIDED_SEQUENCE renamed its first two entries
+     * to plain language ('platform' -> "Start here", 'manager' -> "My team") while keeping
+     * all seven, their order, and their hrefs. The length assertion above is what pins the
+     * "seven, in order" contract; these two spot-check the first and last labels, so the
+     * first one follows the rename and the last is unchanged.
+     */
+    expect(within(rail).getByText('Start here')).toBeTruthy()
     expect(within(rail).getByText('Draft OS')).toBeTruthy()
   })
 })

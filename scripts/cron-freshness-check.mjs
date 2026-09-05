@@ -265,7 +265,19 @@ export const PROBES = {
   '/api/cron/waivers': { heartbeat: 'cron-waivers' },
   '/api/redraft/score-sync': { heartbeat: 'cron-redraft-score-sync' },
   '/api/redraft/waiver-process': { heartbeat: 'cron-redraft-waiver-process' },
-  '/api/guillotine/eliminate': { heartbeat: 'cron-guillotine-eliminate' },
+  /*
+   * ⚠ '/api/guillotine/eliminate' REMOVED — THE ROUTE IS DELIBERATELY GONE.
+   * 47151092e ("refactor(guillotine): delete the second elimination engine and its route")
+   * deleted app/api/guillotine/eliminate/route.ts along with lib/guillotine/
+   * eliminationEngine.ts (358 lines), consolidating onto guillotineChopAudit. Nothing
+   * writes the 'cron-guillotine-eliminate' heartbeat any more — verified: this entry was
+   * its ONLY remaining reference in the repo.
+   *
+   * A probe pointing at a deleted route cannot go green, so it reports a dead cron
+   * forever and teaches everyone to ignore the freshness check. Removing it is the fix;
+   * __tests__/cron-heartbeat-route-contracts.test.ts asserts every probe has a route and
+   * is what caught this.
+   */
   '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
   // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
   // the default path (flag off) recorded nothing and the job looked identical whether it ran
@@ -486,7 +498,7 @@ export const NO_PROBE = {
     'here is satisfied by that job. Needs its own heartbeat.',
 
   // The eight CONDITIONAL jobs that used to live here -- waivers, redraft score-sync and
-  // waiver-process, guillotine eliminate, tournament automation, draft-tick, legacy-import-drain
+  // waiver-process, tournament automation, draft-tick, legacy-import-drain
   // and the playoff schedule refresh -- are now instrumented with withSyncJobRun and have moved
   // up into PROBES as heartbeats. They are the reason heartbeat probes exist: every one of them
   // correctly writes nothing for most of the year, so an output probe on them is red for
