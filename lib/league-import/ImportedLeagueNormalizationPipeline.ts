@@ -86,6 +86,20 @@ export interface ImportedLeagueNormalizationInput {
    * league as having only the last three weeks of transactions.
    */
   transactionWeeks?: number[]
+  /**
+   * Highest `/matchups/{week}` week to fetch (Sleeper only). Omit for the full 1..18 sweep.
+   *
+   * ⚠ A CAP HERE, A WINDOW FOR TRANSACTIONS, AND THE DIFFERENCE IS LOAD-BEARING.
+   * `bootstrapLeagueFromNormalizedImport` upserts `TeamPerformance` from every week in the
+   * payload, so a past week dropped from this fetch stops being refreshed and nothing else
+   * refreshes it — there is no scheduled historical matchup sync. Past weeks must therefore
+   * always be included, which is exactly what "1..N" means and what a window would break.
+   *
+   * ⚠ IMPORT AND MANUAL RE-SYNC MUST NOT SET THIS, for the same reason as the other two knobs:
+   * they persist the season, and a capped fetch would record a league as having a schedule that
+   * stops at the current week.
+   */
+  maxMatchupWeeks?: number
 }
 
 export interface ImportedLeagueNormalizationResult {
@@ -131,6 +145,7 @@ export async function runImportedLeagueNormalizationPipeline(
   const currentStateOnly = typeof input === 'string' ? false : input.currentStateOnly === true
   /* Legacy string input is an import call site, so it keeps the full 1..18 transaction sweep too. */
   const transactionWeeks = typeof input === 'string' ? undefined : input.transactionWeeks
+  const maxMatchupWeeks = typeof input === 'string' ? undefined : input.maxMatchupWeeks
 
   try {
     let payload: unknown
@@ -138,7 +153,7 @@ export async function runImportedLeagueNormalizationPipeline(
     if (provider === 'sleeper') {
       payload = await fetchSleeperLeagueForImport(
         sourceId,
-        currentStateOnly ? { maxPreviousSeasons: 0, transactionWeeks } : {},
+        currentStateOnly ? { maxPreviousSeasons: 0, transactionWeeks, maxMatchupWeeks } : {},
       )
       if (!(payload as any)?.league?.league_id) {
         return {

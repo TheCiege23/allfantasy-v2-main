@@ -30,10 +30,11 @@ export type SeasonState = 'preseason' | 'regular_season' | 'postseason' | 'offse
  * cheaper; at 3x the frequency the net is ~half the transaction requests of the old 30-minute
  * behaviour. The follow-up this comment used to name as standing is done.
  *
- * ⚠ THE MATCHUP HALF IS UNTOUCHED AND IS NOW THE LARGER COST. `maxMatchupWeeks` still defaults to
- * 18 on every sync, and unlike transactions those weeks ARE read — `teams_rosters` persists recent
- * matchups and standings from them, so narrowing that window is a real behavioural question rather
- * than the pure waste the transaction sweep was. It has not been attempted here.
+ * ⚠ THE MATCHUP HALF IS NOW CAPPED TOO — see `resolveMatchupWeekCap`. This comment previously said
+ * it was untouched and that narrowing it was "a real behavioural question rather than the pure
+ * waste the transaction sweep was". The first half was right and the second was resolved by
+ * measurement: those weeks ARE read (they feed `TeamPerformance`), which is why the matchup knob is
+ * a CAP that keeps every played week rather than a window that would drop them.
  *
  * Offseason stays at 4 hours. Nothing trades at 3am in June, and the same multiplier applied there
  * would be pure spend.
@@ -168,6 +169,40 @@ export function nflWeekForDate(now: Date): number {
  * 08-31 — dates BEFORE the Sep 4 opener. Sleeper files a preseason trade under week 1, so that is
  * the window; week 2 rides along on the standard margin.
  */
+/**
+ * Highest `/matchups/{week}` week a LIVE refresh needs — or `null` for "fetch all 18".
+ *
+ * 🛑 A CAP, NOT A WINDOW, AND THE ASYMMETRY WITH TRANSACTIONS IS THE WHOLE POINT. A transaction
+ * is an EVENT: last week's trades are already stored, so the live path only wants the weeks around
+ * now, and `maxTransactionWeeks` (weeks 1..N, anchored at week 1 forever) was the wrong shape.
+ * A matchup is a SEASON RECORD: `bootstrapLeagueFromNormalizedImport` upserts `TeamPerformance`
+ * from every week it is given, so dropping a PAST week would stop refreshing a real score and
+ * nothing else would fix it — `SleeperHistoricalMatchupSyncService` has no scheduled caller. Past
+ * weeks must stay. Only the unplayed future is waste, and "1..current+1" says exactly that.
+ *
+ * ⚠ WHY THE FUTURE IS PURE WASTE, MEASURED ON PRODUCTION 2026-09-05. Every 2026 row in
+ * `team_performances` is zero-point — all 18 weeks, ~2,974 rows each, avg 0.0. Sleeper reports
+ * `points: 0` for an unplayed week, so the sweep was re-writing ~53,000 placeholder rows six times
+ * an hour to record that nothing had happened yet. In week 1 that is 16 of 18 requests spent on
+ * weeks that cannot contain a score.
+ *
+ * ⚠ THE SAVING SHRINKS AS THE SEASON RUNS, AND THAT IS CORRECT, NOT A DEFECT. Week 1 saves 16
+ * requests; week 10 saves 7; week 17 saves none — by which point those weeks hold real scores and
+ * refreshing them is the job. It is the mirror image of the transaction window, which stays a
+ * constant 3 all season.
+ *
+ * ⚠ `+1` RATHER THAN THE CURRENT WEEK, so next week's pairings are on hand before it starts. The
+ * one behaviour this drops is a `TeamPerformance` row for a week further out than that, which
+ * today would be a zero-point placeholder; `resolveMatchupOpponent` reads Sleeper directly for an
+ * upcoming opponent rather than trusting such a row.
+ */
+export function resolveMatchupWeekCap(input: SeasonInput): number | null {
+  const { state } = resolveSeasonState(input)
+  if (state === 'offseason' || state === 'unknown') return null
+  const centre = state === 'preseason' ? 1 : nflWeekForDate(input.now)
+  return Math.min(MAX_TRANSACTION_WEEK, centre + 1)
+}
+
 export function resolveTransactionWeekWindow(input: SeasonInput): number[] | null {
   const { state } = resolveSeasonState(input)
   if (state === 'offseason' || state === 'unknown') return null

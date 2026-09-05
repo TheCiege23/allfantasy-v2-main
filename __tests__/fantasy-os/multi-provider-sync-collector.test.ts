@@ -68,6 +68,8 @@ const ok = () => ({ success: true as const, normalized: NORMALIZED })
  */
 const NOW = new Date('2026-10-15T12:00:00.000Z')
 const WEEK_WINDOW = [5, 6, 7]
+/* 2026-10-15 is week 6, so the matchup CAP is week 6 + 1. */
+const MATCHUP_CAP = 7
 const fail = (code: string, error = 'nope') => ({ success: false as const, code, error })
 
 describe('provider credential classification', () => {
@@ -139,6 +141,7 @@ describe('needs a USER vs needs a CREDENTIAL — the distinction Fantrax lives i
       userId: 'owner-1',
       currentStateOnly: true,
       transactionWeeks: WEEK_WINDOW,
+      maxMatchupWeeks: MATCHUP_CAP,
     })
   })
 
@@ -195,6 +198,7 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
       userId: 'u1',
       currentStateOnly: true,
       transactionWeeks: WEEK_WINDOW,
+      maxMatchupWeeks: MATCHUP_CAP,
     })
   })
 
@@ -209,6 +213,7 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
       sourceId: '123',
       currentStateOnly: true,
       transactionWeeks: WEEK_WINDOW,
+      maxMatchupWeeks: MATCHUP_CAP,
     })
   })
 
@@ -246,6 +251,7 @@ describe('fetchNormalizedForConnection — keyless providers', () => {
       sourceId: '123',
       currentStateOnly: true,
       transactionWeeks: WEEK_WINDOW,
+      maxMatchupWeeks: MATCHUP_CAP,
     })
     expect(runPipeline.mock.calls[0][0]).not.toHaveProperty('userId')
   })

@@ -1,5 +1,12 @@
 /**
- * The transaction-week window: what a LIVE refresh asks Sleeper for, and what it must not.
+ * What a LIVE refresh asks Sleeper for, and what it must not — both week knobs.
+ *
+ * ⚠ THEY ARE DELIBERATELY DIFFERENT SHAPES AND THE TESTS PIN THAT. Transactions get a WINDOW
+ * (week ±1) because a trade is an event and older ones are already stored. Matchups get a CAP
+ * (1..current+1) because `bootstrapLeagueFromNormalizedImport` upserts TeamPerformance from every
+ * week in the payload, so dropping a PAST week would freeze a real score with nothing behind it —
+ * `SleeperHistoricalMatchupSyncService` has no scheduled caller. Swapping the two shapes would be
+ * silently wrong in both directions.
  *
  * 🛑 THE FAILURE THIS FILE EXISTS TO CATCH IS SILENT IN BOTH DIRECTIONS. Fetching the wrong weeks
  * writes nothing and still reports a completed scope — indistinguishable from a quiet week — and
@@ -16,6 +23,7 @@ vi.mock('@/lib/sleeper-client', () => ({ getAllPlayers: vi.fn(async () => ({})) 
 import {
   nflWeekForDate,
   resolveTransactionWeekWindow,
+  resolveMatchupWeekCap,
   MAX_TRANSACTION_WEEK,
   TRANSACTION_WEEK_MARGIN,
 } from '@/lib/import-os/season'
@@ -124,9 +132,10 @@ function jsonRes(body: unknown, status = 200): Response {
 
 const BASE = 'https://api.sleeper.app/v1'
 
-/** Records every `/transactions/{week}` the fetcher actually asked for. */
-function mockSleeper(): { weeks: () => number[] } {
+/** Records every `/transactions/{week}` AND `/matchups/{week}` the fetcher actually asked for. */
+function mockSleeper(): { weeks: () => number[]; matchupWeeks: () => number[] } {
   const asked: number[] = []
+  const askedMatchups: number[] = []
   global.fetch = vi.fn(async (input: unknown) => {
     const url = String(input)
     const tx = url.match(/\/transactions\/(\d+)$/)
@@ -134,12 +143,20 @@ function mockSleeper(): { weeks: () => number[] } {
       asked.push(Number(tx[1]))
       return jsonRes([])
     }
+    const mu = url.match(/\/matchups\/(\d+)$/)
+    if (mu) {
+      askedMatchups.push(Number(mu[1]))
+      return jsonRes([])
+    }
     if (url === `${BASE}/league/L1`) {
       return jsonRes({ league_id: 'L1', season: '2026', previous_league_id: null })
     }
     return jsonRes([])
   }) as unknown as typeof fetch
-  return { weeks: () => [...asked].sort((a, b) => a - b) }
+  return {
+    weeks: () => [...asked].sort((a, b) => a - b),
+    matchupWeeks: () => [...askedMatchups].sort((a, b) => a - b),
+  }
 }
 
 describe('fetchSleeperLeagueForImport honours an explicit transaction window', () => {
@@ -225,5 +242,102 @@ describe('fetchSleeperLeagueForImport honours an explicit transaction window', (
       maxPreviousSeasons: 0,
     })
     expect(m.weeks()).toEqual([1, 2, 3, 4])
+  }, 20000)
+})
+
+/* ── the matchup CAP, which is deliberately a different shape from the window above ───────── */
+
+describe('resolveMatchupWeekCap — keep every played week, drop the unplayed tail', () => {
+  const cap = (now: Date) => resolveMatchupWeekCap({ sport: 'nfl', provider: 'sleeper', now })
+
+  /*
+   * 🛑 THE ASYMMETRY IS THE DESIGN. Transactions get a WINDOW because a trade is an event and last
+   * month's are already stored. Matchups get a CAP because `bootstrapLeagueFromNormalizedImport`
+   * upserts TeamPerformance from every week in the payload, and a past week dropped from the fetch
+   * simply stops being refreshed — `SleeperHistoricalMatchupSyncService` has no scheduled caller.
+   * A window would silently freeze real scores; "1..current+1" cannot.
+   */
+  it('keeps every week up to next week in the regular season', () => {
+    expect(cap(new Date('2026-10-15T12:00:00Z'))).toBe(7) // week 6 + 1
+  })
+
+  it('asks for only two weeks in week 1, where 16 of 18 cannot hold a score', () => {
+    expect(cap(new Date('2026-09-05T12:00:00Z'))).toBe(2)
+  })
+
+  it('centres preseason on week 1 like the transaction window does', () => {
+    expect(cap(new Date('2026-08-15T12:00:00Z'))).toBe(2)
+  })
+
+  it('never exceeds the last week Sleeper serves', () => {
+    expect(cap(new Date('2026-12-25T12:00:00Z'))).toBe(MAX_TRANSACTION_WEEK)
+    expect(cap(new Date('2027-01-03T12:00:00Z'))).toBe(MAX_TRANSACTION_WEEK)
+  })
+
+  it('declines to cap in the offseason, so the full sweep is kept', () => {
+    expect(cap(new Date('2026-03-15T12:00:00Z'))).toBeNull()
+  })
+
+  it('declines to cap for a sport with no calendar', () => {
+    expect(
+      resolveMatchupWeekCap({ sport: 'nba', provider: 'sleeper', now: new Date('2026-10-15T12:00:00Z') }),
+    ).toBeNull()
+  })
+
+  /*
+   * ⚠ THE PROPERTY THAT MATTERS MOST, ASSERTED ACROSS THE WHOLE SEASON RATHER THAN AT A POINT:
+   * the cap never excludes a week that could already hold a score. If this ever fails, a real
+   * TeamPerformance row stops being refreshed and nothing else refreshes it.
+   */
+  it('never drops a week that has already been played', () => {
+    for (const iso of ['2026-09-05', '2026-10-15', '2026-11-20', '2026-12-25', '2027-01-03']) {
+      const now = new Date(`${iso}T12:00:00Z`)
+      const c = cap(now)
+      expect(c).not.toBeNull()
+      expect(c as number).toBeGreaterThanOrEqual(nflWeekForDate(now))
+    }
+  })
+})
+
+describe('fetchSleeperLeagueForImport honours the matchup cap', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('requests only weeks 1..N of matchups, and keeps every earlier week', async () => {
+    const m = mockSleeper()
+    const { fetchSleeperLeagueForImport } = await import(
+      '@/lib/league-import/sleeper/SleeperLeagueFetchService'
+    )
+    await fetchSleeperLeagueForImport('L1', {
+      maxMatchupWeeks: 2,
+      transactionWeeks: [1],
+      maxPreviousSeasons: 0,
+    })
+    expect(m.matchupWeeks()).toEqual([1, 2])
+  }, 20000)
+
+  it('still sweeps all 18 matchup weeks when no cap is given (the import path)', async () => {
+    const m = mockSleeper()
+    const { fetchSleeperLeagueForImport } = await import(
+      '@/lib/league-import/sleeper/SleeperLeagueFetchService'
+    )
+    await fetchSleeperLeagueForImport('L1', { transactionWeeks: [1], maxPreviousSeasons: 0 })
+    expect(m.matchupWeeks().length).toBe(18)
+  }, 20000)
+
+  /* Both knobs are independent: capping matchups must not disturb the transaction window. */
+  it('caps matchups without touching the transaction window', async () => {
+    const m = mockSleeper()
+    const { fetchSleeperLeagueForImport } = await import(
+      '@/lib/league-import/sleeper/SleeperLeagueFetchService'
+    )
+    await fetchSleeperLeagueForImport('L1', {
+      maxMatchupWeeks: 2,
+      transactionWeeks: [5, 6, 7],
+      maxPreviousSeasons: 0,
+    })
+    expect(m.matchupWeeks()).toEqual([1, 2])
+    expect(m.weeks()).toEqual([5, 6, 7])
   }, 20000)
 })

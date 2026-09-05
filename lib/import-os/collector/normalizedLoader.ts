@@ -48,7 +48,7 @@
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
-import { resolveTransactionWeekWindow } from '@/lib/import-os/season'
+import { resolveTransactionWeekWindow, resolveMatchupWeekCap } from '@/lib/import-os/season'
 /*
  * BOTH questions are asked in this file, deliberately: `providerNeedsUser` decides whether to
  * attribute the read to an importing user at all, `providerNeedsCredential` decides whether a
@@ -215,13 +215,31 @@ export async function fetchNormalizedForConnection(
    * window", which restores the full sweep — the safe direction. Cutting cost is worth doing only
    * where it cannot cost a trade.
    */
-  const weekWindow =
-    resolveTransactionWeekWindow({
-      sport: connection.sport,
-      provider: connection.provider,
-      now: deps.now ?? new Date(),
-      season: connection.season,
-    }) ?? undefined
+  const seasonInput = {
+    sport: connection.sport,
+    provider: connection.provider,
+    now: deps.now ?? new Date(),
+    season: connection.season,
+  }
+  const weekWindow = resolveTransactionWeekWindow(seasonInput) ?? undefined
+
+  /*
+   * ⚠ AND THE SAME ARGUMENT FOR MATCHUPS, EXCEPT IT IS A CAP RATHER THAN A WINDOW.
+   *
+   * Sleeper answers `points: 0` for a week that has not been played, and
+   * `bootstrapLeagueFromNormalizedImport` upserts a `TeamPerformance` row from every week the
+   * payload carries — so the 18-week sweep was re-writing a placeholder for every future week on
+   * every run. Measured on production 2026-09-05: all 18 weeks of 2026 `team_performances` are
+   * zero-point, ~2,974 rows each. In week 1 that is 16 of 18 requests spent on weeks that cannot
+   * contain a score yet.
+   *
+   * 🛑 PAST WEEKS ARE NEVER DROPPED, WHICH IS WHY THIS IS A CAP. A past week holds a real score,
+   * `TeamPerformance` is the only place it lands from this path, and
+   * `SleeperHistoricalMatchupSyncService` has no scheduled caller — so a week omitted here would
+   * simply stop being refreshed, with nothing behind it. `1..current+1` keeps every played week
+   * and drops only the unplayed tail.
+   */
+  const matchupCap = resolveMatchupWeekCap(seasonInput) ?? undefined
 
   /*
    * An UNOWNED provider takes the no-user path directly. Resolving candidates for it would be a
@@ -234,6 +252,7 @@ export async function fetchNormalizedForConnection(
       sourceId: connection.externalLeagueId,
       currentStateOnly: true,
       transactionWeeks: weekWindow,
+      maxMatchupWeeks: matchupCap,
     })
     if (result.success) return result.normalized
     if (result.code === 'LEAGUE_NOT_FOUND') {
@@ -262,6 +281,7 @@ export async function fetchNormalizedForConnection(
       userId,
       currentStateOnly: true,
       transactionWeeks: weekWindow,
+      maxMatchupWeeks: matchupCap,
     })
     if (result.success) return result.normalized
 
