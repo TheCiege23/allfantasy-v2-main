@@ -1398,3 +1398,38 @@
 /* Measured and unmoved: present, but never competing with a real move for attention. */
 .af-tc-stock[data-dir='flat'] { color: var(--faint); }
 
+/*
+ * The visible roster under each side.
+ *
+ * Appended at the END of this file deliberately: it carries several `@media` blocks, and
+ * inserting a rule inside one silently moves every rule below it into the narrower query —
+ * brace balance stays 0 and nothing throws. `af-matchup.css` has already been bitten by that.
+ */
+.af-tc-roster { margin-top: 10px; }
+.af-tc-roster-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 0;
+}
+.af-tc-roster-head::-webkit-details-marker { display: none; }
+/*
+ * Capped and scrollable. Two full rosters open at once would push the verdict — the thing the
+ * page exists for — below the fold on every screen.
+ */
+.af-tc-roster-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/*
+ * ⚠ SHOWN, NOT HIDDEN, once a player is in the deal. Removing the row would make the roster
+ * shrink as you build and leave a manager wondering where someone went; dimming says "already
+ * yours to trade" while keeping the list a stable picture of the team.
+ */
+.af-tc-row--button[data-added='true'] { opacity: 0.45; cursor: default; }
+

@@ -171,8 +171,15 @@ describe('🛑 one mark, one rule, in both places it is drawn', () => {
      * The same player must not be rising in the picker and flat two inches away in the deal.
      * One exported component is what makes that impossible rather than merely unlikely.
      */
+    /*
+     * ⚠ ASSERT THE RULE, NOT THE FORMATTING. This read `toContain('import { StockMark,')` and
+     * went red the moment the import was wrapped across lines — a true statement about layout,
+     * not about whether the builder shares the mark. A test that fails on prettier is noise the
+     * next person deletes, taking the real check with it.
+     */
     expect(PICKER).toContain('export function StockMark')
-    expect(BUILDER).toContain('import { StockMark,')
+    const builderImport = /import\s*\{[^}]*\bStockMark\b[^}]*\}\s*from\s*'@\/components\/core-app\/screens\/TradeAssetPicker'/
+    expect(BUILDER).toMatch(builderImport)
     expect(BUILDER).not.toContain('function StockMark')
   })
 

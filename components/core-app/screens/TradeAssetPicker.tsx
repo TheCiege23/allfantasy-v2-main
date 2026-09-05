@@ -110,6 +110,104 @@ export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?
   )
 }
 
+/**
+ * One roster player, as a clickable row.
+ *
+ * ⚠ EXPORTED AND SHARED WITH THE TRADE SCREEN. This markup used to live only inside the picker,
+ * which is why a manager could not see what either team held without opening a modal. It is one
+ * component rather than two copies for the same reason `StockMark` is: the same player must not
+ * look different in the list and in the deal.
+ */
+export function RosterPlayerRow(props: {
+  player: RosterPlayer
+  sport?: string | null
+  onAdd: () => void
+  /** Already in the deal — shown, but not addable twice. */
+  added?: boolean
+}) {
+  const p = props.player
+  const logo = teamLogoUrl(p.team, props.sport)
+  return (
+    <button
+      type="button"
+      className="af-tc-row af-tc-row--button af-tc-row--player"
+      onClick={props.onAdd}
+      disabled={props.added}
+      data-added={props.added ? 'true' : undefined}
+      aria-label={props.added ? `${p.name} is already in this trade` : `Add ${p.name}`}
+    >
+      {/*
+        A headshot is optional and often absent. The initial keeps row height and alignment
+        identical either way, so a roster does not look ragged.
+      */}
+      <span className="af-tc-headshot" aria-hidden="true">
+        {p.imageUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={p.imageUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>
+        )}
+      </span>
+
+      <span className="af-tc-row-body">
+        <span className="af-tc-row-name">
+          {p.name}
+          {p.injuryStatus ? (
+            <span className="af-tc-injury" title={p.injuryStatus}>
+              {p.injuryStatus}
+            </span>
+          ) : null}
+        </span>
+        <span className="af-tc-row-sub">
+          {p.position ? <span className="af-tc-pos">{p.position}</span> : null}
+          {/*
+            ⚠ `af-tc-row-team`, NOT `af-tc-team` — the latter is the TEAM CARD in TradeCenter.
+            Carrying it here inherited `flex-direction: column`, 14px of padding and a border from
+            a component this chip has nothing to do with, stacking the logo above the abbreviation
+            and making every roster row ~130px tall against an intended ~48px. The DOM was correct
+            and the tests passed throughout: a textContent assertion cannot see a layout.
+          */}
+          {p.team ? (
+            <span className="af-tc-row-team">
+              {logo ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={logo} alt="" loading="lazy" />
+              ) : null}
+              {p.team}
+            </span>
+          ) : null}
+          {/*
+            ⚠ ONLY WHEN KNOWN. A null bye means "we do not know"; rendering it as a week — or as
+            0 — states a fact a manager could plan around and be wrong.
+          */}
+          {p.byeWeek != null ? <span className="af-tc-bye">BYE {p.byeWeek}</span> : null}
+          {props.added ? <span className="af-tc-tag">In this trade</span> : null}
+        </span>
+      </span>
+
+      <StockMark stock={p.stock} delta={p.stockDelta} />
+      {/* Unpriced shows an em dash. The picker must never imply zero. */}
+      <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
+        {p.value == null ? '\u2014' : p.value.toLocaleString()}
+      </span>
+    </button>
+  )
+}
+
+/**
+ * Team logo from the abbreviation. Null for an unknown team or sport, which is why the
+ * abbreviation is rendered BESIDE the logo rather than replaced by it.
+ */
+function teamLogoUrl(team: string | null, sport?: string | null): string | null {
+  if (!team) return null
+  try {
+    return resolveTeamLogoUrlSync(team, sport ?? 'NFL')
+  } catch {
+    return null
+  }
+}
+
+
 export function TradeAssetPicker(props: {
   onPick: (asset: PickedAsset) => void
   onClose: () => void
@@ -203,14 +301,7 @@ export function TradeAssetPicker(props: {
    * Returns null for an unknown team or sport, and the row then shows the abbreviation alone —
    * which is why the abbreviation is rendered beside the logo rather than replaced by it.
    */
-  const teamLogoFor = (team: string | null): string | null => {
-    if (!team) return null
-    try {
-      return resolveTeamLogoUrlSync(team, props.sport ?? 'NFL')
-    } catch {
-      return null
-    }
-  }
+  const teamLogoFor = (team: string | null): string | null => teamLogoUrl(team, props.sport)
 
   const search = useCallback(
     async (q: string) => {
@@ -325,11 +416,11 @@ export function TradeAssetPicker(props: {
                 <p className="af-tc-row-sub">Nobody on this roster matches that.</p>
               ) : null}
               {filteredRoster.map((p) => (
-                <button
+                <RosterPlayerRow
                   key={p.id}
-                  type="button"
-                  className="af-tc-row af-tc-row--button af-tc-row--player"
-                  onClick={() =>
+                  player={p}
+                  sport={props.sport}
+                  onAdd={() =>
                     props.onPick({
                       kind: 'player',
                       playerId: p.id,
@@ -343,62 +434,7 @@ export function TradeAssetPicker(props: {
                       sportHint: props.sport ?? undefined,
                     })
                   }
-                >
-                  {/*
-                    A headshot is optional and often absent. The initial keeps row height and
-                    alignment identical either way, so a roster does not look ragged.
-                  */}
-                  <span className="af-tc-headshot" aria-hidden="true">
-                    {p.imageUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={p.imageUrl} alt="" loading="lazy" />
-                    ) : (
-                      <span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>
-                    )}
-                  </span>
-
-                  <span className="af-tc-row-body">
-                    <span className="af-tc-row-name">
-                      {p.name}
-                      {p.injuryStatus ? (
-                        <span className="af-tc-injury" title={p.injuryStatus}>
-                          {p.injuryStatus}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="af-tc-row-sub">
-                      {p.position ? <span className="af-tc-pos">{p.position}</span> : null}
-                      {/*
-                        ⚠ `af-tc-row-team`, NOT `af-tc-team` — the latter is the TEAM CARD in
-                        TradeCenter.tsx. Carrying it here inherited `flex-direction: column`, 14px
-                        of padding and a border from a component this chip has nothing to do with,
-                        which stacked the logo above the abbreviation and made every roster row
-                        130px tall against an intended ~48px. The DOM was correct and the tests
-                        passed throughout: a textContent assertion cannot see a layout.
-                      */}
-                      {p.team ? (
-                        <span className="af-tc-row-team">
-                          {teamLogoFor(p.team) ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={teamLogoFor(p.team) as string} alt="" loading="lazy" />
-                          ) : null}
-                          {p.team}
-                        </span>
-                      ) : null}
-                      {/*
-                        ⚠ ONLY WHEN KNOWN. A null bye means "we do not know"; rendering it as a
-                        week — or as 0 — states a fact a manager could plan around and be wrong.
-                      */}
-                      {p.byeWeek != null ? <span className="af-tc-bye">BYE {p.byeWeek}</span> : null}
-                    </span>
-                  </span>
-
-                  {/* Unpriced shows an em dash. The picker must never imply zero. */}
-                  <StockMark stock={p.stock} delta={p.stockDelta} />
-                  <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
-                    {p.value == null ? '—' : p.value.toLocaleString()}
-                  </span>
-                </button>
+                />
               ))}
             </>
           ) : props.rosterKnown ? (

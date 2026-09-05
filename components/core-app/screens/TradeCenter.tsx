@@ -1,7 +1,12 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { StockMark, TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import {
+  RosterPlayerRow,
+  StockMark,
+  TradeAssetPicker,
+  type PickedAsset,
+} from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 /*
  * ⚠ THE SAME RESOLVER THE PICKER USES, DELIBERATELY. This repo already carries FIVE
@@ -962,6 +967,84 @@ export function TradeCenter(props: {
                 + Add asset
               </button>
             )}
+
+            {/*
+              🛑 WHAT THIS TEAM ACTUALLY HAS, ON THE SCREEN.
+              Guap: "right now I don't know what either team has." The roster was already fetched
+              and already passed to the picker — it was just rendered INSIDE the modal, so the
+              page never showed it. Adding an asset should not be the only way to find out who is
+              on a roster.
+
+              ⚠ THE SAME ROW COMPONENT THE PICKER USES. A second copy of this markup is how the
+              pick price ended up needing three separate fixes; one player must not look different
+              in the list and in the deal.
+            */}
+            {(() => {
+              const r = side.side === 'give' ? myRoster : partnerRoster
+              const chosen = side.side === 'give' ? giveAssets : getAssets
+              /*
+                ⚠ MATCHED ON ID, NOT NAME. Two players share a name often enough that a name key
+                would grey out the wrong man, and `playerId` is what the roster rows carry.
+              */
+              const inDeal = new Set(
+                chosen.flatMap((a) => (a.kind === 'player' && a.playerId ? [a.playerId] : [])),
+              )
+              if (!r) {
+                /*
+                  ⚠ "WE DO NOT KNOW WHOSE ROSTER" IS NOT "THEY HOLD NOTHING", and the copy has to
+                  keep them apart — the same rule the picker and the cross-league strip carry.
+                */
+                return side.side === 'get' ? (
+                  <p className="af-tc-row-sub">
+                    Pick a team above to see what they hold.
+                  </p>
+                ) : null
+              }
+              const players = r.players ?? []
+              if (players.length === 0) {
+                return (
+                  <p className="af-tc-row-sub">
+                    No players are listed on this roster yet.
+                  </p>
+                )
+              }
+              return (
+                <details className="af-tc-roster" open>
+                  <summary className="af-tc-roster-head">
+                    <span className="af-label">
+                      {r.ownerName ? `${r.ownerName}'s roster` : 'On this roster'} · {players.length}
+                    </span>
+                    <span className="af-tc-row-sub">Tap a player to add them</span>
+                  </summary>
+                  {/*
+                    Capped and scrollable: two full rosters open at once would push the verdict —
+                    the thing the page exists for — below the fold on every screen.
+                  */}
+                  <div className="af-tc-roster-list">
+                    {players.map((pl) => (
+                      <RosterPlayerRow
+                        key={pl.id}
+                        player={pl}
+                        onAdd={() =>
+                          addAsset(side.side, {
+                            kind: 'player',
+                            playerId: pl.id,
+                            name: pl.name,
+                            position: pl.position,
+                            team: pl.team,
+                            value: pl.value,
+                            imageUrl: pl.imageUrl,
+                            stock: pl.stock,
+                            stockDelta: pl.stockDelta,
+                          })
+                        }
+                        added={Boolean(pl.id && inDeal.has(pl.id))}
+                      />
+                    ))}
+                  </div>
+                </details>
+              )
+            })()}
 
             <div className="af-tc-total">
               <span>
