@@ -45,7 +45,39 @@ vi.mock('@/lib/trade-intel/sleeperTradeSync', async (importOriginal) => {
    * failing an assertion, which looks nothing like the bug it was meant to catch.
    */
   const actual = await importOriginal<typeof import('@/lib/trade-intel/sleeperTradeSync')>()
-  return { ...actual, currentCompletedTradeIds: h.currentIds }
+  /*
+   * 🛑 THIS KEY MUST NAME A REAL EXPORT, AND FOR ONE COMMIT IT DID NOT.
+   *
+   * It read `currentCompletedTradeIds`, which was renamed to `currentTradeIds` when pending
+   * offers were added. Spreading `...actual` and then setting a key nobody imports overrides
+   * NOTHING — so `tradeNotifyService` kept calling the real function and this file went back to
+   * ~4,500 live Sleeper requests, taking 22s of a 30s budget and flaking under load.
+   *
+   * It stayed GREEN the whole time, and that is the part worth remembering: the sweep tolerates
+   * an unavailable feed, so the test passed BECAUSE the real network call failed. A mock that
+   * silently stops intercepting is indistinguishable from one that works.
+   *
+   * So the key is asserted against the real module rather than trusted. A rename now fails here,
+   * loudly, instead of quietly restoring the network.
+   */
+  const override = { currentTradeIds: h.currentIds }
+  /*
+   * ⚠ CHECK THE KEYS BEING OVERRIDDEN, NOT A NAME TYPED TWICE. The first version of this guard
+   * asserted `'currentTradeIds' in actual` — which is true whatever key the override sets, so it
+   * would NOT have caught the original rot and was pure decoration. A mutation control restoring
+   * the old key left it green and that is how it was found. Deriving the check from `override`
+   * makes the two impossible to disagree.
+   */
+  for (const key of Object.keys(override)) {
+    if (!(key in actual)) {
+      throw new Error(
+        `This mock stubs "${key}", which sleeperTradeSync does not export — it is overriding ` +
+          'NOTHING and the suite is about to make thousands of real Sleeper requests while still ' +
+          'passing, because the sweep tolerates an unavailable feed. Fix the key; do not delete this.',
+      )
+    }
+  }
+  return { ...actual, ...override }
 })
 
 import { detectAndNotifyAll } from '@/lib/trade-intel/tradeNotifyService'
