@@ -308,6 +308,63 @@ describe('Player Finder — league in context', () => {
   })
 })
 
+/*
+ * The trade window (2026-09-05): who to pitch and when they move. It lives in
+ * the decision column, which now renders for it even when there is no
+ * per-league impact to grade — a NOT YOURS league has nothing to fix, and
+ * everything to pitch.
+ */
+describe('Player Finder — trade window', () => {
+  const PRESENCE: NonNullable<React.ComponentProps<typeof PlayerFinder>['presence']> = {
+    available: true,
+    data: {
+      leagueId: 'L-gang',
+      leagueName: 'Gridiron Gang',
+      platform: 'espn',
+      platformLeagueId: '888',
+      season: 2026,
+      timeZone: 'America/New_York',
+      zone: 'ET',
+      player: { sleeperId: '10236', position: 'TE' },
+      holder: 'other',
+      managers: [
+        {
+          role: 'owner',
+          teamName: "Tasha's Titans",
+          ownerName: 'tashaR',
+          avatarUrl: null,
+          externalId: '1',
+          record: '4-2',
+          rank: 3,
+          need: null,
+          startsHim: true,
+          window: { weekday: 0, startHour: 10, endHour: 12, daypart: 'morning', precision: 'window', share: 0.8, sample: 12, zone: 'ET' },
+          lastMove: { at: '2026-10-20T18:00:00.000Z', kind: 'trade' },
+          moves: 13,
+        },
+      ],
+      activityIngested: true,
+      newestMove: '2026-10-20T18:00:00.000Z',
+      unattributed: 0,
+    },
+  }
+
+  it('opens the decision column for the window alone in a league where he is not yours', () => {
+    renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW, presence: PRESENCE, nowIso: '2026-10-24T14:30:00.000Z' })
+    const side = screen.getByRole('complementary', { name: 'What to do' })
+    expect(within(side).getByRole('region', { name: 'Trade window · when they move' })).toBeInTheDocument()
+    expect(within(side).getByText('@tashaR usually moves Sun 10a–12p ET')).toBeInTheDocument()
+    expect(within(side).getByText(/They start Kincaid in Gridiron Gang\. Ask what it takes\. Pitch Sun 10a–12p, not now\./)).toBeInTheDocument()
+    // No trade visual on the screen, so Grade it opens the Trade Center for the league.
+    expect(within(side).getByRole('link', { name: 'Grade it' })).toHaveAttribute('href', '/core/trades?league=L-gang')
+  })
+
+  it('keeps the column out when there is neither impact nor a window', () => {
+    renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
+    expect(screen.queryByRole('complementary', { name: 'What to do' })).not.toBeInTheDocument()
+  })
+})
+
 describe('Player Finder — signed out', () => {
   it('gates the league sections behind a sign-in reason and renders no verdict', () => {
     render(<PlayerFinder query="" matches={[]} detail={DETAIL} leagueCount={0} signedIn={false} />)

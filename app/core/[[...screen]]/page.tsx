@@ -42,6 +42,7 @@ import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
+import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
@@ -766,6 +767,26 @@ export default async function AfCorePage({
   const playerTradeVisual =
     playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
       ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId).catch(() => null)
+      : null
+
+  /*
+   * Trade window (2026-09-05): who to pitch for him and when they move. In a
+   * held league it is that league. In the core view it is the first league
+   * where someone else has him (the pitch), else the first where he is yours
+   * (the buyers) — one league at a time, because the loader reads a league's
+   * whole transaction history, and the card names the league it is about.
+   */
+  const presenceLeagueId = (() => {
+    if (activeKey !== 'players' || !playerDetail?.player.sleeperId) return null
+    if (selectedLeagueId) return selectedLeagueId
+    const rows = playerDetail.leagues.available ? playerDetail.leagues.data : []
+    return rows.find((r) => !r.isYours && r.owner)?.leagueId ?? rows.find((r) => r.isYours)?.leagueId ?? null
+  })()
+  const playerPresence =
+    presenceLeagueId && playerDetail?.player.sleeperId
+      ? await getManagerPresence(presenceLeagueId, playerDetail.player.sleeperId, userId, {
+          position: playerDetail.player.position,
+        }).catch(() => null)
       : null
 
   /*
@@ -1947,6 +1968,8 @@ export default async function AfCorePage({
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}
+          presence={playerPresence}
+          nowIso={new Date().toISOString()}
         />
       ) : activeKey === 'week' ? (
         /*

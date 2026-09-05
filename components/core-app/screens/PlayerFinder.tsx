@@ -9,6 +9,7 @@ import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidat
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
 import { LeagueOwnershipCard } from '@/components/core-app/player-finder/LeagueOwnershipCard'
 import { TradeVisual } from '@/components/core-app/player-finder/TradeVisual'
+import { TradeWindow } from '@/components/core-app/player-finder/TradeWindow'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
@@ -17,6 +18,8 @@ import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import type { LeagueSlot, PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import type { PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
+import type { ManagerPresence } from '@/lib/core-app/managerPresence'
+import type { PitchPackage } from '@/lib/core-app/tradePitch'
 import type { RecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 
@@ -45,20 +48,23 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
  *            second copy of anything — see af-player-finder.css.
  *
  * ⚠ TWO PANELS IN THE DESIGN ARE NOT BUILT, ON PURPOSE, BECAUSE NOTHING BACKS
- * THEM. Measured before building rather than discovered afterwards:
+ * THEM — and two more were built only as far as the data goes. Measured before
+ * building rather than discovered afterwards:
  *
  *   - INJURY TIMELINE (WED DNP / THU LP / FRI FP). No provider we ingest carries
  *     practice participation; `sportsInjury` holds a status and a description and
  *     nothing else. The status we DO have renders as the readiness chip.
- *   - TRADE WINDOW · WHO'S AROUND NOW. Needs per-manager presence ("usually on
- *     Sun 10a–12p", "online now"). `IntelligenceManagerSnapshot.lastActiveAt` is
- *     the only candidate and it is keyed on an import-side manager key with no
- *     join to `LeagueTeam`; nothing else records when a manager is in the app.
- *     Building the panel on that would print a guess beside a real name.
- *   - RECENTLY SEARCHED. Nothing persists a per-user search history.
  *   - SEASON AVG. `PlayerGameStat.fantasyPoints` defaults to 0 and is written
  *     under whichever scoring the importer used — not this league's, not
  *     standard. An average of that would be a number with no name.
+ *   - TRADE WINDOW · WHO'S AROUND NOW — built as "when they move" (2026-09-05).
+ *     The usual window, the last move, the need and the record are real:
+ *     managerPresence.ts reads them from the league's own transaction history
+ *     and rosters. "Online now" is NOT claimed, because nothing we hold records
+ *     when a manager is in the app; the dot pulses only for a move in the last
+ *     day. ESPN and Yahoo activity is not ingested, so those rows carry the need
+ *     and record and say the window is missing.
+ *   - RECENTLY SEARCHED — built 2026-09-02, per account (`recent_player_searches`).
  *
  * ⚠ THE CHIMMY CARD IS COMPUTED, NOT GENERATED — see PlayerVerdict for why a
  * page-load LLM call was rejected.
@@ -92,6 +98,17 @@ export type PlayerFinderProps = {
    * league's card says another manager has him. Null otherwise.
    */
   tradeVisual?: SectionState<PlayerTradeVisual> | null
+  /**
+   * Who to pitch for him and when they move — the held league, or in the core
+   * view the first league where someone else has him. Null when no league
+   * applies; an unavailable state renders its reason.
+   */
+  presence?: SectionState<ManagerPresence> | null
+  /**
+   * The server's clock, ISO. The trade window's "pitch now / not now" is read
+   * against it so the sentence hydrates to what was rendered.
+   */
+  nowIso?: string
   /**
    * False on the public `/players/{slug}` surface when nobody is signed in.
    *
@@ -259,6 +276,8 @@ export function PlayerFinder({
   leagueView = null,
   recent = [],
   tradeVisual = null,
+  presence = null,
+  nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
   /*
@@ -279,6 +298,12 @@ export function PlayerFinder({
    */
   const leagueMode = Boolean(signedIn && selectedLeagueId)
   const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
+
+  /** The trade visual's opening package, for the pitch on the trade-window card. */
+  const pitchPackage: PitchPackage =
+    tradeVisual?.available && tradeVisual.data.recommended
+      ? { give: tradeVisual.data.recommended.give.map((a) => a.name), fairness: tradeVisual.data.recommended.fairness }
+      : null
   const allLeaguesHref = detail
     ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(detail.player.sport, detail.player.externalId))}`
     : '/core/players'
@@ -859,14 +884,37 @@ export function PlayerFinder({
         real per-league impact behind it — an empty rail of headed cards would
         imply we looked and found nothing, which is different from not looking.
       */}
-      {detail && impactRows.length > 0 ? (
+      {detail && (impactRows.length > 0 || presence) ? (
         <aside className="af-pf-side" aria-label="What to do">
-          <PlayerVerdict
-            playerName={detail.player.name}
-            impact={impactRows}
-            moves={moves}
-            scope={leagueMode ? 'league' : 'all'}
-          />
+          {impactRows.length > 0 ? (
+            <PlayerVerdict
+              playerName={detail.player.name}
+              impact={impactRows}
+              moves={moves}
+              scope={leagueMode ? 'league' : 'all'}
+            />
+          ) : null}
+          {/*
+            The trade window: who to pitch and when they move. Grade it jumps to
+            the trade visual when it is on the screen (someone else has him in
+            the held league), else opens the Trade Center for that league.
+          */}
+          {presence ? (
+            <TradeWindow
+              state={presence}
+              playerName={detail.player.name}
+              pkg={pitchPackage}
+              gradeHref={tradeVisual?.available && leagueView?.ownership.kind === 'other' ? '#af-pf-tv-h' : null}
+              tradeCenterHref={
+                presence.available
+                  ? `/core/trades?league=${presence.data.leagueId}`
+                  : selectedLeagueId
+                    ? `/core/trades?league=${selectedLeagueId}`
+                    : '/core/trades'
+              }
+              nowIso={nowIso}
+            />
+          ) : null}
           <SwapCandidates impact={impactRows} />
         </aside>
       ) : null}

@@ -1840,3 +1840,107 @@
     min-height: 44px;
   }
 }
+
+/* ── Trade window — who to pitch, and when they move ─────────────────── */
+.af-core .af-pf-tw {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.af-core .af-pf-tw-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.af-core .af-pf-tw-title {
+  margin: 0;
+}
+.af-core .af-pf-tw-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--muted);
+}
+/* Pulses only for a manager who moved in the last day — never "online". */
+.af-core .af-pf-tw[data-live='true'] .af-pf-tw-dot {
+  background: var(--good);
+  animation: af-pf-tw-pulse 2s ease-out infinite;
+}
+@keyframes af-pf-tw-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.af-core .af-pf-tw-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-core .af-pf-tw-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 10px;
+  border-left: 3px solid var(--line);
+}
+.af-core .af-pf-tw-row[data-timing='now'] {
+  border-left-color: var(--good);
+}
+.af-core .af-pf-tw-row[data-timing='later'] {
+  border-left-color: var(--warn);
+}
+.af-core .af-pf-tw-lead {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-tw-body {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-pf-tw-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-core .af-pf-tw-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-tw-btn {
+  min-height: 40px;
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-tw[data-live='true'] .af-pf-tw-dot {
+    animation: none;
+  }
+}
+
+/* Phone: the one line the handoff shows, and full-width buttons. Appended at
+   the END of the file on purpose — a new @media block inside the 720px band
+   above would close it early and carry its later rules out of the band. */
+@media (max-width: 720px) {
+  .af-core .af-pf-tw {
+    padding: 14px;
+  }
+  .af-core .af-pf-tw-row:not(:first-child) {
+    display: none;
+  }
+  .af-core .af-pf-tw-btn {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+}
