@@ -9,6 +9,7 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
+import { toTradeCanonicalOpinion } from '@/lib/decision-os/trade/canonicalVisibility'
 import { buildTradeContextNotes, type TradeContextNotes } from '@/lib/trade-intel/tradeContextNotes'
 
 /**
@@ -270,7 +271,26 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         context.scaleNotes.length > 0 ||
         context.formatNotes.length > 0
 
-      return NextResponse.json(hasContext ? { ...analysis, ...notes } : analysis)
+      /*
+       * Phase 3B (alongside) — the canonical grade the shadow path ALREADY computed above,
+       * surfaced next to the console verdict instead of being thrown away after telemetry.
+       *
+       * 🛑 IT REPLACES NOTHING. `analysis` is untouched: the console's own value maths still
+       * decides the verdict, the percentages and every label. This adds a second opinion and
+       * the client is free to ignore it.
+       *
+       * ABSENT rather than empty when the flag is off or the engine produced no comparison. A
+       * missing field reads as "no second opinion"; a present-but-null object reads as an
+       * opinion with nothing in it, which is the shape that has already caused one wrong
+       * reading on this surface.
+       */
+      const decisionOs = toTradeCanonicalOpinion(comparison)
+      /* `responseBody`, not `payload` — `payload` is already taken at the top of this same
+       * try block by the parsed REQUEST. Two `const payload` in one block is an ECMAScript
+       * early error, so the module would not parse and every request to this route would
+       * 500. ignoreBuildErrors:true means the build would not have stopped it. */
+      const responseBody = hasContext ? { ...analysis, ...notes } : analysis
+      return NextResponse.json(decisionOs ? { ...responseBody, decisionOs } : responseBody)
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

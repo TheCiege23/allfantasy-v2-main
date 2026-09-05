@@ -451,6 +451,19 @@ export function TradeValueModal({
 
   const fairnessScore = typeof result?.fairnessScore === 'number' ? result.fairnessScore : null
   const labels = result?.labels as { fairnessLabel?: string; confidenceLabel?: string } | undefined
+  /**
+   * Phase 3B (alongside). Absent unless DECISION_OS_TRADE_CANONICAL_VISIBLE is on AND the
+   * canonical engine produced a comparison, so `undefined` here means "no second opinion"
+   * rather than "an opinion of nothing".
+   */
+  const decisionOs = result?.decisionOs as
+    | {
+        grade: string | null
+        confidence: number
+        advantage: 'even' | 'you' | 'opponent' | null
+        agreesWithConsole: boolean | null
+      }
+    | undefined
   const secondary = result?.secondary as Record<string, unknown> | undefined
   const evaluation = result?.evaluation as { bullets?: string[]; sensitivity?: string } | undefined
   const chimmyPayload = result?.chimmyPayload as Record<string, unknown> | undefined
@@ -878,6 +891,38 @@ export function TradeValueModal({
           <span className="font-semibold text-[#00d4aa]">{labels?.fairnessLabel ?? 'Run analysis to score this deal.'}</span>{' '}
           {labels?.confidenceLabel ? <span className="text-[#5c6480]">· {labels.confidenceLabel}</span> : null}
         </p>
+        {/*
+          * A SECOND OPINION, NEVER THE VERDICT. The console's own answer above is unchanged; this
+          * sits beneath it, clearly attributed. Three states, and the two quiet ones matter more:
+          *   grade null      -> the engine could not price the deal. Say so; never print a grade.
+          *   agreement null  -> no verdict to compare. Never render that as agreement; that exact
+          *                      conflation is what the flip gate exists to prevent.
+          *   confidence 0    -> nothing to go on, which is not the same as "even".
+          */}
+        {decisionOs ? (
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#9ba3bf]">
+            <span className="rounded-[3px] bg-[#1b2030] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-widest text-[#7c88ad]">
+              Decision OS
+            </span>
+            {decisionOs.grade ? (
+              <>
+                <span className="font-semibold text-[#c8d4f0]">Grade {decisionOs.grade}</span>
+                <span className="text-[#5c6480]">{'·'} confidence {decisionOs.confidence}/100</span>
+                {decisionOs.agreesWithConsole === true ? (
+                  <span className="text-[#00d4aa]">{'·'} agrees with the console</span>
+                ) : decisionOs.agreesWithConsole === false ? (
+                  <span className="text-[#d98b7c]">{'·'} disagrees with the console</span>
+                ) : (
+                  <span className="text-[#5c6480]">{'·'} not comparable to the console verdict</span>
+                )}
+              </>
+            ) : (
+              <span className="text-[#5c6480]">
+                could not price this deal {'·'} no second opinion, not a neutral one
+              </span>
+            )}
+          </p>
+        ) : null}
         {rosterSummary?.lineupSimulation ? (
           <p className="mt-2 text-[10px] text-[#5c6480]">
             Lineup context: {rosterSummary.yourRosterPlayers ?? 0} your roster players priced,{' '}
