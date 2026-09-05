@@ -156,9 +156,60 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         before, and __tests__/root-language-provider-layout.test.tsx asserts
         the root document does not depend on a build-time Google Fonts fetch
         (it greps this file's source for that loader's import path, so this
-        comment deliberately doesn't spell it out either). Rendering a <link>
-        here (rather than inside a manual <head>) is enough — Next's App
-        Router hoists it into the document <head> on its own.
+        comment deliberately doesn't spell it out either).
+
+        🛑 `precedence` IS LOAD-BEARING, AND THIS COMMENT USED TO SAY THE
+        OPPOSITE. It claimed that rendering a bare <link> here was enough
+        because "Next's App Router hoists it into the document head on its
+        own". Measured on Next 14.2.35 / React 18.3.1, it does not. Without a
+        precedence React emits the element exactly where the tree puts it: in
+        the served HTML it landed after `</head>` and before `<body>`, which is
+        not a legal position for it. Every symptom followed from that one byte
+        offset:
+
+          Warning: In HTML, <link> cannot be a child of <html>. This will
+                   cause a hydration error.
+          Warning: Cannot render a <link rel="stylesheet" /> outside the main
+                   document without knowing its precedence.
+          Warning: An error occurred during hydration. The server HTML was
+                   replaced with client content in #document.
+
+        That last line is the cost: React threw away the WHOLE server-rendered
+        document and re-rendered it on the client, on every page — so
+        production lost SSR on first paint. The fonts themselves still arrived,
+        which is why this went unnoticed for so long: the browser's parser
+        silently relocates a stray <link> into the head while building the DOM,
+        so the page looked right. Measured before this change, the document
+        carried TWO copies of this stylesheet — the parser's rescued one, plus
+        the one React appended under <html> during its client re-render. Both
+        of those are gone now.
+
+        With a precedence React treats the element as a stylesheet RESOURCE and
+        hoists it for real; it is emitted inside the head with a
+        `data-precedence` attribute, like the two sheets Next emits itself. The
+        repo already knew this — the same discovery is recorded on the
+        `/railway-styles.css` link that used to live in the body.
+
+        The other remedy React's message offers is a hand-written head element
+        around this link. Both were run against a dev server rather than
+        reasoned about, and the honest result is that BOTH clear every warning
+        above — so "it stops the errors" does not choose between them. What
+        chooses is the rest:
+
+          - root-language-provider-layout.test.tsx fails on a manual head tag
+            here (measured: it is the assertion that fires). The reason it
+            guards that is recorded with it — writing one made Railway stream
+            malformed HTML with the opening document tags missing, a
+            production-only failure no local dev server will reproduce.
+          - a precedence hands the sheet to React as a managed resource, so it
+            is deduplicated and ordered against Next's own route stylesheets
+            instead of merely sitting in the right place.
+
+        ⚠ And it is `precedence`, spelled exactly. The prop is not in
+        @types/react@18, so it is declared in
+        types/react-stylesheet-precedence.d.ts — deliberately as a named prop
+        rather than spread in, because a spread would compile a misspelling
+        silently and put the bailout straight back.
 
         Covers the one design system that was silently falling back to system
         fonts because its CSS assumed a <link> existed elsewhere and none ever
@@ -191,6 +242,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <link
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap"
+        precedence="default"
       />
       <body
         className="antialiased min-h-screen mode-readable"
