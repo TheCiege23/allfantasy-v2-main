@@ -281,19 +281,50 @@ export async function scanPendingSleeperTrades(args: {
     const out: PendingProviderTrade[] = []
     let weeksUnanswered = 0
 
-    for (const week of weeks) {
-      /*
-       * ⚠ A THROW AND AN EMPTY WEEK ARE DIFFERENT FACTS. The previous
-       * `.catch(() => [])` turned "Sleeper refused" into "no transactions this
-       * week", which is how an outage became an empty inbox. A null body is
-       * still treated as empty — that is Sleeper's own spelling for a quiet
-       * week, not a failure.
-       */
-      let transactions: SleeperTransaction[]
-      try {
-        const raw = await getLeagueTransactions(platformLeagueId, week)
-        transactions = Array.isArray(raw) ? (raw as unknown as SleeperTransaction[]) : []
-      } catch {
+    /*
+     * 🛑 THESE WEEKS USED TO BE FETCHED ONE AT A TIME, AND IT COST 10-30 SECONDS OF PAGE LOAD.
+     *
+     * `for (const week of weeks) { await getLeagueTransactions(...) }` is eighteen strictly
+     * sequential HTTP round trips to Sleeper, and the cross-league strip fires EIGHT of these
+     * scans at once — so opening /core/trades meant 144 provider calls, with every league gated
+     * behind its own 18-deep serial chain. Measured on the dev server: 5,015ms to 23,534ms per
+     * league, repeatedly.
+     *
+     * Fetching is now concurrent and PROCESSING IS STILL IN WEEK ORDER, which is what makes this
+     * a pure speed change: `seen` dedup keeps the earliest occurrence of a transaction id and
+     * `out` keeps its order, exactly as the serial loop produced them. Reading the results in
+     * completion order instead would have quietly reordered the inbox.
+     *
+     * ⚠ BOUNDED, NOT Promise.all OVER ALL EIGHTEEN. Unbounded would turn one page load into 144
+     * simultaneous requests to a third party — trading a latency bug for a rate-limit one, on a
+     * provider whose refusal this function is careful to distinguish from an empty week.
+     */
+    const WEEK_FETCH_CONCURRENCY = 6
+    const fetched = new Array<SleeperTransaction[] | null>(weeks.length)
+    for (let start = 0; start < weeks.length; start += WEEK_FETCH_CONCURRENCY) {
+      const slice = weeks.slice(start, start + WEEK_FETCH_CONCURRENCY)
+      await Promise.all(
+        slice.map(async (week, offset) => {
+          try {
+            const raw = await getLeagueTransactions(platformLeagueId, week)
+            fetched[start + offset] = Array.isArray(raw) ? (raw as unknown as SleeperTransaction[]) : []
+          } catch {
+            /*
+             * ⚠ A THROW AND AN EMPTY WEEK ARE DIFFERENT FACTS, and null is how that is carried
+             * across the concurrent boundary. The previous `.catch(() => [])` turned "Sleeper
+             * refused" into "no transactions this week", which is how an outage became an empty
+             * inbox. A null BODY is still treated as empty — that is Sleeper's own spelling for a
+             * quiet week, not a failure.
+             */
+            fetched[start + offset] = null
+          }
+        }),
+      )
+    }
+
+    for (let i = 0; i < weeks.length; i += 1) {
+      const transactions = fetched[i]
+      if (transactions === null) {
         weeksUnanswered += 1
         continue
       }
