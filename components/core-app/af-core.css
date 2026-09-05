@@ -61,6 +61,8 @@
  * The same trap applied to the @import in
  * components/dashboard/adaptive/adaptive-dashboard.css, which is where this
  * approach was copied from — fixed the same way, folded into the same <link>.
+ * That file was deleted with the unrendered dashboards (15c912781); the trap it
+ * demonstrated is real and is why this note survives its subject.
  */
 
 .af-core {

@@ -160,20 +160,29 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         here (rather than inside a manual <head>) is enough — Next's App
         Router hoists it into the document <head> on its own.
 
-        Covers two design systems that were both silently falling back to
-        system fonts because each one's CSS assumed a <link> existed elsewhere
-        and none ever did:
+        Covers the one design system that was silently falling back to system
+        fonts because its CSS assumed a <link> existed elsewhere and none ever
+        did:
           - .af-core (af-core.css): dashboard, Player Finder, my team, matchup,
             trades, waivers, Draft HQ, War Room, and the homepage (LandingV4
             imports af-core.css directly) — wants Archivo + JetBrains Mono.
-          - .af-adaptive (adaptive-dashboard.css): wants Bebas Neue + Outfit.
-            That file's own `@import` is dead code — Next concatenates it into
-            a route bundle after af-geo.css, and CSS silently drops an
-            `@import` that doesn't lead every rule in its file (see the comment
-            at the top of af-core.css for the measured trap).
 
-        Both files read the family by name with a full fallback chain
-        (e.g. `font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif`),
+        ⚠ BEBAS NEUE AND OUTFIT WERE DROPPED FROM THIS URL, recorded here rather
+        than trimmed silently. They existed only for `.af-adaptive`
+        (adaptive-dashboard.css), whose consumers were the three unrendered
+        dashboards deleted in 15c912781. That stylesheet had ZERO import
+        statements afterwards, so nothing could define `.af-adaptive` at all,
+        and it is deleted in this commit.
+
+        🛑 BEBAS NEUE LOOKED LIVE AND WAS NOT, which is the only part of this
+        worth a second reading. `public/railway-styles.css` still uses it — but
+        that file is served-but-unreferenced: its
+        `<link href="/railway-styles.css">` was deliberately removed from this
+        layout, and root-language-provider-layout.test.tsx asserts it stays
+        removed. A grep for the family name finds it and implies the opposite.
+
+        af-core.css reads each family by name with a full fallback chain
+        (e.g. `font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif`),
         so this <link> is the only thing needed — no CSS variable to define.
         Global, but inert for every page that doesn't render matching text: the
         browser fetches this one small stylesheet and downloads a font file
@@ -181,7 +190,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       */}
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap"
       />
       <body
         className="antialiased min-h-screen mode-readable"
