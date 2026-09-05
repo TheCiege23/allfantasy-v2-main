@@ -161,10 +161,11 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
     buildLeagueUrl: (id, season) =>
       `https://fantasy.espn.com/football/league?leagueId=${encodeURIComponent(id)}` +
       (season ? `&seasonId=${encodeURIComponent(season)}` : ''),
-    // Candidates only, pending a real ESPN league + team id (Guap, 2026-09-02).
     screens: {
+      // VERIFIED 2026-09-05: Guap's own team page, pasted from his browser —
+      // league 919055222, team 7, season 2026 — is exactly this format.
       lineup: {
-        verified: false,
+        verified: true,
         build: ({ leagueId, teamId, season }) => {
           const t = numericId(teamId)
           if (!t) return null
@@ -174,6 +175,7 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
           )
         },
       },
+      // Candidates only, pending Guap opening them on league 919055222.
       waivers: {
         verified: false,
         build: ({ leagueId, season }) =>
@@ -199,16 +201,18 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
     homepage: 'https://football.fantasysports.yahoo.com',
     allowedHosts: ['football.fantasysports.yahoo.com'],
     buildLeagueUrl: (id) => `https://football.fantasysports.yahoo.com/f1/${normalizeYahooLeagueId(id) ?? encodeURIComponent(id)}`,
-    // Candidates only, pending a real Yahoo league + team id (Guap, 2026-09-02).
     screens: {
+      // VERIFIED 2026-09-05: Guap's own team page, pasted from his browser —
+      // league 1361311, team 10 — is exactly this format.
       lineup: {
-        verified: false,
+        verified: true,
         build: ({ leagueId, teamId }) => {
           const l = normalizeYahooLeagueId(leagueId)
           const t = normalizeYahooTeamId(teamId)
           return l && t ? `https://football.fantasysports.yahoo.com/f1/${l}/${t}` : null
         },
       },
+      // Candidates only, pending Guap opening them on league 1361311.
       waivers: {
         verified: false,
         build: ({ leagueId }) => {

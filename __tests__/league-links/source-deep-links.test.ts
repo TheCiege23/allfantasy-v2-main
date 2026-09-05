@@ -49,21 +49,39 @@ describe('resolveSourceScreenLink', () => {
     const trade = resolveSourceScreenLink({ ...sleeper, screen: 'trade' })
     expect(trade).toMatchObject({ href: 'https://sleeper.com/leagues/123456/league', verified: false, destinationType: 'league', candidate: 'https://sleeper.com/leagues/123456/trades' })
 
-    const espnLineup = resolveSourceScreenLink({ ...espn, screen: 'lineup' })
-    expect(espnLineup).toMatchObject({
+    const espnWaivers = resolveSourceScreenLink({ ...espn, screen: 'waivers' })
+    expect(espnWaivers).toMatchObject({
       href: 'https://fantasy.espn.com/football/league?leagueId=888&seasonId=2026',
       verified: false,
-      candidate: 'https://fantasy.espn.com/football/team?leagueId=888&teamId=2&seasonId=2026',
+      candidate: 'https://fantasy.espn.com/football/players/add?leagueId=888&seasonId=2026',
     })
 
-    const yahooLineup = resolveSourceScreenLink({ ...yahoo, screen: 'lineup' })
-    expect(yahooLineup).toMatchObject({
+    const yahooWaivers = resolveSourceScreenLink({ ...yahoo, screen: 'waivers' })
+    expect(yahooWaivers).toMatchObject({
       href: 'https://football.fantasysports.yahoo.com/f1/1361311',
       verified: false,
-      candidate: 'https://football.fantasysports.yahoo.com/f1/1361311/3',
+      candidate: 'https://football.fantasysports.yahoo.com/f1/1361311/players',
     })
     const yahooTrade = resolveSourceScreenLink({ ...yahoo, screen: 'trade', partnerTeamId: '449.l.1361311.t.7' })
     expect(yahooTrade?.candidate).toBe('https://football.fantasysports.yahoo.com/f1/1361311/3/proposetrade?tid=7')
+  })
+
+  /*
+   * Verified 2026-09-05 against Guap's own team pages, pasted from his browser:
+   * ESPN league 919055222 team 7 season 2026, Yahoo league 1361311 team 10.
+   * The expected hrefs below ARE those pasted URLs.
+   */
+  it('ESPN and Yahoo lineup are verified and land on the team page', () => {
+    const espnLineup = resolveSourceScreenLink({ platform: 'espn', sourceLeagueId: '919055222', season: 2026, teamId: '7', screen: 'lineup' })
+    expect(espnLineup).toMatchObject({
+      href: 'https://fantasy.espn.com/football/team?leagueId=919055222&teamId=7&seasonId=2026',
+      verified: true,
+      screen: 'lineup',
+      destinationType: 'action',
+      candidate: null,
+    })
+    const yahooLineup = resolveSourceScreenLink({ platform: 'yahoo', sourceLeagueId: 'https://football.fantasysports.yahoo.com/f1/1361311/10', teamId: '10', screen: 'lineup' })
+    expect(yahooLineup).toMatchObject({ href: 'https://football.fantasysports.yahoo.com/f1/1361311/10', verified: true, screen: 'lineup' })
   })
 
   it('a format that needs a team id builds no candidate without one', () => {
@@ -100,8 +118,9 @@ describe('VERIFIED_SCREENS census', () => {
   it('pins which formats are live destinations today', () => {
     expect(VERIFIED_SCREENS).toEqual({
       sleeper: ['league', 'lineup', 'waivers'],
-      espn: ['league'],
-      yahoo: ['league'],
+      // lineup verified 2026-09-05 on league 919055222 / team 7 (ESPN) and 1361311 / team 10 (Yahoo).
+      espn: ['league', 'lineup'],
+      yahoo: ['league', 'lineup'],
       mfl: [],
       fantrax: [],
       fleaflicker: [],
