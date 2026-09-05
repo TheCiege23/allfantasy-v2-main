@@ -1,6 +1,0 @@
-export { default as BottomTabBar } from './BottomTabBar'
-export type { MainTab } from './BottomTabBar'
-export { default as AIBottomSheet } from './AIBottomSheet'
-export { default as UniversalAIBadge } from './UniversalAIBadge'
-export { default as SubTabNav } from './SubTabNav'
-export { default as MobileSectionHeader } from './MobileSectionHeader'
