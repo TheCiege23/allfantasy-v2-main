@@ -16,12 +16,31 @@ import React from 'react'
  */
 
 const rosterData = vi.hoisted(() => ({ current: null as unknown }))
+const hookCalls = vi.hoisted(() => ({ args: [] as Array<[string | null, boolean]> }))
 
 vi.mock('@/components/core-app/screens/useLeagueRosters', async (importOriginal) => {
   const actual = await importOriginal<
     typeof import('@/components/core-app/screens/useLeagueRosters')
   >()
-  return { ...actual, useLeagueRosters: () => ({ data: rosterData.current, state: 'idle' }) }
+  return {
+    ...actual,
+    /*
+     * 🛑 RECORDS ITS ARGUMENTS, WHICH THE FIRST VERSION OF THIS MOCK DID NOT.
+     *
+     * Returning data unconditionally made every test below pass while the real screen showed
+     * NOTHING: the hook was gated on `picking !== null || assets.length > 0`, so on arrival it
+     * never ran and `rosterData` was null. The mock supplied the very thing that was missing.
+     * Confirmed in the dev server log — a full page load fired nine `trades-panel` reads and
+     * ZERO `trades/rosters`.
+     *
+     * Mocking a dependency to test a component is fine. Mocking away the CONDITION under test
+     * is how a feature ships unreachable with a green suite.
+     */
+    useLeagueRosters: (leagueId: string | null, enabled: boolean) => {
+      hookCalls.args.push([leagueId, enabled])
+      return { data: rosterData.current, state: 'idle' }
+    },
+  }
 })
 
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
@@ -69,6 +88,35 @@ beforeEach(() => {
     viewerRosterId: 'r1',
     viewerTeamRosterId: 'r1',
   }
+})
+
+describe('🛑 the rosters are actually FETCHED on arrival', () => {
+  it('🛑 asks for them as soon as the league is known — nothing picked, nothing added', () => {
+    /*
+     * The bug this catches shipped: the hook was gated on
+     * `picking !== null || giveAssets.length + getAssets.length > 0`, so a manager landing on the
+     * page triggered no fetch at all and the roster list — the whole point of the feature —
+     * rendered nothing until they opened the modal it was meant to replace.
+     *
+     * ⚠ ASSERTS THE ARGUMENT, NOT THE RENDER. Every other test here supplies `rosterData`
+     * through the mock, so they pass whether or not the real hook would ever have run. This is
+     * the only one that can see the enablement condition.
+     */
+    hookCalls.args = []
+    render(<TradeCenter league={LEAGUE} />)
+    expect(hookCalls.args.length).toBeGreaterThan(0)
+    const [leagueId, enabled] = hookCalls.args[0]!
+    expect(leagueId).toBe('l1')
+    expect(enabled).toBe(true)
+  })
+
+  it('⚠ does not ask when there is no league to ask about', () => {
+    // A null league id would fetch nothing anyway; enabling it would be a request to nowhere.
+    hookCalls.args = []
+    render(<TradeCenter league={null} />)
+    const call = hookCalls.args[0]
+    if (call) expect(call[1]).toBe(false)
+  })
 })
 
 describe('🛑 the screen shows what each team holds', () => {

@@ -364,10 +364,28 @@ export function TradeCenter(props: {
   const give = toLines(giveAssets)
   const get = toLines(getAssets)
 
-  /* Only once they start building — see the hook's own note on why it is lazy. */
+  /*
+   * 🛑 LOADED AS SOON AS THE LEAGUE IS KNOWN, NOT ONLY ONCE SOMEONE STARTS BUILDING.
+   *
+   * This used to be gated on `picking !== null || assets.length > 0`, which made the roster list
+   * added in the previous commit unreachable: on arrival nothing is picked and nothing is added,
+   * so the hook stayed disabled, `rosterData` was null, and the section rendered NOTHING. You had
+   * to open the "+ Add asset" modal to make the page show you what a team holds — which is the
+   * exact flow that list exists to replace. Measured in the dev server log: a full page load fired
+   * nine `trades-panel` reads and ZERO `trades/rosters`.
+   *
+   * ⚠ THE OLD COMMENT POINTED AT A JUSTIFICATION THAT DOES NOT EXIST. It read "see the hook's own
+   * note on why it is lazy"; the hook has no such note. The laziness was presumably to avoid a
+   * request on load back when this route resolved players ONCE PER ROSTER — twelve queries for a
+   * twelve-team league. That is now one, with the value and stock lookups concurrent, so the cost
+   * it was avoiding is largely gone.
+   *
+   * ⚠ THIS DOES ADD ONE REQUEST PER TRADE-PAGE LOAD, and that is the deliberate trade: it is the
+   * request that fetches the content the page is for.
+   */
   const { data: rosterData } = useLeagueRosters(
     props.league?.id ?? null,
-    picking !== null || giveAssets.length + getAssets.length > 0,
+    Boolean(props.league?.id),
   )
   /*
    * ⚠ IDENTITY, NOT THE PROPOSE GATE. `viewerRosterId` is the engine's strict
