@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   reapAllAbandonedRuns: vi.fn(),
+  recordSyncJobRun: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -96,6 +97,7 @@ describe('GET /api/cron/reap-sync-runs', () => {
     process.env.CRON_SECRET = CRON_SECRET
     vi.doMock('@/lib/production-health/syncJobRunTelemetry', () => ({
       reapAllAbandonedRuns: mocks.reapAllAbandonedRuns,
+      recordSyncJobRun: mocks.recordSyncJobRun,
     }))
   })
 
@@ -129,6 +131,11 @@ describe('GET /api/cron/reap-sync-runs', () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true, reaped: 6 })
+    // The heartbeat is the ONLY evidence this route ran: cron-freshness-check probes it by
+    // job_name, so a sweep that reaps correctly and records nothing reads as a dead scheduler.
+    // Asserted rather than stubbed on purpose -- the missing export made this the one test that
+    // reached the call, and a bare vi.fn() would have silenced the error without guarding it.
+    expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(1)
   })
 
   it('does NOT return a green zero when the sweep could not run', async () => {
@@ -145,6 +152,9 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // exact class of false-clean signal this route exists to remove, not to add.
     expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ ok: false, reaped: 0 })
+    // And the 503 path records NOTHING, which the route states as deliberate: a heartbeat written
+    // for a sweep that could not look is precisely the false-clean signal this route removes.
+    expect(mocks.recordSyncJobRun).not.toHaveBeenCalled()
   })
 })
 
