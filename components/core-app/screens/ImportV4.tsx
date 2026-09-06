@@ -217,7 +217,7 @@ const FIELD_BY_PROVIDER: Partial<
   },
   espn: {
     label: 'ESPN league ID',
-    placeholder: '123456',
+    placeholder: '123456, or paste the league URL',
     /*
      * ⚠ "Public leagues import directly" WAS NOT TRUE, and it cost a real user a
      * long detour. ESPN import is gated on finding YOUR team in the league, which
@@ -232,7 +232,12 @@ const FIELD_BY_PROVIDER: Partial<
      * send someone away from the control that is already in front of them — the
      * same errand the /settings error link used to be.
      */
-    help: 'Connect ESPN above, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
+    /*
+     * ⚠ NEVER SAID WHERE THE ID LIVES. A beta tester had to find it themselves in
+     * the ESPN URL — parseEspnSourceInput already accepts the full league URL
+     * (extracts `leagueId=`), the help text just never told anyone that.
+     */
+    help: 'Connect ESPN above, then paste a league ID here — it’s the leagueId= number in your league URL, fantasy.espn.com/football/league?leagueId=123456. Paste either. We never ask for your ESPN password.',
   },
   /*
    * ⚠ THIS IS A LEAGUE ID, NOT A SNAPSHOT ID — the provider changed shape under
@@ -2075,7 +2080,7 @@ export function ImportV4({
                     state gets it swapped here.
                   */}
                   {provider === 'espn' && espnConnected === true
-                    ? 'ESPN is connected, so paste a league ID and we will read it as you. We never ask for your ESPN password.'
+                    ? 'ESPN is connected, so paste a league ID — the leagueId= number in your league URL — and we will read it as you. Paste either. We never ask for your ESPN password.'
                     : field.help}
                 </span>
               </label>
