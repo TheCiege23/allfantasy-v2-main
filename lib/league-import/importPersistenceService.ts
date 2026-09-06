@@ -3,6 +3,7 @@
  */
 
 import { createHash } from 'crypto'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ImportProvider, ImportWarningRecord, NormalizedImportResult } from '@/lib/league-import/types'
 import type { CanonicalImportBundle } from '@/lib/league-import/types'
@@ -10,6 +11,16 @@ import {
   persistImportedLeagueFromNormalization,
   type PersistImportedLeagueResult,
 } from '@/lib/league-import/ImportedLeagueCommitService'
+
+/**
+ * Two requests for the same (user, provider, sourceLeagueId, season) can both pass the
+ * `existingRun` check below before either has inserted a row — a double-tap submit, or a
+ * mobile client retrying a slow response it gave up on. `idempotencyKey` is unique, so the
+ * loser's `importRun.create` throws `P2002`, which used to bubble up as an unhandled 500
+ * (Sentry ALLFANTASY-V2-MAIN-K). The winner is still mid-import at that point, so there is
+ * nothing to adopt or return as success — surface it as a conflict the client can retry.
+ */
+export class ImportRunInFlightError extends Error {}
 
 function hashPayload(normalized: NormalizedImportResult): string {
   return createHash('sha256').update(JSON.stringify(normalized.source)).digest('hex').slice(0, 32)
@@ -32,6 +43,43 @@ function buildExistingLeagueImportIdempotencyKey(input: {
   leagueId: string
 }): string {
   return `${input.userId}:${input.provider}:${input.sourceLeagueId}:${input.season}:into:${input.leagueId}`
+}
+
+/**
+ * Insert the audit row for a fresh import run, converting a concurrent-request collision on
+ * `idempotencyKey` (P2002) into `ImportRunInFlightError` instead of letting it surface as an
+ * unhandled 500. See the class doc comment above for why the row is not adopted.
+ */
+async function createImportRun(data: {
+  userId: string
+  provider: ImportProvider
+  sourceLeagueId: string
+  season: number
+  idempotencyKey: string
+  rawPayloadHash: string
+  canonicalSummary: object
+}) {
+  try {
+    return await prisma.importRun.create({
+      data: {
+        userId: data.userId,
+        provider: data.provider,
+        sourceLeagueId: data.sourceLeagueId,
+        season: data.season,
+        status: 'running',
+        idempotencyKey: data.idempotencyKey,
+        rawPayloadHash: data.rawPayloadHash,
+        canonicalSummary: data.canonicalSummary,
+      },
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new ImportRunInFlightError(
+        'This import is already in progress from another request. Please wait a moment and try again.'
+      )
+    }
+    throw error
+  }
 }
 
 /** Allows safe retry after a failed import without violating `idempotencyKey` uniqueness. */
@@ -138,17 +186,14 @@ export async function persistImportWithCanonicalAudit(input: {
             canonicalSummary: input.canonical as object,
           },
         })
-      : await prisma.importRun.create({
-          data: {
-            userId: input.userId,
-            provider: input.provider,
-            sourceLeagueId: input.normalized.source.source_league_id,
-            season: seasonYear,
-            status: 'running',
-            idempotencyKey,
-            rawPayloadHash: hashPayload(input.normalized),
-            canonicalSummary: input.canonical as object,
-          },
+      : await createImportRun({
+          userId: input.userId,
+          provider: input.provider,
+          sourceLeagueId: input.normalized.source.source_league_id,
+          season: seasonYear,
+          idempotencyKey,
+          rawPayloadHash: hashPayload(input.normalized),
+          canonicalSummary: input.canonical as object,
         })
 
   try {

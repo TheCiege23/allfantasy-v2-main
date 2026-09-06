@@ -17,7 +17,7 @@ import {
   ImportedLeagueConflictError,
   ImportedLeagueTombstonedError,
 } from '@/lib/league-import/ImportedLeagueCommitService'
-import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
+import { ImportRunInFlightError, persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-import/commissionerGate'
@@ -236,6 +236,16 @@ export async function POST(req: NextRequest) {
       skipped: skipped === true,
     })
   } catch (error) {
+    if (error instanceof ImportRunInFlightError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: 'IMPORT_IN_PROGRESS',
+          hint: 'Wait a moment and try again.',
+        },
+        { status: 409 },
+      )
+    }
     if (error instanceof ImportedLeagueConflictError) {
       return NextResponse.json(
         {

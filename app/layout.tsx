@@ -274,11 +274,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   f.__afMetaPixelIds=f.__afMetaPixelIds instanceof Set
                     ? f.__afMetaPixelIds
                     : new Set();
-                  if(!f.__afMetaPixelIds.has(pixelId)) {
+                  if(!f.__afMetaPixelIds.has(pixelId) && f.fbq) {
                     f.fbq('init', pixelId);
                     f.__afMetaPixelIds.add(pixelId);
                   }
-                  if(!f.__afMetaBasePageViewFired) {
+                  if(!f.__afMetaBasePageViewFired && f.fbq) {
                     f.__afMetaBasePageViewEventId=f.__afMetaBasePageViewEventId||('af_PageView_bootstrap_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10));
                     f.fbq('track', 'PageView', {
                       content_name: b.title || 'PageView',
@@ -326,13 +326,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               window.__afMetaPixelIds = window.__afMetaPixelIds instanceof Set
                 ? window.__afMetaPixelIds
                 : new Set();
-              if (!window.__afMetaPixelIds.has(${JSON.stringify(metaPixelId)})) {
-                fbq('init', ${JSON.stringify(metaPixelId)});
+              if (!window.__afMetaPixelIds.has(${JSON.stringify(metaPixelId)}) && window.fbq) {
+                window.fbq('init', ${JSON.stringify(metaPixelId)});
                 window.__afMetaPixelIds.add(${JSON.stringify(metaPixelId)});
               }
-              if (!window.__afMetaBasePageViewFired) {
+              if (!window.__afMetaBasePageViewFired && window.fbq) {
                 window.__afMetaBasePageViewEventId = window.__afMetaBasePageViewEventId || ('af_PageView_bootstrap_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10));
-                fbq('track', 'PageView', {
+                window.fbq('track', 'PageView', {
                   content_name: document.title || 'PageView',
                   content_category: 'Page',
                   page_path: window.location.pathname,
