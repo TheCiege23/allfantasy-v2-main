@@ -360,6 +360,19 @@ export const PROBES = {
   // every minute or had not run since March. The wrap now spans the whole tick.
   '/api/cron/draft-tick': { heartbeat: 'cron-draft-tick' },
   '/api/cron/legacy-import-drain': { heartbeat: 'cron-legacy-import-drain' },
+  /*
+   * Keeper deadline sweep, hourly. Instrumented when it turned up UNCLASSIFIED: it was added to
+   * vercel.json without a probe, which is the gap __tests__/cron-tier-and-freshness.test.ts exists
+   * to make loud, and it worked.
+   *
+   * A heartbeat rather than a table probe for the usual reason -- `processKeeperDeadlines` locks
+   * only sessions whose deadline has already passed, so writing nothing is its healthy steady
+   * state and a KeeperSelectionSession probe would be red whenever the job was fine.
+   *
+   * ⚠ The route serves USERS on the same GET (?leagueId=). Only the cron branch is wrapped; if
+   * that ever changes, request traffic writes this heartbeat and the probe stops meaning anything.
+   */
+  '/api/keeper/session': { heartbeat: 'cron-keeper-session' },
   '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
     heartbeat: 'cron-playoff-schedule-refresh',
   },
