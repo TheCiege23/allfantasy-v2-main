@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit';
 import { playerSlug } from '@/lib/core-app/playerSlug';
+import { asHeadshotUrl } from '@/lib/core-app/playerIdentityCompose';
 
 const querySchema = z.object({
   q: z.string().min(2),
@@ -56,14 +57,19 @@ export async function GET(req: Request) {
         { position: { contains: q, mode: 'insensitive' } },
       ],
     },
-    select: { id: true, name: true, sport: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
+    // `externalId` is what the Player Finder's links are keyed on (sport-qualified,
+    // see lib/core-app/playerRef.ts); additive, every earlier caller ignores it.
+    select: { id: true, externalId: true, name: true, sport: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
     take: limit,
     orderBy: { name: 'asc' },
   });
 
   const withSlug = players
-    .map((p: { name: string; sport: string; sleeperId: string | null }) => ({
+    .map((p: { name: string; sport: string; sleeperId: string | null; imageUrl: string | null }) => ({
       ...p,
+      // 959 NFL rows carry a bare filename, not a URL; a `src` of that 404s
+      // against the current route. Null is the honest value for those.
+      imageUrl: asHeadshotUrl(p.imageUrl),
       slug: playerSlug(p),
     }))
     // Belt-and-suspenders: the where-clause already requires sleeperId, but

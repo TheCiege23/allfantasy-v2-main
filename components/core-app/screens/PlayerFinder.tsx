@@ -11,6 +11,8 @@ import { LeagueOwnershipCard } from '@/components/core-app/player-finder/LeagueO
 import { TradeVisual } from '@/components/core-app/player-finder/TradeVisual'
 import { TradeWindow } from '@/components/core-app/player-finder/TradeWindow'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
+import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
+import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
 import { platformLabel } from '@/lib/core-app/platformLinks'
@@ -365,31 +367,12 @@ export function PlayerFinder({
       */}
       <aside className="af-pf-rail" aria-label="Search">
         <h1 className="af-display af-pf-h1">Player Finder</h1>
-        <form className="af-pf-search-wrap" method="get" action="/core/players">
-          {/* Keeps the held league in context across a new search. */}
-          {selectedLeagueId ? <input type="hidden" name="league" value={selectedLeagueId} /> : null}
-          <label className="af-search af-pf-search">
-            <span className="af-search-icon" aria-hidden>
-              ○
-            </span>
-            <input
-              className="af-search-input"
-              name="q"
-              defaultValue={query}
-              placeholder="Search any player"
-              aria-label="Search any player"
-              autoComplete="off"
-            />
-            <button type="submit" className="af-btn af-pf-search-btn">
-              Search
-            </button>
-          </label>
-          <p className="af-pf-search-note">
-            {signedIn
-              ? 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.'
-              : 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups.'}
-          </p>
-        </form>
+        {/*
+          The search box: a GET form as before, with suggestions as you type
+          layered on top (2026-09-05). See PlayerSearchBox for the rate-limit
+          behaviour and why the form never depends on the suggestions.
+        */}
+        <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId} signedIn={signedIn} />
 
         {/*
           ── Matches ─────────────────────────────────────────────────
@@ -428,9 +411,25 @@ export function PlayerFinder({
                         detail?.player.externalId === m.externalId && detail?.player.sport === m.sport
                       }
                     >
-                      <span className="af-pf-match-name">{m.name}</span>
-                      <span className="af-pf-match-meta">
-                        {[m.position, m.team].filter(Boolean).join(' · ') || 'no position on file'}
+                      <PlayerAvatar src={m.imageUrl} name={m.name} size={32} />
+                      <span className="af-pf-match-text">
+                        <span className="af-pf-match-name">{m.name}</span>
+                        <span className="af-pf-match-meta">
+                          {m.position || m.team ? (
+                            <>
+                              {m.position ?? ''}
+                              {m.position && m.team ? ' · ' : ''}
+                              {m.team ? (
+                                <>
+                                  <TeamLogo sport={m.sport} team={m.team} />
+                                  {m.team}
+                                </>
+                              ) : null}
+                            </>
+                          ) : (
+                            'no position on file'
+                          )}
+                        </span>
                       </span>
                     </Link>
                   </li>
@@ -460,9 +459,25 @@ export function PlayerFinder({
                     href={`/core/players?q=${encodeURIComponent(r.name)}&player=${encodeURIComponent(playerRef(r.sport, r.externalId))}${leagueParam}`}
                     className="af-pf-match af-pf-recent-row"
                   >
-                    <span className="af-pf-match-name">{r.name}</span>
-                    <span className="af-pf-match-meta af-num">
-                      {[r.position, r.team].filter(Boolean).join(' · ') || r.sport}
+                    <PlayerAvatar src={r.imageUrl ?? null} name={r.name} size={32} />
+                    <span className="af-pf-match-text">
+                      <span className="af-pf-match-name">{r.name}</span>
+                      <span className="af-pf-match-meta af-num">
+                        {r.position || r.team ? (
+                          <>
+                            {r.position ?? ''}
+                            {r.position && r.team ? ' · ' : ''}
+                            {r.team ? (
+                              <>
+                                <TeamLogo sport={r.sport} team={r.team} />
+                                {r.team}
+                              </>
+                            ) : null}
+                          </>
+                        ) : (
+                          r.sport
+                        )}
+                      </span>
                     </span>
                   </Link>
                 </li>
@@ -532,13 +547,17 @@ export function PlayerFinder({
                   ) : null}
                 </div>
                 <div className="af-pf-line">
-                  {[
-                    detail.player.position,
-                    detail.player.team,
-                    detail.player.number != null ? `#${detail.player.number}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                  {detail.player.position ?? ''}
+                  {detail.player.team ? (
+                    <>
+                      {detail.player.position ? ' · ' : ''}
+                      <TeamLogo sport={detail.player.sport} team={detail.player.team} size={18} />
+                      {detail.player.team}
+                    </>
+                  ) : null}
+                  {detail.player.number != null
+                    ? `${detail.player.position || detail.player.team ? ' · ' : ''}#${detail.player.number}`
+                    : ''}
                   {leagueMode ? (
                     <span className="af-pf-rostered">
                       {' · '}

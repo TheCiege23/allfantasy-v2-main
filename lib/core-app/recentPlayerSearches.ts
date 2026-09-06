@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { asHeadshotUrl } from './playerIdentityCompose'
 
 /**
  * "Recently searched" — the Player Finder rail's per-account history.
@@ -24,6 +25,8 @@ export type RecentPlayerSearch = {
   name: string
   position: string | null
   team: string | null
+  /** The headshot as the catalog holds it today — read at list time, never stored, so a changed image is never stale here. */
+  imageUrl: string | null
   searchedAt: Date
 }
 
@@ -106,9 +109,30 @@ export async function listRecentPlayerSearches(
       },
     })
     const ex = options.exclude
-    return rows
+    const kept = rows
       .filter((r) => !(ex && r.sport === ex.sport && r.externalId === ex.externalId))
       .slice(0, limit)
+    if (kept.length === 0) return []
+
+    /*
+     * The headshot comes from the catalog at list time rather than from the
+     * search row: the row is a bookmark, and a bookmark that carried its own
+     * copy of the image would keep showing it after the catalog changed. One
+     * read for the handful of rows; a miss is a lettered tile, never a throw.
+     */
+    const players = await prisma.sportsPlayer
+      .findMany({
+        where: { OR: kept.map((r) => ({ sport: r.sport, externalId: r.externalId })) },
+        select: { sport: true, externalId: true, imageUrl: true },
+      })
+      .catch(() => [] as Array<{ sport: string; externalId: string; imageUrl: string | null }>)
+    const imageBy = new Map<string, string | null>()
+    for (const p of players) {
+      const key = `${p.sport}:${p.externalId}`
+      const url = asHeadshotUrl(p.imageUrl)
+      if (url || !imageBy.has(key)) imageBy.set(key, url)
+    }
+    return kept.map((r) => ({ ...r, imageUrl: imageBy.get(`${r.sport}:${r.externalId}`) ?? null }))
   } catch {
     return []
   }

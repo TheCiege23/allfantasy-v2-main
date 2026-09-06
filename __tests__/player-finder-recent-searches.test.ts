@@ -9,10 +9,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockUpsert = vi.hoisted(() => vi.fn())
 const mockFindMany = vi.hoisted(() => vi.fn())
 const mockDeleteMany = vi.hoisted(() => vi.fn())
+const mockPlayerFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     recentPlayerSearch: { upsert: mockUpsert, findMany: mockFindMany, deleteMany: mockDeleteMany },
+    sportsPlayer: { findMany: mockPlayerFindMany },
   },
 }))
 
@@ -24,6 +26,7 @@ beforeEach(() => {
   mockUpsert.mockReset().mockResolvedValue({})
   mockFindMany.mockReset().mockResolvedValue([])
   mockDeleteMany.mockReset().mockResolvedValue({ count: 0 })
+  mockPlayerFindMany.mockReset().mockResolvedValue([])
 })
 
 describe('recordRecentPlayerSearch', () => {
@@ -69,6 +72,29 @@ describe('listRecentPlayerSearches', () => {
     expect(got.map((r) => r.name)).toEqual(['Jake Ferguson', 'Isaiah Likely'])
     // limit + 1 is asked for, so the exclusion cannot leave the list one short.
     expect(mockFindMany.mock.calls[0][0]).toMatchObject({ take: 3, orderBy: { searchedAt: 'desc' } })
+  })
+
+  /*
+   * The headshot is read from the catalog at list time (2026-09-05), one query
+   * for the kept rows; a bare filename in the catalog is not a URL and reads as
+   * no image, and a catalog miss never fails the list.
+   */
+  it('attaches the catalog headshot to each row, and nothing when there is none', async () => {
+    mockFindMany.mockResolvedValue(rows)
+    mockPlayerFindMany.mockResolvedValue([
+      { sport: 'NFL', externalId: 'ri-2', imageUrl: 'https://img/ferguson.png' },
+      { sport: 'NFL', externalId: 'ri-3', imageUrl: 'bare-filename.png' },
+    ])
+    const got = await listRecentPlayerSearches('me', { limit: 3 })
+    expect(mockPlayerFindMany.mock.calls[0][0].where.OR).toEqual([
+      { sport: 'NFL', externalId: 'ri-1' },
+      { sport: 'NFL', externalId: 'ri-2' },
+      { sport: 'NFL', externalId: 'ri-3' },
+    ])
+    expect(got.map((r) => r.imageUrl)).toEqual([null, 'https://img/ferguson.png', null])
+
+    mockPlayerFindMany.mockRejectedValue(new Error('down'))
+    expect((await listRecentPlayerSearches('me', { limit: 3 })).map((r) => r.name)).toHaveLength(3)
   })
 
   it('reads as empty when the table is missing or the user is unknown', async () => {

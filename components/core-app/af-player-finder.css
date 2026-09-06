@@ -1944,3 +1944,97 @@
     min-height: 44px;
   }
 }
+
+/* ── Suggestions, headshots and crests (2026-09-05) ────────────────────── */
+.af-core .af-pf-search-field {
+  position: relative;
+  max-width: 620px;
+}
+.af-core .af-pf-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 360px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.af-core .af-pf-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+.af-core .af-pf-suggest li[aria-selected='true'] .af-pf-suggest-item,
+.af-core .af-pf-suggest-item:hover {
+  background: var(--accent-soft);
+}
+.af-core .af-pf-suggest-text,
+.af-core .af-pf-match-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* Match and recent rows become a headshot beside the text. The column layout
+   above centred the stacked text vertically; as a row that same rule centres
+   it horizontally, so the row is pinned back to the left edge. */
+.af-core .af-pf-match {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+.af-core .af-pf-avatar {
+  flex: none;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-core .af-pf-avatar--none {
+  display: inline-grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 13px;
+  color: var(--faint);
+}
+/* Inline on purpose: the shell's image reset makes every <img> a block, which
+   put the crest on a line of its own between "TE ·" and "BUF". */
+.af-core .af-pf-team-logo {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  vertical-align: -3px;
+  object-fit: contain;
+}
+.af-core .af-pf-line .af-pf-team-logo {
+  width: 18px;
+  height: 18px;
+  vertical-align: -4px;
+}
+
+/* Appended at the END of the file on purpose — a new @media block inside
+   an existing one closes it early and carries its later rules out of the band. */
+@media (max-width: 720px) {
+  .af-core .af-pf-search-field {
+    max-width: none;
+  }
+  .af-core .af-pf-suggest-item {
+    min-height: 48px;
+  }
+}
