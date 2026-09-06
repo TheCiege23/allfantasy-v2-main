@@ -134,9 +134,52 @@ export async function loadLeagueIdpVorp(
 ): Promise<LeagueIdpVorpResult> {
   const resolved = await resolveLeagueIdpScoring(args.prisma, args.leagueId)
   if (!resolved.ok) return EMPTY(resolved.reason)
-  const scoring = resolved.scoring
 
-  const ids = [...new Set(args.rosterPlayerIds.filter((id) => typeof id === 'string' && id))]
+  /*
+   * Everything past resolving the scoring is league-AGNOSTIC, so it lives in `priceIdpBoard`
+   * and this function is now just "find the league's rules, then price". See that function for
+   * why the split exists — it is what lets a league-free board reuse this pricer instead of
+   * becoming a second one.
+   */
+  return priceIdpBoard({
+    prisma: args.prisma,
+    scoring: resolved.scoring,
+    sleeperIds: args.rosterPlayerIds,
+    rosterSlots: args.rosterPositions,
+    numTeams: args.numTeams,
+    isDynasty: args.isDynasty,
+  })
+}
+
+export interface PriceIdpBoardArgs {
+  prisma: PrismaClient
+  /** Already-resolved scoring rules. `resolveLeagueIdpScoring` produces these for a real league. */
+  scoring: NonNullable<ReturnType<typeof extractScoringSettings>>
+  /** The defenders to price, in Sleeper-id space. Non-defenders are filtered out here. */
+  sleeperIds: readonly string[]
+  /** Starting slots, `roster_positions` style — `IDP_FLEX` and the specific groups both parse. */
+  rosterSlots: readonly string[] | null | undefined
+  numTeams: number
+  isDynasty?: boolean
+}
+
+/**
+ * Price a set of defenders against a given scoring system and starting requirement.
+ *
+ * 🛑 THIS IS AN EXTRACTION, NOT A NEW BOARD, AND THE DISTINCTION IS THE WHOLE POINT. The body
+ * below is `loadLeagueIdpVorp`'s, unchanged, with `scoring` handed in rather than read from a
+ * league row. A canonical league-free board needs every step of this and differs ONLY in where
+ * the scoring and the roster shape come from — so it calls this, and there stays exactly one
+ * implementation of what a defender is worth.
+ *
+ * Writing a second pricer for the league-free case is the duplicate-board failure
+ * `lib/values/leagueDefenderBoard.ts` names in its own header, and it is the same shape as the
+ * probe that silently answered a different question from the writer it diagnosed.
+ */
+export async function priceIdpBoard(args: PriceIdpBoardArgs): Promise<LeagueIdpVorpResult> {
+  const scoring = args.scoring
+
+  const ids = [...new Set(args.sleeperIds.filter((id) => typeof id === 'string' && id))]
   if (ids.length === 0) return EMPTY('no_rostered_defenders')
 
   const rows = await args.prisma.sportsPlayer
@@ -191,7 +234,7 @@ export async function loadLeagueIdpVorp(
 
   const valuation = buildIdpValuations({
     players: valuationInput,
-    rosterSlots: args.rosterPositions,
+    rosterSlots: args.rosterSlots,
     numTeams: args.numTeams,
   })
   if (!valuation.ok) {
