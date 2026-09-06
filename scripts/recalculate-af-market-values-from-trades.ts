@@ -15,16 +15,19 @@
 import { PrismaClient } from '@prisma/client'
 
 import { recalculateFromCompletedTrades } from '../lib/trade-market/completedTradeObservations'
+import { isCentred, parseSinceSeason } from '../lib/trade-market/sinceSeasonArg'
 
 const prisma = new PrismaClient()
 
-/** How far the population median may sit from zero before we refuse to write. */
-const CENTRING_TOLERANCE = 1.5
-
 async function main() {
   const write = process.argv.includes('--write')
-  const sinceArg = Number(process.argv[process.argv.indexOf('--since') + 1])
-  const sinceSeason = Number.isFinite(sinceArg) && sinceArg > 2000 ? sinceArg : undefined
+  /*
+   * ⚠ THE PARSER AND THE TOLERANCE ARE SHARED WITH `probe-af-market-values.ts` ON PURPOSE.
+   * They used to be two copies, and the copies disagreed: the probe silently measured 2024
+   * when handed `--since 2025`, so it reported PASS on a population this script would refuse.
+   * A diagnosis tool that can answer a different question is worse than none.
+   */
+  const sinceSeason = parseSinceSeason(process.argv.slice(2))
 
   // Always evaluate dry first, so the gate is checked against the same numbers we would write.
   const dry = await recalculateFromCompletedTrades(prisma, { sinceSeason, dryRun: true })
@@ -49,7 +52,7 @@ NOTHING TO PUBLISH: ${why}.`)
   }
 
   const median = dry.medianAdjustment
-  const centred = median != null && Math.abs(median) <= CENTRING_TOLERANCE
+  const centred = isCentred(median)
   console.log(
     `\nZERO-SUM CHECK: ${centred ? 'PASS' : 'FAIL'} — median adjustment ${median?.toFixed(1) ?? 'n/a'}%`,
   )
