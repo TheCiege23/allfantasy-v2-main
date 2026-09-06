@@ -456,17 +456,68 @@ file, 15 insertions / 2 deletions, `merge-base --is-ancestor` rc=0, no conflict,
 no failing test, nothing red anywhere. Nothing was lost only because the second
 version happened to **subsume** the first. That was luck, not a check.
 
-**The check is two lines, and it belongs BEFORE you build, not at handover:**
+**The check belongs BEFORE you build, not at handover:**
 
 ```bash
-git rev-parse <yourBase>:<path>    # the file you started from
-git rev-parse origin/main:<path>   # the file that is there now
+blob() { git ls-tree "$1" -- "$2" | awk '{print $3}'; }   # empty ONLY when genuinely absent
+blob <yourBase>  <path>    # the file you started from
+blob origin/main <path>    # the file that is there now
 ```
 
 Different blobs mean someone has changed your file since your base — read
 `git log <yourBase>..origin/main -- <path>` before writing anything. **A
 fast-forward is not evidence that nobody else worked on the file.** It is
 evidence only that git could apply your bytes without having to ask a question.
+
+🛑 **THIS CHECK WAS WRITTEN AS `git rev-parse <ref>:<path>` AND THAT FORM IS
+BROKEN IN BOTH DIRECTIONS ON THIS BOX. Do not restore it.** Measured 2026-09-06:
+
+- **`git rev-parse <ref>:<path>` PRINTS ITS ARGUMENT BACK** when the path is
+  absent at that ref, exiting 128 but writing to stdout. For a file your commit
+  **ADDS**, the path is absent at both refs, so *both* sides echo — and each echo
+  carries its own ref name, so the two strings are never equal. The check reports
+  a supersede on **every newly-added file**, which is most of a feature commit.
+  It fired on four files of one Player Finder commit; all four were absent from
+  `main` and nothing had superseded anything.
+- **`git rev-parse --verify -q` IS NOT THE FIX, AND IS WORSE.** It returns
+  **empty for a PRESENT leading-dot path** — the MSYS mangling this file already
+  records for `git show ref:path`. That maps a dotfile present on both sides onto
+  the benign row, so a real supersede under `.github/`, `.claude/` or `.husky/`
+  is **silently swallowed**. A false negative, where the bare form only ever gave
+  a false positive:
+
+  ```
+  git rev-parse --verify -q "origin/main:.github/workflows/playwright.yml"  ->  ''
+  git ls-tree origin/main -- .github/workflows/playwright.yml
+      100644 blob f3489f23f5d544df222c3f480cbfc3f7952f4cd8  .github/workflows/playwright.yml
+  ```
+
+⚠ **AND THE CONTROL MUST INCLUDE A PRESENT DOT-PATH, OR IT GOES GREEN ON A HELPER
+THAT CANNOT SEE A SINGLE DOTFILE IN THE REPO.** That is exactly how `--verify -q`
+passed review: its control tested a plain path, because it was written to prove
+the *echo* bug was gone. Four cases, every time:
+
+```bash
+blob origin/main .github/workflows/playwright.yml   # present dot-path -> blob
+blob origin/main .github/workflows/not-real.yml     # absent  dot-path -> empty
+blob origin/main lib/scores/gameScoreProviders.ts   # present plain    -> blob
+blob origin/main lib/not-real.ts                    # absent  plain    -> empty
+```
+
+Only two of the four outcomes are findings: `empty | blob` is a real supersede
+(you add a file that is already on main), and `blob | empty` is a deletion
+upstream. `empty | empty` means your commit adds it and main does not have it.
+
+🛑 **THE DURABLE LESSON, WHICH IS NOT ABOUT GIT: A REPAIR FOR ONE FAILURE MODE CAN
+INSTALL A WORSE ONE, AND THE CONTROL WRITTEN FOR THE OLD BUG IS STRUCTURALLY BLIND
+TO THE NEW ONE.** Re-derive the control from the new implementation's failure
+modes; do not inherit it. This is a different shape from a check that cannot fail —
+here the control is real, correctly aimed, and pointed at the wrong bug.
+
+⚠ And when you retract a recommendation, `grep` the whole document for the
+retracted form rather than fixing the places you remember writing it. The note
+recording this incident went through three correction passes with the retracted
+advice still standing in its "what to go and do" line.
 
 🛑 **AND THE TREE-HASH SHORTCUT IS A CONFIDENT FALSE NEGATIVE ACROSS A
 CHERRY-PICK. THIS FILE ASSERTS IT TWICE AND BOTH NEED THIS QUALIFIER** — once
