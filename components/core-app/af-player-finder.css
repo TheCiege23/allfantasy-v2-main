@@ -2003,6 +2003,23 @@
   letter-spacing: 0;
   text-transform: none;
 }
+/* Three facts, three tones: yours (accent), someone else's (warn), free (good).
+   `.af-chip` carries no tone rules of its own — each chip on this screen names them. */
+.af-core .af-pf-suggest-chip[data-tone='accent'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-pf-suggest-chip[data-tone='warn'] {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.af-core .af-pf-suggest-chip[data-tone='good'] {
+  background: var(--good-soft);
+  border-color: var(--good);
+  color: var(--good);
+}
 /* Match and recent rows become a headshot beside the text. The column layout
    above centred the stacked text vertically; as a row that same rule centres
    it horizontally, so the row is pinned back to the left edge. */
