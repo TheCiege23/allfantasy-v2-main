@@ -7,154 +7,174 @@
  * season budget that does not carry over. So "is this trade fair?" is a question the league never
  * asks, and the whole trade-value surface is aimed past it. The question is "what do I bid?"
  *
- * ── THE EXCHANGE RATE IS NOT INVENTED HERE ─────────────────────────────────────────────────
- * `marketValueService.faabValue` already publishes one: a FULL budget is worth about the market
- * value of the ~`FAAB_ANCHOR_RANK`-th ranked asset, and `$X of $B = (X/B) × anchor`. This module
- * INVERTS that same rate rather than picking a second one — two exchange rates in one codebase is
- * the defect, not the fix. Its honesty label travels with it: the payload calls it "AF heuristic
- * (not market data)", and so does every sentence this module produces.
+ * ── 🛑 THE FIRST VERSION USED THE REPO'S FIXED FAAB ANCHOR AND IT DID NOT SURVIVE THE FORMAT ─
+ * `marketValueService.faabValue` publishes an exchange rate: a full budget is worth about the
+ * market value of the ~150th-ranked asset. Inverting it was the right instinct — one exchange
+ * rate, not two — and the result was measured against the live league before wiring, which is the
+ * only reason it did not ship:
  *
- * ── 🛑 VALUE IS MARGINAL, NOT ABSOLUTE, AND THAT IS THE WHOLE POINT ─────────────────────────
- * A player is worth what he adds OVER THE MAN HE REPLACES in your starting lineup. The same
- * player is therefore worth different money to different teams, which is true, and is the reason
- * a league-wide "player value" cannot answer a bidding question on its own. A team already strong
- * at the position should bid nothing; the chart says they should bid the same as everybody.
+ *     Survivor All-Stars Guillotine, week 11, advising BDog256, $1000 left
+ *       Drake London    margin 4002   ->  $1000   (the WHOLE budget)
+ *       Kyren Williams  margin 3088   ->  $1000
+ *       Drake Maye      margin 1873   ->  $1000
  *
- * ── ⚠ WHY THE SURVIVAL HORIZON MOSTLY CANCELS, WHICH IS NOT THE INTUITIVE ANSWER ────────────
- * It is tempting to discount a bid by how long you expect to survive. That double-counts. The
- * player's value is already horizon-discounted (`survivorHorizon`), AND your budget expires at
- * the same moment for the same reason — you cannot spend it after you are chopped. Numerator and
- * denominator shrink together, so the ratio is very nearly horizon-free.
+ * "Bid everything on all three" is not advice. The anchor is 189 value points, and London's margin
+ * alone is 21x that, so every genuine upgrade blows through any budget.
  *
- * What does NOT cancel is PACING. Unspent FAAB scores zero points, so dying with money is a
- * strictly dominated outcome: with `B` dollars and `W` expected weeks, anything under `B / W` on
- * a genuine upgrade means you are on track to be eliminated holding cash. That is the floor, and
- * it is an argument rather than a tuned constant — at one week left it correctly says "spend it
- * all", because on the last week the money is worth exactly nothing.
+ * ⚠ AND THE CAUSE IS THE FORMAT, NOT THE ARITHMETIC. A rank-150 anchor encodes "a full budget buys
+ * you a waiver flyer", which is true in a 12-team league with a deep free-agent pool. Measured in
+ * this one: 267 players rostered, a 198-player chart, and **zero** free agents on it. There is no
+ * flyer to buy. The only supply is a chopped roster, which drops genuine starters every week.
+ * Different supply, different price, and a constant calibrated elsewhere cannot know that.
+ *
+ * ── THE FIX IS TO PRICE AGAINST THE SUPPLY, WHICH NEEDS NO ANCHOR AT ALL ────────────────────
+ * Your budget buys a share of what is actually for sale. Spread it across the upgrades on offer,
+ * in proportion to how much each one improves you:
+ *
+ *     bid(p) = budget x margin(p) / (weeksLeft x totalMarginOnOfferThisWeek)
+ *
+ * Self-normalizing, no free parameter, and the budget constraint falls out rather than being
+ * imposed: win every upgrade this week and you have spent exactly one week's share.
+ *
+ * ⚠ THE ONE PREMISE, STATED SO IT CAN BE ARGUED WITH: future weeks' pools resemble this one. That
+ * is what `weeksLeft` divides by. It is a real assumption — a week where a stacked roster gets
+ * chopped is worth more than an average one — and it is the honest default when you cannot see
+ * next week's casualty. At one week left it correctly disappears: `weeksLeft` is 1, so this week's
+ * pool gets the entire remaining budget, because unspent FAAB scores nothing.
  */
 
 import type { SurvivorHorizon } from './survivorSchedule'
 
-export interface FaabBidInput {
+export interface FaabCandidate {
+  id: string
+  name: string
+  position: string | null
   /**
    * The player's value under THIS league's rules — already through `scoringFit` and any
-   * mid-season roster-change blend. Passing a raw chart value prices a league nobody is in.
+   * mid-season roster-change blend. A raw chart value prices a league nobody is in.
    */
   playerValue: number
   /**
-   * The value of the starter he would displace. Zero when he fills a slot you cannot fill at all,
-   * which is the only case where his full value is marginal.
+   * The starter he would displace in YOUR lineup. Zero when he fills a slot you cannot fill at
+   * all, which is the only case where his full value is marginal.
    */
   replacedValue: number
-  /** FAAB you have left right now. */
-  budgetRemaining: number
-  /** The league's full season budget — the denominator the published anchor is expressed against. */
-  budgetTotal: number
-  /**
-   * `MarketValuesPayload.faab.anchorValue`. Null when the payload resolved no anchor.
-   *
-   * 🛑 NULL DISABLES THE DOLLAR CONVERSION RATHER THAN SUBSTITUTING A GUESS. A bid is a number a
-   * manager will actually spend; inventing the rate that produces it is the one thing this module
-   * must not do.
-   */
-  anchorValue: number | null
-  /** Where you are in the elimination schedule. Null means no pace floor — stated, not hidden. */
-  horizon: SurvivorHorizon | null
 }
 
 export interface FaabBid {
-  /** Do not pay more than this. Never above `budgetRemaining`. */
+  id: string
+  name: string
+  position: string | null
+  /** Do not pay more than this. */
   ceiling: number
-  /** What he adds over the man he replaces, in value points. Zero or less means do not bid. */
+  /** What he adds over the man he replaces. Zero or less means do not bid. */
   marginalValue: number
-  /** The marginal value converted at the league's published FAAB anchor. */
-  fairValueBid: number
-  /** `budgetRemaining / expectedWeeksAlive` — below this you are on track to die holding cash. */
-  paceFloor: number
-  /** The ceiling as a share of what you have left, for a surface that wants to show the working. */
-  shareOfBudget: number
+  /** His share of this week's upgrade value, 0–1. */
+  shareOfSupply: number
+  reason: string
+}
+
+export interface FaabAllocation {
+  bids: FaabBid[]
+  /** Total marginal value on offer this week, counting upgrades only. */
+  supplyValue: number
+  /** What this week's pool is worth of your budget — `budgetRemaining / weeksAssumed`. */
+  weekBudget: number
+  /** Expected weeks you still get to play. 1 when no schedule was supplied. */
+  weeksAssumed: number
+  /** True when `weeksAssumed` came from a real schedule rather than the fallback. */
+  paced: boolean
   reason: string
 }
 
 const usable = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
 
 /**
- * The bid ceiling, or null when it cannot be computed.
+ * Allocate a FAAB budget across everyone hitting waivers this week.
  *
- * ⚠ RETURNS null RATHER THAN ZERO ON MISSING INPUTS. Zero is a recommendation — "do not bid on
- * this man" — and it is the recommendation this module gives for a player who does not improve
- * your lineup. Returning it for an unreadable budget would tell a manager to pass on somebody
- * nobody has evaluated. Same refusal `scoringFit` and `survivorHorizon` make.
+ * 🛑 POOL-BASED ON PURPOSE, AND PASSING ONE PLAYER IS A FOOTGUN. A bid is only meaningful against
+ * the alternatives — a player who is your one upgrade deserves your whole week's budget, and the
+ * same player alongside two better ones does not. Calling this with a single candidate asserts
+ * "he is the only upgrade available", which is a claim about the pool, not about him.
+ *
+ * ⚠ RETURNS null RATHER THAN ZEROS ON UNUSABLE INPUT. Zero is a recommendation — "do not bid on
+ * this man" — and it is what a non-upgrade gets. Returning it for an unreadable budget would tell
+ * a manager to pass on somebody nobody has evaluated. Same refusal `scoringFit` makes.
  */
-export function faabBidCeiling(input: FaabBidInput): FaabBid | null {
-  if (!usable(input.playerValue) || !usable(input.replacedValue)) return null
+export function allocateFaabAcrossPool(input: {
+  pool: FaabCandidate[]
+  budgetRemaining: number
+  horizon: SurvivorHorizon | null
+}): FaabAllocation | null {
+  if (!Array.isArray(input.pool)) return null
   if (!usable(input.budgetRemaining) || input.budgetRemaining < 0) return null
-  if (!usable(input.budgetTotal) || input.budgetTotal <= 0) return null
-  if (input.anchorValue == null || !usable(input.anchorValue) || input.anchorValue <= 0) return null
 
-  const marginalValue = input.playerValue - input.replacedValue
-
-  /*
-   * 🛑 A NON-UPGRADE IS A ZERO, AND THIS IS THE MOST USEFUL THING THE MODULE SAYS. In a league
-   * with a fixed budget and no trades, the commonest expensive mistake is bidding on a name rather
-   * than on an improvement. The chart cannot tell you this; only your own lineup can.
-   */
-  if (marginalValue <= 0) {
-    return {
-      ceiling: 0,
-      marginalValue,
-      fairValueBid: 0,
-      paceFloor: 0,
-      shareOfBudget: 0,
-      reason:
-        'He does not improve your starting lineup — the man he would replace is worth as much or ' +
-        'more. Bid nothing; in a fixed-budget league the dollars are the scarce thing, not the name.',
-    }
-  }
-
-  /* The inverse of `faabValue`: value points → dollars, at the league's own published rate. */
-  const fairValueBid = (marginalValue / input.anchorValue) * input.budgetTotal
-
-  /* Dying with unspent FAAB is strictly dominated. At one week left this is the whole budget. */
   const weeks = input.horizon?.expectedWeeksAlive
-  const paceFloor = usable(weeks) && weeks > 0 ? input.budgetRemaining / weeks : 0
+  const paced = usable(weeks) && weeks >= 1
+  const weeksAssumed = paced ? (weeks as number) : 1
+  const weekBudget = input.budgetRemaining / weeksAssumed
 
-  const ceiling = Math.min(input.budgetRemaining, Math.max(fairValueBid, paceFloor))
-  const shareOfBudget = input.budgetRemaining > 0 ? ceiling / input.budgetRemaining : 0
+  const scored = input.pool.map((c) => ({
+    c,
+    margin: usable(c.playerValue) && usable(c.replacedValue) ? c.playerValue - c.replacedValue : null,
+  }))
 
-  /*
-   * ⚠ THE PACING SENTENCE IS ONLY AVAILABLE WHEN THERE IS A PACE, AND A TEST CAUGHT THIS SHIPPING
-   * WITHOUT THE GUARD. With no schedule the first branch rendered "at this expected weeks" — broken
-   * prose, and worse, it made the expiry argument for a league whose horizon we do not know. When
-   * the ceiling is capped by the budget there are two different reasons why, and they are not
-   * interchangeable: pacing says spend it, or his fair value simply exceeds your means.
-   */
-  const paced = usable(weeks) && weeks > 0
-  const cappedByBudget = ceiling >= input.budgetRemaining
+  const supplyValue = scored.reduce((s, x) => s + (x.margin != null && x.margin > 0 ? x.margin : 0), 0)
 
-  const priceSentence =
-    `Priced at the league's FAAB anchor (an AF heuristic, not market data): he adds ` +
-    `${Math.round(marginalValue)} value over your current starter.`
+  const bids: FaabBid[] = scored.map(({ c, margin }) => {
+    const head = { id: c.id, name: c.name, position: c.position }
 
-  const driver = cappedByBudget
-    ? paced && paceFloor >= fairValueBid
-      ? `That is everything you have left — with about ${(weeks as number).toFixed(1)} weeks to go, ` +
-        'FAAB you do not spend scores nothing.'
-      : `He is worth more than you can afford. ${priceSentence} That prices him at ` +
-        `$${Math.round(fairValueBid)}, so your whole remaining $${Math.round(input.budgetRemaining)} ` +
-        'is the ceiling.'
-    : paced && paceFloor > fairValueBid
-      ? `Paced rather than priced: $${Math.round(input.budgetRemaining)} across about ` +
-        `${(weeks as number).toFixed(1)} more weeks is $${Math.round(paceFloor)} a week, and bidding ` +
-        'under that puts you on track to be eliminated holding cash.'
-      : `${priceSentence} That is ${Math.round(shareOfBudget * 100)}% of what you have left.`
+    if (margin == null) {
+      return {
+        ...head,
+        ceiling: 0,
+        marginalValue: 0,
+        shareOfSupply: 0,
+        reason: 'No usable value for him or for the man he would replace — not priced, rather than priced at zero.',
+      }
+    }
 
-  return {
-    ceiling: Math.round(ceiling),
-    marginalValue: Math.round(marginalValue),
-    fairValueBid: Math.round(fairValueBid),
-    paceFloor: Math.round(paceFloor),
-    shareOfBudget,
-    reason: driver,
-  }
+    /*
+     * 🛑 A NON-UPGRADE IS A ZERO, AND THIS IS THE MOST USEFUL THING THE MODULE SAYS. In a fixed
+     * budget league with no trades, the commonest expensive mistake is bidding on a name rather
+     * than on an improvement. The chart cannot tell you which you are doing; only your lineup can.
+     */
+    if (margin <= 0) {
+      return {
+        ...head,
+        ceiling: 0,
+        marginalValue: Math.round(margin),
+        shareOfSupply: 0,
+        reason:
+          'He does not improve your starting lineup — the man he would replace is worth as much or ' +
+          'more. Bid nothing; the dollars are the scarce thing, not the name.',
+      }
+    }
+
+    const shareOfSupply = supplyValue > 0 ? margin / supplyValue : 0
+    const ceiling = Math.min(input.budgetRemaining, weekBudget * shareOfSupply)
+
+    return {
+      ...head,
+      ceiling: Math.round(ceiling),
+      marginalValue: Math.round(margin),
+      shareOfSupply,
+      reason:
+        `He is ${Math.round(shareOfSupply * 100)}% of the upgrade value on waivers this week, so he ` +
+        `gets ${Math.round(shareOfSupply * 100)}% of this week's $${Math.round(weekBudget)}` +
+        (paced
+          ? ` — your $${Math.round(input.budgetRemaining)} spread over about ${weeksAssumed.toFixed(1)} more weeks.`
+          : ' — your whole remaining budget, because no elimination schedule was supplied to pace it against.'),
+    }
+  })
+
+  const upgrades = bids.filter((b) => b.ceiling > 0).length
+  const reason = paced
+    ? `${upgrades} genuine upgrade${upgrades === 1 ? '' : 's'} on waivers. $${Math.round(input.budgetRemaining)} ` +
+      `across about ${weeksAssumed.toFixed(1)} more weeks is $${Math.round(weekBudget)} for this week's pool, ` +
+      'split by how much each man actually improves you.'
+    : `${upgrades} genuine upgrade${upgrades === 1 ? '' : 's'} on waivers, and no schedule to pace against — ` +
+      'this week\'s pool is priced against your whole remaining budget, which is the aggressive read.'
+
+  return { bids, supplyValue: Math.round(supplyValue), weekBudget: Math.round(weekBudget), weeksAssumed, paced, reason }
 }
