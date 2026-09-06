@@ -23,6 +23,7 @@ import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
+import { pregameInactive } from '@/lib/core-app/pregameInactive'
 import { byeChip, byeStatus } from '@/lib/core-app/byeStatus'
 
 /** The loader hands a Date across the server boundary; tests and fixtures may hand an ISO string. */
@@ -388,7 +389,11 @@ export function PlayerFinder({
     : []
   const moveByLeague = new Map<string, PlayerMove>()
   for (const m of moves) if (m.tone !== 'good' && !moveByLeague.has(m.leagueId)) moveByLeague.set(m.leagueId, m)
-  const ready = detail ? readiness(injuryStatus, detail.injury.available) : null
+  const readyBase = detail ? readiness(injuryStatus, detail.injury.available) : null
+  // Out inside the last two hours before his kickoff is the inactive list; the chip says so (pregameInactive.ts).
+  const inactive =
+    detail?.injury.available && detail.game?.available ? pregameInactive(detail.injury.data.status, asIso(detail.injury.data.reportedAt), detail.game.data.kickoff) : null
+  const ready = inactive && readyBase ? { tone: 'bad' as const, label: 'Inactive' } : readyBase
   const last = detail ? (detail.player.name.trim().split(/\s+/).slice(-1)[0] ?? detail.player.name) : ''
 
   const leagueRows: LeagueRow[] = (detail?.leagues.available ? detail.leagues.data : [])
@@ -727,6 +732,7 @@ export function PlayerFinder({
                 reportedAt={injuryReportedAt}
                 game={detail.game?.available ? detail.game.data : null}
                 bye={detail.game?.available ? null : byeMark}
+                inactive={inactive}
                 nowIso={nowIso}
                 starting={startingLeagues}
                 benched={benchedCount}

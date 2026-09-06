@@ -462,6 +462,8 @@ describe('Player Finder — game-day home', () => {
           ],
           kickoff: '2026-10-25T17:00:00.000Z',
           noGame: false,
+          bye: false,
+          inactive: null,
         },
         {
           player: { sport: 'NFL', externalId: 'ri-4', sleeperId: '8130', name: 'Jake Ferguson', position: 'TE', team: 'DAL', imageUrl: null },
@@ -503,6 +505,15 @@ describe('Player Finder — game-day home', () => {
     renderCore({ triage: TRIAGE, nowIso: NOW })
     expect(screen.getAllByRole('region', { name: 'Game day · your flagged starters' })).toHaveLength(2) // the two home renders above; none for the open card
   })
+
+  it('shows a pregame inactive on the triage list with the announce clock instead of the report time', () => {
+    const inactiveRow = { ...TRIAGE.data.rows[0]!, status: { tone: 'bad' as const, label: 'Inactive' }, reportedAt: '2026-10-25T15:32:00.000Z', inactive: { announcedAt: '2026-10-25T15:32:00.000Z', minutesBeforeKickoff: 88, clock: '11:32a ET' } }
+    render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={{ ...TRIAGE, data: { ...TRIAGE.data, rows: [inactiveRow] } }} nowIso={NOW} />)
+    const card = screen.getByRole('region', { name: 'Game day · your flagged starters' })
+    expect(within(card).getByText('Inactive · Ankle')).toBeInTheDocument()
+    expect(within(card).getByText('declared inactive at 11:32a ET · 88 min before kickoff')).toBeInTheDocument()
+    expect(within(card).queryByText(/reported/)).toBeNull()
+  })
 })
 
 describe('Player Finder — report time and bye', () => {
@@ -520,6 +531,33 @@ describe('Player Finder — report time and bye', () => {
     const banner = screen.getByRole('region', { name: 'Game day' })
     expect(within(banner).getByText('reported Sun 11:12a ET')).toBeInTheDocument()
     expect(screen.getAllByText('reported Sun 11:12a ET')).toHaveLength(2) // banner + injury section
+  })
+
+  it('calls an Out that landed inside the pregame window "Inactive" and leads the banner with the announcement', () => {
+    // Out reported 11:32a ET for a 1:00p kickoff — 88 minutes before: the inactive list.
+    renderCore({
+      detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: new Date('2026-10-25T15:32:00.000Z') } } },
+      nowIso: NOW,
+    })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).toHaveAttribute('data-inactive', 'true')
+    expect(within(banner).getByText('Inactive · Ankle')).toBeInTheDocument()
+    expect(within(banner).getByText('Declared inactive at 11:32a ET, 88 min before kickoff. Starting in 1 of your league — move Kincaid before kickoff.')).toBeInTheDocument()
+    expect(within(banner).getByText('reported 46 min ago')).toBeInTheDocument()
+    // The header chip says it too; the injury section keeps the feed's own word.
+    expect(screen.getAllByText('Inactive · Ankle').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Out')).toBeInTheDocument()
+  })
+
+  it('does not call a Friday ruling inactive', () => {
+    renderCore({
+      detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: new Date('2026-10-23T20:31:00.000Z') } } },
+      nowIso: NOW,
+    })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).not.toHaveAttribute('data-inactive')
+    expect(within(banner).getByText('Out · Ankle')).toBeInTheDocument()
+    expect(screen.queryByText(/Declared inactive/)).toBeNull()
   })
 
   it('marks a bye beside readiness and leads with a bye banner that still offers the lineup buttons', () => {

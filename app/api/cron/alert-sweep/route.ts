@@ -50,6 +50,7 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { sendPushToUser } from '@/lib/push-notifications'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
+import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 
 export const dynamic = 'force-dynamic'
@@ -134,11 +135,28 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
   const metaById = new Map(meta.map((m) => [m.externalId, m]))
   const expiresAt = new Date(now.getTime() + LIVE_STATUS_TTL_MS)
 
+  /*
+   * ⚠ `date` IS WHEN WE FIRST SAW THE WORD, KEPT ACROSS RE-FOLDS. This loop
+   * runs every five minutes and used to leave `date` empty, so nothing could
+   * tell a Friday Out from a scratch announced ninety minutes before kickoff
+   * — the pregame inactive (lib/core-app/pregameInactive.ts). The instant is
+   * preserved while the designation holds and reset when it changes
+   * (liveStatusFold.ts); the card reads the earliest report of the current
+   * word across every source (designationOnset.ts), so a Friday ruling still
+   * shows Friday when ESPN carries it.
+   */
+  const existingLive = await prisma.sportsInjury.findMany({
+    where: { sport: 'NFL', source: LIVE_STATUS_SOURCE, externalId: { in: urgent.map((u) => u.externalId) } },
+    select: { externalId: true, status: true, date: true },
+  })
+  const existingById = new Map(existingLive.map((e) => [e.externalId, e]))
+
   for (const u of urgent) {
     const m = metaById.get(u.externalId)
     // No identity, no claim — a row the port would bind by a wrong or empty
     // name is worse than no row.
     if (!m?.name?.trim()) continue
+    const date = liveFirstSeen(existingById.get(u.externalId), u.status, now)
     await prisma.sportsInjury.upsert({
       where: {
         sport_externalId_source: { sport: 'NFL', externalId: u.externalId, source: LIVE_STATUS_SOURCE },
@@ -151,6 +169,7 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
         team: m.team,
         position: m.position,
         status: u.status,
+        date,
         source: LIVE_STATUS_SOURCE,
         fetchedAt: now,
         expiresAt,
@@ -160,6 +179,7 @@ async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
         team: m.team,
         position: m.position,
         status: u.status,
+        date,
         fetchedAt: now,
         expiresAt,
       },
