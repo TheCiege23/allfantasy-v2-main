@@ -180,7 +180,8 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
 
       <p className="af-pf-readonly-note">
         Values are AllFantasy market values ({v.values.mode}, {v.values.ppr} PPR, {v.values.numQbs === 2 ? 'superflex' : '1QB'}).
-        AllFantasy never sends a trade — you send it on {platformLabel(v.platform)}.
+        {v.values.scoringAdjustment ? ` ${v.values.scoringAdjustment}` : ''}
+        {' '}AllFantasy never sends a trade — you send it on {platformLabel(v.platform)}.
       </p>
     </section>
   )

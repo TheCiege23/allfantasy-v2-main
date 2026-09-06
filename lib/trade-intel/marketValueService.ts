@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { LeagueContextEnvelope } from '@/lib/league-context/leagueContextService'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { scoringFit, type ScoringFit } from '@/lib/trade-value/scoringFit'
 
 /**
  * marketValueService — REAL trade-value charts for players, picks, and FAAB,
@@ -239,6 +240,46 @@ export async function getMarketValues(
 // ── Lookups ──────────────────────────────────────────────────────────────────
 export function playerValue(values: MarketValuesPayload, sleeperId: string): number | null {
   return values.bySleeperId[sleeperId]?.value ?? null
+}
+
+export interface LeagueAdjustedValue {
+  /** The chart value, untouched. */
+  base: number
+  /** What this league's own scoring makes him worth. Equals `base` when there is no adjustment. */
+  adjusted: number
+  /** Why they differ, or null when they do not. Carry it; a surface that shows only the adjusted
+   *  number has hidden the fact that it moved. */
+  fit: ScoringFit | null
+}
+
+/**
+ * A player's value under THIS league's per-position reception rules.
+ *
+ * 🛑 THE CHART CANNOT EXPRESS A PER-POSITION RECEPTION WEIGHT. It is fetched with one `ppr` and
+ * applies it to everybody, so a league paying tight ends 1.0 and everyone else 0.5 is priced by a
+ * chart that models neither. Measured on production: under that rule a median TE gains 15 ranks
+ * against the RB/WR field and the number of startable TEs in a 32-team FLEX pool goes 15 -> 24.
+ *
+ * ⚠ `values.ppr` IS THE REFERENCE, AND IT MUST BE — it is the weight this very payload was fetched
+ * with. Passing anything else measures the adjustment against a chart nobody requested.
+ *
+ * ⚠ RETURNS BOTH NUMBERS, NEVER JUST THE ADJUSTED ONE. `applyFormat.fitAdjustedValue` already
+ * records why: a caller that collapses base and adjustment into one number reintroduces exactly
+ * the invisibility the split exists to prevent. The trade maths may use `adjusted`; the surface
+ * should be able to say it moved and by how much.
+ */
+export function playerValueForLeague(
+  values: MarketValuesPayload,
+  sleeperId: string,
+  scoringSettings: Record<string, unknown> | null | undefined,
+): LeagueAdjustedValue | null {
+  const entry = values.bySleeperId[sleeperId]
+  if (!entry) return null
+
+  const fit = scoringFit(scoringSettings, entry.position, values.ppr)
+  if (!fit || fit.multiplier === 1) return { base: entry.value, adjusted: entry.value, fit: null }
+
+  return { base: entry.value, adjusted: Math.round(entry.value * fit.multiplier), fit }
 }
 
 /** Pick value: exact slot when known, else that season+round's average. */

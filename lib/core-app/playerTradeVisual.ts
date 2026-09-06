@@ -1,7 +1,12 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { getMarketValues, playerValue, type MarketValuesPayload } from '@/lib/trade-intel/marketValueService'
+import {
+  getMarketValues,
+  playerValue,
+  playerValueForLeague,
+  type MarketValuesPayload,
+} from '@/lib/trade-intel/marketValueService'
 import {
   findPackages,
   type DiscoveryPlayer,
@@ -9,6 +14,7 @@ import {
   type FairnessBand,
   type TradePackage,
 } from '@/lib/trade-discovery/redraftTradeDiscovery'
+import { describeScoringFit } from '@/lib/trade-value/scoringFit'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
 import { runTradeAnalysis } from '@/lib/engine/trade'
@@ -99,7 +105,21 @@ export type PlayerTradeVisual = {
   target: { sleeperId: string; name: string; position: string | null; value: number | null }
   you: TradeVisualSide
   partner: TradeVisualSide
-  values: { mode: 'dynasty' | 'redraft'; source: string; fetchedAt: string; ppr: number; numQbs: 1 | 2 }
+  values: {
+    mode: 'dynasty' | 'redraft'
+    source: string
+    fetchedAt: string
+    ppr: number
+    numQbs: 1 | 2
+    /**
+     * Why these prices differ from the chart's, when this league's per-position reception rules
+     * move them. Null when nothing moved.
+     *
+     * 🛑 NOT OPTIONAL, ON PURPOSE. The prices in this payload are already adjusted, so a surface
+     * that never renders this has quietly shown a number the chart does not carry.
+     */
+    scoringAdjustment: string | null
+  }
   packages: TradeVisualPackage[]
   /** The package we would open with, or null when none is balanced enough to suggest. */
   recommended: TradeVisualPackage | null
@@ -243,9 +263,13 @@ export async function getPlayerTradeVisual(
     null
 
   const leagueSize = rosters.length || 12
-  const values: MarketValuesPayload | null = await getMarketValues(
-    marketContextFor(league.settings, league.leagueType, leagueSize)
-  ).catch(() => null)
+  /*
+   * Built ONCE and reused. It was previously constructed twice from the same inputs, and the
+   * scoring adjustment below needs the identical blob the chart request was keyed on — a second
+   * reading of `scoring_settings` beside this one would be two implementations of one rule.
+   */
+  const marketContext = marketContextFor(league.settings, league.leagueType, leagueSize)
+  const values: MarketValuesPayload | null = await getMarketValues(marketContext).catch(() => null)
   if (!values) {
     return { available: false, reason: 'no market values are loaded for this league’s format yet, so a package cannot be priced' }
   }
@@ -262,16 +286,26 @@ export async function getPlayerTradeVisual(
     .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null }>)
   const byId = new Map(rows.filter((r) => r.sleeperId).map((r) => [r.sleeperId as string, r]))
 
+  /*
+   * ⚠ THE CHART IS FETCHED WITH ONE `ppr` AND APPLIES IT TO EVERY POSITION, so a league with a
+   * per-position reception rule — TE premium being the common one — is priced by a chart that
+   * models neither its tight ends nor its receivers. `playerValueForLeague` corrects for that and
+   * returns BOTH numbers; `adjusted` equals `base` for an ordinary league, so nothing moves for
+   * the leagues that already matched.
+   */
+  const leagueScoring = marketContext.scoring.settings
+
   const toPlayers = (pd: Record<string, unknown>): DiscoveryPlayer[] =>
     allIds(pd).flatMap((id) => {
       const row = byId.get(id)
       if (!row) return []
+      const priced = playerValueForLeague(values, id, leagueScoring)
       return [
         {
           playerId: id,
           playerName: row.name,
           position: row.position ? normalizePosition(row.position) : 'UNK',
-          value: playerValue(values, id),
+          value: priced?.adjusted ?? playerValue(values, id),
           isLocked: false,
         },
       ]
@@ -334,7 +368,7 @@ export async function getPlayerTradeVisual(
     reason: recommended ? 'the trade engine did not answer in time' : 'no package to grade',
   }
   if (recommended) {
-    const ctx = marketContextFor(league.settings, league.leagueType, leagueSize)
+    const ctx = marketContext
     const format: TradeEngineRequest['format'] = ctx.variant.dynasty ? 'dynasty' : ctx.variant.keeper ? 'keeper' : 'redraft'
     const asset = (a: TradeVisualAsset) =>
       a.kind === 'player' && a.playerId
@@ -400,11 +434,20 @@ export async function getPlayerTradeVisual(
         sleeperId: targetSleeperId,
         name: targetRow?.name ?? 'this player',
         position: targetRow?.position ? normalizePosition(targetRow.position) : null,
-        value: playerValue(values, targetSleeperId),
+        value:
+          playerValueForLeague(values, targetSleeperId, leagueScoring)?.adjusted ??
+          playerValue(values, targetSleeperId),
       },
       you: stanceOf(me, yours?.externalId ?? null),
       partner: stanceOf(partner, partnerTeam?.externalId ?? null),
-      values: { mode: values.mode, source: values.source, fetchedAt: values.fetchedAt, ppr: values.ppr, numQbs: values.numQbs },
+      values: {
+        mode: values.mode,
+        source: values.source,
+        fetchedAt: values.fetchedAt,
+        ppr: values.ppr,
+        numQbs: values.numQbs,
+        scoringAdjustment: describeScoringFit(leagueScoring, values.ppr),
+      },
       packages,
       recommended,
       grade,

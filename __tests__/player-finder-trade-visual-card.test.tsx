@@ -31,7 +31,7 @@ const VISUAL: PlayerTradeVisual = {
   target: { sleeperId: '10236', name: 'Dalton Kincaid', position: 'TE', value: 3010 },
   you: { teamName: 'Cafe Con Chimmy', ownerName: 'guap', externalId: '2', stance: 'contender', needs: ['TE'], surpluses: ['RB'] },
   partner: { teamName: "Tasha's Titans", ownerName: 'tashaR', externalId: '1', stance: 'middle', needs: ['RB'], surpluses: ['TE'] },
-  values: { mode: 'redraft', source: 'fantasycalc', fetchedAt: '2026-09-02T12:00:00Z', ppr: 0.5, numQbs: 1 },
+  values: { mode: 'redraft', source: 'fantasycalc', fetchedAt: '2026-09-02T12:00:00Z', ppr: 0.5, numQbs: 1, scoringAdjustment: null },
   packages: [P1, P2],
   recommended: P1,
   grade: { available: true, data: { verdict: 'accept', verdictConfidence: 'medium', fairnessScore: 71, fairnessDelta: 120, starterDeltaPts: 2.6, lineupNote: 'Kincaid starts over Otton', acceptance: 0.62, explanations: ['Values within band'] } },
@@ -87,5 +87,23 @@ describe('TradeVisual', () => {
     render(<TradeVisual state={{ available: true, data: { ...VISUAL, packages: [], recommended: null, grade: { available: false, reason: 'no package to grade' } } }} playerName="Dalton Kincaid" />)
     expect(screen.getByText(/No balanced package for Kincaid/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open Trade Center' })).toBeInTheDocument()
+  })
+
+  /*
+   * 🛑 THE PRICES IN THE PAYLOAD ARE ALREADY ADJUSTED. A card that renders them without this line
+   * has shown a number the chart does not carry and said nothing about it — which is the exact
+   * invisibility `applyFormat` refuses. Asserted in BOTH directions, because a note that is always
+   * present is as wrong as one that is never present.
+   */
+  it('🛑 says when this league’s scoring moved the prices, and stays quiet when it did not', () => {
+    const note = 'Adjusted for this league’s own reception rules, which the 0.5 PPR chart cannot express: TE +14.5%.'
+    const { unmount } = render(
+      <TradeVisual state={{ available: true, data: { ...VISUAL, values: { ...VISUAL.values, scoringAdjustment: note } } }} playerName="Dalton Kincaid" />,
+    )
+    expect(screen.getByText(new RegExp('TE \\+14\\.5%'))).toBeInTheDocument()
+    unmount()
+
+    render(<TradeVisual state={{ available: true, data: VISUAL }} playerName="Dalton Kincaid" />)
+    expect(screen.queryByText(/reception rules/)).not.toBeInTheDocument()
   })
 })

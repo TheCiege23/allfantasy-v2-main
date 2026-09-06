@@ -139,3 +139,30 @@ export function scoringFit(
 
   return { multiplier, leagueWeight, referenceWeight, pointsRatio, reason }
 }
+
+/**
+ * One sentence naming every position this league's reception rules move, or null when none do.
+ *
+ * 🛑 A SURFACE THAT SHOWS ONLY THE ADJUSTED NUMBER HAS HIDDEN THAT IT MOVED, which is the exact
+ * objection `applyFormat` records against folding a multiplier into a base value. Any surface
+ * pricing with `playerValueForLeague` owes the reader this line.
+ *
+ * ⚠ A move under 0.05% is omitted rather than printed as "+0%". It is a rounding artefact of a
+ * league whose reception rule all but matches the chart, and naming it would imply a difference
+ * the numbers on screen do not show.
+ */
+export function describeScoringFit(
+  settings: ScoringSettings | null | undefined,
+  referenceWeight: number,
+): string | null {
+  const moved: string[] = []
+  for (const pos of Object.keys(POINTS_GAIN_PER_RECEPTION_POINT)) {
+    const fit = scoringFit(settings, pos, referenceWeight)
+    if (!fit || fit.multiplier === 1) continue
+    const pct = Number(((fit.multiplier - 1) * 100).toFixed(1))
+    if (pct === 0) continue
+    moved.push(`${pos} ${pct > 0 ? '+' : ''}${pct}%`)
+  }
+  if (moved.length === 0) return null
+  return `Adjusted for this league’s own reception rules, which the ${referenceWeight} PPR chart cannot express: ${moved.join(', ')}.`
+}

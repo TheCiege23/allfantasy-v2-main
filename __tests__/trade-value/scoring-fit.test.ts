@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  describeScoringFit,
   POINTS_GAIN_PER_RECEPTION_POINT,
   receptionWeightForPosition,
   scoringFit,
@@ -144,5 +145,39 @@ describe('scoringFit — the general rule', () => {
     expect(extreme.multiplier).toBe(SCORING_FIT_MAX)
     expect(SCORING_FIT_MIN).toBeLessThan(1)
     expect(SCORING_FIT_MAX).toBeGreaterThan(1)
+  })
+})
+
+describe('describeScoringFit — the line a surface owes the reader', () => {
+  it('🛑 names every position that moved, because an adjusted price shown alone is a hidden one', () => {
+    /*
+     * Measured against the live 0.5 chart (`market-values:v1:dynasty:1qb:16t:0.5ppr`, 397 rows):
+     * this rule repriced 65 rows — every tight end, nobody else — for a median gain of 8 ranks.
+     */
+    expect(describeScoringFit(EFL, 0.5)).toBe(
+      'Adjusted for this league’s own reception rules, which the 0.5 PPR chart cannot express: TE +14.5%.',
+    )
+  })
+
+  it('⚠ and the SAME league against a 1.0 chart names the losers instead — the chart is the reference', () => {
+    /* An EFL-shaped league routed to a full-PPR chart pays RB and WR half what that chart assumed.
+     * Nothing about the league changed; the number it is being measured against did. */
+    const s = describeScoringFit(EFL, 1)!
+    expect(s).toMatch(/RB -7\.8%/)
+    expect(s).toMatch(/WR -15\.1%/)
+    expect(s).not.toMatch(/TE/)
+  })
+
+  it('is NULL for an ordinary league and for settings it cannot read', () => {
+    expect(describeScoringFit({ rec: 0.5 }, 0.5)).toBeNull()
+    expect(describeScoringFit({ rec: 1 }, 1)).toBeNull()
+    expect(describeScoringFit(null, 0.5)).toBeNull()
+    expect(describeScoringFit({}, 0.5)).toBeNull()
+  })
+
+  it('⚠ omits a move too small to show rather than printing "+0%"', () => {
+    /* A 0.001/catch bonus moves a TE by 0.03%, which rounds to nothing on every price on screen.
+     * Naming it would assert a difference the reader cannot see. */
+    expect(describeScoringFit({ rec: 0.5, bonus_rec_te: 0.001 }, 0.5)).toBeNull()
   })
 })
