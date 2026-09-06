@@ -37,6 +37,26 @@ export async function executeSeasonCarryover(
       })
       keptPlayers.push(k.playerName)
       totalKept += 1
+
+      // Round-cost keepers give up that round's pick in the rookie draft.
+      // `getKeeperDraftOrder` (lib/keeper/draftIntegration.ts) already reads
+      // this table and expects exactly this shape — it just never had a
+      // writer, so a dynasty league's forfeited-pick count always read zero
+      // regardless of keeper cost rules. Auction-cost keepers (`costRound`
+      // null) pay auction dollars instead of a pick, so no round is forfeited.
+      if (k.costRound != null) {
+        await prisma.keeperPickAdjustment.create({
+          data: {
+            leagueId,
+            seasonId: incomingSeasonId,
+            rosterId: roster.id,
+            keeperRecordId: k.id,
+            pickRoundForfeited: k.costRound,
+            reason: `Keeper: ${k.playerName}`,
+          },
+        })
+        forfeited.push(k.playerName)
+      }
     }
 
     byTeam.push({
