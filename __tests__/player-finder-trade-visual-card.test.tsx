@@ -32,6 +32,7 @@ const VISUAL: PlayerTradeVisual = {
   you: { teamName: 'Cafe Con Chimmy', ownerName: 'guap', externalId: '2', stance: 'contender', needs: ['TE'], surpluses: ['RB'] },
   partner: { teamName: "Tasha's Titans", ownerName: 'tashaR', externalId: '1', stance: 'middle', needs: ['RB'], surpluses: ['TE'] },
   values: { mode: 'redraft', source: 'fantasycalc', fetchedAt: '2026-09-02T12:00:00Z', ppr: 0.5, numQbs: 1, scoringAdjustment: null },
+  bidInstead: null,
   packages: [P1, P2],
   recommended: P1,
   grade: { available: true, data: { verdict: 'accept', verdictConfidence: 'medium', fairnessScore: 71, fairnessDelta: 120, starterDeltaPts: 2.6, lineupNote: 'Kincaid starts over Otton', acceptance: 0.62, explanations: ['Values within band'] } },
@@ -105,5 +106,70 @@ describe('TradeVisual', () => {
 
     render(<TradeVisual state={{ available: true, data: VISUAL }} playerName="Dalton Kincaid" />)
     expect(screen.queryByText(/reception rules/)).not.toBeInTheDocument()
+  })
+
+  /*
+   * 🛑 A NO-TRADE LEAGUE MUST NOT SEE A TRADE CARD. Every part of the normal card — the give/get
+   * columns, the fairness band, "Send it on ESPN" — describes an action the manager cannot take.
+   * Rendering them under a caveat is how a caveat gets skimmed.
+   */
+  it('🛑 a guillotine league gets a BID card, and none of the trade furniture', () => {
+    render(
+      <TradeVisual
+        state={{
+          available: true,
+          data: {
+            ...VISUAL,
+            packages: [],
+            recommended: null,
+            bidInstead: {
+              concept: 'guillotine',
+              budgetTotal: 1000,
+              marginalValue: 2100,
+              shareOfSupply: 2100 / 3300,
+              ceilingAtFullBudget: 636,
+              reason: 'No trades in this league. He reaches waivers only if his owner is chopped. That is against a FULL season budget — we do not hold what anyone has actually spent.',
+            },
+          },
+        }}
+        playerName="Dalton Kincaid"
+      />,
+    )
+    expect(screen.getByText('Up to $636')).toBeInTheDocument()
+    expect(screen.getByText(/64% of the upgrade value/)).toBeInTheDocument()
+    expect(screen.getByText(/FULL season budget/)).toBeInTheDocument()
+
+    // None of the trade furniture.
+    expect(screen.queryByText('You give')).not.toBeInTheDocument()
+    expect(screen.queryByText('You get')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Send it on ESPN' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/AllFantasy never sends a trade/)).not.toBeInTheDocument()
+  })
+
+  it('⚠ and a non-upgrade is told so plainly, with no dollar figure at all', () => {
+    render(
+      <TradeVisual
+        state={{
+          available: true,
+          data: {
+            ...VISUAL,
+            packages: [],
+            recommended: null,
+            bidInstead: {
+              concept: 'guillotine',
+              budgetTotal: 1000,
+              marginalValue: -2205,
+              shareOfSupply: 0,
+              ceilingAtFullBudget: 0,
+              reason: 'No trades in this league, and he would not improve your lineup anyway — he does not improve your starting lineup.',
+            },
+          },
+        }}
+        playerName="Dalton Kincaid"
+      />,
+    )
+    expect(screen.getByRole('heading', { level: 3, name: /Kincaid would not improve your lineup/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Up to \$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/of the upgrade value/)).not.toBeInTheDocument()
   })
 })

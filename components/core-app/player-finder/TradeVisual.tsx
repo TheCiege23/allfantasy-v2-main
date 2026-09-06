@@ -60,6 +60,42 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
   }
 
   const v = state.data
+
+  /*
+   * 🛑 A NO-TRADE LEAGUE GETS A DIFFERENT CARD ENTIRELY, NOT A TRADE CARD WITH A NOTE ON IT.
+   * The heading, the give/get columns and the "send it on the platform" hand-off all describe an
+   * action this manager cannot take. Rendering them under a caveat is how a caveat gets skimmed.
+   */
+  if (v.bidInstead) {
+    const b = v.bidInstead
+    return (
+      <section className="af-card af-pf-tv af-pf-tv--bid" aria-labelledby="af-pf-tv-h">
+        <header className="af-pf-tv-head">
+          <span className="af-label">What to bid for {last}</span>
+          <h3 className="af-pf-h3" id="af-pf-tv-h">
+            {b.marginalValue > 0
+              ? `${last} would be an upgrade — he is worth bidding on if he hits waivers`
+              : `${last} would not improve your lineup`}
+          </h3>
+        </header>
+        {b.marginalValue > 0 ? (
+          <p className="af-pf-tv-bidline">
+            <strong>
+              {b.ceilingAtFullBudget != null ? `Up to $${b.ceilingAtFullBudget}` : `${Math.round(b.shareOfSupply * 100)}% of your budget`}
+            </strong>{' '}
+            — {Math.round(b.shareOfSupply * 100)}% of the upgrade value on his roster.
+          </p>
+        ) : null}
+        <p className="af-pf-readonly-note">{b.reason}</p>
+        <div className="af-pf-tv-actions">
+          <Link className="af-btn af-pf-tv-btn" href={`/core/trades?league=${v.leagueId}`}>
+            Open Trade Center
+          </Link>
+        </div>
+      </section>
+    )
+  }
+
   const rec = v.recommended
   const links = tradeLink({
     id: v.leagueId,

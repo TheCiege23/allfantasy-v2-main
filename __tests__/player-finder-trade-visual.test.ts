@@ -224,6 +224,61 @@ describe('getPlayerTradeVisual', () => {
     }
   })
 
+  /*
+   * ── A GUILLOTINE LEAGUE IS NOT A TRADE MARKET ──────────────────────────────────────────────
+   * "There are no trades allowed in this league." A package this surface could build is one the
+   * manager can never send, so offering it is worse than offering nothing — it looks actionable.
+   */
+  it('🛑 a guillotine league gets a BID, not a trade — and no package at all', async () => {
+    mockLeagueFindUnique.mockResolvedValue({
+      ...LEAGUE,
+      leagueType: 'guillotine',
+      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+    })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state.available).toBe(true)
+    if (!state.available) return
+    const v = state.data
+
+    // Nothing tradeable is offered, and the engine is not asked to grade a trade that cannot happen.
+    expect(v.packages).toEqual([])
+    expect(v.recommended).toBeNull()
+    expect(v.grade).toEqual({ available: false, reason: 'this league does not allow trades, so there is no package to grade' })
+
+    const bid = v.bidInstead!
+    expect(bid.concept).toBe('guillotine')
+    /*
+     * Kincaid (3,000) over my weakest TE starter Otton (900) is +2,100. The pool is his OWNER'S
+     * whole roster, because that is what hits waivers when a team is chopped — and only Ferguson
+     * (2,100 over 900 = +1,200) is also an upgrade. So supply is 3,300 and Kincaid is 2,100 of it.
+     */
+    expect(bid.marginalValue).toBe(2100)
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.ceilingAtFullBudget).toBe(636)
+    expect(bid.budgetTotal).toBe(1000)
+    expect(bid.reason).toMatch(/No trades in this league/)
+    // 🛑 And it must never present that as money the manager still has.
+    expect(bid.reason).toMatch(/FULL season budget/)
+  })
+
+  it('⚠ and with no FAAB budget on file it gives the share and REFUSES the dollars', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine' })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    const bid = state.data.bidInstead!
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.budgetTotal).toBeNull()
+    expect(bid.ceilingAtFullBudget).toBeNull()
+    expect(bid.reason).toMatch(/no FAAB budget on file/)
+  })
+
+  it('[control] an ordinary league still gets packages and NO bid block', async () => {
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.bidInstead).toBeNull()
+    expect(state.data.packages.length).toBeGreaterThan(0)
+  })
+
   it('and an ordinary league is left EXACTLY alone — no drift on the common case', async () => {
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
     expect(state.available).toBe(true)
