@@ -107,4 +107,11 @@ fi
 run_guard "$scripts/push-queue.mjs" check || exit 1
 run_guard "$scripts/check-inflight-prod-build.mjs" || exit 1
 
+# Guard 3: does the SHA being pushed still typecheck? Runs LAST because it is
+# the slowest by far (a cold isolated compile, ~17 min measured) -- no point
+# spending that only to learn it was not your turn or a build is already
+# running. It is the one guard here that fails CLOSED, and only on a positive,
+# parsed regression; see its header for why that differs from the two above.
+run_guard "$scripts/pre-push-smoke.mjs" || exit 1
+
 exit 0

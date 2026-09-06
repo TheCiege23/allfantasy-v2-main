@@ -1128,8 +1128,19 @@ one.
 
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
-User's decision, 2026-08-29, and the larger half of the build bill. The
-cherry-pick rule above settles HOW work lands; this settles WHEN.
+> ⚠ **PARTIALLY SUPERSEDED 2026-09-06 — read "Queue-order self-push" after the
+> pusher-gate sections below before acting on this one.** The measurements in
+> this section are still true and are still why the push-queue and
+> build-inflight guard exist — keep reading for that context. But the
+> CONCLUSION drawn from them, "so let one session push everything," was
+> anchored to Vercel's per-build-minute bill specifically, and production has
+> since moved to Railway, which bills differently. The batching convention is
+> no longer the default; the mechanism below (queue, base-staleness check,
+> build guard) is unchanged and still governs every push.
+
+User's decision, 2026-08-29, and the larger half of the build bill at the time.
+The cherry-pick rule above settles HOW work lands; this settled WHEN, until the
+2026-09-06 update below.
 
 The pre-push hook states the cost from real data: **165 of 326 production builds
 in one 4.7-day window were superseded before they finished. Both billed, one
@@ -1396,6 +1407,132 @@ does NOT no-op — a generated client that knows about columns production lacks
 raises P2022, and a missing table raises P2021. Landing the code is a deploy;
 applying the schema change is a separate decision that belongs to the user. The
 pusher does neither on the author's say-so.
+
+#### 2026-09-06: queue-order self-push replaces one-session batching
+
+The pusher gate above was never load-bearing by DEFAULT — `push-queue.mjs`'s
+own status output already says so: *"No pusher file, or an unreadable one,
+means no gate... Any session may push, in queue order."* The gate only
+activates once a session runs `npm run push:pusher -- --claim`. What actually
+made batching happen was the CONVENTION of claiming it every time, not the
+mechanism — the mechanism was always optional.
+
+**That convention is retired. Do not claim the pusher role as a matter of
+course.** Take a queue ticket and push your own commit with `npm run
+push:main` once you're at the head of the line. Nothing about the queue, the
+stale-base check, or the build-inflight guard changes — they were never about
+who is allowed to push, only about order and cost, and they still do that job.
+
+**Why the batching conclusion doesn't survive the move to Railway.** The
+2026-08-29 decision rested on one number: $100.90/day in Vercel Build CPU
+Minutes, because Vercel bills a flat per-build-minute rate no matter what the
+build actually uses. Railway (prod since 2026-09-02) bills metered actual
+usage instead — $20/vCPU-month, $10/GB-month, by the minute a resource runs.
+Measured 2026-09-06 against the live `AllFantasy` Railway project:
+
+- Effective rate: Vercel's bill ÷ its own measured Build CPU Minutes ≈
+  $0.0029/CPU-min. Railway's $20/vCPU-month ÷ 43,200 min/month ≈
+  $0.00046/vCPU-min — roughly **6x cheaper per unit of build compute**, before
+  even counting what the build actually uses.
+- `allfantasy-v2-main` is provisioned at 24 vCPU / 24 GB but *averages* 0.008
+  vCPU and 0.64 GB over a 24h window — nowhere near what a flat-rate model
+  would bill it against.
+- Current cadence: 50 Railway deployments over 44.2 hours ≈ **27/day**, ~9 min
+  typical build — already far below the ~71/day that justified the original
+  decision, because the queue and build-guard (neither of which cares who is
+  allowed to push) were already doing the ordering work on their own.
+
+The dollar case for gating every push through one session does not survive
+that comparison. That is NOT the same as "deploys are free" — see below.
+
+⚠ **A real waste WAS found in the same sample, and it has nothing to do with
+who is allowed to push.** 8 of that 50-deployment sample (16%) were a SECOND
+build of a commit already deployed — same SHA, re-triggered minutes apart.
+That is live Railway spend today, and it is a duplicate-deploy problem (a
+manual re-trigger, a retry, or a race the build-guard doesn't catch) — not an
+under-batching problem. One session gating every push does nothing to stop
+that same session re-deploying its own already-deployed commit. Investigate it
+on its own; do not cite it as a reason to reinstate batching.
+
+**What decentralizing removes, and what replaces it.** The batching pusher's
+other job — a human running a fast cross-session smoke check over the union of
+pending commits right before they land — is real and is not free to drop. It
+is what would have caught the `LivePageData.fetchedAt` type-widening case
+earlier in this file: a check scoped to "my files" missed it, because the
+break surfaced in a CONSUMER's file. `scripts/pre-push-smoke.mjs` is the
+automated stand-in. It does not replace a human reading a diff for the things
+a compiler can't see — a change big enough to worry about still deserves the
+old treatment (SendMessage a reviewer, or deliberately claim the pusher role
+for that one batch). That is no longer the standing default; it's a tool you
+reach for on purpose.
+
+**The pusher role still exists and is not deleted.** Claim it on purpose for a
+specific reason — a large or risky multi-commit landing you want reviewed as a
+whole, a migration, a rescue — announce it and release it exactly as described
+above. It's an opt-in tool now, not a queue everyone is expected to wait
+behind.
+
+#### `scripts/pre-push-smoke.mjs` — the automated stand-in for the batch smoke
+
+Runs as a fourth hook guard, after the build-inflight check — it is by far the
+slowest of the four (a fresh isolated typecheck, not a network call), so it
+only runs once the cheaper checks have confirmed the push is worth checking at
+all. It only fires for a push whose remote ref is `refs/heads/main`.
+
+What it does: builds the exact SHA being pushed in an isolated detached
+worktree — never the pushing session's own checkout, which can hold a peer's
+uncommitted edits (see "a check that PASSES on an artifact you did not ship"
+above) — reusing a `node_modules` junction/symlink back to the primary
+checkout so it doesn't `npm install` on every push, and runs the existing
+`scripts/ts-error-ratchet.mjs` against that isolated build. A regression — any
+file gaining errors, or a new file appearing with errors, relative to that
+SHA's OWN committed `scripts/ts-error-baseline.json` — blocks the push.
+Anything else (couldn't create the worktree, tsc didn't run, the ratchet
+itself errored) fails OPEN with a loud warning: a correctness gate that can
+strand a deploy is worse than the bug it might have caught.
+
+🛑 **`core.hooksPath` IS UNSET IN THIS REPO, AND `install-git-hooks.mjs` SAYS
+OTHERWISE.** That file's header claims *"This repo already sets
+`core.hooksPath` to an absolute path (`<primary>/.git/hooks`), and the ~70
+worktrees SHARE that config"*. Measured 2026-09-06: `git config --get
+core.hooksPath` exits **rc=1, unset**. Trusting that comment instead of
+measuring is how a broadcast went out telling every session it did not need to
+run `hooks:install`. What is actually true:
+
+- **Linked worktrees DO share the hook**, but via the common dir, not via
+  config — `git -C <worktree> rev-parse --git-path hooks` resolves to
+  `<primary>/.git/hooks`. So one `hooks:install` covers every `git worktree` of
+  this clone.
+- **A SEPARATE CLONE gets nothing**, silently. `.git/hooks` is not version
+  controlled, which is the whole reason `hooks:install` exists. Anyone working
+  from another clone must run it themselves or they have no guards at all —
+  not the secret scan, not the queue, not this.
+
+⚠ It clears any `*.tsbuildinfo` in the isolated worktree before every run.
+`tsconfig.json` sets `incremental: true`, and the worktree path is REUSED
+across different SHAs — without clearing it, a stale build cache can make tsc
+trust cached state instead of re-analysing the commit actually being pushed.
+The cost of that safety is real: **every run is a cold compile. Measured at
+1001s (~16.7 min) on a contended box**, which is why the default timeout is 20
+minutes and not the 6 it shipped with for its first hour.
+
+⚠ Exit code 1 from `ts-error-ratchet.mjs` is ambiguous by itself — it fires
+both for a genuine regression AND for an uncaught throw from a failed tsc
+launch (no try/catch around its own `main()`). The wrapper classifies by the
+ratchet's own wording ("gained TypeScript errors" vs. anything else) rather
+than trusting the exit code alone.
+
+⚠ It skips itself when 2+ other `tsc.js` processes are already running, and on
+this box that is common — so expect it to fail open often. Verified live: a
+real `git push` found the two peers' runs and skipped. That is deliberate
+(CLAUDE.md's own "concurrent tsc kills each other" entry), but it means this
+is a floor, not a wall.
+
+⚠ It does NOT run the vitest ratchet by default (`AF_SMOKE_RUN_TESTS=1` turns
+it on) — vitest has never gated a push here and the full suite takes
+meaningfully longer than the typecheck.
+
+Escape hatch, for a genuine emergency only: `AF_SKIP_SMOKE_CHECK=1 git push …`
 
 ## A failure path that publishes a secret
 
