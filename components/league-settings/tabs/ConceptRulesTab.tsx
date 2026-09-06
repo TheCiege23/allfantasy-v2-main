@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { DevyLeagueSettingsHub } from '@/components/devy/settings/DevyLeagueSettingsHub'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { BestBallSettingsCommissionerPanel } from '@/components/league-settings/BestBallSettingsCommissionerPanel'
+import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 /** Specialty / concept-specific rules — merges JSON under `settings` via `settingsMerge`. */
@@ -33,6 +34,8 @@ export function ConceptRulesTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
   return (
     <div className="space-y-8">
+      <LeagueTypeConfirm leagueId={leagueId} alwaysShow />
+
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
         <h4 className="text-[12px] font-bold uppercase tracking-wide text-cyan-200/80">Concept snapshot</h4>
         <ul className="mt-3 space-y-1.5 text-[12px] text-white/70">
