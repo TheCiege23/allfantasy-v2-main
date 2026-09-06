@@ -37,6 +37,17 @@ describe('byeStatus', () => {
     expect(byeStatus(null, slate(28), 9)).toBe('unknown')
   })
 
+  it('refuses to judge a slate whose club vocabulary did not fold — more than 32 keys, or a dropped name', () => {
+    // Two spellings of one club both survived: the absent count is not a count of byes.
+    const doubled = { ...slate(28), 'Washington Commanders': '2026-10-25T17:00:00.000Z', 'WSH': '2026-10-25T17:00:00.000Z', 'Tampa Bay Buccaneers': '2026-10-25T17:00:00.000Z', TB: '2026-10-25T17:00:00.000Z', 'Tennessee Titans': '2026-10-25T17:00:00.000Z' }
+    expect(Object.keys(doubled).length).toBeGreaterThan(32)
+    expect(byeStatus('MIA', doubled, 9)).toBe('playing') // a club on the map still plays
+    expect(byeStatus('WAS', doubled, 9)).toBe('unknown') // WAS is absent from the raw keys, but the slate cannot be judged
+    // A name the folder dropped means some club looks absent that is not.
+    expect(byeStatus('WAS', slate(28), 9, 1)).toBe('unknown')
+    expect(byeStatus('WAS', slate(28), 9, 0)).toBe('bye')
+  })
+
   it('chips only the two not-playing states', () => {
     expect(byeChip('bye', 9)).toEqual({ label: 'Bye · wk 9', tone: 'bad' })
     expect(byeChip('no-game', 9)).toEqual({ label: 'No game on the schedule', tone: 'warn' })

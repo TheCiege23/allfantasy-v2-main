@@ -381,7 +381,7 @@ export function PlayerFinder({
         nowIso,
         playerTeam: detail.player.team,
         notPlaying: (() => {
-          const s = byeStatus(detail.player.team, detail.kickoffs ?? {}, detail.scheduleWeek?.week ?? null)
+          const s = byeStatus(detail.player.team, detail.kickoffs ?? {}, detail.scheduleWeek?.week ?? null, detail.kickoffsUnresolved ?? 0)
           return s === 'bye' || s === 'no-game'
         })(),
       })
@@ -422,7 +422,7 @@ export function PlayerFinder({
   const gameKickoff = detail?.game?.available ? detail.game.data.kickoff : null
   const gameDayStatus = ready && (ready.tone === 'bad' || ready.tone === 'warn') ? ready : null
   // Not playing this week: a bye by the slate's shape, or absent from the schedule (byeStatus.ts keeps the two apart).
-  const byeState = detail ? byeStatus(detail.player.team, detail.kickoffs ?? {}, detail.scheduleWeek?.week ?? null) : 'unknown'
+  const byeState = detail ? byeStatus(detail.player.team, detail.kickoffs ?? {}, detail.scheduleWeek?.week ?? null, detail.kickoffsUnresolved ?? 0) : 'unknown'
   const byeMarkBase = byeChip(byeState, detail?.scheduleWeek?.week ?? null)
   const byeMark = byeMarkBase && (byeState === 'bye' || byeState === 'no-game') ? { ...byeMarkBase, kind: byeState } : null
   const injuryReportedAt = detail?.injury.available ? asIso(detail.injury.data.reportedAt) : null

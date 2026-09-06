@@ -1,4 +1,4 @@
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import type { SectionState } from './leagueHome'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import type { SportsWeek } from './sportsWeek'
@@ -29,6 +29,13 @@ export type PlayerGame = {
  * bench swap is read against (see swapLegality.ts). The earliest row per club
  * wins, which is the one that locks; duplicate provider rows carry the same
  * instant. A club with no fixture this week is simply absent.
+ *
+ * ⚠ THE FOLDER NEVER RETURNS NULL FOR A SPELLING IT DOES NOT KNOW — it
+ * returns the spelling upper-cased ("LA Chargers" → "LA CHARGERS"), so an
+ * unknown name would land in this map as an extra key while the real club
+ * (LAC) read as absent, which is exactly what a bye looks like. Only canonical
+ * clubs are keyed here (getTeamInfo is null for anything else); the rest are
+ * reported by unresolvedClubNames and a bye judgement refuses while any exist.
  */
 export function weekKickoffs(games: readonly FixtureRow[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -36,9 +43,32 @@ export function weekKickoffs(games: readonly FixtureRow[]): Record<string, strin
     if (!g.startTime) continue
     for (const raw of [g.homeTeam, g.awayTeam]) {
       const club = normalizeTeamAbbrev(raw)
-      if (!club) continue
+      if (!club || !getTeamInfo(club)) continue
       const iso = g.startTime.toISOString()
       if (!out[club] || iso < out[club]) out[club] = iso
+    }
+  }
+  return out
+}
+
+/**
+ * Club names in the week's rows that do not fold to a canonical club — the
+ * spellings weekKickoffs leaves out. Each one is a club that looks ABSENT
+ * from the map, which is what a bye looks like too, so a bye judgement must
+ * refuse while this is non-empty (byeStatus.ts). Distinct, first-seen order.
+ */
+export function unresolvedClubNames(games: readonly FixtureRow[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const g of games) {
+    for (const raw of [g.homeTeam, g.awayTeam]) {
+      const s = (raw ?? '').trim()
+      if (!s) continue
+      const club = normalizeTeamAbbrev(s)
+      if (club && getTeamInfo(club)) continue
+      if (seen.has(s)) continue
+      seen.add(s)
+      out.push(s)
     }
   }
   return out

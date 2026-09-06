@@ -53,7 +53,9 @@ describe('weekKickoffs', () => {
       { homeTeam: 'BUF', awayTeam: 'MIA', startTime: new Date(KICKOFFS.BUF), seasonType: null, venue: null },
       { homeTeam: 'Baltimore Ravens', awayTeam: 'Cleveland Browns', startTime: new Date(KICKOFFS.BAL), seasonType: 'regular', venue: null },
       { homeTeam: 'KC', awayTeam: 'DEN', startTime: null, seasonType: 'regular', venue: null },
+      // An unknown spelling is NOT keyed: the folder would upper-case it into an extra key while the real club read as absent.
+      { homeTeam: 'LA Chargers', awayTeam: 'Denver Broncos', startTime: new Date(KICKOFFS.BAL), seasonType: 'regular', venue: null },
     ]
-    expect(weekKickoffs(rows)).toEqual({ BUF: KICKOFFS.BUF, MIA: KICKOFFS.BUF, BAL: KICKOFFS.BAL, CLE: KICKOFFS.BAL })
+    expect(weekKickoffs(rows)).toEqual({ BUF: KICKOFFS.BUF, MIA: KICKOFFS.BUF, BAL: KICKOFFS.BAL, CLE: KICKOFFS.BAL, DEN: KICKOFFS.BAL })
   })
 })

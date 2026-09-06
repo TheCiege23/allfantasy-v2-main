@@ -11,7 +11,7 @@ import { loadSnapShare } from './snapShare'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
 import { resolveSportsWeek } from './sportsWeek'
-import { playerGame, weekKickoffs, type PlayerGame } from './playerGame'
+import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from './playerGame'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -176,6 +176,8 @@ export type PlayerDetail = {
   kickoffs: Record<string, string>
   /** The week the schedule rows belong to; null when the week could not be resolved. Lets a bye be judged (byeStatus.ts). */
   scheduleWeek: { season: number; week: number } | null
+  /** Club names in the week's rows the folder could not resolve; while non-zero no bye is claimed. */
+  kickoffsUnresolved: number
   /**
    * Share of his team's snaps, offensive or defensive as the position requires.
    *
@@ -1089,6 +1091,7 @@ export async function getPlayerDetail(
   // Every club's kickoff, for the bench candidates' locks — the same rows, no second read.
   const kickoffs = weekKickoffs(weekGames)
   const scheduleWeek = sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null
+  const kickoffsUnresolved = unresolvedClubNames(weekGames).length
 
   const projRow = projectionWeek
     ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
@@ -1182,6 +1185,7 @@ export async function getPlayerDetail(
     game,
     kickoffs,
     scheduleWeek,
+    kickoffsUnresolved,
     snapShare,
     positionRank: rank,
     recommendedMoves,

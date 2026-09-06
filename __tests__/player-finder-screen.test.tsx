@@ -128,6 +128,7 @@ const DETAIL: PlayerDetail = {
   // Ferguson (DAL) shares the 1:00 slate; nobody else's club is mapped, so nobody else reads as locked.
   kickoffs: { BUF: '2026-10-25T17:00:00.000Z', MIA: '2026-10-25T17:00:00.000Z', DAL: '2026-10-25T17:00:00.000Z' },
   scheduleWeek: { season: 2026, week: 12 },
+  kickoffsUnresolved: 0,
   snapShare: { available: true, data: { share: 0.78, snaps: 400, teamSnaps: 513, games: 8, basis: 'offense' } },
   positionRank: { available: true, data: { rank: 6, outOf: 118, position: 'TE' } },
   impact: { available: true, data: IMPACT },

@@ -5,7 +5,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { triageRows, type GameDayTriage, type TriageInjury, type TriageStarter } from './gameDayTriage'
 import type { SectionState } from './leagueHome'
 import { asHeadshotUrl } from './playerIdentityCompose'
-import { weekKickoffs } from './playerGame'
+import { unresolvedClubNames, weekKickoffs } from './playerGame'
 import { resolveSportsWeek } from './sportsWeek'
 
 /**
@@ -146,7 +146,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
   return {
     available: true,
     data: {
-      rows: triageRows({ starters, injuries, kickoffs, nowIso, week: sportsWeek?.week ?? null }),
+      rows: triageRows({ starters, injuries, kickoffs, nowIso, week: sportsWeek?.week ?? null, unresolved: unresolvedClubNames(games).length }),
       week: sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null,
       leaguesRead: startersByLeague.size,
       startersRead: starters.length,

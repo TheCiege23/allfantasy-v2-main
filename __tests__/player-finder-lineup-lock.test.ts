@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { kickoffClock, lockState } from '@/lib/core-app/lineupLock'
-import { playerGame } from '@/lib/core-app/playerGame'
+import { playerGame, unresolvedClubNames } from '@/lib/core-app/playerGame'
 
 /*
  * The lineup lock read from a kickoff, and the game a player plays this week
@@ -42,6 +42,15 @@ describe('playerGame', () => {
     const g = playerGame(rows, 'BUF', week)
     expect(g).toEqual({ available: true, data: { kickoff: KICK, opponent: 'MIA', home: true, week: 8, season: 2026, preseason: false } })
     expect(playerGame(rows, 'PHI', week)).toMatchObject({ available: true, data: { opponent: 'DAL', home: false } })
+  })
+
+  it('names the club spellings that do not fold to a canonical club, once each, and none for a clean slate', () => {
+    expect(unresolvedClubNames(rows)).toEqual([])
+    // ⚠ The folder upper-cases an unknown spelling rather than returning null ("LA Chargers" → "LA CHARGERS"),
+    // so the check is "is the fold a canonical club", not "did the fold succeed".
+    const dirty = [...rows, { homeTeam: 'LA Chargers', awayTeam: 'BUF', startTime: new Date(KICK), seasonType: 'regular', venue: null }, { homeTeam: 'LA Chargers', awayTeam: 'MIA', startTime: new Date(KICK), seasonType: 'regular', venue: null }]
+    expect(unresolvedClubNames(dirty)).toEqual(['LA Chargers'])
+    expect(unresolvedClubNames([{ homeTeam: 'Los Angeles Chargers', awayTeam: 'BUF', startTime: new Date(KICK), seasonType: 'regular', venue: null }])).toEqual([])
   })
 
   it('says why when there is no team, no week, or no fixture — never a guess', () => {

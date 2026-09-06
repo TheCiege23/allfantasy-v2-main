@@ -70,9 +70,12 @@ export function triageRows(args: {
   nowIso: string
   /** The schedule's week, so an absence can be judged a bye or a gap. */
   week?: number | null
+  /** Club names the folder could not resolve this week; while non-zero no bye is claimed (byeStatus.ts). */
+  unresolved?: number
 }): TriageRow[] {
   const { starters, injuries, kickoffs, nowIso } = args
   const week = args.week ?? null
+  const unresolved = args.unresolved ?? 0
   const scheduleOnFile = Object.keys(kickoffs).length > 0
   const byPlayer = new Map<string, TriageRow>()
 
@@ -83,7 +86,7 @@ export function triageRows(args: {
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null
     const noGame = scheduleOnFile && !kickoff
-    const bye = noGame && byeStatus(club, kickoffs, week) === 'bye'
+    const bye = noGame && byeStatus(club, kickoffs, week, unresolved) === 'bye'
     if (!flagged && !noGame) continue
 
     const existing = byPlayer.get(s.sleeperId)
