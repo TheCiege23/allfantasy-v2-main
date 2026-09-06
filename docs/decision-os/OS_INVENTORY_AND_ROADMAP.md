@@ -8,6 +8,15 @@ audit) and [`HUB_BUILD_PLAN.md`](./HUB_BUILD_PLAN.md) (the owner-directed plan).
 > each one is · what a user actually sees today · and which OS systems *should*
 > exist. §6 is the recommendation; §7 is the road to 100%.
 
+> ⚠ **"Commissioner OS" names FOUR unrelated things in this repo — added 2026-09-06
+> after a session confused two of them.** This file covers only #1 and #2:
+> 1. `lib/decision-os/commissioner-health/` — a real, live decision engine (see §below, "THE TWO COLLISIONS ARE THE POINT").
+> 2. `app/commissioner-os/` + `lib/commissioner-ui/` — the consumer-facing UI this file scores, flatlined at 35%, demo-mode by default.
+> 3. `docs/commissioner-os/{CLAUDE.md,HANDOFF.md,SCOPE.md,TENANCY.md,SURVEY.md}` — a **completely separate B2B multi-tenant SaaS product**, licensing commissioner tooling to *other* fantasy platforms. Substantially landed on `main` (`lib/domain/`, `prisma/tenancy.prisma`). Explicitly not a draft board, not this file's concern, and this file is never mentioned there either.
+> 4. `docs/os/B2C_COMMISSIONER_USER_OS_PROJECT_PLAN.md` and `docs/os/COMMISSIONER_OS_SURFACE_ALIGNMENT.md` — an older (July 2026) B2C plan, superseded by this file and by the August B2B pivot. Historical only.
+>
+> If you're not sure which one a task means, ask before assuming this file covers it.
+
 ---
 
 ## 0. Working agreements — owner-set, 2026-09-01

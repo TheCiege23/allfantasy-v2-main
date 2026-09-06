@@ -5,6 +5,15 @@ has followed and what each phase actually delivered — a living index, not a
 fixed roadmap; each entry reflects what was true when that phase's own
 final report was written, not a forward-looking promise.
 
+> ⚠ **HISTORICAL — superseded, added 2026-09-06.** This is one of *four*
+> unrelated things named "Commissioner OS" in this repo, and the oldest.
+> Current status of the consumer-facing UI this plan describes is tracked in
+> `docs/decision-os/OS_INVENTORY_AND_ROADMAP.md` (flatlined at 35%,
+> demo-mode). A separate, later (2026-08-31) owner decision spun up an
+> entirely different **B2B multi-tenant** "Commissioner OS" product under
+> `docs/commissioner-os/` — unrelated to the B2C work tracked here. Read this
+> file for history, not for current state.
+
 ## The dependency chain (as executed, not as originally imagined)
 
 1. ✅ **Secure canonical imports + identities** (multiple phases,

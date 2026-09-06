@@ -1,4 +1,7 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { CommissionerOSProviders } from '@/components/commissioner-os/providers/CommissionerOSProviders'
 import { CommissionerSidebar } from '@/components/commissioner-os/shell/CommissionerSidebar'
 import { CommissionerHeader } from '@/components/commissioner-os/shell/CommissionerHeader'
@@ -35,6 +38,24 @@ export const metadata: Metadata = {
  * in that situation; these two platform services now match.
  */
 export default async function CommissionerOSLayout({ children }: { children: React.ReactNode }) {
+  /*
+   * ⚠ THIS WHOLE SHELL WAS UNGATED. No auth check, no session check, no
+   * commissioner check anywhere in this route tree — anyone with the URL
+   * could load it. `demo` mode (the current default everywhere in
+   * production, per the adapter) shows fabricated data, so nothing real
+   * has leaked through this yet, but an unauthenticated visitor should
+   * never reach an internal-looking commissioner tool at all, demo mode or
+   * not. Narrowing further to "commissioner of at least one league" is a
+   * deliberate follow-up, not done here: this app already computes
+   * "isCommissioner" four+ different, disagreeing ways across the
+   * codebase, and picking one for this gate needs its own decision rather
+   * than adding a fifth inconsistent definition.
+   */
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  if (!session?.user?.id) {
+    redirect('/login')
+  }
+
   const adapter = await getDecisionOSAdapter()
   const [indexResponse, notificationsResponse, notificationsSummaryResponse] = await Promise.all([
     adapter.search.getIndex(),

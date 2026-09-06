@@ -8,6 +8,17 @@
 > instead. Merging the two, or replacing root deliberately, is your call — see
 > `SURVEY.md`.
 
+> ⚠ **"Commissioner OS" ALSO names three other, unrelated things in this
+> repo — added 2026-09-06.** This doc and its siblings (`HANDOFF.md`,
+> `TENANCY.md`, `SCOPE.md`, `SURVEY.md`) are the **B2B multi-tenant** product
+> described above — licensing commissioner tooling to *other* fantasy
+> platforms. They are NOT: the live `lib/decision-os/commissioner-health/`
+> decision engine; the consumer-facing `app/commissioner-os/` UI (scored in
+> `docs/decision-os/OS_INVENTORY_AND_ROADMAP.md`, flatlined at 35%,
+> demo-mode); or the older (July 2026) B2C plan in
+> `docs/os/B2C_COMMISSIONER_USER_OS_PROJECT_PLAN.md` (superseded, historical
+> only). Those three have no overlap with the tenancy work described here.
+
 Multi-tenant B2B platform. Fantasy sports **operators** license Commissioner OS
 to run commissioner tooling for their own users. We are not the end-user brand.
 

@@ -1,3 +1,10 @@
+> ⚠ **HISTORICAL — superseded, added 2026-09-06.** One of *four* unrelated
+> things named "Commissioner OS" in this repo. This 2026-07-08 doc tracks the
+> consumer-facing UI; current status of that same UI is in
+> `docs/decision-os/OS_INVENTORY_AND_ROADMAP.md` (flatlined at 35%,
+> demo-mode). It has no relation to the separate B2B multi-tenant
+> "Commissioner OS" product decided 2026-08-31 under `docs/commissioner-os/`.
+
 # Commissioner OS Surface Alignment — Phase B
 
 **Audit + incremental, safe alignments. PR #183 (Decision OS Phase A) stays draft, untouched, not
