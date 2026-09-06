@@ -18,6 +18,9 @@ import {
   NO_PROBE,
   PROBES,
 } from '../scripts/cron-freshness-check.mjs'
+// The canonical status vocabulary. Imported here — and only here — because this test file is the
+// one place that can see both it and the `.mjs` checker that has to duplicate it.
+import { normalizeRunStatus } from '../lib/production-health/productionHealthCore'
 
 /**
  * Scheduling moved off the host after all 41 crons died on the Vercel -> Railway migration and
@@ -346,5 +349,46 @@ describe('heartbeatState — arrival and outcome are separate questions', () => 
 
   it('DEGRADED is not a healthy state, so it fails the run', () => {
     expect(HEALTHY_STATES.has('DEGRADED')).toBe(false)
+  })
+
+  /*
+   * 🛑 THE CHECKER KEEPS ITS OWN COPY OF "WHICH WORDS MEAN FAILURE", AND THIS IS WHAT STOPS THAT
+   * BEING THE TWO-IMPLEMENTATIONS BUG.
+   *
+   * `normalizeRunStatus` is the repo's canonical status vocabulary. The checker cannot import it —
+   * it is a plain `.mjs` script with no build step and that module is TypeScript — so it carries a
+   * duplicate. A duplicate nobody checks is how two rules quietly disagree; this test makes the
+   * checker's set a PROVEN superset of the canonical one, so a word added there and not here turns
+   * this red instead of silently going unnoticed by the monitor.
+   */
+  it('never falls behind the canonical normalizer on what counts as failure', () => {
+    const canonicalFailures = ['failed', 'failure', 'error', 'errored']
+    for (const word of canonicalFailures) {
+      expect(
+        normalizeRunStatus(word),
+        `${word} must still be a canonical failure — if this changed, update the checker too`,
+      ).toBe('failed')
+      expect(
+        heartbeatState('OK', word),
+        `the checker must treat "${word}" as a failure, because normalizeRunStatus does`,
+      ).toBe('DEGRADED')
+    }
+  })
+
+  it('extends the canonical vocabulary only where it is deliberately thinner', () => {
+    // The reaper writes these; canonically they normalize to `unknown`, which is a gap in the
+    // shared normalizer rather than agreement with it. A run killed at its timeout is a failed run
+    // for the purpose of "is this cron working".
+    for (const word of ['timed_out', 'abandoned']) {
+      expect(normalizeRunStatus(word)).toBe('unknown')
+      expect(heartbeatState('OK', word)).toBe('DEGRADED')
+    }
+  })
+
+  it('agrees with the canonical normalizer that completed is healthy', () => {
+    // 27,020 rows say `completed` and a live reader (fantasyDataEvidence) queries for it, so this
+    // is load-bearing in both directions.
+    expect(normalizeRunStatus('completed')).toBe('success')
+    expect(heartbeatState('OK', 'completed')).toBe('OK')
   })
 })

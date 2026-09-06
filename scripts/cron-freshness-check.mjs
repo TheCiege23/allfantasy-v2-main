@@ -744,8 +744,25 @@ export const HEALTHY_STATES = new Set(['OK', 'IDLE'])
  *
  * ⚠ AN UNKNOWN STATUS IS NOT UNHEALTHY EITHER. A new writer inventing a new word must not page
  * anybody; only the values known to mean failure are listed.
+ *
+ * 🛑 THIS SET IS A DELIBERATE SUPERSET OF THE CANONICAL NORMALIZER, AND THE TEST ENFORCES THAT.
+ *
+ * `normalizeRunStatus` in lib/production-health/productionHealthCore.ts is the repo's canonical
+ * status vocabulary and calls these failures: failed, failure, error, errored. Keeping a second,
+ * FREELY-DIVERGING list here would be the two-implementations-of-one-rule bug — so
+ * __tests__/cron-tier-and-freshness.test.ts asserts every word the canonical normalizer calls
+ * `failed` also appears here. Drift becomes a red test rather than a silent disagreement.
+ *
+ * ⚠ IT CANNOT SIMPLY IMPORT THE CANONICAL ONE: this is a plain `.mjs` script with no build step and
+ * that module is TypeScript. The test CAN import both, which is why the invariant lives there.
+ *
+ * ⚠ AND THE TWO EXTRAS ARE DELIBERATE, NOT DRIFT. `timed_out` and `abandoned` are written by
+ * importPlayerGameStats's own reaper and normalize to `unknown` canonically — a gap in the shared
+ * normalizer, not agreement with it. A run killed at its timeout is a failed run for the purpose of
+ * "is this cron working", so they are treated as failures HERE while the canonical meaning is left
+ * alone for its own consumers.
  */
-const TERMINAL_UNHEALTHY = new Set(['failed', 'timed_out', 'abandoned'])
+const TERMINAL_UNHEALTHY = new Set(['failed', 'failure', 'error', 'errored', 'timed_out', 'abandoned'])
 
 /**
  * Combine a heartbeat's ARRIVAL verdict with its OUTCOME.
