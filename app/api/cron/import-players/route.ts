@@ -235,10 +235,31 @@ async function handle(req: NextRequest) {
     } else if (wantsNfl) {
       try {
         const { backfillSleeperIds, repairSleeperIds } = await import('@/lib/player-match/sleeperIdentitySync')
+        /*
+         * 🛑 THE `budget.exhausted()` GATE ABOVE DOES NOT BOUND THIS PHASE, AND THAT IS WHY THIS
+         * ROUTE DIED AT THE EDGE ON EVERY RUN. Each of these two downloads Sleeper's whole player
+         * universe, and neither carried a timeout — so a phase entered with a second left ran for
+         * as long as the network allowed. Measured from the slow-tier dispatcher log 2026-09-06:
+         *
+         *     -> /api/cron/import-players ... FAIL HTTP 502 (300037ms)
+         *
+         * and every run in the preceding 48h took 378-582s, recording `success` in sync_job_runs
+         * for runs the dispatcher had already been told were 502s. `deadlineAt` makes the gate a
+         * real ceiling instead of a starting gun.
+         */
+        const identityDeadlineAt = Date.now() + budget.remainingMs()
         // Repair BEFORE backfill: repair only inspects rows that already carry an id, and
         // running it first means the backfill's uniqueness guard sees the corrected set.
-        const repaired = await repairSleeperIds({ sport: 'NFL' })
-        const filled = await backfillSleeperIds({ sport: 'NFL' })
+        const repaired = await repairSleeperIds({ sport: 'NFL', deadlineAt: identityDeadlineAt })
+        /*
+         * ⚠ RE-DERIVED, NOT REUSED. The repair above consumes part of the budget, so handing the
+         * backfill the SAME deadline it started with would let the pair overrun together — the
+         * two-calls-one-budget shape this whole change exists to remove.
+         */
+        const filled = await backfillSleeperIds({
+          sport: 'NFL',
+          deadlineAt: Date.now() + budget.remainingMs(),
+        })
         identity = {
           repairChecked: repaired.checked,
           repaired: repaired.repaired,
@@ -248,8 +269,19 @@ async function handle(req: NextRequest) {
         }
       } catch (identityError) {
         const message = identityError instanceof Error ? identityError.message : String(identityError)
-        console.error('[cron/import-players] identity sync failed:', message)
-        identity = { error: message.slice(0, 200) }
+        /*
+         * ⚠ RUNNING OUT OF TIME IS NOT A FAILURE, AND FILING IT AS ONE IS HOW A HEALTHY DEFERRAL
+         * BECOMES A RED PROBE. Matched on `name` rather than `instanceof`: the class is behind a
+         * dynamic import inside the `try`, so its binding is not in scope here, and a name check
+         * also survives a bundler giving the constructor a different identity.
+         */
+        if (identityError instanceof Error && identityError.name === 'SleeperIdentityBudgetExhausted') {
+          deferredPhases.push('identity')
+          identity = { skipped: message }
+        } else {
+          console.error('[cron/import-players] identity sync failed:', message)
+          identity = { error: message.slice(0, 200) }
+        }
       }
     }
 

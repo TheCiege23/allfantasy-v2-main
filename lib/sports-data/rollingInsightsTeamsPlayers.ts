@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { riFetchRows } from '@/lib/workers/providers/rollingInsightsRest'
+import { remainingFor } from '@/lib/cron/runBudget'
 import { RI_SOCCER_LEAGUES, riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 import type { RollingInsightsSoccerLeagueCode } from '@/lib/providers/rollingInsightsSoccerLeague'
 import { coercePlayerAge, birthDateFromVendorValue } from '@/lib/sports-data/playerAge'
@@ -63,29 +64,6 @@ function leaguesFor(sport: string): Array<RollingInsightsSoccerLeagueCode | unde
   return sport.trim().toUpperCase() === 'SOCCER' ? [...RI_SOCCER_LEAGUES] : [undefined]
 }
 
-/**
- * How long the next per-league request may take, or `null` if there is no time left.
- *
- * 🛑 THIS EXISTS BECAUSE A BUDGET CHECKED *BEFORE* A CALL DOES NOT BOUND THE CALL.
- * `/api/cron/import-schedules?riProfiles=1` already runs `createRunBudget()` (240s) and tests
- * `budget.exhausted()` before each sport AND again before the player sweep. It still returned
- * **HTTP 502 at 300,049ms** on 2026-09-06 — the platform edge, measured from the dispatcher log.
- * With 1s left the check passes, and the sweep then runs for as long as its own timeouts allow.
- *
- * The run budget bounds the NUMBER of units, never the duration of one; that is stated in
- * `lib/cron/runBudget.ts` and this is the case it names. Clamping the per-request timeout to the
- * time actually remaining is what turns the budget into a real ceiling.
- *
- * ⚠ Returns `null` rather than 0 — a 0ms timeout is an immediately-aborted request that reads as
- * a provider failure, which is a different and misleading thing from "we ran out of time".
- */
-export function remainingFor(deadlineAt: number | undefined, cap: number): number | null {
-  if (deadlineAt == null) return cap
-  const left = deadlineAt - Date.now()
-  if (left <= 1_000) return null
-  return Math.min(cap, left)
-}
-
 export interface RiTeamSyncResult {
   sport: string
   fetched: number
@@ -112,9 +90,9 @@ export async function syncRollingInsightsTeamsToDb(opts: {
   fetchImpl?: typeof fetch
   now?: Date
   /**
-   * 🛑 WITHOUT THIS, ONE SPORT CAN OUTLAST THE WHOLE CRON. See the note on
-   * `deadlineFor` below — a caller's run budget is checked BEFORE this function, and this
-   * function then loops once per league with no bound of its own.
+   * 🛑 WITHOUT THIS, ONE SPORT CAN OUTLAST THE WHOLE CRON. A caller's run budget is checked
+   * BEFORE this function is entered; from there the per-league loop had no bound of its own.
+   * See `remainingFor` in `lib/cron/runBudget.ts` for the measurement that produced it.
    */
   deadlineAt?: number
 }): Promise<RiTeamSyncResult> {

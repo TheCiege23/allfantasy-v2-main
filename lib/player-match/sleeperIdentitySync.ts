@@ -27,8 +27,27 @@
 import { prisma } from '@/lib/prisma'
 
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch, type NameMatchReason } from './verifiedNameMatch'
+import { remainingFor } from '@/lib/cron/runBudget'
 
 const SLEEPER_PLAYERS_URL = 'https://api.sleeper.app/v1/players/nfl'
+
+/** Sleeper's full player universe is a multi-MB document; this is the ceiling for one pull. */
+const SLEEPER_FETCH_TIMEOUT_MS = 30_000
+
+/**
+ * Thrown when there is no time left to start a pull.
+ *
+ * ⚠ ITS OWN TYPE, NOT A GENERIC Error. The caller catches everything and files it as
+ * `identity: { error }`, which would report "we ran out of time" as a FAILED identity sync. A
+ * maintenance phase deferring is the budget working, not a fault, and the two must stay legible
+ * apart — that distinction is the whole reason the run budget reports `deferredPhases`.
+ */
+export class SleeperIdentityBudgetExhausted extends Error {
+  constructor() {
+    super('deferred: run budget exhausted before the Sleeper player list could be fetched')
+    this.name = 'SleeperIdentityBudgetExhausted'
+  }
+}
 
 /**
  * Position families, used as a final safety rail on an otherwise-unique name match.
@@ -117,7 +136,7 @@ export interface BackfillSleeperIdsResult {
  * destroy a correct binding. An id is only rewritten when the verified matcher finds a
  * confident DIFFERENT candidate. Everything else is reported for review and left untouched.
  */
-export async function repairSleeperIds(opts: { sport?: string; dryRun?: boolean } = {}): Promise<{
+export async function repairSleeperIds(opts: { sport?: string; dryRun?: boolean; deadlineAt?: number } = {}): Promise<{
   checked: number
   correct: number
   mismatched: number
@@ -128,7 +147,28 @@ export async function repairSleeperIds(opts: { sport?: string; dryRun?: boolean 
   const sport = (opts.sport ?? 'NFL').toUpperCase()
   const dryRun = opts.dryRun ?? false
 
-  const res = await fetch(SLEEPER_PLAYERS_URL, { cache: 'no-store' })
+  /*
+   * 🛑 THIS FETCH HAD NO CEILING, AND IT IS WHY `import-players` DIED AT THE EDGE EVERY RUN.
+   *
+   * The route gates this phase on `budget.exhausted()`, which is checked BEFORE the call and so
+   * bounds nothing: with a second left the test passes and this then downloads Sleeper's entire
+   * player universe with no signal. Measured from the slow-tier dispatcher log 2026-09-06:
+   *
+   *     -> /api/cron/import-players ... FAIL HTTP 502 (300037ms)
+   *
+   * and the route ran on past the severed connection to 378-582s on EVERY run in the last 48h,
+   * recording `success` for runs the caller had already been told were 502s.
+   *
+   * ⚠ AND `deadlineAt` IS NOT OPTIONAL POLITENESS HERE. Without it a caller inherits the old
+   * unbounded behaviour, which is deliberate so existing callers are unchanged — but the cron
+   * path must pass one.
+   */
+  const fetchBudgetMs = remainingFor(opts.deadlineAt, SLEEPER_FETCH_TIMEOUT_MS)
+  if (fetchBudgetMs == null) throw new SleeperIdentityBudgetExhausted()
+  const res = await fetch(SLEEPER_PLAYERS_URL, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(fetchBudgetMs),
+  })
   if (!res.ok) throw new Error(`Sleeper player list returned HTTP ${res.status}`)
   const raw = (await res.json()) as Record<string, SleeperPlayer>
 
@@ -200,12 +240,33 @@ export async function repairSleeperIds(opts: { sport?: string; dryRun?: boolean 
   return out
 }
 
-export async function backfillSleeperIds(opts: { sport?: string; dryRun?: boolean } = {}): Promise<BackfillSleeperIdsResult> {
+export async function backfillSleeperIds(opts: { sport?: string; dryRun?: boolean; deadlineAt?: number } = {}): Promise<BackfillSleeperIdsResult> {
   const sport = (opts.sport ?? 'NFL').toUpperCase()
   const dryRun = opts.dryRun ?? false
   const errors: string[] = []
 
-  const res = await fetch(SLEEPER_PLAYERS_URL, { cache: 'no-store' })
+  /*
+   * 🛑 THIS FETCH HAD NO CEILING, AND IT IS WHY `import-players` DIED AT THE EDGE EVERY RUN.
+   *
+   * The route gates this phase on `budget.exhausted()`, which is checked BEFORE the call and so
+   * bounds nothing: with a second left the test passes and this then downloads Sleeper's entire
+   * player universe with no signal. Measured from the slow-tier dispatcher log 2026-09-06:
+   *
+   *     -> /api/cron/import-players ... FAIL HTTP 502 (300037ms)
+   *
+   * and the route ran on past the severed connection to 378-582s on EVERY run in the last 48h,
+   * recording `success` for runs the caller had already been told were 502s.
+   *
+   * ⚠ AND `deadlineAt` IS NOT OPTIONAL POLITENESS HERE. Without it a caller inherits the old
+   * unbounded behaviour, which is deliberate so existing callers are unchanged — but the cron
+   * path must pass one.
+   */
+  const fetchBudgetMs = remainingFor(opts.deadlineAt, SLEEPER_FETCH_TIMEOUT_MS)
+  if (fetchBudgetMs == null) throw new SleeperIdentityBudgetExhausted()
+  const res = await fetch(SLEEPER_PLAYERS_URL, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(fetchBudgetMs),
+  })
   if (!res.ok) throw new Error(`Sleeper player list returned HTTP ${res.status}`)
   const raw = (await res.json()) as Record<string, SleeperPlayer>
 

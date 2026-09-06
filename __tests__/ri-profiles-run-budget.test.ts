@@ -46,19 +46,19 @@ function providerReturnsNothing() {
 
 describe('remainingFor — the clamp that turns the budget into a real ceiling', () => {
   it('is the cap when no deadline is supplied, so existing callers are unchanged', async () => {
-    const { remainingFor } = await import('@/lib/sports-data/rollingInsightsTeamsPlayers')
+    const { remainingFor } = await import('@/lib/cron/runBudget')
     expect(remainingFor(undefined, 30_000)).toBe(30_000)
   })
 
   it('clamps to the time REMAINING when that is less than the cap', async () => {
-    const { remainingFor } = await import('@/lib/sports-data/rollingInsightsTeamsPlayers')
+    const { remainingFor } = await import('@/lib/cron/runBudget')
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
     // 5s left against a 30s cap — the request must not be allowed to run for 30s.
     expect(remainingFor(1_005_000, 30_000)).toBe(5_000)
   })
 
   it('stays at the cap when there is more time than the cap', async () => {
-    const { remainingFor } = await import('@/lib/sports-data/rollingInsightsTeamsPlayers')
+    const { remainingFor } = await import('@/lib/cron/runBudget')
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
     expect(remainingFor(1_600_000, 30_000)).toBe(30_000)
   })
@@ -69,7 +69,7 @@ describe('remainingFor — the clamp that turns the budget into a real ceiling',
    * a request that cannot possibly complete is not started at all.
    */
   it('returns null rather than a zero timeout when time is gone', async () => {
-    const { remainingFor } = await import('@/lib/sports-data/rollingInsightsTeamsPlayers')
+    const { remainingFor } = await import('@/lib/cron/runBudget')
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
     expect(remainingFor(999_000, 30_000)).toBeNull()
     expect(remainingFor(1_000_500, 30_000)).toBeNull()

@@ -51,6 +51,36 @@ export function createRunBudget(budgetMs: number = CRON_RUN_BUDGET_MS, now: () =
 }
 
 /**
+ * How long the next call may take, given a deadline — or `null` when there is no time left.
+ *
+ * 🛑 THIS IS THE HALF `exhausted()` CANNOT DO, AND TWO CRONS HAVE DIED PROVING IT.
+ * `exhausted()` is checked BETWEEN units, so with a second left it passes and the unit then runs
+ * for as long as its own timeouts allow. Measured from the slow-tier dispatcher log 2026-09-06,
+ * both against the 300s platform edge, and both already carrying a run budget:
+ *
+ *     /api/cron/import-schedules?riProfiles=1 ... FAIL HTTP 502 (300049ms)
+ *     /api/cron/import-players ................. FAIL HTTP 502 (300037ms)
+ *
+ * The header above already says the budget bounds the NUMBER of units and not the duration of
+ * one. This is what to reach for when a unit's duration is the thing that needs bounding: clamp
+ * the call's own timeout to the time actually remaining, and the budget becomes a real ceiling.
+ *
+ * ⚠ RETURNS `null`, NOT `0`. A zero timeout is an instantly-aborted request that surfaces as a
+ * provider failure — a different and more misleading claim than "we ran out of time". The 1s
+ * floor means a call that cannot possibly finish is not started at all.
+ *
+ * ⚠ AND IT IS HERE RATHER THAN BESIDE ITS FIRST CALLER SO THERE IS ONE OF IT. A second copy in
+ * another module is the duplicate-rule failure CLAUDE.md records for `normalizePlayerName` —
+ * two implementations of one rule, free to drift.
+ */
+export function remainingFor(deadlineAt: number | undefined, cap: number): number | null {
+  if (deadlineAt == null) return cap
+  const left = deadlineAt - Date.now()
+  if (left <= 1_000) return null
+  return Math.min(cap, left)
+}
+
+/**
  * Rotate a work list so a different unit leads each period.
  *
  * ⚠ A BUDGET WITHOUT THIS STARVES THE TAIL. A handler that always iterates the same fixed order
