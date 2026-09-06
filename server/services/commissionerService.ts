@@ -11,6 +11,7 @@ import type { AutomationTrigger } from '@/lib/specialty-automation/types'
 import { logAction } from '@/server/services/auditService'
 import {
   transitionLeagueState,
+  transitionLeagueStateInTransaction,
   type LeagueLifecycleAction,
   getLeagueLifecycleState,
 } from '@/server/services/leagueLifecycleService'
@@ -348,11 +349,65 @@ export async function setEmergencyPause(leagueId: string, userId: string, paused
   return updated
 }
 
+/**
+ * Archive a league. Fixed 2026-09-06 per docs/redraft/SEASON_ARCHIVE_ARBITRATION_REPORT.md:
+ * this used to go through `forceStateTransition` (`force: true`), which skips
+ * `validateTransition`'s `current === next` idempotency check — but `archived`
+ * is already a valid TRANSITIONS target from every other state, so `force`
+ * bought nothing except turning a repeat archive into a silent re-write:
+ * a fresh audit row and a fresh notification on every call, non-transactionally.
+ *
+ * Now uses `transitionLeagueStateInTransaction`, which is idempotent
+ * (`applied: false` when already archived, no double-write) and atomic with
+ * its own audit/notification. Still archivable from any lifecycle state,
+ * including mid-season — that capability is intentional (an abandoned or
+ * broken league needs to be archivable without first "finishing" it) and the
+ * existing UI confirmation dialog is the deliberateness check for that;
+ * this fix is about correctness of the write, not gating who may archive when.
+ */
 export async function archiveLeague(leagueId: string, userId: string) {
   await requireHead(leagueId, userId)
-  return forceStateTransition(leagueId, userId, 'archived', {
-    metadata: { source: 'commissionerService.archiveLeague' },
-  })
+
+  const result = await prisma.$transaction((tx) =>
+    transitionLeagueStateInTransaction(tx, {
+      leagueId,
+      nextState: 'archived',
+      actorUserId: userId,
+      source: 'commissionerService.archiveLeague',
+      idempotencyKey: `archive:${leagueId}`,
+    }),
+  )
+
+  if (result.applied) {
+    await logAction({
+      leagueId,
+      userId,
+      actionType: 'lifecycle_transition',
+      entityType: 'league',
+      entityId: leagueId,
+      beforeState: { lifecycleState: result.from },
+      afterState: { lifecycleState: result.to },
+      metadata: { source: 'commissionerService.archiveLeague' },
+    })
+
+    void import('@/lib/league-events/publisher')
+      .then(({ publishLeagueFanoutEvent }) =>
+        publishLeagueFanoutEvent({
+          leagueId,
+          eventType: 'lifecycle_transition',
+          title: 'League phase updated',
+          message: 'Your league has been archived.',
+          category: 'league_announcements',
+          visibility: 'all_members',
+          actorUserId: userId,
+          meta: { from: result.from, to: result.to },
+          dedupeKey: `lifecycle:${leagueId}:${result.from}->${result.to}`,
+        }),
+      )
+      .catch(() => {})
+  }
+
+  return { ok: true as const, alreadyArchived: !result.applied, lifecycleState: result.to }
 }
 
 export async function recomputeStandingsCommissioner(leagueId: string, userId: string, season: number) {

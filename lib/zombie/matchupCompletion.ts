@@ -1,7 +1,23 @@
 import { prisma } from '@/lib/prisma'
 
 /**
- * True when every regular matchup for the week has status `complete` and has two rosters.
+ * `RedraftMatchup.status` transitions to `'final'` when scored
+ * (`lib/redraft/scoringEngine.ts`, `resolveNflRedraftLiveScoringRuntime.ts`) —
+ * no writer in the codebase ever sets the literal string `'complete'`. This
+ * used to check `m.status === 'complete'` exactly, so it returned `false` for
+ * every real week regardless of how long a season ran, and zombie's weekly
+ * resolution (infections/serums/bashings/etc. — `weeklyResolutionEngine.ts`)
+ * never fired non-force despite the cron that gates on this (`/api/redraft/score-sync`,
+ * every 5 min) actually running. Same normalization
+ * `server/services/matchupSources/redraftMatchupSource.ts` already uses.
+ */
+function isMatchupStatusComplete(status: string | null | undefined): boolean {
+  const s = String(status ?? '').toLowerCase()
+  return s === 'final' || s === 'complete' || s === 'completed'
+}
+
+/**
+ * True when every regular matchup for the week is complete and has two rosters.
  */
 export async function checkAllMatchupsComplete(
   fantasyLeagueId: string,
@@ -18,5 +34,5 @@ export async function checkAllMatchupsComplete(
   })
   if (mm.length === 0) return false
 
-  return mm.every((m) => m.awayRosterId != null && m.status === 'complete')
+  return mm.every((m) => m.awayRosterId != null && isMatchupStatusComplete(m.status))
 }
