@@ -29,6 +29,7 @@ import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
+import type { PhaseTimer } from '@/lib/logging/phaseTimer'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -308,7 +309,17 @@ function buildTradeConsoleValidation(args: {
   }
 }
 
-export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): Promise<TradeConsoleAnalyzeOutput> {
+export async function runTradeConsoleAnalysis(
+  input: TradeConsoleAnalyzeInput,
+  /*
+   * Optional phase attribution. A SECOND ARGUMENT rather than a field on the input, because
+   * `TradeConsoleAnalyzeInput` is the parsed request body — putting a live object on it would make
+   * the request shape and the call shape disagree, and the zod schema could never describe it.
+   * Omit it and every existing caller is byte-identical.
+   */
+  opts?: { timer?: PhaseTimer },
+): Promise<TradeConsoleAnalyzeOutput> {
+  const mark = (name: string): void => opts?.timer?.mark(name)
   const give = input.sideGive ?? []
   const get = input.sideGet ?? []
   if (give.length === 0 || get.length === 0) {
@@ -325,6 +336,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
       }
     }
     const mem = await assertLeagueMemberWithCode(input.leagueId.trim(), input.userId)
+    mark('league_member')
     if (!mem.ok) {
       const um = leagueToolAccessUserMessage(mem.code)
       return { ok: false, error: um, code: mem.code, userMessage: um }
@@ -381,6 +393,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     }
   }
   await collectSports()
+  mark('collect_sports')
 
   if (sportSet.size > 1) {
     const allow =
@@ -441,6 +454,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     numTeams: leagueSize,
     ppr: pprNfl,
   })
+  mark('fantasycalc')
 
   /*
    * This league's defenders, priced by its own scoring rather than by the flat
@@ -471,6 +485,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     dataGaps,
     fcPlayers,
   })
+  mark('assets_give')
   let { priced: getPriced, lines: getLines, unresolved: getUnresolved } = await resolveAssets(get, {
     effectiveSport,
     nflCtx,
@@ -492,6 +507,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     }
   }
 
+  mark('assets_get')
   const [giveEnriched, getEnriched] = await Promise.all([
     enrichTradeConsolePlayerLines({
       prisma,
@@ -506,6 +522,7 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
       lines: getLines,
     }),
   ])
+  mark('enrich')
   giveLines = giveEnriched
   getLines = getEnriched
 
@@ -585,7 +602,10 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
     rosterSummary.opponentTeams = rc.opponentTeams
   }
 
+  mark('roster_context')
+
   const calWeights = await getCalibratedWeights()
+  mark('calibrated_weights')
   let drivers
   try {
     drivers = computeTradeDrivers(
@@ -805,6 +825,12 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
       }
     }
   }
+  /*
+   * ⚠ MARKED OUTSIDE THE `skipAi` BRANCH ON PURPOSE. When the call is skipped this charges ~0ms,
+   * which is itself the answer — a near-zero `ai` phase says the LLM is NOT where the seconds go,
+   * and that is only visible if the mark still fires.
+   */
+  mark('ai')
 
   const evaluation = aiNarrative
     ? { bullets: aiNarrative.bullets.map((b) => b.text), sensitivity: aiNarrative.sensitivity.text }

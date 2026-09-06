@@ -3,7 +3,16 @@ import { logApiFailure } from "@/lib/error-tracking"
 import { ENGINE } from "@/lib/analytics/eventNames"
 import { recordEngineTelemetrySample } from "@/lib/analytics/recordAnalyticsEvent"
 
-type UsageScope = "api" | "legacy_tool"
+/**
+ * `api_phase` carries PHASE ATTRIBUTION for one request, not a second usage record for it.
+ *
+ * 🛑 IT IS A SEPARATE SCOPE FOR A LOAD-BEARING REASON. `upsertRollups` keys on
+ * [bucketType, bucketStart, scope, tool, endpoint, leagueId], so a distinct scope gets distinct
+ * rollup rows — a phase event therefore cannot inflate the `scope: 'api'` call counts or move the
+ * p95 that motivated measuring in the first place. Reusing 'api' would have made the instrumentation
+ * corrupt the very number it exists to explain.
+ */
+type UsageScope = "api" | "legacy_tool" | "api_phase"
 type BucketType = "hour" | "day" | "week" | "month"
 
 function nowUtc() {

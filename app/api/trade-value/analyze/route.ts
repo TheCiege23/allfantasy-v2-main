@@ -34,6 +34,8 @@ import {
   type ConsoleComparableAsset,
 } from '@/lib/decision-os/trade/consoleShadowCompare'
 import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
+import { createPhaseTimer, unattributedMs } from '@/lib/logging/phaseTimer'
+import { logUsageEvent } from '@/lib/telemetry/usage'
 import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
 
 const assetSchema = z.discriminatedUnion('kind', [
@@ -105,7 +107,14 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         userId,
         sportFilter: parsed.data.sportFilter as TradeConsoleAnalyzeInput['sportFilter'],
       }
-      const out = await runTradeConsoleAnalysis(payload)
+      const phase = createPhaseTimer()
+      const out = await runTradeConsoleAnalysis(payload, { timer: phase })
+      /*
+       * Whatever inside the analysis no inner mark claimed. NOT the analysis total — naming it that
+       * would read as "the analysis took this long" when it means the opposite: everything the
+       * instrumentation did NOT see. A large value here says a mark is missing.
+       */
+      phase.mark('analysis_unmarked')
 
       // Phase 2→3 shadow instrumentation (flag-gated, never affects the
       // response). Slice 10: successful analyses now run a REAL cross-engine
@@ -171,6 +180,7 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
             }
           }
 
+          phase.mark('shadow_enrichment')
           comparison = compareConsoleVerdictWithCanonicalGrade({
             give,
             get,
@@ -194,6 +204,8 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         surfaceAnalysisMode: out.ok ? out.analysisMode : null,
         comparison,
       })
+
+      phase.mark('shadow_compare')
 
       if (!out.ok) {
         const status =
@@ -329,6 +341,48 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * early error, so the module would not parse and every request to this route would
        * 500. ignoreBuildErrors:true means the build would not have stopped it. */
       const responseBody = hasContext ? { ...analysis, ...notes } : analysis
+
+      /*
+       * Phase attribution for this request.
+       *
+       * 🛑 WHY IT IS RECORDED AT ALL: this endpoint's p95 is 15–24s (measured from
+       * `ApiUsageRollup`, ~50x this app's median endpoint), and nothing on the path said where the
+       * seconds went. Six candidates were identified by reading the code; ranking them without
+       * measuring is how two earlier estimates in this workstream went wrong.
+       *
+       * ⚠ SEPARATE `scope`, DELIBERATELY. `withApiUsage` already writes a `scope: 'api'` event and
+       * rollup for this endpoint; the rollup's unique key includes scope, so a distinct one cannot
+       * pollute the existing counts or the p95 that motivated this. It also means the wrapper —
+       * shared by every route in the app — is untouched.
+       *
+       * ⚠ `unattributed` IS THE HONESTY FIELD. If the phases sum to far less than the total, a mark
+       * is missing and the attribution is incomplete. Folding that gap into the nearest phase would
+       * produce a plausible answer that is confidently wrong.
+       *
+       * Awaited, not fire-and-forget: one indexed insert on a route whose p95 is fifteen seconds is
+       * not a latency question, and awaiting guarantees the row rather than racing a shutdown.
+       * `.catch` because telemetry must never turn a good analysis into a 500.
+       */
+      phase.mark('context_notes')
+      await logUsageEvent({
+        scope: 'api_phase',
+        tool: 'TradeValueConsole',
+        endpoint: '/api/trade-value/analyze',
+        method: 'POST',
+        status: 200,
+        ok: true,
+        durationMs: phase.totalMs(),
+        userId: userId ?? undefined,
+        leagueId: parsed.data.leagueId ?? '',
+        meta: {
+          phases: phase.phases(),
+          unattributedMs: unattributedMs(phase),
+          assetsGive: parsed.data.sideGive.length,
+          assetsGet: parsed.data.sideGet.length,
+          skipAi: Boolean(parsed.data.skipAi),
+        },
+      }).catch(() => {})
+
       return NextResponse.json(decisionOs ? { ...responseBody, decisionOs } : responseBody)
     } catch (e) {
       console.error('[trade-value/analyze]', e)
