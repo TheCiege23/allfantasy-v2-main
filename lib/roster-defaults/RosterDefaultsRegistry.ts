@@ -1,8 +1,8 @@
 /**
  * Registry of default roster slot definitions per sport (and format, e.g. NFL IDP).
  * Single source for starter slots, bench, IR, flex, utility, superflex, goalie/pitcher (G, SP, RP, P), taxi/devy.
- * Built from sport-defaults SportDefaultsRegistry.getRosterDefaults(); used by RosterTemplateResolver,
- * PositionEligibilityResolver, and RosterValidationEngine for draft room position filtering, waiver eligibility, and lineup validation.
+ * Built from sport-defaults SportDefaultsRegistry.getRosterDefaults(); used by
+ * PositionEligibilityResolver and RosterValidationEngine for draft room position filtering, waiver eligibility, and lineup validation.
  *
  * Soccer: GKP, DEF, MID, FWD, UTIL, BENCH, IR (GKP accepts GK alias in eligibility).
  * NFL IDP: offensive slots (QB, RB, WR, TE, FLEX, K) + DE, DT, LB, CB, S, DL, DB, IDP_FLEX, BENCH, IR.
