@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { FIRST_ROUND_IN_MARKET_UNITS, pickRoundShare } from '@/lib/pick-curve'
+import { isCentred } from './sinceSeasonArg'
 
 /**
  * AllFantasy market observations, from trades that actually happened.
@@ -391,7 +392,21 @@ export const COMPLETED_CALCULATION_VERSION = 'ct1.0'
  */
 export async function recalculateFromCompletedTrades(
   prisma: PrismaClient,
-  opts: { sport?: string; sinceSeason?: number; dryRun?: boolean } = {},
+  opts: {
+    sport?: string
+    sinceSeason?: number
+    dryRun?: boolean
+    /**
+     * 🛑 EVALUATE THE CENTRING GATE INSIDE THE RUN THAT WRITES. Without this the caller has to
+     * call twice — once dry to read `medianAdjustment`, once live to write — and those are two
+     * separate computations over a table the Sleeper sync appends to every ten minutes. A trade
+     * landing between them is written having been gated on a population that no longer exists.
+     *
+     * With it there is ONE gather, ONE median, and the write is unreachable unless that median
+     * is centred. The gate and the payload can no longer disagree because they are the same run.
+     */
+    requireCentred?: boolean
+  } = {},
 ): Promise<{
   sport: string
   evaluated: number
@@ -400,6 +415,8 @@ export async function recalculateFromCompletedTrades(
   tradesUsed: number
   medianAdjustment: number | null
   dryRun: boolean
+  /** Non-null when a write was asked for and the gate declined it. `written` is 0. */
+  refused: 'not_centred' | null
 }> {
   const sport = opts.sport ?? 'NFL'
   const dryRun = opts.dryRun !== false
@@ -426,8 +443,15 @@ export async function recalculateFromCompletedTrades(
   const adj = published.map((v) => v.adjustmentPercent).sort((a, b) => a - b)
   const medianAdjustment = adj.length ? adj[Math.floor(adj.length / 2)]! : null
 
+  /*
+   * The gate, evaluated against the median THIS run computed. Nothing between here and the write
+   * re-reads the database, so the population that was judged is the population that is stored.
+   */
+  const refused: 'not_centred' | null =
+    !dryRun && opts.requireCentred === true && !isCentred(medianAdjustment) ? 'not_centred' : null
+
   let written = 0
-  if (!dryRun) {
+  if (!dryRun && refused === null) {
     const generatedAt = new Date()
     for (const v of published) {
       const existing = await prisma.allFantasyMarketPlayerValue
@@ -503,5 +527,6 @@ export async function recalculateFromCompletedTrades(
     tradesUsed: gathered.tradesUsed,
     medianAdjustment,
     dryRun,
+    refused,
   }
 }
