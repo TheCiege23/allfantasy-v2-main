@@ -8,6 +8,7 @@ import { NotificationPanelView } from "@/components/notifications/NotificationPa
 import { getUnreadCount } from "@/lib/notification-center"
 import { isNotificationDrawerCloseKey } from "@/lib/notification-center"
 import { addStateRefreshListener } from "@/lib/state-consistency/state-events"
+import { IconTooltip } from "@/components/shared/IconTooltip"
 
 const USER_NOTIFICATIONS_UNREAD = "/api/user/notifications?unread=true&limit=1"
 
@@ -129,37 +130,39 @@ export default function NotificationBell() {
 
   return (
     <div className="relative">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => void handleBellClick()}
-        className="relative rounded-lg border p-2 transition"
-        style={{
-          borderColor: "var(--border)",
-          background: open
-            ? "color-mix(in srgb, var(--panel2) 95%, transparent)"
-            : "color-mix(in srgb, var(--panel2) 82%, transparent)",
-          color: "var(--text)",
-        }}
-        title="Notifications"
-        aria-label="Notifications"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-      >
-        <Bell className="h-4 w-4" />
-        {unreadBadge !== 0 && (
-          <span
-            className="absolute -right-1 -top-1 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold"
-            style={{
-              background: "var(--accent-cyan-strong)",
-              color: "var(--on-accent-bg)",
-            }}
-          >
-            {String(unreadBadge)}
-          </span>
-        )}
-      </button>
+      <IconTooltip label="Notifications">
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => void handleBellClick()}
+          className="relative rounded-lg border p-2 transition"
+          style={{
+            borderColor: "var(--border)",
+            background: open
+              ? "color-mix(in srgb, var(--panel2) 95%, transparent)"
+              : "color-mix(in srgb, var(--panel2) 82%, transparent)",
+            color: "var(--text)",
+          }}
+          title="Notifications"
+          aria-label="Notifications"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? panelId : undefined}
+        >
+          <Bell className="h-4 w-4" />
+          {unreadBadge !== 0 && (
+            <span
+              className="absolute -right-1 -top-1 inline-flex min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold"
+              style={{
+                background: "var(--accent-cyan-strong)",
+                color: "var(--on-accent-bg)",
+              }}
+            >
+              {String(unreadBadge)}
+            </span>
+          )}
+        </button>
+      </IconTooltip>
       {open && (
         <div
           ref={panelRef}
