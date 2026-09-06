@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
 import { coercePlayerAge } from '@/lib/sports-data/playerAge'
+import { providerPositionCode } from '@/lib/sports-data/providerPositionCode'
 
 /**
  * TheSportsDB ingestion — everything the provider actually serves.
@@ -354,7 +355,15 @@ export async function ingestRosters(
 
       const data = {
         name,
-        position: str(p.strPosition),
+        /*
+         * 🛑 FOLDED, NOT STORED VERBATIM. TheSportsDB's `strPosition` is an English display
+         * name — "Wide Receiver", "Offensive Tackle" — while Sleeper and Rolling Insights
+         * write codes into the same column. Storing it raw put 2,081 NFL players (94% of
+         * this source) into a second vocabulary, where `position in ('QB','RB','WR','TE')`
+         * cannot see them. 265 of those carry a value snapshot, so they were inside the
+         * trade-grading population the whole time.
+         */
+        position: providerPositionCode(str(p.strPosition), sport),
         team: str(p.strTeam) ?? str(team.strTeam),
         teamId: str(p.idTeam) ?? teamId,
         number: intOf(p.strNumber),
