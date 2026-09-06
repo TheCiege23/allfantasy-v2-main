@@ -23,7 +23,9 @@
  * that carries no id, perform the privileged mutation and silently write no audit row — the one
  * failure that would make this endpoint unsafe. `resolveAdminAuditActor` is the helper the six
  * other audit-writing admin routes already use and never returns empty.
- * ⚠ Do NOT reach for `lib/admin/adminActor.ts` — it is a dead duplicate with zero consumers.
+ * ⚠ There WAS a second helper — `lib/admin/adminActor.ts`'s `getAdminActorId`, zero consumers,
+ * with a different fallback (`'admin:unknown'`). It was deleted rather than left as a footgun; if
+ * it reappears, `resolveAdminAuditActor` is still the one with consumers and a NAMED fallback.
  *
  * ⚠ `requireAdmin`, NOT `requireAdminOrBearer`. This mutates arbitrary leagues, so it is
  * deliberately session-only: the bearer/shared-secret path returns `{ role: 'admin' }` with no id
