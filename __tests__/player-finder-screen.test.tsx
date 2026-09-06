@@ -365,6 +365,47 @@ describe('Player Finder — trade window', () => {
   })
 })
 
+describe('Player Finder — compare', () => {
+  const FERGUSON: PlayerDetail = {
+    ...DETAIL,
+    player: { ...DETAIL.player, externalId: 'ri-2', sleeperId: '8130', name: 'Jake Ferguson', team: 'Dallas Cowboys', number: 87, rosteredIn: 1, platforms: ['sleeper'] },
+    injury: { available: true, data: { status: 'Questionable', description: 'Knee', reportedAt: null } },
+    projection: { available: true, data: { points: 11.2, season: '2026', week: 12 } },
+    leagues: {
+      available: true,
+      data: [{ leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper', format: 'Dynasty PPR', platformLeagueId: '123456', season: 2026, slot: 'STARTER', isYours: true, owner: null }],
+    },
+    impact: { available: true, data: [impact({ leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper', slot: 'STARTER', afPoints: { available: true, data: { points: 13.0, matchedKeys: 4, scoredKeys: 30 } } })] },
+    recommendedMoves: { available: false, reason: 'none in fixture' },
+  }
+
+  it('offers a compare box under the open player, and every other match row as the second name', () => {
+    renderCore({ matches: [DETAIL.player, FERGUSON.player], selectedLeagueId: 'L-gang' })
+    expect(screen.getByRole('combobox', { name: 'Compare with another player' })).toHaveValue('')
+    // Once on the desktop match row, once on the phone's "also matched" chip; the same target either way.
+    const vs = screen.getAllByRole('link', { name: 'Compare with Jake Ferguson' })
+    expect(vs).toHaveLength(2)
+    for (const a of vs) expect(a).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&vs=NFL%3Ari-2&league=L-gang')
+    // The open player is not offered against himself.
+    expect(screen.queryByRole('link', { name: 'Compare with Dalton Kincaid' })).toBeNull()
+    // The single card is still the one on screen.
+    expect(screen.queryByRole('heading', { level: 3, name: 'Jake Ferguson' })).toBeNull()
+  })
+
+  it('puts the two side by side in place of the single card when a second player is held, with Swap and Clear', () => {
+    renderCore({ compare: FERGUSON, selectedLeagueId: 'L-gang' })
+    expect(screen.getByRole('heading', { level: 2, name: 'Dalton Kincaid' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Jake Ferguson' })).toBeInTheDocument()
+    expect(screen.getByText(/Kincaid beats Ferguson in the one priced league/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Swap' })).toHaveAttribute('href', '/core/players?q=Jake%20Ferguson&player=NFL%3Ari-2&vs=NFL%3Ari-1&league=L-gang')
+    expect(screen.getByRole('link', { name: 'Clear' })).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&league=L-gang')
+    // The single card's own sections are gone; the compare table has a column per player.
+    expect(screen.queryByText(/on 3 of your 6 leagues/)).toBeNull()
+    const table = screen.getByRole('table', { name: 'Across your leagues' })
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['League', 'Kincaid', 'Ferguson', 'Gap'])
+  })
+})
+
 describe('Player Finder — signed out', () => {
   it('gates the league sections behind a sign-in reason and renders no verdict', () => {
     render(<PlayerFinder query="" matches={[]} detail={DETAIL} leagueCount={0} signedIn={false} />)

@@ -720,6 +720,18 @@ export default async function AfCorePage({
       : null
 
   /*
+   * Compare (2026-09-06): a second player held beside the first, the same
+   * loader over the same leagues, so the two columns are priced the same way.
+   * Only when the first resolved — a `vs` with no `player` is nothing to
+   * compare against.
+   */
+  const vsRef = typeof sp.vs === 'string' && sp.vs.trim() ? sp.vs.trim() : null
+  const playerCompare =
+    activeKey === 'players' && playerDetail && vsRef
+      ? await getPlayerDetail(vsRef, selectedLeagueId ? [selectedLeagueId] : playedLeagues.map((l) => l.id), userId).catch(() => null)
+      : null
+
+  /*
    * "Recently searched", per account. The write is fire-and-forget by design
    * (the module never throws), and the read excludes the player on screen.
    */
@@ -1969,6 +1981,7 @@ export default async function AfCorePage({
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}
           presence={playerPresence}
+          compare={playerCompare}
           nowIso={new Date().toISOString()}
         />
       ) : activeKey === 'week' ? (

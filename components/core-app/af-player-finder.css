@@ -2069,3 +2069,315 @@
     min-height: 48px;
   }
 }
+
+/* ── Compare: two players side by side (2026-09-06) ──────────────────── */
+.af-core .af-pf-compare-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-search-wrap--compare .af-pf-search {
+  height: 38px;
+  max-width: 420px;
+}
+.af-core .af-pf-match-li {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.af-core .af-pf-match-li > .af-pf-match {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-core .af-pf-match-vs {
+  flex: none;
+  align-self: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+}
+.af-core .af-pf-match-vs:hover {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-cmp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.af-core .af-pf-cmp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-cmp-actions {
+  display: flex;
+  gap: 8px;
+}
+.af-core .af-pf-cmp-btn {
+  min-height: 36px;
+  text-decoration: none;
+}
+.af-core .af-pf-cmp-heads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-core .af-pf-cmp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface2);
+}
+.af-core .af-pf-cmp-head:first-child {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-cmp-who {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.af-core .af-pf-cmp-name {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.af-core .af-pf-cmp-line {
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-cmp-ready {
+  font-size: 10px;
+}
+.af-core .af-pf-cmp-verdict {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+.af-core .af-pf-cmp-tiles {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.af-core .af-pf-cmp-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-cmp-tile:first-child {
+  border-top: 0;
+}
+.af-core .af-pf-cmp-tile-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-core .af-pf-cmp-tile-help {
+  font-size: 11px;
+  color: var(--faint);
+}
+.af-core .af-pf-cmp-tile-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-core .af-pf-cmp-tile-value[data-lead='true'] {
+  color: var(--good);
+}
+.af-core .af-pf-cmp-table-wrap {
+  overflow-x: auto;
+}
+.af-core .af-pf-cmp-table td {
+  vertical-align: top;
+}
+.af-core .af-pf-cmp-league {
+  display: block;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-core .af-pf-cmp-platform {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-cmp-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-core .af-pf-cmp-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.af-core .af-pf-cmp-owner {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-cmp-pts {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-cmp-gap {
+  font-weight: 800;
+  white-space: nowrap;
+}
+.af-core .af-pf-cmp-gap[data-tone='good'] {
+  color: var(--good);
+}
+.af-core .af-pf-cmp-gap[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-core .af-pf-cmp-table .af-pf-nothing {
+  display: inline-block;
+  line-height: 1.35;
+}
+/* Phone-only marks: the per-cell column label and the gap beside the league name. */
+.af-core .af-pf-cmp-col,
+.af-core .af-pf-cmp-gap-m {
+  display: none;
+}
+/* The phone's "also matched" chip with its "vs" joined on: one segmented pill. */
+.af-core .af-pf-other-pair {
+  display: inline-flex;
+  align-items: stretch;
+}
+.af-core .af-pf-other-pair .af-pf-other {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.af-core .af-pf-other-vs {
+  min-height: 36px;
+  margin-left: -1px;
+  padding: 0 10px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  text-decoration: none;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.af-core .af-pf-cmp-again {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-cmp {
+    padding: 14px;
+    gap: 12px;
+  }
+  .af-core .af-pf-cmp-heads {
+    gap: 8px;
+  }
+  .af-core .af-pf-cmp-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+  }
+  .af-core .af-pf-cmp-name {
+    font-size: 17px;
+  }
+  .af-core .af-pf-cmp-tile {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
+    padding: 8px 10px;
+  }
+  .af-core .af-pf-cmp-tile-value {
+    font-size: 17px;
+  }
+  /*
+   * The shared league-table rules above turn every row into a two-column
+   * grid ('league slot' / 'action action'). The compare row wants the league
+   * across the top and the two players beneath it, side by side, each cell
+   * carrying its own column label since the header row is gone. Selectors
+   * name the table AND the element so they outrank the shared ones.
+   */
+  .af-core .af-pf-cmp-table tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'league league'
+      'a b';
+    align-items: start;
+    gap: 8px 10px;
+    padding: 12px 0;
+  }
+  .af-core .af-pf-cmp-table td.af-pf-cmp-col-league {
+    grid-area: league;
+  }
+  .af-core .af-pf-cmp-table td.af-pf-cmp-col-a {
+    grid-area: a;
+  }
+  .af-core .af-pf-cmp-table td.af-pf-cmp-col-b {
+    grid-area: b;
+  }
+  .af-core .af-pf-cmp-table th.af-pf-cmp-gap-h,
+  .af-core .af-pf-cmp-table td.af-pf-cmp-gap {
+    display: none;
+  }
+  .af-core .af-pf-cmp-col {
+    display: block;
+    margin-bottom: 4px;
+  }
+  .af-core .af-pf-cmp-gap-m {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .af-core .af-pf-cmp-gap-m[data-tone='good'] {
+    color: var(--good);
+  }
+  .af-core .af-pf-cmp-gap-m[data-tone='bad'] {
+    color: var(--bad);
+  }
+  .af-core .af-pf-cmp-cell {
+    align-items: flex-start;
+  }
+  .af-core .af-pf-search-wrap--compare .af-pf-search {
+    max-width: none;
+    height: 44px;
+  }
+}

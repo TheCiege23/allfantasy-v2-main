@@ -50,9 +50,15 @@ const DEBOUNCE_MS = 300
 const MIN_CHARS = 2
 const LIMIT = 8
 
-function hitHref(h: SearchHit, leagueParam: string): string {
+function hitHref(h: SearchHit, leagueParam: string, compareWith: string | null | undefined, query: string): string {
+  const ref = h.externalId ? playerRef(h.sport, h.externalId) : null
+  if (compareWith) {
+    // A second name beside the first: the open player stays, the hit becomes `vs`.
+    const vs = ref ? `&vs=${encodeURIComponent(ref)}` : ''
+    return `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(compareWith)}${vs}${leagueParam}`
+  }
   const q = `q=${encodeURIComponent(h.name)}`
-  const player = h.externalId ? `&player=${encodeURIComponent(playerRef(h.sport, h.externalId))}` : ''
+  const player = ref ? `&player=${encodeURIComponent(ref)}` : ''
   return `/core/players?${q}${player}${leagueParam}`
 }
 
@@ -84,12 +90,24 @@ export function PlayerSearchBox({
   query,
   selectedLeagueId,
   signedIn,
+  variant = 'search',
+  compareWith = null,
 }: {
   query: string
   selectedLeagueId: string | null
   signedIn: boolean
+  /**
+   * `compare`: the box picks a SECOND player beside the one already open —
+   * every hit links to `?player=<compareWith>&vs=<hit>`, the input starts
+   * empty, and Enter without a highlighted row does nothing (there is no
+   * "search for the second player" page to submit to).
+   */
+  variant?: 'search' | 'compare'
+  /** The open player's sport-qualified ref (lib/core-app/playerRef.ts); required for `compare`. */
+  compareWith?: string | null
 }) {
-  const [value, setValue] = useState(query)
+  const compare = variant === 'compare' && Boolean(compareWith)
+  const [value, setValue] = useState(compare ? '' : query)
   const [hits, setHits] = useState<SearchHit[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
@@ -143,7 +161,12 @@ export function PlayerSearchBox({
     }
   }, [term])
 
-  const hrefs = useMemo(() => hits.map((h) => hitHref(h, leagueParam)), [hits, leagueParam])
+  const hrefs = useMemo(
+    () => hits.map((h) => hitHref(h, leagueParam, compare ? compareWith : null, query)),
+    [hits, leagueParam, compare, compareWith, query],
+  )
+  // Two boxes can share a screen (the search rail and the compare card); their listboxes must not share an id.
+  const listId = compare ? 'af-pf-suggest-vs' : 'af-pf-suggest'
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (!open || hits.length === 0) return
@@ -156,47 +179,56 @@ export function PlayerSearchBox({
     } else if (e.key === 'Enter' && active >= 0) {
       e.preventDefault()
       setOpen(false)
-      document.getElementById(`af-pf-suggest-${active}`)?.querySelector('a')?.click()
+      document.getElementById(`${listId}-${active}`)?.querySelector('a')?.click()
     } else if (e.key === 'Escape') {
       setOpen(false)
       setActive(-1)
     }
   }
 
+  const label = compare ? 'Compare with another player' : 'Search any player'
+
   return (
-    <form className="af-pf-search-wrap" method="get" action="/core/players">
+    <form
+      className={`af-pf-search-wrap${compare ? ' af-pf-search-wrap--compare' : ''}`}
+      method="get"
+      action="/core/players"
+      onSubmit={compare ? (e) => e.preventDefault() : undefined}
+    >
       {/* Keeps the held league in context across a new search. */}
       {selectedLeagueId ? <input type="hidden" name="league" value={selectedLeagueId} /> : null}
       <div className="af-pf-search-field">
         <label className="af-search af-pf-search">
           <span className="af-search-icon" aria-hidden>
-            ○
+            {compare ? '⇄' : '○'}
           </span>
           <input
             className="af-search-input"
-            name="q"
+            name={compare ? 'vsq' : 'q'}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
             onFocus={() => hits.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 120)}
-            placeholder="Search any player"
-            aria-label="Search any player"
+            placeholder={label}
+            aria-label={label}
             autoComplete="off"
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={open}
-            aria-controls="af-pf-suggest"
-            aria-activedescendant={open && active >= 0 ? `af-pf-suggest-${active}` : undefined}
+            aria-controls={listId}
+            aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
           />
-          <button type="submit" className="af-btn af-pf-search-btn">
-            Search
-          </button>
+          {compare ? null : (
+            <button type="submit" className="af-btn af-pf-search-btn">
+              Search
+            </button>
+          )}
         </label>
         {open && hits.length > 0 ? (
-          <ul className="af-pf-suggest" id="af-pf-suggest" role="listbox" aria-label="Suggestions">
+          <ul className="af-pf-suggest" id={listId} role="listbox" aria-label={compare ? 'Players to compare' : 'Suggestions'}>
             {hits.map((h, i) => (
-              <li key={`${h.sport}-${h.externalId ?? h.sleeperId ?? h.name}-${i}`} id={`af-pf-suggest-${i}`} role="option" aria-selected={i === active}>
+              <li key={`${h.sport}-${h.externalId ?? h.sleeperId ?? h.name}-${i}`} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
                 <Link
                   href={hrefs[i]}
                   className="af-pf-suggest-item"
@@ -229,11 +261,13 @@ export function PlayerSearchBox({
           </ul>
         ) : null}
       </div>
-      <p className="af-pf-search-note">
-        {signedIn
-          ? 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.'
-          : 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups.'}
-      </p>
+      {compare ? null : (
+        <p className="af-pf-search-note">
+          {signedIn
+            ? 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.'
+            : 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups.'}
+        </p>
+      )}
     </form>
   )
 }

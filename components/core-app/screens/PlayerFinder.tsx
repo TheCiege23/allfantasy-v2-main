@@ -13,6 +13,7 @@ import { TradeWindow } from '@/components/core-app/player-finder/TradeWindow'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
+import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
 import { platformLabel } from '@/lib/core-app/platformLinks'
@@ -106,6 +107,12 @@ export type PlayerFinderProps = {
    * applies; an unavailable state renders its reason.
    */
   presence?: SectionState<ManagerPresence> | null
+  /**
+   * A second player held beside the first (`?vs=`). When present the main
+   * column shows the two side by side instead of the single detail card; the
+   * decision column stays about the first.
+   */
+  compare?: PlayerDetail | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -279,6 +286,7 @@ export function PlayerFinder({
   recent = [],
   tradeVisual = null,
   presence = null,
+  compare = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -300,6 +308,21 @@ export function PlayerFinder({
    */
   const leagueMode = Boolean(signedIn && selectedLeagueId)
   const inScope = (leagueId: string) => !leagueMode || leagueId === selectedLeagueId
+
+  /*
+   * Compare links. `vs` holds the second player; Swap turns the pair round and
+   * Clear drops back to the single card. Every match row offers itself as the
+   * second name while a player is open.
+   */
+  const detailRef = detail ? playerRef(detail.player.sport, detail.player.externalId) : null
+  const compareRef = compare ? playerRef(compare.player.sport, compare.player.externalId) : null
+  const vsHref = (ref: string) =>
+    detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}&vs=${encodeURIComponent(ref)}${leagueParam}` : null
+  const swapHref =
+    detailRef && compareRef && compare
+      ? `/core/players?q=${encodeURIComponent(compare.player.name)}&player=${encodeURIComponent(compareRef)}&vs=${encodeURIComponent(detailRef)}${leagueParam}`
+      : '/core/players'
+  const clearHref = detailRef ? `/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(detailRef)}${leagueParam}` : '/core/players'
 
   /** The trade visual's opening package, for the pitch on the trade-window card. */
   const pitchPackage: PitchPackage =
@@ -401,7 +424,7 @@ export function PlayerFinder({
             ) : (
               <ul className="af-pf-match-list">
                 {matches.map((m) => (
-                  <li key={`${m.sport}-${m.externalId}`}>
+                  <li key={`${m.sport}-${m.externalId}`} className="af-pf-match-li">
                     <Link
                       // Sport-qualified: `externalId` alone is ambiguous across
                       // sports and opened whichever athlete came back first.
@@ -432,6 +455,12 @@ export function PlayerFinder({
                         </span>
                       </span>
                     </Link>
+                    {/* The row as the second name — only while another player is open. */}
+                    {detail && !(detail.player.externalId === m.externalId && detail.player.sport === m.sport) && vsHref(playerRef(m.sport, m.externalId)) ? (
+                      <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-pf-match-vs" aria-label={`Compare with ${m.name}`}>
+                        vs
+                      </Link>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -490,14 +519,21 @@ export function PlayerFinder({
           <div className="af-pf-m-only af-pf-others" aria-label="Other matches">
             <span className="af-label">Also matched</span>
             {otherMatches.slice(0, 4).map((m) => (
-              <Link
-                key={`${m.sport}-${m.externalId}`}
-                href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId))}${leagueParam}`}
-                className="af-chip af-pf-other"
-              >
-                {m.name}
-                {m.position ? <span className="af-pf-other-pos af-num">{m.position}</span> : null}
-              </Link>
+              <span key={`${m.sport}-${m.externalId}`} className="af-pf-other-pair">
+                <Link
+                  href={`/core/players?q=${encodeURIComponent(query)}&player=${encodeURIComponent(playerRef(m.sport, m.externalId))}${leagueParam}`}
+                  className="af-chip af-pf-other"
+                >
+                  {m.name}
+                  {m.position ? <span className="af-pf-other-pos af-num">{m.position}</span> : null}
+                </Link>
+                {/* The same "vs" the desktop rows carry, joined to the chip so it reads as one pill. */}
+                {vsHref(playerRef(m.sport, m.externalId)) ? (
+                  <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-chip af-pf-other-vs" aria-label={`Compare with ${m.name}`}>
+                    vs
+                  </Link>
+                ) : null}
+              </span>
             ))}
           </div>
         ) : null}
@@ -522,7 +558,17 @@ export function PlayerFinder({
         ) : null}
 
         {/* ── Detail ────────────────────────────────────────────────── */}
-        {detail ? (
+        {detail && compare ? (
+          <PlayerCompare
+            a={detail}
+            b={compare}
+            query={query}
+            selectedLeagueId={selectedLeagueId ?? null}
+            signedIn={signedIn}
+            swapHref={swapHref}
+            clearHref={clearHref}
+          />
+        ) : detail ? (
           <section className="af-card af-pf-detail">
             <header className="af-pf-detail-head">
               <Headshot src={detail.player.imageUrl} name={detail.player.name} />
@@ -592,6 +638,14 @@ export function PlayerFinder({
                 {detail.freshness.label}
               </span>
             </header>
+
+            {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
+            {detailRef ? (
+              <div className="af-pf-compare-entry">
+                <span className="af-label">Compare with</span>
+                <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
+              </div>
+            ) : null}
 
             {/* Stat tiles — a missing one says why rather than showing a bare dash */}
             <div className="af-pf-tiles af-pf-d-only">

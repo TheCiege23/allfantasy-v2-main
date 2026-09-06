@@ -146,6 +146,40 @@ describe('PlayerSearchBox', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
+  /* The compare variant: a second name beside the one already open. */
+  it('in compare mode, links every hit to ?player=<open>&vs=<hit>, starts empty, and never submits', async () => {
+    fetchMock.mockResolvedValueOnce(ok([KING, KINCAID]))
+    const { container } = render(<PlayerSearchBox query="Dalton Kincaid" selectedLeagueId="L-gang" signedIn variant="compare" compareWith="NFL:ri-1" />)
+    const input = screen.getByRole('combobox', { name: 'Compare with another player' })
+    expect(input).toHaveValue('')
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull()
+    expect(screen.queryByText(/Searches every platform/)).toBeNull()
+
+    fireEvent.change(input, { target: { value: 'kin' } })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350)
+    })
+    const list = screen.getByRole('listbox', { name: 'Players to compare' })
+    expect(list).toHaveAttribute('id', 'af-pf-suggest-vs')
+    const links = screen.getAllByRole('option').map((o) => o.querySelector('a')?.getAttribute('href'))
+    expect(links).toEqual([
+      '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&vs=NFL%3Ari-2&league=L-gang',
+      '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&vs=NFL%3Ari-1&league=L-gang',
+    ])
+
+    // Enter with nothing highlighted is swallowed: there is no page for "the second player alone".
+    const form = container.querySelector('form') as HTMLFormElement
+    const submitted = fireEvent.submit(form)
+    expect(submitted).toBe(false)
+    expect(push).not.toHaveBeenCalled()
+
+    // Enter on a highlighted row opens that row's compare link.
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'af-pf-suggest-vs-0')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(push).toHaveBeenCalledWith('/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1&vs=NFL%3Ari-2&league=L-gang')
+  })
+
   /* ⚠ A 429 IS EXPECTED UNDER FAST TYPING. The list stays closed; the form keeps working. */
   it('goes quiet on a rate limit and does not retry until the cooldown passes', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30' }), json: async () => ({}) })
