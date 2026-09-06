@@ -215,12 +215,28 @@ async function ensureOfficialWorldCupTeamRows() {
             { id: officialTeamId(team) },
             { AND: [{ fifaCode: team.fifaCode }, { name: { equals: team.name, mode: "insensitive" } }] },
           ],
+          /*
+           * ⚠ THE TWO `sourcePayload` CLAUSES REMOVED HERE MADE THIS LOOKUP ALWAYS RETURN
+           * NULL. A json path read is SQL NULL when the KEY IS ABSENT, so
+           * `NOT (source_payload #> '{testFixture}') = $1` is UNKNOWN for every real team and
+           * the WHERE dropped it — measured 0 rows against 144, where the id and status
+           * exclusions alone correctly leave 96.
+           *
+           * That was not a cosmetic miss: with `existing` permanently null this loop never
+           * took its update branch, so a team already stored under a legacy id got a SECOND
+           * row created under the official id instead of being updated in place.
+           *
+           * The markers are redundant with what remains. Every writer stamps all three
+           * signals together — `WORLD_CUP_DEMO_TEAMS` is 32 `demo_team_*` ids at
+           * `qualificationStatus: "test"`, and `buildPlaceholderTeam` writes
+           * `wc2026_placeholder_*` at `test_placeholder`, both still excluded below.
+           * `isWorldCupTestTeam` in this same file ORs the same signals, which is why the
+           * in-memory predicate never had this problem.
+           */
           NOT: [
             { id: { startsWith: "demo_team_" } },
             { id: { startsWith: "wc2026_placeholder_" } },
             { qualificationStatus: { in: ["test", "test_placeholder"] } },
-            { sourcePayload: { path: ["testFixture"], equals: true } },
-            { sourcePayload: { path: ["source"], equals: "allfantasy_test_placeholder" } },
           ],
         },
         select: { id: true },

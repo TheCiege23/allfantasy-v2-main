@@ -190,11 +190,27 @@ export async function getWorldCupOfficialGroupsReadiness(
     where: {
       groupName: { not: null },
       qualificationStatus: { notIn: ["test", "test_placeholder"] },
+      /*
+       * ⚠ THE TWO `sourcePayload` CLAUSES THAT USED TO SIT HERE RETURNED ZERO ROWS.
+       * Prisma emits a json path read as `NOT (source_payload #> '{testFixture}') = $1`,
+       * and `#>` yields SQL NULL when the KEY IS ABSENT — not only when the column is.
+       * `NOT (NULL = ...)` is UNKNOWN, so the WHERE dropped every ordinary team.
+       * Measured on the test branch: 144 rows, 96 after the id exclusions, **0** once the
+       * payload clauses were added, so this groupBy returned nothing at all.
+       *
+       * Removing them loses no coverage, and that is true by CONSTRUCTION rather than by
+       * the shape of today's data: every writer of those markers also stamps the id prefix
+       * and the status. `WORLD_CUP_DEMO_TEAMS` is 32 ids, all `demo_team_*`, all
+       * `qualificationStatus: "test"`; `buildPlaceholderTeam` writes `wc2026_placeholder_*`
+       * with `test_placeholder`. Both are already excluded above and below.
+       *
+       * ⚠ Do not "restore" them in a negated form. No Prisma spelling is NULL-safe here —
+       * `path/not:` emits `<>` and `NOT: { OR: [...] }` both measured 0 too. Only SQL's
+       * `IS NOT TRUE` works, and it needs raw SQL.
+       */
       NOT: [
         { id: { startsWith: "demo_team_" } },
         { id: { startsWith: "wc2026_placeholder_" } },
-        { sourcePayload: { path: ["testFixture"], equals: true } },
-        { sourcePayload: { path: ["source"], equals: "allfantasy_test_placeholder" } },
       ],
     },
     _count: { _all: true },
