@@ -470,6 +470,36 @@ html[data-mode='af'] .af-core {
   white-space: nowrap;
 }
 
+/*
+ * 🛑 A DISABLED BUTTON HAS TO LOOK DISABLED, AND BEFORE THIS RULE NONE OF THEM DID.
+ *
+ * The block above sets an explicit `background`, `color` and `cursor: pointer`. Those override
+ * the browser's own disabled appearance, so a disabled `.af-btn` rendered in FULL accent with a
+ * HAND CURSOR — it advertised itself as clickable while doing nothing.
+ *
+ * Measured in Chromium against this stylesheet, before the fix — enabled and disabled computed
+ * IDENTICALLY on every visual property:
+ *
+ *     enabled   background rgb(34,211,238)  color rgb(4,5,12)  opacity 1  cursor pointer
+ *     disabled  background rgb(34,211,238)  color rgb(4,5,12)  opacity 1  cursor pointer
+ *
+ * Reported by a manager who clicked "Propose this trade" and had nothing happen. React had
+ * disabled it correctly, and `TradeProposePanel` printed the reason one line above it ("2027
+ * round 1 — typed by hand, so the league has no pick to match it to"). The styling was the only
+ * part of the stack that disagreed.
+ *
+ * ⚠ ON THE BASE CLASS, DELIBERATELY. Every disabled `.af-btn` in the core app had this defect;
+ * scoping the fix to the propose panel would have fixed the one button somebody complained about
+ * and left the trap on all the others.
+ *
+ * ⚠ `:disabled` only — it does NOT cover `aria-disabled='true'`, which `AuthV4` and `ImportV4`
+ * use on their own classes. Those need their own rule if they ever adopt `.af-btn`.
+ */
+.af-core .af-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .af-core .af-btn--ghost {
   background: transparent;
   color: var(--text2);
