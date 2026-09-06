@@ -9,7 +9,7 @@ import {
 import { apiChain } from '@/lib/workers/api-chain'
 import {
   normalizePosition,
-  normalizeTeamAbbrev,
+  teamDisplayNameForSport,
 } from '@/lib/team-abbrev'
 import { getPlayersBySport } from '@/lib/sleeper-client'
 
@@ -109,7 +109,20 @@ function normalizeSleeperPlayer(
   const name = buildPlayerName(player)
   if (!playerId || !name) return null
 
-  const team = normalizeTeamAbbrev(player.team) ?? 'FA'
+  /*
+   * 🛑 THE DISPLAY NAME, NOT THE ABBREVIATION. Sleeper sends "DET"; `SportsPlayer.team` is an
+   * UNBOUNDED column whose canonical form is the full name (Guap, 2026-09-06) — the short code
+   * belongs in `SportsPlayerRecord.team @db.VarChar(32)`, per `normalizeTeamCode`'s contract.
+   * This writer produced 3,425 of the 4,019 code-form NFL rows, which is most of the split that
+   * made `WHERE team = 'DET'` miss 388 rows.
+   *
+   * ⚠ SAFE FOR READ-TIME CONSUMERS because every one of Sleeper's 32 codes expands to a name
+   * that folds BACK to the same code through `normalizeTeamAbbrev` — verified, not assumed.
+   *
+   * ⚠ 'FA' IS LEFT EXACTLY AS IT WAS. It is a free-agent sentinel rather than a team, so it is
+   * not this change's business; touching it would mix a vocabulary fix with a semantics change.
+   */
+  const team = teamDisplayNameForSport(sport, player.team) ?? 'FA'
   const position = normalizePosition(player.position) ?? 'FLEX'
 
   return {
@@ -156,7 +169,8 @@ function normalizeProviderPlayer(
   return {
     playerId,
     name,
-    team: normalizeTeamAbbrev(String(row.team ?? row.teamAbbrev ?? '')) ?? 'FA',
+    // Same rule as the Sleeper path above: the unbounded column holds the display name.
+    team: teamDisplayNameForSport(sport, String(row.team ?? row.teamAbbrev ?? '')) ?? 'FA',
     position: normalizePosition(String(row.position ?? row.pos ?? '')) ?? 'FLEX',
     headshotUrl: String(row.imageUrl ?? row.headshotUrl ?? '').trim() || null,
     age: toFiniteNumber(row.age),

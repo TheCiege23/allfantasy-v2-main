@@ -157,6 +157,60 @@ export function normalizePositionForSport(
   return upper
 }
 
+/**
+ * The sports whose teams the canonical table above actually contains.
+ *
+ * 🛑 NOT `FOOTBALL_SPORTS`, AND COPYING THAT GATE WOULD HAVE BEEN THE BUG. `normalizePositionForSport`
+ * gates on {NFL, NCAAF} because position CODES are shared between the two. Team NAMES are not:
+ * `CANONICAL_TEAMS` holds the 32 NFL clubs and no college programmes, so folding NCAAF reaches
+ * `normalizeTeamAbbrev`'s `return upper` and UPPERCASES every school.
+ */
+const NFL_TEAM_SPORTS = new Set(['NFL'])
+
+/**
+ * `SportsPlayer.team` -> the display name, sport-gated.
+ *
+ * 🛑 THE COLUMN CARRIED TWO VOCABULARIES AT ONCE, exactly as `position` did. Measured on
+ * production 2026-09-06: 11,580 long-form NFL rows against 4,019 code-form, 67 distinct values
+ * for 32 teams. `WHERE team = 'DET'` silently missed 388 rows.
+ *
+ * 🛑 AND THE CANONICAL DIRECTION IS THE OPPOSITE OF `position` — display name, not code.
+ * Guap's decision, 2026-09-06, and it rests on `normalizeTeamCode` below rather than on the row
+ * counts: that function's contract states the full display name "remains available in the
+ * UNBOUNDED source tables (SportsPlayer.team, SportsTeam.name)", with the short code belonging in
+ * the bounded `SportsPlayerRecord.team @db.VarChar(32)`. So the long forms were right all along
+ * and the abbreviations are the anomaly.
+ *
+ * ⚠ `lib/core-app/teamLogo.ts` ASSERTED THE OPPOSITE — "SportsPlayer.team is an abbreviation on
+ * production" — and that was measurably wrong; long-form outnumbers code-form 3:1. Corrected in
+ * the same change. A stale comment that reads as authoritative is how the wrong direction nearly
+ * shipped.
+ *
+ * ⚠ SAFE FOR THE 63 FILES THAT NORMALISE AT READ TIME, and that was verified rather than hoped:
+ * all 32 Sleeper codes expand to a display name that folds BACK to the identical code through
+ * `normalizeTeamAbbrev`. Without that round-trip property this change would break every one of
+ * them the moment an ingest switched direction.
+ *
+ * ⚠ AN UNRECOGNISED VALUE IS RETURNED UNCHANGED — not uppercased, not guessed. `normalizeTeamAbbrev`
+ * ends in `return upper`, which is why it cannot be used directly here: an ungated fold would
+ * MUTATE 35,093 of the 40,069 non-football rows carrying a team, and mis-map two real ones
+ * (NCAAB "Miami" -> MIA, NCAAB "Washington" -> WAS) onto NFL clubs.
+ */
+export function teamDisplayNameForSport(
+  sport: string | null | undefined,
+  raw: string | null | undefined
+): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  const sportKey = (sport ?? '').trim().toUpperCase()
+  if (!NFL_TEAM_SPORTS.has(sportKey)) return trimmed
+
+  // `getTeamInfo` resolves codes, aliases (JAC/OAK/STL/WSH) and full names alike.
+  return getTeamInfo(trimmed)?.fullName ?? trimmed
+}
+
 /** DB bound on SportsPlayerRecord.team / SportsGame team columns (@db.VarChar(32)). */
 export const TEAM_CODE_MAX_LENGTH = 32
 
