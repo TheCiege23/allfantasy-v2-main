@@ -150,7 +150,28 @@ export function createPrismaSleeperSyncStore(deps: {
           jobName: 'fantasy-os-sleeper-sync',
           jobScope: connection.runKey,
           trigger: 'cron',
-          status: result.status,
+          /*
+           * 🛑 MAPPED HERE, AT THE WRITE SITE, AND EMPHATICALLY NOT AT `result.status`.
+           *
+           * `sync_job_runs.status` carried two words for "fine": `syncJobRunTelemetry` types it
+           * `success | partial | failed` and is the only writer that does, while this one and two
+           * others emitted `completed`. The history was normalised to `success` on 2026-09-06
+           * (27,277 rows) and this keeps new rows consistent with it.
+           *
+           * ⚠ `result.status` FEEDS THREE COLUMNS FROM THIS FILE, AND ONLY THIS ONE MAY CHANGE:
+           *
+           *     :136   leagueSyncState.syncStatus
+           *     here   sync_job_runs.status
+           *     :186   League.syncStatus  (failure path)
+           *
+           * `verdictFrom` in lib/decision-os/import/assertions.ts maps `leagueSyncState.syncStatus
+           * === 'completed'` to the parity verdict `matched`, and ANY unrecognised value falls
+           * through to `unchecked`. Renaming at the source would therefore turn every synced
+           * league's parity from "matched" into "never checked" — silently, with no error and no
+           * failing test. That file's own comment calls an unearned verdict its worst failure
+           * mode; this would be the mirror image of it, an unearned "unchecked".
+           */
+          status: result.status === 'completed' ? 'success' : result.status,
           rowsRead: result.accounting.logicalRequests,
           rowsWritten: result.accounting.imported,
           rowsSkipped: result.accounting.unchanged,

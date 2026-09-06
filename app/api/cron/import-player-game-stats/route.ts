@@ -287,7 +287,9 @@ async function handle(req: NextRequest) {
       await prisma.syncJobRun.update({
         where: { id: lockId },
         data: {
-          status: "completed",
+          // `success`, not `completed` — one vocabulary for the column. See the note in
+          // lib/import-os/collector/prismaSyncStore.ts for why the map lives at write sites.
+          status: "success",
           rowsRead: totals.fetched,
           rowsWritten: totals.ingested,
           rowsSkipped: totals.unresolvedPlayers,

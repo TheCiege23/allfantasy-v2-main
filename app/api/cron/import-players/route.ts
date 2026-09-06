@@ -194,7 +194,9 @@ async function handle(req: NextRequest) {
         jobName: "import-players",
         jobScope: result.sports.join(","),
         trigger: "cron",
-        status: "completed",
+        // `success`, not `completed` — the column had two words for the same thing and the history
+        // was normalised on 2026-09-06. `syncJobRunTelemetry` is the vocabulary of record.
+        status: "success",
         rowsWritten: result.imported,
         rowsSkipped: result.rowsSkippedByGuard,
         completedAt: new Date(),

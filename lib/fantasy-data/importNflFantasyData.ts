@@ -278,7 +278,10 @@ export async function importNflFantasyData(options?: {
     await recordImportRun({
       sport: "NFL",
       rowsWritten: totalWritten,
-      status: errors.length > 0 ? "partial" : "completed",
+      // `success`, not `completed` — one vocabulary for sync_job_runs.status. This writer is
+      // currently dormant (zero rows in production), so it is switched now precisely because it
+      // would otherwise re-open the split the moment it first runs.
+      status: errors.length > 0 ? "partial" : "success",
       errorMessage: errors.length > 0 ? errors[0] : null,
     })
   }
