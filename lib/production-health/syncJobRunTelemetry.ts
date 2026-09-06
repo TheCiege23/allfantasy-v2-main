@@ -130,6 +130,50 @@ function getModel(): SyncJobRunModel | null {
 }
 
 /**
+ * 🛑 A LOST TELEMETRY WRITE USED TO BE COMPLETELY INVISIBLE, AND THE MONITOR BUILT ON IT WAS NOT.
+ *
+ * Every path in this module was best-effort — `if (!model) return` and a bare `catch {}` — which is
+ * correct as BEHAVIOUR (telemetry must never fail the job it observes) and was wrong as SILENCE.
+ * When a row does not arrive, `scripts/cron-freshness-check.mjs` reports CONFIG, "no sync_job_runs
+ * rows for job_name X", which reads as a registry mistake rather than a write that failed.
+ *
+ * Measured on production 2026-09-06, from the slow-tier dispatcher log against the table:
+ *
+ *     06:09  import-news?xnews=1 ... OK 200 ( 78900ms)   ->  no row
+ *     12:07  import-news?xnews=1 ... OK 200 (251446ms)   ->  no row
+ *     18:21  import-news?xnews=1 ... OK 200 (215529ms)   ->  row written
+ *     09:07  sync-player-images?sport=NFL   OK 200       ->  no row
+ *     09:20  sync-player-images?sport=NCAAF OK 200       ->  no row
+ *
+ * The jobs ran, returned 200, and left no trace. "Not deployed" was ruled out — all eleven of that
+ * day's deployments contain the commit that added the instrumentation.
+ *
+ * ⚠ THE TWO FAILURE PATHS ARE INDISTINGUISHABLE FROM OUTSIDE, WHICH IS THE ACTUAL PROBLEM.
+ * A missing `prisma.syncJobRun` delegate and a `create` that threw produce the identical outcome —
+ * no row, no error, exit 200. Naming which one fired is the whole point of this helper.
+ *
+ * ⚠ IT DOES NOT CHANGE BEHAVIOUR. Nothing throws, nothing is retried, every caller still returns
+ * exactly what it returned before. The only difference is a line in the logs.
+ *
+ * 🛑 AND THE MESSAGE GOES THROUGH `redactAndCap`, NOT A BARE `slice`. A Prisma connection error
+ * carries the database URL, and this repo is PUBLIC with its logs pasted into issues — the
+ * keystore-password and RSC_token entries in CLAUDE.md are both secrets escaping through an ERROR
+ * path, which is exactly what this function is. The first draft of it sliced to 160 and would have
+ * shipped that; `sanitize` above already states the rule this broke — redact BEFORE capping,
+ * because slicing first can cut a credential in half and leave the readable front of it in the log.
+ */
+function reportTelemetryLoss(where: string, ctx: SyncJobContext, reason: unknown): void {
+  const detail =
+    reason === undefined
+      ? "prisma.syncJobRun delegate is absent — the generated client does not carry this model"
+      : `write threw: ${redactAndCap(reason instanceof Error ? reason.message : String(reason), 160)}`
+  console.error(
+    `[syncJobRunTelemetry] LOST a run row for "${ctx.jobName}" at ${where} — ${detail}. ` +
+      "The job itself was unaffected; the freshness probe for this job_name will read CONFIG.",
+  )
+}
+
+/**
  * A `running` row older than this is not running — it is abandoned.
  *
  * The longest `maxDuration` any route in this repo declares is 300s, and the platform hard-kills
@@ -231,7 +275,10 @@ export async function reapAllAbandonedRuns(
 /** Best-effort: write the initial `running` row. Returns its id or null. */
 async function startRun(ctx: SyncJobContext): Promise<string | null> {
   const model = getModel()
-  if (!model) return null
+  if (!model) {
+    reportTelemetryLoss("startRun", ctx, undefined)
+    return null
+  }
   try {
     const row = await model.create({
       data: {
@@ -244,14 +291,27 @@ async function startRun(ctx: SyncJobContext): Promise<string | null> {
       },
     })
     return row.id
-  } catch {
+  } catch (error) {
+    reportTelemetryLoss("startRun", ctx, error)
     return null
   }
 }
 
-async function finishRun(id: string | null, payload: SyncJobRunPayload): Promise<void> {
+async function finishRun(
+  ctx: SyncJobContext,
+  id: string | null,
+  payload: SyncJobRunPayload,
+): Promise<void> {
   const model = getModel()
-  if (!model || !id) return
+  /*
+   * ⚠ A NULL `id` IS NOT A LOSS — `startRun` already reported why it could not open a row, and
+   * saying so twice for one run would make the log read like two separate failures.
+   */
+  if (!id) return
+  if (!model) {
+    reportTelemetryLoss('finishRun', ctx, undefined)
+    return
+  }
   try {
     await model.update({
       where: { id },
@@ -266,8 +326,9 @@ async function finishRun(id: string | null, payload: SyncJobRunPayload): Promise
         metadata: payload.metadata,
       },
     })
-  } catch {
-    // telemetry is best-effort; never let it break the job
+  } catch (error) {
+    // Still best-effort — the row is left `running` for the reaper, and now says so.
+    reportTelemetryLoss('finishRun', ctx, error)
   }
 }
 
@@ -295,10 +356,10 @@ export async function withSyncJobRun<T>(
   try {
     const result = await fn()
     const outcome = extract ? safeExtract(extract, result) : {}
-    await finishRun(id, buildSyncJobRunPayload(ctx, outcome, null, Date.now() - startedAt))
+    await finishRun(ctx, id, buildSyncJobRunPayload(ctx, outcome, null, Date.now() - startedAt))
     return result
   } catch (error) {
-    await finishRun(id, buildSyncJobRunPayload(ctx, null, error, Date.now() - startedAt))
+    await finishRun(ctx, id, buildSyncJobRunPayload(ctx, null, error, Date.now() - startedAt))
     throw error
   }
 }
@@ -340,7 +401,10 @@ export function extractCommonCounts(result: unknown): SyncJobOutcome {
 /** One-shot recorder for jobs that compute everything before writing. */
 export async function recordSyncJobRun(ctx: SyncJobContext, outcome: SyncJobOutcome, durationMs: number): Promise<void> {
   const model = getModel()
-  if (!model) return
+  if (!model) {
+    reportTelemetryLoss("recordSyncJobRun", ctx, undefined)
+    return
+  }
   const payload = buildSyncJobRunPayload(ctx, outcome, null, durationMs)
   try {
     await model.create({
@@ -359,7 +423,7 @@ export async function recordSyncJobRun(ctx: SyncJobContext, outcome: SyncJobOutc
         metadata: payload.metadata,
       },
     })
-  } catch {
-    // best-effort
+  } catch (error) {
+    reportTelemetryLoss("recordSyncJobRun", ctx, error)
   }
 }
