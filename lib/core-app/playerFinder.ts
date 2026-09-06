@@ -8,6 +8,8 @@ import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShare } from './snapShare'
+import { isIdpPosition } from '@/lib/core-app/scoringNotes'
+import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -122,6 +124,30 @@ export type PlayerDetail = {
    * lib/core-app/rosterIdCoverage.ts.
    */
   rosterCoverage: { unmatched: Array<{ leagueId: string; leagueName: string; platform: string }> }
+  /**
+   * What this defender is worth, for the players the offensive market chart cannot price.
+   *
+   * 🛑 NULL FOR EVERY NON-DEFENDER, AND FOR DEFENDERS UNTIL THE CRON HAS RUN. FantasyCalc
+   * publishes no defenders and no kickers, so 719 rostered players had no value anywhere; this
+   * is the league-free IDP board filling that. It is null rather than 0 when absent — a
+   * defender with no cached value is unmeasured, not worthless.
+   *
+   * ⚠ THE REFERENCE LEAGUE TRAVELS WITH THE NUMBER AND THE UI MUST RENDER IT. "Worth 3,284" is
+   * a fact about a 12-team league starting three defenders under Balanced scoring, not about the
+   * world. Same rule as the projection field above: a number whose basis is dropped becomes a
+   * claim nobody can support.
+   *
+   * ⚠ AND IT IS NOT COMPARABLE TO THE OFFENSIVE VALUES IN `TradeVisual`. The IDP ceiling is a
+   * product decision about what a top defender is worth against a top receiver, and it moves real
+   * trade verdicts by up to five grades. This is shown as its own labelled fact and is
+   * deliberately NOT fed into trade totals.
+   */
+  idpValue: {
+    value: number
+    positionRank: number | null
+    reference: { numTeams: number; idpStarters: number; scoringFormat: string }
+    computedAt: string
+  } | null
   /**
    * This week's projected points.
    *
@@ -1061,6 +1087,20 @@ export async function getPlayerDetail(
     sport: row.sport,
   })
 
+  /*
+   * ⚠ GATED ON POSITION SO A QUARTERBACK DOES NOT PAY FOR A QUERY THAT CANNOT MATCH HIM. The
+   * board holds defenders only, so a non-defender lookup is a guaranteed miss.
+   *
+   * ⚠ AND THIS READS A PRECOMPUTED CACHE — it never builds the board. Building costs ~27s
+   * because replacement level can only be found by pricing the whole pool, so a lazy read would
+   * hand the first visitor after each expiry a 27-second page. The writer is
+   * `/api/cron/adp-refresh`; a miss here means "not computed yet", which renders as nothing.
+   */
+  const idpValue: PlayerDetail['idpValue'] =
+    row.sport === 'NFL' && isIdpPosition(row.position)
+      ? await getCanonicalDefenderValue({ prisma, sleeperId: row.sleeperId })
+      : null
+
   const rankRow = projRow ? (await positionRanks([projKey], projectionWeek)).get(projKey) : undefined
   const rank: PlayerDetail['positionRank'] = rankRow
     ? {
@@ -1090,6 +1130,7 @@ export async function getPlayerDetail(
         : [],
     },
     identityResolved,
+    idpValue,
     bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
     injury,
     seasonStats,

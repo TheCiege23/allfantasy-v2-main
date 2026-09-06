@@ -730,6 +730,36 @@ export function PlayerFinder({
                   }
                 />
               )}
+              {/*
+                Only rendered when there IS a value. A defender with no cached board entry gets
+                no tile rather than an empty one — an unmeasured player and a worthless player
+                must not look the same, and "—" beside a value label reads as the latter.
+
+                ⚠ THE REFERENCE LEAGUE IS IN `help`, NOT OPTIONAL DECORATION. "3,284" is a fact
+                about a 12-team league starting three defenders, not about the world.
+              */}
+              {detail.idpValue ? (
+                <StatTile
+                  label="IDP value"
+                  value={detail.idpValue.value.toLocaleString()}
+                  tone="good"
+                  tip={{
+                    title: 'IDP value',
+                    body:
+                      'The market chart beside this (FantasyCalc) prices no defenders at all, so this is built from projections against a fixed reference league — ' +
+                      `${detail.idpValue.reference.numTeams} teams, ${detail.idpValue.reference.idpStarters} IDP starters, on the default IDP scoring profile. ` +
+                      'It is NOT on the same scale as the offensive values elsewhere on this page: what a top defender is worth against a top receiver is a separate question this number does not answer.',
+                  }}
+                  help={
+                    [
+                      detail.idpValue.positionRank ? `rank ${detail.idpValue.positionRank}` : null,
+                      `${detail.idpValue.reference.numTeams}-team · ${detail.idpValue.reference.idpStarters} IDP`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || undefined
+                  }
+                />
+              ) : null}
               <StatTile
                 label="Snap share"
                 state={detail.snapShare}

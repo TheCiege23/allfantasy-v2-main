@@ -32,6 +32,8 @@ import { runAdpImporter } from "@/lib/workers/adp-importer"
  */
 import { ingestPlayerValues } from "@/lib/player-values/ingestPlayerValues"
 import { runAiAdpJob } from "@/lib/ai-adp-engine"
+import { prisma } from "@/lib/prisma"
+import { refreshCanonicalDefenderBoardCache } from "@/lib/values/canonicalDefenderBoardCache"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -93,6 +95,37 @@ async function handle(req: NextRequest) {
     }
 
     /*
+     * THE DEFENDER BOARD RIDES ALONG, BECAUSE IT IS THE OTHER HALF OF "player values".
+     *
+     * `ingestPlayerValues` above captures FantasyCalc, which publishes NO defenders and NO
+     * kickers — 719 rostered players priced at nothing. `loadCanonicalDefenderBoard` prices them
+     * against a fixed reference league, and it belongs here rather than in a new cron for the
+     * plain reason that this IS the daily player-value job.
+     *
+     * 🛑 AND THE READ PATH CANNOT DO THIS LAZILY, WHICH IS WHY THE WRITER IS NOT OPTIONAL. The
+     * board takes ~27s: it projects 5,385 defenders to find where replacement level sits, and it
+     * must price the whole pool to price anyone. A read-through cache would hand the first
+     * visitor after each expiry a 27-second page. So the reader returns null on a miss and
+     * THIS is what makes the value exist at all — the ingestCFBDStats failure, avoided by
+     * shipping the writer in the same change as the reader.
+     *
+     * FAILURE IS ISOLATED, same rule as its siblings: ADP and player values are already written,
+     * and a stale-but-present board is strictly better than turning this run red.
+     */
+    let defenderBoard: Awaited<ReturnType<typeof refreshCanonicalDefenderBoardCache>> | { error: string } | null =
+      null
+    try {
+      defenderBoard = await refreshCanonicalDefenderBoardCache({ prisma })
+      if (!defenderBoard.ok) {
+        console.warn("[cron/adp-refresh] defender board not refreshed:", defenderBoard.reason)
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error("[cron/adp-refresh] defender board refresh failed:", message)
+      defenderBoard = { error: message.slice(0, 200) }
+    }
+
+    /*
      * AI ADP RIDES ALONG TOO, AND THIS IS LIKEWISE THE ONLY THING THAT SCHEDULES IT.
      *
      * `runAiAdpJob` documents itself as "Call from cron daily" and had NO caller anywhere in
@@ -137,6 +170,14 @@ async function handle(req: NextRequest) {
         bySport: result.providerRowsWrittenBySport,
         consensus: result.consensusRowsBySport,
       },
+      /*
+       * Reported rather than buried: a board that quietly stopped refreshing looks identical to
+       * one that never had a defender to price, and the surface reading it shows nothing either way.
+       */
+      defenderBoard:
+        defenderBoard && 'ok' in defenderBoard && defenderBoard.ok
+          ? { priced: defenderBoard.cached.coverage.priced, candidates: defenderBoard.cached.coverage.candidates }
+          : defenderBoard,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })
