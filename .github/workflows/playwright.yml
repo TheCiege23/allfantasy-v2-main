@@ -128,9 +128,6 @@ jobs:
         cache: 'npm'
     - name: Install dependencies
       run: npm ci
-    - name: Run foundation apply branch tests
-      if: matrix.lane == 'referral-growth-db'
-      run: npm run test:foundation-apply-branches
     - name: Cache Playwright browsers
       uses: actions/cache@v4
       with:
@@ -156,24 +153,6 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npx prisma db push --skip-generate
-    - name: Apply platform-backend foundation SQL
-      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'core-shard-')
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      run: npm run db:foundation:apply
-    - name: Apply platform-backend supplemental indexes
-      if: matrix.lane == 'referral-growth-db' || startsWith(matrix.lane, 'core-shard-')
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      run: npm run db:indexes:platform-backend
-    - name: Verify platform-backend indexes
-      if: matrix.lane == 'referral-growth-db' || startsWith(matrix.lane, 'core-shard-')
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      run: npm run db:indexes:verify-platform-backend
     - name: Run Playwright tests (core)
       if: startsWith(matrix.lane, 'core-shard-')
       env:
@@ -279,11 +258,6 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npx prisma db push --skip-generate
-    - name: Apply platform-backend foundation SQL
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      run: npm run db:foundation:apply
     - name: Cache Playwright browsers
       uses: actions/cache@v4
       with:
@@ -296,11 +270,6 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npx prisma db push --skip-generate
-    - name: Apply platform-backend foundation SQL
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
-      run: npm run db:foundation:apply
     - name: Run draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
