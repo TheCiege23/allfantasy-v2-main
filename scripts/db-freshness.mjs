@@ -58,13 +58,30 @@ export async function pinSessionToUtc(client) {
  *   `table` and `column` are interpolated as quoted identifiers and must come from trusted,
  *   literal configuration — they cannot be parameterised. `where` is likewise trusted text; put
  *   user-supplied values in `params` and reference them positionally.
- * @returns {Promise<{newest: Date|null, ageMs: number|null, rowCount: number, timestampCount: number}>}
+ * @returns {Promise<{newest: Date|null, newestIso: string|null, ageMs: number|null, rowCount: number, timestampCount: number}>}
  */
 export async function maxAge(client, { table, column, where = null, params = [] }) {
   const sql =
     `SELECT max("${column}") AS newest,\n` +
     `       count(*)::bigint AS n,\n` +
     `       count("${column}")::bigint AS n_ts,\n` +
+    // 🛑 THE TIMESTAMP IS RENDERED BY POSTGRES TOO, FOR THE SAME REASON THE AGE IS.
+    //
+    // `max(col)` came back through node-postgres as a Date, and node-postgres parses
+    // `timestamp without time zone` (oid 1114) in the CLIENT's local zone. On this machine that is
+    // EDT, so a row written at 13:07Z was handed to the checker as 17:07Z and published in --json
+    // as `newest: "...T17:07:02.777Z"` — four hours in the future, while `ageMs` beside it read a
+    // correct 13 minutes.
+    //
+    // ⚠ MEASURED 2026-09-06, AND IT COST A DISAGREEMENT BEFORE IT COST A BUG: two sessions read
+    // the SAME sync_job_runs row and reported timestamps four hours apart, each from its own tool,
+    // each correct by its own lights. The verdicts were never wrong — staleness is judged on
+    // `age_seconds` below — but "when did this last run" is the field a human reads while
+    // debugging, and it was the one that lied.
+    //
+    // `to_char` is safe for either column type because pinSessionToUtc has already pinned the
+    // session: a naive timestamp renders its own digits, and a timestamptz renders in UTC.
+    `       to_char(max("${column}"), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS newest_iso,\n` +
     // The whole point: Postgres subtracts against its own now(), so the client's timezone and
     // clock are never involved.
     `       EXTRACT(EPOCH FROM (now() - max("${column}"))) AS age_seconds\n` +
@@ -75,7 +92,10 @@ export async function maxAge(client, { table, column, where = null, params = [] 
   const row = result?.rows?.[0] ?? {}
 
   return {
-    newest: row.newest ? new Date(row.newest) : null,
+    // Built from the Postgres-rendered ISO string, never from `row.newest` — see above. The `Z` is
+    // what makes this parse as an instant rather than as local wall-clock time.
+    newest: row.newest_iso ? new Date(row.newest_iso) : null,
+    newestIso: row.newest_iso ?? null,
     ageMs: row.age_seconds == null ? null : Number(row.age_seconds) * 1000,
     rowCount: Number(row.n ?? 0),
     timestampCount: Number(row.n_ts ?? 0),
