@@ -146,7 +146,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
   return {
     available: true,
     data: {
-      rows: triageRows({ starters, injuries, kickoffs, nowIso }),
+      rows: triageRows({ starters, injuries, kickoffs, nowIso, week: sportsWeek?.week ?? null }),
       week: sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null,
       leaguesRead: startersByLeague.size,
       startersRead: starters.length,

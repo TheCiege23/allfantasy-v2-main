@@ -2666,3 +2666,29 @@
     padding-left: 52px;
   }
 }
+
+/* ── Injury report time + bye (2026-09-06) ───────────────────────────── */
+.af-core .af-pf-injury-when,
+.af-core .af-pf-gameday-when,
+.af-core .af-pf-triage-when {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-injury-when {
+  display: block;
+  margin-top: 4px;
+}
+.af-core .af-pf-bye[data-tone='bad'] {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-pf-bye[data-tone='warn'] {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.af-core .af-pf-gameday[data-kind='bye'] .af-pf-gameday-sum,
+.af-core .af-pf-gameday[data-kind='no-game'] .af-pf-gameday-sum {
+  margin-top: 2px;
+}

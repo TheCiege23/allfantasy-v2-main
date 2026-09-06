@@ -91,6 +91,8 @@ export function composePlayerMoves(args: {
   kickoffs?: Kickoffs
   nowIso?: string | null
   playerTeam?: string | null
+  /** His club is not playing this week (a bye, or absent from the schedule): never recommend him INTO a lineup. */
+  notPlaying?: boolean
 }): PlayerMove[] {
   const { playerName, injuryStatus, impact, freeAgents } = args
   const last = lastName(playerName)
@@ -137,7 +139,8 @@ export function composePlayerMoves(args: {
     }
 
     const so = im.startOver
-    if (so && so.delta > 0) {
+    // A player with no game this week scores nothing; a projection that says otherwise is stale, not a reason to start him.
+    if (so && so.delta > 0 && !args.notPlaying) {
       // Both sides must be unlocked: the starter he displaces AND himself.
       const locked = swapLockOf(so.name, so.team)
       out.push({

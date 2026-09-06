@@ -127,6 +127,7 @@ const DETAIL: PlayerDetail = {
   game: { available: true, data: { kickoff: '2026-10-25T17:00:00.000Z', opponent: 'MIA', home: true, week: 12, season: 2026, preseason: false } },
   // Ferguson (DAL) shares the 1:00 slate; nobody else's club is mapped, so nobody else reads as locked.
   kickoffs: { BUF: '2026-10-25T17:00:00.000Z', MIA: '2026-10-25T17:00:00.000Z', DAL: '2026-10-25T17:00:00.000Z' },
+  scheduleWeek: { season: 2026, week: 12 },
   snapShare: { available: true, data: { share: 0.78, snaps: 400, teamSnaps: 513, games: 8, basis: 'offense' } },
   positionRank: { available: true, data: { rank: 6, outOf: 118, position: 'TE' } },
   impact: { available: true, data: IMPACT },
@@ -469,6 +470,7 @@ describe('Player Finder — game-day home', () => {
           leagues: [{ leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper' }],
           kickoff: null,
           noGame: true,
+          bye: false,
         },
       ],
     },
@@ -485,7 +487,9 @@ describe('Player Finder — game-day home', () => {
     expect(within(rows[0]).getByText(/starting in Dynasty Dragons · Sleeper, End Zone Elites · ESPN/)).toBeInTheDocument()
     expect(within(rows[0]).getByText('locks in 42 min')).toHaveAttribute('data-lock', 'soon')
     expect(rows[1]).toHaveAttribute('data-nogame', 'true')
-    expect(within(rows[1]).getByText('no game on the schedule')).toBeInTheDocument()
+    // A plain schedule gap (the fixture's `bye: false`): the chip says so, and there is no kickoff to count down to.
+    expect(within(rows[1]).getByText('No game on the schedule')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('no kickoff to count down to')).toBeInTheDocument()
   })
 
   it('says the lineups are clear when nothing is flagged, gives the loader’s reason when it could not read, and stays out once a player is open', () => {
@@ -497,6 +501,50 @@ describe('Player Finder — game-day home', () => {
 
     renderCore({ triage: TRIAGE, nowIso: NOW })
     expect(screen.getAllByRole('region', { name: 'Game day · your flagged starters' })).toHaveLength(2) // the two home renders above; none for the open card
+  })
+})
+
+describe('Player Finder — report time and bye', () => {
+  const NOW = '2026-10-25T16:18:00.000Z'
+  // 28 clubs on file in week 9: a real bye slate. Buffalo is not among them.
+  const BYE_SLATE = Object.fromEntries(
+    ['ARI', 'ATL', 'BAL', 'CAR', 'CHI', 'CIN', 'CLE', 'DAL', 'DEN', 'DET', 'GB', 'HOU', 'IND', 'JAX', 'KC', 'LAC', 'LAR', 'LV', 'MIA', 'MIN', 'NE', 'NO', 'NYG', 'NYJ', 'PHI', 'PIT', 'SEA', 'SF'].map((c) => [c, '2026-10-25T17:00:00.000Z']),
+  )
+
+  it('says when the feed reported it, in the banner and the injury section', () => {
+    renderCore({
+      detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: new Date('2026-10-25T15:12:00.000Z') } } },
+      nowIso: NOW,
+    })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(within(banner).getByText('reported Sun 11:12a ET')).toBeInTheDocument()
+    expect(screen.getAllByText('reported Sun 11:12a ET')).toHaveLength(2) // banner + injury section
+  })
+
+  it('marks a bye beside readiness and leads with a bye banner that still offers the lineup buttons', () => {
+    renderCore({
+      detail: { ...DETAIL, game: { available: false, reason: 'no game on the schedule for BUF in week 9' }, kickoffs: BYE_SLATE, scheduleWeek: { season: 2026, week: 9 } },
+      nowIso: NOW,
+    })
+    expect(screen.getAllByText('Bye · wk 9').length).toBeGreaterThanOrEqual(2) // header chip + banner chip
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).toHaveAttribute('data-kind', 'bye')
+    expect(within(banner).getByText('Ready · Ankle')).toBeInTheDocument() // readiness still shown: a Ready player on bye scores nothing
+    expect(within(banner).getByText('On bye this week — Kincaid is in your starting lineup in 1 league; bench him before those lineups lock.')).toBeInTheDocument()
+    expect(within(banner).getAllByRole('link')).toHaveLength(1)
+    expect(screen.queryAllByText(/locks in/)).toHaveLength(0) // no kickoff, so no row clocks either
+  })
+
+  it('reads a schedule gap as "no game on the schedule", never as a bye', () => {
+    // Week 1, 30 clubs on file: one fixture is missing, nobody is on bye.
+    const gap = Object.fromEntries(Object.entries(BYE_SLATE).slice(0, 30 - 2))
+    renderCore({
+      detail: { ...DETAIL, game: { available: false, reason: 'no game on the schedule for BUF in week 1' }, kickoffs: { ...gap, TB: '2026-10-25T17:00:00.000Z', TEN: '2026-10-25T17:00:00.000Z', WAS: '2026-10-25T17:00:00.000Z', X1: '2026-10-25T17:00:00.000Z' }, scheduleWeek: { season: 2026, week: 1 } },
+      nowIso: NOW,
+    })
+    expect(screen.getAllByText('No game on the schedule').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText(/Bye · wk/)).toBeNull()
+    expect(screen.getByRole('region', { name: 'Game day' })).toHaveAttribute('data-kind', 'no-game')
   })
 })
 

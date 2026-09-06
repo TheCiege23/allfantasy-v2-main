@@ -76,6 +76,11 @@ describe('composePlayerMoves — game-day legality', () => {
     expect(composePlayerMoves({ ...base, kickoffs: {}, nowIso: '2026-10-25T17:30:00.000Z' }).every((m) => m.locked === null)).toBe(true)
   })
 
+  it('never recommends a player with no game this week into a lineup, and keeps his other moves', () => {
+    const moves = composePlayerMoves({ ...base, nowIso: '2026-10-25T16:18:00.000Z', notPlaying: true })
+    expect(moves.map((m) => m.key)).toEqual(['ir:L-elites']) // the Dragons swap is gone; moving him off IR is still roster hygiene
+  })
+
   it('locks the swap once either side has kicked off, names the game, and sorts locked moves last', () => {
     const after = composePlayerMoves({ ...base, nowIso: '2026-10-25T17:30:00.000Z' })
     // Both are locked here (his own game and Ferguson's), so the order falls back to tone.

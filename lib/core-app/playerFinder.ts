@@ -174,6 +174,8 @@ export type PlayerDetail = {
    * claimed locked.
    */
   kickoffs: Record<string, string>
+  /** The week the schedule rows belong to; null when the week could not be resolved. Lets a bye be judged (byeStatus.ts). */
+  scheduleWeek: { season: number; week: number } | null
   /**
    * Share of his team's snaps, offensive or defensive as the position requires.
    *
@@ -1086,6 +1088,7 @@ export async function getPlayerDetail(
   const game: PlayerDetail['game'] = playerGame(weekGames, normalizeTeamAbbrev(row.team), sportsWeek)
   // Every club's kickoff, for the bench candidates' locks — the same rows, no second read.
   const kickoffs = weekKickoffs(weekGames)
+  const scheduleWeek = sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null
 
   const projRow = projectionWeek
     ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
@@ -1178,6 +1181,7 @@ export async function getPlayerDetail(
     projection,
     game,
     kickoffs,
+    scheduleWeek,
     snapShare,
     positionRank: rank,
     recommendedMoves,

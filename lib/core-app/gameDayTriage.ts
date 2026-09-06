@@ -1,4 +1,5 @@
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { byeStatus } from './byeStatus'
 import { lockState } from './lineupLock'
 import { readiness, type MoveTone } from './playerMoves'
 
@@ -47,6 +48,8 @@ export type TriageRow = {
   kickoff: string | null
   /** The schedule is on file and his club has no game in it. */
   noGame: boolean
+  /** `noGame` with the shape of a real bye slate (byeStatus.ts); false for a plain schedule gap. */
+  bye: boolean
 }
 
 export type GameDayTriage = {
@@ -65,8 +68,11 @@ export function triageRows(args: {
   injuries: Map<string, TriageInjury>
   kickoffs: Record<string, string>
   nowIso: string
+  /** The schedule's week, so an absence can be judged a bye or a gap. */
+  week?: number | null
 }): TriageRow[] {
   const { starters, injuries, kickoffs, nowIso } = args
+  const week = args.week ?? null
   const scheduleOnFile = Object.keys(kickoffs).length > 0
   const byPlayer = new Map<string, TriageRow>()
 
@@ -77,6 +83,7 @@ export function triageRows(args: {
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null
     const noGame = scheduleOnFile && !kickoff
+    const bye = noGame && byeStatus(club, kickoffs, week) === 'bye'
     if (!flagged && !noGame) continue
 
     const existing = byPlayer.get(s.sleeperId)
@@ -92,6 +99,7 @@ export function triageRows(args: {
       leagues: [{ leagueId: s.leagueId, leagueName: s.leagueName, platform: s.platform }],
       kickoff,
       noGame,
+      bye,
     })
   }
 

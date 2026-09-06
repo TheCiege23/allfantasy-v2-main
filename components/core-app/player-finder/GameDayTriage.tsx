@@ -4,6 +4,7 @@ import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/Play
 import type { GameDayTriage as Triage } from '@/lib/core-app/gameDayTriage'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { playerRef } from '@/lib/core-app/playerRef'
 
 /**
@@ -60,6 +61,12 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
                           {r.description && r.description.length <= 20 ? ` · ${r.description}` : ''}
                         </span>
                       ) : null}
+                      {r.noGame ? (
+                        <span className="af-chip af-num af-pf-ready af-pf-triage-status af-pf-bye" data-tone={r.bye ? 'bad' : 'warn'}>
+                          {r.bye ? (week ? `Bye · wk ${week.week}` : 'Bye') : 'No game on the schedule'}
+                        </span>
+                      ) : null}
+                      {reportedLabel(r.reportedAt, nowIso) ? <span className="af-pf-triage-when af-num">{reportedLabel(r.reportedAt, nowIso)}</span> : null}
                     </span>
                     <span className="af-pf-triage-meta">
                       {r.player.position ?? ''}
@@ -79,7 +86,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
                       <LockClock kickoffIso={r.kickoff} nowIso={nowIso} />
                     ) : (
                       <span className="af-chip af-num af-pf-lock" data-lock="nogame">
-                        no game on the schedule
+                        {r.bye ? 'bench him before your leagues lock' : 'no kickoff to count down to'}
                       </span>
                     )}
                   </span>
@@ -90,7 +97,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
         </ul>
       )}
       <p className="af-pf-triage-foot">
-        Flagged means the injury feed reads Questionable, Doubtful or Out, or his club has no game on the week&apos;s schedule. Locks are his own kickoff; a league that locks every lineup at the first game locks earlier.
+        Flagged means the injury feed reads Questionable, Doubtful or Out, or his club is not playing this week — a bye when the slate has the shape of one, otherwise a gap in the schedule we hold. Locks are his own kickoff; a league that locks every lineup at the first game locks earlier.
       </p>
     </section>
   )

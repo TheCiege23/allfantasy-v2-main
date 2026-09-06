@@ -22,6 +22,14 @@ import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
+import { reportedLabel } from '@/lib/core-app/injuryReport'
+import { byeChip, byeStatus } from '@/lib/core-app/byeStatus'
+
+/** The loader hands a Date across the server boundary; tests and fixtures may hand an ISO string. */
+function asIso(v: Date | string | null | undefined): string | null {
+  if (!v) return null
+  return v instanceof Date ? v.toISOString() : v
+}
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import type { LeagueSlot, PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -372,6 +380,10 @@ export function PlayerFinder({
         kickoffs: detail.kickoffs ?? {},
         nowIso,
         playerTeam: detail.player.team,
+        notPlaying: (() => {
+          const s = byeStatus(detail.player.team, detail.kickoffs ?? {}, detail.scheduleWeek?.week ?? null)
+          return s === 'bye' || s === 'no-game'
+        })(),
       })
     : []
   const moveByLeague = new Map<string, PlayerMove>()
@@ -409,6 +421,11 @@ export function PlayerFinder({
    */
   const gameKickoff = detail?.game?.available ? detail.game.data.kickoff : null
   const gameDayStatus = ready && (ready.tone === 'bad' || ready.tone === 'warn') ? ready : null
+  // Not playing this week: a bye by the slate's shape, or absent from the schedule (byeStatus.ts keeps the two apart).
+  const byeState = detail ? byeStatus(detail.player.team, detail.kickoffs ?? {}, detail.scheduleWeek?.week ?? null) : 'unknown'
+  const byeMarkBase = byeChip(byeState, detail?.scheduleWeek?.week ?? null)
+  const byeMark = byeMarkBase && (byeState === 'bye' || byeState === 'no-game') ? { ...byeMarkBase, kind: byeState } : null
+  const injuryReportedAt = detail?.injury.available ? asIso(detail.injury.data.reportedAt) : null
   const startingLeagues: GameDayLeague[] = leagueRows
     .filter((r) => r.slot.isYours && (r.impact ? r.impact.isStarting : r.slot.slot === 'STARTER'))
     .map((r) => ({
@@ -647,6 +664,12 @@ export function PlayerFinder({
                         : ''}
                     </span>
                   ) : null}
+                  {/* Not playing this week — beside readiness, since a Ready player on bye still scores nothing. */}
+                  {byeMark ? (
+                    <span className="af-chip af-num af-pf-ready af-pf-bye" data-tone={byeMark.tone}>
+                      {byeMark.label}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="af-pf-line">
                   {detail.player.position ?? ''}
@@ -696,12 +719,14 @@ export function PlayerFinder({
             </header>
 
             {/* Game day: at-risk or out, with a kickoff on the schedule — the lock and the lineup buttons first. */}
-            {gameDayStatus && detail.game?.available && signedIn ? (
+            {signedIn && ((gameDayStatus && detail.game?.available) || (byeMark && !detail.game?.available)) ? (
               <GameDayBanner
                 playerName={detail.player.name}
-                status={gameDayStatus}
+                status={gameDayStatus ?? (byeMark ? ready : null)}
                 detail={detail.injury.available && detail.injury.data.description && detail.injury.data.description.length <= 28 ? detail.injury.data.description : null}
-                game={detail.game.data}
+                reportedAt={injuryReportedAt}
+                game={detail.game?.available ? detail.game.data : null}
+                bye={detail.game?.available ? null : byeMark}
                 nowIso={nowIso}
                 starting={startingLeagues}
                 benched={benchedCount}
@@ -854,6 +879,10 @@ export function PlayerFinder({
                   </span>
                   {detail.injury.data.description ? (
                     <p className="af-pf-injury-note">{detail.injury.data.description}</p>
+                  ) : null}
+                  {/* When the feed said it — the fact that tells a reader the news is fresh enough to act on. */}
+                  {reportedLabel(asIso(detail.injury.data.reportedAt), nowIso) ? (
+                    <span className="af-pf-injury-when af-num">{reportedLabel(asIso(detail.injury.data.reportedAt), nowIso)}</span>
                   ) : null}
                 </div>
               ) : (
