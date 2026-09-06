@@ -2163,6 +2163,20 @@
   font-size: 20px;
   line-height: 1.15;
   overflow-wrap: anywhere;
+  /*
+   * ⚠ AUTHORED ON THE TOKEN ON PURPOSE. The global heading and table-cell
+   * colour in app/globals.css has a light value and a dark override, and AF
+   * mode matches neither — so an h3 or a th left to inherit paints near-black
+   * on the AF purple (measured 2026-09-06: rgba(2,6,23,.92) on #0d0819). The
+   * single card's name and headers already name their colour; these must too.
+   */
+  color: var(--text);
+}
+.af-core .af-pf-cmp-table th {
+  color: var(--text);
+}
+.af-core .af-pf-cmp-table td {
+  color: var(--text2);
 }
 .af-core .af-pf-cmp-line {
   font-size: 12.5px;
