@@ -21,7 +21,10 @@
  * 🛑 THE `outlook` SATELLITE WAS REMOVED 2026-09-06, AND THE MEASUREMENT IS WHY.
  * It read `ai_player_outlooks_cache`, and that table is EMPTY IN PRODUCTION — `count(*)` 0 and
  * `max(created_at)` NULL, so not one row has ever been written. Its only writer,
- * `lib/ai/players/aiPlayerOutlook.ts:88`, has zero callers, so nothing has ever filled it.
+ * `lib/ai/players/aiPlayerOutlook.ts`, had zero callers, so nothing ever filled it. That writer
+ * was itself deleted once this read went — with the read gone the table had no reader either, so
+ * the module was orphaned at both ends. ⚠ THE TABLE ITSELF IS STILL IN `prisma/schema.prisma`:
+ * dropping it is a MIGRATION and is a separate decision from removing the code.
  *
  * ⚠ NOTHING WAS BROKEN BY IT, WHICH IS WHY IT SURVIVED. This function reports gaps rather than
  * faking them, so `missing` correctly carried `'outlook'` on every call, and no consumer of
