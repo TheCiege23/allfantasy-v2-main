@@ -276,7 +276,32 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
    * alone". The folding is what puts the duplicate rows in the same group at
    * all, so any census of this collapse has to use the real key.
    */
-  const seen = new Map<string, { row: (typeof rows)[number]; imageUrl: string | null }>()
+  return collapseCatalog(rows, limit)
+}
+
+/** One catalog row as the two search paths read it. */
+type CatalogRow = {
+  externalId: string
+  sleeperId: string | null
+  name: string
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+  number: number | null
+  sport: string
+}
+
+const CATALOG_SELECT = {
+  externalId: true, sleeperId: true, name: true, position: true,
+  team: true, imageUrl: true, number: true, sport: true,
+} as const
+
+/**
+ * Collapse duplicate source rows to one per athlete. Shared by the page search
+ * above and the typeahead below; the rationale is in searchPlayers.
+ */
+function collapseCatalog(rows: CatalogRow[], limit: number): PlayerMatch[] {
+  const seen = new Map<string, { row: CatalogRow; imageUrl: string | null }>()
   for (const r of rows) {
     // Normalised so "Dalton Kincaid / TE / BUF" and "Dalton Kincaid / Tight End
     // / BUF" collapse to one entry instead of looking like two players.
@@ -313,6 +338,88 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
     rosteredIn: null,
     platforms: [],
   }))
+}
+
+/**
+ * The typeahead's catalog read: names that START with the letters first.
+ *
+ * ⚠ MEASURED ON PRODUCTION, 2026-09-05: "kin" through the contains-query above
+ * returned Cameron Kinley, D'Eriq King, Alex AKINgbulu and Andrew HawKINs and
+ * never Dalton Kincaid — the query stops at `take` rows of an alphabetical
+ * contains-match, and a prefix rule applied afterwards can only reorder the
+ * survivors. So the preference is in the WHERE: a name that starts with the
+ * query, or has a word that does (`" kin"` is the space-prefixed contains),
+ * is read first; the plain contains-match tops up only when those run short.
+ */
+export async function suggestCatalog(
+  query: string,
+  limit = 8,
+  opts: {
+    /**
+     * Sleeper ids to read FIRST among the prefix matches — every id on any
+     * roster AllFantasy holds, from the caller's cache. "kin" has dozens of
+     * prefix names across every sport in the catalog, and the one being typed
+     * for is almost always one somebody rosters; without this pass he sits
+     * behind forty alphabetical Kings the window never reaches.
+     */
+    preferIds?: readonly string[]
+  } = {},
+): Promise<PlayerMatch[]> {
+  const q = query.trim()
+  if (q.length < 2) return []
+  /*
+   * ⚠ NAME ORDER, NOT ID ORDER. The page search sorts by sleeperId first so
+   * its collapse sees identified rows early; applied here it made the prefix
+   * window an arbitrary slice by id — "kin" has dozens of prefix names, and
+   * Kincaid's low Sleeper id fell outside the first 48 rows. Sorting by name
+   * keeps a player's source rows adjacent (so the collapse still folds them)
+   * and makes the window the first names alphabetically, which is what a
+   * suggestion list is.
+   */
+  const orderBy = [
+    { name: 'asc' as const },
+    { sleeperId: { sort: 'desc' as const, nulls: 'last' as const } },
+    { externalId: 'asc' as const },
+  ]
+  const prefix = {
+    OR: [
+      { name: { startsWith: q, mode: 'insensitive' as const } },
+      { name: { contains: ` ${q}`, mode: 'insensitive' as const } },
+    ],
+  }
+  const out: PlayerMatch[] = []
+  const seen = new Set<string>()
+  const add = (rows: CatalogRow[]) => {
+    for (const m of collapseCatalog(rows, limit)) {
+      const key = `${m.sport}:${m.externalId}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(m)
+    }
+  }
+  /*
+   * Up to four reads, each only when the ones before ran short: prefix
+   * matches somebody rosters (see `preferIds`), prefix matches with a team
+   * (8,536 identified NFL rows carry no team — the retired and the free
+   * agents), prefix matches without one, then the plain contains-match.
+   *
+   * The prefix windows are wide on purpose. A case-insensitive prefix scan
+   * costs the same whatever `take` says, and the caller ranks the result by
+   * who is rostered, so handing it 200 rows instead of 24 is free relevance.
+   */
+  const preferIds = opts.preferIds ?? []
+  const passes: Array<{ where: Record<string, unknown>; take: number }> = [
+    ...(preferIds.length > 0 ? [{ where: { ...prefix, sleeperId: { in: [...preferIds] } }, take: 200 }] : []),
+    { where: { ...prefix, team: { not: null } }, take: 200 },
+    { where: { ...prefix, team: null }, take: 60 },
+    { where: { name: { contains: q, mode: 'insensitive' as const } }, take: 60 },
+  ]
+  for (const { where, take } of passes) {
+    if (out.length >= limit) break
+    const rows = await prisma.sportsPlayer.findMany({ where, orderBy, take, select: CATALOG_SELECT })
+    add(rows ?? [])
+  }
+  return out.slice(0, limit)
 }
 
 /**

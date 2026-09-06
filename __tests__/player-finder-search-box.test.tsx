@@ -33,7 +33,16 @@ vi.mock('next/link', () => ({
 const KINCAID = { externalId: 'ri-1', sleeperId: '10236', name: 'Dalton Kincaid', sport: 'NFL', position: 'TE', team: 'BUF', imageUrl: null }
 // The same athlete from a second source, spelled the way TheSportsDB spells him — and the only row with a headshot.
 const KINCAID_DUPE = { ...KINCAID, externalId: 'tsdb_34249066', sleeperId: null, position: 'Tight End', team: 'Buffalo Bills', imageUrl: 'https://img/kincaid.png' }
-const KING = { externalId: 'ri-2', sleeperId: '77', name: 'Kingsley Suamataia', sport: 'NFL', position: 'OT', team: 'KC', imageUrl: null }
+const KING = {
+  externalId: 'ri-2',
+  sleeperId: '77',
+  name: 'Kingsley Suamataia',
+  sport: 'NFL',
+  position: 'OT',
+  team: 'KC',
+  imageUrl: null,
+  presence: { yours: [], owned: [{ leagueName: 'Gridiron Gang', ownerName: 'tashaR' }], free: ['Dynasty Dragons'], unchecked: 0 },
+}
 
 const fetchMock = vi.fn()
 
@@ -80,7 +89,7 @@ describe('PlayerSearchBox', () => {
     await typeAndSettle('kin')
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/players/search?q=kin&limit=8')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/core/players/suggest?q=kin&limit=8')
     const list = screen.getByRole('listbox', { name: 'Suggestions' })
     const options = screen.getAllByRole('option')
     expect(options).toHaveLength(2)
@@ -92,6 +101,9 @@ describe('PlayerSearchBox', () => {
     expect(link.querySelector('img.af-pf-avatar')).toHaveAttribute('src', 'https://img/kincaid.png')
     expect(link.querySelector('img.af-pf-team-logo')).toHaveAttribute('src', 'https://a.espncdn.com/i/teamlogos/nfl/500/buf.png')
     expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'true')
+    // The chip says where he is in your leagues; a row without presence has none.
+    expect(screen.getByText('@tashaR has him in Gridiron Gang')).toHaveAttribute('data-tone', 'warn')
+    expect(link.querySelector('.af-pf-suggest-chip')).toBeNull()
   })
 
   it('does not ask for one character, and reuses a cached answer instead of asking twice', async () => {

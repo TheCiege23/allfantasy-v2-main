@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { normalizePosition } from '@/lib/core-app/positionNormalization'
+import { suggestionChip } from '@/lib/core-app/suggestionChip'
+import type { SuggestionPresence } from '@/lib/core-app/playerSuggest'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 
 /**
@@ -12,14 +14,16 @@ import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/Play
  * The form is the same GET to /core/players it always was — Enter or Search
  * still runs the full search and renders the page — and the suggestions are
  * a layer on top of it that never has to work for the search to work. They
- * come from `/api/players/search`, the catalog endpoint the shell's command
- * palette and the chat mention picker already use, debounced at 300ms and
- * cached per query so backspacing does not refetch.
+ * come from `/api/core/players/suggest` (lib/core-app/playerSuggest.ts): the
+ * finder's own catalog search, ranked prefix-first and then by who is in
+ * your leagues, each row carrying a chip — "yours in Dynasty Dragons",
+ * "@tashaR has him in Gridiron Gang", "free in 4 leagues". Debounced at
+ * 300ms and cached per query so backspacing does not refetch.
  *
- * ⚠ THAT ENDPOINT IS RATE LIMITED AT 30 REQUESTS A MINUTE PER IP. A 429 is
- * expected behaviour under fast typing, not an error: the list simply stays
- * closed until the next keystroke after the cooldown, and the form keeps
- * working throughout. Nothing is retried in a loop.
+ * ⚠ THAT ENDPOINT IS RATE LIMITED PER IP (40 a minute). A 429 is expected
+ * behaviour under fast typing, not an error: the list simply stays closed
+ * until the next keystroke after the cooldown, and the form keeps working
+ * throughout. Nothing is retried in a loop.
  *
  * Each suggestion links to the same URL the match list uses — sport-qualified
  * `player=` param, the held league carried — so picking one lands on exactly
@@ -38,6 +42,8 @@ export type SearchHit = {
   position: string | null
   team: string | null
   imageUrl: string | null
+  /** Where he is in your leagues; absent when signed out or unjoinable. */
+  presence?: SuggestionPresence | null
 }
 
 const DEBOUNCE_MS = 300
@@ -112,7 +118,7 @@ export function PlayerSearchBox({
     const ctl = new AbortController()
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/players/search?q=${encodeURIComponent(term)}&limit=${LIMIT}`, { signal: ctl.signal })
+        const res = await fetch(`/api/core/players/suggest?q=${encodeURIComponent(term)}&limit=${LIMIT}`, { signal: ctl.signal })
         if (res.status === 429) {
           const retry = Number.parseInt(res.headers.get('Retry-After') ?? '', 10)
           cooldownUntil.current = Date.now() + (Number.isFinite(retry) ? retry : 30) * 1000
@@ -207,6 +213,15 @@ export function PlayerSearchBox({
                       {h.team ?? 'no team on file'}
                       {h.sport && h.sport !== 'NFL' ? ` · ${h.sport}` : ''}
                     </span>
+                    {/* Where he is in your leagues — its own line, so a long name never has to make room for it. */}
+                    {(() => {
+                      const chip = suggestionChip(h.presence)
+                      return chip ? (
+                        <span className="af-chip af-pf-suggest-chip" data-tone={chip.tone}>
+                          {chip.text}
+                        </span>
+                      ) : null
+                    })()}
                   </span>
                 </Link>
               </li>

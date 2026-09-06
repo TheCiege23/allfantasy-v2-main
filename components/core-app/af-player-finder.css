@@ -1988,6 +1988,20 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1 1 auto;
+}
+/* Where he is in your leagues: a third line under the meta, sized to its text,
+   so a long name and a long chip never fight for one row. */
+.af-core .af-pf-suggest-chip {
+  align-self: flex-start;
+  margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 /* Match and recent rows become a headshot beside the text. The column layout
    above centred the stacked text vertically; as a row that same rule centres
