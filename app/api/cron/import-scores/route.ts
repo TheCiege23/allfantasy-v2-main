@@ -36,7 +36,7 @@ import {
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
 import { prisma } from "@/lib/prisma"
-import { fetchGamesForSport, type ProviderGame } from "@/lib/scores/gameScoreProviders"
+import { fetchGamesForSport, normalizeGameStatus, type ProviderGame } from "@/lib/scores/gameScoreProviders"
 import { createRunBudget } from "@/lib/cron/runBudget"
 
 /**
@@ -130,6 +130,46 @@ const GAME_TTL_MS = 6 * 60 * 60 * 1000
  * persisted until a visible field moves too — acceptable, because nothing reads
  * `raw` to render a score.
  */
+/**
+ * 🛑 A PROVIDER THAT STOPS REPORTING A SCORE MUST NOT ERASE THE ONE WE ALREADY HAVE.
+ *
+ * Rolling Insights is the worked example, and it cost the whole NFL feed. Its two endpoints
+ * disagree about the same fixture: `/live/{date}` carries the scores but covers ONE date, while
+ * `/schedule-season/{year}` covers every game and returns finished ones as `status: "completed"`
+ * with NO score at all (verified from the stored `raw`: 21 schedule-shaped keys, no `home_score`,
+ * no `full_box`). So the day after a game, `/live` no longer returns it, the schedule row does,
+ * `completed` normalizes to `final` — the row is correctly treated as PLAYED — and the score
+ * resolves to null. `unchanged` then compares `28 === null`, calls it a change, and the upsert
+ * writes the null over a real result. After that `null === null` reads unchanged, so it is stable
+ * at null forever.
+ *
+ * Measured 2026-09-06: rolling_insights held 0 scores across 421 NFL rows while espn had 48/64 and
+ * thesportsdb 383/658 for the same fixtures. The corroboration is that this cron writes only
+ * `["NFL","NCAAF"]` and uses RI only for NFL — every RI sport it does NOT rewrite kept its scores
+ * (MLB 450, NBA 29, NHL 18, all frozen since May). The one it rewrites is the one at zero.
+ *
+ * ⚠ THE PROVIDER-SIDE GUARD LOOKS LIKE IT COVERS THIS AND DOES NOT. `fetchRollingInsightsNflGames`
+ * already preserves `existing?.homeScore`, but `existing` is its in-run `byId` map — it merges two
+ * endpoints within ONE call and knows nothing about the stored row. Across runs there is no
+ * memory, which is exactly where the data was being lost.
+ *
+ * ⚠ GATED ON THE GAME HAVING BEEN PLAYED, deliberately. Carrying a score forward onto a row that
+ * has gone back to `scheduled` or `postponed` would invent the mirror-image bug — a score for a
+ * game nobody has played — which this file already guards against on the provider side. Only
+ * `in_progress` and `final` protect a score; anything else lets the null through.
+ */
+function carryForwardScore(
+  prev: { homeScore: number | null; awayScore: number | null },
+  next: ProviderGame,
+): ProviderGame {
+  const state = normalizeGameStatus(next.status)
+  if (state !== "in_progress" && state !== "final") return next
+  const homeScore = next.homeScore ?? prev.homeScore
+  const awayScore = next.awayScore ?? prev.awayScore
+  if (homeScore === next.homeScore && awayScore === next.awayScore) return next
+  return { ...next, homeScore, awayScore }
+}
+
 function unchanged(prev: {
   homeTeam: string
   awayTeam: string
@@ -209,8 +249,9 @@ async function persistGames(
   const moved: ProviderGame[] = []
   for (const g of games) {
     const prev = byId.get(g.externalId)
-    if (prev && unchanged(prev, g)) stale.push(g.externalId)
-    else moved.push(g)
+    const merged = prev ? carryForwardScore(prev, g) : g
+    if (prev && unchanged(prev, merged)) stale.push(g.externalId)
+    else moved.push(merged)
   }
 
   if (stale.length > 0) {

@@ -308,6 +308,33 @@ describe('provider priority decides what survives a short tick', () => {
     expect(attempts[0].error ?? '').not.toMatch(/skipped/)
   })
 
+  /*
+   * 🛑 `/live/{date}` IS KEYED ON THE VENDOR'S US EASTERN DAY, AND A UTC DATE MISSES EVERY
+   * PRIMETIME GAME. The window is 00:00-04:00 UTC — Sunday night, Monday night, Thursday night —
+   * where the UTC calendar has already rolled over and Eastern has not, so the request asks for a
+   * date on which those games had not been played. Kickoff below is 8:30pm ET on Sunday the 6th,
+   * which is 00:30Z on Monday the 7th.
+   */
+  it('asks /live for the EASTERN date, not the UTC one, during a primetime game', async () => {
+    withProviderEnv()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-07T00:30:00Z')) // Sun 8:30pm ET
+    try {
+      const fetchSpy = vi.fn().mockResolvedValue(mockResponse(200, '{}'))
+      vi.stubGlobal('fetch', fetchSpy)
+
+      const { fetchRollingInsightsNflGames } = await loadProviders()
+      await fetchRollingInsightsNflGames()
+
+      const liveUrl = fetchSpy.mock.calls.map((c) => String(c[0])).find((u) => u.includes('/live/'))
+      expect(liveUrl).toBeDefined()
+      expect(liveUrl).toContain('/live/2026-09-06/NFL')
+      expect(liveUrl).not.toContain('/live/2026-09-07/NFL')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('NCAAF uses CFBD as its primary, in the same position', async () => {
     withProviderEnv()
     vi.stubEnv('CFBD_KEY', 'test-key-not-a-real-credential')

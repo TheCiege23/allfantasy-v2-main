@@ -319,17 +319,41 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
    * 3,331 RI game rows on production, only 497 carrying a score, while ESPN and
    * TheSportsDB held the real numbers for the same fixtures.
    *
-   * The date is UTC-derived, matching how the rest of this file treats provider
-   * timestamps, and /live "returns started AND finished events for the given
-   * date" so a single call covers the whole slate.
+   * /live "returns started AND finished events for the given date", so a single call covers the
+   * whole slate.
+   *
+   * 🛑 THE DATE IS US EASTERN, NOT UTC, AND THE UTC VERSION SILENTLY MISSED EVERY PRIMETIME GAME.
+   *
+   * This previously derived the date from `getUTCFullYear/Month/Date`, justified as "matching how
+   * the rest of this file treats provider timestamps". That reasoning is right about parsing a
+   * timestamp the vendor SENDS and wrong about a date we PUT IN A PATH: `/live/{date}` is keyed on
+   * the vendor's Eastern calendar day (contracts/rolling-insights/GAPS.md, and CLAUDE.md records a
+   * UTC date 404ing through NFL primetime).
+   *
+   * Measured 2026-09-06 — the window is exactly the one that matters:
+   *
+   *     Sunday 8:30pm ET kickoff   eastern 2026-09-06   utc 2026-09-07   <-- asked for TOMORROW
+   *     Monday 11:59pm ET          eastern 2026-09-07   utc 2026-09-08   <-- asked for TOMORROW
+   *     Sunday 1:25pm ET           eastern 2026-09-06   utc 2026-09-06       agree
+   *
+   * So 00:00-04:00 UTC — every Sunday-night, Monday-night and Thursday-night game — requested a
+   * date on which those games had not been played. `en-CA` renders `YYYY-MM-DD`, which is the
+   * format the contract specifies.
+   *
+   * ⚠ The season year is derived from the SAME Eastern string rather than from UTC, so the two
+   * cannot disagree about which day it is at a season boundary.
    */
-  const today = new Date()
-  const liveDate = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`
-  const seasonYearForPath = String(
-    // The NFL season is named for the year it STARTED, so January and February
-    // still belong to the previous season's schedule.
-    today.getUTCMonth() + 1 <= 2 ? today.getUTCFullYear() - 1 : today.getUTCFullYear(),
-  )
+  const liveDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+  // The NFL season is named for the year it STARTED, so January and February still belong to the
+  // previous season's schedule.
+  const easternYear = Number(liveDate.slice(0, 4))
+  const easternMonth = Number(liveDate.slice(5, 7))
+  const seasonYearForPath = String(easternMonth <= 2 ? easternYear - 1 : easternYear)
 
   for (const endpoint of [`schedule-season/${seasonYearForPath}/NFL`, `live/${liveDate}/NFL`]) {
     const { body, failure } = await getJson(`${base}/${endpoint}${q}`)

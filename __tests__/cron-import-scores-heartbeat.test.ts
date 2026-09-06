@@ -51,7 +51,14 @@ const { withSyncJobRunMock, syncRuns, prismaMock, fetchGamesForSportMock, syncAP
           return result
         },
       ),
-      prismaMock: { sportsGame: { findFirst: vi.fn(), upsert: vi.fn() } },
+      prismaMock: {
+        sportsGame: {
+          findFirst: vi.fn(),
+          upsert: vi.fn(),
+          findMany: vi.fn(),
+          updateMany: vi.fn(),
+        },
+      },
       fetchGamesForSportMock: vi.fn(),
       syncAPISportsGamesToDbMock: vi.fn(),
     }
@@ -64,7 +71,24 @@ vi.mock('@/lib/api-sports', () => ({
   clearAPISportsDiagnostics: vi.fn(),
   getAPISportsDiagnostics: vi.fn(() => ({})),
 }))
-vi.mock('@/lib/scores/gameScoreProviders', () => ({ fetchGamesForSport: fetchGamesForSportMock }))
+/**
+ * ⚠ PASS THE REAL MODULE THROUGH, REPLACING ONLY THE NETWORK CALL.
+ *
+ * This used to return `{ fetchGamesForSport }` and nothing else. The route later began importing
+ * `normalizeGameStatus` from the same module, and the mock silently stopped satisfying its
+ * contract — every test here happens to exercise the GATED path, where that function is never
+ * reached, so the suite stayed green while the double no longer matched the module. That is the
+ * quiet half of the stale-mock failure CLAUDE.md describes, and the first test to touch the
+ * persistence path would have hit `undefined is not a function`.
+ *
+ * Using the ACTUAL `normalizeGameStatus` also matters for what it is testing: the carry-forward
+ * guard keys on a real provider string ("completed" -> final), so a stubbed normalizer would prove
+ * the test's own assumption rather than the module's behaviour.
+ */
+vi.mock('@/lib/scores/gameScoreProviders', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/scores/gameScoreProviders')>()
+  return { ...actual, fetchGamesForSport: fetchGamesForSportMock }
+})
 
 import { GET as importScoresGET } from '@/app/api/cron/import-scores/route'
 
@@ -165,5 +189,98 @@ describe('import-scores heartbeat contract', () => {
     // The probe matches on job_name alone, so a row written by an unauthenticated or hand-issued
     // call would be indistinguishable from a scheduled fire and could hide a dead scheduler.
     expect(syncRuns).toHaveLength(0)
+  })
+})
+
+/**
+ * 🛑 THE FEED THAT STOPS REPORTING A SCORE MUST NOT ERASE THE ONE ALREADY STORED.
+ *
+ * Rolling Insights `/schedule-season` returns a finished game as `status: "completed"` with NO
+ * score, while `/live/{date}` — which has the score — covers one date only. The day after a game,
+ * only the schedule row comes back, `completed` normalizes to `final`, the score resolves to null,
+ * and the upsert wrote that null over a real result. Measured on production 2026-09-06:
+ * rolling_insights held 0 scores across 421 NFL rows while espn held 48/64 for the same fixtures.
+ *
+ * These run through the ROUTE, not a hand-called helper, so they also prove the guard is wired.
+ */
+describe('a stored score survives a provider that stops sending one', () => {
+  const PLAYED = {
+    externalId: 'g1',
+    homeTeam: 'Steelers',
+    awayTeam: 'Packers',
+    status: 'completed', // the literal RI schedule-season string
+    startTime: new Date('2026-08-13T23:00:00Z'),
+    week: 1,
+    seasonType: 'Preseason',
+    season: 2026,
+    raw: {},
+  }
+
+  /** Gate open, so the providers are actually consulted. */
+  function gateIsOpen() {
+    prismaMock.sportsGame.findFirst.mockResolvedValue(null)
+    prismaMock.sportsGame.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.sportsGame.upsert.mockResolvedValue({})
+  }
+
+  function providerReturns(games: unknown[]) {
+    fetchGamesForSportMock.mockResolvedValue([
+      { source: 'rolling_insights', games, error: null },
+    ])
+  }
+
+  it('does not overwrite a stored score with the schedule row that omits it', async () => {
+    gateIsOpen()
+    // What the DB already holds: the real result, captured earlier from /live.
+    prismaMock.sportsGame.findMany.mockResolvedValue([
+      { ...PLAYED, homeScore: 28, awayScore: 9 },
+    ])
+    // What the schedule endpoint sends today: same game, finished, no score.
+    providerReturns([{ ...PLAYED, homeScore: null, awayScore: null }])
+
+    await importScoresGET(req('/api/cron/import-scores?sport=NFL'))
+
+    const wroteANull = prismaMock.sportsGame.upsert.mock.calls.some(
+      (c: any) => c[0]?.update?.homeScore === null || c[0]?.update?.awayScore === null,
+    )
+    expect(wroteANull).toBe(false)
+    // Nothing visible moved, so it takes the cheap freshness bump instead of an upsert.
+    expect(prismaMock.sportsGame.updateMany).toHaveBeenCalled()
+  })
+
+  it('still accepts a real score, and a CHANGED score still overwrites', async () => {
+    gateIsOpen()
+    prismaMock.sportsGame.findMany.mockResolvedValue([
+      { ...PLAYED, homeScore: 21, awayScore: 9 },
+    ])
+    providerReturns([{ ...PLAYED, homeScore: 28, awayScore: 9 }])
+
+    await importScoresGET(req('/api/cron/import-scores?sport=NFL'))
+
+    const wrote28 = prismaMock.sportsGame.upsert.mock.calls.some(
+      (c: any) => c[0]?.update?.homeScore === 28,
+    )
+    expect(wrote28).toBe(true)
+  })
+
+  /*
+   * ⚠ THE MIRROR-IMAGE BUG THIS MUST NOT CREATE. Carrying a score forward onto a game that has
+   * gone back to scheduled or postponed would mint a result nobody played — the same class of
+   * error the provider module already guards against when RI sends 0-0 before kickoff. Only a
+   * played game protects its score.
+   */
+  it('lets the null through when the game is no longer played — a postponement clears the score', async () => {
+    gateIsOpen()
+    prismaMock.sportsGame.findMany.mockResolvedValue([
+      { ...PLAYED, homeScore: 28, awayScore: 9 },
+    ])
+    providerReturns([{ ...PLAYED, status: 'postponed', homeScore: null, awayScore: null }])
+
+    await importScoresGET(req('/api/cron/import-scores?sport=NFL'))
+
+    const clearedIt = prismaMock.sportsGame.upsert.mock.calls.some(
+      (c: any) => c[0]?.update?.homeScore === null,
+    )
+    expect(clearedIt).toBe(true)
   })
 })
