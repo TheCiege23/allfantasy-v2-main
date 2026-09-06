@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   reapAllAbandonedRuns: vi.fn(),
+  recordSyncJobRun: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -94,8 +95,15 @@ describe('GET /api/cron/reap-sync-runs', () => {
     vi.resetModules()
     vi.clearAllMocks()
     process.env.CRON_SECRET = CRON_SECRET
+    // ⚠ BOTH EXPORTS, BECAUSE THE ROUTE IMPORTS BOTH. This factory listed only
+    // `reapAllAbandonedRuns` while the route also calls `recordSyncJobRun` to write its
+    // heartbeat row, so vitest threw "No `recordSyncJobRun` export is defined on the mock"
+    // and the authorised-path test died before asserting anything. A mock that has stopped
+    // matching its module's real surface is the failure mode this repo has hit before: the
+    // loud form kills the suite, the silent form asserts against a function nothing calls.
     vi.doMock('@/lib/production-health/syncJobRunTelemetry', () => ({
       reapAllAbandonedRuns: mocks.reapAllAbandonedRuns,
+      recordSyncJobRun: mocks.recordSyncJobRun,
     }))
   })
 
@@ -129,6 +137,12 @@ describe('GET /api/cron/reap-sync-runs', () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true, reaped: 6 })
+
+    // The heartbeat is the reason this route can be monitored at all — a sweep that stops
+    // firing must show up as a stale job rather than as silence. Asserted here so the mock
+    // export added above is load-bearing instead of merely silencing the throw.
+    expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(1)
+    expect(mocks.recordSyncJobRun.mock.calls[0]![0]).toMatchObject({ trigger: 'cron' })
   })
 
   it('does NOT return a green zero when the sweep could not run', async () => {

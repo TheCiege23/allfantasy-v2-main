@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { hasInternalLeakage } from '../../../../lib/decision-os/sdk/privacy'
@@ -25,17 +25,40 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 
 const read = (rel: string) => stripComments(readFileSync(resolve(process.cwd(), rel), 'utf8'))
+const exists = (rel: string) => existsSync(resolve(process.cwd(), rel))
 
-const BROWSER_FILES = [
+// ⚠ ONE DECLARED FILE HAS NO COMMITTED SOURCE, AND THAT MUST NOT SILENTLY DISABLE
+// THIS SUITE. Reading it threw ENOENT at module scope, which fails the whole file
+// before a single assertion runs — so the boundary rules below were enforcing
+// nothing, and had been since the suite landed.
+//
+// Filtered rather than skipped, deliberately. The sibling `sdk-contracts` suite is
+// skipped wholesale because its entire `src` tree is absent; here every file but the
+// barrel is committed and real, so skipping would drop genuine sources out of
+// enforcement to work around one that is missing.
+//
+// EXPECTED_ABSENT is asserted below, so this cannot rot in either direction: a NEW
+// file going missing fails, and committing the barrel also fails until it is removed
+// from this list — which is what puts it back under enforcement rather than leaving
+// it quietly excluded forever.
+
+const EXPECTED_ABSENT: readonly string[] = ['sdk-runtime/iframe/src/browser/index.ts']
+
+const loadDeclared = (paths: readonly string[]) =>
+  paths.filter(exists).map((p) => [p, read(p)] as const)
+
+const DECLARED_BROWSER_FILES = [
   'sdk-runtime/iframe/src/browser/windowBridge.ts',
   'sdk-runtime/iframe/src/browser/iframeElementAdapter.ts',
   'sdk-runtime/iframe/src/browser/nonce.ts',
   'sdk-runtime/iframe/src/browser/mount.ts',
   'sdk-runtime/iframe/src/browser/teardown.ts',
   'sdk-runtime/iframe/src/browser/index.ts',
-].map((p) => [p, read(p)] as const)
+] as const
 
-const TOP_LEVEL_IFRAME_FILES = [
+const BROWSER_FILES = loadDeclared(DECLARED_BROWSER_FILES)
+
+const DECLARED_TOP_LEVEL_IFRAME_FILES = [
   'sdk-runtime/iframe/src/types.ts',
   'sdk-runtime/iframe/src/origin.ts',
   'sdk-runtime/iframe/src/security.ts',
@@ -48,7 +71,9 @@ const TOP_LEVEL_IFRAME_FILES = [
   'sdk-runtime/iframe/src/iframeHost.ts',
   'sdk-runtime/iframe/src/iframeClient.ts',
   'sdk-runtime/iframe/src/index.ts',
-].map((p) => [p, read(p)] as const)
+] as const
+
+const TOP_LEVEL_IFRAME_FILES = loadDeclared(DECLARED_TOP_LEVEL_IFRAME_FILES)
 
 const IMPORT_SPECIFIER_RE = /import\s+(?:type\s+)?(?:[\s\S]*?)from\s+['"]([^'"]+)['"]/g
 
@@ -71,6 +96,13 @@ function isAllowedSpecifier(specifier: string): boolean {
 }
 
 describe('architecture: sdk-runtime/iframe/browser import boundary', () => {
+  it('every declared source file is present except the known-absent barrel', () => {
+    const declared = [...DECLARED_BROWSER_FILES, ...DECLARED_TOP_LEVEL_IFRAME_FILES]
+    expect(declared.filter((f) => !exists(f))).toEqual(EXPECTED_ABSENT)
+    expect(BROWSER_FILES).toHaveLength(DECLARED_BROWSER_FILES.length - EXPECTED_ABSENT.length)
+    expect(TOP_LEVEL_IFRAME_FILES).toHaveLength(DECLARED_TOP_LEVEL_IFRAME_FILES.length)
+  })
+
   it('every import specifier is local, one level up (the 7.9/7.10 layer), or the frozen sdk/presentation contract layers', () => {
     for (const [path, src] of BROWSER_FILES) {
       const specifiers = extractImportSpecifiers(src)
