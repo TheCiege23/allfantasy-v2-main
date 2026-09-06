@@ -150,11 +150,35 @@ const NO_CACHE_HEADERS: Record<string, string> = {
  * could have appeared said the wrong thing.
  */
 export type ProviderFailure = {
-  kind: 'quota' | 'rate_limit' | 'unauthorized' | 'http' | 'network' | 'empty' | 'parse'
+  kind: 'quota' | 'rate_limit' | 'unauthorized' | 'http' | 'network' | 'empty' | 'parse' | 'timeout'
   status: number | null
   /** Safe to log — carries no URL and no credential. */
   message: string
 }
+
+/**
+ * 🛑 EVERY REQUEST IN THIS MODULE WAS UNBOUNDED, AND `import-scores` RUNS EVERY TWO MINUTES.
+ *
+ * There is exactly one `fetch()` in this file and it carried no signal, so a provider that
+ * accepted a connection and then stopped talking held the whole handler until the socket died.
+ * The route's `RUN_BUDGET_MS` could not help: it is spent on `persistGames`, which runs AFTER
+ * the fetches, so the budget bounded the fast part and left the slow part unbounded.
+ *
+ * Measured on production over 24h (2026-09-06, `cron-import-scores`, 663 runs):
+ *
+ *     p50  10.0s      p95  137.0s      max  345.2s      44 runs over the 120s interval
+ *
+ * ⚠ AND THE COST IS A SKIPPED TICK, NOT A LATE ONE. The fast-tier loop guarantees a job never
+ * overlaps itself, so a run over 120s means the next one does not fire at all — 663 runs against
+ * 720 expected. The overrun does not delay the next tick, it deletes it, and it does so during
+ * live games, which is when the p95 spikes (17-19h UTC).
+ *
+ * 15s is ~15x the typical per-call time, so it cannot cut off a provider that is merely busy on
+ * a heavy slate; it catches a hang, which is the failure this exists for. ⚠ THE 304 RETRY MEANS
+ * A SINGLE PROVIDER CALL CAN COST 2x THIS — the aggregate bound is the deadline in
+ * `fetchGamesForSport`, not this constant.
+ */
+const PROVIDER_ATTEMPT_TIMEOUT_MS = 15_000
 
 type JsonResult = { body: unknown | null; failure: ProviderFailure | null }
 
@@ -189,6 +213,8 @@ async function getJson(url: string, headers?: Record<string, string>): Promise<J
     const res = await fetch(cacheBusted(url), {
       cache: 'no-store',
       headers: { ...NO_CACHE_HEADERS, ...(headers ?? {}) },
+      // Per ATTEMPT, and this runs twice on a 304 — see PROVIDER_ATTEMPT_TIMEOUT_MS.
+      signal: AbortSignal.timeout(PROVIDER_ATTEMPT_TIMEOUT_MS),
     })
     if (res.status === 304) return { status: 304, result: { body: null, failure: null } }
     if (!res.ok) {
@@ -219,10 +245,34 @@ async function getJson(url: string, headers?: Record<string, string>): Promise<J
     const second = await attempt()
     return second.result
   } catch (err) {
+    const name = err instanceof Error ? err.name : ''
     const message = err instanceof Error ? err.message : String(err)
-    /* A malformed payload and a dead socket are different problems. */
-    const kind: ProviderFailure['kind'] = /JSON|Unexpected token/i.test(message) ? 'parse' : 'network'
-    return { body: null, failure: { kind, status: null, message: `provider request failed (${kind})` } }
+    /*
+     * A hang, a malformed payload and a dead socket are three different problems.
+     *
+     * ⚠ THE TIMEOUT MUST BE ITS OWN KIND, NOT FOLDED INTO `network`. `AbortSignal.timeout`
+     * rejects with a DOMException named `TimeoutError`, which reaches here as an ordinary
+     * error — so without this branch a deliberately bounded request is reported as a flaky
+     * provider, and the one signal that says "our own ceiling fired" is the one lost.
+     */
+    const kind: ProviderFailure['kind'] =
+      name === 'TimeoutError' || name === 'AbortError'
+        ? 'timeout'
+        : /JSON|Unexpected token/i.test(message)
+          ? 'parse'
+          : 'network'
+    return {
+      body: null,
+      failure: {
+        kind,
+        status: null,
+        // Still no URL: Rolling Insights carries its token as a query parameter.
+        message:
+          kind === 'timeout'
+            ? `provider did not respond within ${PROVIDER_ATTEMPT_TIMEOUT_MS / 1000}s`
+            : `provider request failed (${kind})`,
+      },
+    }
   }
 }
 

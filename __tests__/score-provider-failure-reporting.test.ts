@@ -152,3 +152,83 @@ describe('a 304 is not an error under either reading of the dispute', () => {
     expect(init.headers['Cache-Control']).toMatch(/no-store/)
   })
 })
+
+/**
+ * ⚠ THE HANG WAS THE ONE FAILURE MODE WITH NO CEILING AT ALL.
+ *
+ * Every request in gameScoreProviders funnelled through one `fetch()` that carried no signal, so
+ * a provider which accepted a connection and then stopped talking held the whole handler until
+ * the socket died. `import-scores` runs every two minutes and the fast-tier loop guarantees a job
+ * never overlaps itself, so an overrun does not delay the next tick — it deletes it. Measured on
+ * production 2026-09-06 across 663 runs: p50 10.0s, p95 137.0s, max 345.2s, and 663 runs against
+ * the 720 the schedule asks for.
+ *
+ * The route's own RUN_BUDGET_MS could not have caught this: it is spent inside `persistGames`,
+ * which runs AFTER the fetches, so it bounded the fast half and left the slow half open.
+ */
+describe('a provider that hangs cannot run forever', () => {
+  /*
+   * 🛑 THE LOAD-BEARING ASSERTION IS THAT THE SIGNAL IS ATTACHED, NOT THAT A TIMEOUT IS
+   * CLASSIFIED. Classification is easy to get right while the ceiling is never wired, and that
+   * combination passes every test that only inspects the error string — a guard that cannot fail
+   * being cited as coverage. This one goes red if `signal:` is dropped from the fetch init.
+   */
+  it('every request carries an abort signal — the ceiling is wired, not just described', async () => {
+    vi.stubEnv('CFBD_KEY', 'test-key-not-a-real-credential')
+    const fetchSpy = vi.fn().mockResolvedValue(mockResponse(200, '[]'))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const { fetchCfbdGames } = await loadProviders()
+    await fetchCfbdGames(2026, 1)
+
+    const init = fetchSpy.mock.calls[0][1] as any
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+    expect(init.signal.aborted).toBe(false)
+  })
+
+  it('a hang is reported as a timeout, not as an empty slate', async () => {
+    vi.stubEnv('CFBD_KEY', 'test-key-not-a-real-credential')
+    // What AbortSignal.timeout actually rejects with: a DOMException named TimeoutError.
+    const hang = Object.assign(new Error('The operation was aborted due to timeout'), {
+      name: 'TimeoutError',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(hang))
+
+    const { fetchCfbdGames } = await loadProviders()
+    const result = await fetchCfbdGames(2026, 1)
+
+    expect(result.games).toEqual([])
+    expect(result.error).toMatch(/did not respond within/i)
+    expect(result.error).not.toMatch(/no games returned/i)
+  })
+
+  /*
+   * ⚠ THE DISCRIMINATING CASE. Folding the timeout into `network` was the tempting shortcut, and
+   * it destroys the only signal that says OUR ceiling fired rather than the provider's socket
+   * dying. If this goes green while the test above also goes green, the two kinds are genuinely
+   * separated; a single over-broad branch cannot satisfy both.
+   */
+  it('an ordinary network fault is still a network fault, not a timeout', async () => {
+    vi.stubEnv('CFBD_KEY', 'test-key-not-a-real-credential')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('socket hang up')))
+
+    const { fetchCfbdGames } = await loadProviders()
+    const result = await fetchCfbdGames(2026, 1)
+
+    expect(result.error).toMatch(/\(network\)/i)
+    expect(result.error).not.toMatch(/did not respond within/i)
+  })
+
+  it('the timeout message leaks neither the key nor the host', async () => {
+    const KEY = 'super-secret-cfbd-key-value'
+    vi.stubEnv('CFBD_KEY', KEY)
+    const hang = Object.assign(new Error('aborted'), { name: 'TimeoutError' })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(hang))
+
+    const { fetchCfbdGames } = await loadProviders()
+    const result = await fetchCfbdGames(2026, 1)
+
+    expect(result.error ?? '').not.toContain(KEY)
+    expect(result.error ?? '').not.toContain('collegefootballdata.com')
+  })
+})
