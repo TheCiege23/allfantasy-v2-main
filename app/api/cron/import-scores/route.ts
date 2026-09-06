@@ -293,10 +293,24 @@ async function runOneSport(url: URL, sport: Sport, budget: ReturnType<typeof cre
     const diagnostics = getAPISportsDiagnostics()
 
     const seasonYear = Number(season ?? new Date().getFullYear())
+    /*
+     * ⚠ THE FETCHES ARE INSIDE THE RUN BUDGET NOW, AND THEY WERE THE PART THAT WAS NOT.
+     *
+     * `RUN_BUDGET_MS` was only ever reached by `persistGames` below, so it bounded the database
+     * writes — the fast, predictable half — while the provider reads above ran unbounded.
+     * Measured 2026-09-06 over 663 production runs: p50 10.0s, p95 137.0s, max 345.2s, 44 runs
+     * past the 120s interval. The fast-tier loop never overlaps a job with itself, so each of
+     * those deleted the following tick rather than delaying it.
+     *
+     * Headroom is left below the budget so the surviving providers can still be written and the
+     * response can still serialise; `fetchGamesForSport` reports anything it skips rather than
+     * dropping it silently.
+     */
     const attempts = await fetchGamesForSport(
       sport,
       Number.isFinite(seasonYear) ? seasonYear : new Date().getFullYear(),
       toWeek(url.searchParams.get("week")),
+      { deadlineAt: Date.now() + Math.max(0, budget.remainingMs() - 20_000) },
     )
 
     const bySource: Record<

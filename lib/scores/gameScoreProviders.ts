@@ -753,22 +753,58 @@ export async function fetchGamesForSport(
   sport: 'NFL' | 'NCAAF',
   season: number,
   week?: number,
+  opts?: { deadlineAt?: number },
 ): Promise<ProviderResult[]> {
+  const deadlineAt = opts?.deadlineAt ?? Number.POSITIVE_INFINITY
+
+  /*
+   * 🛑 PRIORITY ORDER, AND IT IS THE REVERSE OF WHAT THIS FUNCTION USED TO DO.
+   *
+   * Guap's call, 2026-09-06: ESPN, then TheSportsDB, then the primary (Rolling Insights for NFL,
+   * CFBD for NCAAF). Under a deadline the LAST entries are the ones that get dropped, so the
+   * order here decides what survives a slow tick — and the previous order dropped ESPN first,
+   * which is the only feed of the three that reports in-progress state.
+   *
+   * ⚠ THE OLD COMMENT SAID ESPN RAN LAST SO IT COULD "UPGRADE A STORED scheduled TO LIVE". That
+   * mechanism does not exist. `SportsGame` is `@@unique([sport, externalId, source])`, so every
+   * feed writes its OWN row and none of them overwrites another; nothing is upgraded by running
+   * later. Source selection happens at READ time in `pickFreshestSourceRows`
+   * (lib/sports-live-scores-service.ts), which buckets feeds by freshness at 5 minutes and then
+   * picks by rank. A whole run finishes far inside that bucket — p50 10s — so every source in one
+   * tick is co-fresh and write order cannot decide anything. Reordering is safe for that reason,
+   * not by assumption; it was checked before it was changed.
+   *
+   * ⚠ REORDERING HERE DOES NOT FIX THE READ SIDE, AND MUST NOT BE MISTAKEN FOR IT.
+   * `LIVE_SOURCE_PREFERENCE` still ranks `rolling_insights` first and does not list `espn` at
+   * all, so the scoreboard's own preference remains the opposite of this one. That is a separate
+   * decision in a separate module.
+   */
+  const planned: Array<{ source: string; run: () => Promise<ProviderResult> }> = [
+    { source: 'espn', run: () => fetchEspnGames(sport) },
+    { source: 'thesportsdb', run: () => fetchTheSportsDbGames(sport) },
+    sport === 'NFL'
+      ? { source: 'rolling_insights', run: () => fetchRollingInsightsNflGames() }
+      : { source: 'cfbd', run: () => fetchCfbdGames(season, week) },
+  ]
+
   const attempts: ProviderResult[] = []
-
-  if (sport === 'NFL') {
-    attempts.push(await fetchRollingInsightsNflGames())
-  } else {
-    attempts.push(await fetchCfbdGames(season, week))
+  for (const provider of planned) {
+    /*
+     * ⚠ SKIPPED, AND IT SAYS SO. Omitting the entry would make a dropped provider look like a
+     * provider that answered with nothing — the same "silent truncation reads as covered
+     * everything" failure the run budget already exists to avoid. The route surfaces this string
+     * in `bySource[...].error`, so a tick that ran out of time is legible in the response.
+     */
+    if (Date.now() >= deadlineAt) {
+      attempts.push({
+        source: provider.source,
+        games: [],
+        error: 'skipped: run budget exhausted before this provider was reached',
+      })
+      continue
+    }
+    attempts.push(await provider.run())
   }
-
-  // TheSportsDB always runs: it is the corroborating source, it carries the
-  // season-wide slate, and it fills in when the primary has games but no scores.
-  attempts.push(await fetchTheSportsDbGames(sport))
-
-  // ESPN last, and for BOTH sports: it is the only feed here that reports
-  // in-progress state, so it is what upgrades a stored "scheduled" to live.
-  attempts.push(await fetchEspnGames(sport))
 
   // Normalise centrally rather than per provider. Each feed speaks its own
   // dialect ("completed", "FT", "NS"), and a provider added later would

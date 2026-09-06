@@ -28,6 +28,13 @@ function mockResponse(status: number, body: string) {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetModules()
+  /*
+   * ⚠ `unstubAllGlobals` DOES NOT UNDO A `vi.spyOn`. One test below drives `Date.now` from a
+   * counter to make the mid-run deadline deterministic; without this the mocked clock leaks into
+   * every test that runs after it in this file, which is the kind of pollution that shows up
+   * later as an unrelated suite failing for no visible reason.
+   */
+  vi.restoreAllMocks()
 })
 
 async function loadProviders() {
@@ -230,5 +237,85 @@ describe('a provider that hangs cannot run forever', () => {
 
     expect(result.error ?? '').not.toContain(KEY)
     expect(result.error ?? '').not.toContain('collegefootballdata.com')
+  })
+})
+
+/**
+ * ⚠ UNDER A DEADLINE THE ORDER OF THIS LIST IS A PRODUCT DECISION, NOT A STYLE ONE.
+ *
+ * Whatever runs last is what gets dropped when a tick runs short. The original order ran the
+ * primary first and ESPN last, so the feed most worth keeping was the first one lost — and ESPN
+ * is, by this module's own comment, the only one of the three that reports in-progress state.
+ * Guap's call 2026-09-06: ESPN, then TheSportsDB, then the primary.
+ */
+describe('provider priority decides what survives a short tick', () => {
+  const withProviderEnv = () => {
+    vi.stubEnv('THESPORTSDB_API_KEY', 'test-key-not-a-real-credential')
+    vi.stubEnv('ROLLING_INSIGHTS_RSC_TOKEN', 'test-token-not-a-real-credential')
+  }
+
+  it('runs ESPN, then TheSportsDB, then Rolling Insights', async () => {
+    withProviderEnv()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse(200, '[]')))
+
+    const { fetchGamesForSport } = await loadProviders()
+    const attempts = await fetchGamesForSport('NFL', 2026)
+
+    expect(attempts.map((a) => a.source)).toEqual(['espn', 'thesportsdb', 'rolling_insights'])
+  })
+
+  /*
+   * 🛑 A DROPPED PROVIDER IS REPORTED, NOT OMITTED. Returning a shorter array would make "we ran
+   * out of time" indistinguishable from "that feed had nothing", which is the silent-truncation
+   * failure the run budget exists to avoid. The route surfaces these strings in bySource.
+   */
+  it('a deadline already past skips every provider and says so, without calling out', async () => {
+    withProviderEnv()
+    const fetchSpy = vi.fn().mockResolvedValue(mockResponse(200, '[]'))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const { fetchGamesForSport } = await loadProviders()
+    const attempts = await fetchGamesForSport('NFL', 2026, undefined, { deadlineAt: Date.now() - 1 })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(attempts.map((a) => a.source)).toEqual(['espn', 'thesportsdb', 'rolling_insights'])
+    expect(attempts.every((a) => /skipped: run budget exhausted/.test(a.error ?? ''))).toBe(true)
+  })
+
+  /*
+   * The case the priority exists for: time runs out mid-run and exactly one provider fits.
+   * Deterministic — the clock is driven by the mock rather than by wall time, so this cannot
+   * flake on a loaded box.
+   */
+  it('when only one provider fits, the one that survives is ESPN', async () => {
+    withProviderEnv()
+    let clock = 1_000_000
+    vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    // The first provider's request consumes the whole remaining budget.
+    const fetchSpy = vi.fn().mockImplementation(async () => {
+      clock += 10_000
+      return mockResponse(200, '[]')
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const { fetchGamesForSport } = await loadProviders()
+    const attempts = await fetchGamesForSport('NFL', 2026, undefined, { deadlineAt: clock + 5_000 })
+
+    const skipped = attempts.filter((a) => /skipped: run budget exhausted/.test(a.error ?? ''))
+    expect(skipped.map((a) => a.source)).toEqual(['thesportsdb', 'rolling_insights'])
+    // ESPN ran: it is the one source NOT carrying the skip marker.
+    expect(attempts[0].source).toBe('espn')
+    expect(attempts[0].error ?? '').not.toMatch(/skipped/)
+  })
+
+  it('NCAAF uses CFBD as its primary, in the same position', async () => {
+    withProviderEnv()
+    vi.stubEnv('CFBD_KEY', 'test-key-not-a-real-credential')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse(200, '[]')))
+
+    const { fetchGamesForSport } = await loadProviders()
+    const attempts = await fetchGamesForSport('NCAAF', 2026)
+
+    expect(attempts.map((a) => a.source)).toEqual(['espn', 'thesportsdb', 'cfbd'])
   })
 })
