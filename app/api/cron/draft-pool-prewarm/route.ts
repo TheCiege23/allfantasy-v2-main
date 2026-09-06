@@ -10,6 +10,20 @@ import { prisma } from '@/lib/prisma'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { checkDraftPoolCacheFast, ensureDraftPoolReady } from '@/lib/draft-room/ensureDraftPoolReady'
 import { runWithConcurrency, withTimeout } from '@/lib/async-utils'
+import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+
+/**
+ * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
+ *
+ * ⚠ DISTINCT FROM THE EXISTING `draft_pool_cache_warm` NAME, DELIBERATELY. That name already
+ * exists in sync_job_runs from a non-cron caller and has ZERO cron-triggered runs, so probing it
+ * would report this cron healthy on somebody else's invocation — the same shared-identity false
+ * green that the query-param modes had. The cron path gets its own name.
+ *
+ * ⚠ AND A HEARTBEAT IS THE ONLY OPTION HERE: this route WRITES NOTHING DURABLE. It warms a cache,
+ * so there is no table whose freshness could stand in for "did the prewarm run".
+ */
+const JOB = 'cron-draft-pool-prewarm'
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -189,6 +203,25 @@ async function handle(req: NextRequest) {
   }
 
   console.info('[draft-pool-prewarm] cron done', { totalMs: Date.now() - t, results })
+
+  /*
+   * Recorded even when every league defers. A deferral is the container being saturated, which is
+   * the budget working — and it still proves the job woke up, which is the whole claim a heartbeat
+   * makes. Counting deferrals as failure would make this red under exactly the load it is designed
+   * to shed.
+   */
+  await recordSyncJobRun(
+    { jobName: JOB, trigger: 'cron' },
+    {
+      rowsRead: results.length,
+      rowsWritten: results.filter((r) => r.action !== 'deferred').length,
+      rowsSkipped: deferred.length,
+      warnings: deferred.length === results.length && results.length > 0 ? ['container-saturated'] : [],
+      metadata: { deferred: deferred.length },
+    },
+    Date.now() - t,
+  )
+
   return NextResponse.json({ ok: true, results })
 }
 

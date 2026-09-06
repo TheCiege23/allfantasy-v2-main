@@ -37,6 +37,11 @@ on:
 
 permissions:
   contents: read
+  # The alarm needs somewhere to GO. A non-zero exit only reddens an Actions run, and in a repo
+  # with this many concurrent sessions nobody is watching the runs list -- see "Route the alarm".
+  issues: write
+  # Self-re-arm dispatches this workflow.
+  actions: write
 
 concurrency:
   group: cron-freshness
@@ -46,7 +51,10 @@ jobs:
   freshness:
     name: Check data freshness
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # ⚠ LONG-LIVED ON PURPOSE, AND THE ALARM STILL FIRES IMMEDIATELY. The run checks, heals and
+    # opens the issue in its first minute, then holds the slot until the next cycle so a dropped
+    # schedule trigger cannot silence it -- see SELF-RE-ARM. Only the final verdict step waits.
+    timeout-minutes: 58
     steps:
       - uses: actions/checkout@v4
 
@@ -65,15 +73,175 @@ jobs:
 
       # Input passed through `env:` and tested as a shell variable, never interpolated into the
       # script text -- see the note in cron-slow-tier.yml.
+      - name: Record cycle start
+        id: started
+        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      # ⚠ DELIBERATELY NOT `set -e` ON THE CHECK ITSELF. A stale probe exits 1, and that exit IS
+      # the signal — letting it fail the step would skip the heal and the alert, which are the two
+      # things that make the signal useful. The verdict is carried forward and re-raised last.
       - name: Check freshness
+        id: check
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          INPUT_REPORT_ONLY: ${{ inputs.report_only }}
         run: |
-          set -euo pipefail
-          if [ "${INPUT_REPORT_ONLY:-false}" = "true" ]; then
-            node scripts/cron-freshness-check.mjs --report
-          else
-            node scripts/cron-freshness-check.mjs
+          set -uo pipefail
+          if [ -z "${DATABASE_URL:-}${DIRECT_URL:-}" ]; then
+            echo "::notice::Neither DATABASE_URL nor DIRECT_URL is set -- skipping freshness check."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          node scripts/cron-freshness-check.mjs --json > freshness.json
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          # A parse failure must not read as "nothing failing" — that is the false clean this whole
+          # monitor exists to remove. An unreadable report counts as a failure of its own.
+          node --input-type=module -e '
+            import fs from "node:fs"
+            let d
+            try { d = JSON.parse(fs.readFileSync("freshness.json", "utf8")) }
+            catch (e) { console.log("PARSE_ERROR"); process.exit(0) }
+            const bad = (d.results ?? []).filter((r) => !["OK", "IDLE"].includes(r.state))
+            console.log(JSON.stringify({ failing: bad.length, unmonitored: (d.unmonitored ?? []).length,
+              bad: bad.map((r) => ({ path: r.path, state: r.state, detail: r.detail ?? null })) }))
+          ' > summary.json
+          if grep -q PARSE_ERROR summary.json; then
+            echo "::error::freshness report was unreadable — treating as FAILING"
+            echo "failing=-1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FAILING=$(node -p "JSON.parse(require('fs').readFileSync('summary.json','utf8')).failing")
+          echo "failing=$FAILING" >> "$GITHUB_OUTPUT"
+          echo "--- failing probes ---"
+          node -p "JSON.parse(require('fs').readFileSync('summary.json','utf8')).bad.map(b=>\`\${b.state}  \${b.path}  \${b.detail??''}\`).join('\n') || '(none)'"
+
+      # ── HEAL: RE-FIRE WHAT THE SCHEDULER DROPPED ───────────────────────────────────────────
+      #
+      # WHY THIS AND NOT A CRON EVALUATOR. GitHub drops most slow-tier triggers (6 of 24 hourly
+      # slots, measured 2026-08-28) and 40 jobs across 29 distinct wall-clock schedules depend on
+      # them. Re-firing them needs an answer to "what is overdue", and the only existing answer is
+      # this checker — `cron-dispatch.mjs` speaks `--schedule <exact string>` and `--path`, neither
+      # of which computes dueness. Writing a cron evaluator to find out would be a second
+      # implementation of a question already answered here, and the wrong one would silently
+      # over-fire.
+      #
+      # ⚠ SO THE HEAL IS DRIVEN BY STALENESS, NOT BY THE CLOCK, and that is strictly safer: a job
+      # that already ran is not stale, so this cannot double-fire a healthy job. Its worst case is
+      # re-firing a genuinely BROKEN job once an hour, which is bounded and visible.
+      #
+      # OFF BY DEFAULT. Set repo variable CRON_SELF_HEAL to 1/true/on to enable.
+      - name: Re-fire stale jobs
+        if: always() && steps.check.outputs.skipped == 'false' && steps.check.outputs.failing != '0' && steps.check.outputs.failing != '-1'
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SELF_HEAL: ${{ vars.CRON_SELF_HEAL }}
+        run: |
+          set -uo pipefail
+          case "$(printf '%s' "${SELF_HEAL:-0}" | tr '[:upper:]' '[:lower:]')" in
+            1|true|on|yes) ;;
+            *) echo "::notice::CRON_SELF_HEAL is off — not re-firing. Set the repo variable to enable."; exit 0 ;;
+          esac
+          # CONFIG means the probe names a job_name nothing writes — a registry error, not a dropped
+          # trigger. Re-firing it cannot help and would hammer a route hourly forever.
+          PATHS=$(node -p "JSON.parse(require('fs').readFileSync('summary.json','utf8')).bad.filter(b=>b.state!=='CONFIG'&&b.path).map(b=>b.path).join('\n')")
+          if [ -z "$PATHS" ]; then echo "nothing re-firable (all CONFIG)"; exit 0; fi
+          echo "$PATHS" | while IFS= read -r p; do
+            [ -n "$p" ] || continue
+            echo "re-firing $p"
+            node scripts/cron-dispatch.mjs --path "$p" || echo "::warning::re-fire failed for $p"
+          done
+
+      # ── ROUTE THE ALARM ────────────────────────────────────────────────────────────────────
+      #
+      # A red Actions run is not a notification. This keeps ONE open issue and comments on it,
+      # rather than opening one per hour — an alarm that spams is an alarm that gets muted, which
+      # is the same silence this monitor was built to end.
+      - name: Open or update the alert issue
+        if: always() && steps.check.outputs.skipped == 'false' && steps.check.outputs.failing != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FAILING: ${{ steps.check.outputs.failing }}
+        run: |
+          set -uo pipefail
+          BODY=$(printf '%s failing probe(s) as of %s UTC\n\n```\n%s\n```\n\n%s\n' \
+            "$FAILING" "$(date -u '+%Y-%m-%d %H:%M')" \
+            "$(node -p "JSON.parse(require('fs').readFileSync('summary.json','utf8')).bad.map(b=>\`\${b.state}  \${b.path}  \${b.detail??''}\`).join('\n')" 2>/dev/null || echo 'report unreadable')" \
+            "$RUN_URL")
+          EXISTING=$(gh issue list --repo "$REPO" --label cron-freshness --state open --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY" || echo "::warning::could not comment on #$EXISTING"
+          else
+            gh label create cron-freshness --repo "$REPO" --color B60205 --description "A scheduled job stopped writing rows" 2>/dev/null || true
+            gh issue create --repo "$REPO" --label cron-freshness \
+              --title "Cron freshness: $FAILING probe(s) stale" --body "$BODY" || echo "::warning::could not open an issue"
+          fi
+
+      # ── SELF-RE-ARM ────────────────────────────────────────────────────────────────────────
+      #
+      # Ported from cron-fast-tier.yml, whose header records why: GitHub's shared scheduler DROPS
+      # most triggers, and no amount of scheduling harder fixes a scheduler that drops. The fast
+      # tier survives because its last act books the next window; this monitor did not, so the
+      # thing watching for dropped jobs could itself be dropped.
+      #
+      # ⚠ THE ELAPSED GUARD IS THE WHOLE SAFETY STORY AND IT TRANSFERS ONLY BECAUSE THE JOB SLEEPS.
+      # The fast tier re-arms after a genuine 55-minute window. A SHORT run that re-armed would be
+      # a dispatch loop, so this holds the slot first and then re-arms, and refuses to re-arm if it
+      # did not actually hold it. A crash or a setup failure dies in seconds, nowhere near 70%.
+      #
+      # KILL SWITCH: repo variable CRON_FRESHNESS_SELF_ARM to 0/false/off.
+      - name: Hold the slot and re-arm
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STARTED_EPOCH: ${{ steps.started.outputs.epoch }}
+          SELF_ARM: ${{ vars.CRON_FRESHNESS_SELF_ARM }}
+          REPO: ${{ github.repository }}
+          IS_REPORT_ONLY: ${{ inputs.report_only }}
+        run: |
+          set -uo pipefail
+
+          # ⚠ NOT GATED ON `github.event_name == 'schedule'`, WHICH WOULD BREAK THE CHAIN AFTER ONE
+          # HOP. The successor arrives as a workflow_dispatch, so a schedule-only guard would let it
+          # run and then decline to book the next one — the chain would die silently after the first
+          # dropped trigger, which is the failure this exists to fix. `report_only` is the escape
+          # hatch instead, mirroring the fast tier's dry-run guard: a manual test cannot start a chain.
+          if [ "${IS_REPORT_ONLY:-false}" = "true" ]; then
+            echo "::notice::report_only — not re-arming"; exit 0
+          fi
+
+          case "$(printf '%s' "${SELF_ARM:-1}" | tr '[:upper:]' '[:lower:]')" in
+            0|false|off|no) echo "::notice::CRON_FRESHNESS_SELF_ARM is off — not re-arming"; exit 0 ;;
+          esac
+          CYCLE_S=3300   # 55 min, matching the fast tier's window
+          ELAPSED=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
+          SLEEP_S=$(( CYCLE_S - ELAPSED ))
+          if [ "$SLEEP_S" -gt 0 ]; then sleep "$SLEEP_S"; fi
+          ELAPSED=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
+          MIN_ELAPSED=$(( CYCLE_S * 70 / 100 ))
+          if [ "$ELAPSED" -lt "$MIN_ELAPSED" ]; then
+            echo "::warning::cycle was only ${ELAPSED}s (<${MIN_ELAPSED}s) — NOT re-arming."
+            echo "::warning::A short cycle means the run died early or was superseded; re-arming"
+            echo "::warning::that would be a dispatch loop. The schedule trigger will restart it."
+            exit 0
+          fi
+          # As in the fast tier: expect this run's conclusion to be `cancelled`. The successor
+          # cancels us via the concurrency group as it takes over, AFTER the dispatch returns.
+          echo "cycle ran ${ELAPSED}s — booking the next one"
+          gh workflow run cron-freshness.yml --repo "$REPO"
+
+      # Re-raise the verdict LAST, so a stale report still reddens the run after the heal, the
+      # alert and the re-arm have all had their turn.
+      - name: Verdict
+        if: always() && steps.check.outputs.skipped == 'false'
+        run: |
+          set -uo pipefail
+          if [ "${{ inputs.report_only }}" = "true" ]; then
+            echo "::notice::report_only — not failing the run"; exit 0
+          fi
+          F="${{ steps.check.outputs.failing }}"
+          if [ "$F" = "-1" ]; then echo "::error::freshness report unreadable"; exit 1; fi
+          if [ "$F" != "0" ]; then echo "::error::$F freshness probe(s) failing"; exit 1; fi
+          echo "all probes healthy"

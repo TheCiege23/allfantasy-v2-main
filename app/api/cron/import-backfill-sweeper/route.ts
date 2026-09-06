@@ -5,6 +5,20 @@ import { prisma } from '@/lib/prisma'
 import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+
+/**
+ * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
+ *
+ * ⚠ A HEARTBEAT IS THE ONLY PROBE THAT CAN JUDGE THIS JOB, and the reason is inverted from the
+ * usual one. Its healthy steady state is writing NOTHING — it re-drives historical backfills stuck
+ * at pending, so zero writes means every league is fine. An output probe would therefore read
+ * STALE exactly when the job is working perfectly, and green only when leagues are broken.
+ *
+ * It also stamps `League.settings` JSON, which the import and manual-retry paths both write, so
+ * even a table probe pointed there would be satisfied by a human clicking retry.
+ */
+const JOB = 'cron-import-backfill-sweeper'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -237,6 +251,26 @@ export async function GET(req: NextRequest) {
       })
     }
   }
+
+  /*
+   * `rowsWritten` is attempts, not repairs, and `rowsSkipped` is the backlog this fire did not
+   * reach — `stale > attempted` is the bounded drain working, not a failure. Neither number gates
+   * the probe: the probe asks only whether this job woke up.
+   */
+  await recordSyncJobRun(
+    { jobName: JOB, trigger: 'cron' },
+    {
+      rowsRead: candidates.length,
+      rowsWritten: outcomes.length,
+      rowsSkipped: Math.max(0, stale.length - outcomes.length),
+      errors: outcomes
+        .filter((o) => o && typeof o === 'object' && 'error' in (o as object))
+        .map((o) => String((o as { error: unknown }).error))
+        .slice(0, 5),
+      metadata: { scanned: candidates.length, stale: stale.length },
+    },
+    budget.elapsedMs(),
+  )
 
   return NextResponse.json({
     ok: true,

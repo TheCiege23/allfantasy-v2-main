@@ -317,6 +317,15 @@ export const PROBES = {
    * keeps reporting amber "appears stuck" instead of red, and nothing says so.
    */
   '/api/cron/reap-sync-runs': { heartbeat: 'cron-reap-sync-runs' },
+  /*
+   * The last two unprobed jobs, both heartbeats because neither has a table that means anything
+   * about them: the prewarm writes nothing durable, and the sweeper's healthy state is writing
+   * nothing. `cron-draft-pool-prewarm` is deliberately NOT the pre-existing `draft_pool_cache_warm`
+   * name — that one has zero cron-triggered runs and belongs to another caller, so probing it would
+   * report this cron healthy on somebody else's invocation.
+   */
+  '/api/cron/draft-pool-prewarm': { heartbeat: 'cron-draft-pool-prewarm' },
+  '/api/cron/import-backfill-sweeper': { heartbeat: 'cron-import-backfill-sweeper' },
   '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
   // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
   // the default path (flag off) recorded nothing and the job looked identical whether it ran
@@ -530,8 +539,20 @@ export const NO_PROBE = {
   // correctly writes nothing for most of the year, so an output probe on them is red for
   // two-thirds of the season and trains everyone to ignore the alarm.
 
-  // ── NO DURABLE OUTPUT AT ALL ──
-  '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
+  /*
+   * ── EMPTY ON PURPOSE ──
+   *
+   * The last two entries -- draft-pool-prewarm and import-backfill-sweeper -- moved into PROBES as
+   * heartbeats. Both were unprobed for the SAME reason from opposite directions: neither has a
+   * table whose freshness means anything about them. The prewarm writes nothing durable at all
+   * (it warms a cache), and the sweeper's healthy steady state is writing nothing (zero repairs
+   * means zero broken leagues). An output probe on either is red when it is working.
+   *
+   * ⚠ KEEP THIS OBJECT, AND KEEP ADDING TO IT. A cron that is neither probed nor listed here is
+   * reported as an unclassified gap and turns __tests__/cron-tier-and-freshness.test.ts red, which
+   * is deliberate: silence about coverage is what let the last outage run for six days. An empty
+   * NO_PROBE means every declared job is currently probed, not that the concept is retired.
+   */
 
   // ── HAS NEVER PRODUCED ANYTHING ──
 
@@ -554,13 +575,6 @@ export const NO_PROBE = {
    * today, so pointing a heartbeat probe at it now would report CONFIG forever rather than
    * measure anything. Checked before writing this rather than assumed.
    */
-  '/api/cron/import-backfill-sweeper':
-    'a repair job whose healthy steady state is writing NOTHING -- it re-drives historical ' +
-    'backfills stuck at pending, so zero writes means every league is fine. An output probe ' +
-    'would read stale exactly when it is working and green only when leagues are broken. It ' +
-    'also stamps League.settings JSON that the import and manual-retry paths both write, so a ' +
-    'table probe would be satisfied by those. Needs a withSyncJobRun heartbeat on the route, ' +
-    'which it does not emit yet.',
 }
 
 /**
