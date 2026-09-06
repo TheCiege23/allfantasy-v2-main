@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { AppLinkHint } from '@/components/core-app/player-finder/AppLinkHint'
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import type { PlayerGame } from '@/lib/core-app/playerGame'
 import { kickoffClock, lockState } from '@/lib/core-app/lineupLock'
@@ -131,6 +132,8 @@ export function GameDayBanner({
                   {/* `screen` is the human label ("Lineup", "League") — an unverified format lands on the league page and says so. */}
                   {l.link.screen === 'Lineup' ? `Open lineup in ${l.link.platformLabel}` : `${l.link.label} · ${l.link.screen}`}
                   <small>{l.leagueName}</small>
+                  {/* On a phone: whether this tap lands in the platform's app — measured per platform and screen (nativeApp.ts). */}
+                  <AppLinkHint platform={l.platform} screen={l.link.screen} />
                 </a>
               ) : (
                 <Link key={l.leagueId} className="af-btn af-pf-gameday-btn" href={l.link.href} data-screen={l.link.screen}>

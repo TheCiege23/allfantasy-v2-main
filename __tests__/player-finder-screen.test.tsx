@@ -415,6 +415,36 @@ describe('Player Finder — game day', () => {
     expect(screen.queryByRole('region', { name: 'Game day' })).toBeNull()
   })
 
+  it('tells a phone where the tap lands — this fixture’s Yahoo button is the LEAGUE page, which the Yahoo app does not take on an iPhone; "may open" on Android; nothing on a desktop', () => {
+    const out = { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } } }
+    const withUa = (ua: string, run: () => void) => {
+      const original = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent')
+      Object.defineProperty(window.navigator, 'userAgent', { value: ua, configurable: true })
+      try {
+        run()
+      } finally {
+        if (original) Object.defineProperty(window.navigator, 'userAgent', original)
+        else delete (window.navigator as unknown as Record<string, unknown>).userAgent
+      }
+    }
+    withUa('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', () => {
+      const { unmount } = renderCore({ detail: out, nowIso: NOW })
+      const button = within(screen.getByRole('region', { name: 'Game day' })).getAllByRole('link')[0]!
+      expect(button).toHaveTextContent('Open in Yahoo · League') // no team id in the fixture: the verified lineup format cannot be built, so it is the league page
+      expect(within(button).getByText('Opens Yahoo on the web')).toHaveAttribute('data-landing', 'web')
+      unmount()
+    })
+    withUa('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36', () => {
+      const { unmount } = renderCore({ detail: out, nowIso: NOW })
+      const button = within(screen.getByRole('region', { name: 'Game day' })).getAllByRole('link')[0]!
+      expect(within(button).getByText('May open the Yahoo app')).toHaveAttribute('data-landing', 'unknown')
+      unmount()
+    })
+    // jsdom's own user agent is a desktop: no claim at all.
+    renderCore({ detail: out, nowIso: NOW })
+    expect(screen.queryByText(/Opens in the|May open the|on the web/)).toBeNull()
+  })
+
   it('leads with the game-day banner when he is Out: status, kickoff, the lock, and an Open-lineup button per league where he starts', () => {
     renderCore({ detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } } }, nowIso: NOW })
     const banner = screen.getByRole('region', { name: 'Game day' })
