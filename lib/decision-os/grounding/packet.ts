@@ -21,7 +21,11 @@ import {
  * cycle exists only in the type graph, where it is legal and inert.
  */
 import type { DecisionFact } from './decisionToSlice'
-import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice } from './decisionBridge'
+import {
+  loadLineupDecisionSlice,
+  loadCommissionerHealthDecisionSlice,
+  loadWaiverDecisionSlice,
+} from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
 import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { loadPsychologyConsistencySlice, type PsychologyConsistencyFact } from './psychologyConsistencySlice'
@@ -815,6 +819,19 @@ export async function buildDecisionOsGroundingPacket(
       : Promise.resolve(null)
 
   /*
+   * R2.6 — the waiver claim decision. Same wave, same rules as the two bridges above.
+   *
+   * 🛑 KICKED HERE RATHER THAN AWAITED AT THE ASSIGNMENT, and that is not a style choice. This
+   * producer reads the league's rosters AND the sport's player pool before running an engine — the
+   * most expensive slice in the packet. Awaited inline down in the assembly it would run strictly
+   * after every other producer had finished, turning parallel work into a serial tail. In this wave
+   * it overlaps with them and costs roughly its own slowest read.
+   */
+  const pWaiverDecision = want.waiverDecision
+    ? kick('waiverDecision', loadWaiverDecisionSlice({ userId: args.userId, leagueId }))
+    : Promise.resolve(null)
+
+  /*
    * R3.3 (2.2) — roster value grade. Same wave, same rules: its own DB reads, no dependency on the
    * roster slice, so it joins the concurrent wave rather than serialising behind context like
    * `idpKicker` does.
@@ -1313,27 +1330,26 @@ export async function buildDecisionOsGroundingPacket(
    * reported as missing, in a packet whose entire contract is that those are the only two
    * options.
    *
-   * ⚠ WHY THERE IS NO PRODUCER, recorded so the next reader does not re-derive it. The engine
-   * at `lib/decision-os/waiver/` is complete, but it is a WRAP-FIDELITY wrapper: it takes the
-   * legacy `/api/waiver-ai/engine` OUTPUT and proves the wrapper adds no drift.
-   * `productionWaiverRecommend()` exists for a future live run and is deterministic — no LLM
-   * unless `includeAIExplanation` is set — so cost is not the blocker. The blocker is INPUT:
-   * `WaiverAIEngineInput` needs `availablePlayers`, the waiver wire pool, which the legacy
-   * route already holds and `loadWaiverWorldFacts` does not load. Building it means a pool
-   * loader inside the packet's latency ceiling, which is a scoped decision, not a bridge.
+   * ✅ IT NOW HAS A PRODUCER, AND THE DIAGNOSIS ABOVE IS WHAT MADE IT BUILDABLE. This comment used
+   * to end "the blocker is INPUT: `WaiverAIEngineInput` needs `availablePlayers`, the waiver wire
+   * pool, which the legacy route already holds and `loadWaiverWorldFacts` does not load." That was
+   * exactly right, and only one clause was wrong: the legacy route does not hold the pool either —
+   * its CLIENT posts it (`availablePlayers: z.array(...).min(1)`), so there was never a server-side
+   * assembly to reuse. `lib/decision-os/waiver/pool.ts` is that assembly, built on the same
+   * resolver and the same rostered-player subtraction the waiver assistant already uses.
    *
-   * Until then the honest answer is a gap with a remedy that actually works: the waiver
-   * product surface is live, so a user is pointed at the thing that CAN answer them.
+   * ⚠ THE RUN IS LIVE, NOT WRAP-FIDELITY. Every other waiver path replays the legacy engine's
+   * output as a memo to prove the wrapper adds no drift. A packet slice doing that would report an
+   * answer this question never produced, so `loadWaiverDecisionSlice` runs the real recommender —
+   * deterministic, no LLM unless `includeAIExplanation` is set, and it is not set.
+   *
+   * ⚠ THE COST IS BOUNDED BY `want.waiverDecision`, which `intentToWant` sets only for
+   * `intent === 'waiver'`. The pool read and the engine run land on waiver questions and nothing
+   * else — the gate below is load-bearing, not decorative.
    */
-  const waiverDecision: GroundedSlice<DecisionFact> = want.waiverDecision
-    ? absent<DecisionFact>({
-        reason: 'no_producer',
-        detail:
-          'A waiver claim decision cannot be computed here yet — the waiver engine needs the ' +
-          'available-player pool for this league, which this packet does not load.',
-        remedy: 'The waiver assistant in the app has the pool and can recommend claims there.',
-      })
-    : absent<DecisionFact>({
+  const waiverDecision: GroundedSlice<DecisionFact> =
+    (await pWaiverDecision) ??
+    absent<DecisionFact>({
         reason: 'not_requested',
         detail: 'This question did not call for a waiver claim decision.',
         remedy: 'Ask who to claim off waivers and it is requested.',

@@ -56,3 +56,25 @@ export function buildProductionWaiverDecisionDeps(facts: WaiverWorldFacts, memo:
 export function productionWaiverRecommend(): WaiverDecisionDeps['recommend'] {
   return runWaiverAIService
 }
+
+/**
+ * LIVE decision deps — the recommender actually RUNS instead of replaying a legacy memo.
+ *
+ * 🛑 THIS EXISTS BECAUSE THE SHADOW BUILDER CANNOT BE REUSED FOR A LIVE RUN, and the reason is
+ * worth stating rather than rediscovering. `buildProductionWaiverDecisionDeps` requires a
+ * `WaiverAIServiceOutput` memo purely to hand straight back from `recommend`. A caller with no
+ * legacy output would have to FABRICATE one — inventing `ScoredWaiverTarget` dimensions, drivers
+ * and composite scores it does not have — to satisfy a parameter it never wanted. That is the same
+ * class of mistake as manufacturing agreement out of missing data, and this repo already refuses it
+ * elsewhere.
+ *
+ * ⚠ `newId` stays module-private. Exporting it to let callers assemble deps by hand is how a second
+ * spelling of "how a waiver decision is constructed" gets created.
+ */
+export function buildLiveWaiverDecisionDeps(facts: WaiverWorldFacts): WaiverDecisionDeps {
+  return {
+    recommend: productionWaiverRecommend(),
+    ruleDeps: buildProductionWaiverRuleDeps(facts),
+    newId,
+  }
+}

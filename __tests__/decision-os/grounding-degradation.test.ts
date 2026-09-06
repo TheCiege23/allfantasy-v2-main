@@ -643,16 +643,44 @@ describe('a portfolio that timed out is not a portfolio that is empty', () => {
  * an undefined slice does not appear in `everySlice`.
  */
 describe('R2.6 · waiverDecision reports an honest gap, and only when requested', () => {
-  it('🛑 when REQUESTED it surfaces a no_producer gap naming the missing input', async () => {
+  it('🛑 when REQUESTED it now RUNS a producer and never claims no_producer again', async () => {
+    /*
+     * This test previously asserted `reason === 'no_producer'` and a remedy pointing at the waiver
+     * assistant. That was the correct contract while the slice had no producer; it now has one, so
+     * the assertion is INVERTED rather than deleted — `no_producer` reappearing here would mean the
+     * producer was unwired, which is exactly the regression worth catching.
+     *
+     * ⚠ IT DOES NOT ASSERT A DECISION. Under this suite's mocks no roster resolves, so the honest
+     * outcome is a stated gap. What matters is WHICH gap: a real degrade, not "nobody built this".
+     */
     const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, waiverDecision: true } })
 
-    expect(p.waiverDecision?.present).toBe(false)
-    expect(p.waiverDecision?.gap?.reason).toBe('no_producer')
-    // The remedy must point somewhere that actually works, not at a TODO.
-    expect(p.waiverDecision?.gap?.remedy).toMatch(/waiver assistant/i)
+    expect(p.waiverDecision).toBeDefined()
+    expect(p.waiverDecision?.gap?.reason).not.toBe('no_producer')
+    expect(p.waiverDecision?.gap?.remedy).not.toMatch(/waiver assistant/i)
 
-    const surfaced = p.gaps.filter((g) => g.slice === 'waiverDecision')
-    expect(surfaced).toHaveLength(1)
+    // Requested-and-absent still has to reach the gap block; silence would be the original defect.
+    if (p.waiverDecision?.present === false) {
+      expect(p.gaps.filter((g) => g.slice === 'waiverDecision')).toHaveLength(1)
+    }
+  })
+
+  it('🛑 a producer failure degrades to a stated gap, never a fabricated claim', async () => {
+    /*
+     * The engine runs live here rather than replaying a memo, so the failure mode matters more than
+     * it did before. A waiver slice that invented a claim would be worse than one that said nothing:
+     * a FAAB bid on a player who may already be rostered looks actionable and is not.
+     */
+    const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, waiverDecision: true } })
+
+    if (p.waiverDecision?.present === false) {
+      expect(p.waiverDecision.value).toBeNull()
+      expect(p.waiverDecision.gap?.detail).toBeTruthy()
+      expect(p.waiverDecision.gap?.remedy).toBeTruthy()
+    } else {
+      // If it DID produce, it must be a real decision rather than an empty shell.
+      expect(p.waiverDecision?.value?.decisionType).toBeTruthy()
+    }
   })
 
   it('🛑 when NOT requested it is not_requested and never reaches the gap block', async () => {

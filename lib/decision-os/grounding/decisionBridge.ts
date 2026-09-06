@@ -10,6 +10,10 @@ import { productionLineupWorldDeps, productionLineupDecisionDeps } from '../line
 import { runCommissionerHealthDecision } from '../commissioner-health'
 import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
+import { runWaiverClaimDecision } from '../waiver'
+import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
+import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
+import { loadWaiverPool } from '../waiver/pool'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice, GroundingGap } from './packet'
 
@@ -301,5 +305,121 @@ export async function loadCommissionerHealthDecisionSlice(
     }, { describeAction: describeCommissionerAssessment })
   } catch (err) {
     return failed('commissioner health', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
+  }
+}
+
+/**
+ * R2.6 — the waiver claim decision for this user in this league.
+ *
+ * 🛑 THIS IS THE SLICE THAT HAD NO PRODUCER, AND THE BLOCKER WAS AN INPUT, NOT AN ENGINE.
+ * `lib/decision-os/waiver/` has been complete for a while; what it lacked was `availablePlayers` —
+ * the wire pool. The legacy route never assembled one server-side either (its client POSTs the
+ * pool), so there was nothing to reuse until `loadWaiverPool` was written. `packet.ts` stated that
+ * blocker precisely, and this discharges it.
+ *
+ * ⚠ THE RECOMMENDER RUNS FOR REAL. Every OTHER waiver path here is WRAP-FIDELITY — fed the legacy
+ * engine's output as a memo, proving the wrapper adds no drift. Right for a parity shadow, wrong
+ * here: a packet slice replaying a memo would report an answer this question never produced.
+ * `buildLiveWaiverDecisionDeps` runs `runWaiverAIService`, which is deterministic — no LLM unless
+ * `includeAIExplanation` is set, and it is not set.
+ *
+ * ⚠ COST IS BOUNDED BY INTENT, NOT BY LUCK. `intentToWant` sets `waiverDecision` only when the
+ * question is about waivers (`intent === 'waiver'`), so the pool read and the engine run land on
+ * waiver questions and no others. That gate already existed; this producer relies on it.
+ */
+export async function loadWaiverDecisionSlice(args: DecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
+  const userId = args.userId ?? null
+  const leagueId = args.leagueId ?? null
+  if (!userId || !leagueId) {
+    return {
+      present: false,
+      value: null,
+      asOf: null,
+      servedFrom: null,
+      confidence: null,
+      conclusive: { ok: true },
+      gap: {
+        reason: 'not_requested',
+        detail: 'A waiver claim decision is about one manager in one league, and neither was in scope.',
+        remedy: 'Ask who to claim in a specific league and it runs.',
+      },
+    }
+  }
+
+  try {
+    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    if (!facts) {
+      /*
+       * ⚠ THE HONEST DEGRADE, AND IT IS THE LIKELY PATH FOR SOME PROVIDERS.
+       * `loadWaiverWorldFacts` returns null when no roster resolves for this user, and
+       * `WaiverRecommendationAdapter` records that the userId/managerKey pairing can legitimately
+       * disagree by provider. An unresolved manager gets a stated gap, never an invented claim.
+       */
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_synced',
+          detail: 'No roster is resolved for you in this league yet, so there is nothing to claim onto.',
+          remedy: 'Import or re-sync the league so your roster is known.',
+        },
+      }
+    }
+
+    const pool = await loadWaiverPool(leagueId, facts.sport)
+    if (pool.availablePlayers.length === 0) {
+      /*
+       * Distinct from "no roster": the league resolved and the wire is empty after subtraction.
+       * Reporting "could not compute" there would be false — it computed, and the answer is nobody.
+       */
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_synced',
+          detail:
+            pool.leagueRosterCount === 0
+              ? 'No rosters are loaded for this league, so the available pool cannot be trusted.'
+              : 'Every player in the loaded pool is already rostered in this league.',
+          remedy: 'Re-sync the league so the player pool and rosters are current.',
+        },
+      }
+    }
+
+    const result = await runWaiverClaimDecision(
+      {
+        worldInput: worldInputFromFacts(facts),
+        userId,
+        leagueId,
+        sport: facts.sport,
+        rosterId: facts.rosterId,
+        engineInput: {
+          sport: facts.sport,
+          leagueSettings: {
+            faabBudget: facts.settings.faabBudget ?? null,
+            faabRemaining: facts.faabRemaining,
+          },
+          availablePlayers: pool.availablePlayers,
+        },
+        poolIncomplete: pool.poolIncomplete,
+      },
+      { decision: buildLiveWaiverDecisionDeps(facts) },
+    )
+
+    return decisionToSlice(result.decision, {
+      reason: 'not_computed',
+      detail: 'The waiver engine returned no decision.',
+      remedy: 'It runs again on the next request.',
+    })
+  } catch (err) {
+    return failed('waiver', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
   }
 }
