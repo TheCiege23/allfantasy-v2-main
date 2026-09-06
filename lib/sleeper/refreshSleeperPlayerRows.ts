@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getPlayersBySport } from '@/lib/sleeper-client'
+import { teamDisplayNameForSport } from '@/lib/team-abbrev'
 
 /**
  * Keep the Sleeper-sourced `SportsPlayer` rows current, without deleting any.
@@ -155,7 +156,14 @@ export async function refreshSleeperPlayerRows(args: {
         data: {
           name: fullName(p),
           position: p.position?.trim() || undefined,
-          team: p.team?.trim() || undefined,
+          /*
+           * 🛑 THIS IS THE LIVE WRITER, and it is the one that matters. Sleeper sends "DET";
+           * `SportsPlayer.team`'s canonical form is the display name. Fixing
+           * `SleeperPlayerSeedService` instead would have changed nothing — that module has no
+           * caller (see the note in app/api/cron/import-players/route.ts), while THIS runs every
+           * 6 hours at 1,500 players a pass and would re-introduce codes within one lap.
+           */
+          team: teamDisplayNameForSport(sport, p.team) ?? undefined,
           age: toFiniteNumber(p.age),
           yearsExp: toFiniteNumber(p.years_exp),
           height: p.height?.trim() || null,
@@ -202,7 +210,8 @@ export async function refreshSleeperPlayerRows(args: {
             externalId: `${SOURCE}:${id}`,
             name: fullName(p),
             position: p.position?.trim() || null,
-            team: p.team?.trim() || null,
+            // Same rule as the update path above; `null` rather than `undefined` on a create.
+            team: teamDisplayNameForSport(sport, p.team) ?? null,
             age: toFiniteNumber(p.age),
             yearsExp: toFiniteNumber(p.years_exp),
             height: p.height?.trim() || null,

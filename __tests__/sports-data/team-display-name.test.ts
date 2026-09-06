@@ -134,17 +134,35 @@ describe('the writers agree with the decision', () => {
       .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
       .join('\n')
 
-  it('🛑 the Sleeper seed writes the DISPLAY NAME, not an abbreviation', () => {
-    /* Sleeper is the dominant code-form writer — 3,425 rows. Asserted on comment-stripped
-     * source because the file now documents the old call as the thing it replaced. */
-    const code = stripComments(raw('lib/sleeper/SleeperPlayerSeedService.ts'))
-    expect(code).toContain('teamDisplayNameForSport')
-    expect(code).not.toMatch(/normalizeTeamAbbrev\(player\.team\)/)
+  it('🛑 THE LIVE WRITER writes the display name — this is the one that matters', () => {
+    /*
+     * 🛑 THE FIRST VERSION OF THIS TEST ASSERTED THE WRONG MODULE, AND PASSED.
+     * `SleeperPlayerSeedService` looked like the writer — it is the one that appears in a
+     * `sportsPlayer.createMany` grep — but it HAS NO CALLER. The repo says so in its own words at
+     * app/api/cron/import-players/route.ts: "complete, correct and unreachable — no route, no
+     * cron, no script". A source assertion against it is green and worthless.
+     *
+     * `refreshSleeperPlayerRows` is what actually runs: every 6 hours, 1,500 players a pass, from
+     * /api/cron/import-players. It wrote `p.team?.trim()` — raw Sleeper abbreviations, no
+     * normalisation, importing nothing from this module.
+     */
+    const live = stripComments(raw('lib/sleeper/refreshSleeperPlayerRows.ts'))
+    expect(live).toContain('teamDisplayNameForSport')
+    // The raw pass-through on both the update and the create path must be gone.
+    expect(live).not.toMatch(/team:\s*p\.team\?\.trim\(\)/)
   })
 
-  it('[control] the scan reads real code', () => {
-    const code = stripComments(raw('lib/sleeper/SleeperPlayerSeedService.ts'))
-    expect(code.length).toBeGreaterThan(400)
-    expect(code).toContain('sportsPlayer')
+  it('the unreachable seed service is fixed too, so it cannot become wrong if revived', () => {
+    const seed = stripComments(raw('lib/sleeper/SleeperPlayerSeedService.ts'))
+    expect(seed).toContain('teamDisplayNameForSport')
+    expect(seed).not.toMatch(/normalizeTeamAbbrev\(player\.team\)/)
+  })
+
+  it('[control] both scans read real code, so the negatives cannot pass vacuously', () => {
+    for (const p of ['lib/sleeper/refreshSleeperPlayerRows.ts', 'lib/sleeper/SleeperPlayerSeedService.ts']) {
+      const code = stripComments(raw(p))
+      expect(code.length).toBeGreaterThan(400)
+      expect(code).toContain('sportsPlayer')
+    }
   })
 })
