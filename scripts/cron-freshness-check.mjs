@@ -37,8 +37,9 @@
  * STALENESS is judged per job against its OWN declared cadence in vercel.json -- specifically the
  * largest gap between consecutive fires, not the average. `0 16-19 * * *` fires hourly inside a
  * four-hour window and then not again for 21 hours; an average-based threshold would page every
- * night. The allowance is MAX_GAP * TOLERANCE, so a job needs to miss roughly three runs before
- * it trips.
+ * night. The allowance is MAX_GAP * a tolerance SCALED BY THAT GAP — three misses for a sub-hourly
+ * job, two up to daily, one and a half for weekly and slower. See `toleranceForGap` for why a flat
+ * number cannot serve both ends of this registry.
  *
  *   node scripts/cron-freshness-check.mjs              # fail (exit 1) on any stale probe
  *   node scripts/cron-freshness-check.mjs --report     # print only, always exit 0
@@ -53,8 +54,35 @@ import pg from 'pg'
 import { readVercelCrons, classifyCrons } from './cron-tier.mjs'
 import { pinSessionToUtc, maxAge } from './db-freshness.mjs'
 
-/** A job must miss this many consecutive runs before it counts as stale. */
-const TOLERANCE = 3
+/**
+ * How many consecutive runs a job must miss before it counts as stale — scaled by how often it
+ * runs, because one number cannot serve both ends of this registry.
+ *
+ * 🛑 A FLAT TOLERANCE OF 3 IS GENEROUS AT ONE END AND ABSURD AT THE OTHER. It was flat, and the
+ * arithmetic is what makes the case:
+ *
+ *     every 2 min   import-scores      3 misses =  6 minutes   reasonable slack
+ *     hourly        reap-sync-runs     3 misses =  3 hours     reasonable
+ *     Mondays       weekly recalib     3 misses = 21 DAYS      three weeks of silence
+ *
+ * (Written as prose rather than cron expressions on purpose: a literal two-minute schedule
+ * contains the sequence that ENDS a block comment, which is how this note first broke the file.)
+ *
+ * Sub-hourly jobs genuinely need the slack: GitHub's scheduler drops triggers, and the fast tier's
+ * own window is ~55 minutes, so a job can legitimately skip a couple of slots without anything
+ * being wrong. A weekly job has no such excuse — if Monday passes twice, something is broken, and
+ * waiting for a third Monday means finding out three weeks late.
+ *
+ * ⚠ THE FLOOR STILL APPLIES AND IS WHAT KEEPS THIS SAFE. `MIN_ALLOWANCE_MS` (20 min) is taken as a
+ * maximum against the scaled value below, so tightening the multiplier can never make a FAST job
+ * page on ordinary queue drift — it only bites jobs whose own cadence is already long.
+ */
+function toleranceForGap(gapMs) {
+  if (gapMs == null) return 3
+  if (gapMs <= 60 * 60_000) return 3 // sub-hourly: absorb dropped triggers
+  if (gapMs <= 24 * 60 * 60_000) return 2 // hourly..daily: two misses is a signal
+  return 1.5 // weekly and slower: one and a half periods, not three
+}
 
 /** Nothing is allowed to page on a gap shorter than this -- absorbs Actions queue drift. */
 const MIN_ALLOWANCE_MS = 20 * 60_000
@@ -769,7 +797,7 @@ async function main() {
       }
 
       const gap = maxGapMs(cron.schedule)
-      const allowanceMs = Math.max(MIN_ALLOWANCE_MS, (gap ?? 3_600_000) * TOLERANCE)
+      const allowanceMs = Math.max(MIN_ALLOWANCE_MS, (gap ?? 3_600_000) * toleranceForGap(gap))
       const base = {
         path: cron.path,
         schedule: cron.schedule,
