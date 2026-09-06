@@ -716,6 +716,55 @@ export function classifyFreshness({ rowCount, timestampCount, ageMs, allowanceMs
 /** The states that do NOT fail a run. Kept beside the classifier so the two cannot drift apart. */
 export const HEALTHY_STATES = new Set(['OK', 'IDLE'])
 
+/**
+ * 🛑 `status` IN sync_job_runs IS NOT ONE VOCABULARY — IT IS SEVEN WRITERS' WORTH.
+ *
+ * `syncJobRunTelemetry.ts` types the field as `success | partial | failed`, and it is the only
+ * writer that does. At least six others call `prisma.syncJobRun.create/update` directly, two of
+ * them through `(prisma as any)`, which is how values outside that union got in. Censused
+ * 2026-09-06 across the whole table:
+ *
+ *     85806  success      the typed writer
+ *     27209  completed    prismaSyncStore, import-players, import-player-game-stats
+ *       666  failed       both
+ *       567  partial      both
+ *         5  running      in flight
+ *         1  timed_out    importPlayerGameStats's own reaper
+ *
+ * ⚠ `completed` AND `success` MEAN THE SAME THING. They are a naming difference between writers,
+ * not a semantic one — which is why this is a vocabulary declared here rather than a seven-file
+ * refactor of live import paths. Unifying the writers is worth doing; it is not worth doing as a
+ * prerequisite to reading the field correctly.
+ *
+ * ⚠ `partial` IS DELIBERATELY NOT HERE. It is job-dependent: `alert-sweep` used it to report push
+ * being unconfigured (135 runs in a day), and `playoff-schedule-refresh` uses it for ordinary
+ * warnings. Treating it as unhealthy would have reddened two jobs that are behaving exactly as
+ * designed — the always-red alarm this monitor exists to avoid. It is surfaced in the caveat and
+ * judged by a human.
+ *
+ * ⚠ AN UNKNOWN STATUS IS NOT UNHEALTHY EITHER. A new writer inventing a new word must not page
+ * anybody; only the values known to mean failure are listed.
+ */
+const TERMINAL_UNHEALTHY = new Set(['failed', 'timed_out', 'abandoned'])
+
+/**
+ * Combine a heartbeat's ARRIVAL verdict with its OUTCOME.
+ *
+ * ⚠ EXPORTED AND PURE BECAUSE THE LIVE CONTROL FOR IT IS AMBIGUOUS. Proving the DEGRADED branch
+ * against production needs a job that is simultaneously ON CADENCE and FAILING, and no such job
+ * exists most of the time — the obvious attempt (repointing a probe at a job whose last run
+ * failed) reports STALE instead, because that job's last run is also old, and STALE and DEGRADED
+ * produce an identical count and exit code. A control that cannot distinguish the branch it is
+ * testing from the branch beside it is not a control, so the decision lives here where a test can
+ * reach every case directly.
+ *
+ * ⚠ STALENESS WINS WHEN BOTH ARE WRONG. A job that is late AND failing is a dead job; calling that
+ * DEGRADED would understate it.
+ */
+export function heartbeatState(freshness, latestStatus) {
+  return freshness === 'OK' && TERMINAL_UNHEALTHY.has(latestStatus) ? 'DEGRADED' : freshness
+}
+
 // ───────────────────────────── formatting ────────────────────────────────
 
 function fmtAge(ms) {
@@ -787,6 +836,21 @@ async function main() {
     )
     const columnsByTable = new Map(cols.rows.map((r) => [r.table_name, r.cols]))
 
+    // Every heartbeat's LATEST status in ONE query rather than one per probe — the same bulk shape
+    // as the information_schema fetch above. 35 heartbeats would otherwise be 35 extra round trips
+    // on a monitor that already sends ~51.
+    const hbNames = [...new Set(Object.values(PROBES).map((p) => p.heartbeat).filter(Boolean))]
+    const latestRows = hbNames.length
+      ? await client.query(
+          `SELECT DISTINCT ON ("${HEARTBEAT_NAME_COLUMN}") "${HEARTBEAT_NAME_COLUMN}" AS job, status
+             FROM "${HEARTBEAT_TABLE}"
+            WHERE "${HEARTBEAT_NAME_COLUMN}" = ANY($1)
+            ORDER BY "${HEARTBEAT_NAME_COLUMN}", "${HEARTBEAT_TIME_COLUMN}" DESC`,
+          [hbNames],
+        )
+      : { rows: [] }
+    const latestStatusByJob = new Map(latestRows.rows.map((r) => [r.job, r.status]))
+
     for (const cron of crons) {
       const probe = PROBES[cron.path]
       if (!probe) {
@@ -829,14 +893,37 @@ async function main() {
           continue
         }
         const ageMs = hb.ageMs
+        const latestStatus = latestStatusByJob.get(probe.heartbeat) ?? null
+        const freshness = ageMs == null ? 'EMPTY' : ageMs > allowanceMs ? 'STALE' : 'OK'
+
+        /*
+         * ⚠ ARRIVAL AND OUTCOME ARE DIFFERENT QUESTIONS, AND THIS PROBE ONLY EVER ASKED THE FIRST.
+         *
+         * The caveat this replaced said so out loud — "proves the job RAN, not that it succeeded" —
+         * which meant a job firing perfectly on cadence and failing every single time read as `OK`.
+         * That is the same false green as a shared freshness column, reached from a different
+         * direction: the signal was present in the row all along and nothing looked at it.
+         *
+         * STALENESS STILL WINS when both are wrong. A job that is both late and failing is a dead
+         * job, and reporting DEGRADED there would understate it — so the outcome check only applies
+         * to a job that is arriving on time.
+         */
+        const state = heartbeatState(freshness, latestStatus)
+
         results.push({
           ...base,
           column: probe.heartbeat,
           rowCount: runCount,
           newest: newest?.toISOString() ?? null,
           ageMs,
-          state: ageMs == null ? 'EMPTY' : ageMs > allowanceMs ? 'STALE' : 'OK',
-          caveat: 'heartbeat: proves the job RAN, not that it succeeded',
+          latestStatus,
+          state,
+          caveat:
+            state === 'DEGRADED'
+              ? `arriving on cadence and FAILING — latest run status "${latestStatus}"`
+              : latestStatus === 'partial'
+                ? 'heartbeat: on cadence; latest run was PARTIAL — check what the job means by that'
+                : 'heartbeat: proves the job RAN, not that it succeeded',
         })
         continue
       }

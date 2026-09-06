@@ -13,6 +13,7 @@ import {
 import {
   classifyFreshness,
   HEALTHY_STATES,
+  heartbeatState,
   maxGapMs,
   NO_PROBE,
   PROBES,
@@ -297,5 +298,53 @@ describe('classifyFreshness', () => {
     for (const s of ['UNPOPULATED', 'EMPTY', 'STALE', 'CONFIG']) {
       expect(HEALTHY_STATES.has(s), `${s} must fail the run`).toBe(false)
     }
+  })
+})
+
+/*
+ * A heartbeat used to answer only "did this job ARRIVE", so a job firing perfectly on cadence and
+ * failing every single time read as OK. These pin the outcome half.
+ *
+ * ⚠ THEY EXIST BECAUSE THE LIVE CONTROL FOR IT IS AMBIGUOUS. Forcing DEGRADED against production
+ * needs a job that is simultaneously on cadence AND failing, and none exists most of the time. The
+ * obvious attempt — repointing a probe at a job whose last run failed — reports STALE instead,
+ * because that job's last run is also old. STALE and DEGRADED produce an identical healthy-count
+ * and an identical exit code, so that control cannot tell the two branches apart. It was tried, it
+ * was ambiguous, and that is why the decision was extracted into a pure function.
+ */
+describe('heartbeatState — arrival and outcome are separate questions', () => {
+  it('reports DEGRADED when a job is ON CADENCE but its last run failed', () => {
+    expect(heartbeatState('OK', 'failed')).toBe('DEGRADED')
+    expect(heartbeatState('OK', 'timed_out')).toBe('DEGRADED')
+    expect(heartbeatState('OK', 'abandoned')).toBe('DEGRADED')
+  })
+
+  it('lets STALENESS win when the job is both late and failing', () => {
+    // Late AND failing is a dead job, not a degraded one — DEGRADED would understate it.
+    expect(heartbeatState('STALE', 'failed')).toBe('STALE')
+    expect(heartbeatState('EMPTY', 'failed')).toBe('EMPTY')
+  })
+
+  it('treats both healthy vocabularies as healthy', () => {
+    // `completed` is what the six untyped writers emit, `success` what the typed one emits.
+    expect(heartbeatState('OK', 'success')).toBe('OK')
+    expect(heartbeatState('OK', 'completed')).toBe('OK')
+  })
+
+  it('does NOT degrade on partial, which is job-dependent', () => {
+    // alert-sweep used partial to report push being unconfigured — 135 runs in one day, every one
+    // of them correct. Failing on partial would have reddened a job behaving exactly as designed.
+    expect(heartbeatState('OK', 'partial')).toBe('OK')
+  })
+
+  it('does NOT degrade on an unknown or absent status', () => {
+    // A new writer inventing a new word must not page anybody.
+    expect(heartbeatState('OK', 'running')).toBe('OK')
+    expect(heartbeatState('OK', 'some_future_word')).toBe('OK')
+    expect(heartbeatState('OK', null)).toBe('OK')
+  })
+
+  it('DEGRADED is not a healthy state, so it fails the run', () => {
+    expect(HEALTHY_STATES.has('DEGRADED')).toBe(false)
   })
 })
