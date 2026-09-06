@@ -16,6 +16,8 @@ import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearc
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
 import { GameDayBanner, type GameDayLeague } from '@/components/core-app/player-finder/GameDayBanner'
+import { GameDayTriage } from '@/components/core-app/player-finder/GameDayTriage'
+import type { GameDayTriage as GameDayTriageData } from '@/lib/core-app/gameDayTriage'
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
@@ -118,6 +120,12 @@ export type PlayerFinderProps = {
    */
   windows?: ManagerPresence[] | null
   windowsUnread?: number
+  /**
+   * The finder's home before a search (2026-09-06): your flagged starters
+   * across every league with their locks. Rendered only when no player is
+   * open; the loader is not run when one is.
+   */
+  triage?: SectionState<GameDayTriageData> | null
   /**
    * A second player held beside the first (`?vs=`). When present the main
    * column shows the two side by side instead of the single detail card; the
@@ -299,6 +307,7 @@ export function PlayerFinder({
   presence = null,
   windows = null,
   windowsUnread = 0,
+  triage = null,
   compare = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
@@ -594,6 +603,9 @@ export function PlayerFinder({
       </aside>
 
       <main className="af-pf-main">
+        {/* ── Game day home: your flagged starters, before any search ──── */}
+        {!detail && signedIn && triage ? <GameDayTriage state={triage} nowIso={nowIso} leagueCount={leagueCount} /> : null}
+
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
         {/* The trade visual, under the ownership card, when someone else has him here. */}

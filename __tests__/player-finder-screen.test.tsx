@@ -440,6 +440,66 @@ describe('Player Finder — game day', () => {
   })
 })
 
+describe('Player Finder — game-day home', () => {
+  const NOW = '2026-10-25T16:18:00.000Z'
+  const TRIAGE: NonNullable<React.ComponentProps<typeof PlayerFinder>['triage']> = {
+    available: true,
+    data: {
+      week: { season: 2026, week: 12 },
+      leaguesRead: 3,
+      startersRead: 27,
+      rows: [
+        {
+          player: { sport: 'NFL', externalId: 'ri-1', sleeperId: '10236', name: 'Dalton Kincaid', position: 'TE', team: 'BUF', imageUrl: null },
+          status: { tone: 'bad', label: 'Out' },
+          description: 'Ankle',
+          reportedAt: null,
+          leagues: [
+            { leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper' },
+            { leagueId: 'L-elites', leagueName: 'End Zone Elites', platform: 'espn' },
+          ],
+          kickoff: '2026-10-25T17:00:00.000Z',
+          noGame: false,
+        },
+        {
+          player: { sport: 'NFL', externalId: 'ri-4', sleeperId: '8130', name: 'Jake Ferguson', position: 'TE', team: 'DAL', imageUrl: null },
+          status: null,
+          description: null,
+          reportedAt: null,
+          leagues: [{ leagueId: 'L-dragons', leagueName: 'Dynasty Dragons', platform: 'sleeper' }],
+          kickoff: null,
+          noGame: true,
+        },
+      ],
+    },
+  }
+
+  it('shows the flagged starters before any search, each row opening his card, with his lock', () => {
+    render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={TRIAGE} nowIso={NOW} />)
+    const card = screen.getByRole('region', { name: 'Game day · your flagged starters' })
+    expect(within(card).getByText('3 of 6 lineups read · week 12')).toBeInTheDocument()
+    const rows = within(card).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/core/players?q=Dalton%20Kincaid&player=NFL%3Ari-1')
+    expect(within(rows[0]).getByText('Out · Ankle')).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/starting in Dynasty Dragons · Sleeper, End Zone Elites · ESPN/)).toBeInTheDocument()
+    expect(within(rows[0]).getByText('locks in 42 min')).toHaveAttribute('data-lock', 'soon')
+    expect(rows[1]).toHaveAttribute('data-nogame', 'true')
+    expect(within(rows[1]).getByText('no game on the schedule')).toBeInTheDocument()
+  })
+
+  it('says the lineups are clear when nothing is flagged, gives the loader’s reason when it could not read, and stays out once a player is open', () => {
+    render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={{ ...TRIAGE, data: { ...TRIAGE.data, rows: [] } }} nowIso={NOW} />)
+    expect(screen.getByText('No flagged starters across your lineups week 12. Search any player above.')).toBeInTheDocument()
+
+    render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={0} signedIn triage={{ available: false, reason: 'connect a league to see your starters here' }} nowIso={NOW} />)
+    expect(screen.getByText('connect a league to see your starters here.')).toBeInTheDocument()
+
+    renderCore({ triage: TRIAGE, nowIso: NOW })
+    expect(screen.getAllByRole('region', { name: 'Game day · your flagged starters' })).toHaveLength(2) // the two home renders above; none for the open card
+  })
+})
+
 describe('Player Finder — legal bench swaps', () => {
   const KICKED_OFF = '2026-10-25T17:30:00.000Z' // the 1:00 games are under way
 

@@ -43,6 +43,7 @@ import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
+import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
@@ -753,6 +754,16 @@ export default async function AfCorePage({
             : null,
         })
       : []
+
+  /*
+   * Game-day home (2026-09-06): your flagged starters across every league,
+   * with their locks — only when NO player is open, on the finder's own
+   * bounded joins (never the lineup-actions engine).
+   */
+  const gameDayTriage =
+    activeKey === 'players' && userId && !playerDetail
+      ? await loadGameDayTriage(userId, playedLeagues.map((l) => l.id)).catch(() => null)
+      : null
 
   /*
    * 2a, league in context: who has him in THIS league — you, a named manager,
@@ -2012,6 +2023,7 @@ export default async function AfCorePage({
           windows={playerWindows.length > 0 ? playerWindows : null}
           windowsUnread={playerWindowsUnread}
           compare={playerCompare}
+          triage={gameDayTriage}
           nowIso={new Date().toISOString()}
         />
       ) : activeKey === 'week' ? (

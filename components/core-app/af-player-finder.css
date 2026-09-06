@@ -2532,3 +2532,137 @@
 .af-core .af-pf-swap-lock {
   color: var(--bad);
 }
+
+/* ── Game-day home: your flagged starters (2026-09-06) ───────────────── */
+.af-core .af-pf-triage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+.af-core .af-pf-triage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-triage-title {
+  margin: 0;
+}
+.af-core .af-pf-triage-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-core .af-pf-triage-clear {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text2);
+}
+.af-core .af-pf-triage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.af-core .af-pf-triage-row {
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-triage-row:first-child {
+  border-top: 0;
+}
+.af-core .af-pf-triage-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px;
+  border-left: 3px solid transparent;
+  text-decoration: none;
+  color: inherit;
+}
+.af-core .af-pf-triage-row[data-tone='bad'] .af-pf-triage-link {
+  border-left-color: var(--bad);
+}
+.af-core .af-pf-triage-row[data-tone='warn'] .af-pf-triage-link {
+  border-left-color: var(--warn);
+}
+.af-core .af-pf-triage-row[data-nogame='true'] .af-pf-triage-link {
+  border-left-color: var(--muted);
+}
+.af-core .af-pf-triage-link:hover {
+  background: var(--accent-soft);
+}
+.af-core .af-pf-triage-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.af-core .af-pf-triage-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-triage-status {
+  font-size: 10px;
+}
+.af-core .af-pf-triage-meta {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  /* Flows as text so the crest never becomes a break point on a narrow row. */
+  display: block;
+}
+.af-core .af-pf-triage-meta .af-pf-team-logo {
+  vertical-align: -3px;
+  margin: 0 3px;
+}
+.af-core .af-pf-triage-lock {
+  flex: none;
+}
+.af-core .af-pf-triage-lock .af-pf-lock {
+  margin-top: 0;
+}
+.af-core .af-pf-lock[data-lock='nogame'] {
+  color: var(--muted);
+}
+.af-core .af-pf-triage-foot {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-triage {
+    padding: 14px;
+  }
+  /* Avatar and text stay side by side; only the lock drops to its own line under the text. */
+  .af-core .af-pf-triage-link {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-areas:
+      'avatar text'
+      'lock lock';
+    column-gap: 12px;
+    row-gap: 6px;
+    align-items: center;
+  }
+  .af-core .af-pf-triage-link > :first-child {
+    grid-area: avatar;
+  }
+  .af-core .af-pf-triage-text {
+    grid-area: text;
+  }
+  .af-core .af-pf-triage-lock {
+    grid-area: lock;
+    padding-left: 52px;
+  }
+}
