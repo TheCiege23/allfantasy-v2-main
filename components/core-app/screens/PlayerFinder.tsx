@@ -359,6 +359,10 @@ export function PlayerFinder({
         freeAgents: (detail.recommendedMoves.available ? detail.recommendedMoves.data : []).filter((m) =>
           inScope(m.leagueId)
         ),
+        // Legal moves only (2026-09-06): a swap the platform would refuse right now is marked locked.
+        kickoffs: detail.kickoffs ?? {},
+        nowIso,
+        playerTeam: detail.player.team,
       })
     : []
   const moveByLeague = new Map<string, PlayerMove>()
@@ -1077,7 +1081,7 @@ export function PlayerFinder({
               nowIso={nowIso}
             />
           ) : null}
-          <SwapCandidates impact={impactRows} />
+          <SwapCandidates impact={impactRows} kickoffs={detail.kickoffs ?? {}} nowIso={nowIso} />
         </aside>
       ) : null}
     </div>

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import type { PlayerGame } from '@/lib/core-app/playerGame'
-import { kickoffClock } from '@/lib/core-app/lineupLock'
+import { kickoffClock, lockState } from '@/lib/core-app/lineupLock'
 import { platformLabel, type PlatformLink } from '@/lib/core-app/platformLinks'
 
 /**
@@ -52,8 +52,13 @@ export function GameDayBanner({
 }) {
   const last = playerName.trim().split(/\s+/).slice(-1)[0] ?? playerName
   const n = starting.length
-  const summary =
-    n > 0
+  // Once his game has started nothing of his can move on any platform; say so instead of offering buttons.
+  const locked = lockState(game.kickoff, nowIso).state === 'locked'
+  const summary = locked
+    ? n > 0
+      ? `His game has kicked off — ${last} is locked in your lineup in ${n} ${n === 1 ? 'league' : 'leagues'}; nothing can move now.`
+      : `His game has kicked off — nothing of his can move now.`
+    : n > 0
       ? `Starting in ${n} of your ${n === 1 ? 'league' : 'leagues'} — move ${last} before kickoff.`
       : benched > 0
         ? `On your bench in ${benched} ${benched === 1 ? 'league' : 'leagues'} — nothing to move before kickoff.`
@@ -75,7 +80,7 @@ export function GameDayBanner({
         <LockClock kickoffIso={game.kickoff} nowIso={nowIso} big />
       </div>
       <p className="af-pf-gameday-sum">{summary}</p>
-      {n > 0 ? (
+      {n > 0 && !locked ? (
         <div className="af-pf-gameday-actions">
           {starting.map((l) =>
             l.link ? (

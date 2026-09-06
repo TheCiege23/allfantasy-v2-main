@@ -32,6 +32,8 @@ export type StartOver = {
   playerId: string
   name: string
   position: string | null
+  /** The displaced starter's club, for his lineup lock (swapLegality.ts); null when the roster row has none. */
+  team: string | null
   /** The exact slot he would take, or null when the lineup could not be pinned. */
   slot: string | null
   /** The displaced starter's points under this league's scoring. */
@@ -49,7 +51,7 @@ export function pickStartOver(args: {
   starters: readonly string[]
   /** The league's starting slots in lineup order, or null when not stored. */
   slots: string[] | null
-  playerById: (id: string) => { name: string; position: string | null } | undefined
+  playerById: (id: string) => { name: string; position: string | null; team?: string | null } | undefined
   /** Points under this league's scoring, or null when he cannot be priced. */
   priceOf: (id: string) => number | null
 }): StartOver | null {
@@ -79,6 +81,7 @@ export function pickStartOver(args: {
         playerId: id,
         name: row.name,
         position: row.position,
+        team: row.team ?? null,
         slot,
         afPoints: pts,
         delta: Math.round((benched.afPoints - pts) * 100) / 100,

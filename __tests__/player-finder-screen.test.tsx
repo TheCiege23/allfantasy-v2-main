@@ -60,7 +60,7 @@ const IMPACT: LeagueImpact[] = [
     platformLeagueId: '123456',
     slot: 'BENCH',
     afPoints: { available: true, data: { points: 15.4, matchedKeys: 4, scoredKeys: 30 } },
-    startOver: { playerId: 'fergie', name: 'Jake Ferguson', position: 'TE', slot: 'FLEX', afPoints: 13.0, delta: 2.4 },
+    startOver: { playerId: 'fergie', name: 'Jake Ferguson', position: 'TE', team: 'DAL', slot: 'FLEX', afPoints: 13.0, delta: 2.4 },
     replacements: {
       available: true,
       data: [{ playerId: 'fergie', name: 'Jake Ferguson', position: 'TE', team: 'DAL', afPoints: 13.0, delta: -2.4, injuryStatus: null, from: 'STARTER' }],
@@ -125,6 +125,8 @@ const DETAIL: PlayerDetail = {
   projection: { available: true, data: { points: 13.8, season: '2026', week: 12 } },
   // Sunday 2026-10-25, 1:00pm ET — the lock every "yours" row counts down to.
   game: { available: true, data: { kickoff: '2026-10-25T17:00:00.000Z', opponent: 'MIA', home: true, week: 12, season: 2026, preseason: false } },
+  // Ferguson (DAL) shares the 1:00 slate; nobody else's club is mapped, so nobody else reads as locked.
+  kickoffs: { BUF: '2026-10-25T17:00:00.000Z', MIA: '2026-10-25T17:00:00.000Z', DAL: '2026-10-25T17:00:00.000Z' },
   snapShare: { available: true, data: { share: 0.78, snaps: 400, teamSnaps: 513, games: 8, basis: 'offense' } },
   positionRank: { available: true, data: { rank: 6, outOf: 118, position: 'TE' } },
   impact: { available: true, data: IMPACT },
@@ -435,6 +437,59 @@ describe('Player Finder — game day', () => {
     expect(container.querySelector('.af-pf-gameday')).toBeNull()
     expect(container.querySelectorAll('.af-pf-lock')).toHaveLength(0)
     expect(screen.getAllByRole('region', { name: 'Game day' })).toHaveLength(1) // only the first render's
+  })
+})
+
+describe('Player Finder — legal bench swaps', () => {
+  const KICKED_OFF = '2026-10-25T17:30:00.000Z' // the 1:00 games are under way
+
+  it('marks a swap candidate whose game has kicked off as locked, never green, and last', () => {
+    const detail: PlayerDetail = {
+      ...DETAIL,
+      impact: {
+        available: true,
+        data: [
+          impact({
+            leagueId: 'L-dragons',
+            leagueName: 'Dynasty Dragons',
+            platform: 'sleeper',
+            slot: 'BENCH',
+            afPoints: { available: true, data: { points: 15.4, matchedKeys: 4, scoredKeys: 30 } },
+            replacements: {
+              available: true,
+              data: [
+                { playerId: 'fergie', name: 'Jake Ferguson', position: 'TE', team: 'DAL', afPoints: 17.0, delta: 1.6, injuryStatus: null, from: 'STARTER' },
+                { playerId: 'likely', name: 'Isaiah Likely', position: 'TE', team: 'BAL', afPoints: 12.3, delta: -3.1, injuryStatus: null, from: 'BENCH' },
+              ],
+            },
+          }),
+        ],
+      },
+    }
+    renderCore({ detail, nowIso: KICKED_OFF })
+    const card = screen.getByRole('region', { name: 'Swap candidates on your bench' })
+    const rows = within(card).getAllByRole('listitem')
+    // Likely (BAL, not in the map) is movable and first; Ferguson (DAL, kicked off) is locked and last despite the better number.
+    expect(within(rows[0]).getByText('Isaiah Likely')).toBeInTheDocument()
+    expect(rows[1]).toHaveAttribute('data-locked', 'true')
+    expect(within(rows[1]).getByText(/locked · kicked off Sun 1:00p ET/)).toBeInTheDocument()
+    expect(within(rows[1]).getByText('17.0')).not.toHaveAttribute('data-better')
+    expect(within(card).getByText(/1 is locked — their games have kicked off/)).toBeInTheDocument()
+  })
+
+  it('keeps a locked recommended move in the list without its button, and says his own game has started in the banner', () => {
+    renderCore({ detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } } }, nowIso: KICKED_OFF })
+    // Kincaid (BUF) kicked off: the Dragons swap cannot be made.
+    const moves = screen.getByRole('region', { name: 'Recommended moves' })
+    const swap = within(moves).getByText(/Swap Ferguson out for Kincaid/).closest('li') as HTMLElement
+    expect(within(swap).getByText('locked')).toBeInTheDocument()
+    expect(within(swap).queryByRole('link', { name: /Open in Sleeper/ })).toBeNull()
+    expect(within(swap).getByText(/locked — both games have kicked off/)).toBeInTheDocument()
+
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(within(banner).getByText('His game has kicked off — Kincaid is locked in your lineup in 1 league; nothing can move now.')).toBeInTheDocument()
+    expect(within(banner).queryByRole('link')).toBeNull()
+    expect(within(banner).getByText('locked · kicked off Sun 1:00p ET')).toHaveAttribute('data-lock', 'locked')
   })
 })
 

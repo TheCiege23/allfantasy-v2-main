@@ -58,6 +58,43 @@ const WARRIORS = impact({
   afPoints: { available: true, data: { points: 9.9, matchedKeys: 4, scoredKeys: 20 } },
 })
 
+/*
+ * Legal moves only (2026-09-06): a swap the platform would refuse right now
+ * is marked locked and sorted last. Sunday 2026-10-25: BUF and DAL 1:00pm ET.
+ */
+describe('composePlayerMoves — game-day legality', () => {
+  const KICKOFFS = { BUF: '2026-10-25T17:00:00.000Z', DAL: '2026-10-25T17:00:00.000Z', BAL: '2026-10-25T20:25:00.000Z' }
+  const dragons = impact({ ...DRAGONS, startOver: { ...DRAGONS.startOver!, team: 'DAL' } })
+  const base = { playerName: 'Dalton Kincaid', injuryStatus: 'Active', impact: [dragons, ELITES], freeAgents: [], kickoffs: KICKOFFS, playerTeam: 'BUF' }
+
+  it('leaves every move makeable before kickoff, and without kickoffs at all', () => {
+    const before = composePlayerMoves({ ...base, nowIso: '2026-10-25T16:18:00.000Z' })
+    expect(before.map((m) => [m.key, m.locked])).toEqual([
+      ['start:L-dragons', null],
+      ['ir:L-elites', null],
+    ])
+    expect(composePlayerMoves({ ...base, kickoffs: {}, nowIso: '2026-10-25T17:30:00.000Z' }).every((m) => m.locked === null)).toBe(true)
+  })
+
+  it('locks the swap once either side has kicked off, names the game, and sorts locked moves last', () => {
+    const after = composePlayerMoves({ ...base, nowIso: '2026-10-25T17:30:00.000Z' })
+    // Both are locked here (his own game and Ferguson's), so the order falls back to tone.
+    expect(after.map((m) => m.key)).toEqual(['start:L-dragons', 'ir:L-elites'])
+    expect(after[0].locked).toBe('locked — both games have kicked off')
+    expect(after[0].note).toBe('locked — both games have kicked off')
+    expect(after[1].locked).toBe('locked — Kincaid’s game kicked off Sun 1:00p ET')
+    expect(after[1].note).toBe('locked — Kincaid’s game kicked off Sun 1:00p ET · an IR-slot player scores nothing')
+
+    // Only the displaced starter has kicked off: the swap is locked and drops below the still-makeable IR move.
+    const lateBuf = composePlayerMoves({ ...base, kickoffs: { ...KICKOFFS, BUF: '2026-10-25T20:25:00.000Z' }, nowIso: '2026-10-25T17:30:00.000Z' })
+    expect(lateBuf.map((m) => [m.key, m.locked])).toEqual([
+      ['ir:L-elites', null],
+      ['start:L-dragons', 'locked — Ferguson’s game kicked off Sun 1:00p ET'],
+    ])
+    expect(lateBuf[1].link).not.toBeNull() // the link is kept; the card hides the button
+  })
+})
+
 const CLAIM: RecommendedMove = {
   leagueId: 'L-gang',
   leagueName: 'Gridiron Gang',

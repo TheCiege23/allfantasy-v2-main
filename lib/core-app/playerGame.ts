@@ -1,3 +1,4 @@
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import type { SectionState } from './leagueHome'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import type { SportsWeek } from './sportsWeek'
@@ -21,6 +22,26 @@ export type PlayerGame = {
   week: number
   season: number
   preseason: boolean
+}
+
+/**
+ * Every club's kickoff this week, abbreviation → ISO — what the legality of a
+ * bench swap is read against (see swapLegality.ts). The earliest row per club
+ * wins, which is the one that locks; duplicate provider rows carry the same
+ * instant. A club with no fixture this week is simply absent.
+ */
+export function weekKickoffs(games: readonly FixtureRow[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const g of games) {
+    if (!g.startTime) continue
+    for (const raw of [g.homeTeam, g.awayTeam]) {
+      const club = normalizeTeamAbbrev(raw)
+      if (!club) continue
+      const iso = g.startTime.toISOString()
+      if (!out[club] || iso < out[club]) out[club] = iso
+    }
+  }
+  return out
 }
 
 export function playerGame(games: readonly FixtureRow[], team: string | null, week: SportsWeek | null): SectionState<PlayerGame> {

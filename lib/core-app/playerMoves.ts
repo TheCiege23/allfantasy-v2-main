@@ -2,6 +2,7 @@ import type { LeagueImpact } from './playerImpact'
 import type { RecommendedMove } from './playerFinder'
 import { isHealthyDesignation, isRuledOut } from './injuryStatus'
 import { claimLink, lineupLink, movePath, type PlatformLink } from './platformLinks'
+import { moveLegality, swapLegality, type Kickoffs } from './swapLegality'
 
 /**
  * "Recommended moves" — every card names platform › league › screen, carries a
@@ -40,6 +41,13 @@ export type PlayerMove = {
   delta: number | null
   scoring: 'league' | 'standard'
   link: PlatformLink | null
+  /**
+   * Why the move cannot be made right now — "locked — Ferguson’s game kicked
+   * off Sun 1:00p ET" — read from the week's kickoffs (swapLegality.ts). Null
+   * when it can, or when no kickoffs were passed. A locked move keeps its
+   * place in the list and loses its button.
+   */
+  locked: string | null
 }
 
 /**
@@ -75,10 +83,24 @@ export function composePlayerMoves(args: {
   injuryStatus: string | null
   impact: LeagueImpact[]
   freeAgents: RecommendedMove[]
+  /**
+   * Game-day legality (2026-09-06): the week's kickoffs by club, the clock,
+   * and his club. Without them every move reads as makeable — the old
+   * behaviour, and the right one when no schedule is on file.
+   */
+  kickoffs?: Kickoffs
+  nowIso?: string | null
+  playerTeam?: string | null
 }): PlayerMove[] {
   const { playerName, injuryStatus, impact, freeAgents } = args
   const last = lastName(playerName)
   const out: PlayerMove[] = []
+  const kickoffs = args.kickoffs ?? {}
+  const nowIso = args.nowIso ?? null
+  const lockOf = (name: string, team: string | null | undefined): string | null =>
+    nowIso ? moveLegality({ name, team, kickoffs, nowIso }).reason : null
+  const swapLockOf = (outName: string, outTeam: string | null | undefined): string | null =>
+    nowIso ? swapLegality({ out: { name: outName, team: outTeam }, in: { name: playerName, team: args.playerTeam }, kickoffs, nowIso }).reason : null
 
   for (const im of impact) {
     if (im.isStarting) continue
@@ -98,32 +120,37 @@ export function composePlayerMoves(args: {
        * at all we cannot tell, so no card — the table still shows the slot.
        */
       if (!injuryStatus || isRuledOut(injuryStatus)) continue
+      const locked = lockOf(playerName, args.playerTeam)
       out.push({
         key: `ir:${im.leagueId}`,
         leagueId: im.leagueId,
         tone: 'warn',
         title: `Move ${last} off IR — he's ${isHealthyDesignation(injuryStatus) ? 'active' : injuryStatus.trim().toLowerCase()}`,
         path: movePath(league, 'Roster'),
-        note: 'an IR-slot player scores nothing',
+        note: [locked, 'an IR-slot player scores nothing'].filter(Boolean).join(' · '),
         delta: im.afPoints.available ? im.afPoints.data.points : null,
         scoring: 'league',
         link: lineupLink(league),
+        locked,
       })
       continue
     }
 
     const so = im.startOver
     if (so && so.delta > 0) {
+      // Both sides must be unlocked: the starter he displaces AND himself.
+      const locked = swapLockOf(so.name, so.team)
       out.push({
         key: `start:${im.leagueId}`,
         leagueId: im.leagueId,
         tone: 'bad',
         title: `Swap ${lastName(so.name)} out for ${last}${so.slot ? ` at ${so.slot.replace(/_/g, ' ')}` : ''}`,
         path: movePath(league, 'Lineup'),
-        note: im.slotConfirmed ? null : 'slot unconfirmed — legal somewhere in this lineup',
+        note: [locked, im.slotConfirmed ? null : 'slot unconfirmed — legal somewhere in this lineup'].filter(Boolean).join(' · ') || null,
         delta: so.delta,
         scoring: 'league',
         link: lineupLink(league),
+        locked,
       })
     }
   }
@@ -157,14 +184,19 @@ export function composePlayerMoves(args: {
       delta: fa.delta,
       scoring: 'standard',
       link,
+      // A free agent's club is not on the recommendation, so his lock is not read here.
+      locked: null,
     })
   }
 
   /*
-   * Urgent first, then by size. A lineup that is wrong today outranks a waiver
-   * claim that can wait until Tuesday, whatever the numbers say.
+   * Makeable first; then urgent, then by size. A lineup that is wrong today
+   * outranks a waiver claim that can wait until Tuesday, whatever the numbers
+   * say — but a move the platform will refuse right now goes to the bottom
+   * whatever its tone, and keeps its reason.
    */
   return out.sort((a, b) => {
+    if (Boolean(a.locked) !== Boolean(b.locked)) return a.locked ? 1 : -1
     if (TONE_RANK[a.tone] !== TONE_RANK[b.tone]) return TONE_RANK[a.tone] - TONE_RANK[b.tone]
     return (b.delta ?? -Infinity) - (a.delta ?? -Infinity)
   })

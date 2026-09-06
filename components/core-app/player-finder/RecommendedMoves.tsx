@@ -49,7 +49,12 @@ export function RecommendedMoves({
               ) : (
                 <span className="af-pf-move-delta af-pf-move-delta--none af-num">—</span>
               )}
-              {m.link ? (
+              {m.locked ? (
+                /* The platform would refuse it right now; the reason sits in the path line. */
+                <span className="af-chip af-num af-pf-move-locked" title={m.locked}>
+                  locked
+                </span>
+              ) : m.link ? (
                 m.link.external ? (
                   <a
                     className="af-btn af-pf-move-btn"

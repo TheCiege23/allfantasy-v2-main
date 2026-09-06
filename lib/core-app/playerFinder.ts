@@ -11,7 +11,7 @@ import { loadSnapShare } from './snapShare'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
 import { resolveSportsWeek } from './sportsWeek'
-import { playerGame, type PlayerGame } from './playerGame'
+import { playerGame, weekKickoffs, type PlayerGame } from './playerGame'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -167,6 +167,13 @@ export type PlayerDetail = {
    * file, no week on the schedule, no fixture for the club), never a guess.
    */
   game: SectionState<PlayerGame>
+  /**
+   * Every club's kickoff this week, abbreviation → ISO, from the same schedule
+   * rows — what a bench swap's legality is read against (swapLegality.ts).
+   * Empty when the week could not be resolved; a club absent from it is not
+   * claimed locked.
+   */
+  kickoffs: Record<string, string>
   /**
    * Share of his team's snaps, offensive or defensive as the position requires.
    *
@@ -1065,21 +1072,20 @@ export async function getPlayerDetail(
    * matched in memory, because SportsGame holds provider display names and
    * `row.team` holds an abbreviation (see nextGameMap.ts).
    */
-  const game: PlayerDetail['game'] = await (async () => {
-    const team = normalizeTeamAbbrev(row.team)
-    if (!team) return playerGame([], null, null)
-    const week = await resolveSportsWeek(row.sport).catch(() => null)
-    if (!week) return playerGame([], team, null)
-    const games = await prisma.sportsGame
-      .findMany({
-        where: { sport: row.sport, season: week.season, week: week.week, seasonType: week.seasonType },
-        orderBy: { startTime: 'asc' },
-        take: 400,
-        select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
-      })
-      .catch(() => [])
-    return playerGame(games, team, week)
-  })()
+  const sportsWeek = await resolveSportsWeek(row.sport).catch(() => null)
+  const weekGames = sportsWeek
+    ? await prisma.sportsGame
+        .findMany({
+          where: { sport: row.sport, season: sportsWeek.season, week: sportsWeek.week, seasonType: sportsWeek.seasonType },
+          orderBy: { startTime: 'asc' },
+          take: 400,
+          select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+        })
+        .catch(() => [])
+    : []
+  const game: PlayerDetail['game'] = playerGame(weekGames, normalizeTeamAbbrev(row.team), sportsWeek)
+  // Every club's kickoff, for the bench candidates' locks — the same rows, no second read.
+  const kickoffs = weekKickoffs(weekGames)
 
   const projRow = projectionWeek
     ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
@@ -1171,6 +1177,7 @@ export async function getPlayerDetail(
     impact,
     projection,
     game,
+    kickoffs,
     snapShare,
     positionRank: rank,
     recommendedMoves,

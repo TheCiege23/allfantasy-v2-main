@@ -2519,3 +2519,16 @@
     flex: 1 1 100%;
   }
 }
+
+/* ── Legal bench swaps: a locked move keeps its row and loses its button (2026-09-06) ── */
+.af-core .af-pf-move-locked {
+  align-self: center;
+  color: var(--muted);
+}
+.af-core .af-pf-swap-row[data-locked='true'] .af-pf-swap-name,
+.af-core .af-pf-swap-row[data-locked='true'] .af-pf-swap-pts {
+  color: var(--muted);
+}
+.af-core .af-pf-swap-lock {
+  color: var(--bad);
+}
