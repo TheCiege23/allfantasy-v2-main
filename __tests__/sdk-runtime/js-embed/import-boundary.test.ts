@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { hasInternalLeakage } from '../../../lib/decision-os/sdk/privacy'
@@ -29,8 +29,24 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 
 const read = (rel: string) => stripComments(readFileSync(resolve(process.cwd(), rel), 'utf8'))
+const exists = (rel: string) => existsSync(resolve(process.cwd(), rel))
 
-const JS_EMBED_FILES = [
+// ⚠ ONE DECLARED FILE HAS NO COMMITTED SOURCE, AND THAT MUST NOT SILENTLY DISABLE
+// THIS SUITE. Reading it threw ENOENT at module scope, which fails the whole file
+// before a single assertion runs — so the boundary rules below were enforcing
+// nothing, and had been since the suite landed.
+//
+// Filtered rather than skipped, deliberately. The sibling `sdk-contracts` suite is
+// skipped wholesale because its entire `src` tree is absent; here every file but the
+// barrel is committed and real, so skipping would drop genuine sources out of
+// enforcement to work around one that is missing.
+//
+// EXPECTED_ABSENT is asserted below, so this cannot rot in either direction: a NEW
+// file going missing fails, and committing the barrel also fails until it is removed
+// from this list — which is what puts it back under enforcement rather than leaving
+// it quietly excluded forever.
+
+const DECLARED_JS_EMBED_FILES = [
   'sdk-runtime/js-embed/src/types.ts',
   'sdk-runtime/js-embed/src/containerValidation.ts',
   'sdk-runtime/js-embed/src/config.ts',
@@ -39,7 +55,11 @@ const JS_EMBED_FILES = [
   'sdk-runtime/js-embed/src/createWidget.ts',
   'sdk-runtime/js-embed/src/namespace.ts',
   'sdk-runtime/js-embed/src/index.ts',
-].map((p) => [p, read(p)] as const)
+] as const
+
+const EXPECTED_ABSENT: readonly string[] = ['sdk-runtime/js-embed/src/index.ts']
+
+const JS_EMBED_FILES = DECLARED_JS_EMBED_FILES.filter(exists).map((p) => [p, read(p)] as const)
 
 const IMPORT_SPECIFIER_RE = /import\s+(?:type\s+)?(?:[\s\S]*?)from\s+['"]([^'"]+)['"]/g
 
@@ -65,6 +85,11 @@ function isAllowedSpecifier(specifier: string): boolean {
 }
 
 describe('architecture: sdk-runtime/js-embed import boundary', () => {
+  it('every declared source file is present except the known-absent barrel', () => {
+    expect(DECLARED_JS_EMBED_FILES.filter((f) => !exists(f))).toEqual(EXPECTED_ABSENT)
+    expect(JS_EMBED_FILES).toHaveLength(DECLARED_JS_EMBED_FILES.length - EXPECTED_ABSENT.length)
+  })
+
   it('every import specifier is local, the sanctioned react exception, core, or the frozen sdk/presentation contract layers', () => {
     for (const [path, src] of JS_EMBED_FILES) {
       const specifiers = extractImportSpecifiers(src)

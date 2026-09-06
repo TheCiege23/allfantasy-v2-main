@@ -603,6 +603,33 @@ export const NO_PROBE = {
    * today, so pointing a heartbeat probe at it now would report CONFIG forever rather than
    * measure anything. Checked before writing this rather than assumed.
    */
+
+  /*
+   * ── EVENT-DRIVEN, SO ITS SILENCE IS THE HEALTHY STATE ──
+   *
+   * The keeper-deadline sweep, scheduled with the route in 8cd2cc7a. It arrived on the schedule
+   * without a classification, which is exactly the gap this registry exists to refuse: it turned
+   * __tests__/cron-tier-and-freshness.test.ts red as "unclassified crons: 0 * * * * /api/keeper/session"
+   * on every PR until someone decided which of the three it is. This is that decision.
+   *
+   * ⚠ A TABLE PROBE IS WRONG IN BOTH DIRECTIONS HERE. `processKeeperDeadlines` locks selections
+   * only when a keeper deadline actually elapses, so it correctly writes NOTHING for most of the
+   * season — the same inversion as the backfill sweeper above, where a freshness probe is red
+   * precisely while the job is working. And `KeeperSelectionSession` is written by commissioners
+   * and managers through this same route's user-facing branch, so a probe on it would be kept
+   * green by ordinary league traffic while the cron half was dead: the shared-probe false green.
+   *
+   * ⚠ AND THE HEARTBEAT DOES NOT EXIST YET. Checked rather than assumed: neither
+   * `app/api/keeper/session/route.ts` nor `lib/keeper/selectionEngine.ts` calls `recordSyncJobRun`
+   * or `withSyncJobRun`, so pointing a heartbeat probe at it today would report CONFIG forever and
+   * measure nothing — the failure the entry above already names. Instrumenting the cron branch is
+   * how this graduates into PROBES, which is the path every heartbeat entry in this file took.
+   */
+  '/api/keeper/session':
+    'Event-driven keeper-deadline sweep: it writes only when a deadline elapses, so an output ' +
+    'probe is red through every quiet period, and KeeperSelectionSession is also written by this ' +
+    "route's user-facing branch, so a table probe would be held green by ordinary league traffic. " +
+    'Needs recordSyncJobRun in the cron branch before it can be probed as a heartbeat.',
 }
 
 /**
