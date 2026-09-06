@@ -12,7 +12,7 @@ import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeS
 /**
  * Fantasy OS — season-aware read-model refresh heartbeat, all providers (durable cron entrypoint).
  *
- * Deploy this on a FREQUENT fixed schedule (every 30 min, per vercel.json). Each invocation enumerates
+ * Deploy this on a FREQUENT fixed schedule (every 30 min, per cron-schedule.json). Each invocation enumerates
  * the canonical imported leagues of every syncable provider and refreshes only the ones DUE for their
  * season-aware cadence
  * (≈30 min in season / 4h offseason) — the fixed heartbeat runs often, but the per-league scheduler
@@ -31,6 +31,29 @@ import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeS
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+// ⚠ 300s AND THE CADENCE ARE ONE DECISION, NOT TWO, AND TWO SEPARATE TESTS SAY SO.
+//
+// `cron-fast-tier-timeouts` requires any fast-tier job declaring 300s to run no more often
+// than every 15 minutes — a job allowed to run five minutes must not be re-fired inside its
+// own worst case. `cron-fast-tier-phase-stagger` is stricter and more specific: it encodes
+// the 2026-09-03 production incident, in which this route is named as one of FIVE
+// every-30-minute jobs that must stay phase-separated.
+//
+// This sat at every-10-minutes and failed both — the only one of the five 300s jobs under
+// the line (the others run every 15, 30, 30 and 30 minutes). Every-30-minutes is what the
+// header above always said, what the stagger test counts on, and what the per-league
+// due-ness cadence (~30 min in season) already is; every-15 satisfies the timeout test
+// alone and leaves the stagger test red.
+//
+// Fixed by widening the cadence rather than trimming the budget: nothing measures how long
+// this sync actually needs, and truncating it mid-run is the worse failure. If you tighten
+// this schedule, lower `maxDuration` in the same change — both tests will say so.
+//
+// ⚠ LINE COMMENTS, DELIBERATELY. A cron expression written literally in a BLOCK comment
+// ends it: the star-slash in "*/30" is the close-comment token, so everything below turns
+// into syntax errors. Caught here by `npm run typecheck` reporting 48 errors against a
+// 143-error baseline — a count BELOW the baseline meant a file had stopped parsing, not
+// that anything got better.
 export const maxDuration = 300
 
 export async function GET(req: NextRequest) {
