@@ -82,8 +82,18 @@ const CLAIM: RecommendedMove = {
   platform: 'yahoo',
   projectionWeek: 12,
   affectedProjection: 9.4,
-  freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', projectedPoints: 12.3, delta: 2.9 }],
+  freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', team: 'BAL', projectedPoints: 12.3, delta: 2.9 }],
   claimTarget: { kind: 'none' },
+}
+/* A claim whose free agent plays for Dallas, which shares Kincaid's 1:00 slate. */
+const CLAIM_DAL: RecommendedMove = {
+  leagueId: 'L-dragons',
+  leagueName: 'Dynasty Dragons',
+  platform: 'sleeper',
+  projectionWeek: 12,
+  affectedProjection: 9.4,
+  freeAgents: [{ playerId: '11', name: 'Luke Schoonmaker', position: 'TE', team: 'DAL', projectedPoints: 10.1, delta: 0.7 }],
+  claimTarget: { kind: 'provider', provider: 'sleeper', url: 'https://sleeper.com/leagues/999/players' },
 }
 
 const DETAIL: PlayerDetail = {
@@ -637,6 +647,22 @@ describe('Player Finder — legal bench swaps', () => {
     expect(within(banner).getByText('His game has kicked off — Kincaid is locked in your lineup in 1 league; nothing can move now.')).toBeInTheDocument()
     expect(within(banner).queryByRole('link')).toBeNull()
     expect(within(banner).getByText('locked · kicked off Sun 1:00p ET')).toHaveAttribute('data-lock', 'locked')
+  })
+
+  it('locks a claim whose free agent has kicked off and keeps the one whose club has not', () => {
+    // Schoonmaker (DAL) kicked off at 1:00; Likely (BAL) is not on the map. Kincaid is healthy, so no swap competes.
+    renderCore({ detail: { ...DETAIL, recommendedMoves: { available: true, data: [CLAIM, CLAIM_DAL] } }, nowIso: KICKED_OFF })
+    const moves = screen.getByRole('region', { name: 'Recommended moves' })
+    const dal = within(moves).getByText('Claim Luke Schoonmaker over Kincaid').closest('li') as HTMLElement
+    expect(within(dal).getByText('locked')).toBeInTheDocument()
+    expect(within(dal).queryByRole('link', { name: /Open in Sleeper/ })).toBeNull()
+    expect(within(dal).getByText(/locked — Schoonmaker’s game kicked off Sun 1:00p ET/)).toBeInTheDocument()
+    const bal = within(moves).getByText('Claim Isaiah Likely over Kincaid').closest('li') as HTMLElement
+    expect(within(bal).queryByText('locked')).toBeNull()
+    expect(within(bal).getByRole('link')).toBeInTheDocument()
+    // The makeable claim sorts above the locked one.
+    const titles = within(moves).getAllByRole('heading', { level: 4 }).map((h) => h.textContent)
+    expect(titles.indexOf('Claim Isaiah Likely over Kincaid')).toBeLessThan(titles.indexOf('Claim Luke Schoonmaker over Kincaid'))
   })
 })
 

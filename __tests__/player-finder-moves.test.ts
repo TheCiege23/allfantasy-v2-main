@@ -98,6 +98,41 @@ describe('composePlayerMoves — game-day legality', () => {
     ])
     expect(lateBuf[1].link).not.toBeNull() // the link is kept; the card hides the button
   })
+
+  it('locks a claim once the free agent’s OWN game has kicked off, keeps his link, and never locks a club it cannot see', () => {
+    const claim: RecommendedMove = {
+      leagueId: 'L-gang',
+      leagueName: 'Gridiron Gang',
+      platform: 'sleeper',
+      projectionWeek: 12,
+      affectedProjection: 6.2,
+      freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', team: 'BAL', projectedPoints: 12.3, delta: 6.1 }],
+      claimTarget: { kind: 'provider', provider: 'sleeper', url: 'https://sleeper.com/leagues/999/players' },
+    }
+    // 12:18p ET: Baltimore's 4:25 game is hours away — the claim is makeable, and first among the good moves.
+    const before = composePlayerMoves({ ...base, impact: [], freeAgents: [claim], nowIso: '2026-10-25T16:18:00.000Z' })
+    expect(before.map((m) => [m.key, m.locked])).toEqual([['claim:L-gang:9', null]])
+    expect(before[0].note).toBe('TE · unrostered · week 12 · standard scoring')
+
+    // 5:00p ET: Likely's game has kicked off — he cannot come into a lineup now; the reason leads the note, the link stays for the card to hide.
+    const after = composePlayerMoves({ ...base, impact: [], freeAgents: [claim], nowIso: '2026-10-25T21:00:00.000Z' })
+    expect(after[0].locked).toBe('locked — Likely’s game kicked off Sun 4:25p ET')
+    expect(after[0].note).toBe('locked — Likely’s game kicked off Sun 4:25p ET · TE · unrostered · week 12 · standard scoring')
+    expect(after[0].link).not.toBeNull()
+
+    // A locked claim sorts below a still-makeable IR move, whatever its tone.
+    const mixed = composePlayerMoves({ ...base, impact: [ELITES], freeAgents: [claim], kickoffs: { ...KICKOFFS, BUF: '2026-10-25T23:00:00.000Z' }, nowIso: '2026-10-25T21:00:00.000Z' })
+    expect(mixed.map((m) => [m.key, Boolean(m.locked)])).toEqual([
+      ['ir:L-elites', false],
+      ['claim:L-gang:9', true],
+    ])
+
+    // No club on the candidate, or a club not in the map: not a lock.
+    const noClub: RecommendedMove = { ...claim, freeAgents: [{ ...claim.freeAgents[0], team: null }] }
+    expect(composePlayerMoves({ ...base, impact: [], freeAgents: [noClub], nowIso: '2026-10-25T21:00:00.000Z' })[0].locked).toBeNull()
+    const unmapped: RecommendedMove = { ...claim, freeAgents: [{ ...claim.freeAgents[0], team: 'KC' }] }
+    expect(composePlayerMoves({ ...base, impact: [], freeAgents: [unmapped], nowIso: '2026-10-25T21:00:00.000Z' })[0].locked).toBeNull()
+  })
 })
 
 const CLAIM: RecommendedMove = {
@@ -106,7 +141,7 @@ const CLAIM: RecommendedMove = {
   platform: 'sleeper',
   projectionWeek: 12,
   affectedProjection: 6.2,
-  freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', projectedPoints: 12.3, delta: 6.1 }],
+  freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', team: 'BAL', projectedPoints: 12.3, delta: 6.1 }],
   claimTarget: { kind: 'provider', provider: 'sleeper', url: 'https://sleeper.com/leagues/999/players' },
 }
 
