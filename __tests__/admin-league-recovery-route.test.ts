@@ -18,12 +18,29 @@ const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   runAdminLeagueRecovery: vi.fn(),
   resolveAdminAuditActor: vi.fn(),
+  buildLeagueInspectSnapshot: vi.fn(),
+  normalizeLifecycleState: vi.fn(),
+  validateTransition: vi.fn(),
+  auditFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/adminAuth', () => ({ requireAdmin: mocks.requireAdmin }))
 
 vi.mock('@/lib/admin/recovery/adminRecoveryService', () => ({
   runAdminLeagueRecovery: mocks.runAdminLeagueRecovery,
+}))
+
+vi.mock('@/lib/admin/operations/leagueInspectService', () => ({
+  buildLeagueInspectSnapshot: mocks.buildLeagueInspectSnapshot,
+}))
+
+vi.mock('@/server/services/leagueLifecycleService', () => ({
+  normalizeLifecycleState: mocks.normalizeLifecycleState,
+  validateTransition: mocks.validateTransition,
+}))
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: { adminAuditLog: { findMany: mocks.auditFindMany } },
 }))
 
 vi.mock('@/lib/admin-audit', () => ({
@@ -56,6 +73,16 @@ describe('/api/admin/leagues/[leagueId]/recovery', () => {
     vi.clearAllMocks()
     mocks.resolveAdminAuditActor.mockReturnValue('admin-actor-1')
     mocks.runAdminLeagueRecovery.mockResolvedValue({ ok: true, detail: { lifecycleState: 'in_season' } })
+    mocks.buildLeagueInspectSnapshot.mockResolvedValue({
+      league: { id: 'lg-1', name: 'Test League', lifecycleState: 'in_season' },
+      draftSession: null,
+      waiverRunsRecent: [],
+      rosterCount: 12,
+      finance: null,
+    })
+    mocks.normalizeLifecycleState.mockImplementation((raw: string | null) => raw ?? 'in_season')
+    mocks.validateTransition.mockReturnValue({ ok: false, reason: 'not allowed' })
+    mocks.auditFindMany.mockResolvedValue([])
   })
 
   it('REFUSES a non-admin and never reaches the recovery service', async () => {
@@ -166,5 +193,88 @@ describe('/api/admin/leagues/[leagueId]/recovery', () => {
 
     expect(res.status).toBe(400)
     expect(mocks.runAdminLeagueRecovery).not.toHaveBeenCalled()
+  })
+
+  // ── GET — the read the POST is unusable without ──────────────────────────────────────────────
+
+  it('GET REFUSES a non-admin and never reads the league', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({ ok: false, res: new Response('Forbidden', { status: 403 }) })
+    const { GET } = await import('@/app/api/admin/leagues/[leagueId]/recovery/route')
+
+    const res = await GET(new Request('http://localhost/x'), PARAMS)
+
+    expect(res.status).toBe(403)
+    // A league's state is itself privileged: the refusal must happen before any read.
+    expect(mocks.buildLeagueInspectSnapshot).not.toHaveBeenCalled()
+    expect(mocks.auditFindMany).not.toHaveBeenCalled()
+  })
+
+  it('GET 404s an unknown league instead of returning an empty snapshot', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({ ok: true, user: { id: 'u1' } })
+    mocks.buildLeagueInspectSnapshot.mockResolvedValueOnce(null)
+    const { GET } = await import('@/app/api/admin/leagues/[leagueId]/recovery/route')
+
+    const res = await GET(new Request('http://localhost/x'), PARAMS)
+
+    expect(res.status).toBe(404)
+    expect(mocks.auditFindMany).not.toHaveBeenCalled()
+  })
+
+  it('DERIVES allowedTransitions from validateTransition rather than a copied table', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({ ok: true, user: { id: 'u1' } })
+    // Only these two are legal; every other enum member must be excluded because the VALIDATOR
+    // said so, not because the route holds its own list.
+    mocks.validateTransition.mockImplementation((_cur: string, next: string) =>
+      next === 'playoffs' || next === 'archived' ? { ok: true } : { ok: false, reason: 'no' },
+    )
+    const { GET } = await import('@/app/api/admin/leagues/[leagueId]/recovery/route')
+
+    const res = await GET(new Request('http://localhost/x'), PARAMS)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.lifecycle.allowedTransitions).toEqual(['playoffs', 'archived'])
+    // Asked about EVERY enum member — a route filtering a hardcoded subset would call it fewer times.
+    expect(mocks.validateTransition).toHaveBeenCalledTimes(10)
+  })
+
+  it('reports `coerced` when the stored lifecycle state is null, instead of stating a state as fact', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({ ok: true, user: { id: 'u1' } })
+    mocks.buildLeagueInspectSnapshot.mockResolvedValueOnce({
+      league: { id: 'lg-1', name: 'Broken League', lifecycleState: null },
+      draftSession: null, waiverRunsRecent: [], rosterCount: 0, finance: null,
+    })
+    const { GET } = await import('@/app/api/admin/leagues/[leagueId]/recovery/route')
+
+    const body = await (await GET(new Request('http://localhost/x'), PARAMS)).json()
+
+    expect(body.lifecycle.raw).toBeNull()
+    expect(body.lifecycle.normalized).toBe('in_season')
+    // The substitution is visible. Without this an operator reads "in_season" as the truth.
+    expect(body.lifecycle.coerced).toBe(true)
+  })
+
+  it('does NOT flag coercion when the stored state is already valid', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({ ok: true, user: { id: 'u1' } })
+    const { GET } = await import('@/app/api/admin/leagues/[leagueId]/recovery/route')
+
+    const body = await (await GET(new Request('http://localhost/x'), PARAMS)).json()
+
+    expect(body.lifecycle.raw).toBe('in_season')
+    expect(body.lifecycle.coerced).toBe(false)
+  })
+
+  it('scopes recent audit rows to THIS league and to recovery actions only', async () => {
+    mocks.requireAdmin.mockResolvedValueOnce({ ok: true, user: { id: 'u1' } })
+    const { GET } = await import('@/app/api/admin/leagues/[leagueId]/recovery/route')
+
+    await GET(new Request('http://localhost/x'), PARAMS)
+
+    const where = mocks.auditFindMany.mock.calls[0]![0].where
+    expect(where.targetType).toBe('league')
+    expect(where.targetId).toBe('lg-1')
+    // Unscoped, this would surface every admin action ever taken against any league.
+    expect(where.action.in).toContain('ops_draft_pause')
+    expect(where.action.in).toContain('ops_lifecycle_repair')
   })
 })
