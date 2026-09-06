@@ -31,6 +31,34 @@ describe('provider positions fold to the code the rest of the table already uses
     expect(providerPositionCode('QUARTERBACK', 'NFL')).toBe('QB')
   })
 
+  it('folds the HYPHENATED fullback, which the first pass missed', () => {
+    /*
+     * `Full-back` survived the 2026-09-06 backfill because the table held only `FULLBACK`.
+     * 7 production rows, all NFL, all genuine football fullbacks — Kyle Juszczyk, Patrick
+     * Ricard, Reggie Gilliam, Robbie Ouzts, Ben VanSumeren, Lucas Scott, Nikola Kalinic.
+     *
+     * ⚠ CHECKED BEFORE MAPPING: `Full-back` is also the standard SOCCER term for a defender,
+     * so this is the MLB `Center` trap in a new costume. It appears in no other sport in the
+     * column, which is why folding it cannot mislabel anyone.
+     */
+    expect(providerPositionCode('Full-back', 'NFL')).toBe('FB')
+    expect(providerPositionCode('FULL-BACK', 'NFL')).toBe('FB')
+    expect(providerPositionCode('  full-back ', 'NFL')).toBe('FB')
+    // The unhyphenated spelling keeps working — this ADDS a variant, it does not move one.
+    expect(providerPositionCode('Fullback', 'NFL')).toBe('FB')
+  })
+
+  it('[control] an UNMAPPED hyphenated value still passes through untouched', () => {
+    /*
+     * Pins the shape of the fix. `Co-Driver` is the one other hyphenated value football
+     * stores — a motorsport row — and it must keep coming back verbatim. A future
+     * "simplification" that folds on hyphen structure rather than on a named key has to
+     * keep this true.
+     */
+    expect(providerPositionCode('Co-Driver', 'NFL')).toBe('Co-Driver')
+    expect(providerPositionCode('Half-back', 'NFL')).toBe('Half-back')
+  })
+
   it('🛑 leaves an already-short code untouched — safe to apply to any source', () => {
     /*
      * The fold runs on every ingested row, including sources that already emit codes.

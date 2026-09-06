@@ -47,6 +47,21 @@ const PROVIDER_POSITION_CODE: Record<string, string> = {
   QUARTERBACK: 'QB',
   'RUNNING BACK': 'RB',
   FULLBACK: 'FB',
+  /*
+   * ⚠ A SECOND KEY RATHER THAN A HYPHEN-STRIPPING RULE — and the honest reason is precedent,
+   * not danger. A rule would ALSO be safe here (`Co-Driver` normalises to `CODRIVER`, still
+   * not a key, still returned unchanged). It is not used because this table enumerates the
+   * variants it has actually measured — PLACEKICKER beside PLACE KICKER is the same call —
+   * and football stores exactly ONE hyphenated position, so a rule would be generalising
+   * from a single observation.
+   *
+   * ⚠ AND IT IS A FOOTBALL FULLBACK, WHICH WAS CHECKED RATHER THAN ASSUMED — `Full-back` is
+   * also the standard soccer term for a defender, the same trap as MLB's `Center` meaning
+   * centre FIELDER. All 7 rows on production 2026-09-06 are NFL and named: Kyle Juszczyk,
+   * Patrick Ricard, Reggie Gilliam, Robbie Ouzts, Ben VanSumeren, Lucas Scott, Nikola
+   * Kalinic. `Full-back` appears in NO other sport, so there is nothing to collide with.
+   */
+  'FULL-BACK': 'FB',
   'WIDE RECEIVER': 'WR',
   'TIGHT END': 'TE',
   KICKER: 'K',
