@@ -44,6 +44,18 @@ const THIRD_PARTY_SCRIPT_BAIL_PREFIXES = [
   ...AUTH_ROUTE_PREFIXES,
   "/choose-username",
   "/dashboard",
+  // `/core` (the canonical home) and `/league/*` carry the same DOM-heavy,
+  // hydration-sensitive shells `/dashboard` did, and were never added here when
+  // `/dashboard` was. Measured on /league/<id>: with the SDK injected an
+  // intermittent `TypeError: Cannot read properties of null (reading
+  // 'parentNode')` fires alongside FB's own "getLoginStatus can no longer be
+  // called from http pages"; bailing the SDK here removed both, and restoring it
+  // brought a fresh one back. NOTE this gate only suppresses the Facebook SDK —
+  // the Meta Pixel is injected from app/layout.tsx and is NOT routed through
+  // here, so conversion tracking is unaffected (verified: `fbq` still a
+  // function, `window.FB` undefined).
+  "/core",
+  "/league",
   "/brackets",
   "/api",
   "/_next",
