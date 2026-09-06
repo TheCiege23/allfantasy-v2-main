@@ -69,6 +69,26 @@ export async function runCommissionerHealthShadow(
       { snapshot: args.snapshot, userId: args.userId },
       { decision: buildDecisionDeps(args.snapshot), shadow: { snapshot: args.snapshot } },
     )
+    // The success path emitted NOTHING until now — only the two failure paths below did, and the
+    // orchestrator's `ran`-less event was silently standing in for this one. `ran: true` is what
+    // makes the row a COMPARISON to `flipReadiness` rather than a skip; every other flag is carried
+    // across unchanged from the emit that used to live in `runCommissionerHealthDecision`.
+    emitShadowParity(
+      'commissioner.league.health',
+      {
+        shadow: true,
+        ran: true,
+        legacy_shadow_compared: true,
+        wrap_fidelity: true,
+        decider_scope: 'commissioner',
+        parity_passed: result.parity?.passed,
+        parity_failed: result.parity ? !result.parity.passed : undefined,
+        diffs: result.parity?.diffs.length ?? 0,
+        userId: args.userId,
+        leagueId,
+      },
+      result.decision.decision_id,
+    )
     return { ran: true, leagueId, result }
   } catch (e) {
     emitShadowParity('commissioner.league.health', { shadow: true, ran: false, reason: 'shadow_error', userId: args.userId, leagueId })

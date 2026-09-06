@@ -6,7 +6,6 @@
  * provides the built snapshot. ASSESSMENT ONLY — the Decision OS never executes a commissioner action.
  */
 import type { Decision } from '@/lib/decision-os/core/decision'
-import { emitShadowParity } from '@/lib/decision-os/core/parity'
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { resolveCommissionerHealthWorld, type CommissionerHealthWorld } from './world'
 import { buildCommissionerHealthDCO } from './dco'
@@ -48,21 +47,22 @@ export async function runCommissionerHealthDecision(
 
   let parity: CommissionerHealthParityResult | undefined
   if (deps.shadow) {
+    // 🛑 THE PARITY RESULT IS RETURNED, NOT EMITTED — the emit moved to `runCommissionerHealthShadow`.
+    // This used to fire `emitShadowParity` with `{ legacy_shadow_compared: true, parity_passed }` and
+    // NO `ran` key. `flipReadiness` counts a comparison only when `flags.ran === true`; everything
+    // else falls to the skip branch under reason 'unknown'.
+    //
+    // That made this surface UNCOUNTABLE, not merely noisy. `runCommissionerHealthShadow` emitted
+    // only on its two FAILURE paths, so the orchestrator's `ran`-less event was the sole record of a
+    // successful comparison — and the gate discarded every one. Measured in production before the
+    // move: 80 rows, every one agreeing, every one filed as a skip, readiness `no_signal`. No amount
+    // of traffic could have changed that.
+    //
+    // ⚠ The emit belongs in the shadow wrapper because that is the layer that knows the run WAS a
+    // shadow. An emit here cannot: `grounding/decisionBridge` calls this decider directly with no
+    // `shadow` dep (see its header), and a future caller doing the same must not be reported as a
+    // parity comparison. Same reasoning as the lineup slice.
     parity = compareCommissionerHealthParity(decision, deps.shadow.snapshot)
-    emitShadowParity(
-      'commissioner.league.health',
-      {
-        legacy_shadow_compared: true,
-        wrap_fidelity: true,
-        decider_scope: 'commissioner',
-        parity_passed: parity.passed,
-        parity_failed: !parity.passed,
-        diffs: parity.diffs.length,
-        userId: input.userId,
-        leagueId: input.snapshot.leagueId,
-      },
-      decision.decision_id,
-    )
   }
 
   return { world, decision, parity }

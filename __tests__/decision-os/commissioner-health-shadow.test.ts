@@ -77,4 +77,47 @@ describe('runCommissionerHealthShadow — wrap-fidelity, never affecting the hub
     expect(events.some((e) => e.event === 'decision.shadow_parity' && e.flags?.decider_scope === 'commissioner')).toBe(true)
     expect(events.some((e) => (e.event as string) === 'decision.parity')).toBe(false)
   })
+
+  it('the success-path parity event carries `ran`, so flipReadiness counts it as a COMPARISON', async () => {
+    // Deliberately re-implements the gate's own predicate (`flags.ran === true`, flipReadiness.ts)
+    // rather than asserting "an event was emitted". Without `ran` the event falls to the skip branch
+    // under reason 'unknown' and the surface can never reach the gate at any volume — which is how
+    // all 80 of this surface's production rows became uncountable.
+    const events: { event: string; flags?: Record<string, unknown> }[] = []
+    registerDecisionTelemetrySink((e) => events.push(e as never))
+    await runCommissionerHealthShadow({ userId: 'commish-1', snapshot: fakeSnapshot() }, okDeps())
+    const parity = events.filter((e) => e.event === 'decision.shadow_parity')
+    expect(parity).toHaveLength(1)
+    expect(parity[0]?.flags?.ran).toBe(true)
+    expect(typeof parity[0]?.flags?.parity_passed).toBe('boolean')
+  })
+
+  it('moving the emit preserves every flag it carried (verdict, scope, provenance)', async () => {
+    // The PRESERVATION half of the control: this passes before and after, so if it ever goes red the
+    // move dropped something. A control that only asserted the new `ran` flag could not tell the
+    // difference between relocating the emit and replacing it with a thinner one.
+    const events: { event: string; flags?: Record<string, unknown> }[] = []
+    registerDecisionTelemetrySink((e) => events.push(e as never))
+    await runCommissionerHealthShadow({ userId: 'commish-1', snapshot: fakeSnapshot() }, okDeps())
+    const flags = events.find((e) => e.event === 'decision.shadow_parity')?.flags ?? {}
+    expect(flags.decider_scope).toBe('commissioner')
+    expect(flags.wrap_fidelity).toBe(true)
+    expect(flags.parity_passed).toBe(true)
+    expect(flags.parity_failed).toBe(false)
+    expect(flags.diffs).toBe(0)
+    expect(flags.userId).toBe('commish-1')
+    expect(flags.leagueId).toBe(fakeSnapshot().leagueId)
+  })
+
+  it('a SKIPPED run still emits exactly one parity event, and it is not a comparison', async () => {
+    // The skip paths already carried `ran: false`. Pinning it here stops a future "just add ran:true
+    // everywhere" from turning refusals into agreements — the failure this whole area is prone to.
+    const events: { event: string; flags?: Record<string, unknown> }[] = []
+    registerDecisionTelemetrySink((e) => events.push(e as never))
+    await runCommissionerHealthShadow({ userId: 'commish-1', snapshot: fakeSnapshot({ source: 'dashboard-fallback' }) }, okDeps())
+    const parity = events.filter((e) => e.event === 'decision.shadow_parity')
+    expect(parity).toHaveLength(1)
+    expect(parity[0]?.flags?.ran).toBe(false)
+    expect(parity[0]?.flags?.reason).toBe('fallback_or_missing_snapshot')
+  })
 })
