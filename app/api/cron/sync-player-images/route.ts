@@ -233,9 +233,30 @@ async function resolveBatch(
  * prisma-free and client-safe by design, so they cannot write to the DB without pulling
  * Prisma into client bundles. See `lib/sport-teams/teamImageStore.ts`.
  */
-async function syncTeamLogos(
+export async function syncTeamLogos(
   sport: string,
   dryRun: boolean,
+  /*
+   * 🛑 THE ONE LOOP IN THIS ROUTE THAT HAD NO DEADLINE, AND THE ONLY PLACE IT COULD OVERRUN.
+   *
+   * Everything else here is bounded properly: the shared 240s budget is checked between sports
+   * AND per player inside `resolveBatch`. This pass took neither — it iterated every legacy team
+   * with an unbounded `await` each, which is why NCAAF (231 teams, per the header above) finished
+   * at 276s against a 240s budget while NFL landed at 241s. Measured from the slow-tier
+   * dispatcher log, 2026-09-06 09:07 and 09:20:
+   *
+   *     -> sync-player-images?sport=NFL   ... OK 200 (241034ms)
+   *     -> sync-player-images?sport=NCAAF ... OK 200 (276282ms)
+   *
+   * Both under the 300s edge, and both on the wrong side of the budget that exists to keep them
+   * there. `import-players` and `import-schedules?riProfiles=1` are what this looks like once it
+   * crosses: HTTP 502 with the handler still running.
+   *
+   * ⚠ THE TELL WAS ALREADY IN THE TYPE. `PassSummary.timedOut` was initialised `false` here and
+   * never assigned, while both other passes set it — a field that can only ever report one value
+   * is a bound nobody wired.
+   */
+  deadline: number,
 ): Promise<PassSummary> {
   // Logos live on the legacy SportsTeam rows; canonical Team has no logo column. Route each
   // logo to its canonical team through TeamProviderIdentity, which the backfill populated
@@ -266,6 +287,16 @@ async function syncTeamLogos(
   if (dryRun) return summary;
 
   for (const team of legacyTeams) {
+    /*
+     * Checked per team, matching `resolveBatch`. Stopping mid-pass is safe and resumable: this
+     * backfills from rows already on disk, so the teams not reached are simply picked up next
+     * run — the same drain-and-resume property the player passes rely on.
+     */
+    if (Date.now() > deadline) {
+      summary.timedOut = true;
+      break;
+    }
+
     const canonicalTeamId = canonicalByProviderKey.get(
       `${team.source}|${team.externalId}`,
     );
@@ -511,7 +542,7 @@ async function handle(req: NextRequest) {
       }
 
       if (doTeams) {
-        teams = await syncTeamLogos(sport, dryRun);
+        teams = await syncTeamLogos(sport, dryRun, deadline);
       }
 
       perSport.push({ sport, players: { fill, refresh }, teams });
@@ -537,10 +568,27 @@ async function handle(req: NextRequest) {
       {
         rowsWritten: totals.resolved + totals.teamLogos,
         rowsSkipped: Math.max(0, sports.length - perSport.length),
-        warnings:
-          perSport.length < sports.length
+        /*
+         * ⚠ A PASS THAT RAN OUT OF TIME IS REPORTED HERE, NOT ONLY IN THE RESPONSE BODY. The
+         * body is read by whoever is looking at that moment; `sync_job_runs` is what anyone
+         * asks later, and a run that quietly did two thirds of its work is exactly the thing a
+         * freshness probe cannot see on its own.
+         */
+        warnings: [
+          ...(perSport.length < sports.length
             ? [`budget stopped after ${perSport.length}/${sports.length} sports`]
-            : [],
+            : []),
+          ...perSport
+            .filter((s) => s.players.fill.timedOut || s.players.refresh.timedOut || s.teams.timedOut)
+            .map((s) => {
+              const passes = [
+                s.players.fill.timedOut ? "fill" : null,
+                s.players.refresh.timedOut ? "refresh" : null,
+                s.teams.timedOut ? "teams" : null,
+              ].filter(Boolean)
+              return `${s.sport}: ran out of budget during ${passes.join("+")}`
+            }),
+        ],
         metadata: { scope, limit, dryRun, failed: totals.failed },
       },
       Date.now() - startedAt,
