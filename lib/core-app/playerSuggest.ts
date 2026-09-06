@@ -60,8 +60,9 @@ const COUNTS_TTL_MS = 10 * 60_000
 let countsCache: { at: number; counts: Map<string, number> } | null = null
 
 /** Rosters per Sleeper id across every league we hold, rebuilt at most every ten minutes. */
-export async function getGlobalRosterCounts(now = Date.now()): Promise<Map<string, number>> {
-  if (countsCache && now - countsCache.at < COUNTS_TTL_MS) return countsCache.counts
+let countsRefresh: Promise<Map<string, number>> | null = null
+
+async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
   const rosters = await prisma.roster
     .findMany({ select: { playerData: true } })
     .catch(() => [] as Array<{ playerData: unknown }>)
@@ -69,8 +70,29 @@ export async function getGlobalRosterCounts(now = Date.now()): Promise<Map<strin
   for (const r of rosters) {
     for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) counts.set(id, (counts.get(id) ?? 0) + 1)
   }
-  countsCache = { at: now, counts }
   return counts
+}
+
+/**
+ * ⚠ MEASURED ON PRODUCTION BY THE GATE, 2026-09-05: this read is every roster
+ * row — 3,407 rows / 4.3 MB of JSON today, growing with league count — so it
+ * must never sit on a request's critical path once a value exists. A stale
+ * value is handed back at once and ONE refresh runs behind it; only the very
+ * first request in a process waits.
+ */
+export async function getGlobalRosterCounts(now = Date.now()): Promise<Map<string, number>> {
+  if (countsCache && now - countsCache.at < COUNTS_TTL_MS) return countsCache.counts
+  if (!countsRefresh) {
+    countsRefresh = buildGlobalRosterCounts()
+      .then((counts) => {
+        countsCache = { at: now, counts }
+        return counts
+      })
+      .finally(() => {
+        countsRefresh = null
+      })
+  }
+  return countsCache ? countsCache.counts : countsRefresh
 }
 
 type IndexedRoster = { platformUserId: string; ids: Set<string> }
@@ -162,19 +184,42 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
 }
 
 /** The index for a user, rebuilt at most once a minute; `loadLeagueIds` runs only on a miss. */
+/**
+ * Bounded: the TTL is checked on read, so without a cap an entry for a user
+ * who searched once would live for the life of the process. Today that is
+ * ~23 users with a claimed team (the gate's production count); the cap is for
+ * the day it is not. Insertion order is recency — a hit is re-inserted — so
+ * the oldest-used entries go first.
+ */
+const INDEX_CAP = 500
+
 export async function getRosterIndex(userId: string, loadLeagueIds: () => Promise<string[]>, now = Date.now()): Promise<RosterIndex> {
   const hit = indexCache.get(userId)
-  if (hit && now - hit.at < INDEX_TTL_MS) return hit.index
+  if (hit && now - hit.at < INDEX_TTL_MS) {
+    indexCache.delete(userId)
+    indexCache.set(userId, hit)
+    return hit.index
+  }
   const leagueIds = await loadLeagueIds().catch(() => [] as string[])
   const index = await buildRosterIndex(userId, leagueIds)
+  indexCache.delete(userId)
   indexCache.set(userId, { at: now, index })
+  while (indexCache.size > INDEX_CAP) {
+    const oldest = indexCache.keys().next().value
+    if (oldest === undefined) break
+    indexCache.delete(oldest)
+  }
   return index
 }
 
-/** Test seam. */
+/** Test seams. */
 export function clearRosterIndexCache(): void {
   indexCache.clear()
   countsCache = null
+  countsRefresh = null
+}
+export function rosterIndexCacheSize(): number {
+  return indexCache.size
 }
 
 export function presenceOf(sleeperId: string | null, index: RosterIndex): SuggestionPresence | null {

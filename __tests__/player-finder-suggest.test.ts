@@ -22,7 +22,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/core-app/playerFinder', () => ({ suggestCatalog: mockSearchPlayers }))
 
-import { clearRosterIndexCache, isPrefixMatch, suggestPlayers } from '@/lib/core-app/playerSuggest'
+import { clearRosterIndexCache, getGlobalRosterCounts, getRosterIndex, isPrefixMatch, rosterIndexCacheSize, suggestPlayers } from '@/lib/core-app/playerSuggest'
 
 const match = (over: { externalId: string; sleeperId: string | null; name: string; position?: string; team?: string }) => ({
   sport: 'NFL',
@@ -162,6 +162,49 @@ describe('suggestPlayers', () => {
     expect(mockSearchPlayers).not.toHaveBeenCalled()
     const two = await suggestPlayers({ query: 'kin', userId: null, loadLeagueIds, limit: 2 })
     expect(two).toHaveLength(2)
+  })
+})
+
+/*
+ * The global count is every roster row (3,407 rows / 4.3 MB on production the
+ * day this shipped) and must never wait on a request once a value exists.
+ */
+describe('getGlobalRosterCounts', () => {
+  it('serves the stale count at once and refreshes it once behind the request', async () => {
+    const first = await getGlobalRosterCounts(0)
+    expect(first.get('10236')).toBe(2)
+    expect(mockRosterFindMany).toHaveBeenCalledTimes(1)
+
+    // Ten minutes on, the rosters have grown; the caller still gets the old map immediately.
+    mockRosterFindMany.mockResolvedValue([...ROSTERS, { leagueId: 'L-x', platformUserId: 'sl-z', playerData: { players: ['10236'] } }])
+    const stale = await getGlobalRosterCounts(11 * 60_000)
+    expect(stale).toBe(first)
+    const staleAgain = await getGlobalRosterCounts(11 * 60_000)
+    expect(staleAgain).toBe(first)
+    // One refresh for both stale reads, not two.
+    expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
+
+    await new Promise((r) => setTimeout(r, 0))
+    const fresh = await getGlobalRosterCounts(11 * 60_000 + 1)
+    expect(fresh.get('10236')).toBe(3)
+    expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('getRosterIndex', () => {
+  it('caps the per-user cache and drops the least recently used first', async () => {
+    const none = async () => [] as string[]
+    for (let i = 0; i < 505; i += 1) await getRosterIndex(`u${i}`, none, 0)
+    expect(rosterIndexCacheSize()).toBe(500)
+    // u0..u4 were evicted; touching u5 keeps it alive through the next insert.
+    await getRosterIndex('u5', none, 0)
+    await getRosterIndex('u-new', none, 0)
+    expect(rosterIndexCacheSize()).toBe(500)
+    const loads = vi.fn(async () => [] as string[])
+    await getRosterIndex('u5', loads, 0)
+    expect(loads).not.toHaveBeenCalled() // still cached
+    await getRosterIndex('u6', loads, 0)
+    expect(loads).toHaveBeenCalledTimes(1) // u6 was the oldest and went
   })
 })
 
