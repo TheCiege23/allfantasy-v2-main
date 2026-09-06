@@ -82,6 +82,8 @@ export async function maxAge(client, { table, column, where = null, params = [] 
     // `to_char` is safe for either column type because pinSessionToUtc has already pinned the
     // session: a naive timestamp renders its own digits, and a timestamptz renders in UTC.
     `       to_char(max("${column}"), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS newest_iso,\n` +
+    // 🛑 AND THE `Z` ABOVE IS ASSERTED, NOT ASSUMED — read the check below before removing this.
+    `       current_setting('TimeZone') AS session_tz,\n` +
     // The whole point: Postgres subtracts against its own now(), so the client's timezone and
     // clock are never involved.
     `       EXTRACT(EPOCH FROM (now() - max("${column}"))) AS age_seconds\n` +
@@ -90,6 +92,32 @@ export async function maxAge(client, { table, column, where = null, params = [] 
 
   const result = await client.query(sql, params)
   const row = result?.rows?.[0] ?? {}
+
+  /*
+   * 🛑 THE `"Z"` IN THE FORMAT STRING IS A CLAIM ABOUT THE SESSION, AND THIS IS WHERE IT IS PAID FOR.
+   *
+   * `to_char` appends that literal Z whatever the session zone actually is. For a naive
+   * `timestamp` column the digits are UTC either way, so the label is true. For a `timestamptz`
+   * column Postgres renders in the SESSION zone, so the label is true only if the session is
+   * pinned to UTC — and this function does not pin it. `pinSessionToUtc` is a separate export the
+   * CALLER has to remember.
+   *
+   * ⚠ THAT IS THE SAME DEFECT THIS FUNCTION WAS JUST FIXED FOR, ONE LAYER OUT. The client-zone bug
+   * published a confidently-wrong timestamp because nothing checked an assumption; a caller who
+   * forgets to pin would publish a confidently-wrong timestamp LABELLED UTC for exactly the same
+   * reason. A contract that lives only in a doc comment is not a contract, so it is executable
+   * here: forgetting now throws instead of lying.
+   *
+   * Costs nothing — `current_setting` rides along in the query that was already being sent.
+   */
+  const tz = row.session_tz
+  if (tz && tz !== 'UTC') {
+    throw new Error(
+      `maxAge("${table}"."${column}"): session TimeZone is "${tz}", not UTC — the "Z" this function ` +
+        'appends to newest_iso would be a lie for a timestamptz column. Call pinSessionToUtc(client) ' +
+        'before maxAge, as scripts/cron-freshness-check.mjs does.',
+    )
+  }
 
   return {
     // Built from the Postgres-rendered ISO string, never from `row.newest` — see above. The `Z` is
