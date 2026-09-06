@@ -26,7 +26,7 @@ Updated as work lands. `✅ done · 🔄 in progress · ⏸ blocked · ⬜ not s
 | ✅ | **1.1b** Split waiver/trade settings derives so they are schedulable | Both split. Waiver now scheduled; trade blocked on a season key, not on the derive |
 | ✅ | **0.6** Diff the two waiver-settings resolvers | §2.14. **No divergence** — they are layered, not rival. The alarm was a truncated grep |
 | ✅ | **1.2a** League OS — cached ruleset on the three resolvers that have routes | 60s TTL, GET only. §4 Phase 1.2 |
-| ✅ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | **DECIDED: no route.** Deprecated in place with a written retirement condition. §4 Phase 1.2 |
+| ✅ | **1.2b** Decide the fate of `resolveNflRedraftDraftRuntime` | **CLOSED 2026-09-06: DELETED.** Was "no route, deprecated in place with a written retirement condition"; that condition was evaluated, found unsatisfiable as written, and the resolver removed. `draft-os` and `draft-runtime-intelligence` deliberately stay. §4 Phase 1.2 |
 | 🔄 | **1.3** Propagate `drainOutcomes()` | **Premise was wrong** — see §4 Phase 1.3. Telemetry half was already done; League OS now emits too. Response half deferred to Phase 4 |
 | ✅ | **1.4** Schedule `classifyDraftStatus` | **Already done** by `ad514a334`, on main. My §2.6 claim was stale — see §2.15 |
 | ✅ | **2.1** Define `CanonicalValue` | `lib/decision-os/value/contract.ts`. Unit refusal enforced by a test proven red-then-green |
@@ -1572,6 +1572,27 @@ someone confirms `live-draft-engine` covers every fact
 `resolveNflRedraftDraftRuntime` returns, delete the resolver **and** `draft-os`
 together — nothing else imports either. Until then, adding callers to either is
 the one move that makes the eventual cleanup harder.
+
+> ✅ **RESOLVED 2026-09-06 — and the condition turned out to be unsatisfiable as
+> written.** The resolver did not compete with `live-draft-engine`; it
+> **imported** it (`buildSessionSnapshot`) and added four facts on top — `rules`,
+> `recommendations`, `intelligence`, `playerCoverage` — three of whose builders
+> appear nowhere under `lib/live-draft-engine/`. "Covers every fact" could
+> therefore only become true by moving four capabilities *into* live-draft-engine,
+> i.e. by building the duplicate the condition existed to prevent.
+>
+> 🛑 **And "nothing else imports either" was already false for `draft-os` when
+> this was written.** `app/api/cron/domain-os-refresh/route.ts` imports it and
+> warms `draft/rules` hourly; that cron landed 93 seconds *before* the audit
+> control that assumed the opposite. True of the resolver, and only the resolver.
+>
+> **Outcome:** the resolver is **deleted**. `draft-os` **stays** — removing it is
+> a live-behaviour change to the cron and belongs to that route's owner.
+> `lib/decision-os/draft-runtime-intelligence.ts` **stays** deliberately: it is a
+> pure, tested function and `DraftRuntimeIntelligenceResult` is named in eight
+> architecture docs as the contract behind a *deferred* capability, so deleting it
+> would turn "deferred, backend exists" into "does not exist". Full record:
+> `lib/decision-os/draft-os/index.ts`.
 
 ### 2.15 1.4 was already done, and my evidence for it was a comment
 

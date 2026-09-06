@@ -99,19 +99,47 @@ const controls = [
   // and is also why nobody noticed: a check that refuses to answer looks the same as a check
   // nobody ran. The control was right to fail; only the expectation was wrong.
   //
-  // The replacement is the module that measurement actually found dead — 0 callers by a four-form
-  // census on 2026-09-06, and the subject of the retirement condition in
-  // lib/decision-os/draft-os/index.ts.
-  ['lib/draft-runtime/resolveNflRedraftDraftRuntime', 0, 'known DEAD — 0 callers, four-form census 2026-09-06'],
+  // ⚠ AND THE SLOT THEN HELD `lib/draft-runtime/resolveNflRedraftDraftRuntime` FOR EXACTLY ONE
+  // COMMIT, WHICH IS ITS OWN LESSON. That was a correct measurement (0 callers, four-form census)
+  // and a bad CHOICE: the module was dead because it was queued for DELETION, and deleting it would
+  // have left this control reporting PASS against a path that no longer exists. A known-dead
+  // control must not point at anything anyone has a reason to remove — see `moduleExists` below,
+  // which now makes that failure loud instead of silent.
+  //
+  // `lib/supplemental-draft` is the replacement: 0 consumers, and inert — nothing is queued against
+  // it. If it ever gains one, this control FAILS loudly, which is the correct outcome and the
+  // signal to repoint it.
+  ['lib/supplemental-draft', 0, 'known DEAD — 0 consumers, inert (verified 2026-09-06)'],
   ['lib/fantasycalc-db', null, 'known ALIVE — 36 migrated call sites'],
   ['lib/decision-os/three-brain', null, 'known ALIVE — 6 runtime paths'],
 ]
+/**
+ * 🛑 A CONTROL MUST PROVE ITS SUBJECT EXISTS BEFORE IT MAY REPORT ZERO.
+ *
+ * `consumersOf` counts import SPECIFIERS, so it answers 0 for a module nobody imports and 0 for a
+ * module that is not there at all. Measured 2026-09-06:
+ * `consumersOf('lib/this/module/never/existed').size === 0`. A known-dead control therefore turns
+ * into a check that CANNOT FAIL the moment anybody deletes its subject — and deleting dead modules
+ * is precisely what this script is used to justify, so the tool corrodes its own control by
+ * succeeding. That was not hypothetical: it was found while preparing the deletion of the module
+ * this slot pointed at one commit earlier.
+ */
+function moduleExists(p) {
+  for (const c of [`${p}.ts`, `${p}.tsx`, `${p}/index.ts`, `${p}/index.tsx`, p]) {
+    try { statSync(join(ROOT, c)); return true } catch { /* next */ }
+  }
+  return false
+}
+
 let controlsOk = true
 for (const [p, expect, why] of controls) {
+  const exists = moduleExists(p)
   const n = consumersOf(p).size
-  const pass = expect === null ? n > 0 : n === expect
+  // An absent subject fails whatever the count says — a zero from nothing is not a measurement.
+  const pass = !exists ? false : expect === null ? n > 0 : n === expect
   if (!pass) controlsOk = false
-  console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${p.padEnd(34)} consumers=${String(n).padEnd(4)} ${why}`)
+  const note = exists ? why : `🛑 SUBJECT MISSING — repoint this control (was: ${why})`
+  console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${p.padEnd(34)} consumers=${String(n).padEnd(4)} ${note}`)
 }
 if (!controlsOk) {
   console.log('\n🛑 A CONTROL FAILED. The results below are not evidence. Fix the check first.')
