@@ -83,3 +83,55 @@ Only the third is evidence about the *decision*. The first two are evidence abou
 - It does not say wrap-fidelity telemetry is worthless. It is the cheapest available proof that a wrapper is safe to install, and lineup's 9 disagreements in 2,817 are a real finding.
 - It does not say the gate is broken. `flipReadiness` computes exactly what it claims to; the gap is that "comparison" was never defined.
 - ⚠ It does not claim the surface labels are complete. `manager.lineup.set` and `commissioner.league.health` still emit **no** `surface` and bucket as `'default'`. That is deliberate and currently harmless — each of those decision types has exactly one surface, so there is no collision — but it stops being harmless the moment either gains a second one, at which point the historical rows cannot be attributed. Label them BEFORE adding a second surface, not after.
+
+---
+
+## 8. Why the one bucket that can flip a surface is not filling — measured 2026-09-06
+
+Rule 2 above says only `manager.trade.evaluate | proposal` may flip on its own agreement rate.
+`DECISION_OS_TRADE_SHADOW` has since been enabled in production and that bucket is still empty.
+**This is not a traffic problem, and the reason is worth writing down because it looked cheap to fix
+twice.**
+
+**The Trade Center is not instrumented on the path that matters.** Its "Propose this trade" posts to
+`/api/leagues/[leagueId]/trades`; `runTradeShadowForProposal` runs only in
+`/api/redraft/trade-proposals`. The *analyse* path IS instrumented — `/api/trade-value/analyze` calls
+`recordTradeSurfaceShadow({ surface: 'console' })` — so trade evidence is not zero, it is
+**console-only**, which by rule 2 cannot flip anything.
+
+**Wiring the propose path is blocked on an id-space split, not on effort.** The shadow needs a
+`TradeValueSnapshot`, and `computeRedraftTradeValueSnapshot` prices from `prisma.redraftRoster`. The
+Trade Center holds `Roster` ids. The bridge is the nullable `Roster.redraftRosterId`. Measured with a
+read-only probe:
+
+| | |
+|---|---|
+| leagues with ≥2 reachable rosters (i.e. *could* trade natively) | **59** |
+| of those, leagues that could produce a shadow row | **0** |
+| reachable rosters | 350 |
+| reachable **and** linked to a redraft roster | **4** |
+| *control* — link rate across all rosters | 2,855 / 3,408 = **83.8%** (schema documents 84.5%) |
+
+⚠ **THE INVERSION IS THE FINDING.** Rosters that belong to real AllFantasy accounts are almost
+exactly the ones WITHOUT redraft counterparts. The control matters: the overall link rate is high, so
+a low number here is a property of the *reachable* subset, not a broken join.
+
+⚠ **AND THE CHEAP REPAIR DOES NOT EXIST.** 58 of the 59 leagues do have redraft rosters, so the model
+is present — but **zero** of the 346 unlinked reachable rosters would link on the semantic pair the
+schema itself names (`Roster.platformUserId` ↔ `RedraftRoster.ownerId`). The two sides key teams by
+different identities in both directions, so there is no derivable backfill.
+
+**Consequence.** Instrumenting the propose path as it stands would ship a code path that can never
+execute — the same shape as `ingestCFBDStats`, where a surface was pointed at a table nothing
+refreshed. Doing it properly means teaching the value engine to price from the AF-native roster
+model. That is a project, not a wiring change, and it should be scoped as one.
+
+⚠ **RECORD THE ESTIMATE THAT WAS WRONG, because it will look cheap again.** This was scoped as "one
+handler edit plus a snapshot-shape check" and abandoned only after the id spaces were measured. The
+`redraftRosterId` bridge is invisible from the route, from the panel, and from the shadow's own
+signature — it only appears once you read what `computeRedraftTradeValueSnapshot` actually queries.
+
+⚠ One useful property found on the way: `Roster.platformUserId` holds an AF user id on native leagues
+and a **Sleeper** id on imported ones, and a Sleeper id can never match `app_users.id`. So the join to
+`app_users` IS the native-league test — no separate "is this imported" filter is needed, and
+`canReceiveProposal` in `trades/rosters` is that same predicate.
