@@ -19,6 +19,12 @@ export interface ReplacementCandidate {
   playerId: string
   name: string
   position: string | null
+  /**
+   * His club, from the player table, so a caller can read his own kickoff — a
+   * free agent whose game has started cannot come into a lineup now
+   * (lib/core-app/playerMoves.ts). Null when the identity row has none.
+   */
+  team: string | null
   projectedPoints: number
   /** candidate projection − affected player's projection (positive = upgrade). Null when the affected player has no projection. */
   delta: number | null
@@ -98,7 +104,7 @@ export function resolveLineupTarget(league: {
 
 /** Pure ranking helper (unit-tested): sort by projection desc, attach deltas, cap. */
 export function rankReplacementCandidates(
-  candidates: Array<{ playerId: string; name: string; position: string | null; projectedPoints: number }>,
+  candidates: Array<{ playerId: string; name: string; position: string | null; team?: string | null; projectedPoints: number }>,
   affectedProjection: number | null,
   limit: number,
 ): ReplacementCandidate[] {
@@ -107,6 +113,7 @@ export function rankReplacementCandidates(
     .slice(0, limit)
     .map((c) => ({
       ...c,
+      team: c.team ?? null,
       delta: affectedProjection != null ? Number((c.projectedPoints - affectedProjection).toFixed(1)) : null,
     }))
 }
@@ -239,20 +246,20 @@ export async function resolveReplacementOptions(args: {
     ? await prisma.sportsPlayer
         .findMany({
           where: { sport: league.sport, OR: [{ sleeperId: { in: poolIds } }, { externalId: { in: poolIds } }] },
-          select: { sleeperId: true, externalId: true, name: true, position: true },
+          select: { sleeperId: true, externalId: true, name: true, position: true, team: true },
         })
-        .catch(() => [] as Array<{ sleeperId: string | null; externalId: string | null; name: string; position: string | null }>)
+        .catch(() => [] as Array<{ sleeperId: string | null; externalId: string | null; name: string; position: string | null; team: string | null }>)
     : []
-  const identityById = new Map<string, { name: string; position: string | null }>()
+  const identityById = new Map<string, { name: string; position: string | null; team: string | null }>()
   for (const row of identityRows) {
-    if (row.sleeperId) identityById.set(row.sleeperId, { name: row.name, position: row.position })
-    if (row.externalId) identityById.set(row.externalId, { name: row.name, position: row.position })
+    if (row.sleeperId) identityById.set(row.sleeperId, { name: row.name, position: row.position, team: row.team })
+    if (row.externalId) identityById.set(row.externalId, { name: row.name, position: row.position, team: row.team })
   }
   const freeAgentCandidates = poolProjections
     .map((p) => {
       const identity = identityById.get(p.playerId)
       return identity
-        ? { playerId: p.playerId, name: identity.name, position: identity.position, projectedPoints: p.projectedPoints }
+        ? { playerId: p.playerId, name: identity.name, position: identity.position, team: identity.team, projectedPoints: p.projectedPoints }
         : null
     })
     .filter((c): c is NonNullable<typeof c> => c !== null)
