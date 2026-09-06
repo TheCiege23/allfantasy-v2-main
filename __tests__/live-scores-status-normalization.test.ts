@@ -187,11 +187,42 @@ describe('pickFreshestSourceRows — a stale favourite must not beat a live feed
     expect(picked.map((r) => r.source)).toEqual(['espn_live'])
   })
 
+  /*
+   * 🛑 THIS ASSERTION WAS REVERSED ON 2026-09-06, DELIBERATELY. It previously expected
+   * `rolling_insights` to win, with the comment "rank is the right tiebreak, and rolling_insights
+   * wins it" — encoding a belief that RI is the better feed. Production falsified it: RI carries
+   * 0 scores across all 421 NFL rows while espn carries 48 of 64, so winning the tiebreak is
+   * exactly what put an empty scoreboard on screen. The tiebreak itself is still right; the
+   * ordering it applied was not.
+   */
   it('still honours preference between feeds of comparable freshness', () => {
-    // Same minute: rank is the right tiebreak, and rolling_insights wins it.
+    // Same minute, so rank decides — and ESPN now outranks rolling_insights.
     const riFresh = { ...rollingInsights, fetchedAt: new Date('2026-08-28T03:43:20Z') }
     const picked = pickFreshestSourceRows([espnLive, riFresh], NOW)
-    expect(picked.map((r) => r.source)).toEqual(['rolling_insights'])
+    expect(picked.map((r) => r.source)).toEqual(['espn_live'])
+  })
+
+  /*
+   * The production bug this ordering exists to stop, pinned directly: `espn` is what the cron
+   * writes, and it was absent from LIVE_SOURCE_PREFERENCE, so `rank()` sorted it below every
+   * listed source. One cron writes both of these seconds apart, so they are ALWAYS in the same
+   * freshness bucket and rank alone decides — the 5-minute bucket cannot separate co-written
+   * feeds, which is why the earlier freshness fix did not cover this.
+   */
+  it('the cron-written espn feed outranks rolling_insights at equal freshness', () => {
+    const stamp = new Date('2026-08-28T03:43:20Z')
+    const espnCron = { source: 'espn', fetchedAt: stamp, label: 'ESPN 9-28 final' }
+    const riSameTick = { source: 'rolling_insights', fetchedAt: stamp, label: 'RI no score' }
+    const picked = pickFreshestSourceRows([riSameTick, espnCron], NOW)
+    expect(picked.map((r) => r.source)).toEqual(['espn'])
+  })
+
+  it('espn is ranked at all — an unlisted source sorts below every listed one', () => {
+    const stamp = new Date('2026-08-28T03:43:20Z')
+    const espnCron = { source: 'espn', fetchedAt: stamp, label: 'ESPN' }
+    const tsdb = { source: 'thesportsdb', fetchedAt: stamp, label: 'TSDB' }
+    const picked = pickFreshestSourceRows([tsdb, espnCron], NOW)
+    expect(picked.map((r) => r.source)).toEqual(['espn'])
   })
 
   it('ignores a long-dead feed even when it outranks everything', () => {

@@ -1023,8 +1023,44 @@ export function dbRowToLiveScore(g: {
  * preference list alone is not enough: `espn_live` still holds 8 NCAAF rows
  * from 2026-04-26 carrying 0-0, and ranking it above TheSportsDB would show a
  * scoreboard of nil-nils while the real scores sat one row over.
+ *
+ * 🛑 `espn` WAS MISSING FROM THIS LIST ENTIRELY, AND IT IS THE FEED THE CRON WRITES.
+ *
+ * `rank()` returns `LIVE_SOURCE_PREFERENCE.length` for anything unlisted, so `espn` — the source
+ * `/api/cron/import-scores` writes every two minutes, and the only one that reports in-progress
+ * state — sorted DEAD LAST, below `thesportsdb`. The list named `espn_live` instead, which is a
+ * different source written by the /live page's own poll and therefore only fresh while a human
+ * has that page open.
+ *
+ * ⚠ AND THE FRESHNESS BUCKET COULD NOT SAVE IT, WHICH IS WHY THE 2026-08-27 FIX DID NOT HOLD.
+ * That fix made freshness outrank preference, in 5-minute buckets, on the reasoning that "live
+ * scoring is a recency problem before it is a preference problem". True — but ONE cron writes
+ * rolling_insights, thesportsdb and espn seconds apart, so all three land in the SAME bucket on
+ * every tick, permanently. Freshness never separates them and rank alone decides, every time.
+ * The bucket only helps when feeds have genuinely different update rates; it is blind to
+ * co-written sources.
+ *
+ * Measured on production 2026-09-06:
+ *
+ *     rolling_insights   421 NFL rows   with scores:   0     <- rank 0, won every tie
+ *     espn                64 NFL rows   with scores:  48     <- unlisted, lost every tie
+ *     thesportsdb        658 NFL rows   with scores: 383
+ *
+ *     GB @ PIT, status final:  rolling_insights "- @ -"   ·   espn "9 @ 28"
+ *
+ * So the scoreboard was being served a feed carrying no scores at all, for the same reason and in
+ * the same module as the incident above.
+ *
+ * Order is Guap's call, 2026-09-06: ESPN, then TheSportsDB, then Rolling Insights. `espn_live`
+ * sits next to `espn` as the same vendor in the same shape, and `api_sports` sits last because it
+ * is plan-blocked for the current season ("Free plans do not have access to this season") and
+ * reliably returns nothing — see the note in the import-scores route.
+ *
+ * ⚠ THIS RANKS FEEDS, IT DOES NOT INSPECT THEM. A source that goes scoreless in future still wins
+ * its rank while it stays fresh. The durable fix is to prefer a feed that actually carries scores
+ * for games in progress, rather than to keep re-sorting a static list after each incident.
  */
-const LIVE_SOURCE_PREFERENCE = ['rolling_insights', 'api_sports', 'espn_live', 'thesportsdb'] as const
+const LIVE_SOURCE_PREFERENCE = ['espn', 'espn_live', 'thesportsdb', 'rolling_insights', 'api_sports'] as const
 
 /** A feed silent this long is treated as dead, whatever its rank. */
 const LIVE_SOURCE_DEAD_AFTER_MS = 6 * 60 * 60 * 1000
