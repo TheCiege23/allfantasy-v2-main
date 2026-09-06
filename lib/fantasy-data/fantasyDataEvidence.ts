@@ -343,7 +343,26 @@ async function getLastImportRun(sport: string) {
     const run = await (prisma as any).syncJobRun.findFirst({
       where: {
         jobScope: { contains: sport },
-        status: { in: ["completed", "failed"] },
+        /*
+         * 🛑 BOTH HEALTHY SPELLINGS, AND THE ORDER THIS LANDED IN IS THE WHOLE POINT.
+         *
+         * `sync_job_runs.status` carries two words for "fine": the typed writer
+         * (syncJobRunTelemetry) emits `success`, and three untyped writers emit `completed` —
+         * 27,020 rows from fantasy-os-sleeper-sync, 159 from import-players, 53 from
+         * import-player-game-stats. `normalizeRunStatus` already treats them as synonyms.
+         *
+         * ⚠ THIS QUERY MATCHES import-players TODAY, because that job writes a comma-joined sport
+         * list as its jobScope and this filters on `contains: sport`. So a backfill of `completed`
+         * to `success` would have emptied this result while the deployed code still asked only for
+         * `completed` — and this feeds `leagueSportsGroundingPacket`, so the visible symptom would
+         * have been the AI quietly losing its evidence for when data last imported, with nothing
+         * failing anywhere.
+         *
+         * Accepting both is the EXPAND step: it is correct before the backfill, during it, and
+         * after it. Do not narrow this back to one spelling until every writer emits `success` and
+         * the history has been migrated.
+         */
+        status: { in: ["completed", "success", "failed"] },
       },
       orderBy: { completedAt: "desc" },
       select: { jobName: true, status: true, completedAt: true, rowsWritten: true },
