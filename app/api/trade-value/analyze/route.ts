@@ -33,6 +33,8 @@ import {
   compareConsoleVerdictWithCanonicalGrade,
   type ConsoleComparableAsset,
 } from '@/lib/decision-os/trade/consoleShadowCompare'
+import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
+import type { CanonicalMemoEnrichment } from '@/lib/decision-os/trade/canonicalMemo'
 
 const assetSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -118,6 +120,12 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
           ): ConsoleComparableAsset[] => [
             ...lines.map((line) => ({
               kind: 'player' as const,
+              /*
+               * The id the console already resolved (`row?.id ?? raw.playerId`). It was being
+               * dropped here, which is the entire reason the canonical engine could only ever be
+               * handed the console's own numbers.
+               */
+              playerId: line.playerId ?? null,
               name: line.name,
               position: line.position,
               team: line.team,
@@ -133,11 +141,42 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                   : { kind: 'faab' as const, amount: a.amount },
               ),
           ]
+          const give = toComparable(out.players.give, parsed.data.sideGive)
+          const get = toComparable(out.players.get, parsed.data.sideGet)
+
+          /*
+           * Values the CONSOLE DID NOT SUPPLY, so the two engines are compared on different inputs.
+           *
+           * ⚠ ONE ADDED READ ON A USER-FACING RESPONSE, AND IT IS SEQUENTIAL BY NECESSITY. The ids
+           * come from the console's own resolved lines, so this cannot start until the analysis has
+           * finished. It is one indexed lookup on a route that already performs many; if it ever
+           * shows up in latency, the fix is to resolve from the REQUEST's optional ids in parallel
+           * with the analysis and fall back per line — deliberately not done pre-emptively, because
+           * the request id and the resolved id are not always the same value.
+           *
+           * Failure is not fatal: no enrichment means the previous behaviour exactly, and the
+           * comparison reports `independentInputs: false` so the row stays in the old bucket.
+           */
+          let enrichment: CanonicalMemoEnrichment | undefined
+          const enrichIds = [...give, ...get]
+            .map((a) => (a.kind === 'player' ? a.playerId : null))
+            .filter((id): id is string => Boolean(id))
+          if (enrichIds.length > 0) {
+            try {
+              enrichment = (
+                await resolveTradeEnrichment({ sport: out.effectiveSport, playerIds: enrichIds })
+              ).enrichment
+            } catch {
+              enrichment = undefined
+            }
+          }
+
           comparison = compareConsoleVerdictWithCanonicalGrade({
-            give: toComparable(out.players.give, parsed.data.sideGive),
-            get: toComparable(out.players.get, parsed.data.sideGet),
+            give,
+            get,
             consoleAdvantage: out.labels.sideAdvantage,
             context: { sport: out.effectiveSport, leagueType: out.analysisMode, scoring: null },
+            enrichment,
           })
         } catch {
           comparison = null

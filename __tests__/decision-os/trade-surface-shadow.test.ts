@@ -172,3 +172,79 @@ describe("recordTradeSurfaceShadow", () => {
     ).not.toThrow()
   })
 })
+
+describe("independent inputs get their own flip-gate bucket", () => {
+  const base = {
+    surface: "console" as TradeSurface,
+    leagueId: "L1",
+    userId: "u1",
+    assetsGive: 1,
+    assetsGet: 1,
+  }
+  const cmp = (over: Record<string, unknown> = {}) => ({
+    canonicalGrade: "B",
+    canonicalFairnessScore: 80,
+    canonicalConfidenceScore: 88,
+    canonicalValueDifference: 100,
+    canonicalAdvantage: "you",
+    agreement: true,
+    playerAssets: 2,
+    playerAssetsWithId: 2,
+    ...over,
+  })
+  const env = { DECISION_OS_TRADE_SHADOW_CONSOLE: "true" } as never
+
+  /** The bucket `flipReadiness` groups on — re-implemented here rather than trusted. */
+  const bucketOf = (e: DecisionTelemetryEvent) => {
+    const f = (e.flags ?? {}) as Record<string, unknown>
+    return typeof f.surface === "string" && f.surface ? f.surface : "default"
+  }
+
+  it("a comparison fed the surface's OWN numbers stays in the original bucket", () => {
+    const cap = captureEvents()
+    recordTradeSurfaceShadow({ ...base, comparison: cmp({ independentInputs: false }) }, env)
+    cap.stop()
+    const parity = cap.events.filter((e) => e.event === "decision.shadow_parity")
+    expect(parity).toHaveLength(1)
+    expect(bucketOf(parity[0]!)).toBe("console")
+  })
+
+  it("a comparison fed INDEPENDENT values lands in a separate bucket", () => {
+    const cap = captureEvents()
+    recordTradeSurfaceShadow({ ...base, comparison: cmp({ independentInputs: true }) }, env)
+    cap.stop()
+    const parity = cap.events.filter((e) => e.event === "decision.shadow_parity")
+    expect(parity).toHaveLength(1)
+    expect(bucketOf(parity[0]!)).toBe("console_independent")
+    // 🛑 The whole point: the two samples must not merge. flipReadiness groups on this string alone.
+    expect(bucketOf(parity[0]!)).not.toBe("console")
+  })
+
+  it("carries the screen and the resolution rate alongside the bucket", () => {
+    /*
+     * Once `surface` can carry a suffix it no longer answers "which screen", and both questions get
+     * asked. `playerAssetsWithId` is the yield that could not be read from existing telemetry — it
+     * is emitted from the first request rather than waited for.
+     */
+    const cap = captureEvents()
+    recordTradeSurfaceShadow(
+      { ...base, comparison: cmp({ independentInputs: true, playerAssets: 3, playerAssetsWithId: 1 }) },
+      env,
+    )
+    cap.stop()
+    const f = (cap.events.find((e) => e.event === "decision.shadow_parity")?.flags ?? {}) as Record<string, unknown>
+    expect(f.surfaceScreen).toBe("console")
+    expect(f.independentInputs).toBe(true)
+    expect(f.playerAssets).toBe(3)
+    expect(f.playerAssetsWithId).toBe(1)
+  })
+
+  it("a SKIPPED observation is never promoted — no comparison means no independence claim", () => {
+    const cap = captureEvents()
+    recordTradeSurfaceShadow({ ...base, comparison: null }, env)
+    cap.stop()
+    const parity = cap.events.filter((e) => e.event === "decision.shadow_parity")
+    expect(bucketOf(parity[0]!)).toBe("console")
+    expect((parity[0]!.flags as Record<string, unknown>).independentInputs).toBe(false)
+  })
+})

@@ -103,6 +103,19 @@ export interface TradeSurfaceObservation {
     canonicalValueDifference: number
     canonicalAdvantage: string | null
     agreement: boolean | null
+    /**
+     * TRUE when at least one asset was priced from a value the surface did not supply.
+     *
+     * 🛑 THIS CHANGES WHICH FLIP-GATE BUCKET THE ROW LANDS IN, which is why it is carried up here
+     * rather than left as a detail. A comparison fed the surface's own numbers and one fed
+     * independent ADP are different STRENGTHS of evidence; `flipReadiness` groups on `surface` and
+     * cannot tell them apart, so they must not share a bucket. See
+     * docs/adr/ADR_DECISION_OS_PHASE3_WHAT_COUNTS_AS_FLIP_EVIDENCE.md §3.
+     */
+    independentInputs?: boolean
+    /** Resolution rate, so the yield is measured from the first request rather than assumed. */
+    playerAssets?: number
+    playerAssetsWithId?: number
   } | null
 }
 
@@ -127,9 +140,24 @@ export function recordTradeSurfaceShadow(
 ): void {
   try {
     if (!shouldRunTradeSurfaceShadow(obs.surface, env)) return
+    /*
+     * 🛑 THE BUCKET FOLLOWS THE EVIDENCE, NOT THE SCREEN. A comparison fed independent values is a
+     * different kind of claim from one regrading the surface's own numbers, and `flipReadiness`
+     * groups on this string alone. Suffixing rather than replacing keeps the screen readable in the
+     * bucket name while stopping the two samples from mixing — and it is decided PER ROW, so a
+     * request where nothing resolved stays in the original bucket instead of being promoted.
+     *
+     * ⚠ NOT a member of `TradeSurface`, deliberately. That union drives `SURFACE_FLAGS` and its
+     * test-enforced coverage, and this is a parity-bucket label rather than a screen to instrument
+     * — the same way `canonicalShadow` emits 'proposal' without joining the union.
+     */
+    const paritySurface = obs.comparison?.independentInputs
+      ? `${obs.surface}_independent`
+      : obs.surface
+
     emitShadowParity('manager.trade.evaluate', {
       shadow: true,
-      surface: obs.surface,
+      surface: paritySurface,
       ran: Boolean(obs.comparison),
       reason: obs.comparison ? 'value_engine_compare' : canonicalInputSkipReason(obs),
       canonicalGrade: obs.comparison?.canonicalGrade ?? null,
@@ -159,6 +187,15 @@ export function recordTradeSurfaceShadow(
       surfaceConfidence: obs.surfaceConfidence ?? null,
       surfaceValueDeltaPct: obs.surfaceValueDeltaPct ?? null,
       surfaceAnalysisMode: obs.surfaceAnalysisMode ?? null,
+      /*
+       * The screen this came from, kept alongside the bucket. Once `surface` can carry an
+       * `_independent` suffix, grouping by it no longer answers "which screen" — and both questions
+       * get asked.
+       */
+      surfaceScreen: obs.surface,
+      independentInputs: obs.comparison?.independentInputs ?? false,
+      playerAssets: obs.comparison?.playerAssets ?? null,
+      playerAssetsWithId: obs.comparison?.playerAssetsWithId ?? null,
     })
   } catch {
     // Shadow instrumentation must never break a surface.
