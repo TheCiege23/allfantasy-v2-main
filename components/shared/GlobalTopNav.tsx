@@ -8,6 +8,7 @@ import { ChevronDown, MessageCircle, Shield, Sparkles, Menu, Search, Settings as
 import { loginUrlWithIntent, signupUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
 import { ProductContextSwitcher } from "@/components/shell/ProductContextSwitcher"
 import NotificationBell from "@/components/shared/NotificationBell"
+import { IconTooltip } from "@/components/shared/IconTooltip"
 import WalletSummaryBadge from "@/components/shared/WalletSummaryBadge"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { UserMenuDropdown } from "@/components/navigation/UserMenuDropdown"
@@ -157,17 +158,18 @@ export default function GlobalTopNav({
     if (!isAuthenticated) return null
     if (spec.id === "search" && onOpenSearch) {
       return (
-        <button
-          key={spec.id}
-          type="button"
-          onClick={onOpenSearch}
-          className="rounded-lg border p-2 transition"
-          style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)", color: "var(--muted)" }}
-          title={`${spec.title} (${shortcutLabel})`}
-          aria-label="Search"
-        >
-          <Search className="h-4 w-4" />
-        </button>
+        <IconTooltip key={spec.id} label={`${spec.title} (${shortcutLabel})`}>
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            className="rounded-lg border p-2 transition"
+            style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)", color: "var(--muted)" }}
+            title={`${spec.title} (${shortcutLabel})`}
+            aria-label="Search"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+        </IconTooltip>
       )
     }
     if (spec.id === "wallet") {
@@ -175,9 +177,11 @@ export default function GlobalTopNav({
     }
     if (spec.id === "messages") {
       return (
-        <Link key={spec.id} href={spec.href ?? "/messages"} className="rounded-lg border p-2 transition" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)", color: "var(--text)" }} title={spec.title} aria-label={spec.title}>
-          <MessageCircle className="h-4 w-4" />
-        </Link>
+        <IconTooltip key={spec.id} label={spec.title}>
+          <Link href={spec.href ?? "/messages"} className="rounded-lg border p-2 transition" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)", color: "var(--text)" }} title={spec.title} aria-label={spec.title}>
+            <MessageCircle className="h-4 w-4" />
+          </Link>
+        </IconTooltip>
       )
     }
     if (spec.id === "notifications") {
@@ -185,24 +189,27 @@ export default function GlobalTopNav({
     }
     if (spec.id === "settings") {
       return (
-        <Link
-          key={spec.id}
-          href={spec.href ?? "/settings"}
-          className="rounded-lg border p-2 transition"
-          style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)", color: "var(--text)" }}
-          title={spec.title}
-          aria-label={spec.title}
-          data-testid="topbar-settings-shortcut"
-        >
-          <SettingsIcon className="h-4 w-4" />
-        </Link>
+        <IconTooltip key={spec.id} label={spec.title}>
+          <Link
+            href={spec.href ?? "/settings"}
+            className="rounded-lg border p-2 transition"
+            style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)", color: "var(--text)" }}
+            title={spec.title}
+            aria-label={spec.title}
+            data-testid="topbar-settings-shortcut"
+          >
+            <SettingsIcon className="h-4 w-4" />
+          </Link>
+        </IconTooltip>
       )
     }
     if (spec.id === "ai_chat") {
       return (
-        <Link key={spec.id} href={spec.href ?? chimmyEntry.href} className="rounded-lg border p-2 transition hover:opacity-90" style={{ borderColor: "color-mix(in srgb, var(--accent-cyan) 45%, var(--border))", background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)", color: "var(--accent-cyan-strong)" }} title={spec.title} aria-label={spec.title}>
-          <Sparkles className="h-4 w-4" />
-        </Link>
+        <IconTooltip key={spec.id} label={spec.title}>
+          <Link href={spec.href ?? chimmyEntry.href} className="rounded-lg border p-2 transition hover:opacity-90" style={{ borderColor: "color-mix(in srgb, var(--accent-cyan) 45%, var(--border))", background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)", color: "var(--accent-cyan-strong)" }} title={spec.title} aria-label={spec.title}>
+            <Sparkles className="h-4 w-4" />
+          </Link>
+        </IconTooltip>
       )
     }
     if (spec.id === "language") {
@@ -214,9 +221,11 @@ export default function GlobalTopNav({
     }
     if (spec.id === "admin" && showAdminNav(isAdmin)) {
       return (
-        <Link key={spec.id} href={spec.href ?? "/admin"} className="rounded-lg border p-2 transition hover:opacity-90" style={{ borderColor: "color-mix(in srgb, var(--accent-amber) 45%, var(--border))", background: "color-mix(in srgb, var(--accent-amber) 14%, transparent)", color: "var(--accent-amber-strong)" }} title={spec.title} aria-label={spec.title}>
-          <Shield className="h-4 w-4" />
-        </Link>
+        <IconTooltip key={spec.id} label={spec.title}>
+          <Link href={spec.href ?? "/admin"} className="rounded-lg border p-2 transition hover:opacity-90" style={{ borderColor: "color-mix(in srgb, var(--accent-amber) 45%, var(--border))", background: "color-mix(in srgb, var(--accent-amber) 14%, transparent)", color: "var(--accent-amber-strong)" }} title={spec.title} aria-label={spec.title}>
+            <Shield className="h-4 w-4" />
+          </Link>
+        </IconTooltip>
       )
     }
     if (spec.id === "profile") {
