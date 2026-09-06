@@ -37,6 +37,7 @@ import { buildKeeperLocks } from './keeper/KeeperDraftOrder'
 import type { KeeperConfig, KeeperSelection } from './keeper/types'
 import { draftOrderSlotsToSlotOrder } from '@/lib/league/league-settings-draft-sync'
 import { pickTimerSecondsFromLeagueSettings } from '@/lib/league/league-settings-pick-timer'
+import { resolveRookieDraftSlotOrderForLeague } from '@/lib/draft/resolveRookieDraftSlotOrderForLeague'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { withControlLock } from '@/lib/draft/draftLock'
@@ -229,10 +230,23 @@ export async function buildSlotOrderForLeague(leagueId: string): Promise<SlotOrd
     }
   }
 
+  let manualSlotOrderApplied = false
   if (ls) {
     const fromSettings = draftOrderSlotsToSlotOrder(ls.draftOrderSlots, teamCount)
     if (fromSettings.length >= teamCount && isCompleteSlotOrder(fromSettings, teamCount)) {
       slotOrder = fromSettings as SlotOrderEntry[]
+      manualSlotOrderApplied = true
+    }
+  }
+
+  // Auto rookie-draft order (worst-to-first / reverse-max-PF), when a
+  // commissioner has enabled it and no manual slot order already overrides
+  // it. Lives in League.settings.rookie_draft_order, a different field from
+  // LeagueSettings.draftOrderSlots handled above.
+  if (!manualSlotOrderApplied) {
+    const rookieSlotOrder = await resolveRookieDraftSlotOrderForLeague(leagueId).catch(() => null)
+    if (rookieSlotOrder && rookieSlotOrder.length > 0 && isCompleteSlotOrder(rookieSlotOrder, teamCount)) {
+      slotOrder = rookieSlotOrder
     }
   }
 

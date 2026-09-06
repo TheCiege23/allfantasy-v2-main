@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { finalizeNflRedraftPlayoffRuntimeSeason } from '@/lib/playoff-runtime'
+import { triggerKeeperOffseason } from '@/lib/keeper/offseasonEngine'
+import { supportsKeeperDeclarations } from '@/lib/league/keeper-policy'
+import { enterRedraftOffseason } from '@/lib/redraft/offseason/RedraftOffseasonService'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,9 +86,61 @@ export async function POST(req: NextRequest) {
 
     const champion = result.state.teams.find((team) => team.rosterId === result.championRosterId)
     const alreadyFinalized = 'alreadyFinalized' in result && result.alreadyFinalized === true
+
+    // First-time finalize only: archive the season and enter offseason.
+    // Previously nothing called `enterRedraftOffseason` either, so a
+    // finalized league's lifecycleState just sat at 'completed' forever —
+    // no LeagueSeason/FranchiseSeason archive snapshot, no offseason
+    // transition, and downstream renewal/keeper flows had nothing to key off.
+    let offseasonEntered = false
+    let offseasonSnapshotId: string | null = null
+    if (!alreadyFinalized) {
+      try {
+        const offseasonResult = await enterRedraftOffseason(seasonId, userId)
+        if (offseasonResult.ok) {
+          offseasonEntered = true
+          offseasonSnapshotId = offseasonResult.snapshotId
+        } else {
+          console.error('[redraft/seasons/finalize] enterRedraftOffseason declined', {
+            leagueId: season.leagueId,
+            seasonId,
+            code: offseasonResult.code,
+          })
+        }
+      } catch (error) {
+        console.error('[redraft/seasons/finalize] enterRedraftOffseason failed', {
+          leagueId: season.leagueId,
+          seasonId,
+          error,
+        })
+      }
+
+      // Open the keeper offseason (creates next season's roster shells if
+      // needed, opens the declaration window) for leagues that actually use
+      // keepers. Previously nothing called this at all, so a finalized
+      // keeper/dynasty league just sat there.
+      const leagueMeta = await prisma.league.findUnique({
+        where: { id: season.leagueId },
+        select: { leagueType: true, isDynasty: true },
+      })
+      const keeperEligible =
+        !!leagueMeta && (supportsKeeperDeclarations(leagueMeta.leagueType) || leagueMeta.isDynasty === true)
+      if (keeperEligible) {
+        triggerKeeperOffseason(season.leagueId, seasonId).catch((error) => {
+          console.error('[redraft/seasons/finalize] triggerKeeperOffseason failed', {
+            leagueId: season.leagueId,
+            seasonId,
+            error,
+          })
+        })
+      }
+    }
+
     return NextResponse.json({
       status: alreadyFinalized ? 'already_finalized' : 'ok',
       alreadyFinalized,
+      offseasonEntered,
+      offseasonSnapshotId,
       championRosterId: result.championRosterId,
       championUserId: champion?.ownerId ?? null,
       championTeamName: champion?.displayName ?? null,

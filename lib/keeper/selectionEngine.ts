@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { computeKeeperEligibility } from './eligibilityEngine'
+import { executeSeasonCarryover } from './carryoverEngine'
 import type { ConflictReport, SubmitKeeperResult } from './types'
 
 export async function openKeeperSelectionPhase(
@@ -220,6 +221,8 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
   })
   if (!session) throw new Error('Session not found')
 
+  const wasAlreadyLocked = session.status === 'locked'
+
   await prisma.keeperRecord.updateMany({
     where: { leagueId, seasonId: session.seasonId, status: 'pending' },
     data: { status: 'locked', lockedAt: new Date() },
@@ -234,6 +237,32 @@ export async function lockKeeperSelections(leagueId: string, sessionId: string):
     where: { id: leagueId },
     data: { keeperPhaseActive: false },
   })
+
+  // Materialize locked keepers onto the incoming season's rosters. Guarded on
+  // `wasAlreadyLocked` because `executeSeasonCarryover` creates roster-player
+  // rows rather than upserting them — re-running it on an already-locked
+  // session (a repeat commissioner click, or the deadline sweep racing a
+  // manual lock) would duplicate every kept player instead of no-op'ing.
+  if (!wasAlreadyLocked) {
+    const outgoing = await prisma.redraftSeason.findFirst({
+      where: { leagueId, NOT: { id: session.seasonId } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    })
+    if (outgoing) {
+      try {
+        await executeSeasonCarryover(leagueId, outgoing.id, session.seasonId)
+      } catch (error) {
+        console.error('[keeper] executeSeasonCarryover failed after lock', {
+          leagueId,
+          sessionId,
+          incomingSeasonId: session.seasonId,
+          outgoingSeasonId: outgoing.id,
+          error,
+        })
+      }
+    }
+  }
 }
 
 /** Cron: lock sessions past deadline */
