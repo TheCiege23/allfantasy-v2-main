@@ -8,6 +8,25 @@
  *   - providers not in the requested set,
  *   - deleted/disconnected leagues (hard-deleted rows simply don't return).
  *
+ * 🛑 THAT LAST EXCLUSION STRANDS A `league_sync_state` ROW, AND THE ROW IS WHAT LIES LATER.
+ * Selection reads `leagues`; `league_sync_state` has no foreign key to it and nothing deletes from
+ * it. So disconnecting a league leaves its state row behind, and that row is thereafter never
+ * enumerated, never retried, and costs ZERO provider requests — while `consecutiveFailures` stays
+ * frozen at whatever it reached on the day it was disconnected. Nothing can ever reset it, because
+ * only a run resets it and it will never run again.
+ *
+ * ⚠ SO A FAILURE COUNT READ OFF `league_sync_state` IS NOT A LIVE-COST MEASURE, AND ORPHANS CARRY
+ * THE BIGGEST NUMBERS — they failed longest before somebody gave up and disconnected them.
+ * Measured on production 2026-09-06: of 3 rows with `consecutiveFailures > 0`, two were orphans
+ * (92 and 70 failures, last attempted 2026-08-24) and one was live (15). A release-register entry
+ * had already been written off the 165 total, describing a retry storm that was 98% dead rows.
+ *
+ * Join before you quote it:
+ *
+ *     LEFT JOIN leagues l ON l.platform = s.provider
+ *       AND l."platformLeagueId" = s."externalLeagueId" AND l.season = s.season
+ *     -- l.id IS NULL  =>  orphan: not enumerated, not retried, not a cost
+ *
  * Multiple `League` rows (one per importing user) can mirror the same external league+season; they
  * collapse to ONE deterministic run key `<provider>:<externalLeagueId>:<season>` so a single fetch
  * refreshes every mirror without duplicate provider load.
