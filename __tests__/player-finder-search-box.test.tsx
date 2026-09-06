@@ -146,6 +146,25 @@ describe('PlayerSearchBox', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
+  /*
+   * ⚠ The page arrives with its own query in the box. That is not a request
+   * for suggestions: fetching on mount opened the list over the match card on
+   * every load (seen in the compare renders, 2026-09-06). Only typing asks.
+   */
+  it('does not fetch or open the list for the query the page loaded with — only typing does', async () => {
+    fetchMock.mockResolvedValue(ok([KINCAID]))
+    render(<PlayerSearchBox query="Dalton Kincaid" selectedLeagueId={null} signedIn />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    await typeAndSettle('Dalton Kincai')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
   /* The compare variant: a second name beside the one already open. */
   it('in compare mode, links every hit to ?player=<open>&vs=<hit>, starts empty, and never submits', async () => {
     fetchMock.mockResolvedValueOnce(ok([KING, KINCAID]))

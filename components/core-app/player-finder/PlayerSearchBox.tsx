@@ -108,6 +108,13 @@ export function PlayerSearchBox({
 }) {
   const compare = variant === 'compare' && Boolean(compareWith)
   const [value, setValue] = useState(compare ? '' : query)
+  /*
+   * ⚠ THE PAGE ARRIVES WITH ITS OWN QUERY IN THE BOX, AND THAT IS NOT A REQUEST
+   * FOR SUGGESTIONS. Fetching on mount opened the list over the match card on
+   * every load of /core/players?q=… (seen in the compare renders, 2026-09-06).
+   * Only a keystroke asks.
+   */
+  const [typed, setTyped] = useState(false)
   const [hits, setHits] = useState<SearchHit[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
@@ -118,6 +125,7 @@ export function PlayerSearchBox({
   const term = value.trim()
 
   useEffect(() => {
+    if (!typed) return
     if (term.length < MIN_CHARS) {
       setHits([])
       setOpen(false)
@@ -159,7 +167,7 @@ export function PlayerSearchBox({
       clearTimeout(t)
       ctl.abort()
     }
-  }, [term])
+  }, [term, typed])
 
   const hrefs = useMemo(
     () => hits.map((h) => hitHref(h, leagueParam, compare ? compareWith : null, query)),
@@ -206,7 +214,10 @@ export function PlayerSearchBox({
             className="af-search-input"
             name={compare ? 'vsq' : 'q'}
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setTyped(true)
+              setValue(e.target.value)
+            }}
             onKeyDown={onKeyDown}
             onFocus={() => hits.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 120)}
