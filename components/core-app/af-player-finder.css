@@ -2426,3 +2426,96 @@
     display: flex;
   }
 }
+
+/* ── Game day: the lock and the lineup buttons first (2026-09-06) ─────── */
+.af-core .af-pf-gameday {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--warn);
+  border-radius: 14px;
+  background: var(--warn-soft);
+}
+.af-core .af-pf-gameday[data-tone='bad'] {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-pf-gameday-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-core .af-pf-gameday-game {
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-core .af-pf-lock-big {
+  margin-left: auto;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-pf-lock-big[data-lock='soon'] {
+  color: var(--bad);
+}
+.af-core .af-pf-lock-big[data-lock='locked'] {
+  color: var(--muted);
+}
+.af-core .af-pf-gameday-sum {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+}
+.af-core .af-pf-gameday-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.af-core .af-pf-gameday-btn {
+  min-height: 44px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 14px;
+  text-decoration: none;
+}
+.af-core .af-pf-gameday-btn small {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+/* The per-row lock chip. `.af-chip` has no tone rules; each state names its colours. */
+.af-core .af-pf-lock {
+  display: inline-flex;
+  margin-top: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--text2);
+}
+.af-core .af-pf-lock[data-lock='soon'] {
+  color: var(--bad);
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-pf-lock[data-lock='locked'] {
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .af-core .af-pf-gameday {
+    padding: 12px 14px;
+  }
+  .af-core .af-pf-lock-big {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .af-core .af-pf-gameday-btn {
+    flex: 1 1 100%;
+  }
+}

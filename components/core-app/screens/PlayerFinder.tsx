@@ -15,9 +15,11 @@ import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
+import { GameDayBanner, type GameDayLeague } from '@/components/core-app/player-finder/GameDayBanner'
+import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { composePlayerMoves, readiness, type PlayerMove } from '@/lib/core-app/playerMoves'
-import { platformLabel } from '@/lib/core-app/platformLinks'
+import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
 import type { LeagueSlot, PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -384,6 +386,33 @@ export function PlayerFinder({
 
   const yoursCount = leagueRows.filter((r) => r.slot.isYours).length
   const unmatched = (detail?.rosterCoverage.unmatched ?? []).filter((u) => inScope(u.leagueId))
+
+  /*
+   * Game day (2026-09-06). His kickoff is the lock every league row counts
+   * down to; when the feed says Questionable / Doubtful / Out, the card leads
+   * with it and one Open-lineup button per league where he is in YOUR
+   * starting lineup. Starting is the impact row's word when it has one, else
+   * the slot's.
+   */
+  const gameKickoff = detail?.game?.available ? detail.game.data.kickoff : null
+  const gameDayStatus = ready && (ready.tone === 'bad' || ready.tone === 'warn') ? ready : null
+  const startingLeagues: GameDayLeague[] = leagueRows
+    .filter((r) => r.slot.isYours && (r.impact ? r.impact.isStarting : r.slot.slot === 'STARTER'))
+    .map((r) => ({
+      leagueId: r.slot.leagueId,
+      leagueName: r.slot.leagueName,
+      platform: r.slot.platform,
+      link: lineupLink({
+        id: r.slot.leagueId,
+        platform: r.slot.platform,
+        platformLeagueId: r.slot.platformLeagueId,
+        season: r.slot.season,
+        name: r.slot.leagueName,
+        teamId: r.slot.teamExternalId,
+      }),
+    }))
+  const benchedCount = yoursCount - startingLeagues.length
+  const elsewhereCount = leagueRows.filter((r) => !r.slot.isYours).length
   // In league mode the header's numbers are the league's own, when we have them.
   const leagueProj = leagueMode && leagueView ? leagueView.afPoints : null
   const leagueRank = leagueMode && leagueView ? leagueView.positionRank : null
@@ -650,6 +679,20 @@ export function PlayerFinder({
               </span>
             </header>
 
+            {/* Game day: at-risk or out, with a kickoff on the schedule — the lock and the lineup buttons first. */}
+            {gameDayStatus && detail.game?.available && signedIn ? (
+              <GameDayBanner
+                playerName={detail.player.name}
+                status={gameDayStatus}
+                detail={detail.injury.available && detail.injury.data.description && detail.injury.data.description.length <= 28 ? detail.injury.data.description : null}
+                game={detail.game.data}
+                nowIso={nowIso}
+                starting={startingLeagues}
+                benched={benchedCount}
+                elsewhere={elsewhereCount}
+              />
+            ) : null}
+
             {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
             {detailRef ? (
               <div className="af-pf-compare-entry">
@@ -894,6 +937,8 @@ export function PlayerFinder({
                               {r.impact && !r.impact.slotConfirmed ? (
                                 <span className="af-pf-impact-unconfirmed">slot unconfirmed</span>
                               ) : null}
+                              {/* The lineup lock, on every league where he is yours — a bench player can still be moved in. */}
+                              {l.isYours && gameKickoff ? <LockClock kickoffIso={gameKickoff} nowIso={nowIso} /> : null}
                             </td>
                             <td className="af-pf-col-status">
                               {l.isYours && ready ? (

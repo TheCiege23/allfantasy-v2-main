@@ -10,6 +10,8 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShare } from './snapShare'
 import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
+import { resolveSportsWeek } from './sportsWeek'
+import { playerGame, type PlayerGame } from './playerGame'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -158,6 +160,13 @@ export type PlayerDetail = {
    * the copy says "standard scoring".
    */
   projection: SectionState<{ points: number; season: string; week: number }>
+  /**
+   * The game he plays this week — the instant every lineup lock on the card
+   * counts down to (2026-09-06). From the ingested schedule for the resolved
+   * week, matched to his club in memory; unavailable says why (no team on
+   * file, no week on the schedule, no fixture for the club), never a guess.
+   */
+  game: SectionState<PlayerGame>
   /**
    * Share of his team's snaps, offensive or defensive as the position requires.
    *
@@ -1049,6 +1058,29 @@ export async function getPlayerDetail(
   const projectionWeek = row.sleeperId ? await latestProjectionWeek() : null
   const projKey = row.sleeperId ?? ''
 
+  /*
+   * His game this week, for the lineup lock. The week comes from the schedule
+   * (resolveSportsWeek), the rows are filtered on season + week + seasonType
+   * in SQL — preseason week 1 and regular week 1 share a key — and the club is
+   * matched in memory, because SportsGame holds provider display names and
+   * `row.team` holds an abbreviation (see nextGameMap.ts).
+   */
+  const game: PlayerDetail['game'] = await (async () => {
+    const team = normalizeTeamAbbrev(row.team)
+    if (!team) return playerGame([], null, null)
+    const week = await resolveSportsWeek(row.sport).catch(() => null)
+    if (!week) return playerGame([], team, null)
+    const games = await prisma.sportsGame
+      .findMany({
+        where: { sport: row.sport, season: week.season, week: week.week, seasonType: week.seasonType },
+        orderBy: { startTime: 'asc' },
+        take: 400,
+        select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+      })
+      .catch(() => [])
+    return playerGame(games, team, week)
+  })()
+
   const projRow = projectionWeek
     ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
     : undefined
@@ -1138,6 +1170,7 @@ export async function getPlayerDetail(
     rosterCoverage,
     impact,
     projection,
+    game,
     snapShare,
     positionRank: rank,
     recommendedMoves,

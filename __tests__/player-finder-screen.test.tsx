@@ -123,6 +123,8 @@ const DETAIL: PlayerDetail = {
     ],
   },
   projection: { available: true, data: { points: 13.8, season: '2026', week: 12 } },
+  // Sunday 2026-10-25, 1:00pm ET — the lock every "yours" row counts down to.
+  game: { available: true, data: { kickoff: '2026-10-25T17:00:00.000Z', opponent: 'MIA', home: true, week: 12, season: 2026, preseason: false } },
   snapShare: { available: true, data: { share: 0.78, snaps: 400, teamSnaps: 513, games: 8, basis: 'offense' } },
   positionRank: { available: true, data: { rank: 6, outOf: 118, position: 'TE' } },
   impact: { available: true, data: IMPACT },
@@ -387,6 +389,52 @@ describe('Player Finder — trade window', () => {
   it('keeps the column out when there is neither impact nor a window', () => {
     renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
     expect(screen.queryByRole('complementary', { name: 'What to do' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Player Finder — game day', () => {
+  const NOW = '2026-10-25T16:18:00.000Z' // 42 minutes before his 1:00pm ET kickoff
+
+  it('puts the lineup lock on every league where he is yours, and no banner while he is healthy', () => {
+    renderCore({ nowIso: NOW })
+    expect(screen.getAllByText('locks in 42 min')).toHaveLength(3) // Warriors, Dragons, Elites — not Gridiron Gang
+    expect(screen.queryByRole('region', { name: 'Game day' })).toBeNull()
+  })
+
+  it('leads with the game-day banner when he is Out: status, kickoff, the lock, and an Open-lineup button per league where he starts', () => {
+    renderCore({ detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } } }, nowIso: NOW })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).toHaveAttribute('data-tone', 'bad')
+    expect(within(banner).getByText('Out · Ankle')).toBeInTheDocument()
+    expect(within(banner).getByText('vs MIA · Sun 1:00p ET')).toBeInTheDocument()
+    expect(within(banner).getByText('locks in 42 min')).toHaveAttribute('data-lock', 'soon')
+    expect(within(banner).getByText('Starting in 1 of your league — move Kincaid before kickoff.')).toBeInTheDocument()
+    // Waiver Warriors is the one league where he starts (Dragons: bench, Elites: IR); its button opens Yahoo.
+    const buttons = within(banner).getAllByRole('link')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0]).toHaveTextContent('Waiver Warriors')
+    expect(buttons[0].getAttribute('href')).toMatch(/yahoo\.com\/f1\/55/)
+    expect(buttons[0]).toHaveAttribute('target', '_blank')
+    // The fixture's Yahoo slot carries no team id, so the verified lineup format cannot build; the league page is offered and labelled as such.
+    expect(buttons[0].textContent).toMatch(/^Open (lineup in Yahoo|in Yahoo · League)/)
+    // The banner sits above the tiles, at the top of the card.
+    const card = banner.closest('.af-pf-detail') as HTMLElement
+    expect(card.querySelector('.af-pf-gameday + .af-pf-compare-entry')).not.toBeNull()
+  })
+
+  it('says there is nothing to move when he is benched everywhere, and stays quiet with no kickoff on file', () => {
+    const benched = { ...DETAIL, injury: { available: true, data: { status: 'Questionable', description: 'Knee', reportedAt: null } }, impact: { available: true, data: IMPACT.map((i) => ({ ...i, slot: 'BENCH', isStarting: false })) } }
+    renderCore({ detail: benched, nowIso: NOW })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).toHaveAttribute('data-tone', 'warn')
+    expect(within(banner).getByText('On your bench in 3 leagues — nothing to move before kickoff.')).toBeInTheDocument()
+    expect(within(banner).queryByRole('link')).toBeNull()
+
+    // No kickoff on file: no banner and no row chips — the card says nothing it cannot time.
+    const { container } = renderCore({ detail: { ...benched, game: { available: false, reason: 'no game on the schedule for BUF in week 12' } }, nowIso: NOW })
+    expect(container.querySelector('.af-pf-gameday')).toBeNull()
+    expect(container.querySelectorAll('.af-pf-lock')).toHaveLength(0)
+    expect(screen.getAllByRole('region', { name: 'Game day' })).toHaveLength(1) // only the first render's
   })
 })
 
