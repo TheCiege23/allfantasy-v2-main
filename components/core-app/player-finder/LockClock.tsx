@@ -15,9 +15,11 @@ export function LockClock({ kickoffIso, nowIso, big = false }: { kickoffIso: str
     return () => clearInterval(t)
   }, [])
   const s = lockState(kickoffIso, now)
+  // The row chip stays short once locked — the kickoff is in the tooltip and on the banner; a long chip pushed the table past the card.
+  const text = !big && s.state === 'locked' ? 'locked' : s.label
   return (
-    <span className={big ? 'af-num af-pf-lock-big' : 'af-chip af-num af-pf-lock'} data-lock={s.state} title={`Lineup locks at his kickoff · ${s.clock}`}>
-      {s.label}
+    <span className={big ? 'af-num af-pf-lock-big' : 'af-chip af-num af-pf-lock'} data-lock={s.state} title={s.state === 'locked' ? `Locked · kicked off ${s.clock}` : `Lineup locks at his kickoff · ${s.clock}`}>
+      {text}
     </span>
   )
 }
