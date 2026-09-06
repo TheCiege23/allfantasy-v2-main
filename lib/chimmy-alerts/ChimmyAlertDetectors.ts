@@ -79,6 +79,8 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
       repeatCooldownMinutes: mins != null && mins <= 90 ? 20 : 120,
       leagueId: player.leagueId,
       metadata: {
+        // Carried so a delivery path can key and link on the player without parsing the title.
+        playerName: player.playerName,
         minutesToLock: mins,
         designation: player.designation,
         detail: player.detail ?? null,

@@ -7,9 +7,18 @@
  * opened the app. That is the whole gap between "the system knows your starter is out" and
  * "you find out before kickoff".
  *
- * SCOPE IS DELIBERATELY NARROW. It sweeps only users who have a push subscription, because
- * evaluating users who cannot be reached is pure cost. Everyone else still gets the same
- * alerts in-app via /api/ai/alerts, unchanged.
+ * WHO IT SWEEPS (changed 2026-09-06). It used to sweep only users with a push subscription,
+ * on the argument that evaluating the unreachable is pure cost. Measured on production: zero
+ * push subscriptions ever, 22 users with a claimed current-season team — all with an email —
+ * and zero injured-starter notifications ever created across 592 successful runs in a week.
+ * Healthy, and reaching nobody. It now sweeps everyone with a claimed team in the current
+ * season (push subscribers first), and the dispatcher gates each on category preference,
+ * contact availability and quiet hours. See lib/chimmy-alerts/sweepAudience.ts.
+ *
+ * ⚠ ONE MESSAGE PER PLAYER, PER DESIGNATION, PER DAY. This route calls the detector directly,
+ * not through the engine, so the engine's repeat cooldown does not apply; and the dispatcher's
+ * email path sends whenever it is called. The pre-dispatch check on the in-app row's sourceKey
+ * is what keeps a five-minute sweep from emailing the same fact twelve times an hour.
  *
  * Query params:
  *   dryRun=1     evaluate and report without sending
@@ -34,6 +43,7 @@ import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarte
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 
 export const dynamic = 'force-dynamic'
@@ -156,6 +166,8 @@ interface SweepUserResult {
   injuredStarters: number
   alerts: number
   pushed: number
+  /** True when today's message about this player and designation had already gone out. */
+  deduped: boolean
   errors: string[]
 }
 
@@ -186,22 +198,35 @@ async function handle(req: NextRequest) {
       new Promise<void>((resolve) => setTimeout(resolve, LIVE_FOLD_TIMEOUT_MS)),
     ])
 
-    // Only users we can actually reach. A subscription row is the proof of reachability —
-    // permission granted, endpoint stored, and not yet expired.
+    // Push subscribers first (both channels), then everyone with a claimed team this season —
+    // email is the channel that exists (see the header). The dispatcher gates each of them.
+    const season = new Date().getUTCFullYear()
+    const [pushSubscribers, claimed] = singleUser
+      ? [[], []]
+      : await Promise.all([
+          prisma.webPushSubscription.findMany({ select: { userId: true }, distinct: ['userId'], take: limit }),
+          prisma.leagueTeam.findMany({
+            where: { claimedByUserId: { not: null }, league: { season } },
+            select: { claimedByUserId: true },
+            distinct: ['claimedByUserId'],
+            take: limit,
+          }),
+        ])
     const subscribers = singleUser
       ? [{ userId: singleUser }]
-      : await prisma.webPushSubscription.findMany({
-          select: { userId: true },
-          distinct: ['userId'],
-          take: limit,
-        })
+      : mergeAudience(
+          pushSubscribers.map((s) => s.userId),
+          claimed.map((c) => c.claimedByUserId).filter((id): id is string => Boolean(id)),
+          limit,
+        ).map((userId) => ({ userId }))
 
     const results: SweepUserResult[] = []
     let totalPushed = 0
     let totalAlerts = 0
+    let totalDeduped = 0
 
     for (const sub of subscribers) {
-      const result: SweepUserResult = { userId: sub.userId, injuredStarters: 0, alerts: 0, pushed: 0, errors: [] }
+      const result: SweepUserResult = { userId: sub.userId, injuredStarters: 0, alerts: 0, pushed: 0, deduped: false, errors: [] }
       try {
         const signal = await hydrateInjuredStarters({ appUserId: sub.userId })
         result.injuredStarters = signal.injuredStarters.length
@@ -231,6 +256,18 @@ async function handle(req: NextRequest) {
         // Send only the most urgent alert per sweep. A burst of six notifications for six
         // leagues is how someone turns notifications off permanently.
         const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
+        const dedupePrefix = injuredStarterDedupeKey(top, new Date())
+        const href = injuredStarterHref(top)
+        // Today's message about this player and designation already went out: say nothing again.
+        const already = await prisma.platformNotification
+          .findFirst({ where: { sourceKey: `${dedupePrefix}:${sub.userId}` }, select: { id: true } })
+          .catch(() => null)
+        if (already) {
+          result.deduped = true
+          totalDeduped += 1
+          results.push(result)
+          continue
+        }
 
         /*
          * The email lists EVERY flagged starter, not just `top`. A phone
@@ -273,12 +310,13 @@ async function handle(req: NextRequest) {
           type: 'chimmy_alert',
           title: top.title,
           body: top.message,
-          actionHref: top.leagueId ? `/league/${top.leagueId}` : '/my-players',
-          actionLabel: 'Set lineup',
+          // The Player Finder card: it leads with the game-day banner and the verified lineup buttons.
+          actionHref: href,
+          actionLabel: 'Open his card',
           leagueId: top.leagueId ?? null,
           severity: top.urgencySignal >= 78 ? 'high' : 'medium',
           meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
-          dedupePrefix: `injured-starter:${top.leagueId ?? 'all'}:${new Date().toISOString().slice(0, 10)}`,
+          dedupePrefix,
           skipChannels: { email: injuryEmail == null, sms: true, push: true },
           ...(injuryEmail ? { emailOverride: injuryEmail } : {}),
         })
@@ -292,8 +330,8 @@ async function handle(req: NextRequest) {
         const sent = await sendPushToUser(sub.userId, {
           title: top.title,
           body: top.message,
-          href: top.leagueId ? `/league/${top.leagueId}` : '/my-players',
-          tag: `injured-starter:${top.leagueId ?? 'all'}`,
+          href,
+          tag: dedupePrefix,
           type: 'lineup',
           leagueId: top.leagueId ?? null,
         })
@@ -319,6 +357,7 @@ async function handle(req: NextRequest) {
       usersScanned: results.length,
       usersWithInjuredStarters: results.filter((r) => r.injuredStarters > 0).length,
       alertsDetected: totalAlerts,
+      usersDeduped: totalDeduped,
       pushesSent: totalPushed,
       usersWithErrors: withErrors.length,
       errors: withErrors.slice(0, 10).map((r) => ({ userId: r.userId, errors: r.errors })),
