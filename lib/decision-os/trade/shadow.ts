@@ -12,7 +12,11 @@ import { shouldRunShadow, type DecisionShadowScope } from '@/lib/decision-os/cor
 import type { TradeValueSnapshot } from '@/lib/trade-value/types'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { runTradeEvaluateDecision, type RunTradeEvaluateResult } from './index'
-import type { TradeAssetSummary, TradeProposalContext } from './dco'
+// `deriveParticipants` is the DCO's OWN helper (dco.ts builds `participantCount` from it, and
+// `canonicalShadow` already reuses it). Importing it rather than recounting rosters here keeps ONE
+// implementation of "how many teams are in this trade" — the emit must report the same number the
+// evaluator branched on.
+import { deriveParticipants, type TradeAssetSummary, type TradeProposalContext } from './dco'
 import { loadTradeWorldFacts, worldInputFromFacts, parseTradeSnapshot, type TradeWorldFacts } from './loader'
 import { buildProductionTradeDecisionDeps } from './deps'
 import type { TradeDecisionDeps } from './decision'
@@ -112,6 +116,52 @@ export async function runTradeShadowForProposal(
         decision: buildDecisionDeps(snapshot),
         shadow: { snapshot },
       },
+    )
+
+    // The success path emitted NOTHING of its own until now — only the three `ran: false` paths did,
+    // and `runTradeEvaluateDecision`'s `ran`-less event was silently standing in for this one.
+    //
+    // `ran` is what makes the row a COMPARISON to `flipReadiness` rather than a skip, and it is
+    // BRANCHED on purpose: an `unsupported` parity means the legacy evaluator cannot evaluate this
+    // trade (3+ teams), so no comparison happened and it stays a refusal.
+    //
+    // ⚠ `surface` is 'proposal_wrap_fidelity', deliberately NOT the 'proposal' that `canonicalShadow`
+    // emits a few lines below on this same route. Both are the proposal route; they are not the same
+    // evidence. This path is fed the SAME persisted snapshot it is graded against (wrap fidelity —
+    // tautological by design, and that is its job: prove the wrapper adds no drift), while canonical
+    // resolves its own ADP. Sharing a bucket would let the weaker evidence top the stronger one up to
+    // the gate's fifty.
+    const parity = result.parity
+    const participants = deriveParticipants(args.assets).length
+    emitShadowParity(
+      'manager.trade.evaluate',
+      parity?.unsupported
+        ? {
+            shadow: true,
+            ran: false,
+            surface: 'proposal_wrap_fidelity',
+            legacy_shadow_compared: true,
+            wrap_fidelity: true,
+            evaluator_supported: false,
+            unsupported: true,
+            reason: 'unsupported_by_legacy_evaluator',
+            participants,
+            proposalId,
+          }
+        : {
+            shadow: true,
+            ran: true,
+            surface: 'proposal_wrap_fidelity',
+            legacy_shadow_compared: true,
+            wrap_fidelity: true,
+            evaluator_supported: true,
+            parity_passed: parity?.passed,
+            parity_failed: parity ? !parity.passed : undefined,
+            diffs: parity?.diffs.length ?? 0,
+            participants: parity?.comparedParticipants ?? participants,
+            proposalId,
+          },
+      result.decision.decision_id,
     )
 
     // E.4 — canonical TradeWorld shadow attempt, BESIDE the native path (parity-only, read-only). The
