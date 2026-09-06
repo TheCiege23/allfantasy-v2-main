@@ -111,17 +111,60 @@ async function main() {
     )
     await client.query('COMMIT')
 
-    console.log(`\nmigrated : ${res.rowCount} row(s)`)
+    console.log(`\nreported : ${res.rowCount} row(s) updated — as claimed by the transaction`)
     console.log(`cutoff   : ${now}`)
     console.log('\nTo reverse exactly this run:')
     console.log("  UPDATE sync_job_runs SET status = 'completed'")
     console.log(`   WHERE status = 'success' AND job_name = ANY('{${JOB_NAMES.join(',')}}')`)
     console.log(`     AND started_at <= '${now}';`)
-
-    const after = await client.query("SELECT count(*)::int AS n FROM sync_job_runs WHERE status = 'completed'")
-    console.log(`\nremaining 'completed': ${after.rows[0].n}`)
   } finally {
     await client.end()
+  }
+
+  /*
+   * 🛑 THE WRITE IS VERIFIED FROM A DIFFERENT CONNECTION, AFTER THE FIRST ONE IS CLOSED.
+   *
+   * The original version read the row count back on the SAME client that did the UPDATE. That read
+   * happened after COMMIT, so it was correct — but it could not PROVE it was correct, and that turned
+   * out to matter. When the migration was later found reverted, a reviewing session reconstructed the
+   * incident as "the transaction never committed and you read your own uncommitted writes", which is
+   * a real failure mode and fits the observed output exactly. It was wrong — a human had run the
+   * reversal — but nothing in this script's own output could rule it out, and I could not answer the
+   * charge from the artifact. A verification that cannot distinguish success from the most plausible
+   * failure is not a verification.
+   *
+   * A fresh connection cannot see an uncommitted transaction. So if these numbers are right, the
+   * commit is proven rather than assumed, and the same argument cannot be had twice.
+   *
+   * ⚠ IT ASSERTS, IT DOES NOT JUST PRINT. Printing a number a human has to notice is how the first
+   * version failed; a mismatch here exits non-zero and says which way it went.
+   */
+  const verifier = new pg.Client({ connectionString })
+  await verifier.connect()
+  try {
+    await verifier.query("SET TIME ZONE 'UTC'")
+    const { rows } = await verifier.query(
+      `SELECT count(*) FILTER (WHERE status = 'completed')::int AS still_completed,
+              count(*) FILTER (WHERE status = 'success')::int   AS now_success
+         FROM sync_job_runs WHERE job_name = ANY($1)`,
+      [JOB_NAMES],
+    )
+    const { still_completed: stillCompleted, now_success: nowSuccess } = rows[0]
+    console.log('\n--- verified on a SEPARATE connection ---')
+    console.log(`  still 'completed' : ${stillCompleted}`)
+    console.log(`  now 'success'     : ${nowSuccess}`)
+
+    if (stillCompleted > 0) {
+      console.error(
+        `\nFAILED: ${stillCompleted} row(s) are still 'completed' on a fresh connection. The ` +
+          'transaction reported success but the change is not visible to anyone else — treat the ' +
+          'commit as having NOT taken effect and do not report this run as done.',
+      )
+      process.exit(1)
+    }
+    console.log('\nOK — the change is visible outside the writing transaction.')
+  } finally {
+    await verifier.end()
   }
 }
 
