@@ -8,12 +8,18 @@
  * "you find out before kickoff".
  *
  * WHO IT SWEEPS (changed 2026-09-06). It used to sweep only users with a push subscription,
- * on the argument that evaluating the unreachable is pure cost. Measured on production: zero
- * push subscriptions ever, 22 users with a claimed current-season team — all with an email —
- * and zero injured-starter notifications ever created across 592 successful runs in a week.
- * Healthy, and reaching nobody. It now sweeps everyone with a claimed team in the current
- * season (push subscribers first), and the dispatcher gates each on category preference,
- * contact availability and quiet hours. See lib/chimmy-alerts/sweepAudience.ts.
+ * on the argument that evaluating the unreachable is pure cost. Measured on production
+ * (2026-09-06, re-measured by the gate): zero push subscriptions ever, 23 users with a claimed
+ * current-season team — 22 of those with a non-empty email on file — and zero injured-starter
+ * notifications ever created across 592 successful runs in a week. Healthy, and reaching
+ * nobody. It now sweeps everyone with a claimed team in the current season (push subscribers
+ * first), and the dispatcher gates each on category preference, contact availability and
+ * quiet hours. See lib/chimmy-alerts/sweepAudience.ts.
+ *
+ * ⚠ TWO POPULATIONS, REPORTED SEPARATELY. `usersScanned` is the audience (the union above);
+ * `usersWithEmail` is how many of them the dispatcher's email gate can reach at all. A dry run
+ * against production should read 23 and 22 — one number that both a healthy and a broken
+ * audience query would produce is not a check, so neither figure stands in for the other.
  *
  * ⚠ ONE MESSAGE PER PLAYER, PER DESIGNATION, PER DAY. This route calls the detector directly,
  * not through the engine, so the engine's repeat cooldown does not apply; and the dispatcher's
@@ -220,6 +226,14 @@ async function handle(req: NextRequest) {
           limit,
         ).map((userId) => ({ userId }))
 
+    // Reported beside usersScanned so a verification reads the union and the contact gate
+    // apart (see the header). The same column the dispatcher's profile read gates on (the
+    // column is NOT NULL, so "none on file" is the empty string); the undeliverable-domain
+    // rule is stricter still, so this is an upper bound on sends.
+    const usersWithEmail = await prisma.appUser
+      .count({ where: { id: { in: subscribers.map((s) => s.userId) }, email: { not: '' } } })
+      .catch(() => null)
+
     const results: SweepUserResult[] = []
     let totalPushed = 0
     let totalAlerts = 0
@@ -355,6 +369,8 @@ async function handle(req: NextRequest) {
       dryRun,
       pushConfigured,
       usersScanned: results.length,
+      /** Audience members with a non-empty email on file; null only if the count itself failed. */
+      usersWithEmail,
       usersWithInjuredStarters: results.filter((r) => r.injuredStarters > 0).length,
       alertsDetected: totalAlerts,
       usersDeduped: totalDeduped,
