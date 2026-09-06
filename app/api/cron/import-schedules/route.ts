@@ -60,6 +60,13 @@ export const maxDuration = 300
  */
 const JOB_TSDB = "cron-import-schedules-tsdb"
 
+/**
+ * Heartbeat identity for the `?riProfiles=1` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs. Renaming it here without renaming it there makes the
+ * freshness monitor report CONFIG ("no rows for job_name") forever.
+ */
+const JOB_RI_PROFILES = "cron-import-schedules-ri-profiles"
+
 /** Every league the TheSportsDB ingest covers. */
 const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
 
@@ -401,40 +408,78 @@ async function handle(req: NextRequest) {
         ? [explicitProfileSport as IngestSport]
         : rotateForFairness(RI_PROFILE_SPORTS, 24 * 60 * 60 * 1000)
 
-      for (const s of profileSports) {
-        if (budget.exhausted()) {
-          deferred.push(s)
-          continue
-        }
-        try {
-          const teams = await syncRollingInsightsTeamsToDb({ sport: s })
-          // Re-checked before the second, much larger call — a player sweep started at 239s is
-          // exactly how this route reached the edge before.
-          const players = budget.exhausted()
-            ? null
-            : await syncRollingInsightsPlayersToDb({ sport: s })
+      /*
+       * ⚠ A HEARTBEAT, FOR EXACTLY THE REASON `?rosters=1` ABOVE HAS ONE.
+       *
+       * `syncRollingInsightsTeamsToDb`/`PlayersToDb` write `sportsTeam` and `sports_players` —
+       * the same `last_updated` that `import-players` probes and that `?rosters=1` also writes.
+       * Both run more often than this six-hourly pass, so a table probe here would be satisfied
+       * by whichever of them wrote last and would report THIS cron healthy on another job's
+       * work. `scripts/cron-freshness-check.mjs` named this fix in its NO_PROBE entry.
+       *
+       * Wrapped around the whole sweep rather than per sport: one fire is one run, and a
+       * per-sport wrap would record up to six runs per fire and make the cadence unreadable. A
+       * rotation that defers a sport still proves the job WOKE UP, which is all a heartbeat
+       * claims — deferral is the budget working, not a failure.
+       */
+      await withSyncJobRun(
+        { jobName: JOB_RI_PROFILES, jobScope: profileSports.join(","), trigger: "cron" },
+        async () => {
+          for (const s of profileSports) {
+            if (budget.exhausted()) {
+              deferred.push(s)
+              continue
+            }
+            try {
+              const teams = await syncRollingInsightsTeamsToDb({ sport: s })
+              // Re-checked before the second, much larger call — a player sweep started at 239s is
+              // exactly how this route reached the edge before.
+              const players = budget.exhausted()
+                ? null
+                : await syncRollingInsightsPlayersToDb({ sport: s })
 
-          const entry: Record<string, unknown> = {
-            teams: teams.written,
-            teamsWithLogo: teams.withLogo,
-            players: players?.written ?? 0,
-            playersWithImage: players?.withImage ?? 0,
+              const entry: Record<string, unknown> = {
+                teams: teams.written,
+                teamsWithLogo: teams.withLogo,
+                players: players?.written ?? 0,
+                playersWithImage: players?.withImage ?? 0,
+              }
+              // Soccer's per-league split is the whole point of this pass; showing only a total would
+              // hide two leagues returning nothing behind one league returning plenty.
+              if (s === 'SOCCER') {
+                entry.byLeague = { teams: teams.byLeague, players: players?.byLeague }
+              }
+              if (players == null) entry.playersDeferredForBudget = true
+              if (teams.notModified || players?.notModified) entry.notModified = true
+              const errs = [...teams.errors, ...(players?.errors ?? [])]
+              if (errs.length) entry.errors = errs.slice(0, 5)
+              profiles[s] = entry
+            } catch (err) {
+              profiles[s] = { error: String(err).slice(0, 120) }
+            }
           }
-          // Soccer's per-league split is the whole point of this pass; showing only a total would
-          // hide two leagues returning nothing behind one league returning plenty.
-          if (s === 'SOCCER') {
-            entry.byLeague = { teams: teams.byLeague, players: players?.byLeague }
-          }
-          if (players == null) entry.playersDeferredForBudget = true
-          if (teams.notModified || players?.notModified) entry.notModified = true
-          const errs = [...teams.errors, ...(players?.errors ?? [])]
-          if (errs.length) entry.errors = errs.slice(0, 5)
-          profiles[s] = entry
-        } catch (err) {
-          profiles[s] = { error: String(err).slice(0, 120) }
-        }
-      }
-      if (deferred.length) profiles.deferredSports = deferred
+          if (deferred.length) profiles.deferredSports = deferred
+          return profiles
+        },
+        (acc) => ({
+          rowsWritten: Object.entries(acc)
+            .filter(([k]) => k !== "deferredSports")
+            .reduce<number>((n, [, v]) => {
+              if (!v || typeof v !== "object") return n
+              const e = v as { teams?: unknown; players?: unknown }
+              return (
+                n +
+                (typeof e.teams === "number" ? e.teams : 0) +
+                (typeof e.players === "number" ? e.players : 0)
+              )
+            }, 0),
+          rowsSkipped: deferred.length,
+          errors: Object.entries(acc)
+            .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
+            .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+          metadata: { deferredSports: deferred },
+        }),
+      )
       results.rolling_insights_profiles = profiles
     }
 

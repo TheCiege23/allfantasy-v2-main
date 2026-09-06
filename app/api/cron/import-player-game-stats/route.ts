@@ -33,6 +33,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
+import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import {
   dateRange,
   ingestRollingInsightsGameLogs,
@@ -56,6 +57,13 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
 const RUN_BUDGET_MS = 240_000
+
+/**
+ * Heartbeat identity for the `?multiSport=1` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs. Renaming it here without renaming it there makes the
+ * freshness monitor report CONFIG ("no rows for job_name") forever.
+ */
+const JOB_MULTI_SPORT = "cron-import-player-game-stats-multisport"
 const DEFAULT_MAX_WEEKS = 6
 
 /**
@@ -148,6 +156,30 @@ async function handle(req: NextRequest) {
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),
       0,
     )
+    /*
+     * ⚠ A HEARTBEAT, BECAUSE THE TABLE PROBE ON THIS ROUTE BELONGS TO THE OTHER MODE.
+     *
+     * This sweep writes the same `player_game_stats.updatedAt` that the default NFL mode probes
+     * an hour earlier, so a table probe here reads THIS job healthy on THAT job's run. The NFL
+     * probe is scoped with `seasonal.sport`; this pass covers MLB/NBA/NHL/NCAAB/NCAAF and needs
+     * its own identity. `scripts/cron-freshness-check.mjs` named this fix in its NO_PROBE entry.
+     *
+     * Recorded even when every sport is deferred for budget: a deferral proves the job woke up,
+     * which is the whole claim a heartbeat makes.
+     */
+    await recordSyncJobRun(
+      { jobName: JOB_MULTI_SPORT, jobScope: candidates.join(","), trigger: "cron" },
+      {
+        rowsWritten: written,
+        rowsSkipped: deferred.length,
+        errors: Object.entries(perSport)
+          .filter(([, v]) => v && typeof v === "object" && "error" in (v as object))
+          .map(([sport, v]) => `${sport}: ${String((v as { error: unknown }).error)}`),
+        metadata: { days, deferredSports: deferred, explicitSport: explicit ?? null },
+      },
+      Date.now() - startedAt,
+    )
+
     return NextResponse.json({
       ok: true,
       mode: "multiSport",

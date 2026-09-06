@@ -15,6 +15,20 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runNewsImporter } from "@/lib/workers/news-importer"
+import { recordSyncJobRun, extractCommonCounts } from "@/lib/production-health/syncJobRunTelemetry"
+
+/**
+ * Heartbeat identity for the `?xnews=1` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs.
+ *
+ * ⚠ WHY THIS MODE NEEDS ITS OWN NAME. The base schedule and this one are the SAME route writing
+ * the SAME `player_news.created_at`, and the base runs every 15 minutes against this one's six
+ * hours. A table probe here is therefore satisfied by the base job on every check, so the X pass
+ * could stop entirely and the monitor would never notice. Zero new rows is also a legitimate
+ * outcome here — X may simply have had nothing in the window — which is the second reason an
+ * output probe cannot judge it and a heartbeat can.
+ */
+const JOB_XNEWS = "cron-import-news-xnews"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -86,6 +100,12 @@ async function handle(req: NextRequest) {
       const ingest = await runXNewsIngestion(xSports)
       const dispatchResult = await dispatchPendingPlayerNewsNotifications()
 
+      await recordSyncJobRun(
+        { jobName: JOB_XNEWS, jobScope: xSports.join(','), trigger: 'cron' },
+        { ...extractCommonCounts(ingest), errors: ingest.errors.map((e) => String(e)) },
+        Date.now() - startedAt
+      )
+
       return NextResponse.json(
         {
           ok: ingest.errors.length === 0,
@@ -103,6 +123,9 @@ async function handle(req: NextRequest) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[cron/import-news] xnews failed:', message)
+      // A failed fire still heartbeats — see the note on JOB_XNEWS. "Scheduled but throwing" and
+      // "not scheduled at all" are different problems and must not read the same.
+      await recordSyncJobRun({ jobName: JOB_XNEWS, trigger: 'cron' }, { errors: [message] }, Date.now() - startedAt)
       return NextResponse.json(
         { ok: false, mode: 'xnews', error: message.slice(0, 240), durationMs: Date.now() - startedAt },
         { status: 500 }

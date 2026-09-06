@@ -35,6 +35,48 @@ import {
   TEAM_IMAGE_TYPE_LOGO,
   writePrimaryTeamImage,
 } from "@/lib/sport-teams/teamImageStore";
+import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry";
+
+/**
+ * ⚠ THE HEARTBEAT IS PER SPORT, AND THAT IS THE ENTIRE POINT OF IT.
+ *
+ * Three schedules hit this one route — `?sport=all`, `?sport=NFL` and `?sport=NCAAF` — and all
+ * three write the SAME `sports_core_player_images.fetched_at`. A freshness probe on that column
+ * is therefore satisfied for all three the moment any one of them runs, so the two sport-scoped
+ * schedules could die silently while the daily `?sport=all` pass kept the probe green. That is
+ * the false green `scripts/cron-freshness-check.mjs` exists to prevent, and its NO_PROBE entries
+ * for the NFL and NCAAF modes named this fix.
+ *
+ * A single job name would move the collision from the image table into `sync_job_runs` rather
+ * than removing it, so the name carries the requested sport. `?sport=all` keeps its TABLE probe —
+ * it writes unconditionally, and an output probe is the stronger check where one is available.
+ *
+ * Must stay in step with PROBES in scripts/cron-freshness-check.mjs; renaming here alone makes
+ * the monitor report CONFIG ("no rows for job_name") forever.
+ */
+/*
+ * ⚠ THE NAMES ARE LITERALS, NOT BUILT FROM A TEMPLATE, AND THAT IS DELIBERATE.
+ *
+ * `__tests__/cron-heartbeat-route-contracts.test.ts` asserts that every name PROBES expects
+ * appears verbatim in the route that records it — which is what stops a probe and its route
+ * drifting apart into a permanent CONFIG report. A computed `cron-sync-player-images-${slug}`
+ * satisfies the runtime and defeats that check, because the string never exists in the source
+ * for the test (or for a human with grep) to find. It was written that way first and the
+ * contract test caught it.
+ *
+ * An unscheduled ad-hoc sport still gets a usable name from the fallback; only the three
+ * SCHEDULED modes need to be greppable, because only those are probed.
+ */
+const JOB_BY_SPORT: Record<string, string> = {
+  all: "cron-sync-player-images-all",
+  nfl: "cron-sync-player-images-nfl",
+  ncaaf: "cron-sync-player-images-ncaaf",
+};
+
+const jobNameForSport = (raw: string | null): string => {
+  const slug = (raw ?? "all").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || "all";
+  return JOB_BY_SPORT[slug] ?? `cron-sync-player-images-${slug}`;
+};
 
 /**
  * Phase 2: this route is now canonical-first. It iterates `Player` / `Team` and writes images
@@ -304,6 +346,8 @@ async function handle(req: NextRequest) {
     MAX_LIMIT,
   );
 
+  const jobName = jobNameForSport(url.searchParams.get("sport"));
+
   const startedAt = Date.now();
   const deadline = startedAt + TIME_BUDGET_MS;
 
@@ -483,6 +527,25 @@ async function handle(req: NextRequest) {
       { resolved: 0, failed: 0, teamLogos: 0 },
     );
 
+    /*
+     * Recorded whether or not any image resolved. A sweep that resolves nothing because every
+     * player already has a headshot is a HEALTHY run, so counting it as a non-event would make
+     * the probe red exactly when the backfill is complete.
+     */
+    await recordSyncJobRun(
+      { jobName, jobScope: perSport.map((s) => s.sport).join(",") || undefined, trigger: "cron" },
+      {
+        rowsWritten: totals.resolved + totals.teamLogos,
+        rowsSkipped: Math.max(0, sports.length - perSport.length),
+        warnings:
+          perSport.length < sports.length
+            ? [`budget stopped after ${perSport.length}/${sports.length} sports`]
+            : [],
+        metadata: { scope, limit, dryRun, failed: totals.failed },
+      },
+      Date.now() - startedAt,
+    );
+
     return NextResponse.json({
       ok: true,
       dryRun,
@@ -500,6 +563,13 @@ async function handle(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[cron/sync-player-images] failed:", message);
+    /*
+     * A FAILED fire still heartbeats. The probe answers "did the scheduler reach this route",
+     * and a route that throws every time is still being scheduled — suppressing the row here
+     * would report a loudly-failing job as a DEAD one, which sends the next person hunting the
+     * scheduler instead of reading the error.
+     */
+    await recordSyncJobRun({ jobName, trigger: "cron" }, { errors: [message] }, Date.now() - startedAt);
     return NextResponse.json(
       {
         ok: false,

@@ -2,7 +2,23 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 import { requireCronAuth } from '../_auth'
-import { reapAllAbandonedRuns } from '@/lib/production-health/syncJobRunTelemetry'
+import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+
+/**
+ * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
+ *
+ * ⚠ RECORDED WITH `recordSyncJobRun`, NEVER `withSyncJobRun`, AND THE DISTINCTION IS THE WHOLE
+ * REASON THIS IS SAFE. The note below rules out `withSyncJobRun` because it calls `startRun`
+ * first and `finishRun` later, so a sweep killed in between leaves behind the exact `running`
+ * row this route exists to remove — a reaper that can orphan itself. `recordSyncJobRun` writes a
+ * SINGLE already-terminal row, with startedAt and completedAt both set in one insert. There is no
+ * window in which it can leave a `running` row, so the objection does not reach it.
+ *
+ * Worth having because the alternative was no monitoring at all: this sweep is what restores the
+ * failed → very-stale escalation for every job that will never fire again, so a reaper that
+ * silently stops firing takes the whole board's escalation with it and nothing says so.
+ */
+const JOB = 'cron-reap-sync-runs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -36,6 +52,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
+  const startedAt = Date.now()
   const { available, reaped, cutoff } = await reapAllAbandonedRuns()
 
   // `reaped: 0` is ambiguous on its own — it reads the same for "nothing was stale" and "the
@@ -51,6 +68,15 @@ export async function GET(request: NextRequest) {
       { status: 503 },
     )
   }
+
+  // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
+  // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
+  // nothing: if the model is unreachable, this insert would fail anyway.
+  await recordSyncJobRun(
+    { jobName: JOB, trigger: 'cron' },
+    { rowsUpdated: reaped, metadata: { cutoff } },
+    Date.now() - startedAt,
+  )
 
   return NextResponse.json({ ok: true, reaped, cutoff })
 }

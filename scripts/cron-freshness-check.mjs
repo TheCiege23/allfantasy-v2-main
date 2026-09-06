@@ -92,6 +92,12 @@ export const PROBES = {
    */
   '/api/cron/import-schedules?rosters=1': { heartbeat: 'cron-import-schedules-rosters' },
   /*
+   * Same route, same reason, different mode: the RI profile pass writes sportsTeam and
+   * sports_players -- the columns import-players and ?rosters=1 already write, both more often --
+   * so only a per-mode heartbeat can tell whether THIS six-hourly fire happened.
+   */
+  '/api/cron/import-schedules?riProfiles=1': { heartbeat: 'cron-import-schedules-ri-profiles' },
+  /*
    * The four CFBD intel feeds, split onto their own tick 2026-08-28.
    *
    * ⚠ HEARTBEAT, NOT A TABLE PROBE, for the same reason as ?rosters=1 above:
@@ -142,11 +148,26 @@ export const PROBES = {
     column: 'updatedAt',
     seasonal: { sport: 'NFL' },
   },
+  /*
+   * The multi-sport sweep writes the same player_game_stats.updatedAt the NFL mode probes an hour
+   * earlier. The NFL probe is scoped with seasonal.sport; this pass covers MLB/NBA/NHL/NCAAB/SOCCER
+   * and needs its own identity rather than a differently-scoped table probe.
+   */
+  '/api/cron/import-player-game-stats?multiSport=1&days=3': { heartbeat: 'cron-import-player-game-stats-multisport' },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   /* ⚠ KEY MATCHES THE FULL PATH INCLUDING QUERY, so adding `&limit=500` to the cron orphaned
      this entry: the job read as unclassified AND the probe read as pointing at no cron. */
   '/api/cron/sync-player-images?sport=all&limit=500': { table: 'sports_core_player_images', column: 'fetched_at' },
+  /*
+   * The two in-season sweeps, added 2026-08-30 alongside the fantasy-position priority tier. They
+   * exist because `?sport=all` rotates the sport order by day-of-year, so NFL and NCAAF each got
+   * the budget one day in seven -- which is how 408 of 7,427 rostered NFL players ended up with a
+   * headshot while this job's TABLE probe stayed green all season. That is the precise failure a
+   * shared column hides, so these two get heartbeats keyed on the requested sport.
+   */
+  '/api/cron/sync-player-images?sport=NFL&limit=500&scope=players': { heartbeat: 'cron-sync-player-images-nfl' },
+  '/api/cron/sync-player-images?sport=NCAAF&limit=500&scope=players': { heartbeat: 'cron-sync-player-images-ncaaf' },
   /*
    * ⚠ `lastUpdatedAt`, NOT `createdAt`. This job UPSERTS, so `createdAt` freezes at first insert
    * and never moves again no matter how many times the row is refreshed.
@@ -193,6 +214,13 @@ export const PROBES = {
   // ran -- the shared-probe false green fixed for import-scores just above.
   // Every 6h, so 9h allows one missed fire before it goes red.
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
+  /*
+   * The X pass writes the same player_news.created_at as the base job above, which runs every 15
+   * minutes against this one's six hours -- so a table probe here is satisfied on every check by
+   * the base job. Zero new rows is ALSO legitimate here (X may have had nothing in the window),
+   * which is the second, independent reason an output probe cannot judge this mode.
+   */
+  '/api/cron/import-news?xnews=1&sport=NFL': { heartbeat: 'cron-import-news-xnews' },
 
   /*
    * WAS AN OUTPUT PROBE ON `notification_outbox.sentAt`, DELIBERATELY, AND THE REASONING IS KEPT
@@ -278,6 +306,17 @@ export const PROBES = {
    * __tests__/cron-heartbeat-route-contracts.test.ts asserts every probe has a route and
    * is what caught this.
    */
+  /*
+   * The reaper heartbeats through `recordSyncJobRun`, not `withSyncJobRun` — the route explains
+   * why at length: the wrapping helper opens a `running` row and closes it later, so a sweep
+   * killed in between would orphan the exact row it exists to remove. The single-insert recorder
+   * has no such window.
+   *
+   * Worth probing rather than excusing: this sweep is what restores failed → very-stale
+   * escalation for jobs that will never fire again, so if IT stops, every dead job on the board
+   * keeps reporting amber "appears stuck" instead of red, and nothing says so.
+   */
+  '/api/cron/reap-sync-runs': { heartbeat: 'cron-reap-sync-runs' },
   '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
   // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
   // the default path (flag off) recorded nothing and the job looked identical whether it ran
@@ -469,33 +508,20 @@ const HEARTBEAT_TIME_COLUMN = 'started_at'
  * red, and trains everyone to ignore the alarm. Both entries here were exactly that trap.
  */
 export const NO_PROBE = {
-  '/api/cron/import-player-game-stats?multiSport=1&days=3':
-    'writes the same player_game_stats.updatedAt the NFL job an hour earlier probes, so a table ' +
-    'probe here reports this one healthy on that run instead. The NFL probe is scoped with ' +
-    'seasonal.sport; this sweep covers the other sports and needs either its own heartbeat or a ' +
-    'probe scoped to a sport the NFL job never touches.',
-  '/api/cron/import-schedules?riProfiles=1':
-    'syncRollingInsightsTeamsToDb/PlayersToDb write sportsTeam and sportsPlayer — the same ' +
-    'sports_players that import-players and ?rosters=1 already write, and those run more often, so ' +
-    'any table probe here is satisfied by another job. Needs a heartbeat on the route, which is ' +
-    'the same fix ?rosters=1 is waiting on.',
-
   /*
-   * The two in-season image sweeps, added 2026-08-30 alongside the fantasy-position priority tier.
-   * They exist because `?sport=all` rotates the sport order by day-of-year, so NFL and NCAAF each
-   * got the budget one day in seven — which is how 408 of 7,427 rostered NFL players ended up with
-   * a headshot while this job's probe stayed green all season.
+   * The five TABLE-COLLISION jobs that used to live here -- the multi-sport game-log sweep, the
+   * Rolling Insights profile pass, the NFL and NCAAF image sweeps, and the X news pass -- were all
+   * unprobed for one shared reason: each is a query-param MODE of a route whose other mode already
+   * has a table probe, writing the same column. A table probe on any of them is satisfied by the
+   * sibling that runs more often, so all five could have died silently.
    *
-   * Unprobed for the ordinary reason: they write the same sports_core_player_images.fetched_at that
-   * `?sport=all` already probes an hour earlier, so a table probe here is satisfied by that job
-   * instead. Same shape as ?riProfiles=1 above, and the same fix — a per-route heartbeat.
+   * They are now instrumented and have moved up into PROBES as heartbeats.
+   *
+   * ⚠ THE NAME HAS TO CARRY THE MODE, OR THE FIX IS COSMETIC. One job name per ROUTE would move
+   * the collision out of the data table and into sync_job_runs unchanged -- `?sport=all` firing
+   * would still satisfy the probe for `?sport=NFL`. Each mode therefore has its own job_name, and
+   * those names are duplicated in the routes; the route-side comments say so.
    */
-  '/api/cron/sync-player-images?sport=NFL&limit=500&scope=players':
-    'writes the same sports_core_player_images.fetched_at that ?sport=all probes, so a table probe ' +
-    'here is satisfied by that job. Needs its own heartbeat.',
-  '/api/cron/sync-player-images?sport=NCAAF&limit=500&scope=players':
-    'writes the same sports_core_player_images.fetched_at that ?sport=all probes, so a table probe ' +
-    'here is satisfied by that job. Needs its own heartbeat.',
 
   // The eight CONDITIONAL jobs that used to live here -- waivers, redraft score-sync and
   // waiver-process, tournament automation, draft-tick, legacy-import-drain
@@ -508,26 +534,6 @@ export const NO_PROBE = {
   '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
 
   // ── HAS NEVER PRODUCED ANYTHING ──
-
-  /*
-   * Classified 2026-08-30. It had been an UNCLASSIFIED gap since it was added, which is the one
-   * state this module treats as a bug rather than a decision -- and it kept
-   * __tests__/cron-tier-and-freshness.test.ts red, which in turn made that whole guard easy to
-   * ignore.
-   *
-   * `?xnews=1` is a query-param mode of the SAME route as the base import-news job, and it writes
-   * the same player_news rows. The base job runs every 15 minutes against this one's 6 hours, so
-   * any table probe here is satisfied by the base job's writes long before this one is due --
-   * the shared-probe false green. Zero new rows is also a legitimate outcome (X may have had
-   * nothing in the window), so an output probe would be wrong even if it were not shared.
-   *
-   * The fix is the same one ?riProfiles=1 and ?rosters=1 are waiting on: a per-mode heartbeat.
-   * Its notification dispatch half is separately covered now -- see the outbox relay probe above.
-   */
-  '/api/cron/import-news?xnews=1&sport=NFL':
-    'a query-param mode of the import-news route writing the same player_news the base job writes ' +
-    'every 15 minutes, so a table probe here is satisfied by that job. Zero new rows is also ' +
-    'legitimate (X may have nothing in the window). Needs a per-mode heartbeat.',
 
   /*
    * The backfill sweeper, added with the route in 5e0624675 / 4b7a82d1c.
