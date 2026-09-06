@@ -3,7 +3,8 @@
  *
  * ⚠ THIS DOMAIN DECLARES ONE SOURCE, AND THE TWO IT OMITS ARE THE POINT.
  *
- * `resolveNflRedraftDraftRuntime` loads three things. Only one is cacheable:
+ * `resolveNflRedraftDraftRuntime` (deleted 2026-09-06) loaded three things. Only one is cacheable,
+ * and the reasoning still governs this domain's shape, so it is kept rather than deleted with it:
  *
  *   RULES   `resolveCanonicalLeagueRules(leagueId)` — one league row plus six config reads in
  *           parallel, keyed on nothing but the league, changing a few times a season. Cacheable,
@@ -20,10 +21,16 @@
  * the failure this codebase keeps finding — a confident answer resting on a fact that is no
  * longer true.
  *
- * ⚠ NOTHING CALLS THE DRAFT RUNTIME YET. `resolveNflRedraftDraftRuntime` has zero invocations and
- * nothing imports `@/lib/draft-runtime` (verified with a positive control). The seam and the feed
- * are correct and unused; that is stated here rather than implied, so nobody reads the existence
- * of Draft OS as evidence the draft path is live.
+ * 🛑 THERE IS NO DRAFT RUNTIME RESOLVER ANY MORE. `resolveNflRedraftDraftRuntime` had zero
+ * invocations and was DELETED on 2026-09-06. This suite is now the ONLY importer of
+ * `createDraftOsLoaders`, so the seam it pins is exercised by nothing but this file.
+ *
+ * ⚠ AND THE OLD WORDING HERE — "nothing imports `@/lib/draft-runtime`" — WAS TOO BROAD EVEN THEN.
+ * That directory still holds `canonicalDraftRuntime.ts`, which IS imported: by
+ * `lib/redraft-season-simulation/` and by `__tests__/g34-draft-runtime.test.ts`. The precise claim
+ * is about the RESOLVER, never the directory. Stated so nobody reads the existence of Draft OS as
+ * evidence the draft path is live, and so nobody deletes `lib/draft-runtime/` on the strength of a
+ * sentence that was measuring something narrower than it said.
  */
 import { describe, it, expect, vi } from 'vitest'
 

@@ -39,9 +39,14 @@ import { createProjectionOs, canonicalProjectionSource } from '@/lib/decision-os
  * ⚠ AND THIS FILE'S FIRST VERSION OVERCLAIMED WHAT THAT SAVES. It said "seven queries on every
  * draft-runtime resolve, which during a live draft is every poll and every pick", quoting
  * `draft-os/index.ts`. The figure is real; the traffic is not. `resolveNflRedraftDraftRuntime` —
- * the only consumer of `draftRulesSource` — has **zero callers**. No route, no component, no
- * service; the sole reference in the tree is `__tests__/draft-os.test.ts`. Live drafts run on
- * `lib/live-draft-engine/DraftSessionService` and never reach it.
+ * the only consumer of `draftRulesSource` — had **zero callers**, and was DELETED on 2026-09-06.
+ * Live drafts run on `lib/live-draft-engine/DraftSessionService` and never reached it.
+ *
+ * 🛑 SO THIS CRON NOW WARMS A FACT WITH NO READER AT ALL — not "a reader nobody calls", which is
+ * what this comment used to describe. The warm is still correct and still cheap, and removing it
+ * is a live-behaviour decision that belongs to whoever owns this route rather than to a cleanup
+ * pass; see the retirement record in `lib/decision-os/draft-os/index.ts`. Stated here so the next
+ * person reading this file does not have to go and re-derive it.
  *
  * So today this cron warms a fact that is true, cheap, and read by nothing. That is the inverse of
  * the `ingestCFBDStats` failure this repo records — not a surface reading a table nobody writes,
@@ -334,7 +339,7 @@ async function run(): Promise<RefreshCounts> {
    * `derive` satisfiable from a league id alone, a `scopeKey` of the league id alone, and a TTL
    * long enough that a 30-minute fire can actually keep it warm.
    *
-   *   draft   rules     ✅ but read by nothing — resolveNflRedraftDraftRuntime has no callers
+   *   draft   rules     ✅ but read by nothing — its only consumer was deleted 2026-09-06
    *   waiver  settings  ✅ and the reason 1.1b existed: its derive used to need a userId
    *   trade   settings  ❌ keyed `${leagueId}:${seasonId}`; this walk has no season
    *   league  rules     ❌ 60s TTL — expired long before the next fire; read-through by nature
