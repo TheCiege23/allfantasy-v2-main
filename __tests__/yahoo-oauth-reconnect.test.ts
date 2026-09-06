@@ -13,9 +13,13 @@ vi.mock('server-only', () => ({}))
  *     Yahoo token refresh failed: {"error":"invalid_grant",
  *     "error_description":"Invalid refresh token"}
  *
- * while the dead credential stayed in the database. `getYahooAuthForUser` gates
+ * while the dead credential stayed in the database. `loadYahooCredential` gates
  * on `oauthToken` being present, so the connection kept reading as live and kept
  * failing identically, with nothing prompting a reconnect.
+ *
+ * The refresh moved to `lib/yahoo/yahooCredentialStore.ts` when the two Yahoo
+ * credential stores were reconciled; these tests drive it through the fetch
+ * service's public API, so they cover it wherever it lives.
  *
  * The refresh only runs after an API call 401s, so these tests drive both legs.
  */
