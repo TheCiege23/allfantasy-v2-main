@@ -44,10 +44,23 @@ describe('resolveSourceScreenLink', () => {
     expect(waivers).toMatchObject({ href: 'https://sleeper.com/leagues/123456/players', verified: true, screen: 'waivers' })
   })
 
-  /* ⚠ THE GATE. Unverified means the league page, with the candidate carried, never used. */
-  it('an unverified format falls back to the league page and carries its candidate', () => {
+  /*
+   * ⚠ THE GATE. Unverified means the league page, with the candidate carried,
+   * never used. Sleeper's trade screen was the last unverified launch format
+   * and it flipped on 2026-09-06 (Guap opened it on league 1313566817444167680
+   * and landed on the trade screen), so no live format exercises the gate
+   * today — the no-format branch below is the nearest live neighbour. Adding
+   * a provider screen with `verified: false` must come with a test here.
+   */
+  it('Sleeper trade is verified and lands on the trade screen', () => {
     const trade = resolveSourceScreenLink({ ...sleeper, screen: 'trade' })
-    expect(trade).toMatchObject({ href: 'https://sleeper.com/leagues/123456/league', verified: false, destinationType: 'league', candidate: 'https://sleeper.com/leagues/123456/trades' })
+    expect(trade).toMatchObject({ href: 'https://sleeper.com/leagues/123456/trades', verified: true, screen: 'trade', destinationType: 'action', candidate: null })
+  })
+
+  it('a provider with no screen formats falls back to its approved page, unverified, with nothing to carry', () => {
+    const trade = resolveSourceScreenLink({ platform: 'mfl', sourceLeagueId: '123', leagueName: 'Old Guard', season: 2026, screen: 'trade' })
+    expect(trade).toMatchObject({ verified: false, screen: 'trade', candidate: null })
+    expect(trade.href).toMatch(/^https:\/\/www\.myfantasyleague\.com/)
   })
 
   /*
@@ -138,7 +151,8 @@ describe('resolveSourceScreenLink', () => {
 describe('VERIFIED_SCREENS census', () => {
   it('pins which formats are live destinations today', () => {
     expect(VERIFIED_SCREENS).toEqual({
-      sleeper: ['league', 'lineup', 'waivers'],
+      // Sleeper trade verified 2026-09-06 by Guap on league 1313566817444167680 (roster 1).
+      sleeper: ['league', 'lineup', 'waivers', 'trade'],
       // Verified 2026-09-05 by Guap on league 919055222 / team 7 (ESPN) and 1361311 / team 10 (Yahoo).
       // ESPN "trade" is the partner's team page — /football/trade 404s.
       espn: ['league', 'lineup', 'waivers', 'trade'],

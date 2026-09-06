@@ -149,8 +149,11 @@ const PROVIDERS: Record<SourcePlatform, ProviderConfig> = {
       // user's own team, so no team id is needed.
       lineup: { verified: true, build: ({ leagueId }) => `https://sleeper.com/leagues/${encodeURIComponent(leagueId)}/team` },
       waivers: { verified: true, build: ({ leagueId }) => `https://sleeper.com/leagues/${encodeURIComponent(leagueId)}/players` },
-      // Candidate only — Sleeper's trade screen path has not been opened on a real league.
-      trade: { verified: false, build: ({ leagueId }) => `https://sleeper.com/leagues/${encodeURIComponent(leagueId)}/trades` },
+      // VERIFIED 2026-09-06: Guap opened it on his own league 1313566817444167680
+      // ($20 Pirate League, roster 1) and landed on Sleeper's trade screen. No
+      // team id in the path — the screen opens on the signed-in user's side and
+      // the partner is picked inside it, so `partnerTeamId` is not needed here.
+      trade: { verified: true, build: ({ leagueId }) => `https://sleeper.com/leagues/${encodeURIComponent(leagueId)}/trades` },
     },
   },
   espn: {

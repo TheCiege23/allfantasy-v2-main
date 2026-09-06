@@ -134,8 +134,10 @@ export function claimLink(league: LinkLeague): PlatformLink | null {
  * Where a trade for a player another manager owns starts.
  *
  * Always AllFantasy's own trade screen for that league — it is the one that
- * grades the offer — with the platform's trade screen (or its league page,
- * while the trade format is unverified) as the place the trade is sent.
+ * grades the offer — with the platform's trade screen as the place the trade
+ * is sent. Every launch provider's trade format is verified as of 2026-09-06
+ * (Sleeper was the last); an unverified one would fall back to its league
+ * page with the candidate carried, per the resolver's gate.
  */
 export function tradeLink(league: LinkLeague): { here: PlatformLink; there: PlatformLink | null } {
   const here = internal(`/core/trades?league=${encodeURIComponent(league.id)}`, 'Trades')
