@@ -431,12 +431,31 @@ async function handle(req: NextRequest) {
               continue
             }
             try {
-              const teams = await syncRollingInsightsTeamsToDb({ sport: s })
+              /*
+               * 🛑 THE `exhausted()` CHECKS BELOW AND ABOVE WERE NOT ENOUGH, AND THIS ROUTE 502'd
+               * PROVING IT. Measured from the slow-tier dispatcher log, 2026-09-06 09:20:37Z:
+               *
+               *     /api/cron/import-schedules?riProfiles=1 ... FAIL HTTP 502 (300049ms)
+               *
+               * A budget checked BEFORE a call cannot bound the call. With a second left the test
+               * passes, and each sweep then loops once per league at 30s (teams) or 45s (players)
+               * with no ceiling of its own — soccer is several leagues, so one sport is several
+               * minutes. `runBudget` says it bounds the NUMBER of units, not the duration of one;
+               * this is that case, and the edge answers 502 at 300s regardless of maxDuration.
+               *
+               * Passing the deadline down clamps each request to the time actually left, so the
+               * budget becomes a real ceiling instead of a starting gun.
+               */
+              const deadlineAt = Date.now() + budget.remainingMs()
+              const teams = await syncRollingInsightsTeamsToDb({ sport: s, deadlineAt })
               // Re-checked before the second, much larger call — a player sweep started at 239s is
               // exactly how this route reached the edge before.
               const players = budget.exhausted()
                 ? null
-                : await syncRollingInsightsPlayersToDb({ sport: s })
+                : await syncRollingInsightsPlayersToDb({
+                    sport: s,
+                    deadlineAt: Date.now() + budget.remainingMs(),
+                  })
 
               const entry: Record<string, unknown> = {
                 teams: teams.written,
@@ -450,6 +469,12 @@ async function handle(req: NextRequest) {
                 entry.byLeague = { teams: teams.byLeague, players: players?.byLeague }
               }
               if (players == null) entry.playersDeferredForBudget = true
+              /*
+               * Surfaced per sport, because a league dropped for time and a league the vendor had
+               * nothing for are different facts and the response is the only place they separate.
+               */
+              const deferredLeagues = [...teams.deferredLeagues, ...(players?.deferredLeagues ?? [])]
+              if (deferredLeagues.length) entry.deferredLeagues = deferredLeagues
               if (teams.notModified || players?.notModified) entry.notModified = true
               const errs = [...teams.errors, ...(players?.errors ?? [])]
               if (errs.length) entry.errors = errs.slice(0, 5)

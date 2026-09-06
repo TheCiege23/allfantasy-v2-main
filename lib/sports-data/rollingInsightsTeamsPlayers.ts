@@ -63,6 +63,29 @@ function leaguesFor(sport: string): Array<RollingInsightsSoccerLeagueCode | unde
   return sport.trim().toUpperCase() === 'SOCCER' ? [...RI_SOCCER_LEAGUES] : [undefined]
 }
 
+/**
+ * How long the next per-league request may take, or `null` if there is no time left.
+ *
+ * 🛑 THIS EXISTS BECAUSE A BUDGET CHECKED *BEFORE* A CALL DOES NOT BOUND THE CALL.
+ * `/api/cron/import-schedules?riProfiles=1` already runs `createRunBudget()` (240s) and tests
+ * `budget.exhausted()` before each sport AND again before the player sweep. It still returned
+ * **HTTP 502 at 300,049ms** on 2026-09-06 — the platform edge, measured from the dispatcher log.
+ * With 1s left the check passes, and the sweep then runs for as long as its own timeouts allow.
+ *
+ * The run budget bounds the NUMBER of units, never the duration of one; that is stated in
+ * `lib/cron/runBudget.ts` and this is the case it names. Clamping the per-request timeout to the
+ * time actually remaining is what turns the budget into a real ceiling.
+ *
+ * ⚠ Returns `null` rather than 0 — a 0ms timeout is an immediately-aborted request that reads as
+ * a provider failure, which is a different and misleading thing from "we ran out of time".
+ */
+export function remainingFor(deadlineAt: number | undefined, cap: number): number | null {
+  if (deadlineAt == null) return cap
+  const left = deadlineAt - Date.now()
+  if (left <= 1_000) return null
+  return Math.min(cap, left)
+}
+
 export interface RiTeamSyncResult {
   sport: string
   fetched: number
@@ -70,6 +93,8 @@ export interface RiTeamSyncResult {
   withLogo: number
   /** Per-league tallies for soccer; a single `all` entry otherwise. */
   byLeague: Record<string, { fetched: number; written: number }>
+  /** Leagues not attempted because the run budget ran out. Reported, never silently dropped. */
+  deferredLeagues: string[]
   unsupported: boolean
   notModified: boolean
   errors: string[]
@@ -86,6 +111,12 @@ export async function syncRollingInsightsTeamsToDb(opts: {
   sport: string
   fetchImpl?: typeof fetch
   now?: Date
+  /**
+   * 🛑 WITHOUT THIS, ONE SPORT CAN OUTLAST THE WHOLE CRON. See the note on
+   * `deadlineFor` below — a caller's run budget is checked BEFORE this function, and this
+   * function then loops once per league with no bound of its own.
+   */
+  deadlineAt?: number
 }): Promise<RiTeamSyncResult> {
   const sport = opts.sport.trim().toUpperCase()
   const result: RiTeamSyncResult = {
@@ -94,6 +125,7 @@ export async function syncRollingInsightsTeamsToDb(opts: {
     written: 0,
     withLogo: 0,
     byLeague: {},
+    deferredLeagues: [],
     unsupported: false,
     notModified: false,
     errors: [],
@@ -110,12 +142,25 @@ export async function syncRollingInsightsTeamsToDb(opts: {
 
   for (const league of leaguesFor(sport)) {
     const label = league ?? 'all'
+
+    /*
+     * ⚠ SOCCER IS SEVERAL LEAGUES, SO "ONE SPORT" IS NOT ONE REQUEST. A caller's run budget is
+     * checked before this function is entered; from there this loop was unbounded, and at 30s a
+     * league it can outlast whatever remained. Deferred leagues are REPORTED — an omitted league
+     * would be indistinguishable from a league the vendor had nothing for.
+     */
+    const budgetMs = remainingFor(opts.deadlineAt, 30_000)
+    if (budgetMs == null) {
+      result.deferredLeagues.push(label)
+      continue
+    }
     result.byLeague[label] = { fetched: 0, written: 0 }
 
     const { rows, notModified, error } = await riFetchRows('team_info', {
       sport,
       league,
       fetchImpl: opts.fetchImpl,
+      timeoutMs: budgetMs,
     })
     if (notModified) result.notModified = true
     if (error) result.errors.push(`team-info ${label}: ${error}`)
@@ -173,6 +218,8 @@ export interface RiPlayerSyncResult {
   written: number
   withImage: number
   byLeague: Record<string, { fetched: number; written: number }>
+  /** Leagues not attempted because the run budget ran out. Reported, never silently dropped. */
+  deferredLeagues: string[]
   unsupported: boolean
   notModified: boolean
   errors: string[]
@@ -191,6 +238,8 @@ export async function syncRollingInsightsPlayersToDb(opts: {
   sport: string
   fetchImpl?: typeof fetch
   now?: Date
+  /** See `syncRollingInsightsTeamsToDb`. Per-league loop, 45s a call, no bound without this. */
+  deadlineAt?: number
 }): Promise<RiPlayerSyncResult> {
   const sport = opts.sport.trim().toUpperCase()
   const result: RiPlayerSyncResult = {
@@ -199,6 +248,7 @@ export async function syncRollingInsightsPlayersToDb(opts: {
     written: 0,
     withImage: 0,
     byLeague: {},
+    deferredLeagues: [],
     unsupported: false,
     notModified: false,
     errors: [],
@@ -215,13 +265,20 @@ export async function syncRollingInsightsPlayersToDb(opts: {
 
   for (const league of leaguesFor(sport)) {
     const label = league ?? 'all'
+
+    // Same bound as the team sweep, and this is the larger of the two — 45s a league.
+    const budgetMs = remainingFor(opts.deadlineAt, 45_000)
+    if (budgetMs == null) {
+      result.deferredLeagues.push(label)
+      continue
+    }
     result.byLeague[label] = { fetched: 0, written: 0 }
 
     const { rows, notModified, error } = await riFetchRows('player_info', {
       sport,
       league,
       fetchImpl: opts.fetchImpl,
-      timeoutMs: 45_000,
+      timeoutMs: budgetMs,
     })
     if (notModified) result.notModified = true
     if (error) result.errors.push(`player-info ${label}: ${error}`)
