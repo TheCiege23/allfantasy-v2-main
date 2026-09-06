@@ -88,20 +88,46 @@ describe('🛑 what the backfill would WRITE, not what it would print', () => {
     expect(k!.froms.sort()).toEqual(['Kicker', 'Place Kicker'])
   })
 
-  it('never touches a row that is already a code, or a non-football sport', () => {
+  it('never touches a row that is ALREADY a code', () => {
     const touched = planUpdates(ROWS).flatMap((g) => g.ids)
     expect(touched).not.toContain('f') // already 'WR'
-    expect(touched).not.toContain('g') // MLB Center — C means CATCHER there
-    expect(touched).not.toContain('h') // NHL Center — left alone by design
+  })
+
+  it('🛑 MLB "Center" is planned as CF, NEVER as C — the corruption this suite exists for', () => {
+    /*
+     * ⚠ THIS ASSERTION USED TO BE "not touched at all", AND THE SAFETY PROPERTY IS UNCHANGED —
+     * only the mechanism moved. While there was one football table the sole available target
+     * was `C`, and folding MLB "Center" to it would relabel centre FIELDERS as catchers (627
+     * rows already hold C = catcher). Now MLB has its own table, so the correct target exists.
+     *
+     * What must never change is the OUTPUT: MLB "Center" is not a catcher. Asserting the
+     * positive value is a stronger guard than asserting absence, because a planner that
+     * silently stopped planning MLB at all would still have passed the old version.
+     */
+    const plan = planUpdates(ROWS)
+    const g = plan.find((p) => p.ids.includes('g'))
+    expect(g, 'MLB Center should now be planned').toBeTruthy()
+    expect(g!.to).toBe('CF')
+    expect(g!.to).not.toBe('C')
+  })
+
+  it('NHL "Center" is planned as C — correct in that sport, and now folded', () => {
+    const h = planUpdates(ROWS).find((p) => p.ids.includes('h'))
+    expect(h?.to).toBe('C')
   })
 
   it('[control] the plan is non-empty and would really write — this is not vacuously green', () => {
     /*
      * Without this, every assertion above would also hold for a planner that returned
      * nothing at all, which is the failure mode a "no bad values were written" test invites.
+     *
+     * ⚠ 7 rather than 5 since NBA/NHL/MLB gained tables: the two non-football rows that were
+     * deliberately skipped are now deliberately folded. The number is asserted rather than
+     * loosened to `toBeGreaterThan` precisely so a future change to the fixture has to be
+     * looked at rather than absorbed.
      */
     const plan = planUpdates(ROWS)
-    expect(plan.flatMap((g) => g.ids)).toHaveLength(5)
+    expect(plan.flatMap((g) => g.ids)).toHaveLength(7)
   })
 })
 

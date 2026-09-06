@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { providerPositionCode, isLongFormPosition } from '@/lib/sports-data/providerPositionCode'
+import {
+  isLongFormPosition,
+  POSITION_CODE_TABLES_FOR_TEST,
+  providerPositionCode,
+} from '@/lib/sports-data/providerPositionCode'
 import { foldLongPosition } from '@/lib/core-app/positionLabels'
 
 /**
@@ -121,14 +125,39 @@ describe('provider positions fold to the code the rest of the table already uses
      * else writes would leave the column split three ways instead of two. This list was
      * counted on production across sleeper + rolling_insights for NFL.
      */
-    const STORED = new Set([
-      'WR', 'LB', 'DB', 'RB', 'CB', 'TE', 'DE', 'DT', 'OT', 'DL', 'QB', 'OL', 'G', 'C',
-      'OG', 'K', 'OLB', 'P', 'T', 'S', 'LS', 'SS', 'FB', 'FS', 'ILB', 'NT',
-    ])
-    const src = readFileSync(resolve(process.cwd(), 'lib/sports-data/providerPositionCode.ts'), 'utf8')
-    const targets = [...src.matchAll(/:\s*'([A-Z]{1,3})',/g)].map((m) => m[1]!)
-    expect(targets.length).toBeGreaterThan(20)
-    expect(targets.filter((t) => !STORED.has(t))).toEqual([])
+    /*
+     * ⚠ PER SPORT, AND CHECKED AGAINST THE REAL MAPPING RATHER THAN THE SOURCE TEXT. This used
+     * to regex-scrape the file for `: 'XX',` and compare every hit against the NFL code set.
+     * That worked while there was one table; the moment NBA/NHL/MLB tables existed it began
+     * checking `1B` and `LW` against football codes and failed for the wrong reason.
+     *
+     * Each list below was counted on production for THAT sport.
+     */
+    const STORED: Record<string, Set<string>> = {
+      NFL: new Set([
+        'WR', 'LB', 'DB', 'RB', 'CB', 'TE', 'DE', 'DT', 'OT', 'DL', 'QB', 'OL', 'G', 'C',
+        'OG', 'K', 'OLB', 'P', 'T', 'S', 'LS', 'SS', 'FB', 'FS', 'ILB', 'NT',
+      ]),
+      // NBA: SG 400 · PG 383 · PF 380 · SF 294 · C 292 · G 61 · F 20 · FC 2
+      NBA: new Set(['SG', 'PG', 'PF', 'SF', 'C', 'G', 'F', 'FC']),
+      // NHL: D 1334 · C 991 · LW 685 · RW 634 · G 471
+      NHL: new Set(['D', 'C', 'LW', 'RW', 'G']),
+      // MLB: P 3375 · C 627 · SS 593 · 2B 444 · CF 400 · OF 395 · 3B 384 · 1B 372 · LF 323 ·
+      //      RF 304 · DH 52 · IF 47
+      MLB: new Set(['P', 'C', 'SS', '2B', 'CF', 'OF', '3B', '1B', 'LF', 'RF', 'DH', 'IF']),
+    }
+    STORED.NCAAF = STORED.NFL!
+
+    let checked = 0
+    for (const [sport, table] of Object.entries(POSITION_CODE_TABLES_FOR_TEST)) {
+      const stored = STORED[sport]
+      expect(stored, `no measured code set for ${sport}`).toBeTruthy()
+      const invented = [...new Set(Object.values(table))].filter((t) => !stored!.has(t))
+      expect(invented, `${sport} folds to codes nothing else stores`).toEqual([])
+      checked += Object.keys(table).length
+    }
+    // Control: the loop must have actually examined mappings, not iterated an empty object.
+    expect(checked).toBeGreaterThan(60)
   })
 })
 
@@ -139,31 +168,87 @@ describe('🛑 the table is FOOTBALL-ONLY, because the same word means different
    * and would have run on every sport.
    */
 
-  it('🛑 MLB "Center" is NOT folded — C means CATCHER there', () => {
+  it('🛑 ONE WORD, THREE ANSWERS — this is why the tables are per-sport', () => {
     /*
-     * The one that would have corrupted data. MLB stores C = catcher (627 rows on
-     * production) and has 2 players stored as "Center", meaning centre FIELDER. Folding
-     * them to C relabels two outfielders as catchers: a wrong value that looks completely
-     * valid and would never be questioned.
+     * The assertion that would have caught the original hazard, now stated positively. These
+     * three cannot be served by one shared table, and any future "simplification" that merges
+     * them reintroduces the exact corruption this module was written to prevent:
+     *
+     *     MLB  "Center"  is a centre FIELDER  -> CF   (C is the catcher, 627 rows)
+     *     NBA  "Center"                       -> C
+     *     NHL  "Center"                       -> C
+     *     NFL  "Center"  is an offensive lineman -> C
+     *
+     * ⚠ THIS TEST PREVIOUSLY ASSERTED THAT MLB "Center" WAS NOT FOLDED AT ALL. That was the
+     * right call while there was only a football table — the available target was `C`, and
+     * folding to it would have relabelled outfielders as catchers. With an MLB table the
+     * correct target exists, so the SAFETY PROPERTY is unchanged and only the mechanism moved:
+     * MLB "Center" still never becomes `C`.
      */
-    expect(providerPositionCode('Center', 'MLB')).toBe('Center')
+    expect(providerPositionCode('Center', 'MLB')).toBe('CF')
+    expect(providerPositionCode('Center', 'MLB')).not.toBe('C')
+    expect(providerPositionCode('Center', 'NBA')).toBe('C')
+    expect(providerPositionCode('Center', 'NHL')).toBe('C')
     expect(providerPositionCode('Center', 'NFL')).toBe('C')
   })
 
-  it('🛑 NBA "Guard" is NOT folded — NBA has no plain G, it stores PG and SG', () => {
-    // Folding to `G` would invent a THIRD vocabulary in the column this exists to unify.
-    expect(providerPositionCode('Guard', 'NBA')).toBe('Guard')
+  it('🛑 NBA "Guard" folds to G — RE-MEASURED, because the old premise expired', () => {
+    /*
+     * This test used to assert `Guard` was NOT folded, on the stated grounds that "NBA has no
+     * plain G, it stores PG and SG". That was true when measured and is no longer: production
+     * 2026-09-06 carries NBA `G` (61 rows) and `F` (20), both from rolling_insights. So the
+     * target exists and no third vocabulary is created.
+     *
+     * ⚠ Recorded rather than quietly flipped, because "the reason a rule existed has expired"
+     * is a different justification from "the rule was wrong", and only the first one licenses
+     * changing it.
+     */
+    expect(providerPositionCode('Guard', 'NBA')).toBe('G')
+    expect(providerPositionCode('Forward', 'NBA')).toBe('F')
     expect(providerPositionCode('Guard', 'NFL')).toBe('G')
   })
 
-  it('⚠ NHL "Center" is left alone even though C would happen to be right there', () => {
+  it('🛑 NHL wingers and forwards are STILL not folded — the target is unknowable', () => {
     /*
-     * 269 NHL rows. C IS the NHL code, so folding would be correct — and it is still not
-     * done, because "right by coincidence in two sports" is what made the MLB case look
-     * safe. One sport's column staying slightly split is cheaper than a confidently wrong
-     * value in another.
+     * `Winger` and `Wing` do not say WHICH side, so folding to LW or RW would invent the
+     * information. And NHL stores no `F` at all, so `Forward` (105 rows) has nowhere to land —
+     * folding it would create the third vocabulary this module exists to prevent.
+     *
+     * These are the cases that separate "unify a spelling" from "guess a value".
      */
-    expect(providerPositionCode('Center', 'NHL')).toBe('Center')
+    expect(providerPositionCode('Winger', 'NHL')).toBe('Winger')
+    expect(providerPositionCode('Wing', 'NHL')).toBe('Wing')
+    expect(providerPositionCode('Forward', 'NHL')).toBe('Forward')
+    // The ones that DO say which side are folded.
+    expect(providerPositionCode('Left Wing', 'NHL')).toBe('LW')
+    expect(providerPositionCode('Right Winger', 'NHL')).toBe('RW')
+  })
+
+  it('🛑 MLB starting/relief pitchers are NOT folded — P would destroy the role', () => {
+    /*
+     * MLB stores no SP or RP, so the only available target is `P`. That unifies the query and
+     * DISCARDS the distinction on 111 rows. Losing information is not the same as unifying a
+     * spelling, and this module only does the latter.
+     */
+    expect(providerPositionCode('Starting Pitcher', 'MLB')).toBe('Starting Pitcher')
+    expect(providerPositionCode('Relief Pitcher', 'MLB')).toBe('Relief Pitcher')
+    expect(providerPositionCode('Pitcher', 'MLB')).toBe('P')
+  })
+
+  it('⚠ a sport with NO table folds nothing — the gate is structural', () => {
+    // SOCCER carries three vocabularies and granular roles; folding Centre-Back to DEF would
+    // DESTROY information rather than unify it. NCAAB needs nothing: 6 long-form rows.
+    expect(providerPositionCode('Centre-Back', 'SOCCER')).toBe('Centre-Back')
+    expect(providerPositionCode('Central Midfield', 'SOCCER')).toBe('Central Midfield')
+    expect(providerPositionCode('Point Guard', 'NCAAB')).toBe('Point Guard')
+  })
+
+  it('⚠ non-players are never folded, in any sport', () => {
+    for (const sport of ['NBA', 'NHL', 'MLB', 'NFL']) {
+      expect(providerPositionCode('Assistant Coach', sport)).toBe('Assistant Coach')
+    }
+    expect(providerPositionCode('General Manager', 'NBA')).toBe('General Manager')
+    expect(providerPositionCode('Owner', 'NBA')).toBe('Owner')
   })
 
   it('NCAAF IS folded — it is football and shares the NFL code set', () => {
