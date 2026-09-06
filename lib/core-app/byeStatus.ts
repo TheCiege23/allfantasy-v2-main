@@ -5,17 +5,28 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
  * schedule we hold — three different claims, kept apart on purpose.
  *
  * ⚠ THERE IS NO BYE COLUMN TO READ. `fantasy_players.bye_week` exists in the
- * schema and holds ZERO NFL rows with no writer (measured 2026-09-06), and the
- * season schedule on disk covers only the current week (16 games, all 32
- * clubs, Week 1). So a bye can only be inferred from a club's absence from
- * the week's fixture map — and an absent club is ALSO what a missing fixture
- * looks like. The rule below says "bye" only when the absence has the shape
- * of a real NFL bye slate: a bye week (5–14), an even number of absent clubs,
- * between two and six of them. Anything else reads "no game on the schedule",
- * which is what we know.
+ * schema and holds ZERO NFL rows with no writer (measured 2026-09-06). So a
+ * bye is inferred from a club's absence from the week's fixture map — and an
+ * absent club is ALSO what a missing fixture looks like. The rule below says
+ * "bye" only when the absence has the shape of a real NFL bye slate: a bye
+ * week (5–14), an even number of absent clubs, between two and six of them.
+ * Anything else reads "no game on the schedule", which is what we know.
  *
- * A false "bye" is still possible if a fixture is missing in a bye week; the
- * shape check narrows it, it does not close it. Client-safe.
+ * MEASURED AGAINST THE REAL SEASON (2026-09-06, production, thesportsdb rows,
+ * distinct clubs per week): weeks 5–14 hold 30/28/28/28/30/28/26/32/28/30
+ * clubs — every absence even and inside the window, week 12 a full slate —
+ * so the rule fires on every real bye week and declines the one that is not.
+ * An earlier note here said the schedule on disk covered only Week 1; that
+ * came from a query filtered to one provider, and it was wrong: the season
+ * is on file, weeks 1–18. The conservative "no game on the schedule" reading
+ * remains the fallback for a gap, not the common case.
+ *
+ * ⚠ CLUB VOCABULARY. Across ALL providers the season's rows carry more than
+ * 32 spellings of the 32 clubs (week 4 shows 84 home/away slots against a
+ * ceiling of 64); the map is built through normalizeTeamAbbrev so spellings
+ * fold, but a spelling it cannot fold would make a club look absent and
+ * manufacture a bye. Weeks 5–14 carry only rolling_insights and thesportsdb
+ * rows, which share one set of full club names. Client-safe.
  */
 
 export const NFL_CLUBS = 32
