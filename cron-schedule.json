@@ -129,6 +129,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/keeper/session",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/redraft/ai/weekly-recap",
       "schedule": "0 9 * * 2"
     },

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import { resolveNflRedraftRosterRuntime } from '@/lib/roster-runtime/resolveNflRedraftRosterRuntime'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { generateNflRedraftPlayoffRuntimeBracket } from '@/lib/playoff-runtime'
 import {
   buildCanonicalScheduleRuntimeState,
   buildScheduleGeneratedEvents,
@@ -363,6 +364,29 @@ export async function advanceNflRedraftScheduleWeek(input: {
 
   if (input.action === 'complete_week' || input.action === 'advance_week') {
     await updateStandings(input.seasonId, input.week ?? resolved.state.currentWeek)
+  }
+
+  // The commissioner already made the "regular season is over" call by
+  // advancing past the final week (itself gated on every matchup being
+  // finalized, above) — auto-generating the bracket here just removes a
+  // second, redundant click for the default case. It is not locked, so a
+  // commissioner can still `regenerate_bracket` before playoffs actually
+  // begin if standings need correcting. Previously this transition fired and
+  // nothing downstream ever read it: a season could sit at
+  // `regular_season_complete` indefinitely with no bracket until someone
+  // remembered to generate one by hand.
+  if (transition.nextStatus === 'regular_season_complete' && resolved.state.status !== 'regular_season_complete') {
+    try {
+      await generateNflRedraftPlayoffRuntimeBracket({
+        seasonId: input.seasonId,
+        actorUserId: input.actorUserId,
+      })
+    } catch (error) {
+      console.error('[schedule-runtime] auto playoff bracket generation failed', {
+        seasonId: input.seasonId,
+        error,
+      })
+    }
   }
 
   if (input.commissionerOverride) {

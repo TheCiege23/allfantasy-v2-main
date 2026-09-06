@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { calculateScoreFromSportConfig } from './scoringEngine'
+import { pickFreshestSourceRows } from '@/lib/sports-live-scores-service'
 import {
   findCachedWeekPayload,
   isTeamDefenseRow,
@@ -159,10 +160,16 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const teamDefensePlayerIds = playerIds.filter((id) => isTeamDefenseRow(id, positionByPlayer.get(id) ?? null))
   const gameByTeam = new Map<string, { homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null }>()
   if (teamDefensePlayerIds.length > 0) {
-    const games = await prisma.sportsGame.findMany({
+    const rawGames = await prisma.sportsGame.findMany({
       where: { sport: { in: candidateSportKeys(sport) }, season: seasonYear, week },
-      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true },
+      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, source: true, fetchedAt: true },
     })
+    // A fixture can carry 3-4 rows here, one per provider feed. Without
+    // dedup, whichever row `findMany` happened to return last for a team wins
+    // — possibly a stale or still-scoreless duplicate from a different
+    // source than the one that actually has the final score. Same fix as
+    // `lib/live/liveScoresPage.ts`: trust one source for the whole batch.
+    const games = pickFreshestSourceRows(rawGames)
     for (const g of games) {
       const home = String(g.homeTeam ?? '').trim().toUpperCase()
       const away = String(g.awayTeam ?? '').trim().toUpperCase()
