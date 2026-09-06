@@ -10,6 +10,7 @@ import { RecommendedMoves } from '@/components/core-app/player-finder/Recommende
 import { LeagueOwnershipCard } from '@/components/core-app/player-finder/LeagueOwnershipCard'
 import { TradeVisual } from '@/components/core-app/player-finder/TradeVisual'
 import { TradeWindow } from '@/components/core-app/player-finder/TradeWindow'
+import { TradeWindows } from '@/components/core-app/player-finder/TradeWindows'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
@@ -107,6 +108,14 @@ export type PlayerFinderProps = {
    * applies; an unavailable state renders its reason.
    */
   presence?: SectionState<ManagerPresence> | null
+  /**
+   * Core view only: the presence of every league where someone ELSE has him,
+   * for the cross-league "who's reachable" card. Loaded in place of `presence`
+   * when there is at least one such league; `windowsUnread` counts the ones
+   * whose presence could not be loaded.
+   */
+  windows?: ManagerPresence[] | null
+  windowsUnread?: number
   /**
    * A second player held beside the first (`?vs=`). When present the main
    * column shows the two side by side instead of the single detail card; the
@@ -286,6 +295,8 @@ export function PlayerFinder({
   recent = [],
   tradeVisual = null,
   presence = null,
+  windows = null,
+  windowsUnread = 0,
   compare = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
@@ -957,7 +968,7 @@ export function PlayerFinder({
         real per-league impact behind it — an empty rail of headed cards would
         imply we looked and found nothing, which is different from not looking.
       */}
-      {detail && (impactRows.length > 0 || presence) ? (
+      {detail && (impactRows.length > 0 || presence || (windows && windows.length > 0)) ? (
         <aside className="af-pf-side" aria-label="What to do">
           {impactRows.length > 0 ? (
             <PlayerVerdict
@@ -972,7 +983,10 @@ export function PlayerFinder({
             the trade visual when it is on the screen (someone else has him in
             the held league), else opens the Trade Center for that league.
           */}
-          {presence ? (
+          {/* Core view with him on other people's rosters: every owner, most reachable first. */}
+          {!leagueMode && windows && windows.length > 0 ? (
+            <TradeWindows presences={windows} playerName={detail.player.name} pkg={pitchPackage} nowIso={nowIso} unread={windowsUnread} />
+          ) : presence ? (
             <TradeWindow
               state={presence}
               playerName={detail.player.name}

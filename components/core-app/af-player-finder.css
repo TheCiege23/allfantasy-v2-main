@@ -2395,3 +2395,34 @@
     height: 44px;
   }
 }
+
+/* ── Trade windows across leagues (core view, 2026-09-06) ─────────────── */
+.af-core .af-pf-tw-sum {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-core .af-pf-tw-league {
+  font-size: 10px;
+  color: var(--muted);
+}
+.af-core .af-pf-tw-go {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-core .af-pf-tw-go:hover {
+  text-decoration: underline;
+}
+
+/* The single card keeps one row on a phone (one league); here the list IS the
+   answer, so every row shows. Own @media block at EOF, per the file's warning. */
+@media (max-width: 720px) {
+  .af-core .af-pf-tw--multi .af-pf-tw-row:not(:first-child) {
+    display: flex;
+  }
+}

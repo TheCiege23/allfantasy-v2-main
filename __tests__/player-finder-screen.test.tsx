@@ -359,6 +359,31 @@ describe('Player Finder — trade window', () => {
     expect(within(side).getByRole('link', { name: 'Grade it' })).toHaveAttribute('href', '/core/trades?league=L-gang')
   })
 
+  it('in the core view, shows every other owner most reachable first instead of the single-league card', () => {
+    const pirates: NonNullable<React.ComponentProps<typeof PlayerFinder>['windows']>[number] = {
+      ...PRESENCE.data,
+      leagueId: 'L-pirates',
+      leagueName: 'Pirate League',
+      platform: 'sleeper',
+      managers: [{ ...PRESENCE.data.managers[0], ownerName: 'mikeD', window: { weekday: 6, startHour: 10, endHour: 12, daypart: 'morning', precision: 'window', share: 0.6, sample: 9, zone: 'ET' } }],
+    }
+    renderCore({ windows: [PRESENCE.data, pirates], windowsUnread: 1, nowIso: '2026-10-24T14:30:00.000Z' })
+    const side = screen.getByRole('complementary', { name: 'What to do' })
+    const card = within(side).getByRole('region', { name: 'Trade windows · who’s reachable' })
+    expect(within(side).queryByRole('region', { name: 'Trade window · when they move' })).toBeNull()
+    const rows = within(card).getAllByRole('listitem')
+    expect(within(rows[0]).getByText('Pirate League · Sleeper')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Gridiron Gang · ESPN')).toBeInTheDocument()
+    expect(within(card).getByText(/1 more league where someone else has him could not be read/)).toBeInTheDocument()
+  })
+
+  it('in league mode, keeps the single-league card even when cross-league windows were passed', () => {
+    renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW, presence: PRESENCE, windows: [PRESENCE.data], nowIso: '2026-10-24T14:30:00.000Z' })
+    const side = screen.getByRole('complementary', { name: 'What to do' })
+    expect(within(side).getByRole('region', { name: 'Trade window · when they move' })).toBeInTheDocument()
+    expect(within(side).queryByRole('region', { name: 'Trade windows · who’s reachable' })).toBeNull()
+  })
+
   it('keeps the column out when there is neither impact nor a window', () => {
     renderCore({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
     expect(screen.queryByRole('complementary', { name: 'What to do' })).not.toBeInTheDocument()

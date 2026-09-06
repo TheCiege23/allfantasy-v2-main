@@ -788,9 +788,37 @@ export default async function AfCorePage({
    * (the buyers) — one league at a time, because the loader reads a league's
    * whole transaction history, and the card names the league it is about.
    */
+  /*
+   * Trade windows across leagues (2026-09-06). In the core view, every league
+   * where someone ELSE has him is read for its owner's window, in parallel,
+   * capped — a player is rarely on more than a handful of other rosters, and
+   * each read is a league's teams, rosters and activity. In league mode the
+   * single card for the held league stands, as before.
+   */
+  const MAX_WINDOW_LEAGUES = 6
+  const otherLeagueIds =
+    activeKey === 'players' && playerDetail?.player.sleeperId && !selectedLeagueId && playerDetail.leagues.available
+      ? playerDetail.leagues.data
+          .filter((r) => !r.isYours && r.owner)
+          .map((r) => r.leagueId)
+          .slice(0, MAX_WINDOW_LEAGUES)
+      : []
+  const windowStates =
+    otherLeagueIds.length > 0 && playerDetail?.player.sleeperId
+      ? await Promise.all(
+          otherLeagueIds.map((id) =>
+            getManagerPresence(id, playerDetail.player.sleeperId as string, userId, { position: playerDetail.player.position }).catch(() => null),
+          ),
+        )
+      : []
+  const playerWindows = windowStates.flatMap((s) => (s && s.available ? [s.data] : []))
+  const playerWindowsUnread = otherLeagueIds.length - playerWindows.length
+
   const presenceLeagueId = (() => {
     if (activeKey !== 'players' || !playerDetail?.player.sleeperId) return null
     if (selectedLeagueId) return selectedLeagueId
+    // The cross-league card covers the other owners; the single card is only for a player who is yours everywhere.
+    if (playerWindows.length > 0) return null
     const rows = playerDetail.leagues.available ? playerDetail.leagues.data : []
     return rows.find((r) => !r.isYours && r.owner)?.leagueId ?? rows.find((r) => r.isYours)?.leagueId ?? null
   })()
@@ -1981,6 +2009,8 @@ export default async function AfCorePage({
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}
           presence={playerPresence}
+          windows={playerWindows.length > 0 ? playerWindows : null}
+          windowsUnread={playerWindowsUnread}
           compare={playerCompare}
           nowIso={new Date().toISOString()}
         />
