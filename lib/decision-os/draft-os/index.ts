@@ -24,10 +24,17 @@ import { HOURS } from '../domain-os/types'
  *                   with the old rules while looking authoritative.
  *
  * ⚠ AND ONLY ONE OF THEM IS REACHED BY ANYTHING. Measured 2026-08-31:
- * `resolveNflRedraftDraftRuntime` — this module's sole consumer — has ZERO callers. Live drafts
- * run on `lib/live-draft-engine/DraftSessionService`. Meanwhile playoff-runtime (4 routes),
- * roster-runtime (1) and schedule-runtime (1) all pay for the same ruleset, which is why League OS
- * exists and why it is the one that is wired.
+ * `resolveNflRedraftDraftRuntime` — the sole consumer of this module's FACT — has ZERO callers.
+ * Live drafts run on `lib/live-draft-engine/DraftSessionService`. Meanwhile playoff-runtime
+ * (4 routes), roster-runtime (1) and schedule-runtime (1) all pay for the same ruleset, which is
+ * why League OS exists and why it is the one that is wired.
+ *
+ * ⚠ "SOLE CONSUMER" USED TO SAY *THIS MODULE'S*, AND THAT WAS WRONG — corrected 2026-09-06. The
+ * resolver consumes the fact; `app/api/cron/domain-os-refresh/route.ts` consumes the MODULE, and
+ * has since `63588d261` (2026-08-31 17:35). It warms `draft/rules` hourly: 242 rows in
+ * `domain_os_facts`, all NFL, measured 2026-09-06. So this module is not dead code — it is a
+ * fact that is written on a schedule and read by nobody, which is a different thing and has a
+ * different fix.
  *
  * ── 1.2b, DECIDED 2026-08-31: DO NOT GIVE THE DRAFT RUNTIME A ROUTE ─────────────────────────
  *
@@ -48,10 +55,50 @@ import { HOURS } from '../domain-os/types'
  * duplicates above, pointed the other way.
  *
  * 🛑 SO IT IS DEPRECATED IN PLACE, WITH THE CONDITION FOR RETIRING IT WRITTEN DOWN RATHER THAN
- * LEFT TO JUDGEMENT: when someone confirms `live-draft-engine` covers every fact
- * `resolveNflRedraftDraftRuntime` returns, delete the resolver AND this module together, since
- * nothing else imports either. Until that confirmation exists, adding callers to either is the
- * one move that makes the eventual cleanup harder.
+ * LEFT TO JUDGEMENT. The condition was: *when someone confirms `live-draft-engine` covers every
+ * fact `resolveNflRedraftDraftRuntime` returns, delete the resolver AND this module together,
+ * since nothing else imports either.*
+ *
+ * ✅ THAT CHECK WAS RUN ON 2026-09-06. THE CONDITION CANNOT BE SATISFIED, AND THE REASON IS
+ * STRUCTURAL RATHER THAN A MATTER OF EFFORT: the resolver is not a RIVAL to `live-draft-engine`,
+ * it is a CONSUMER of it. `resolveNflRedraftDraftRuntime.ts:3` imports `buildSessionSnapshot`
+ * from `@/lib/live-draft-engine/DraftSessionService` and builds four further facts on top:
+ *
+ *   state            buildSessionSnapshot → buildCanonicalDraftRuntimeState   snapshot FROM it
+ *   rules            resolveCanonicalLeagueRules                              absent from it
+ *   recommendations  buildSmartDraftRecommendations                           absent from it
+ *   intelligence     deriveDraftRuntimeIntelligence                           absent from it
+ *   playerCoverage   getResolvedDraftPoolForLeague (limit 350)                see below
+ *
+ * Three of those five names appear NOWHERE under `lib/live-draft-engine/`. The pool appears once,
+ * in `autopickBestAvailableSubmit.ts` behind a legacy fallback — not in the snapshot. So
+ * "live-draft-engine covers every fact" could only become true by moving four capabilities INTO
+ * it, which is the second implementation this header exists to prevent, pointed the other way.
+ * A condition that can only be met by committing the defect it guards against is not a condition.
+ *
+ * 🛑 AND THE CLAUSE "SINCE NOTHING ELSE IMPORTS EITHER" WAS ALREADY FALSE FOR THIS MODULE WHEN IT
+ * WAS WRITTEN — see the correction above. It is true of the resolver and only the resolver.
+ *
+ * ── THE RESTATED CONDITION, IN THREE PARTS, BECAUSE A DELETION IS NOT ONE COMMIT ────────────
+ *
+ *   1. `lib/draft-runtime/resolveNflRedraftDraftRuntime.ts` — 0 callers by a four-form census
+ *      (alias, relative, `require(`, `await import(`) plus a symbol sweep. Deletable TODAY, on
+ *      its own, with no condition attached. Nothing waits on live-draft-engine for this.
+ *   2. `lib/decision-os/draft-runtime-intelligence.ts` — dies with it. Its only runtime importer
+ *      is the resolver (plus `__tests__/g34-draft-runtime.test.ts`).
+ *   3. THIS MODULE — cannot go with them. Removing it means also deleting the cron's
+ *      `target('draft', createDraftOs({ store }), draftRulesSource)` line and accepting that 242
+ *      warmed rows stop. That is a live-behaviour change and belongs to whoever owns the cron.
+ *
+ * ⚠ `lib/draft-runtime/canonicalDraftRuntime.ts` STAYS REGARDLESS, and this is the fact that
+ * makes "delete the draft runtime" wrong as a slogan. `buildCanonicalDraftRuntimeState` has a
+ * second consumer — `lib/redraft-season-simulation/canonicalNflRedraftFullSeasonSimulation.ts:723`,
+ * reached from `app/e2e/g43-nfl-redraft-full-season/page.tsx`. The dead thing is the RESOLVER,
+ * not the runtime it resolves.
+ *
+ * So the honest trigger is no longer about live-draft-engine at all: retire this module when the
+ * cron stops warming `draft/rules`, and retire the resolver whenever anyone feels like it. Until
+ * then, adding callers to either is still the one move that makes the cleanup harder.
  *
  * If you are here anyway to wire something: use League OS's loader, not this one, unless you can
  * say why a draft needs the longer life — and if you can, say it here rather than assuming the 6h

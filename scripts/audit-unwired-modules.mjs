@@ -88,7 +88,21 @@ function consumersOf(modPath) {
 // ── positive controls: the check must reproduce a known red AND a known green ──
 console.log('=== POSITIVE CONTROLS ===')
 const controls = [
-  ['lib/decision-os/draft-os', 0, 'known DEAD — only a code comment references it'],
+  // 🛑 THIS SLOT HELD `lib/decision-os/draft-os` AT expect=0, AND IT WAS FALSE ON THE DAY IT WAS
+  // WRITTEN. `app/api/cron/domain-os-refresh/route.ts` imports it, and that cron landed in
+  // 63588d261 at 17:35:23 — NINETY-THREE SECONDS before aaab0e278 added this control at 17:36:56,
+  // with the cron commit an ancestor of it. Verified 2026-09-06 by running the birth version of
+  // this script in a detached worktree at aaab0e278: same FAIL, consumers=1.
+  //
+  // ⚠ SO THIS SCRIPT HAS NEVER ONCE PRODUCED AN AUDIT. It halts on the control every run and
+  // prints "the results below are not evidence" — which is the guard working exactly as designed,
+  // and is also why nobody noticed: a check that refuses to answer looks the same as a check
+  // nobody ran. The control was right to fail; only the expectation was wrong.
+  //
+  // The replacement is the module that measurement actually found dead — 0 callers by a four-form
+  // census on 2026-09-06, and the subject of the retirement condition in
+  // lib/decision-os/draft-os/index.ts.
+  ['lib/draft-runtime/resolveNflRedraftDraftRuntime', 0, 'known DEAD — 0 callers, four-form census 2026-09-06'],
   ['lib/fantasycalc-db', null, 'known ALIVE — 36 migrated call sites'],
   ['lib/decision-os/three-brain', null, 'known ALIVE — 6 runtime paths'],
 ]
