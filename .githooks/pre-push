@@ -1,25 +1,41 @@
 #!/bin/sh
-# Two guards on a push to `main`, in order:
+# Three guards on a push to `main`, in order:
 #
-#   1. scripts/push-queue.mjs           — is it your TURN?
+#   1. scripts/push-queue.mjs             — is it your TURN?
 #   2. scripts/check-inflight-prod-build.mjs — may ANYONE push right now?
+#   3. scripts/pre-push-smoke.mjs         — does this SHA typecheck clean?
 #
 # The queue runs first on purpose: it is local and cheap, and it means only the
-# head of the line ever spends a Vercel API call on the build check. The two
-# answer different questions and neither replaces the other — the build guard
-# stops a second build from being billed, the queue stops the retry scramble
-# that guard creates from serving whoever polls luckiest instead of whoever
-# waited longest.
+# head of the line ever spends a Railway API call on the build check. The
+# smoke check runs LAST because it is by far the slowest (a fresh isolated
+# typecheck, not a network call) — no point spending minutes on it only to
+# then find out it wasn't your turn, or a build is already running.
 #
-# The reasoning, the measurements and the fail-open policy live in those two
-# scripts. This file stays a thin shim on purpose: it is COPIED into the active
-# hooks directory by `npm run hooks:install`, so a stale copy can survive there
-# for a long time. Keeping the logic in the tracked scripts means the installed
-# shim never needs to change, and the behaviour is always whatever the checkout
-# says it is.
+# The three answer different questions and none replaces another. Guards 1-2
+# are about cost and ordering and fail OPEN on any error — the reasoning is in
+# those two scripts. Guard 3 is about correctness: a genuine regression there
+# fails CLOSED, everything else about it still fails open.
 #
-# ⚠ Every failure path here exits 0. A cost guard that can strand a deploy is
-# worse than the cost it saves.
+# 🛑 GUARD 3 IS A FLOOR UNDER THE PUSHER, NOT A REPLACEMENT FOR ONE. An earlier
+# version of this comment said that "since 2026-09-06 pushes to `main` are no
+# longer batched through one reviewing session". That was wrong: it cited a
+# CLAUDE.md section that was an uncommitted working-tree edit and never landed,
+# and Guap reaffirmed BOTH the batching rule and the pusher role on 2026-09-06
+# when asked directly. Batching still applies and one session still holds the
+# role. What guard 3 adds is the check an author cannot run for themselves —
+# the exact SHA, typechecked in isolation against its own baseline — which
+# handovers here routinely and honestly report as missing, because a manual
+# pair needs a clear box and this machine runs ~9 sessions. See its own header.
+#
+# This file stays a thin shim on purpose: it is COPIED into the active hooks
+# directory by `npm run hooks:install`, so a stale copy can survive there for a
+# long time. Keeping the logic in the tracked scripts means the installed shim
+# never needs to change, and the behaviour is always whatever the checkout says
+# it is.
+#
+# ⚠ Guards 1-2 exit 0 on every failure path. A cost guard that can strand a
+# deploy is worse than the cost it saves. Guard 3 is the one exception in this
+# file: it exits 1 on a POSITIVE, PARSED regression, and only on that.
 
 [ "$AF_SKIP_PREPUSH_HOOK" = "1" ] && exit 0
 
@@ -106,5 +122,6 @@ fi
 
 run_guard "$scripts/push-queue.mjs" check || exit 1
 run_guard "$scripts/check-inflight-prod-build.mjs" || exit 1
+run_guard "$scripts/pre-push-smoke.mjs" || exit 1
 
 exit 0
