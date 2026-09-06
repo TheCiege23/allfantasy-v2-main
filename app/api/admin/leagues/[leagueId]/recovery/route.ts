@@ -1,6 +1,11 @@
 /**
  * Admin — league recovery.
- * POST /api/admin/leagues/[leagueId]/recovery
+ *   GET  /api/admin/leagues/[leagueId]/recovery   what is wrong, and what may legally be done
+ *   POST /api/admin/leagues/[leagueId]/recovery   do one of those things
+ *
+ * Both carry the same gate. The GET is not a convenience: the POST validates transitions against a
+ * table the caller cannot see, so without a read an operator picks from ten enum values and mostly
+ * gets rejections. See the GET's own note below.
  *
  * 🛑 WHY THIS EXISTS: A PLATFORM OPERATOR COULD NOT RECOVER A LEAGUE THEY DO NOT BELONG TO.
  * Every league-scoped equivalent gates on membership first — `app/api/leagues/[leagueId]/
@@ -43,9 +48,81 @@ import { LeagueLifecycleState } from '@prisma/client'
 import { requireAdmin } from '@/lib/adminAuth'
 import { resolveAdminAuditActor } from '@/lib/admin-audit'
 import { runAdminLeagueRecovery } from '@/lib/admin/recovery/adminRecoveryService'
+import { buildLeagueInspectSnapshot } from '@/lib/admin/operations/leagueInspectService'
+import { normalizeLifecycleState, validateTransition } from '@/server/services/leagueLifecycleService'
+import { prisma } from '@/lib/prisma'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+/** Audit actions this service writes, all tagged `targetType: 'league'`. */
+const RECOVERY_AUDIT_ACTIONS = [
+  'ops_lifecycle_repair',
+  'ops_enqueue_waiver',
+  'ops_enqueue_scoring',
+  'ops_enqueue_automation',
+  'ops_stat_reprocess',
+  'ops_draft_pause',
+] as const
+
+/**
+ * GET — what is wrong with this league, and what may legally be done about it.
+ *
+ * 🛑 THE POST IS UNUSABLE WITHOUT THIS. `transitionLeagueState` validates against a TRANSITIONS
+ * table, so an operator choosing from all ten enum values would have most attempts bounce. This
+ * returns the legal set for the league's ACTUAL state, so the caller picks from what will work.
+ *
+ * ⚠ THE ALLOWED SET IS DERIVED FROM `validateTransition`, NOT COPIED FROM THE TABLE. `TRANSITIONS`
+ * is module-private in the lifecycle service; re-declaring it here would be a second copy that
+ * drifts the first time someone edits the real one. Asking the exported validator about each enum
+ * member costs ten calls and cannot disagree with the thing that actually enforces it.
+ */
+export async function GET(
+  _request: Request,
+  { params }: { params: { leagueId: string } },
+) {
+  const gate = await requireAdmin()
+  if (!gate.ok) return gate.res
+
+  const leagueId = params?.leagueId?.trim()
+  if (!leagueId) {
+    return NextResponse.json({ ok: false, error: 'leagueId is required' }, { status: 400 })
+  }
+
+  const snapshot = await buildLeagueInspectSnapshot(leagueId)
+  if (!snapshot?.league) {
+    return NextResponse.json({ ok: false, error: 'League not found' }, { status: 404 })
+  }
+
+  /**
+   * ⚠ RAW AND NORMALIZED ARE BOTH REPORTED, AND THAT IS NOT REDUNDANCY.
+   * `normalizeLifecycleState` silently returns `'in_season'` for anything it does not recognise —
+   * including `null`. A screen showing only the normalized value would state, confidently, that a
+   * league with no lifecycle state is in season, and offer that state's transitions. `coerced`
+   * makes the substitution visible instead of letting it read as fact.
+   */
+  const raw = snapshot.league.lifecycleState
+  const normalized = normalizeLifecycleState(raw)
+  const coerced = raw !== normalized
+
+  const allowedTransitions = Object.values(LeagueLifecycleState).filter(
+    (candidate) => validateTransition(normalized, candidate).ok,
+  )
+
+  const recentActions = await prisma.adminAuditLog.findMany({
+    where: { targetType: 'league', targetId: leagueId, action: { in: [...RECOVERY_AUDIT_ACTIONS] } },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: { id: true, action: true, adminUserId: true, details: true, createdAt: true },
+  })
+
+  return NextResponse.json({
+    ok: true,
+    snapshot,
+    lifecycle: { raw, normalized, coerced, allowedTransitions },
+    recentActions,
+  })
+}
 
 /**
  * Mirrors `AdminRecoveryAction`. The discriminated union is deliberate: an unknown `type` is
