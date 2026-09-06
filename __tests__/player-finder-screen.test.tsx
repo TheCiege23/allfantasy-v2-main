@@ -438,3 +438,54 @@ describe('Player Finder — signed out', () => {
     expect(screen.queryByRole('table')).toBeNull()
   })
 })
+
+describe('Player Finder — IDP value', () => {
+  /**
+   * FantasyCalc prices no defenders, so 719 rostered players had no value anywhere. The tile
+   * carries the league-free IDP board's number — and the reference league it is relative to.
+   */
+  const PARSONS: PlayerDetail = {
+    ...DETAIL,
+    player: { ...DETAIL.player, name: 'Micah Parsons', position: 'LB', team: 'Green Bay Packers' },
+    idpValue: {
+      value: 3284,
+      positionRank: 4,
+      reference: { numTeams: 12, idpStarters: 3, scoringFormat: 'IDP' },
+      computedAt: '2026-09-06T15:00:00.000Z',
+    },
+  }
+
+  it('shows the value for a defender', () => {
+    renderCore({ detail: PARSONS })
+    expect(screen.getByText('IDP value')).toBeInTheDocument()
+    // Rendered with toLocaleString, so the separator matters to a reader.
+    expect(screen.getByText('3,284')).toBeInTheDocument()
+  })
+
+  it('🛑 RENDERS THE REFERENCE LEAGUE BESIDE IT — the number is meaningless alone', () => {
+    /*
+     * "Worth 3,284" is a fact about a 12-team league starting three defenders, not about the
+     * world. If this assertion ever fails, the tile is making a claim the board cannot support.
+     */
+    renderCore({ detail: PARSONS })
+    expect(screen.getByText(/12-team/)).toBeInTheDocument()
+    expect(screen.getByText(/3 IDP/)).toBeInTheDocument()
+    expect(screen.getByText(/rank 4/)).toBeInTheDocument()
+  })
+
+  it('🛑 RENDERS NO TILE AT ALL when there is no value — not an empty one', () => {
+    /*
+     * A defender the board has not priced is UNMEASURED, not worthless, and "—" beside a value
+     * label reads as the latter. The base DETAIL fixture carries no idpValue, which is also the
+     * state every player is in before the cron has run.
+     */
+    renderCore({ detail: { ...PARSONS, idpValue: null } })
+    expect(screen.queryByText('IDP value')).toBeNull()
+    expect(screen.queryByText('3,284')).toBeNull()
+  })
+
+  it('[control] a non-defender never carries one', () => {
+    renderCore()
+    expect(screen.queryByText('IDP value')).toBeNull()
+  })
+})
