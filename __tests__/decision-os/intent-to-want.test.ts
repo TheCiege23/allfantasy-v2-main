@@ -69,12 +69,40 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
     expect(w.rosterValueGrade).toBe(false)
   })
 
-  it('player_value turns on rosterValueGrade, and nothing else', () => {
+  /**
+   * ⚠ THE THIRD INVERTED ASSERTION IN THIS FILE, AND THE WEAKEST OF THE THREE — WHICH IS EXACTLY
+   * WHY IT SAYS SO. `waiver` was turned ON because its gap became honest. `lineupDecision` was
+   * turned OFF because 37s against a 3s ceiling meant it was discarded on every single turn, so
+   * removing it cost nothing. This one is ~4.6s: over the ceiling most of the time, not all of it.
+   *
+   * Profiled 2026-09-07 from the packet's own `meta.sources`, median of 3:
+   *   player_value  total 4,593 ms   rosterValueGrade completes at 4,590 ms  <- the critical path
+   *
+   * It goes because the ceiling discards the WHOLE packet, not the slow slice: asking for this
+   * gambles fifteen other feeds against one roster grade on whether the build lands under 3s.
+   *
+   * 🛑 A GREEN TEST HERE IS NOT EVIDENCE THE INTENT IS FAST. With this off, player_value inherits
+   * the base packet's own cost -- `marketValues` serialised behind `leagueRules`, 2,995 ms median
+   * and itself over the ceiling under load. Restore this mapping only after that read is fixed.
+   */
+  it('player_value turns on NOTHING — rosterValueGrade is the packet critical path', () => {
     const w = deriveWantFromIntent('player_value')
-    expect(w.rosterValueGrade).toBe(true)
+    expect(w.rosterValueGrade).toBe(false)
     expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.psychologyConsistency).toBe(false)
+    expect(w.waiverDecision).toBe(false)
+  })
+
+  /**
+   * The same structural guard the lineup slice has: no intent may ask for `rosterValueGrade` on
+   * any path. Without it, re-adding `intent === 'player_value'` reddens only the test above, which
+   * reads like a stale assertion to update rather than a budget being breached.
+   */
+  it('NO intent asks for rosterValueGrade, on any path', () => {
+    for (const intent of ALL_INTENTS) {
+      expect(deriveWantFromIntent(intent).rosterValueGrade).toBe(false)
+    }
   })
 
   /**

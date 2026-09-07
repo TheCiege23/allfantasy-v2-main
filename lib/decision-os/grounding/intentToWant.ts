@@ -96,7 +96,38 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
     lineupDecision: false,
     commissionerHealthDecision: intent === 'commissioner',
     psychologyConsistency: intent === 'manager_psychology',
-    rosterValueGrade: intent === 'player_value',
+    /*
+     * 🛑 ALSO ALWAYS FALSE — SAME CEILING, WEAKER ARGUMENT, STATED HONESTLY — 2026-09-07.
+     *
+     * This was `intent === 'player_value'`. Profiled against the same live 13-roster league, using
+     * the packet's own `meta.sources` (median of 3, quiet box):
+     *
+     *     player_value   total 4,593 ms   rosterValueGrade completes at 4,590 ms
+     *     general        total 4,511 ms   marketValues     completes at 2,995 ms
+     *
+     * ⚠ `kick()` MEASURES ELAPSED FROM THE START OF THE CONCURRENT WAVE, not a slice's exclusive
+     * duration. So 4,590 of 4,593 ms does not mean this slice "takes" 4.6s in isolation — it means
+     * it is the LAST thing to finish, i.e. it IS the critical path. Nothing else is waited on.
+     *
+     * ⚠ AND THE CASE IS GENUINELY WEAKER THAN `lineupDecision`'S ABOVE. That slice was 37s against
+     * a 3s ceiling and was therefore discarded on EVERY turn — removing it cost nothing at all.
+     * This one is ~4.6s: over the ceiling most of the time, but not always. So this is a
+     * MITIGATION, not a free win, and it is worth saying which one it is.
+     *
+     * The reason it still goes: the ceiling discards the WHOLE packet, not the slow slice. Asking
+     * for this trades the other fifteen feeds — values, projections, psychology, portfolio, league
+     * intelligence, import state — against one roster grade, on the roll of whether the build lands
+     * under 3s. That is a bad trade at any hit rate.
+     *
+     * ⚠ THIS DOES NOT MAKE player_value FAST, AND NOTHING HERE SHOULD BE READ AS CLAIMING IT DOES.
+     * With this off, the intent inherits the base packet's own cost, which is `marketValues`
+     * serialised behind `leagueRules` — measured at 2,995 ms median and itself over the ceiling
+     * under load. The real fix is that read (`prisma.playerValueSnapshot` + `resolvePlayers`,
+     * already DB-first, so it wants indexing or warming rather than caching) and breaking the
+     * `pRules -> pValueFormat -> pMarket` chain. Until that lands, restoring this mapping only
+     * re-buys the drop.
+     */
+    rosterValueGrade: false,
     waiverDecision: intent === 'waiver',
   }
 }
