@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { CommissionerOSProviders } from '@/components/commissioner-os/providers/CommissionerOSProviders'
+import { CommissionerAccessNotice } from '@/components/commissioner-os/shell/CommissionerAccessNotice'
 import { CommissionerSidebar } from '@/components/commissioner-os/shell/CommissionerSidebar'
 import { CommissionerHeader } from '@/components/commissioner-os/shell/CommissionerHeader'
 import { CommissionerBreadcrumbs } from '@/components/commissioner-os/shell/CommissionerBreadcrumbs'
@@ -40,30 +41,42 @@ export const metadata: Metadata = {
  */
 export default async function CommissionerOSLayout({ children }: { children: React.ReactNode }) {
   /*
-   * ⚠ THIS WHOLE SHELL WAS UNGATED. No auth check, no session check, no
-   * commissioner check anywhere in this route tree — anyone with the URL
-   * could load it. `demo` mode (the current default everywhere in
-   * production, per the adapter) shows fabricated data, so nothing real
-   * has leaked through this yet, but an unauthenticated visitor should
-   * never reach an internal-looking commissioner tool at all, demo mode or
-   * not. Narrowing further to "commissioner of at least one league" is a
-   * deliberate follow-up, not done here: this app already computes
-   * "isCommissioner" four+ different, disagreeing ways across the
-   * codebase, and picking one for this gate needs its own decision rather
-   * than adding a fifth inconsistent definition.
+   * ⚠ THIS SHELL WAS SIGNED-IN-ONLY, WHICH IS NOT THE SAME AS GATED. The session check below
+   * arrived first and closed the anonymous hole; the follow-up it named — narrowing to
+   * "commissioner of at least one league" — is done here.
+   *
+   * That follow-up was deferred because the app computes "isCommissioner" four-plus disagreeing
+   * ways and picking one needed a decision. The decision: reuse `League.userId`, the definition
+   * `lib/commissioner/permissions.ts` exports and the 64 `/api/commissioner/*` routes already use
+   * at 69 call sites. Reusing the majority authority beats introducing a fifth, even if a
+   * different definition might be nicer in isolation.
+   *
+   * The check is a SIDE EFFECT OF RESOLUTION, not a second rule: `listActiveLeaguesForUser` now
+   * returns the leagues this user commissions, so "no leagues" IS "not a commissioner" and the two
+   * can never disagree. A separate boolean gate beside a separate resolver is exactly how those
+   * four definitions accumulated.
    */
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) {
     redirect('/login')
   }
 
+  /*
+   * Resolved BEFORE the adapter is built, so a non-commissioner triggers no intelligence fetch at
+   * all — not a search index, not a notification list. Gating the render while still running the
+   * queries would close the display and leave the data access open.
+   */
+  const leagues = await listActiveLeaguesForUser()
+  if (leagues.length === 0) {
+    return <CommissionerAccessNotice />
+  }
+
   const adapter = await getDecisionOSAdapter()
-  const [indexResponse, notificationsResponse, notificationsSummaryResponse, leagues, activeLeagueId] =
+  const [indexResponse, notificationsResponse, notificationsSummaryResponse, activeLeagueId] =
     await Promise.all([
       adapter.search.getIndex(),
       adapter.notifications.getNotifications(),
       adapter.notifications.getSummary(),
-      listActiveLeaguesForUser(),
       resolveActiveLeagueId(),
     ])
 

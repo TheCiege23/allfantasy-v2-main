@@ -33,7 +33,7 @@ vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 const prismaMock = vi.hoisted(() => ({
-  roster: { findMany: vi.fn() },
+  league: { findMany: vi.fn() },
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 
@@ -43,12 +43,20 @@ vi.mock("next/headers", () => ({ cookies: cookiesMock }))
 import { resolveActiveLeagueId } from "@/lib/commissioner-ui/resolveActiveLeagueId"
 import { ACTIVE_LEAGUE_COOKIE_KEY } from "@/lib/commissioner-ui/activeLeague/constants"
 
-/** Two leagues this user genuinely owns, most-recent-roster first. */
+/**
+ * Two leagues this user genuinely COMMISSIONS, newest first.
+ *
+ * ⚠ These were `prisma.roster.findMany` rows until the commissioner gate landed. The resolver now
+ * answers "which leagues does this user commission" (`League.userId`) rather than "which leagues
+ * does this user hold a roster in" — a different question that let a league member open a
+ * commissioner tool and locked out commissioners who hold no team. Every assertion below is about
+ * the cookie override and `cookies()` error handling, which are unchanged; only the source moved.
+ */
 function withOwnedLeagues() {
   getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-  prismaMock.roster.findMany.mockResolvedValue([
-    { league: { id: "lg-newest", status: "active", name: "Newest" } },
-    { league: { id: "lg-older", status: "active", name: "Older" } },
+  prismaMock.league.findMany.mockResolvedValue([
+    { id: "lg-newest", status: "active", name: "Newest" },
+    { id: "lg-older", status: "active", name: "Older" },
   ])
 }
 
@@ -67,11 +75,11 @@ describe("resolveActiveLeagueId — cookie override", () => {
   it("honours a cookie naming a league this user owns", async () => {
     withOwnedLeagues()
     cookieJar("lg-older")
-    // Not the most-recent roster — proving the cookie actually decided it.
+    // Not the newest league — proving the cookie actually decided it.
     await expect(resolveActiveLeagueId()).resolves.toBe("lg-older")
   })
 
-  it("falls back to the most recent roster when no cookie is set", async () => {
+  it("falls back to the most recently created league when no cookie is set", async () => {
     withOwnedLeagues()
     cookieJar(undefined)
     await expect(resolveActiveLeagueId()).resolves.toBe("lg-newest")
@@ -122,7 +130,7 @@ describe("resolveActiveLeagueId — what cookies() throws", () => {
 
   it("never reads the cookie at all when the user owns no leagues", async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-    prismaMock.roster.findMany.mockResolvedValue([])
+    prismaMock.league.findMany.mockResolvedValue([])
     await expect(resolveActiveLeagueId()).resolves.toBeNull()
     // The early return runs first, so a scopeless context cannot even be reached here.
     expect(cookiesMock).not.toHaveBeenCalled()
