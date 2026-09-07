@@ -351,3 +351,109 @@ describe('MyTeamBoard', () => {
     expect(lock?.getAttribute('aria-label')).toMatch(/Lock time unknown/)
   })
 })
+
+/*
+ * ⚠ THIS BOARD NUMBERED TEN ROWS 01..10 THAT NOTHING HAD SEPARATED. Observed on
+ * a 94-league production account: every row read `2d 8h` because `lockAt` is the
+ * earliest kickoff among a team's starters, taken from one shared per-sport
+ * kickoff map — so leagues whose earliest starter is in the same game carry a
+ * byte-identical timestamp. The comparator returned 0, the stable sort kept
+ * whatever order the query produced, and the numerals dressed it up as a
+ * priority. A rank is a claim that the row above won something.
+ */
+describe('the board ranks only what it actually ordered', () => {
+  const ranksOf = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('.af-bd-rank')).map((n) => n.textContent)
+
+  const board = (rows: MyTeamRow[], over: Partial<MyTeamPulse> = {}) =>
+    render(
+      <MyTeamBoard
+        pulse={pulse({
+          set: rows,
+          setTotal: rows.length,
+          considered: rows.length,
+          checked: rows.length,
+          ...over,
+        })}
+        now={NOW}
+        allHref={ALL_HREF}
+      />,
+    )
+
+  const atLocks = (locks: Array<string | null>): MyTeamRow[] =>
+    locks.map((lockAt, i) => row({ leagueId: `l${i}`, leagueName: `League ${i}`, lockAt }))
+
+  it('drops every numeral when nothing separates the rows', () => {
+    const { container } = board(atLocks(Array.from({ length: 5 }, () => '2026-09-13T17:00:00Z')))
+    expect(ranksOf(container)).toEqual(['·', '·', '·', '·', '·'])
+  })
+
+  it('says so in the label rather than calling them a top N', () => {
+    const { container } = board(atLocks(Array.from({ length: 5 }, () => '2026-09-13T17:00:00Z')))
+    const head = container.textContent ?? ''
+    expect(head).toContain('all lock together, so in no particular order')
+    expect(head).not.toContain('Top 5')
+  })
+
+  it('still ranks rows that genuinely differ', () => {
+    const { container } = board(
+      atLocks(['2026-09-13T17:00:00Z', '2026-09-13T20:00:00Z', '2026-09-14T00:20:00Z']),
+    )
+    expect(ranksOf(container)).toEqual(['01', '02', '03'])
+  })
+
+  /*
+   * The mixed case is the normal one in season: a cluster on the first kickoff
+   * and a few stragglers. The numeral marks where a new lock time starts, so it
+   * keeps counting rows rather than tiers -- "03" means the third ROW, which is
+   * what a reader comparing against the list length expects.
+   */
+  it('numbers the first row of each tier and bullets the rest', () => {
+    const { container } = board(
+      atLocks([
+        '2026-09-13T17:00:00Z',
+        '2026-09-13T17:00:00Z',
+        '2026-09-14T00:20:00Z',
+        '2026-09-14T00:20:00Z',
+      ]),
+    )
+    expect(ranksOf(container)).toEqual(['01', '·', '03', '·'])
+  })
+
+  /*
+   * ⚠ ROUNDING MUST NOT DECIDE THIS. `formatLockLabel` prints hours past a day,
+   * so these two both render "2d 8h" -- but they are 40 minutes apart and the
+   * order between them is real. Tiering off the DISPLAY would erase a true rank.
+   */
+  it('does not merge rows that only LOOK identical once rounded', () => {
+    const a = '2026-09-12T20:00:00Z'
+    const b = '2026-09-12T20:40:00Z'
+    expect(formatLockLabel(Date.parse(a), NOW).text).toBe(formatLockLabel(Date.parse(b), NOW).text)
+    const { container } = board(atLocks([a, b]))
+    expect(ranksOf(container)).toEqual(['01', '02'])
+  })
+
+  /* An unknown lock has no order against another unknown lock. */
+  it('treats unknown lock times as one tier', () => {
+    const { container } = board(atLocks([null, null]))
+    expect(ranksOf(container)).toEqual(['·', '·'])
+  })
+
+  /*
+   * Severity is part of the comparator, so a broken lineup outranks a clean one
+   * even when the two lock at the same moment.
+   */
+  it('keeps the numeral when severity separates rows that lock together', () => {
+    const lockAt = '2026-09-13T17:00:00Z'
+    const needs = [row({ leagueId: 'n1', leagueName: 'Broken', lockAt, empty: 2, severity: 2 })]
+    const set = [row({ leagueId: 's1', leagueName: 'Clean', lockAt })]
+    const { container } = render(
+      <MyTeamBoard
+        pulse={pulse({ needs, set, needsTotal: 1, setTotal: 1, considered: 2, checked: 2 })}
+        now={NOW}
+        allHref={ALL_HREF}
+      />,
+    )
+    expect(ranksOf(container)).toEqual(['01', '02'])
+  })
+})
