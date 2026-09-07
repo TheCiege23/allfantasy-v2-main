@@ -676,6 +676,97 @@ describe('TradesBoard — the label must describe what the list did', () => {
 })
 
 /*
+ * 🛑 ASSERT THE PAIRING, NOT THE PRESENCE — AND THIS SUITE FAILED THAT TEST.
+ *
+ * A peer session hit this on their own Trades screen and warned me. I ran their
+ * mutation against this board rather than assume I was clear: flattening the two
+ * sides into one list — `[...t.sent, ...t.received]` under a single label —
+ * still renders EVERY player name and every value. All 42 tests passed.
+ *
+ * So the whole suite was blind to the one structural fact a trade card exists to
+ * convey: who gave up what. A board that renders "TheCiege24 sent Perry Vance,
+ * Dana Okoye" when Okoye came the other way is not a smaller truth, it is the
+ * opposite of the truth, and nothing here would have gone red.
+ *
+ * The fix is to assert which side each asset sits UNDER, which is what these do.
+ * Verified red-before-green against that exact mutation.
+ */
+describe('TradesBoard — which side each asset is on', () => {
+  /** The asset names under each `.af-bd-side`, in DOM order. */
+  function sides(container: HTMLElement): Array<{ label: string; assets: string[] }> {
+    return [...container.querySelectorAll('.af-bd-side')].map((side) => ({
+      label: side.querySelector('.af-bd-side-label')?.textContent ?? '',
+      assets: [...side.querySelectorAll('.af-bd-asset-name')].map((n) =>
+        (n.textContent ?? '').trim(),
+      ),
+    }))
+  }
+
+  it('keeps the two sides separate, each under its own manager', () => {
+    const { container } = render(
+      <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
+    )
+    const s = sides(container)
+    expect(s).toHaveLength(2)
+
+    expect(s[0].label).toContain('TheCiege24')
+    expect(s[0].assets.join(' ')).toContain('Perry Vance')
+    expect(s[0].assets.join(' ')).not.toContain('Dana Okoye')
+
+    expect(s[1].label).toContain('Jordan')
+    expect(s[1].assets.join(' ')).toContain('Dana Okoye')
+    expect(s[1].assets.join(' ')).not.toContain('Perry Vance')
+  })
+
+  /*
+   * ⚠ THE VALUE MUST TRAVEL WITH ITS OWN PLAYER, not merely appear somewhere on
+   * the card. A price rendered against the wrong side is the same class of error
+   * as a player on the wrong side, and a whole-card text scan cannot see either.
+   */
+  it('keeps each price with the asset it belongs to', () => {
+    const { container } = render(
+      <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
+    )
+    const rows = [...container.querySelectorAll('.af-bd-side')].flatMap((side) =>
+      [...side.querySelectorAll('.af-bd-asset')].map((a) => ({
+        side: side.querySelector('.af-bd-side-label')?.textContent ?? '',
+        name: a.querySelector('.af-bd-asset-name')?.textContent ?? '',
+        value: a.querySelector('.af-bd-asset-val')?.textContent ?? '',
+      })),
+    )
+    const vance = rows.find((r) => r.name.includes('Perry Vance'))
+    const okoye = rows.find((r) => r.name.includes('Dana Okoye'))
+
+    expect(vance?.value).toBe('6,552')
+    expect(vance?.side).toContain('TheCiege24')
+    /* Unpriced, and the dash must be on HIS row rather than anywhere on the card. */
+    expect(okoye?.value).toBe('—')
+    expect(okoye?.side).toContain('Jordan')
+  })
+
+  /*
+   * A side with only picks or FAAB says so IN PLACE. Rendering nothing there
+   * would make a two-sided trade look one-sided — the same misreading as
+   * flattening, reached from the other direction.
+   */
+  it('says a players-empty side is picks-or-FAAB rather than rendering nothing', () => {
+    const d = tradesData()
+    const { container } = render(
+      <TradesBoard
+        data={{
+          ...d,
+          windows: [{ ...d.windows[0], latest: { ...d.windows[0].latest!, received: [] } }],
+        }}
+        allHref="/core/trades?all=1"
+      />,
+    )
+    const s = sides(container)
+    expect(s).toHaveLength(2)
+    expect(s[1].assets.join(' ')).toMatch(/Picks or FAAB only/i)
+  })
+})
+
+/*
  * 🛑 THIS SHIPPED WRONG IN 421ce94d2 AND A PEER SESSION'S MEASUREMENT CAUGHT IT.
  *
  * `LeagueTradeHistory` is unique on (sleeperLeagueId, sleeperUsername) and
