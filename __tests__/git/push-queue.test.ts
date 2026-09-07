@@ -213,6 +213,58 @@ describe('push-queue — the line always moves', () => {
 
     expect(check(SHA_B).status).toBe(1)
   })
+
+  /**
+   * 🛑 The grace has to outlast pre-push-smoke.mjs, which takes up to 20 min.
+   * At the old 10-min grace this ticket was released while its own push was
+   * still inside the smoke run — freeing everyone behind it, moving `main`, and
+   * bouncing the leader as non-fast-forward. Measured 2026-09-07: the same patch
+   * lost six consecutive attempts in ~90 min and its patch-id never changed.
+   *
+   * 12 min is chosen to sit BETWEEN the old grace and the new one, so this test
+   * is red on the old constant and green on the new. A value inside both, or
+   * outside both, would pass either way and prove nothing.
+   */
+  it('holds a ticket 12 minutes into a push, because the smoke check runs for 20', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+
+    expect(check(SHA_B).status).toBe(1)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
+  })
+
+  /**
+   * 🛑 The second half of the same bug, and the half a longer grace does NOT fix.
+   * Nothing refreshes `heartbeatAt` between the wave-through and the end of the
+   * push, so a healthy push's heartbeat ages exactly like an abandoned one. The
+   * heartbeat branch used to run FIRST, which capped every push at HEARTBEAT_TTL
+   * (15 min) no matter what the grace said — the shorter of two clocks always won.
+   */
+  it('does not reap a pushing ticket on its heartbeat, which nothing refreshes mid-push', () => {
+    // `allowedAt` is NOW, so the grace cannot be what saves this ticket — only
+    // the state check can. Dating it 12 min ago instead would conflate the two
+    // halves of the fix and this test would go red for the other one's reason.
+    seed(1, SHA_A, {
+      state: 'pushing',
+      allowedAt: Date.now(),
+      heartbeatAt: Date.now() - 60 * 60_000,
+    })
+
+    expect(check(SHA_B).status).toBe(1)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
+  })
+
+  /**
+   * The control for the exemption above, so it cannot become "a pushing ticket
+   * lives forever". A ticket claiming to push with no `allowedAt` is malformed —
+   * hand-edited, or written by an older version — and must still be reaped by the
+   * heartbeat rule rather than trusted indefinitely.
+   */
+  it('still reaps a ticket that claims to be pushing but has no allowedAt', () => {
+    seed(1, SHA_A, { state: 'pushing', heartbeatAt: Date.now() - 60 * 60_000 })
+
+    expect(check(SHA_B).status).toBe(0)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(false)
+  })
 })
 
 describe('push-queue — the pusher gate', () => {

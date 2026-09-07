@@ -32,12 +32,19 @@
  * ticket with a lower sequence number is ahead of yours. A queue that can strand
  * a deploy is worse than the duplicate builds it prevents.
  *
- * ⚠ AND IT CANNOT DEADLOCK ON AN ABANDONED SESSION. Two independent expiries,
- * both journaled rather than silent:
- *   - a ticket whose heartbeat is older than HEARTBEAT_TTL is reaped;
- *   - a ticket the hook has already waved through is released once the push
- *     LANDS (its sha is what `origin/main` now points at — verified by sha, per
- *     CLAUDE.md, never by reading push output) or once PUSH_GRACE elapses.
+ * ⚠ AND IT CANNOT DEADLOCK ON AN ABANDONED SESSION. Two expiries, applied to
+ * DIFFERENT states and never to the same ticket at once, both journaled rather
+ * than silent:
+ *   - a WAITING ticket whose heartbeat is older than HEARTBEAT_TTL is reaped;
+ *   - a PUSHING ticket is released once the push LANDS (its sha is what
+ *     `origin/main` now points at — verified by sha, per CLAUDE.md, never by
+ *     reading push output) or once PUSH_GRACE elapses.
+ *
+ * 🛑 A PUSHING TICKET IS NOT SUBJECT TO THE HEARTBEAT RULE, and that separation
+ * is load-bearing rather than tidy: nothing refreshes `heartbeatAt` during a
+ * push, so the two clocks would race and the SHORTER one would always win —
+ * silently capping every push at HEARTBEAT_TTL no matter what PUSH_GRACE says.
+ * See the note on PUSH_GRACE_MS for the six landings this cost.
  *
  * Override for a genuine emergency:  AF_SKIP_PUSH_QUEUE=1 git push ...
  * Journal of every automatic release:  <git-common-dir>/af-push-queue/journal.jsonl
@@ -56,7 +63,35 @@ import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
 
 const HEARTBEAT_TTL_MS = Number(process.env.AF_PUSH_QUEUE_TTL_MS) || 15 * 60_000
-const PUSH_GRACE_MS = Number(process.env.AF_PUSH_QUEUE_GRACE_MS) || 10 * 60_000
+
+/**
+ * 🛑 THE GRACE MUST OUTLAST THE GUARDS IT AUTHORISES, OR IT STARVES THE HEAD OF
+ * THE LINE. This was 10 min flat, and `pre-push-smoke.mjs` takes up to 20 —
+ * a cold, non-incremental compile of the whole repo, measured at 519s, 600s and
+ * 1001s on a contended box. So the ticket authorising a push expired WHILE THE
+ * PUSH WAS STILL INSIDE ITS OWN SMOKE RUN, freeing everyone behind it to push,
+ * moving `main`, and bouncing the leader as non-fast-forward. The re-pick then
+ * minted a new sha and took a new ticket at the BACK.
+ *
+ * Measured 2026-09-07 from the journal — the same patch lost six consecutive
+ * attempts in ~90 minutes across two sessions while `main` moved seven times,
+ * and its patch-id never changed once:
+ *
+ *   04:14:42  released  seq 192  reason "waved through 10m ago and never landed"
+ *   04:15:36  taken     seq 195  <- same work, back of the line
+ *
+ * That is precisely the starvation this queue was written to remove, reappearing
+ * one layer down: the queue ordered the CHECKS and then stopped protecting the
+ * session while the slowest of them ran.
+ *
+ * ⚠ SO IT IS DERIVED, NOT PICKED. It reads the smoke guard's OWN timeout
+ * variable, so raising one raises the other and the two cannot drift apart
+ * again. The margin covers the cheaper guards ahead of it and the push itself.
+ */
+const SMOKE_TIMEOUT_MS = Number(process.env.AF_SMOKE_TIMEOUT_MS) || 20 * 60_000
+const PUSH_GRACE_MARGIN_MS = 5 * 60_000
+const PUSH_GRACE_MS =
+  Number(process.env.AF_PUSH_QUEUE_GRACE_MS) || SMOKE_TIMEOUT_MS + PUSH_GRACE_MARGIN_MS
 
 /**
  * How long a pusher lock survives without a heartbeat.
@@ -365,21 +400,40 @@ function reconcile(dir, tickets) {
   const live = []
   for (const t of tickets) {
     const heartbeat = Number(t.heartbeatAt) || 0
-    if (t0 - heartbeat > HEARTBEAT_TTL_MS) {
-      release(dir, t, `heartbeat stale (${mins(t0 - heartbeat)})`)
-      continue
-    }
-    if (t.state === 'pushing') {
+    const allowedAt = Number(t.allowedAt) || 0
+
+    /**
+     * 🛑 A TICKET THAT IS PUSHING IS JUDGED BY ITS GRACE, NEVER BY ITS HEARTBEAT.
+     * Nothing refreshes `heartbeatAt` between the wave-through and the end of the
+     * push — `check` writes it once and then git runs the guards — so the
+     * heartbeat of a perfectly healthy push ages exactly as fast as an abandoned
+     * one. Reaping on it here would re-impose a 15 min ceiling and undo the grace
+     * above, which is the whole bug: this branch ran FIRST and would have killed
+     * the ticket five minutes before the grace was even consulted.
+     *
+     * The grace is the honest clock for this state because it starts when the
+     * push was allowed to begin, which is the only moment we actually observed.
+     * A ticket with no `allowedAt` is not really pushing (a hand-edited or
+     * truncated ticket), so it falls through to the heartbeat rule rather than
+     * being trusted forever.
+     */
+    if (t.state === 'pushing' && allowedAt) {
       const landed = remoteMain()
       if (landed && landed === t.sha) {
         release(dir, t, 'landed on origin/main')
         continue
       }
-      const allowedAt = Number(t.allowedAt) || 0
       if (t0 - allowedAt > PUSH_GRACE_MS) {
         release(dir, t, `waved through ${mins(t0 - allowedAt)} ago and never landed`)
         continue
       }
+      live.push(t)
+      continue
+    }
+
+    if (t0 - heartbeat > HEARTBEAT_TTL_MS) {
+      release(dir, t, `heartbeat stale (${mins(t0 - heartbeat)})`)
+      continue
     }
     live.push(t)
   }
