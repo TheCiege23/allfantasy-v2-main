@@ -88,8 +88,30 @@ function buildKpis(intel: LeagueIntelligenceAnalyticsShape['data'], trend: Leagu
         : {}),
     },
     {
+      /*
+       * 🛑 "of N" IS NOT THE LEAGUE'S TEAM COUNT, AND THE OLD LABEL IMPLIED IT WAS.
+       *
+       * `totalManagers` is `managerIntelligences.length`, which the behavioural
+       * pipeline derives from managers holding at least one EVENT inside
+       * `INTELLIGENCE_LOOKBACK_DAYS` (90 by default) — see real-data-provider.ts's
+       * own "events-derived managerIds: silent managers are not surfaced" note.
+       * A manager who did nothing in the window is not counted at all, so the
+       * denominator is smaller than the roster count and moves on its own as the
+       * window slides.
+       *
+       * Measured on a real 12-team league: 12 rosters, 12 managers with activity
+       * ever, but only 7 inside 90 days — rendered as "0 of 7" under a label that
+       * reads as "0 of your 12 teams". Every number was right and the sentence
+       * was wrong, which is the worst combination to leave on a dashboard.
+       *
+       * Naming the denominator is the honest fix and costs nothing. Changing what
+       * `totalManagers` MEANS is a different, much larger decision — it is shared
+       * with Manager Intelligence, Recommendations, League Health and Mission
+       * Control, and it is the denominator of every per-manager rate in
+       * league-intelligence.ts — so it is deliberately NOT done here.
+       */
       id: 'kpi-active-managers',
-      label: 'Active Managers',
+      label: 'Active Managers (last 90d)',
       value: `${intel.participationDistribution.activeManagers} of ${intel.participationDistribution.totalManagers}`,
     },
     { id: 'kpi-trade-activity', label: 'Trade Activity', value: capitalize(intel.tradeActivity.tier) },
