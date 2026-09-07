@@ -5,6 +5,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
 
 /**
@@ -66,7 +67,7 @@ export type PlayerCardBio = {
  * is a fact about the superflex dynasty book, not about the world — the same
  * player is a different number in one-QB, and a materially different one in
  * redraft. A card that drops the basis turns a conditional reading into a claim
- * nobody can support. See `VALUE_SOURCE` below for why that book and not another.
+ * nobody can support. `valueBook.ts` says which book and why.
  */
 export type PlayerCardMarket = {
   value: number
@@ -202,31 +203,17 @@ const MIN_LEAGUES_FOR_OWNERSHIP = 8
 const SCHEDULE_SPORT = 'NFL'
 
 /**
- * The value book every surface in this app quotes.
+ * The book used when NO league is in context.
  *
- * ⚠ `source: 'FANTASYCALC'` IS A LICENCE BOUNDARY, NOT A TIDY FILTER, and it must
- * be restated at every new read site. DynastyProcess's value files are derived
- * from FantasyPros ECR and carry FantasyPros ids; FantasyPros' terms prohibit
- * commercial use of any portion of their site, and a permissive licence on the
- * redistributing repo cannot relicense third-party data inside it. FantasyCalc is
- * the one source in use here with no such encumbrance. Today only FantasyCalc
- * rows exist so the filter is a no-op — which is exactly why it is written down.
- * The moment a second source is ingested, an unfiltered query silently starts
- * pricing on data we may not be licensed to use, and nothing fails.
- *
- * 🛑 AND `DYNASTY` / `SUPERFLEX` ARE COPIED VERBATIM FROM `lib/core-app/trades.ts`
- * ON PURPOSE. This card first read `ONE_QB`, which is arguably the better default
- * — most leagues are one-QB — and that is precisely the wrong reason to differ.
- * The trades screen and the cross-league trades board both quote the superflex
- * dynasty book, so a card quoting a different number for the same player, on the
- * same page, would read as a bug in one of them. It IS a known wrongness for a
- * redraft league; it is a SHARED one, and the card states the book on screen.
- * The league flavour does not use these at all — it re-derives from the league's
- * own variant and scoring.
+ * 🛑 THIS FILE USED TO PIN `DYNASTY / SUPERFLEX` FOR EVERY READ, INCLUDING THE
+ * LEAGUE FLAVOUR, AND THAT WAS WRONG FOR A REDRAFT LEAGUE. The pin existed for a
+ * real reason — so this card could not quote a different number than the Trades
+ * screen for the same player — and it achieved that by making all three surfaces
+ * wrong together. The shared derivation in `valueBook.ts` keeps them consistent
+ * AND correct: a league gets its own book, and only the league-less universal
+ * card falls back to the stated default below, which it renders on screen.
  */
-const VALUE_SOURCE = 'FANTASYCALC'
-const VALUE_FORMAT = 'DYNASTY'
-const VALUE_QB_FORMAT = 'SUPERFLEX'
+const UNIVERSAL_BOOK = CROSS_LEAGUE_BOOK
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 
@@ -254,16 +241,16 @@ function isUnpriced(position: string | null): boolean {
 async function loadMarket(
   sleeperId: string | null,
   position: string | null,
-  format: string,
-  qbFormat: string
+  book: ValueBook
 ): Promise<SectionState<PlayerCardMarket>> {
+  const { format, qbFormat } = book
   if (!sleeperId) {
     return unavailable('No Sleeper id on file for this player, so no market row can be matched.')
   }
 
   const rows = await prisma.playerValueSnapshot
     .findMany({
-      where: { sleeperId, source: VALUE_SOURCE, format, qbFormat },
+      where: { sleeperId, source: book.source, format, qbFormat },
       orderBy: { capturedAt: 'desc' },
       take: 40,
       select: { value: true, overallRank: true, positionRank: true, capturedAt: true, source: true },
@@ -325,7 +312,7 @@ async function loadComps(
   const rows = await prisma.playerValueSnapshot
     .findMany({
       where: {
-        source: VALUE_SOURCE,
+        source: 'FANTASYCALC',
         format,
         qbFormat,
         capturedAt: new Date(capturedAt),
@@ -671,7 +658,8 @@ async function loadLeague(
   leagueId: string,
   sleeperId: string | null,
   position: string | null,
-  userId: string | null
+  userId: string | null,
+  book: ValueBook
 ): Promise<PlayerCardLeague | null> {
   const league = await prisma.league
     .findUnique({
@@ -790,9 +778,9 @@ async function loadLeague(
               .findMany({
                 where: {
                   sleeperId: { in: samePos.flatMap((p) => (p.sleeperId ? [p.sleeperId] : [])) },
-                  source: VALUE_SOURCE,
-                  format: VALUE_FORMAT,
-                  qbFormat: VALUE_QB_FORMAT,
+                  source: book.source,
+                  format: book.format,
+                  qbFormat: book.qbFormat,
                 },
                 orderBy: { capturedAt: 'desc' },
                 distinct: ['sleeperId'],
@@ -892,8 +880,28 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
 
   const projWeek = await latestProjectionWeek().catch(() => null)
 
+  /*
+   * ⚠ THE BOOK IS RESOLVED BEFORE ANYTHING IS PRICED, and that ordering is the
+   * point rather than an optimisation. `market` supplies OVERALL RK and POS RK,
+   * which are properties of a BOOK — a player is not "#31 overall" full stop, he
+   * is #31 in dynasty superflex and a different number in redraft. Loading the
+   * ranks in parallel with the league (as this first did) meant the league card
+   * showed a league-correct price beside two ranks from the wrong book, which is
+   * a subtler version of the bug being fixed.
+   *
+   * One extra small query when a league is in context; nothing when it is not.
+   */
+  const leagueBookRow = req.leagueId
+    ? await prisma.league
+        .findUnique({ where: { id: req.leagueId }, select: { settings: true, leagueType: true } })
+        .catch(() => null)
+    : null
+  const book = leagueBookRow
+    ? valueBookFor(leagueBookRow.settings, leagueBookRow.leagueType)
+    : UNIVERSAL_BOOK
+
   const [market, ownershipBoard, projections, news, trades, league] = await Promise.all([
-    loadMarket(player.sleeperId, player.position, VALUE_FORMAT, VALUE_QB_FORMAT),
+    loadMarket(player.sleeperId, player.position, book),
     getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
     player.sleeperId && projWeek
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
@@ -901,7 +909,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     loadNews(player.name, player.sport),
     loadTrades(player.sleeperId),
     req.leagueId
-      ? loadLeague(req.leagueId, player.sleeperId, player.position, req.userId ?? null).catch(() => null)
+      ? loadLeague(req.leagueId, player.sleeperId, player.position, req.userId ?? null, book).catch(() => null)
       : Promise.resolve(null),
   ])
 
