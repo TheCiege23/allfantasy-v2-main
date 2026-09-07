@@ -42,6 +42,7 @@ import { prisma as defaultPrisma }              from '@/lib/prisma'
 import type { IntelligenceDataProvider }        from './intelligence-handlers'
 import type { ManagerBehavioralIntelligence }   from '../manager-intelligence'
 import type { LeagueBehavioralIntelligence }    from '../league-intelligence'
+import { mapImportedActivityRowsToEvents }       from '../importedActivityToEvents'
 import type { ImportedActivityEventRow }         from '../importedActivityToEvents'
 
 // ── Configuration (read at call time for env-override support) ────────────────
@@ -98,6 +99,8 @@ export interface RealDataProviderDeps {
     session: RawDraftSessionRow | null
     picks:   RawDraftPickRow[]
   }>
+  /** Imported/external-league activity (Sleeper, Yahoo, ESPN, …) — see `defaultLoadImportedActivityRows`. */
+  loadImportedActivityRows(leagueId: string, since?: Date): Promise<ImportedActivityEventRow[]>
   /** Read-only: returns league ids ordered most-recent-first, up to `take` entries. */
   findLeagueIds(take: number): Promise<{ id: string }[]>
 }
@@ -107,6 +110,7 @@ const defaultDeps: RealDataProviderDeps = {
   loadLeagueTradeRows: defaultLoadLeagueTradeRows,
   loadRosterMoveRows:  defaultLoadRosterMoveRows,
   loadDraftRows:       defaultLoadDraftRows,
+  loadImportedActivityRows: defaultLoadImportedActivityRows,
   findLeagueIds: (take) =>
     defaultPrisma.league.findMany({
       orderBy: { createdAt: 'desc' },
@@ -123,22 +127,33 @@ function sinceDate(days: number): Date {
   return d
 }
 
+/**
+ * Merges AF-native events with imported/external-league activity (Decision OS Phase A) via the
+ * SAME `loadImportedActivityRows`/`mapImportedActivityRowsToEvents` pair `dashboard-intelligence.ts`'s
+ * `loadLeagueEvents` already uses for Commissioner Hub / Dashboard Overview / LeagueTab. Without this,
+ * a Sleeper/Yahoo/ESPN-imported league — whose trades/waivers/roster moves never touch AF's own
+ * `WaiverClaim`/`AfLeagueTrade`/`AfRosterMoveHistory` tables — reads as zero engagement here even
+ * when `decision_os_imported_activity` holds its real history. Purely additive; degrades to `[]`
+ * honestly when no imported activity exists (never fabricated).
+ */
 async function loadAllLeagueEvents(
   leagueId: string,
   since:    Date,
   deps:     RealDataProviderDeps,
 ): Promise<BehavioralEvent[]> {
-  const [waiverRows, tradeRows, rosterMoveRows, draftData] = await Promise.all([
+  const [waiverRows, tradeRows, rosterMoveRows, draftData, importedActivityRows] = await Promise.all([
     deps.loadWaiverClaimRows(leagueId, since),
     deps.loadLeagueTradeRows(leagueId, since),
     deps.loadRosterMoveRows(leagueId, since),
     deps.loadDraftRows(leagueId),
+    deps.loadImportedActivityRows(leagueId, since),
   ])
   return [
     ...mapWaiverClaimsToEvents(waiverRows),
     ...mapLeagueTradesToEvents(tradeRows),
     ...mapRosterMovesToEvents(rosterMoveRows),
     ...mapDraftRowsToEvents(draftData.session, draftData.picks),
+    ...mapImportedActivityRowsToEvents(importedActivityRows).events,
   ]
 }
 

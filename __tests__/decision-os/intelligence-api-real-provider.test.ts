@@ -12,6 +12,7 @@
  * - Manager: loadDraftRows called WITHOUT a since date (finite history)
  * - League: with events → non-null intelligence with correct leagueId
  * - League: active managers surfaced in managerCount
+ * - League: a manager whose only activity is imported (Sleeper) is still surfaced
  * - League: zero events → degraded but non-null
  * - League: port throws → null
  * - Platform: findLeagueIds called with max-leagues cap
@@ -36,6 +37,7 @@ import type {
   RawDraftSessionRow,
   RawDraftPickRow,
 } from '@/lib/decision-os/behavioral/port'
+import type { ImportedActivityEventRow } from '@/lib/decision-os/behavioral/importedActivityToEvents'
 
 // ── Fixture builders ──────────────────────────────────────────────────────────
 
@@ -94,15 +96,29 @@ const emptyDraftResult = () =>
     picks:   [] as RawDraftPickRow[],
   })
 
+const makeImportedActivityRow = (o: Partial<ImportedActivityEventRow> = {}): ImportedActivityEventRow => ({
+  externalSourceKey: 'sleeper:waiver:1',
+  provider:           'sleeper',
+  afLeagueId:         LG,
+  providerLeagueId:   'sleeper-league-1',
+  activityType:       'waiver',
+  occurredAt:         new Date('2026-01-10T12:00:00Z'),
+  createdAt:          new Date('2026-01-10T12:00:00Z'),
+  normalized:         { managerKeys: [MGR] },
+  appUserId:          MGR,
+  ...o,
+})
+
 // ── Deps builder ──────────────────────────────────────────────────────────────
 
 function makeDeps(overrides: Partial<RealDataProviderDeps> = {}): RealDataProviderDeps {
   return {
-    loadWaiverClaimRows: vi.fn().mockResolvedValue([]),
-    loadLeagueTradeRows: vi.fn().mockResolvedValue([]),
-    loadRosterMoveRows:  vi.fn().mockResolvedValue([]),
-    loadDraftRows:       vi.fn().mockImplementation(emptyDraftResult),
-    findLeagueIds:       vi.fn().mockResolvedValue([]),
+    loadWaiverClaimRows:      vi.fn().mockResolvedValue([]),
+    loadLeagueTradeRows:      vi.fn().mockResolvedValue([]),
+    loadRosterMoveRows:       vi.fn().mockResolvedValue([]),
+    loadDraftRows:            vi.fn().mockImplementation(emptyDraftResult),
+    loadImportedActivityRows: vi.fn().mockResolvedValue([]),
+    findLeagueIds:            vi.fn().mockResolvedValue([]),
     ...overrides,
   }
 }
@@ -256,7 +272,22 @@ describe('getLeagueIntelligence', () => {
     expect(result!.managerCount).toBe(2)
   })
 
-  it('calls all 4 loaders with leagueId and since Date', async () => {
+  it('surfaces a manager whose ONLY activity is imported (Sleeper) — the shadow-league gap this pipeline used to miss', async () => {
+    const deps = makeDeps({
+      // Zero AF-native rows anywhere — this manager's history lives entirely in imported activity,
+      // exactly like a league whose trades/waivers all happened on the source platform.
+      loadImportedActivityRows: vi.fn().mockResolvedValue([
+        makeImportedActivityRow({ externalSourceKey: 'sleeper:waiver:1', appUserId: 'mgr-imported' , normalized: { managerKeys: ['mgr-imported'] } }),
+      ]),
+    })
+    const provider = createRealDataProvider(deps)
+    const result = await provider.getLeagueIntelligence(LG)
+
+    expect(result).not.toBeNull()
+    expect(result!.managerCount).toBe(1)
+  })
+
+  it('calls all 5 loaders, including imported activity, with leagueId and since Date', async () => {
     const deps = makeDeps()
     const provider = createRealDataProvider(deps)
     await provider.getLeagueIntelligence(LG)
@@ -265,6 +296,7 @@ describe('getLeagueIntelligence', () => {
     expect(deps.loadLeagueTradeRows).toHaveBeenCalledWith(LG, expect.any(Date))
     expect(deps.loadRosterMoveRows).toHaveBeenCalledWith(LG, expect.any(Date))
     expect(deps.loadDraftRows).toHaveBeenCalledWith(LG)
+    expect(deps.loadImportedActivityRows).toHaveBeenCalledWith(LG, expect.any(Date))
   })
 
   it('contains valid engagement tier string', async () => {
