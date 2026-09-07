@@ -153,6 +153,16 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npx prisma db push --skip-generate
+    # `db push` creates the SCHEMA and no data, so `Tenant` is empty — and
+    # `League.tenantId` defaults to "allfantasy" with an FK to it, so every
+    # league creation dies on `leagues_tenantId_fkey`. That is what has been
+    # failing the three core shards while the other lanes pass.
+    - name: Seed the default tenant
+      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'core-shard-')
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+      run: node scripts/seed-e2e-tenant.mjs
     - name: Run Playwright tests (core)
       if: startsWith(matrix.lane, 'core-shard-')
       env:
@@ -258,6 +268,11 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npx prisma db push --skip-generate
+    - name: Seed the default tenant
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+      run: node scripts/seed-e2e-tenant.mjs
     - name: Cache Playwright browsers
       uses: actions/cache@v4
       with:
@@ -270,6 +285,11 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npx prisma db push --skip-generate
+    - name: Seed the default tenant for draft-room regression
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+      run: node scripts/seed-e2e-tenant.mjs
     - name: Run draft-room regression
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
