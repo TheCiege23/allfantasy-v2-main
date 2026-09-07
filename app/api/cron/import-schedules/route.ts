@@ -21,7 +21,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
+import { createRunBudget, rotateForFairness, respondBeforeEdge } from "@/lib/cron/runBudget"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
@@ -533,12 +533,48 @@ async function handle(req: NextRequest) {
   }
 }
 
+/**
+ * 🛑 THE 240s BUDGET GATES ENTRY TO A SPORT AND NEVER BOUNDS THE SPORT ITSELF.
+ * Measured 2026-09-07 from the slow-tier dispatcher, with that budget already in place:
+ * `/api/cron/import-schedules?sport=all ... FAIL HTTP 502 (300043ms)`. The `?riProfiles=1` mode of
+ * this same route died the same way a day earlier, which is what `remainingFor` was written for —
+ * but that only helps a call that ACCEPTS a deadline, and the schedule/roster passes here do not.
+ *
+ * Bounding the RESPONSE here rather than inside `handle`: this handler nests sport loops inside
+ * provider passes, and the budget is already consulted at three different depths. Adding a fourth
+ * check would not fix the case that actually bites — one pass, already started, running long.
+ *
+ * ⚠ WHY THIS DOES NOT LOSE TELEMETRY. Each pass wraps itself in `withSyncJobRun` (JOB_TSDB, the
+ * roster pass, JOB_RI_PROFILES), so anything finished before the deadline has already recorded its
+ * own run. Only the in-flight pass is unrecorded, which is correct — it did not finish — and its
+ * `running` row is what `/api/cron/reap-sync-runs` exists to sweep.
+ *
+ * ⚠ 200, NOT 5xx. A deferral is designed behaviour for a budgeted job, matching the
+ * `deferredForBudget` convention already used by `import-stat-lines`.
+ */
+async function handleBoundedByEdge(req: NextRequest) {
+  const startedAt = Date.now()
+  const { result, overran } = await respondBeforeEdge<NextResponse | null>(() => handle(req), () => null)
+  if (!overran && result) return result
+
+  return NextResponse.json(
+    {
+      ok: true,
+      deferredForBudget: true,
+      note: 'stopped at the response deadline; completed passes recorded their own runs and the next fire continues',
+      elapsedMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  return handle(req)
+  return handleBoundedByEdge(req)
 }
 
 export async function POST(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  return handle(req)
+  return handleBoundedByEdge(req)
 }
