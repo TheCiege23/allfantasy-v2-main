@@ -1,14 +1,19 @@
 'use client'
 
 import Link from 'next/link'
-import { Menu, PanelLeftClose, PanelLeft, Search, Bell, HelpCircle, UserCircle, ChevronDown } from 'lucide-react'
+import { Menu, PanelLeftClose, PanelLeft, Search, Bell, HelpCircle, UserCircle } from 'lucide-react'
 import { useCommissionerLayout } from '@/components/commissioner-os/providers/CommissionerLayoutProvider'
 import { useCommissionerPlatform } from '@/components/commissioner-os/providers/CommissionerPlatformProvider'
 import { DataModeIndicator } from '@/components/commissioner-os/demo-mode/DataModeIndicator'
+import { LeagueSelector, type LeagueSelectorOption } from '@/components/commissioner-os/shell/LeagueSelector'
 
 export interface CommissionerHeaderProps {
   /** Fetched once by the layout via adapter.notifications.getSummary() — the header never counts unread notifications itself. */
   unreadNotificationCount?: number
+  /** Fetched once by the layout via `listActiveLeaguesForUser()` — the header never queries leagues itself. */
+  leagues?: LeagueSelectorOption[]
+  /** Fetched once by the layout via `resolveActiveLeagueId()`. */
+  activeLeagueId?: string | null
 }
 
 /**
@@ -16,7 +21,11 @@ export interface CommissionerHeaderProps {
  * profile, per the Design Language & Experience System §3. Sticky at every
  * breakpoint, fixed height, never grows with page content.
  */
-export function CommissionerHeader({ unreadNotificationCount = 0 }: CommissionerHeaderProps) {
+export function CommissionerHeader({
+  unreadNotificationCount = 0,
+  leagues = [],
+  activeLeagueId = null,
+}: CommissionerHeaderProps) {
   const { toggleSidebar, sidebarCollapsed, toggleMobileSidebar } = useCommissionerLayout()
   const { openService } = useCommissionerPlatform()
 
@@ -44,17 +53,7 @@ export function CommissionerHeader({ unreadNotificationCount = 0 }: Commissioner
         {sidebarCollapsed ? <PanelLeft size={20} aria-hidden /> : <PanelLeftClose size={20} aria-hidden />}
       </button>
 
-      {/* League selector — placeholder. Real implementation reads League
-          Snapshot (Mission Control Addendum A) once a real league data
-          source is wired up through the Decision OS client interface. */}
-      <button
-        type="button"
-        className="focus-ring flex items-center gap-1 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm font-medium"
-        style={{ background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--border)' }}
-      >
-        <span>Select league</span>
-        <ChevronDown size={16} aria-hidden />
-      </button>
+      <LeagueSelector leagues={leagues} activeLeagueId={activeLeagueId} />
 
       <div className="flex-1" />
 
