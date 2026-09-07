@@ -10,7 +10,7 @@ import {
   LeagueCrest,
   RowTag,
   SectionHead,
-  rankLabel,
+  rankTiers,
   type Sev,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
@@ -155,7 +155,7 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   )
 }
 
-function Row({ row, i, now }: { row: MyTeamRow; i: number; now: number }) {
+function Row({ row, rank, now }: { row: MyTeamRow; rank: string | null; now: number }) {
   const tags = tagsOf(row)
   /*
    * ⚠ THE CTA GOES TO THE PLATFORM, NOT INTO AllFantasy. AllFantasy is
@@ -175,8 +175,14 @@ function Row({ row, i, now }: { row: MyTeamRow; i: number; now: number }) {
   return (
     <li>
       <div className="af-bd-row">
-        <span className="af-bd-rank" aria-hidden>
-          {rankLabel(i)}
+        {/*
+          ⚠ A BULLET, NOT A BLANK, WHEN THE ROW TIES WITH THE ONE ABOVE IT. An
+          empty cell in a column of numerals reads as data that failed to load;
+          a bullet says "no order here", which is the actual fact. See
+          `rankTiers` for why most of this board ties on a normal week.
+        */}
+        <span className="af-bd-rank" data-untiered={rank == null ? '' : undefined} aria-hidden>
+          {rank ?? '·'}
         </span>
         <LeagueCrest
           imageUrl={row.logoUrl}
@@ -246,6 +252,18 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   const total = pulse.considered
 
   /*
+   * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
+   * THE RENDERED LOCK. `needs` sorts on (locked, severity, lockAt) and `set` on
+   * lockAt alone with severity pinned at 0, so this one key returns "tied"
+   * exactly when the comparator would have returned 0 in either column. Reading
+   * the DISPLAYED time instead would merge rows an hour apart, because
+   * `formatLockLabel` rounds to the hour past a day.
+   */
+  const ranks = rankTiers(rows.map((r) => `${r.locked ? 1 : 0}|${r.severity}|${r.lockAt ?? ''}`))
+  /* Nothing separated any row from any other, so the board is a set, not a ranking. */
+  const unordered = ranks.length > 0 && ranks.every((r) => r === null)
+
+  /*
    * ⚠ THREE DIFFERENT SILENCES, THREE DIFFERENT SENTENCES. "Nothing needs you",
    * "we could not read some of these" and "you hold no claimed teams" are
    * distinct facts, and collapsing them is how a board tells a manager their
@@ -293,12 +311,20 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             state a rule the list is not following — the same defect the trades
             board's "ranked by deadline" had over rows with no deadline.
           */
+          /*
+            ⚠ "TOP N" IS ITSELF A RANKING CLAIM, so it goes too when nothing
+            separated the rows. On a normal week most leagues lock at the same
+            first kickoff, which makes this the COMMON branch rather than an
+            edge case — see `rankTiers`.
+          */
           label={
             rows.length === 0
               ? 'Needs you first'
-              : pulse.needs.length > 0
-                ? `Top ${rows.length} · ranked by urgency`
-                : `Top ${rows.length} · nothing is broken, so ranked by lock time`
+              : unordered
+                ? `${rows.length} shown · all lock together, so in no particular order`
+                : pulse.needs.length > 0
+                  ? `Top ${rows.length} · ranked by urgency`
+                  : `Top ${rows.length} · nothing is broken, so ranked by lock time`
           }
           count={`${pulse.checked.toLocaleString()} of ${total.toLocaleString()} teams read`}
         />
@@ -320,7 +346,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             ) : null}
             <ul className="af-bd-rows">
               {rows.map((r, i) => (
-                <Row key={r.leagueId} row={r} i={i} now={nowMs} />
+                <Row key={r.leagueId} row={r} rank={ranks[i]} now={nowMs} />
               ))}
             </ul>
           </>

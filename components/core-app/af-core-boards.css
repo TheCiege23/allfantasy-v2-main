@@ -131,6 +131,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * A row that ties with the one above it carries a bullet instead of a numeral.
+ * It keeps the column's width so the league names stay aligned, but drops the
+ * weight — a bullet as bold as a rank would read as a rank. See `rankTiers`.
+ */
+.af-core .af-bd-rank[data-untiered] {
+  font-weight: 400;
+  opacity: 0.45;
+}
+
 /* league identity block — name over platform · detail */
 .af-core .af-bd-league {
   width: 230px;
