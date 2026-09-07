@@ -173,6 +173,51 @@ function idsOf(v: unknown): string[] {
   return Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []
 }
 
+/**
+ * Collapse the mirrored copies of each trade, per league.
+ *
+ * 🛑 THE SAME TRADE IS STORED ONCE PER MANAGER. `LeagueTradeHistory` is
+ * `@@unique([sleeperLeagueId, sleeperUsername])` — one history per manager per
+ * league — and `LeagueTrade` is `@@unique([historyId, transactionId])`. So a
+ * league where two managers have both been ingested holds every trade between
+ * them TWICE, mirrored, and a per-row count reports "6 trades on file" for
+ * three. That is a structural certainty from the two unique constraints, not a
+ * guess about the data.
+ *
+ * ⚠ DEDUPED ON `transactionId` — the platform's own id, and the one field equal
+ * across mirrors by definition. The copies are INVERTED (one manager's
+ * `playersGiven` is the other's `playersReceived`), so they compare equal on no
+ * payload field at all.
+ *
+ * ⚠ AND THE INPUT MUST ALREADY BE ORDERED, because `firstByLeague` keeps the
+ * FIRST row it sees per league and the mirrors are inverted — which copy
+ * survives decides which way round the card's two sides read. The caller orders
+ * by season, week, then `historyId` so that choice is stable between renders
+ * rather than whatever Postgres returned first.
+ *
+ * Pure and exported so the rule can be asserted without a database; the loader
+ * below is the only caller.
+ */
+export function collapseMirroredTrades<T extends { leagueId: string; transactionId: string }>(
+  ordered: readonly T[],
+): { counts: Map<string, number>; firstByLeague: Map<string, T> } {
+  const counts = new Map<string, number>()
+  const firstByLeague = new Map<string, T>()
+  const seen = new Map<string, Set<string>>()
+
+  for (const row of ordered) {
+    const forLeague = seen.get(row.leagueId) ?? new Set<string>()
+    if (forLeague.has(row.transactionId)) continue
+    forLeague.add(row.transactionId)
+    seen.set(row.leagueId, forLeague)
+
+    counts.set(row.leagueId, (counts.get(row.leagueId) ?? 0) + 1)
+    if (!firstByLeague.has(row.leagueId)) firstByLeague.set(row.leagueId, row)
+  }
+
+  return { counts, firstByLeague }
+}
+
 export async function getTradesBoard(
   userId: string,
   currentWeek: number | null,
@@ -251,7 +296,15 @@ export async function getTradesBoard(
       ? await prisma.leagueTrade
           .findMany({
             where: { historyId: { in: historyIds } },
-            orderBy: [{ season: 'desc' }, { week: 'desc' }],
+            /*
+             * ⚠ `historyId` IS THE TIEBREAK, AND IT IS THERE FOR DETERMINISM, NOT
+             * TIDINESS. The mirrors of one trade share a season and a week, so
+             * without a third key which copy survives the dedupe below is
+             * whatever Postgres returned first — and the two copies are
+             * INVERTED, so the card's "X sent / Y sent" sides would swap
+             * between renders of the same trade.
+             */
+            orderBy: [{ season: 'desc' }, { week: 'desc' }, { historyId: 'asc' }],
             /*
              * Bounded read: enough to give every league on the board a latest
              * trade without pulling all 7,781 rows. Sliced per league below.
@@ -343,18 +396,27 @@ export async function getTradesBoard(
     mine.map((c) => [c.league!.platformLeagueId ?? '', c.league!] as const),
   )
 
-  /* Latest graded trade, and a total, per league. */
-  const latestByLeague = new Map<string, BoardTrade>()
-  const countByLeague = new Map<string, number>()
-
-  for (const t of trades) {
+  /*
+   * Resolve each row to its league, then collapse the mirrors. `trades` arrives
+   * ordered by season, week and historyId, which is what makes the surviving
+   * copy — and therefore which way round the card's two sides read — stable.
+   */
+  const resolved = trades.flatMap((t) => {
     const h = historyById.get(t.historyId)
-    if (!h) continue
+    if (!h) return []
     const league = leagueByPlatformId.get(h.sleeperLeagueId)
-    if (!league) continue
+    if (!league) return []
+    return [{ ...t, leagueId: league.id, username: h.sleeperUsername }]
+  })
 
-    countByLeague.set(league.id, (countByLeague.get(league.id) ?? 0) + 1)
-    if (latestByLeague.has(league.id)) continue
+  const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved)
+
+  /* Latest graded trade per league, built from the surviving copy. */
+  const latestByLeague = new Map<string, BoardTrade>()
+
+  for (const t of firstByLeague.values()) {
+    const league = { id: t.leagueId }
+    const h = { sleeperUsername: t.username }
 
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
