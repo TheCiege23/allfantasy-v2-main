@@ -38,7 +38,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
+import { createRunBudget, rotateForFairness, respondBeforeEdge } from "@/lib/cron/runBudget"
 import { syncRollingInsightsPlayerStatsToDb } from "@/lib/stats/rollingInsightsPlayerStats"
 import { syncCfbdPlayerStatsToDb } from "@/lib/stats/cfbdPlayerStats"
 import { backfillCfbdIdsForNcaaf } from "@/lib/sports-data/cfbdIdentityBridge"
@@ -262,18 +262,60 @@ async function handle(req: NextRequest) {
   const budget = createRunBudget()
   const results: SportOutcome[] = []
   const deferred: string[] = []
+  const sports = resolveSports(explicit)
 
-  for (const sport of resolveSports(explicit)) {
-    if (!explicit && budget.exhausted()) {
-      deferred.push(sport)
-      continue
-    }
-    results.push(await runOneSport(sport, season, skipIdentityBackfill))
+  /*
+   * 🛑 THE 240s BUDGET BELOW DOES NOT BOUND `runOneSport`, AND THAT IS WHY THIS ROUTE 502'd.
+   * Measured 2026-09-07 from the slow-tier dispatcher: `import-stat-lines ... FAIL HTTP 502
+   * (300147ms)`, with this budget already in place. `exhausted()` gates ENTRY to a sport; once one
+   * starts it runs as long as its provider calls take, so the last sport admitted at 239s can carry
+   * the request past the 300s platform edge on its own.
+   *
+   * `respondBeforeEdge` bounds the RESPONSE instead. `results` and `deferred` are closure state, so
+   * the overrun path reports exactly what finished — the in-flight sport and everything after it
+   * come back as deferred rather than as a severed connection with nothing recorded.
+   *
+   * ⚠ The in-flight sport keeps running; there is no signal to cancel it with. See the header on
+   * `respondBeforeEdge`: the edge kills that work either way, and the difference is whether a run
+   * gets recorded at all.
+   */
+  const { overran } = await respondBeforeEdge(
+    async () => {
+      for (const sport of sports) {
+        if (!explicit && budget.exhausted()) {
+          deferred.push(sport)
+          continue
+        }
+        results.push(await runOneSport(sport, season, skipIdentityBackfill))
+      }
+    },
+    () => undefined,
+  )
+
+  if (overran) {
+    /*
+     * Anything with no outcome is deferred, NOT failed — including the sport that was mid-flight.
+     * Calling it a failure would make a slow provider look like a broken importer, and the
+     * freshness probe would then read a red job that is merely late.
+     */
+    const settled = new Set(results.map((r) => r.body.sport))
+    for (const s of sports) if (!settled.has(s) && !deferred.includes(s)) deferred.push(s)
   }
 
   // Explicit single-sport callers keep the exact response shape they had before.
   if (explicit) {
-    const only = results[0]!
+    const only = results[0]
+    /*
+     * ⚠ `results[0]` can be absent now: the guard can fire before the single requested sport
+     * finishes. The old `results[0]!` would have thrown on `.body` and turned a deferral into a
+     * 500 — a worse lie than the 502, because a 500 names US as broken.
+     */
+    if (!only) {
+      return NextResponse.json(
+        { ok: false, sport: explicit, deferredForBudget: [explicit], timestamp: new Date().toISOString() },
+        { status: 503 },
+      )
+    }
     return NextResponse.json({ ...only.body, timestamp: new Date().toISOString() }, {
       status: only.failed ? 500 : 200,
     })
