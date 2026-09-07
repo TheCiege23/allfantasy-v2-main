@@ -25,6 +25,19 @@ vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: call
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
+/*
+ * ⚠ MOCKED BECAUSE THE MODULE UNDER TEST CHANGED DEPENDENCY, NOT BECAUSE THESE TESTS CARE ABOUT
+ * COOKIES. `resolveActiveLeagueId` gained a `cookies()` read in 440e6d39 (the Commissioner OS
+ * league selector), and every suite here reaches it through its live client. Without this the
+ * whole file dies on `\`cookies\` was called outside a request scope` before a single assertion
+ * runs.
+ *
+ * `get` returns undefined, which is the no-cookie path — the "most recent roster" default these
+ * assertions were written against and still describe. Returning a value here would silently
+ * repoint every test at a different league.
+ */
+const cookieStoreMock = vi.hoisted(() => ({ get: vi.fn(() => undefined) }))
+vi.mock("next/headers", () => ({ cookies: () => Promise.resolve(cookieStoreMock) }))
 
 import { liveDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/live"
 
