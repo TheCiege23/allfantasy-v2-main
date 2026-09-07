@@ -50,7 +50,19 @@ export default async function MissionControlPage() {
     adapter.notifications.getSummary(),
   ])
 
-  const recommendationsPreview = (recommendationsResponse.data ?? []).filter((rec) => LIVE_STATUSES.has(rec.status)).slice(0, 3)
+  /*
+   * A statusless recommendation is untriaged, which is the definition of "live" — so it belongs in
+   * this preview. `status` became optional when the live client stopped discarding real
+   * recommendations; nothing persists a lifecycle, so every real one arrives without a status and
+   * `LIVE_STATUSES.has(undefined)` would have hidden all of them from Mission Control.
+   *
+   * ⚠ The compiler caught this one only because `Set.has` is typed strictly. The identical filter
+   * in `RecommendationsView` used `Array.prototype.includes`, which accepts `undefined` happily and
+   * would have silently emptied the queue with a clean typecheck.
+   */
+  const recommendationsPreview = (recommendationsResponse.data ?? [])
+    .filter((rec) => rec.status === undefined || LIVE_STATUSES.has(rec.status))
+    .slice(0, 3)
   const recentActivityPreview = (activityResponse.data ?? []).slice(0, RECENT_ACTIVITY_PREVIEW_COUNT).map((event) => ({
     id: event.id,
     label: event.summary,

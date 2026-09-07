@@ -141,7 +141,16 @@ describe("commissioner-os — Recommendations Center card actions scoped within 
     const response = await demoRecommendationsClient.getQueue()
     render(<RecommendationsView recommendations={response.data!} dataMode="demo" />)
 
-    const card = screen.getByText('Manager engagement declining').closest('[class*="rounded-2xl"]') as HTMLElement
+    /*
+     * PRE-EXISTING FAILURE, fixed in passing. The selector looked for `rounded-2xl`, which the
+     * shared `Card` stopped emitting at the Phase 23 component refresh (`d23d8b42e`) — it renders
+     * `card-premium` now. `closest()` returned null and the assertion had been red since.
+     *
+     * ⚠ A CLASS-NAME SELECTOR IS A TEST COUPLED TO STYLING. It goes red on a purely visual change
+     * and says nothing about the behaviour it guards — which is that each card's action button is
+     * scoped to its own card. Anchoring on the semantic wrapper keeps that meaning.
+     */
+    const card = screen.getByText('Manager engagement declining').closest('[class*="card-premium"]') as HTMLElement
     expect(card).not.toBeNull()
     expect(within(card).getByRole('button', { name: 'Send Check-In' })).toBeInTheDocument()
   })

@@ -30,7 +30,21 @@ export function RecommendationsView({ recommendations, dataMode }: Recommendatio
   const visible = useMemo(() => {
     const statuses = showArchive ? TERMINAL_STATUSES : LIVE_STATUSES
     return recommendations
-      .filter((rec) => statuses.includes(rec.status))
+      .filter((rec) => {
+        /*
+         * 🛑 A RECOMMENDATION WITH NO STATUS BELONGS IN THE QUEUE, NOT NOWHERE. `status` became
+         * optional when the live client stopped discarding real recommendations — nothing
+         * persists a lifecycle, so every live recommendation arrives without one. The previous
+         * `statuses.includes(rec.status)` returned false for `undefined`, which would have
+         * filtered out EVERY real recommendation: the module would have wired correctly, fetched
+         * correctly, mapped correctly, and still rendered an empty queue.
+         *
+         * Statusless means "not yet triaged", which is the definition of the live queue and the
+         * opposite of archived — so it shows in Queue and is absent from Archive.
+         */
+        if (rec.status === undefined) return !showArchive
+        return statuses.includes(rec.status)
+      })
       .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
   }, [recommendations, showArchive])
 
