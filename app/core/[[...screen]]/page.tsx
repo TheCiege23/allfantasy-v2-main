@@ -2016,6 +2016,7 @@ export default async function AfCorePage({
                   : null
               }
               platform={trades.league.platform}
+              sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
               leagues={tradeStripLeagues}

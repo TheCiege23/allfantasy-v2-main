@@ -1447,3 +1447,21 @@
  */
 .af-tc-row--button[data-added='true'] { opacity: 0.45; cursor: default; }
 
+
+/*
+ * The platform hand-off. AllFantasy cannot SEND a trade — Sleeper's API has no
+ * write endpoint — so the builder's last step is a link out, and the note says
+ * so plainly rather than leaving the user to discover it.
+ */
+.af-tc-handoff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+}
+
+.af-tc-handoff-note {
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+}

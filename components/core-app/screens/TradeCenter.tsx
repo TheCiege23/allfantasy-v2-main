@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import { SourceActionLink } from '@/components/league-links/SourceActionLink'
+import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import {
   RosterPlayerRow,
   StockMark,
@@ -270,6 +272,11 @@ export function TradeCenter(props: {
   leagueVariant?: string | null
   /** Every connected league, for the cross-league offers strip. Omit to hide the strip. */
   leagues?: StripLeague[] | null
+  /**
+   * Where to actually send the finished trade — the platform's own trade page.
+   * Null for a native league, or when the resolver could not verify a host.
+   */
+  sourceLink?: SourceScreenLink | null
 }) {
   const [result, setResult] = useState<AnalyzeResult | null>(null)
   const [busy, setBusy] = useState(false)
@@ -741,6 +748,28 @@ export function TradeCenter(props: {
           Build a deal across any league you&rsquo;re in and any asset class it allows. Context
           below the verdict is additive &mdash; it never touches the score above it.
         </p>
+        {/*
+          🛑 WHERE THE TRADE IS ACTUALLY SENT, AND THIS SCREEN HAD NO SUCH LINK.
+          AllFantasy is read-only on every connected platform — Sleeper's API has
+          no write endpoint at all — so a deal built here does not exist until it
+          is re-entered on the source platform. My Team and Matchup have carried a
+          `sourceLink` for that reason since they shipped; the trade builder, the
+          one screen whose entire output is an action the user must take
+          somewhere else, did not. The flow dead-ended on a verdict.
+
+          `screen: 'trade'` lands on the platform's own trade page (Sleeper
+          /trades, ESPN's team page, Yahoo's proposetrade) rather than the league
+          home, and renders nothing at all for a native league or an unresolved
+          host — never a guessed href.
+        */}
+        {props.sourceLink ? (
+          <div className="af-tc-handoff">
+            <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
+            <span className="af-tc-handoff-note">
+              AllFantasy never sends a trade for you — build it here, then send it there.
+            </span>
+          </div>
+        ) : null}
       </header>
 
       {/* Every league at a glance, before this one's context — see the strip's own header. */}

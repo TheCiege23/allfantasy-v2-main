@@ -1,5 +1,6 @@
 import 'server-only'
 import { valueBookFor, type ValueBook } from './valueBook'
+import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -228,7 +229,28 @@ async function resolveGrades(
 }
 
 export type TradesData = {
-  league: { id: string; name: string; platform: string }
+  league: {
+    id: string
+    name: string
+    platform: string
+    /**
+     * Where the trade is actually SENT.
+     *
+     * 🛑 AllFantasy CANNOT SEND A TRADE, AND THIS SCREEN NEVER SAID SO. Sleeper's
+     * API is read-only and the ESPN/Yahoo integrations are read-only too, so a
+     * trade built here has to be re-entered on the source platform to exist. My
+     * Team and Matchup both carry a `sourceLink` for exactly that reason; the
+     * trade builder — the one screen whose whole output is an action the user
+     * must take elsewhere — was the one that did not, so the flow dead-ended on
+     * a proposal with nowhere to go.
+     *
+     * Resolved server-side through the one hardened resolver (exact-host HTTPS
+     * allowlist), with `screen: 'trade'` so it lands on the platform's own trade
+     * page rather than the league home. Null for a native league, where there is
+     * no source to open.
+     */
+    sourceLink: SourceScreenLink | null
+  }
   /** Grading context the handoff prints above every grade. */
   gradingContext: SectionState<{ leagueName: string; format: string | null; teamCount: number }>
   history: SectionState<TradeRecord[]>
@@ -284,7 +306,7 @@ function resolveDeadline(settings: unknown): SectionState<TradeDeadline> {
 export async function getTradesData(leagueId: string, userId: string): Promise<TradesData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true },
+    select: { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true, season: true },
   })
   if (!league) return null
 
@@ -296,6 +318,14 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
       id: league.id,
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
+      sourceLink: resolveSourceScreenLink({
+        platform: league.platform,
+        sourceLeagueId: league.platformLeagueId,
+        leagueName: leagueDisplayName(league.name),
+        season: league.season,
+        screen: 'trade',
+        action: 'trade',
+      }),
     },
     gradingContext: {
       available: true as const,

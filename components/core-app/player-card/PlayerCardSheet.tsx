@@ -275,6 +275,28 @@ export default function PlayerCardSheet({
                 </div>
               ) : null}
 
+              {/*
+                The design's Propose Trade action.
+
+                It goes to AF's own per-league trade builder rather than straight
+                to the platform, because that is where the deal is actually
+                priced and graded under this league's settings. The builder then
+                hands off to Sleeper/ESPN/Yahoo to SEND it — AllFantasy is
+                read-only on every connected platform and cannot submit a trade.
+
+                Only on the league flavour, and only when he is not already
+                yours: "propose a trade" for a player on your own roster is not
+                a thing you can do.
+              */}
+              {league && !league.isYours && league.slot !== 'NOT ROSTERED' ? (
+                <a
+                  className="af-pc-cta"
+                  href={`/core/trades?league=${encodeURIComponent(league.leagueId)}`}
+                >
+                  Propose Trade
+                </a>
+              ) : null}
+
               {bio ? (
                 <div className="af-pc-bio">
                   {bio.age != null ? (
