@@ -8,6 +8,7 @@ import {
 } from './dynasty-tiers';
 import { getComprehensiveLearningContext } from './comprehensive-trade-learning';
 import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
+import { resolveNflAges, ageOf } from './player-age';
 import {
   getLeagueInfo,
   getLeagueRosters,
@@ -560,9 +561,15 @@ async function analyzeUserTradingProfile(sleeperUsername: string): Promise<UserT
   const partnerCounts: Record<string, number> = {};
   let totalValue = 0;
   
+  /* 🛑 Real ages, resolved once above the loop. The tier list's ages are a 2024 snapshot, so a
+   * 27-year-old reads as 25 and inflates this manager's "youth" score. See lib/player-age.ts. */
+  const historyAges = await resolveNflAges(
+    trades.flatMap(t => ((t.playersReceived as Array<{ name: string }>) || []).map(p => p.name)),
+  );
+
   for (const trade of trades) {
     if ((trade.valueDifferential || 0) > 0) wins++;
-    
+
     const received = (trade.playersReceived as Array<{ name: string; position: string }>) || [];
     const given = (trade.playersGiven as Array<{ name: string; position: string }>) || [];
     const picksReceived = (trade.picksReceived as Array<{ round: number }>) || [];
@@ -570,7 +577,8 @@ async function analyzeUserTradingProfile(sleeperUsername: string): Promise<UserT
     
     for (const p of received) {
       const tiered = ALL_TIERED_PLAYERS.find(tp => tp.name.toLowerCase() === p.name.toLowerCase());
-      if (tiered?.age && tiered.age < 26) youthScore++;
+      const pAge = ageOf(historyAges, p.name) ?? tiered?.age;
+      if (pAge && pAge < 26) youthScore++;
       positionCounts[p.position] = (positionCounts[p.position] || 0) + 1;
     }
     
