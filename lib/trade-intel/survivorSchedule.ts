@@ -254,6 +254,36 @@ export function blendAcrossRosterChange(args: {
  *   W14–16  merged, one a week, 6 → 4
  *   W17     three teams, no elimination — money placement
  */
+/**
+ * Which leagues have a published schedule ON FILE, keyed on the platform's own league id.
+ *
+ * 🛑 THIS IS A HAND-ENTERED REGISTRY AND THAT IS THE HONEST SHAPE, NOT A SHORTCUT. An elimination
+ * schedule comes from a league's constitution — a document — and no platform exposes it. Sleeper
+ * knows the roster and the scoring; it does not know that weeks 11-13 chop two teams instead of
+ * one. So the only leagues that can be paced are the ones somebody has read the rules for.
+ *
+ * ⚠ KEYED ON `platformLeagueId`, NOT ON NAME OR THE AF UUID. Names are edited mid-season and the
+ * AF id changes if a league is re-imported; the platform id is the one thing that survives both.
+ *
+ * ⚠ AND THE DEFAULT IS null, WHICH MATTERS MORE THAN THE ENTRY. Every league not listed here keeps
+ * the unpaced behaviour it has today rather than being paced against somebody else's calendar.
+ */
+const SCHEDULE_BY_PLATFORM_LEAGUE_ID: Readonly<Record<string, () => SurvivorSchedule>> = {
+  /* Survivor All-Stars Guillotine, 2026 — 22 teams, transcribed from the constitution. */
+  '1387654855463534592': () => SURVIVOR_ALL_STARS_2026,
+}
+
+/** The published schedule for a league, or null when nobody has entered one. */
+export function scheduleForLeague(platformLeagueId: string | null | undefined): SurvivorSchedule | null {
+  const key = (platformLeagueId ?? '').trim()
+  if (!key) return null
+  const make = SCHEDULE_BY_PLATFORM_LEAGUE_ID[key]
+  return make ? make() : null
+}
+
+/** Exported so a test can assert the registry resolves the real ids, not a shape. */
+export const SCHEDULE_REGISTRY_IDS_FOR_TEST = Object.keys(SCHEDULE_BY_PLATFORM_LEAGUE_ID)
+
 export const SURVIVOR_ALL_STARS_2026: SurvivorSchedule = {
   id: 'survivor_all_stars_2026',
   label: 'Survivor All-Stars Guillotine (22 teams)',

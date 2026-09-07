@@ -13,13 +13,21 @@ const mockRosterFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
 const mockGetMarketValues = vi.hoisted(() => vi.fn())
 const mockRunTradeAnalysis = vi.hoisted(() => vi.fn())
+const mockWeeklyFindFirst = vi.hoisted(() => vi.fn())
+const mockWeeklyFindMany = vi.hoisted(() => vi.fn())
 
+/*
+ * ⚠ `weeklyMatchup` IS HERE BECAUSE `resolveCurrentWeekForLeague` READS IT. Without it the week
+ * lookup throws, the caller's `.catch` swallows it, and the paced path silently becomes the
+ * unpaced one — a mock that stops doubling exactly the thing under test.
+ */
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: mockLeagueFindUnique },
     leagueTeam: { findMany: mockTeamFindMany },
     roster: { findMany: mockRosterFindMany },
     sportsPlayer: { findMany: mockSportsPlayerFindMany },
+    weeklyMatchup: { findFirst: mockWeeklyFindFirst, findMany: mockWeeklyFindMany },
   },
 }))
 
@@ -108,6 +116,8 @@ beforeEach(() => {
   mockSportsPlayerFindMany.mockReset().mockResolvedValue(PLAYERS)
   mockGetMarketValues.mockReset().mockResolvedValue(VALUES)
   mockRunTradeAnalysis.mockReset().mockResolvedValue(ENGINE)
+  mockWeeklyFindFirst.mockReset().mockResolvedValue(null)
+  mockWeeklyFindMany.mockReset().mockResolvedValue([])
 })
 
 describe('marketContextFor', () => {
@@ -282,6 +292,54 @@ describe('getPlayerTradeVisual', () => {
     // 🛑 The league budget is on file, and must NOT be substituted for what he has left.
     expect(bid.budgetTotal).toBe(1000)
     expect(bid.reason).toMatch(/do not hold your remaining FAAB/)
+  })
+
+  /*
+   * ── THE PACED PATH, WHICH THE OTHER GUILLOTINE TESTS DO NOT REACH ──────────────────────────
+   * They use `platformLeagueId: '888'`, which resolves no schedule — so they exercise the UNPACED
+   * branch and would pass with the whole pacing wire deleted. This one uses the real Sleeper id
+   * from the registry, which is the only way to prove the schedule is actually consulted.
+   */
+  it('🛑 a league WITH a published schedule is PACED — the bid shrinks to one week\'s share', async () => {
+    const SURVIVOR_ALL_STARS_SLEEPER_ID = '1387654855463534592'
+    mockLeagueFindUnique.mockResolvedValue({
+      ...LEAGUE,
+      platformLeagueId: SURVIVOR_ALL_STARS_SLEEPER_ID,
+      leagueType: 'guillotine',
+      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+    })
+    /* Week 11: 12 alive, the Gauntlet begins, E[weeks left] = 4.0. */
+    mockWeeklyFindFirst.mockResolvedValue({ seasonYear: 2026, week: 11 })
+
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    const bid = state.data.bidInstead!
+
+    /*
+     * Unpaced this is $255 (400 x 2100/3300). Paced across 4.0 expected weeks it is a quarter of
+     * that — $64. The difference IS the schedule, and it is the whole point of the wire.
+     */
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.ceilingAtRemaining).toBe(64)
+    expect(bid.reason).toMatch(/4\.0 more weeks/)
+  })
+
+  it('⚠ [control] an UNREGISTERED league gets the same share but is NOT paced', async () => {
+    /* The registry's default is null, and that is what keeps every other league unchanged. */
+    mockLeagueFindUnique.mockResolvedValue({
+      ...LEAGUE,
+      platformLeagueId: '999-not-in-the-registry',
+      leagueType: 'guillotine',
+      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+    })
+    mockWeeklyFindFirst.mockResolvedValue({ seasonYear: 2026, week: 11 })
+
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    const bid = state.data.bidInstead!
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.ceilingAtRemaining).toBe(255)
+    expect(bid.reason).not.toMatch(/more weeks/)
   })
 
   it('[control] an ordinary league still gets packages and NO bid block', async () => {

@@ -17,6 +17,8 @@ import {
 import { describeScoringFit } from '@/lib/trade-value/scoringFit'
 import { allocateFaabAcrossPool, type FaabCandidate } from '@/lib/trade-intel/faabBid'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
+import { scheduleForLeague, survivorHorizon, type SurvivorHorizon } from '@/lib/trade-intel/survivorSchedule'
+import { resolveCurrentWeekForLeague } from './currentWeek'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
 import { runTradeAnalysis } from '@/lib/engine/trade'
@@ -263,6 +265,8 @@ function bidFor(args: {
   faabBudget: number | null
   /** What THIS manager has left, from `rosters.faabRemaining`. This is what is bid against. */
   faabRemaining: number | null
+  /** The published elimination schedule at this week, or null when the league has none on file. */
+  horizon: SurvivorHorizon | null
   myPlayers: DiscoveryPlayer[]
 }): PlayerBidInstead | null {
   /* Your weakest starter at each slot — what a new man would actually displace. */
@@ -291,12 +295,11 @@ function bidFor(args: {
   if (!pool.length) return null
 
   /*
-   * ⚠ NO HORIZON IS PASSED, AND THAT IS HONEST RATHER THAN LAZY. Pacing needs a published
-   * elimination schedule; this surface holds a league row, not a constitution. Unpaced is the
-   * aggressive read — the whole budget against this one pool — and the module says so in its own
-   * reason string rather than letting a caller mistake it for a paced number.
-   */
-  /*
+   * ⚠ THE HORIZON IS PASSED ONLY WHEN A REAL SCHEDULE RESOLVED, and null keeps the unpaced read.
+   * Pacing needs a published elimination calendar and only leagues somebody has transcribed have
+   * one — the module labels the unpaced case in its own reason string rather than letting it pass
+   * for a paced number.
+   *
    * ⚠ `faabRemaining` IS WHAT THIS MANAGER ACTUALLY HAS, not the league's season budget.
    * `lib/sleeper-sync.ts` writes it as `leagueBudget − waiver_budget_used` on every sync, and it
    * is present on 96% of rosters. Falling back to the league total would quietly tell somebody
@@ -305,7 +308,7 @@ function bidFor(args: {
   const alloc = allocateFaabAcrossPool({
     pool,
     budgetRemaining: args.faabRemaining ?? 0,
-    horizon: null,
+    horizon: args.horizon,
   })
   const mine = alloc?.bids.find((b) => b.id === args.targetSleeperId)
   if (!alloc || !mine) return null
@@ -549,10 +552,23 @@ export async function getPlayerTradeVisual(
     leagueType: league.leagueType,
     isDynasty: marketContext.variant.dynasty,
   }).concept
+  const isGuillotine = concept === 'guillotine' || concept === 'survivor'
   const faabRaw = Number((settings as Record<string, unknown>).faab_budget)
-  const bidInstead =
-    concept === 'guillotine' || concept === 'survivor'
+
+  /*
+   * ── PACING, WHEN AND ONLY WHEN THE LEAGUE HAS A PUBLISHED SCHEDULE ─────────────────────────
+   *
+   * ⚠ THE WEEK LOOKUP IS GATED ON THE SCHEDULE, NOT THE OTHER WAY AROUND. `resolveCurrentWeekForLeague`
+   * is a database round trip, and the overwhelming majority of leagues have no schedule on file —
+   * paying for a query whose answer can only be discarded would tax every league to serve one.
+   */
+  const schedule = isGuillotine ? scheduleForLeague(league.platformLeagueId) : null
+  const resolvedWeek = schedule ? await resolveCurrentWeekForLeague(league.platformLeagueId ?? '').catch(() => null) : null
+  const horizon = schedule && resolvedWeek ? survivorHorizon(schedule, resolvedWeek.week) : null
+
+  const bidInstead = isGuillotine
       ? bidFor({
+          horizon,
           concept,
           holderPlayerData: theirPd,
           targetSleeperId,
