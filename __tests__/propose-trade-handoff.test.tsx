@@ -63,6 +63,8 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
       /* Required on the type since the playoff window shipped; unavailable here
          because this suite is about the button, not the schedule. */
       playoffSchedule: SECTION_NO('no playoff start week on file'),
+      /* Required since the ☆ shipped; this suite is about the button, not the star. */
+      watched: false,
     },
     ...over,
   }

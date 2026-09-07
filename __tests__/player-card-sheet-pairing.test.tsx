@@ -79,6 +79,9 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
       isYours: true,
       owner: null,
       price: SECTION_OK({ value: 126, mode: 'dynasty', numQbs: 1, teams: 14 }),
+      /* Required since the ☆ shipped; the star's own behaviour is pinned by
+         `__tests__/player-card-watchlist.test.tsx`. */
+      watched: false,
       playoffSchedule: SECTION_OK({
         startWeek: 15,
         weeks: [

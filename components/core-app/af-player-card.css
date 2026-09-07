@@ -127,6 +127,40 @@
   border-radius: 6px;
 }
 
+/*
+ * The ☆ watchlist toggle, in the top bar beside the close control.
+ *
+ * ⚠ THE SIZE IS SET ON THE BUTTON, NOT ONLY ON THE GLYPH, because this is a tap
+ * target on a phone: the agent-tester flags anything under 44px, and a bare
+ * 18px star is about half that. The padding is what makes it hittable.
+ */
+.af-pc-star {
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.af-pc-star:hover {
+  color: var(--text);
+}
+.af-pc-star[aria-pressed='true'] {
+  color: var(--accent);
+}
+.af-pc-star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 .af-pc-crest {
   width: 18px;
   height: 18px;

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
@@ -174,6 +175,20 @@ export type PlayerCardLeague = {
    * 257 claimed leagues.
    */
   playoffSchedule: SectionState<{ weeks: PlayerCardWeek[]; startWeek: number }>
+  /**
+   * Whether the signed-in reader is already watching him IN THIS LEAGUE.
+   *
+   * ⚠ A PLAIN BOOLEAN, NOT A `SectionState`, AND DELIBERATELY SO. Every other
+   * section reports a reason when it cannot answer, because "—" and "we never
+   * priced kickers" look identical. A watchlist has no such failure: signed
+   * out, or in a league you are not a member of, there is no star to render at
+   * all — so `false` here always means "not watched", never "unknown".
+   *
+   * ⚠ AND IT IS LEAGUE-SCOPED BECAUSE THE TABLE IS. `WaiverWatchlist` keys on
+   * [leagueId, userId, playerId] with a NOT NULL leagueId, which is why this
+   * lives on the league section rather than beside `bio`.
+   */
+  watched: boolean
 }
 
 export type PlayerCardData = {
@@ -859,6 +874,25 @@ async function loadLeague(
       : schedule
   }
 
+  /*
+   * The ☆.
+   *
+   * ⚠ KEYED ON THE SLEEPER ID, WHICH IS **NOT** THE VOCABULARY THE WAIVER PAGE
+   * MATCHES ON. Measured 2026-09-07 against production: `SportsPlayer.sleeperId`
+   * ("5129"), `SportsPlayer.id` (a uuid) and `SportsPlayerRecord.id` ("NFL:1000",
+   * what the waiver pool joins through) are three disjoint spaces — 0 of 200
+   * sampled ids matched across them in either direction. Reconciling would need
+   * a name join over the 178 NFL duplicate groups the repo forbids merging, so
+   * the card writes its own key and the two surfaces do not reflect each other.
+   * `waiver_watchlists` held 0 rows in production when this shipped, so there
+   * was no established convention to break.
+   *
+   * A player we could not identify has no stable key to store, so he is simply
+   * never watched rather than being stored under something ambiguous.
+   */
+  const watched =
+    userId && sleeperId ? await isWatched(leagueId, userId, sleeperId).catch(() => false) : false
+
   return {
     leagueId: league.id,
     leagueName: league.name ?? 'This league',
@@ -870,6 +904,7 @@ async function loadLeague(
     yourRoster,
     trades: leagueTrades?.available ? leagueTrades.data : [],
     playoffSchedule,
+    watched,
   }
 }
 

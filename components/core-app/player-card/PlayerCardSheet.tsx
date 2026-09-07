@@ -164,6 +164,9 @@ export default function PlayerCardSheet({
   onOpen: (ref: PlayerCardRef) => void
 }) {
   const [insightOpen, setInsightOpen] = useState(false)
+  /* The ☆'s optimistic value; null means "defer to the payload". Declared here,
+     beside its sibling, because the reset effect below closes over it. */
+  const [watchOverride, setWatchOverride] = useState<boolean | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
 
@@ -174,8 +177,11 @@ export default function PlayerCardSheet({
 
   // Collapse the expander whenever the subject changes — a comp opened from
   // inside the card must not inherit the previous player's expanded state.
+  // ...and so must the star's optimistic override, or a player you starred
+  // hands his lit ☆ to whoever you open next.
   useEffect(() => {
     setInsightOpen(false)
+    setWatchOverride(null)
   }, [subject.externalId, subject.sleeperId])
 
   const p = data?.player
@@ -186,6 +192,45 @@ export default function PlayerCardSheet({
   const league = data?.league ?? null
   const market = data?.market
   const bio = data?.bio
+
+  /*
+   * The ☆.
+   *
+   * ⚠ THE OVERRIDE IS SEPARATE FROM THE PAYLOAD, RATHER THAN SEEDED FROM IT.
+   * Seeding `useState(league?.watched)` would freeze the first render's value:
+   * the card is re-used across subjects, so the second player opened would show
+   * the FIRST one's star until something else forced a remount. Holding the
+   * optimistic value as an override that falls back to the payload means a new
+   * payload is authoritative the moment it lands.
+   */
+  const watched = watchOverride ?? league?.watched ?? false
+  const watchId = p?.sleeperId ?? subject.sleeperId ?? null
+
+  const toggleWatch = async () => {
+    if (!league || !watchId) return
+    const next = !watched
+    // Flip first: this is a pop-up, and a star that waits for a round-trip
+    // reads as a dropped click.
+    setWatchOverride(next)
+    try {
+      const res = await fetch('/api/core/player-card/watch', {
+        method: next ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          leagueId: league.leagueId,
+          sleeperId: watchId,
+          sport: p?.sport ?? subject.sport,
+        }),
+      })
+      // ⚠ REVERT ON A REFUSAL, NOT ONLY ON A THROW. A 401 or 404 resolves
+      // successfully; leaving the star lit there would tell the reader something
+      // was saved when nothing was, which is worse than the click not landing.
+      if (!res?.ok) setWatchOverride(!next)
+    } catch {
+      setWatchOverride(!next)
+    }
+  }
 
   const openComp = (c: PlayerCardComp) => {
     onOpen({
@@ -221,6 +266,23 @@ export default function PlayerCardSheet({
             )}
           </button>
           <span className="af-pc-bar-sp" />
+          {/*
+            ⚠ ONLY ON THE LEAGUE FLAVOUR. The watchlist row is keyed on a NOT
+            NULL leagueId, so on the universal card there is nowhere to write —
+            the same gate Propose Trade carries, for the same reason.
+          */}
+          {league && watchId ? (
+            <button
+              type="button"
+              className="af-pc-star"
+              onClick={toggleWatch}
+              aria-pressed={watched}
+              aria-label={watched ? `Stop watching ${name}` : `Watch ${name}`}
+              title={watched ? 'Watching — click to remove' : 'Add to your watchlist'}
+            >
+              <span aria-hidden>{watched ? '★' : '☆'}</span>
+            </button>
+          ) : null}
           <button type="button" className="af-pc-x" onClick={onClose} aria-label="Close player card" ref={closeRef}>
             ✕
           </button>

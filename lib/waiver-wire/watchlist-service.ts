@@ -14,6 +14,25 @@ export async function getWatchlistPlayerIds(leagueId: string, userId: string): P
   return rows.map((r) => r.playerId)
 }
 
+/**
+ * Is this one player watched? Used by the player card, which asks about exactly
+ * one man and would otherwise pull the caller's whole list to answer.
+ *
+ * ⚠ IT LIVES HERE RATHER THAN IN THE CARD so there is ONE implementation of
+ * "what counts as watched". A second copy in `lib/core-app` would be free to
+ * drift from the writers above — which is the two-implementations-of-one-rule
+ * bug this repo has already paid for once in SQL.
+ */
+export async function isWatched(leagueId: string, userId: string, playerId: string): Promise<boolean> {
+  const pid = String(playerId).trim()
+  if (!pid) return false
+  const row = await prisma.waiverWatchlist.findUnique({
+    where: { leagueId_userId_playerId: { leagueId, userId, playerId: pid } },
+    select: { id: true },
+  })
+  return row != null
+}
+
 export async function addToWatchlist(leagueId: string, userId: string, playerId: string, sport?: string | null): Promise<void> {
   const pid = String(playerId).trim()
   if (!pid) return
