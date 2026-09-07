@@ -41,6 +41,18 @@ export type WeekRollHoldReason =
   | 'REGULAR_SEASON_ENDED'
   /** The schedule runtime refused — most often because a matchup has not finalized. */
   | 'RUNTIME_REFUSED'
+  /**
+   * The schedule runtime does not cover this league's format at all.
+   *
+   * ⚠ THIS IS A SEPARATE REASON FROM `RUNTIME_REFUSED` BECAUSE IT IS PERMANENT.
+   * `resolveNflRedraftScheduleRuntime` accepts only `sport === 'NFL' && format
+   * === 'redraft'`, so a guillotine, survivor, zombie, dynasty or keeper league
+   * — all of which DO carry a `RedraftSeason` — is refused every single time.
+   * Counting that as a failure would mark this job `partial` on every hourly run
+   * forever, which is how a real signal gets trained out of a dashboard. It is a
+   * coverage gap to be reported once, not an incident to be raised hourly.
+   */
+  | 'FORMAT_NOT_SUPPORTED'
 
 export type WeekRollPlan =
   | { action: 'advance'; fromWeek: number; toWeek: number }
@@ -212,6 +224,13 @@ export async function rollSeasonWeeks(
         ...seasonFields(season),
         plan,
         applied: { ok: true, status: applied.status, currentWeek: applied.currentWeek },
+      })
+    } else if (applied.code === 'not_nfl_redraft') {
+      // Permanent, expected, and not this job's problem — see FORMAT_NOT_SUPPORTED.
+      held += 1
+      outcomes.push({
+        ...seasonFields(season),
+        plan: { action: 'hold', reason: 'FORMAT_NOT_SUPPORTED', detail: applied.code },
       })
     } else {
       failed += 1

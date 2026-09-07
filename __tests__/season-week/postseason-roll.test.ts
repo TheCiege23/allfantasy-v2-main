@@ -30,12 +30,16 @@ vi.mock('@/lib/playoff-runtime', () => ({
 vi.mock('@/lib/redraft/offseason/finalizeSeasonAndEnterOffseason', () => ({
   finalizeSeasonAndEnterOffseason: (...a: unknown[]) => finalizeSeason(...a),
 }))
-vi.mock('@/lib/schedule-runtime', () => ({ advanceNflRedraftScheduleWeek: vi.fn() }))
+const advanceWeek = vi.fn()
+const resolveWeek = vi.fn()
+vi.mock('@/lib/schedule-runtime', () => ({
+  advanceNflRedraftScheduleWeek: (...a: unknown[]) => advanceWeek(...a),
+}))
 vi.mock('@/lib/season-week/seasonWeekService', () => ({
-  resolveSeasonWeekForRedraftSeason: vi.fn(),
+  resolveSeasonWeekForRedraftSeason: (...a: unknown[]) => resolveWeek(...a),
 }))
 
-import { rollPostseason } from '@/lib/season-week/rollSeasonWeek'
+import { rollPostseason, rollSeasonWeeks } from '@/lib/season-week/rollSeasonWeek'
 
 const SEASON = { id: 's1', leagueId: 'l1', status: 'playoffs' }
 
@@ -148,5 +152,62 @@ describe('rollPostseason', () => {
     advanceRound.mockResolvedValue({ ok: true, events: [] })
     await rollPostseason()
     expect(advanceRound).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('rollSeasonWeeks — unsupported formats', () => {
+  const PLAYED_WEEK_1 = {
+    ok: true,
+    fantasyWeek: 1,
+    sportWeek: 1,
+    phase: 'regular',
+    state: 'played',
+    sportWeekComplete: true,
+    slate: null,
+    source: 'schedule',
+  }
+
+  beforeEach(() => {
+    findManySeasons.mockResolvedValue([
+      { id: 's1', leagueId: 'l1', sport: 'NFL', currentWeek: 1, totalWeeks: 14, playoffStartWeek: 15 },
+    ])
+    resolveWeek.mockResolvedValue(PLAYED_WEEK_1)
+  })
+
+  it('records a concept league as a coverage gap, not a failure', async () => {
+    // 🛑 EVERY CONCEPT LEAGUE LANDS HERE. `resolveNflRedraftScheduleRuntime`
+    // accepts only `sport === 'NFL' && format === 'redraft'` — so guillotine,
+    // survivor, zombie, dynasty and keeper leagues, all of which DO carry a
+    // RedraftSeason, are refused on every single run. Counting that as `failed`
+    // marks this hourly job `partial` forever, which is how a real signal gets
+    // trained out of a dashboard.
+    advanceWeek.mockResolvedValue({ ok: false, code: 'not_nfl_redraft', message: 'x' })
+
+    const out = await rollSeasonWeeks()
+    expect(out.failed).toBe(0)
+    expect(out.held).toBe(1)
+    expect(out.outcomes[0].plan).toEqual({
+      action: 'hold',
+      reason: 'FORMAT_NOT_SUPPORTED',
+      detail: 'not_nfl_redraft',
+    })
+  })
+
+  it('still reports a REAL refusal as a failure', async () => {
+    // The distinction has to cut both ways: an unfinalized matchup is a league
+    // that needs a human, and must not be filed alongside the permanent gap.
+    advanceWeek.mockResolvedValue({ ok: false, code: 'INCOMPLETE_WEEK', message: 'x' })
+
+    const out = await rollSeasonWeeks()
+    expect(out.failed).toBe(1)
+    expect(out.outcomes[0].plan).toMatchObject({ reason: 'RUNTIME_REFUSED', detail: 'INCOMPLETE_WEEK' })
+  })
+
+  it('advances a supported league normally', async () => {
+    advanceWeek.mockResolvedValue({ ok: true, status: 'active', currentWeek: 2 })
+    const out = await rollSeasonWeeks()
+    expect(out.advanced).toBe(1)
+    expect(out.failed).toBe(0)
   })
 })
