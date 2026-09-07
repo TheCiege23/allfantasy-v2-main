@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 
 const COMPONENT = fs.readFileSync(
   path.join(process.cwd(), 'components', 'core-app', 'screens', 'Portfolio.tsx'),
@@ -25,12 +26,34 @@ function monogram(name: string): string {
 describe('league artwork reaches the card', () => {
   /*
    * ⚠ `logoUrl` IS NULL ON ALL 115 PRODUCTION LEAGUES and has never been
-   * written; `avatarUrl` is populated on 48. Reading the empty column is why no
-   * league art has ever appeared anywhere in the app.
+   * written; `avatarUrl` is populated on 48. Reading the empty column INSTEAD OF
+   * the populated one is why no league art has ever appeared anywhere in the app.
+   *
+   * 🛑 THIS TEST USED TO ASSERT `LOADER).not.toContain('logoUrl: true')`, AND THAT
+   * BANNED THE FIX AS WELL AS THE BUG. 039e8c8a0 routed the loader through
+   * `leagueArtUrl`, which prefers a commissioner logo WHEN ONE EXISTS and falls
+   * back to the avatar — so with logoUrl null everywhere the rendered result is
+   * unchanged, and a commissioner who does upload one now sees it. The substring
+   * ban could not tell "reads the empty column instead" from "reads it first and
+   * falls back", which are opposite behaviours, and it went red on main for
+   * ~12 hours, blocking every PR branched after 02:30Z under `strict: true`.
+   *
+   * It now asserts the BEHAVIOUR the original finding cared about. A source-text
+   * scan pins an implementation; this pins the rule, and survives the next
+   * refactor that keeps the rule.
    */
-  it('selects avatarUrl, not the empty logoUrl', () => {
+  it('a null logoUrl still yields the avatar — the populated column wins', () => {
+    expect(leagueArtUrl({ logoUrl: null, avatarUrl: 'https://cdn.example/x.png', platform: 'espn' }))
+      .toBe('https://cdn.example/x.png')
+  })
+
+  it('a commissioner logo beats the avatar when one actually exists', () => {
+    expect(leagueArtUrl({ logoUrl: 'https://cdn.example/logo.png', avatarUrl: 'https://cdn.example/x.png', platform: 'espn' }))
+      .toBe('https://cdn.example/logo.png')
+  })
+
+  it('still selects the populated column', () => {
     expect(LOADER).toContain('avatarUrl: true')
-    expect(LOADER).not.toContain('logoUrl: true')
   })
 
   it('carries it onto the row payload', () => {
