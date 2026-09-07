@@ -12,7 +12,8 @@ import { MINUTES } from '../domain-os/types'
  * ⚠ FEEDS Decision OS. `lib/commissioner-ui/*` points the other way.
  *
  * WHY THIS EXISTS SEPARATELY FROM DRAFT OS, WHICH ALREADY DECLARES THE SAME FACT.
- * `draft-os` was built around `resolveNflRedraftDraftRuntime` and calls this fact "draft rules".
+ * `draft-os` was built around `resolveNflRedraftDraftRuntime` (deleted 2026-09-06) and calls this
+ * fact "draft rules".
  * It is not: `resolveCanonicalLeagueRules` returns the LEAGUE's ruleset — scoring, roster shape,
  * waiver and playoff settings — and four separate canonical runtime resolvers need it.
  *
@@ -21,10 +22,15 @@ import { MINUTES } from '../domain-os/types'
  *     playoff-runtime    4 routes        roster-runtime    1 route
  *     schedule-runtime   1 route         draft-runtime     0 routes
  *
- * `resolveNflRedraftDraftRuntime` — the one Draft OS was written for — has **no callers at all**.
- * Live drafts run on `lib/live-draft-engine/DraftSessionService`. So the fact was cached for the
- * only consumer that does not exist, while three that do exist paid seven uncached queries per
- * call. `resolveCanonicalLeagueRules` has no caching of its own; that was verified, not assumed.
+ * `resolveNflRedraftDraftRuntime` — the one Draft OS was written for — had **no callers at all**,
+ * and was DELETED on 2026-09-06. Live drafts run on `lib/live-draft-engine/DraftSessionService`.
+ * So the fact was cached for the only consumer that does not exist, while three that do exist paid
+ * seven uncached queries per call. `resolveCanonicalLeagueRules` has no caching of its own; that
+ * was verified, not assumed.
+ *
+ * ⚠ THE `draft-runtime  0 routes` ROW ABOVE IS NOW `0 routes AND NO RESOLVER`. Nothing about this
+ * module changes — League OS was always the wired one — but the contrast it draws is with a
+ * consumer that no longer exists at all, which is stronger than the one originally written here.
  *
  * 🛑 SIXTY SECONDS, NOT SIX HOURS, AND THE DIFFERENCE IS NOT TIMIDITY.
  * `draft-os` gives the same fact a 6h TTL, which is right for a draft: rules do not change during

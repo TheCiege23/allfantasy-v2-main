@@ -88,16 +88,58 @@ function consumersOf(modPath) {
 // ── positive controls: the check must reproduce a known red AND a known green ──
 console.log('=== POSITIVE CONTROLS ===')
 const controls = [
-  ['lib/decision-os/draft-os', 0, 'known DEAD — only a code comment references it'],
+  // 🛑 THIS SLOT HELD `lib/decision-os/draft-os` AT expect=0, AND IT WAS FALSE ON THE DAY IT WAS
+  // WRITTEN. `app/api/cron/domain-os-refresh/route.ts` imports it, and that cron landed in
+  // 63588d261 at 17:35:23 — NINETY-THREE SECONDS before aaab0e278 added this control at 17:36:56,
+  // with the cron commit an ancestor of it. Verified 2026-09-06 by running the birth version of
+  // this script in a detached worktree at aaab0e278: same FAIL, consumers=1.
+  //
+  // ⚠ SO THIS SCRIPT HAS NEVER ONCE PRODUCED AN AUDIT. It halts on the control every run and
+  // prints "the results below are not evidence" — which is the guard working exactly as designed,
+  // and is also why nobody noticed: a check that refuses to answer looks the same as a check
+  // nobody ran. The control was right to fail; only the expectation was wrong.
+  //
+  // ⚠ AND THE SLOT THEN HELD `lib/draft-runtime/resolveNflRedraftDraftRuntime` FOR EXACTLY ONE
+  // COMMIT, WHICH IS ITS OWN LESSON. That was a correct measurement (0 callers, four-form census)
+  // and a bad CHOICE: the module was dead because it was queued for DELETION, and deleting it would
+  // have left this control reporting PASS against a path that no longer exists. A known-dead
+  // control must not point at anything anyone has a reason to remove — see `moduleExists` below,
+  // which now makes that failure loud instead of silent.
+  //
+  // `lib/supplemental-draft` is the replacement: 0 consumers, and inert — nothing is queued against
+  // it. If it ever gains one, this control FAILS loudly, which is the correct outcome and the
+  // signal to repoint it.
+  ['lib/supplemental-draft', 0, 'known DEAD — 0 consumers, inert (verified 2026-09-06)'],
   ['lib/fantasycalc-db', null, 'known ALIVE — 36 migrated call sites'],
   ['lib/decision-os/three-brain', null, 'known ALIVE — 6 runtime paths'],
 ]
+/**
+ * 🛑 A CONTROL MUST PROVE ITS SUBJECT EXISTS BEFORE IT MAY REPORT ZERO.
+ *
+ * `consumersOf` counts import SPECIFIERS, so it answers 0 for a module nobody imports and 0 for a
+ * module that is not there at all. Measured 2026-09-06:
+ * `consumersOf('lib/this/module/never/existed').size === 0`. A known-dead control therefore turns
+ * into a check that CANNOT FAIL the moment anybody deletes its subject — and deleting dead modules
+ * is precisely what this script is used to justify, so the tool corrodes its own control by
+ * succeeding. That was not hypothetical: it was found while preparing the deletion of the module
+ * this slot pointed at one commit earlier.
+ */
+function moduleExists(p) {
+  for (const c of [`${p}.ts`, `${p}.tsx`, `${p}/index.ts`, `${p}/index.tsx`, p]) {
+    try { statSync(join(ROOT, c)); return true } catch { /* next */ }
+  }
+  return false
+}
+
 let controlsOk = true
 for (const [p, expect, why] of controls) {
+  const exists = moduleExists(p)
   const n = consumersOf(p).size
-  const pass = expect === null ? n > 0 : n === expect
+  // An absent subject fails whatever the count says — a zero from nothing is not a measurement.
+  const pass = !exists ? false : expect === null ? n > 0 : n === expect
   if (!pass) controlsOk = false
-  console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${p.padEnd(34)} consumers=${String(n).padEnd(4)} ${why}`)
+  const note = exists ? why : `🛑 SUBJECT MISSING — repoint this control (was: ${why})`
+  console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${p.padEnd(34)} consumers=${String(n).padEnd(4)} ${note}`)
 }
 if (!controlsOk) {
   console.log('\n🛑 A CONTROL FAILED. The results below are not evidence. Fix the check first.')

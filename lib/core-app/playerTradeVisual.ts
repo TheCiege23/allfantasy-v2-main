@@ -15,6 +15,8 @@ import {
   type TradePackage,
 } from '@/lib/trade-discovery/redraftTradeDiscovery'
 import { describeScoringFit } from '@/lib/trade-value/scoringFit'
+import { allocateFaabAcrossPool, type FaabCandidate } from '@/lib/trade-intel/faabBid'
+import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
 import { runTradeAnalysis } from '@/lib/engine/trade'
@@ -124,6 +126,43 @@ export type PlayerTradeVisual = {
   /** The package we would open with, or null when none is balanced enough to suggest. */
   recommended: TradeVisualPackage | null
   grade: SectionState<TradeVisualGrade>
+  /**
+   * Set when the league FORBIDS TRADES, in which case `packages` is empty and this is the answer.
+   *
+   * 🛑 A GUILLOTINE LEAGUE IS NOT A TRADE MARKET. Survivor All-Stars says it outright — "there are
+   * no trades allowed in this league" — so a package this surface could build is one the manager
+   * can never send. Offering it is worse than refusing: it looks like a plan. What is real is that
+   * the man reaches waivers if his owner is chopped, and what to bid when he does.
+   */
+  bidInstead: PlayerBidInstead | null
+}
+
+export type PlayerBidInstead = {
+  /** The canonical concept from `readFormatRules` — never a second opinion about the format. */
+  concept: string
+  /** The league's configured season budget, or null when it is not on file. */
+  budgetTotal: number | null
+  /** What he adds over your weakest starter at his slot. Zero or less means do not bid. */
+  marginalValue: number
+  /** His share of the upgrade value that would hit waivers with him, 0–1. */
+  shareOfSupply: number
+  /**
+   * The bid against the FAAB this manager actually has left, or null when we do not hold it.
+   *
+   * ⚠ THIS FIELD WAS `ceilingAtFullBudget` FOR ONE COMMIT, ON A MEASUREMENT THAT WAS WRONG. The
+   * probe behind it read `rosters.settings` and `waiver_budget_used` — both empty — and concluded
+   * no per-team budget existed. It was in `rosters.faabRemaining` the whole time, a dedicated
+   * column the probe never looked at: 3,266 of 3,418 rosters (96%) carry it, written by
+   * `lib/sleeper-sync.ts` as `leagueBudget − waiver_budget_used` on every sync.
+   *
+   * 🛑 THE LESSON IS THE PROBE'S SHAPE, NOT THE COLUMN. An absence is only as trustworthy as the
+   * places you looked, and "I checked two spellings in one JSON blob" is not "the database does
+   * not have this".
+   */
+  ceilingAtRemaining: number | null
+  /** What that manager has left, in dollars. Null when the roster row does not carry it. */
+  budgetRemaining: number | null
+  reason: string
 }
 
 const IDP_SLOTS = new Set(['DL', 'LB', 'DB', 'IDP_FLEX', 'DE', 'DT', 'CB', 'S'])
@@ -202,6 +241,93 @@ function toPackage(p: TradePackage): TradeVisualPackage {
 
 const OPENABLE: FairnessBand[] = ['balanced', 'slight edge you']
 
+/** How many of each position a lineup starts, for working out who a new man would displace. */
+const STARTS: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 }
+
+/**
+ * What to bid for him, for a league where he cannot be traded for at any price.
+ *
+ * ⚠ THE POOL IS HIS OWNER'S WHOLE ROSTER, NOT HIM ALONE, AND THAT IS DELIBERATE. In a guillotine
+ * league a player reaches waivers only when his owner is chopped — and then the whole roster
+ * arrives at once. `allocateFaabAcrossPool` documents that a single candidate asserts "he is the
+ * only upgrade available", which would be false here and would inflate him.
+ */
+function bidFor(args: {
+  concept: string
+  holderPlayerData: Record<string, unknown>
+  targetSleeperId: string
+  byId: Map<string, { sleeperId: string | null; name: string; position: string | null }>
+  values: MarketValuesPayload
+  leagueScoring: Record<string, number>
+  /** The league's configured season budget. Context only — never the thing bid against. */
+  faabBudget: number | null
+  /** What THIS manager has left, from `rosters.faabRemaining`. This is what is bid against. */
+  faabRemaining: number | null
+  myPlayers: DiscoveryPlayer[]
+}): PlayerBidInstead | null {
+  /* Your weakest starter at each slot — what a new man would actually displace. */
+  const weakest: Record<string, number> = {}
+  for (const pos of Object.keys(STARTS)) {
+    const atPos = args.myPlayers.filter((p) => p.position === pos).sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+    const starters = atPos.slice(0, STARTS[pos])
+    weakest[pos] = starters.length >= STARTS[pos] ? (starters[starters.length - 1].value ?? 0) : 0
+  }
+
+  const pool: FaabCandidate[] = allIds(args.holderPlayerData).flatMap((id) => {
+    const row = args.byId.get(id)
+    if (!row) return []
+    const priced = playerValueForLeague(args.values, id, args.leagueScoring)
+    const value = priced?.adjusted ?? playerValue(args.values, id)
+    if (value == null) return []
+    const position = row.position ? normalizePosition(row.position) : 'UNK'
+    return [{
+      id,
+      name: row.name,
+      position,
+      playerValue: value,
+      replacedValue: weakest[position] ?? 0,
+    }]
+  })
+  if (!pool.length) return null
+
+  /*
+   * ⚠ NO HORIZON IS PASSED, AND THAT IS HONEST RATHER THAN LAZY. Pacing needs a published
+   * elimination schedule; this surface holds a league row, not a constitution. Unpaced is the
+   * aggressive read — the whole budget against this one pool — and the module says so in its own
+   * reason string rather than letting a caller mistake it for a paced number.
+   */
+  /*
+   * ⚠ `faabRemaining` IS WHAT THIS MANAGER ACTUALLY HAS, not the league's season budget.
+   * `lib/sleeper-sync.ts` writes it as `leagueBudget − waiver_budget_used` on every sync, and it
+   * is present on 96% of rosters. Falling back to the league total would quietly tell somebody
+   * down to their last $40 to bid like they were untouched.
+   */
+  const alloc = allocateFaabAcrossPool({
+    pool,
+    budgetRemaining: args.faabRemaining ?? 0,
+    horizon: null,
+  })
+  const mine = alloc?.bids.find((b) => b.id === args.targetSleeperId)
+  if (!alloc || !mine) return null
+
+  return {
+    concept: args.concept,
+    budgetTotal: args.faabBudget,
+    budgetRemaining: args.faabRemaining,
+    marginalValue: mine.marginalValue,
+    shareOfSupply: mine.shareOfSupply,
+    ceilingAtRemaining: args.faabRemaining == null ? null : mine.ceiling,
+    reason:
+      mine.marginalValue <= 0
+        ? `No trades in this league, and he would not improve your lineup anyway — ${mine.reason}`
+        : `No trades in this league. He reaches waivers only if his owner is chopped, and his whole ` +
+          `roster arrives with him: ${mine.reason}` +
+          (args.faabRemaining == null
+            ? ' We do not hold your remaining FAAB for this league, so that share cannot be turned into dollars.'
+            : ''),
+  }
+}
+
 export async function getPlayerTradeVisual(
   leagueId: string,
   targetSleeperId: string,
@@ -243,7 +369,7 @@ export async function getPlayerTradeVisual(
       })
       .catch(() => []),
     prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
       .catch(() => []),
   ])
 
@@ -413,6 +539,32 @@ export async function getPlayerTradeVisual(
     }
   }
 
+  /*
+   * ── THE LEAGUE MAY NOT ALLOW TRADES AT ALL, IN WHICH CASE EVERYTHING ABOVE IS THE WRONG ANSWER ──
+   *
+   * Resolved through `readFormatRules`, which is the canonical "what format is this league" — two
+   * implementations of that question is the defect this repo already records, not the fix.
+   */
+  const concept = readFormatRules({
+    leagueType: league.leagueType,
+    isDynasty: marketContext.variant.dynasty,
+  }).concept
+  const faabRaw = Number((settings as Record<string, unknown>).faab_budget)
+  const bidInstead =
+    concept === 'guillotine' || concept === 'survivor'
+      ? bidFor({
+          concept,
+          holderPlayerData: theirPd,
+          targetSleeperId,
+          byId,
+          values,
+          leagueScoring,
+          faabBudget: Number.isFinite(faabRaw) && faabRaw > 0 ? faabRaw : null,
+          faabRemaining: typeof myRoster.faabRemaining === 'number' ? myRoster.faabRemaining : null,
+          myPlayers: me.players,
+        })
+      : null
+
   const stanceOf = (r: DiscoveryRoster, externalId: string | null): TradeVisualSide => ({
     teamName: r.teamName,
     ownerName: r.managerDisplayName ?? null,
@@ -448,9 +600,16 @@ export async function getPlayerTradeVisual(
         numQbs: values.numQbs,
         scoringAdjustment: describeScoringFit(leagueScoring, values.ppr),
       },
-      packages,
-      recommended,
-      grade,
+      /*
+       * 🛑 A NO-TRADE LEAGUE GETS NO PACKAGES. Leaving them in would offer a manager a plan they
+       * cannot execute, which is worse than offering nothing — it looks actionable.
+       */
+      packages: bidInstead ? [] : packages,
+      recommended: bidInstead ? null : recommended,
+      grade: bidInstead
+        ? { available: false, reason: 'this league does not allow trades, so there is no package to grade' }
+        : grade,
+      bidInstead,
     },
   }
 }

@@ -3,7 +3,7 @@
  *
  * `getCanonicalPlayer(id)` is the single server-side call that Phase 3 will swap the 86
  * `getAllPlayers()` call sites onto. It assembles the whole player object — profile, primary
- * image, latest season stats, projections, outlook, news, injury, and the cross-platform id
+ * image, latest season stats, projections, news, injury, and the cross-platform id
  * map — from the canonical tables in one batched round trip, instead of re-resolving anything
  * live per request.
  *
@@ -13,13 +13,35 @@
  * the next read is a pure DB hit. Pass `skipLiveFallback` to guarantee zero network calls.
  *
  * ── A note on where the satellites live ──
- * Stats, injuries and news are canonical (`sports_core_*`). Projections and outlook are not:
- * they live in `fantasy_projections` and `ai_player_outlooks_cache`, which predate the
- * canonical family. They still key on a plain `playerId` string, so once canonical ids are
- * what gets written everywhere they line up without a schema change. Note that
- * `PlayerOutlook` (`player_outlooks`) is deliberately NOT used here — it is user-scoped
- * (`userId` is required), so it cannot answer "the outlook for this player" without a viewer.
- * `AiPlayerOutlookCache` is the global one.
+ * Stats, injuries and news are canonical (`sports_core_*`). Projections are not: they live in
+ * `fantasy_projections`, which predates the canonical family. It still keys on a plain
+ * `playerId` string, so once canonical ids are what gets written everywhere they line up
+ * without a schema change.
+ *
+ * 🛑 THE `outlook` SATELLITE WAS REMOVED 2026-09-06, AND THE MEASUREMENT IS WHY.
+ * It read `ai_player_outlooks_cache`, and that table is EMPTY IN PRODUCTION — `count(*)` 0 and
+ * `max(created_at)` NULL, so not one row has ever been written. Its only writer,
+ * `lib/ai/players/aiPlayerOutlook.ts`, had zero callers, so nothing ever filled it. That writer
+ * was itself deleted once this read went — with the read gone the table had no reader either, so
+ * the module was orphaned at both ends. ⚠ THE TABLE ITSELF IS STILL IN `prisma/schema.prisma`:
+ * dropping it is a MIGRATION and is a separate decision from removing the code.
+ *
+ * ⚠ NOTHING WAS BROKEN BY IT, WHICH IS WHY IT SURVIVED. This function reports gaps rather than
+ * faking them, so `missing` correctly carried `'outlook'` on every call, and no consumer of
+ * `getCanonicalPlayer` read the field at all. What it actually cost was ONE INDEXED QUERY PER
+ * CALL, on a path reached from trade pre-analysis and roster name resolution — invisible in
+ * latency because it sat inside the `Promise.all`, and real DB load regardless.
+ *
+ * ⚠ AND `AiPlayerOutlookCache` COULD NOT HAVE BEEN WIRED AS IT STOOD. The writer upserts on
+ * `(playerId, sport, leagueContextHash)`; the read here constrained `leagueContextHash` ZERO
+ * times and took `findFirst … orderBy createdAt desc`. Filling the table would therefore have
+ * served a canonical, viewer-independent read an outlook computed for whatever league's context
+ * was written most recently — the same wrong-row class the `sportKey` note below guards against.
+ * Restoring an outlook here means settling that key question first, not re-adding the query.
+ *
+ * `PlayerOutlook` (`player_outlooks`) was never the answer either, and still is not: it is
+ * user-scoped (`userId` is required), so it cannot answer "the outlook for this player" without
+ * a viewer. That is why the global table was chosen, and the global table was empty.
  */
 
 import { prisma } from '@/lib/prisma'
@@ -96,7 +118,6 @@ export interface CanonicalPlayer {
     source: string | null
   } | null
   projections: CanonicalPlayerProjection[]
-  outlook: { payload: unknown; expiresAt: Date } | null
   news: CanonicalPlayerNews[]
   injury: { status: string | null; bodyPart: string | null; description: string | null } | null
 
@@ -134,7 +155,7 @@ export async function getCanonicalPlayer(
   const sportKey = String(player.sport ?? '').toUpperCase()
 
   // One batched round trip for every satellite.
-  const [image, seasonStats, projections, outlook, news, injury, identities] = await Promise.all([
+  const [image, seasonStats, projections, news, injury, identities] = await Promise.all([
     readPrimaryPlayerImage({ playerId }),
     prisma.playerSeasonStat.findFirst({
       where: { playerId, sportKey },
@@ -149,11 +170,6 @@ export async function getCanonicalPlayer(
       orderBy: [{ season: 'desc' }, { week: 'desc' }],
       take: projectionLimit,
       select: { season: true, week: true, projectedPoints: true, source: true },
-    }),
-    prisma.aiPlayerOutlookCache.findFirst({
-      where: { playerId, sport: sportKey, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-      select: { outlookPayload: true, expiresAt: true },
     }),
     prisma.playerNewsItem.findMany({
       where: { playerId },
@@ -200,7 +216,6 @@ export async function getCanonicalPlayer(
   if (!resolvedImage) missing.push('image')
   if (!seasonStats) missing.push('seasonStats')
   if (projections.length === 0) missing.push('projections')
-  if (!outlook) missing.push('outlook')
   if (news.length === 0) missing.push('news')
   if (!injury) missing.push('injury')
 
@@ -232,7 +247,6 @@ export async function getCanonicalPlayer(
       projectedPoints: p.projectedPoints,
       source: p.source,
     })),
-    outlook: outlook ? { payload: outlook.outlookPayload, expiresAt: outlook.expiresAt } : null,
     news: news.map((n) => ({ headline: n.headline, url: n.url, publishedAt: n.publishedAt })),
     injury: injury
       ? { status: injury.status, bodyPart: injury.bodyPart, description: injury.description }

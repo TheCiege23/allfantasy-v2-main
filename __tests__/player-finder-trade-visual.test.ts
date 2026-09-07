@@ -59,7 +59,8 @@ const TASHA = { externalId: '1', platformUserId: 'u-tasha', claimedByUserId: nul
 const ME = { externalId: '2', platformUserId: 'u-me', claimedByUserId: 'me', ownerName: 'guap', teamName: 'Cafe Con Chimmy', wins: 5, losses: 1, ties: 0, pointsFor: 860 }
 
 /* Me: four running backs (a surplus) and one thin tight end. Tasha: Kincaid plus a balanced roster. */
-const MY_ROSTER = { platformUserId: 'u-me', playerData: { players: ['qb1', 'rb1', 'rb2', 'rb3', 'rb4', 'wr1', 'wr2', 'te0'], starters: ['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te0', 'rb3'] } }
+/* `faabRemaining` is deliberately NOT the league budget — a bid must be against what is left. */
+const MY_ROSTER = { platformUserId: 'u-me', faabRemaining: 400, playerData: { players: ['qb1', 'rb1', 'rb2', 'rb3', 'rb4', 'wr1', 'wr2', 'te0'], starters: ['qb1', 'rb1', 'rb2', 'wr1', 'wr2', 'te0', 'rb3'] } }
 const THEIR_ROSTER = { platformUserId: 'u-tasha', playerData: { players: ['qb2', 'rb5', 'rb6', 'wr3', 'wr4', KINCAID, 'te2'], starters: ['qb2', 'rb5', 'rb6', 'wr3', 'wr4', KINCAID, 'te2'] } }
 
 const PLAYERS = [
@@ -222,6 +223,72 @@ describe('getPlayerTradeVisual', () => {
         expect(a.value).toBe(VALUES.bySleeperId[a.playerId as string].value)
       }
     }
+  })
+
+  /*
+   * ── A GUILLOTINE LEAGUE IS NOT A TRADE MARKET ──────────────────────────────────────────────
+   * "There are no trades allowed in this league." A package this surface could build is one the
+   * manager can never send, so offering it is worse than offering nothing — it looks actionable.
+   */
+  it('🛑 a guillotine league gets a BID, not a trade — and no package at all', async () => {
+    mockLeagueFindUnique.mockResolvedValue({
+      ...LEAGUE,
+      leagueType: 'guillotine',
+      settings: { ...LEAGUE.settings, faab_budget: 1000 },
+    })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    expect(state.available).toBe(true)
+    if (!state.available) return
+    const v = state.data
+
+    // Nothing tradeable is offered, and the engine is not asked to grade a trade that cannot happen.
+    expect(v.packages).toEqual([])
+    expect(v.recommended).toBeNull()
+    expect(v.grade).toEqual({ available: false, reason: 'this league does not allow trades, so there is no package to grade' })
+
+    const bid = v.bidInstead!
+    expect(bid.concept).toBe('guillotine')
+    /*
+     * Kincaid (3,000) over my weakest TE starter Otton (900) is +2,100. The pool is his OWNER'S
+     * whole roster, because that is what hits waivers when a team is chopped — and only Ferguson
+     * (2,100 over 900 = +1,200) is also an upgrade. So supply is 3,300 and Kincaid is 2,100 of it.
+     */
+    expect(bid.marginalValue).toBe(2100)
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+
+    /*
+     * 🛑 THE BID IS AGAINST WHAT HE HAS LEFT ($400), NOT THE LEAGUE'S SEASON BUDGET ($1000).
+     * 400 x 2100/3300 = 255. Bidding the budget would tell a manager down to their last few
+     * dollars to spend like they were untouched — and `rosters.faabRemaining` carries the real
+     * number on 96% of rosters, so there is no excuse for using the wrong one.
+     */
+    expect(bid.budgetRemaining).toBe(400)
+    expect(bid.budgetTotal).toBe(1000)
+    expect(bid.ceilingAtRemaining).toBe(255)
+    expect(bid.reason).toMatch(/No trades in this league/)
+  })
+
+  it('⚠ and with no faabRemaining on the roster it gives the share and REFUSES the dollars', async () => {
+    /* 4% of rosters carry no FAAB figure. They get the share and an explicit refusal, never a
+     * dollar invented from the league total. */
+    mockRosterFindMany.mockResolvedValue([{ ...MY_ROSTER, faabRemaining: null }, THEIR_ROSTER])
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine', settings: { ...LEAGUE.settings, faab_budget: 1000 } })
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    const bid = state.data.bidInstead!
+    expect(bid.shareOfSupply).toBeCloseTo(2100 / 3300, 4)
+    expect(bid.budgetRemaining).toBeNull()
+    expect(bid.ceilingAtRemaining).toBeNull()
+    // 🛑 The league budget is on file, and must NOT be substituted for what he has left.
+    expect(bid.budgetTotal).toBe(1000)
+    expect(bid.reason).toMatch(/do not hold your remaining FAAB/)
+  })
+
+  it('[control] an ordinary league still gets packages and NO bid block', async () => {
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.bidInstead).toBeNull()
+    expect(state.data.packages.length).toBeGreaterThan(0)
   })
 
   it('and an ordinary league is left EXACTLY alone — no drift on the common case', async () => {

@@ -15,6 +15,11 @@ const prismaMock = vi.hoisted(() => ({
   teamImage: { findFirst: vi.fn() },
   playerSeasonStat: { findFirst: vi.fn() },
   fantasyProjection: { findMany: vi.fn() },
+  // 🛑 KEPT ON PURPOSE THOUGH THE CODE NO LONGER READS IT. `getCanonicalPlayer` dropped its
+  // `outlook` satellite on 2026-09-06 because `ai_player_outlooks_cache` is empty in production
+  // (0 rows, max(created_at) NULL — its only writer has no callers). This delegate stays so the
+  // assertion below can prove the query is GONE; deleting it would make a re-added query throw
+  // on an undefined mock instead of failing a named expectation.
   aiPlayerOutlookCache: { findFirst: vi.fn() },
   playerNewsItem: { findMany: vi.fn() },
   injuryReport: { findFirst: vi.fn() },
@@ -185,9 +190,6 @@ describe('getCanonicalPlayer', () => {
     prismaMock.fantasyProjection.findMany.mockResolvedValue([
       { season: '2025', week: 1, projectedPoints: 18.4, source: 'test' },
     ])
-    prismaMock.aiPlayerOutlookCache.findFirst.mockResolvedValue({
-      outlookPayload: { summary: 'WR1' }, expiresAt: new Date(Date.now() + 86_400_000),
-    })
     prismaMock.playerNewsItem.findMany.mockResolvedValue([
       { headline: 'Full participant', url: 'https://n/1', publishedAt: new Date() },
     ])
@@ -207,7 +209,10 @@ describe('getCanonicalPlayer', () => {
     expect(result?.image?.url).toBe('https://cdn.test/x.png')
     expect(result?.seasonStats?.fantasyPoints).toBe(241.6)
     expect(result?.projections).toHaveLength(1)
-    expect(result?.outlook?.payload).toEqual({ summary: 'WR1' })
+    // The `outlook` satellite is gone — `ai_player_outlooks_cache` has never held a row in
+    // production and no consumer read the field. This pins the QUERY's absence, not just the
+    // field's: a re-added read fails here by name rather than silently costing a query per call.
+    expect(prismaMock.aiPlayerOutlookCache.findFirst).not.toHaveBeenCalled()
     expect(result?.news).toHaveLength(1)
     expect(result?.injury?.status).toBe('Questionable')
     expect(result?.providerIds).toEqual({ sleeper: '7564', espn: '4362628' })

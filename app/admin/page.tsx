@@ -284,6 +284,14 @@ function AdminOverviewDeck({
             <span>Duplicate-manager verification</span>
             <span className="text-emerald-100/65">Open</span>
           </a>
+          {/* Rose, not cyan/emerald: this one writes to a real league someone is playing in. */}
+          <a
+            href="/admin/league-recovery"
+            className="flex items-center justify-between rounded-2xl border border-rose-300/15 bg-rose-300/[0.08] px-4 py-3 text-sm font-bold text-rose-100 transition hover:border-rose-300/35"
+          >
+            <span>League recovery (writes to real leagues)</span>
+            <span className="text-rose-100/65">Open</span>
+          </a>
           <a
             href="/api/admin/status"
             className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/78 transition hover:border-white/25"

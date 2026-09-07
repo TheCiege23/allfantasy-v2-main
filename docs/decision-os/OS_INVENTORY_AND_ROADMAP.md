@@ -3584,7 +3584,7 @@ things that already exist".
 
 | Thing | Status |
 |---|---|
-| `resolveNflRedraftDraftRuntime` | Zero callers. Deliberately no route (1.2b). |
+| `resolveNflRedraftDraftRuntime` | **DELETED 2026-09-06.** Had zero callers and no test; its retirement condition was evaluated and could not be satisfied (it *imported* `live-draft-engine` rather than duplicating it). `draft-os` and `draft-runtime-intelligence` deliberately stay — see `lib/decision-os/draft-os/index.ts`. |
 | `/api/chimmy` | A shim. Zero callers. Three docs wrongly call it preferred. |
 | IDP + kicker value adapter | Built and tested. No feed, no slice, no consumer on the Chimmy path. |
 | three-brain saved analysis | Assembled into the packet, then serialized away (G11). |

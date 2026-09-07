@@ -29,16 +29,28 @@ Pure deterministic runtime helpers:
 - Detects Draft Flow signals: position runs, scarcity, tier cliffs, expired-clock pace.
 - Emits canonical draft runtime events through `toCanonicalLeagueRuntimeEvent`.
 
-### `lib/draft-runtime/resolveNflRedraftDraftRuntime.ts`
+### ~~`lib/draft-runtime/resolveNflRedraftDraftRuntime.ts`~~ — 🛑 DELETED 2026-09-06
 
-Server-side facade for current and future route/UI/OS connection:
+**This file no longer exists.** It was the "server-side facade for current and future route/UI/OS
+connection" described below, and it never acquired the route it was written for: a four-form caller
+census (alias, relative, `require(`, `await import(`) plus a symbol sweep found **zero** callers,
+and it had no test of its own. It was deprecated in place on 2026-08-31 with a written retirement
+condition, and that condition was evaluated and could not be satisfied — the resolver *imported*
+`live-draft-engine` rather than competing with it, so "live-draft-engine covers every fact it
+returns" could only become true by moving four capabilities into live-draft-engine. Full record:
+`lib/decision-os/draft-os/index.ts`.
 
-- Resolves `CanonicalLeagueRules`.
-- Gates to NFL redraft only.
-- Reads the live draft snapshot through `buildSessionSnapshot`.
-- Reads the normalized draft pool through `getResolvedDraftPoolForLeague`.
-- Converts normalized draft-pool entries into runtime-player evidence without requiring provider-specific fields.
-- Returns canonical state, recommendations, draft-runtime intelligence, and data-coverage counts.
+What it did, kept because it is the composition blueprint for any future draft reader and the parts
+it composed all still exist:
+
+- Resolved `CanonicalLeagueRules`.
+- Gated to NFL redraft only.
+- Read the live draft snapshot through `buildSessionSnapshot`.
+- Read the normalized draft pool through `getResolvedDraftPoolForLeague`.
+- Converted normalized draft-pool entries into runtime-player evidence without requiring provider-specific fields.
+- Returned canonical state, recommendations, draft-runtime intelligence, and data-coverage counts.
+
+⚠ Every module it called is still present and still tested. Nothing below this line was removed.
 
 ### `lib/decision-os/draft-runtime-intelligence.ts`
 
@@ -85,7 +97,7 @@ Required enforcement for future route wiring:
 
 Claude-side OS work can consume G34 through:
 
-- `resolveNflRedraftDraftRuntime({ leagueId, viewerRosterId })`
+- ~~`resolveNflRedraftDraftRuntime({ leagueId, viewerRosterId })`~~ — **deleted 2026-09-06, see above.** Compose the three below directly; that is all the resolver did.
 - `buildCanonicalDraftRuntimeState(...)`
 - `buildSmartDraftRecommendations(...)`
 - `deriveDraftRuntimeIntelligence(...)`
