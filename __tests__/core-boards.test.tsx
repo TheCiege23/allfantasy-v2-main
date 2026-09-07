@@ -14,11 +14,14 @@ import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
+import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
 import type { SeasonOutlook, OutlookLeague } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
+import { collapseMirroredTrades } from '@/lib/core-app/tradesBoard'
 import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
+import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 
 /*
  * The 2026-09-07 core-pages boards.
@@ -669,5 +672,255 @@ describe('TradesBoard — the label must describe what the list did', () => {
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
     expect(container.textContent ?? '').toMatch(/ranked by deadline/i)
+  })
+})
+
+/*
+ * 🛑 THIS SHIPPED WRONG IN 421ce94d2 AND A PEER SESSION'S MEASUREMENT CAUGHT IT.
+ *
+ * `LeagueTradeHistory` is unique on (sleeperLeagueId, sleeperUsername) and
+ * `LeagueTrade` on (historyId, transactionId) — so a league where two managers
+ * have both been ingested stores every trade between them twice, mirrored. The
+ * first version counted rows and reported "6 trades on file" for three.
+ *
+ * The mirrors are INVERTED, so they compare equal on no payload field: the
+ * platform's own `transactionId` is the only key that works.
+ */
+describe('collapseMirroredTrades', () => {
+  const row = (leagueId: string, transactionId: string, extra: Record<string, unknown> = {}) => ({
+    leagueId,
+    transactionId,
+    ...extra,
+  })
+
+  it('counts one trade once, however many managers stored it', () => {
+    const { counts } = collapseMirroredTrades([
+      row('l1', 'tx-1', { playersGiven: ['a'], playersReceived: ['b'] }),
+      row('l1', 'tx-1', { playersGiven: ['b'], playersReceived: ['a'] }),
+      row('l1', 'tx-2', { playersGiven: ['c'], playersReceived: ['d'] }),
+      row('l1', 'tx-2', { playersGiven: ['d'], playersReceived: ['c'] }),
+      row('l1', 'tx-3', { playersGiven: ['e'], playersReceived: ['f'] }),
+    ])
+    expect(counts.get('l1')).toBe(3)
+  })
+
+  it('keeps leagues separate — the same transaction id in two leagues is two trades', () => {
+    const { counts } = collapseMirroredTrades([row('l1', 'tx-1'), row('l2', 'tx-1')])
+    expect(counts.get('l1')).toBe(1)
+    expect(counts.get('l2')).toBe(1)
+  })
+
+  /*
+   * ⚠ THE SURVIVING COPY DECIDES WHICH WAY ROUND THE CARD READS, because the
+   * mirrors are inverted. First-wins on an ordered input is what makes that
+   * stable between renders; without it the two sides swap at random.
+   */
+  it('keeps the FIRST copy, so the card sides cannot swap between renders', () => {
+    const { firstByLeague } = collapseMirroredTrades([
+      row('l1', 'tx-1', { playersGiven: ['a'], historyId: 'h-aaa' }),
+      row('l1', 'tx-1', { playersGiven: ['b'], historyId: 'h-bbb' }),
+    ])
+    expect((firstByLeague.get('l1') as { historyId: string }).historyId).toBe('h-aaa')
+    expect((firstByLeague.get('l1') as { playersGiven: string[] }).playersGiven).toEqual(['a'])
+  })
+
+  it('is empty for no rows rather than throwing', () => {
+    const { counts, firstByLeague } = collapseMirroredTrades([])
+    expect(counts.size).toBe(0)
+    expect(firstByLeague.size).toBe(0)
+  })
+})
+
+/* ── War Room ────────────────────────────────────────────────────────────── */
+
+/*
+ * 🛑 THIS BOARD HAD NO TEST AT ALL UNTIL A PEER SESSION NAMED THE SHAPE. Their
+ * case was a suite that set `lineups: { available: false }` and so never reached
+ * the component it was believed to cover — green with the wiring deleted.
+ * WarRoomBoard renders more player data than any other board here (pick rows
+ * with headshots and club crests, the queue) and none of it was asserted.
+ *
+ * Every test below was verified red-before-green against a deliberate mutation.
+ */
+function livePicks(over: Partial<LiveDraftPicks> = {}): LiveDraftPicks {
+  return {
+    byLeague: {
+      l1: [
+        {
+          overall: 1,
+          round: 1,
+          pickInRound: 1,
+          rosterId: '1',
+          managerName: 'Riley',
+          isYours: false,
+          playerName: 'Josh Allen',
+          position: 'QB',
+          imageUrl: null,
+          team: 'BUF',
+        },
+        {
+          overall: 2,
+          round: 1,
+          pickInRound: 2,
+          rosterId: '2',
+          managerName: null,
+          isYours: true,
+          /* Our resolution gap, not a gap in the draft — must still render. */
+          playerName: null,
+          position: null,
+          imageUrl: null,
+          team: null,
+        },
+      ],
+    },
+    queueByLeague: { l1: [{ playerName: 'Bijan Robinson', position: 'RB' }] },
+    ...over,
+  }
+}
+
+const NO_PICKS: LiveDraftPicks = { byLeague: {}, queueByLeague: {} }
+
+describe('WarRoomBoard', () => {
+  /*
+   * The filter that is this screen's entire reason to exist beside Draft HQ. If
+   * it stops filtering, the two screens show one list and one of them is dead
+   * weight.
+   */
+  it('shows only running drafts, and does not hide the rest', () => {
+    const { container } = render(
+      <WarRoomBoard
+        drafts={draftData(
+          [
+            draftRow({ leagueId: 'l1', leagueName: 'Running Now', phase: 'live' }),
+            draftRow({ leagueId: 'l2', leagueName: 'Not Yet', phase: 'upcoming' }),
+          ],
+          { counts: { live: 1, upcoming: 1, done: 0, unknown: 0 } },
+        )}
+        picks={livePicks()}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    const live = container.querySelector('.af-bd-cards')
+    expect(live?.textContent).toContain('Running Now')
+    expect(live?.textContent).not.toContain('Not Yet')
+    /* Not hidden — it moves to Starting soon, pointing at Draft HQ. */
+    expect(container.textContent ?? '').toContain('Not Yet')
+    expect(container.textContent ?? '').toContain('Starting soon')
+  })
+
+  it('renders the last picks with their round and pick number', () => {
+    const { container } = render(
+      <WarRoomBoard
+        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+        picks={livePicks()}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('Josh Allen')
+    expect(text).toContain('1.01')
+    expect(text).toContain('Riley')
+  })
+
+  /*
+   * ⚠ AN UNNAMED PICK IS SHOWN, NOT DROPPED. Dropping it would silently shorten
+   * the board and make the pick numbers skip — a gap in OUR player resolution
+   * reading as a gap in the draft itself.
+   */
+  it('renders a pick we could not identify rather than skipping its number', () => {
+    const { container } = render(
+      <WarRoomBoard
+        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+        picks={livePicks()}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('Player not identified')
+    expect(text).toContain('1.02')
+  })
+
+  /*
+   * ⚠ "NO QUEUE HERE", NOT "NO QUEUE". The queue tables are AllFantasy's own; a
+   * Sleeper draft keeps its queue on Sleeper, so an empty one means we hold
+   * nothing — not that the manager is unprepared.
+   */
+  it('blames AllFantasy, not the manager, for an empty queue', () => {
+    const { container } = render(
+      <WarRoomBoard
+        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+        picks={livePicks({ queueByLeague: {} })}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    expect(container.textContent ?? '').toMatch(/No queue built in AllFantasy/i)
+  })
+
+  it('says the queue is not checked for availability rather than implying it is', () => {
+    const { container } = render(
+      <WarRoomBoard
+        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+        picks={livePicks()}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    expect(container.textContent ?? '').toMatch(/does not check whether they are still available/i)
+  })
+
+  /*
+   * Three different silences. A War Room that says one sentence for all three
+   * tells a manager with a draft in an hour that they have nothing on.
+   */
+  it('tells nothing-running apart from nothing-at-all', () => {
+    const coming = render(
+      <WarRoomBoard
+        drafts={draftData([draftRow({ phase: 'upcoming' })], {
+          counts: { live: 0, upcoming: 1, done: 0, unknown: 0 },
+        })}
+        picks={NO_PICKS}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    expect(coming.container.textContent ?? '').toMatch(/1 is still to come/i)
+
+    const none = render(
+      <WarRoomBoard
+        drafts={draftData([], {
+          counts: { live: 0, upcoming: 0, done: 0, unknown: 0 },
+          withoutDraft: 12,
+        })}
+        picks={NO_PICKS}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    expect(none.container.textContent ?? '').toMatch(/No draft is set up in any of your leagues/i)
+  })
+
+  it('puts your own clock above the other running drafts', () => {
+    const { container } = render(
+      <WarRoomBoard
+        drafts={draftData(
+          [
+            draftRow({ leagueId: 'a', leagueName: 'Someone else', phase: 'live' }),
+            draftRow({ leagueId: 'b', leagueName: 'Your pick', phase: 'live', yoursOnClock: true }),
+          ],
+          { counts: { live: 2, upcoming: 0, done: 0, unknown: 0 } },
+        )}
+        picks={NO_PICKS}
+        allHref="/core/war-room?all=1"
+        draftHqHref="/core/draft-hq"
+      />,
+    )
+    const names = [...container.querySelectorAll('.af-bd-cards .af-bd-name')].map(
+      (n) => n.textContent,
+    )
+    expect(names[0]).toBe('Your pick')
   })
 })
