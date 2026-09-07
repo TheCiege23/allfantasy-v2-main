@@ -33,13 +33,7 @@ export const dynamic = 'force-dynamic'
 const DEFAULT_MAX_LEAGUES = 40
 
 function isEnabled(): boolean {
-  // TEMPORARY DIAGNOSTIC — 2026-09-06, remove once the raw value is confirmed.
-  // This flag reads as disabled in production despite being set to "true" via
-  // two independent Railway write paths across three fresh deploys. Not a
-  // secret (a boolean feature flag), safe to log raw.
-  const raw = process.env.DRAFT_TICK_CRON_ENABLED
-  console.log('[cron/draft-tick] DRAFT_TICK_CRON_ENABLED raw=%s length=%s', JSON.stringify(raw), raw?.length ?? null)
-  return raw?.trim().toLowerCase() === 'true'
+  return process.env.DRAFT_TICK_CRON_ENABLED?.trim().toLowerCase() === 'true'
 }
 
 export async function GET(request: NextRequest) {
