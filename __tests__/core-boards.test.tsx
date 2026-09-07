@@ -18,7 +18,7 @@ import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
 import type { SeasonOutlook, OutlookLeague } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
-import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
+import { isViewersOwnHistory, type TradesBoardData } from '@/lib/core-app/tradesBoard'
 import { collapseMirroredTrades } from '@/lib/core-app/tradesBoard'
 import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
 import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
@@ -1013,5 +1013,77 @@ describe('WarRoomBoard', () => {
       (n) => n.textContent,
     )
     expect(names[0]).toBe('Your pick')
+  })
+})
+
+/*
+ * ⚠ THE BOARD LABELLED BOTH SIDES WITH A RAW SLEEPER USERNAME, so a trade the
+ * reader made themselves read "TheCiege24 sent ..." rather than "You sent ...".
+ *
+ * 🛑 AND THE OBVIOUS MECHANISM WAS THE WRONG ONE. The proposal on the table was a
+ * measured ~78% `sleeperUsername -> LeagueTeam.platformUserId` join, which would
+ * have put the reader on the wrong side of roughly one card in five — and a
+ * confident "You sent" that is wrong INVERTS a trade rather than blurring it.
+ * The real chain is exact: `AppUser.legacyUserId` (@unique) ->
+ * `LegacyUser.sleeperUsername` (@unique). It resolves to one username or to
+ * none, so the only two outcomes are "correct" and "unchanged".
+ */
+describe('isViewersOwnHistory', () => {
+  it('claims the trade only when both names are known and equal', () => {
+    expect(isViewersOwnHistory('TheCiege24', 'TheCiege24')).toBe(true)
+    expect(isViewersOwnHistory('TheCiege24', 'someone-else')).toBe(false)
+  })
+
+  /* Sleeper is case-preserving but not case-significant. */
+  it('ignores case and surrounding space', () => {
+    expect(isViewersOwnHistory('  TheCiege24 ', 'theciege24')).toBe(true)
+  })
+
+  /*
+   * 🛑 THE ENTIRE SAFETY PROPERTY. An account with no legacy link resolves to
+   * null, and a null must never become "You" — that would tell a manager they
+   * made a trade they did not make.
+   */
+  it('never claims the trade when either side is unknown', () => {
+    for (const [a, b] of [
+      ['TheCiege24', null],
+      [null, 'TheCiege24'],
+      [null, null],
+      ['TheCiege24', ''],
+      ['', 'TheCiege24'],
+      ['TheCiege24', '   '],
+    ] as Array<[string | null, string | null]>) {
+      expect(isViewersOwnHistory(a, b), `${a} / ${b}`).toBe(false)
+    }
+  })
+})
+
+describe('TradesBoard — whose side is whose', () => {
+  const sideLabels = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('.af-bd-side-label')).map((n) => n.textContent)
+
+  it('says "You sent" for the reader and names the other manager', () => {
+    const { container } = render(
+      <TradesBoard
+        data={tradesData({
+          windows: tradesData().windows.map((w) => ({
+            ...w,
+            latest: w.latest ? { ...w.latest, fromName: 'You', toName: 'Jordan' } : w.latest,
+          })),
+        })}
+        allHref="/core/trades?all=1"
+      />,
+    )
+    expect(sideLabels(container)).toContain('You sent')
+    expect(sideLabels(container)).toContain('Jordan sent')
+  })
+
+  /* Unresolved reader: the previous behaviour, not a degraded one. */
+  it('falls back to the platform username rather than guessing', () => {
+    const { container } = render(
+      <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
+    )
+    expect(sideLabels(container)).toContain('TheCiege24 sent')
+    expect(sideLabels(container)).not.toContain('You sent')
   })
 })

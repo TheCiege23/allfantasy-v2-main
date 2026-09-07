@@ -219,10 +219,71 @@ export function collapseMirroredTrades<T extends { leagueId: string; transaction
   return { counts, firstByLeague }
 }
 
+/**
+ * The reader's own Sleeper username, or null when we cannot say who they are.
+ *
+ * ⚠ THIS IS AN EXACT TWO-HOP LOOKUP, NOT A NAME MATCH, and the distinction is
+ * the whole reason this is safe to render. `AppUser.legacyUserId` is `@unique`
+ * and points at `LegacyUser.id`; `LegacyUser.sleeperUsername` is `@unique` too.
+ * So the chain either resolves to exactly one username or to nothing — there is
+ * no scoring, no threshold, and no second-best candidate.
+ *
+ * ⚠ NULL IS THE COMMON CASE AND MUST STAY CHEAP. An account that never came
+ * through the legacy Sleeper import has no `legacyUserId`, and that is not an
+ * error — the board simply keeps printing the platform username, which is what
+ * it does today. Every failure here (no row, no link, a throw) returns null, so
+ * the feature can only ever ADD a correct "You" and never replace a correct
+ * username with a wrong one.
+ *
+ * `lib/core-app/career.ts` already walks the first hop of this same chain.
+ */
+async function viewerSleeperUsername(userId: string): Promise<string | null> {
+  try {
+    const appUser = await prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { legacyUserId: true },
+    })
+    if (!appUser?.legacyUserId) return null
+    const legacy = await prisma.legacyUser.findUnique({
+      where: { id: appUser.legacyUserId },
+      select: { sleeperUsername: true },
+    })
+    return legacy?.sleeperUsername?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Is this trade history the READER's own?
+ *
+ * ⚠ BOTH SIDES MUST BE PRESENT. A null on either side is "we do not know", and
+ * an unknown must never render as "You" — that would tell a manager they made a
+ * trade they did not make, which is worse than the raw username this replaces.
+ */
+export function isViewersOwnHistory(
+  historyUsername: string | null | undefined,
+  viewerUsername: string | null | undefined,
+): boolean {
+  const a = historyUsername?.trim().toLowerCase()
+  const b = viewerUsername?.trim().toLowerCase()
+  if (!a || !b) return false
+  return a === b
+}
+
 export async function getTradesBoard(
   userId: string,
   currentWeek: number | null,
 ): Promise<TradesBoardData> {
+  /*
+   * ⚠ THE ASSETS ARE ALREADY READER-RELATIVE; ONLY THE LABEL IS NOT.
+   * `LeagueTrade.playersGiven` is what the HISTORY OWNER gave — the rows are
+   * stored from that manager's perspective, one history per manager per league
+   * (`@@unique([sleeperLeagueId, sleeperUsername])`). So nothing about the two
+   * sides needs re-orienting; the only thing the board could not say was
+   * whether that manager is the person reading the screen.
+   */
+  const viewerSleeper = await viewerSleeperUsername(userId)
   const claimed = await prisma.leagueTeam
     .findMany({
       where: { claimedByUserId: userId },
@@ -496,7 +557,13 @@ export async function getTradesBoard(
       season: t.season ?? null,
       week: t.week ?? null,
       at: t.tradeDate ? t.tradeDate.toISOString() : null,
-      fromName: h.sleeperUsername,
+      /*
+       * "You sent" only when the identity is certain — see `isViewersOwnHistory`.
+       * An unresolved reader keeps the platform username, which is exactly what
+       * this board printed before, so the fallback is the previous behaviour
+       * rather than a degraded one.
+       */
+      fromName: isViewersOwnHistory(h.sleeperUsername, viewerSleeper) ? 'You' : h.sleeperUsername,
       toName: t.partnerName?.trim() || 'the other manager',
       /*
        * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the
