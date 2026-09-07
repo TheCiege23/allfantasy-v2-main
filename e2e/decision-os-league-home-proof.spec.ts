@@ -78,8 +78,35 @@ async function openLeagueHome(
   const visible = await leagueTab.isVisible({ timeout: 45_000 }).catch(() => false)
   if (!visible) {
     const bodyText = await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')
+    /*
+     * ⚠ "NOT VISIBLE" IS TWO DIFFERENT BUGS AND THIS MESSAGE COULD NOT TELL THEM APART.
+     * `isVisible` is false both when the element is ABSENT (the shell never rendered
+     * that tab — a gating or data bug) and when it is PRESENT BUT HIDDEN (behind an
+     * inactive group, an overlay, or zero-sized — a UI-state bug). Every other
+     * diagnostic here was already wired and already silent: console errors AND
+     * warnings, pageerror, requestfailed, and any response >= 400 all fired nothing,
+     * which rules out a crash and an API failure but says nothing about this fork.
+     *
+     * Measured 2026-09-07 on run 34127164380: the body text proves the page renders
+     * fully — league name, 12 teams, standings, VITALS, COMMISH — so the shell IS
+     * there and only this tab is missing or hidden. Resolving which one needs the DOM,
+     * and the saved error-context carries no page snapshot, only the body text and
+     * this spec's own source. So ask the page directly, at the moment it fails.
+     *
+     * `count()` is deliberate rather than a second `isVisible`: a hidden element still
+     * counts, so count>0 with visible=false IS the discriminator.
+     */
+    const tabCount = await leagueTab.count().catch(() => -1)
+    const groupCount = await page.getByTestId('league-tab-group-league').count().catch(() => -1)
+    const renderedTabIds = await page
+      .locator('[data-testid^="league-tab-"]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')).filter(Boolean).slice(0, 30))
+      .catch(() => [] as (string | null)[])
     throw new Error(
-      `League Home shell did not render. url=${page.url()} browser=${browserEvents.slice(-12).join(' | ')} body=${bodyText.slice(0, 1200)}`,
+      `League Home shell did not render. url=${page.url()} ` +
+        `leagueTabInDom=${tabCount} leagueGroupInDom=${groupCount} ` +
+        `renderedTabTestIds=[${renderedTabIds.join(',')}] ` +
+        `browser=${browserEvents.slice(-12).join(' | ')} body=${bodyText.slice(0, 1200)}`,
     )
   }
   await page.getByTestId('league-tab-league').click()
