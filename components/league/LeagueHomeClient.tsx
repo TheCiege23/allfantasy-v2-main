@@ -13,6 +13,7 @@ import LeagueTab from '@/components/league/tabs/LeagueTab'
 import IntroVideoModal from '@/components/league/IntroVideoModal'
 import type { LeagueHomeData, LeagueTopTab } from '@/components/league/types'
 import LeagueStatusBar from '@/components/league/LeagueStatusBar'
+import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import CommissionerControlsPanel from '@/components/league/CommissionerControlsPanel'
 import AuditLogViewer from '@/components/league/AuditLogViewer'
 import LeagueFeed from '@/components/league-feed/LeagueFeed'
@@ -78,6 +79,7 @@ export default function LeagueHomeClient({
 
       <main className="mx-auto max-w-md px-4 pb-[148px] pt-5">
         <LeagueStatusBar snapshot={lifecycleLive} currentWeek={data.league.currentWeek} />
+        <LeagueTypeConfirm leagueId={data.league.id} className="mb-3" />
         <CommissionerControlsPanel
           leagueId={data.league.id}
           season={data.league.season}

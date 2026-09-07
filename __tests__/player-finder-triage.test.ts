@@ -19,7 +19,8 @@ const KICKOFFS = {
 function starter(sleeperId: string, name: string, team: string | null, leagueId: string, leagueName: string, platform = 'sleeper'): TriageStarter {
   return { sleeperId, sport: 'NFL', externalId: `ri-${sleeperId}`, name, position: 'TE', team, imageUrl: null, leagueId, leagueName, platform }
 }
-const inj = (status: string, description: string | null = null): TriageInjury => ({ status, description, reportedAt: '2026-10-25T15:12:00.000Z' })
+// Reported Friday evening — the injury report's ruling, not a game-day scratch (see the Inactive case below).
+const inj = (status: string, description: string | null = null): TriageInjury => ({ status, description, reportedAt: '2026-10-23T20:31:00.000Z' })
 
 describe('triageRows', () => {
   const starters = [
@@ -54,6 +55,21 @@ describe('triageRows', () => {
     expect(rows[3]).toMatchObject({ status: { tone: 'warn', label: 'Doubtful' }, kickoff: KICKOFFS.LAR })
     // Healthy and unreported starters with a game are not listed.
     expect(rows.some((r) => r.player.name === 'Healthy Guy' || r.player.name === 'Unreported Guy')).toBe(false)
+  })
+
+  it('reads an Out that landed inside the pregame window as "Inactive", with when and how long before kickoff', () => {
+    // Kincaid's Out reported 11:32a ET for a 1:00p kickoff; Andrews' Questionable at the same minute is a forecast, not a scratch.
+    const late = new Map<string, TriageInjury>([
+      ['dalton kincaid', { status: 'Out', description: 'Ankle', reportedAt: '2026-10-25T15:32:00.000Z' }],
+      ['mark andrews', { status: 'Questionable', description: 'Knee', reportedAt: '2026-10-25T15:32:00.000Z' }],
+    ])
+    const rows = triageRows({ starters, injuries: late, kickoffs: KICKOFFS, nowIso: NOW, week: 12 })
+    const kincaid = rows.find((r) => r.player.name === 'Dalton Kincaid')!
+    expect(kincaid.status).toEqual({ tone: 'bad', label: 'Inactive' })
+    expect(kincaid.inactive).toEqual({ announcedAt: '2026-10-25T15:32:00.000Z', minutesBeforeKickoff: 88, clock: '11:32a ET' })
+    expect(rows.find((r) => r.player.name === 'Mark Andrews')!.inactive).toBeNull()
+    // The Friday ruling in the default fixture is Out, not Inactive.
+    expect(triageRows({ starters, injuries, kickoffs: KICKOFFS, nowIso: NOW, week: 12 }).find((r) => r.player.name === 'Dalton Kincaid')!).toMatchObject({ status: { label: 'Out' }, inactive: null })
   })
 
   it('does not call a missing club "no game" when the schedule itself is missing', () => {

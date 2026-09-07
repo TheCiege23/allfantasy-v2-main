@@ -100,6 +100,12 @@ export interface InjuredStarterSignal {
    * wrong for most of a roster. Null when the schedule has no game for him (bye, or no row).
    */
   lockAt?: string | null
+  /**
+   * When the designation was REPORTED (the earliest row of the current word), ISO. With
+   * `lockAt` it tells a pregame inactive — Out inside the last two hours before kickoff —
+   * from a Friday ruling (lib/core-app/pregameInactive.ts). Null when no row carries a date.
+   */
+  reportedAt?: string | null
   /** Best replacement on the bench, when a projection exists to rank by. */
   replacement?: { playerName: string; projectedPoints: number | null } | null
   /**

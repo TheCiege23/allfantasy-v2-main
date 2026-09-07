@@ -22,6 +22,31 @@ const OUT_STARTER: InjuredStarterSignal = {
   replacement: { playerName: 'Bench Guy', projectedPoints: 11.4 },
 }
 
+describe('pregame inactives', () => {
+  it('tops the scale for an Out that landed inside the last two hours before his kickoff, and says when', () => {
+    // Kickoff 1:00p ET, reported 11:32a ET — 88 minutes before kickoff. At 80 minutes to lock the clock
+    // alone would say 88; the announcement says 99.
+    const later = new Date('2026-09-13T15:40:00Z') // 11:40a ET, 80 minutes to lock
+    const fired = detectInjuredStarterAlerts({
+      now: later,
+      signalBundle: { injuredStarters: [{ ...OUT_STARTER, lockAt: '2026-09-13T17:00:00Z', reportedAt: '2026-09-13T15:32:00Z' }], lineupLockAt: null },
+    } as unknown as ChimmyAlertContext)
+    expect(fired).toHaveLength(1)
+    const a = fired[0]!
+    expect(a.urgencySignal).toBe(99)
+    expect(a.title).toBe('Test Starter is inactive and still starting')
+    expect(a.message).toContain('was declared inactive at 11:32a ET, 88 minutes before kickoff, with 80 minutes to lock in The Last IDP Dynasty!!')
+    expect(a.metadata).toMatchObject({ inactive: true, announcedAt: '2026-09-13T15:32:00.000Z', designation: 'Out' })
+  })
+
+  it('leaves a Friday ruling on the ordinary scale', () => {
+    const alerts = detectInjuredStarterAlerts(ctx([{ ...OUT_STARTER, lockAt: '2026-09-13T17:00:00Z', reportedAt: '2026-09-11T20:31:00Z' }]))
+    expect(alerts[0]!.urgencySignal).toBe(99) // 55 minutes to lock, as before — by the clock, not by the word
+    expect(alerts[0]!.title).toBe('Test Starter is Out and still starting')
+    expect(alerts[0]!.metadata).toMatchObject({ inactive: false, announcedAt: null })
+  })
+})
+
 describe('detectInjuredStarterAlerts', () => {
   it('fires the Sunday-panic case: OUT starter, 55 minutes to lock', () => {
     const alerts = detectInjuredStarterAlerts(ctx([OUT_STARTER]))

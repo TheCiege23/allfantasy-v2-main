@@ -12,6 +12,7 @@ import { isIdpPosition } from '@/lib/core-app/scoringNotes'
 import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCache'
 import { resolveSportsWeek } from './sportsWeek'
 import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from './playerGame'
+import { designationOnset } from './designationOnset'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -851,21 +852,26 @@ export async function getPlayerDetail(
     .catch(() => [] as Array<{ sleeperId: string | null }>)
   const nameIsAmbiguous = nameSharers.length > 1
 
-  const injuryRow = nameIsAmbiguous
-    ? null
+  // One row per source. The freshest says the word; the earliest row of that
+  // word says WHEN — the live game-window fold is always freshest and used to
+  // hide ESPN's report time behind it (designationOnset.ts).
+  const injuryRows = nameIsAmbiguous
+    ? []
     : await prisma.sportsInjury
-        .findFirst({
+        .findMany({
           where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
           orderBy: { fetchedAt: 'desc' },
+          take: 8,
           select: { status: true, description: true, date: true, fetchedAt: true },
         })
-        .catch(() => null)
+        .catch(() => [] as Array<{ status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>)
+  const injuryRow = designationOnset(injuryRows)
 
   const injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }> =
     injuryRow
       ? {
           available: true,
-          data: { status: injuryRow.status, description: injuryRow.description, reportedAt: injuryRow.date },
+          data: { status: injuryRow.status, description: injuryRow.description, reportedAt: injuryRow.reportedAt },
         }
       : {
           available: false,

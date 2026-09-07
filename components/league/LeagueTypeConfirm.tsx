@@ -49,7 +49,16 @@ const TYPES = [
   { id: 'survivor', label: 'Survivor', hint: 'Last manager standing' },
 ]
 
-export function LeagueTypeConfirm({ leagueId, className }: { leagueId: string; className?: string }) {
+export function LeagueTypeConfirm({
+  leagueId,
+  className,
+  alwaysShow,
+}: {
+  leagueId: string
+  className?: string
+  /** Skip the "not worth asking" self-hide — for a settings page the commissioner chose to open. */
+  alwaysShow?: boolean
+}) {
   const [state, setState] = useState<State | null>(null)
   const [choice, setChoice] = useState<string | null>(null)
   const [buyIn, setBuyIn] = useState('')
@@ -113,8 +122,9 @@ export function LeagueTypeConfirm({ leagueId, className }: { leagueId: string; c
     state.suggestion.suggested &&
     state.suggestion.suggested !== 'redraft' &&
     !state.suggestion.looksNonCompetitive
-  // An ordinary league nobody needs to label: show nothing at all.
-  if (!state.confirmation && !worthAsking) return null
+  // An ordinary league nobody needs to label: show nothing at all — unless the
+  // commissioner navigated here deliberately (alwaysShow), which is its own signal.
+  if (!state.confirmation && !worthAsking && !alwaysShow) return null
 
   const confirmed = state.confirmation != null
 

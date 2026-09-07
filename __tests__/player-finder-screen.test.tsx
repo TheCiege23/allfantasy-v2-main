@@ -82,8 +82,18 @@ const CLAIM: RecommendedMove = {
   platform: 'yahoo',
   projectionWeek: 12,
   affectedProjection: 9.4,
-  freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', projectedPoints: 12.3, delta: 2.9 }],
+  freeAgents: [{ playerId: '9', name: 'Isaiah Likely', position: 'TE', team: 'BAL', projectedPoints: 12.3, delta: 2.9 }],
   claimTarget: { kind: 'none' },
+}
+/* A claim whose free agent plays for Dallas, which shares Kincaid's 1:00 slate. */
+const CLAIM_DAL: RecommendedMove = {
+  leagueId: 'L-dragons',
+  leagueName: 'Dynasty Dragons',
+  platform: 'sleeper',
+  projectionWeek: 12,
+  affectedProjection: 9.4,
+  freeAgents: [{ playerId: '11', name: 'Luke Schoonmaker', position: 'TE', team: 'DAL', projectedPoints: 10.1, delta: 0.7 }],
+  claimTarget: { kind: 'provider', provider: 'sleeper', url: 'https://sleeper.com/leagues/999/players' },
 }
 
 const DETAIL: PlayerDetail = {
@@ -405,6 +415,36 @@ describe('Player Finder — game day', () => {
     expect(screen.queryByRole('region', { name: 'Game day' })).toBeNull()
   })
 
+  it('tells a phone where the tap lands — this fixture’s Yahoo button is the LEAGUE page, which the Yahoo app does not take on an iPhone; "may open" on Android; nothing on a desktop', () => {
+    const out = { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } } }
+    const withUa = (ua: string, run: () => void) => {
+      const original = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent')
+      Object.defineProperty(window.navigator, 'userAgent', { value: ua, configurable: true })
+      try {
+        run()
+      } finally {
+        if (original) Object.defineProperty(window.navigator, 'userAgent', original)
+        else delete (window.navigator as unknown as Record<string, unknown>).userAgent
+      }
+    }
+    withUa('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', () => {
+      const { unmount } = renderCore({ detail: out, nowIso: NOW })
+      const button = within(screen.getByRole('region', { name: 'Game day' })).getAllByRole('link')[0]!
+      expect(button).toHaveTextContent('Open in Yahoo · League') // no team id in the fixture: the verified lineup format cannot be built, so it is the league page
+      expect(within(button).getByText('Opens Yahoo on the web')).toHaveAttribute('data-landing', 'web')
+      unmount()
+    })
+    withUa('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36', () => {
+      const { unmount } = renderCore({ detail: out, nowIso: NOW })
+      const button = within(screen.getByRole('region', { name: 'Game day' })).getAllByRole('link')[0]!
+      expect(within(button).getByText('May open the Yahoo app')).toHaveAttribute('data-landing', 'unknown')
+      unmount()
+    })
+    // jsdom's own user agent is a desktop: no claim at all.
+    renderCore({ detail: out, nowIso: NOW })
+    expect(screen.queryByText(/Opens in the|May open the|on the web/)).toBeNull()
+  })
+
   it('leads with the game-day banner when he is Out: status, kickoff, the lock, and an Open-lineup button per league where he starts', () => {
     renderCore({ detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: null } } }, nowIso: NOW })
     const banner = screen.getByRole('region', { name: 'Game day' })
@@ -462,6 +502,8 @@ describe('Player Finder — game-day home', () => {
           ],
           kickoff: '2026-10-25T17:00:00.000Z',
           noGame: false,
+          bye: false,
+          inactive: null,
         },
         {
           player: { sport: 'NFL', externalId: 'ri-4', sleeperId: '8130', name: 'Jake Ferguson', position: 'TE', team: 'DAL', imageUrl: null },
@@ -503,6 +545,15 @@ describe('Player Finder — game-day home', () => {
     renderCore({ triage: TRIAGE, nowIso: NOW })
     expect(screen.getAllByRole('region', { name: 'Game day · your flagged starters' })).toHaveLength(2) // the two home renders above; none for the open card
   })
+
+  it('shows a pregame inactive on the triage list with the announce clock instead of the report time', () => {
+    const inactiveRow = { ...TRIAGE.data.rows[0]!, status: { tone: 'bad' as const, label: 'Inactive' }, reportedAt: '2026-10-25T15:32:00.000Z', inactive: { announcedAt: '2026-10-25T15:32:00.000Z', minutesBeforeKickoff: 88, clock: '11:32a ET' } }
+    render(<PlayerFinder query="" matches={[]} detail={null} leagueCount={6} signedIn triage={{ ...TRIAGE, data: { ...TRIAGE.data, rows: [inactiveRow] } }} nowIso={NOW} />)
+    const card = screen.getByRole('region', { name: 'Game day · your flagged starters' })
+    expect(within(card).getByText('Inactive · Ankle')).toBeInTheDocument()
+    expect(within(card).getByText('declared inactive at 11:32a ET · 88 min before kickoff')).toBeInTheDocument()
+    expect(within(card).queryByText(/reported/)).toBeNull()
+  })
 })
 
 describe('Player Finder — report time and bye', () => {
@@ -520,6 +571,33 @@ describe('Player Finder — report time and bye', () => {
     const banner = screen.getByRole('region', { name: 'Game day' })
     expect(within(banner).getByText('reported Sun 11:12a ET')).toBeInTheDocument()
     expect(screen.getAllByText('reported Sun 11:12a ET')).toHaveLength(2) // banner + injury section
+  })
+
+  it('calls an Out that landed inside the pregame window "Inactive" and leads the banner with the announcement', () => {
+    // Out reported 11:32a ET for a 1:00p kickoff — 88 minutes before: the inactive list.
+    renderCore({
+      detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: new Date('2026-10-25T15:32:00.000Z') } } },
+      nowIso: NOW,
+    })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).toHaveAttribute('data-inactive', 'true')
+    expect(within(banner).getByText('Inactive · Ankle')).toBeInTheDocument()
+    expect(within(banner).getByText('Declared inactive at 11:32a ET, 88 min before kickoff. Starting in 1 of your league — move Kincaid before kickoff.')).toBeInTheDocument()
+    expect(within(banner).getByText('reported 46 min ago')).toBeInTheDocument()
+    // The header chip says it too; the injury section keeps the feed's own word.
+    expect(screen.getAllByText('Inactive · Ankle').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Out')).toBeInTheDocument()
+  })
+
+  it('does not call a Friday ruling inactive', () => {
+    renderCore({
+      detail: { ...DETAIL, injury: { available: true, data: { status: 'Out', description: 'Ankle', reportedAt: new Date('2026-10-23T20:31:00.000Z') } } },
+      nowIso: NOW,
+    })
+    const banner = screen.getByRole('region', { name: 'Game day' })
+    expect(banner).not.toHaveAttribute('data-inactive')
+    expect(within(banner).getByText('Out · Ankle')).toBeInTheDocument()
+    expect(screen.queryByText(/Declared inactive/)).toBeNull()
   })
 
   it('marks a bye beside readiness and leads with a bye banner that still offers the lineup buttons', () => {
@@ -599,6 +677,22 @@ describe('Player Finder — legal bench swaps', () => {
     expect(within(banner).getByText('His game has kicked off — Kincaid is locked in your lineup in 1 league; nothing can move now.')).toBeInTheDocument()
     expect(within(banner).queryByRole('link')).toBeNull()
     expect(within(banner).getByText('locked · kicked off Sun 1:00p ET')).toHaveAttribute('data-lock', 'locked')
+  })
+
+  it('locks a claim whose free agent has kicked off and keeps the one whose club has not', () => {
+    // Schoonmaker (DAL) kicked off at 1:00; Likely (BAL) is not on the map. Kincaid is healthy, so no swap competes.
+    renderCore({ detail: { ...DETAIL, recommendedMoves: { available: true, data: [CLAIM, CLAIM_DAL] } }, nowIso: KICKED_OFF })
+    const moves = screen.getByRole('region', { name: 'Recommended moves' })
+    const dal = within(moves).getByText('Claim Luke Schoonmaker over Kincaid').closest('li') as HTMLElement
+    expect(within(dal).getByText('locked')).toBeInTheDocument()
+    expect(within(dal).queryByRole('link', { name: /Open in Sleeper/ })).toBeNull()
+    expect(within(dal).getByText(/locked — Schoonmaker’s game kicked off Sun 1:00p ET/)).toBeInTheDocument()
+    const bal = within(moves).getByText('Claim Isaiah Likely over Kincaid').closest('li') as HTMLElement
+    expect(within(bal).queryByText('locked')).toBeNull()
+    expect(within(bal).getByRole('link')).toBeInTheDocument()
+    // The makeable claim sorts above the locked one.
+    const titles = within(moves).getAllByRole('heading', { level: 4 }).map((h) => h.textContent)
+    expect(titles.indexOf('Claim Isaiah Likely over Kincaid')).toBeLessThan(titles.indexOf('Claim Luke Schoonmaker over Kincaid'))
   })
 })
 

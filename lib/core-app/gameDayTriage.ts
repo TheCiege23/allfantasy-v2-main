@@ -2,6 +2,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { byeStatus } from './byeStatus'
 import { lockState } from './lineupLock'
 import { readiness, type MoveTone } from './playerMoves'
+import { pregameInactive, type PregameInactive } from './pregameInactive'
 
 /**
  * The finder's game-day home: your starters across every league who are
@@ -48,6 +49,8 @@ export type TriageRow = {
   kickoff: string | null
   /** The schedule is on file and his club has no game in it. */
   noGame: boolean
+  /** Ruled Out inside the last two hours before his kickoff — the inactive list or a late scratch (pregameInactive.ts). The chip then reads "Inactive". */
+  inactive: PregameInactive | null
   /** `noGame` with the shape of a real bye slate (byeStatus.ts); false for a plain schedule gap. */
   bye: boolean
 }
@@ -81,10 +84,13 @@ export function triageRows(args: {
 
   for (const s of starters) {
     const inj = injuries.get(s.name.trim().toLowerCase()) ?? null
-    const ready = readiness(inj?.status ?? null, Boolean(inj))
-    const flagged = ready ? ready.tone !== 'good' : false
+    const readyBase = readiness(inj?.status ?? null, Boolean(inj))
     const club = normalizeTeamAbbrev(s.team)
     const kickoff = club ? (kickoffs[club] ?? null) : null
+    // An Out that landed inside the pregame window is the inactive list; the chip says so.
+    const inactive = inj ? pregameInactive(inj.status, inj.reportedAt, kickoff) : null
+    const ready = inactive && readyBase ? { tone: 'bad' as MoveTone, label: 'Inactive' } : readyBase
+    const flagged = ready ? ready.tone !== 'good' : false
     const noGame = scheduleOnFile && !kickoff
     const bye = noGame && byeStatus(club, kickoffs, week, unresolved) === 'bye'
     if (!flagged && !noGame) continue
@@ -103,6 +109,7 @@ export function triageRows(args: {
       kickoff,
       noGame,
       bye,
+      inactive,
     })
   }
 

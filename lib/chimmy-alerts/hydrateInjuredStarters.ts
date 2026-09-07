@@ -50,7 +50,7 @@ export function buildInjuredStarterSignals(portfolio: {
   items: Array<{
     displayName: string
     position: string | null
-    injury: { status: string; freshness?: { stale?: boolean } | null } | null
+    injury: { status: string; reportedAt?: string | null; freshness?: { stale?: boolean } | null } | null
     projection?: { projectedPoints: number } | null
     schedule?: { nextGameAt?: string | null } | null
     leagueAppearances: Array<{
@@ -110,6 +110,8 @@ export function buildInjuredStarterSignals(portfolio: {
         // The player's own kickoff is his lock. Null on a bye or a missing schedule row —
         // the detector degrades to a lower urgency rather than inventing a deadline.
         lockAt: item.schedule?.nextGameAt ?? null,
+        // When the word landed, so the detector can tell an inactive from a Friday ruling.
+        reportedAt: item.injury?.reportedAt ?? null,
         replacement,
         // Either the individual row or the whole feed being stale taints the claim.
         stale: feedStale || Boolean(item.injury?.freshness?.stale),

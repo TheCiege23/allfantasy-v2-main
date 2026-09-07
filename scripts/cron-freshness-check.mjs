@@ -360,6 +360,19 @@ export const PROBES = {
   // every minute or had not run since March. The wrap now spans the whole tick.
   '/api/cron/draft-tick': { heartbeat: 'cron-draft-tick' },
   '/api/cron/legacy-import-drain': { heartbeat: 'cron-legacy-import-drain' },
+  /*
+   * Keeper deadline sweep, hourly. Instrumented when it turned up UNCLASSIFIED: it was added to
+   * vercel.json without a probe, which is the gap __tests__/cron-tier-and-freshness.test.ts exists
+   * to make loud, and it worked.
+   *
+   * A heartbeat rather than a table probe for the usual reason -- `processKeeperDeadlines` locks
+   * only sessions whose deadline has already passed, so writing nothing is its healthy steady
+   * state and a KeeperSelectionSession probe would be red whenever the job was fine.
+   *
+   * ⚠ The route serves USERS on the same GET (?leagueId=). Only the cron branch is wrapped; if
+   * that ever changes, request traffic writes this heartbeat and the probe stops meaning anything.
+   */
+  '/api/keeper/session': { heartbeat: 'cron-keeper-session' },
   '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
     heartbeat: 'cron-playoff-schedule-refresh',
   },
@@ -604,32 +617,6 @@ export const NO_PROBE = {
    * measure anything. Checked before writing this rather than assumed.
    */
 
-  /*
-   * ── EVENT-DRIVEN, SO ITS SILENCE IS THE HEALTHY STATE ──
-   *
-   * The keeper-deadline sweep, scheduled with the route in 8cd2cc7a. It arrived on the schedule
-   * without a classification, which is exactly the gap this registry exists to refuse: it turned
-   * __tests__/cron-tier-and-freshness.test.ts red as "unclassified crons: 0 * * * * /api/keeper/session"
-   * on every PR until someone decided which of the three it is. This is that decision.
-   *
-   * ⚠ A TABLE PROBE IS WRONG IN BOTH DIRECTIONS HERE. `processKeeperDeadlines` locks selections
-   * only when a keeper deadline actually elapses, so it correctly writes NOTHING for most of the
-   * season — the same inversion as the backfill sweeper above, where a freshness probe is red
-   * precisely while the job is working. And `KeeperSelectionSession` is written by commissioners
-   * and managers through this same route's user-facing branch, so a probe on it would be kept
-   * green by ordinary league traffic while the cron half was dead: the shared-probe false green.
-   *
-   * ⚠ AND THE HEARTBEAT DOES NOT EXIST YET. Checked rather than assumed: neither
-   * `app/api/keeper/session/route.ts` nor `lib/keeper/selectionEngine.ts` calls `recordSyncJobRun`
-   * or `withSyncJobRun`, so pointing a heartbeat probe at it today would report CONFIG forever and
-   * measure nothing — the failure the entry above already names. Instrumenting the cron branch is
-   * how this graduates into PROBES, which is the path every heartbeat entry in this file took.
-   */
-  '/api/keeper/session':
-    'Event-driven keeper-deadline sweep: it writes only when a deadline elapses, so an output ' +
-    'probe is red through every quiet period, and KeeperSelectionSession is also written by this ' +
-    "route's user-facing branch, so a table probe would be held green by ordinary league traffic. " +
-    'Needs recordSyncJobRun in the cron branch before it can be probed as a heartbeat.',
 }
 
 /**

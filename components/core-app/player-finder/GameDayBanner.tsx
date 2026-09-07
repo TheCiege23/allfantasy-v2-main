@@ -1,8 +1,10 @@
 import Link from 'next/link'
+import { AppLinkHint } from '@/components/core-app/player-finder/AppLinkHint'
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import type { PlayerGame } from '@/lib/core-app/playerGame'
 import { kickoffClock, lockState } from '@/lib/core-app/lineupLock'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
+import { inactiveSentence, type PregameInactive } from '@/lib/core-app/pregameInactive'
 import { platformLabel, type PlatformLink } from '@/lib/core-app/platformLinks'
 
 /**
@@ -36,6 +38,7 @@ export function GameDayBanner({
   reportedAt = null,
   game,
   bye = null,
+  inactive = null,
   nowIso,
   starting,
   benched,
@@ -52,6 +55,8 @@ export function GameDayBanner({
   game: PlayerGame | null
   /** The not-playing chip — "Bye · wk 9" or "No game on the schedule" — with which claim it is. */
   bye?: { label: string; tone: 'bad' | 'warn'; kind: 'bye' | 'no-game' } | null
+  /** Ruled Out inside the pregame window — the inactive list or a late scratch (pregameInactive.ts). Leads the summary. */
+  inactive?: PregameInactive | null
   nowIso: string
   /** Leagues where he is in YOUR starting lineup. */
   starting: GameDayLeague[]
@@ -90,10 +95,12 @@ export function GameDayBanner({
     summary = 'Not on any roster we read.'
   }
 
+  // The inactive announcement leads: it is the one fact that changed in the last two hours.
+  if (inactive && game) summary = `${inactiveSentence(inactive)}. ${summary}`
   const tone = bye && !game ? bye.tone : (status?.tone ?? 'warn')
 
   return (
-    <section className="af-pf-gameday" data-tone={tone} data-kind={bye && !game ? bye.kind : 'game'} aria-label="Game day">
+    <section className="af-pf-gameday" data-tone={tone} data-kind={bye && !game ? bye.kind : 'game'} data-inactive={inactive && game ? 'true' : undefined} aria-label="Game day">
       <div className="af-pf-gameday-top">
         {status ? (
           <span className="af-chip af-num af-pf-ready" data-tone={status.tone}>
@@ -125,6 +132,8 @@ export function GameDayBanner({
                   {/* `screen` is the human label ("Lineup", "League") — an unverified format lands on the league page and says so. */}
                   {l.link.screen === 'Lineup' ? `Open lineup in ${l.link.platformLabel}` : `${l.link.label} · ${l.link.screen}`}
                   <small>{l.leagueName}</small>
+                  {/* On a phone: whether this tap lands in the platform's app — measured per platform and screen (nativeApp.ts). */}
+                  <AppLinkHint platform={l.platform} screen={l.link.screen} />
                 </a>
               ) : (
                 <Link key={l.leagueId} className="af-btn af-pf-gameday-btn" href={l.link.href} data-screen={l.link.screen}>

@@ -66,7 +66,11 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
                           {r.bye ? (week ? `Bye · wk ${week.week}` : 'Bye') : 'No game on the schedule'}
                         </span>
                       ) : null}
-                      {reportedLabel(r.reportedAt, nowIso) ? <span className="af-pf-triage-when af-num">{reportedLabel(r.reportedAt, nowIso)}</span> : null}
+                      {r.inactive ? (
+                        <span className="af-pf-triage-when af-num">{`declared inactive at ${r.inactive.clock} · ${r.inactive.minutesBeforeKickoff} min before kickoff`}</span>
+                      ) : reportedLabel(r.reportedAt, nowIso) ? (
+                        <span className="af-pf-triage-when af-num">{reportedLabel(r.reportedAt, nowIso)}</span>
+                      ) : null}
                     </span>
                     <span className="af-pf-triage-meta">
                       {r.player.position ?? ''}
