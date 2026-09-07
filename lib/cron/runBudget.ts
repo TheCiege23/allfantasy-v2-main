@@ -237,9 +237,20 @@ export async function respondBeforeEdge<T>(
    * paying for: an absent guard and a working one produced byte-identical evidence.
    *
    * Ruled out before adding this, so the next reader does not re-run them: the deployed blob has
-   * the wrapper wired (0 direct `handle(req)` calls); no deployment rolled over during the window;
-   * and the event loop was healthy — the uptime probe was answered in 24-72ms every minute of it,
-   * on a service configured `numReplicas: 1`, so that traffic and the cron shared one container.
+   * the wrapper wired (0 direct `handle(req)` calls), and no deployment rolled over during the
+   * window.
+   *
+   * 🛑 A THIRD RULING-OUT STOOD HERE AND WAS WITHDRAWN 2026-09-07 — IT WAS MEASURED ON THE WRONG
+   * SERVICE. It read: "the event loop was healthy — the uptime probe was answered in 24-72ms every
+   * minute of it, on a service configured `numReplicas: 1`, so that traffic and the cron shared one
+   * container." Every clause was true of `allfantasy-v2-main`. The crons do not run there:
+   * `vars.APP_URL` points the whole fast and slow tier at `allfantasy-v2-worker`, a separate service
+   * on the `worker-release` branch at a different commit. The probe and the cron were never in the
+   * same container, so that was not weak evidence — it was none.
+   *
+   * ⚠ AND THE REPLICA HALF IS DEAD TWICE OVER: the worker moved to `numReplicas: 2` later the same
+   * day, so one request lands on one replica and an ABSENT log line no longer proves the code did
+   * not run. Any future "X never happened" read here needs several fires before it means anything.
    *
    * ARMED is what makes the others readable. Without it, "no FIRED line" cannot distinguish a
    * timer that failed from a guard that was never reached.
