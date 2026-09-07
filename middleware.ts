@@ -94,7 +94,33 @@ function canonicalProductionHostRedirect(request: NextRequest): NextResponse | n
  * The rule lives in lib/auth/session-auth-paths so it can be tested directly.
  */
 
-/** Paths that skip geo logic. Includes `/api/auth` so NextAuth + OAuth callbacks are never geo-blocked. */
+/**
+ * Paths that skip geo logic. Includes `/api/auth` so NextAuth + OAuth callbacks are never geo-blocked.
+ *
+ * 🛑 MACHINE CALLERS BELONG HERE, AND LEAVING THEM OUT IS A LATENT OUTAGE THAT
+ * ONLY FIRES ONCE GEO STARTS WORKING. A geo restriction exists to stop a PERSON
+ * in a prohibited state from using the product. A cron runner and a payment
+ * webhook have no person behind them, so blocking one enforces nothing and
+ * silently stops ingestion or billing instead.
+ *
+ * Measured 2026-09-07, and it was very nearly shipped: `WA` is the one
+ * full_block state, this repo fires its crons over HTTP from GitHub Actions
+ * (`.github/workflows/cron-slow-tier.yml`, `wc-cron.yml` → `${APP_URL}/api/cron/…`),
+ * and GitHub Actions runs on Azure — whose West US 2 region is in Quincy,
+ * WASHINGTON. A runner allocated a WA address hits the gate with no session, so
+ * `isMiddlewareAdmin` is false, and the job takes a 403 GEO_BLOCKED and fails
+ * silently. 38 cron routes and 4 webhooks were exposed this way.
+ *
+ * ⚠ IT WAS INVISIBLE UNTIL NOW ONLY BECAUSE THE GATE WAS BROKEN. With no edge
+ * header, `country` was null and every request skipped the block — so this bug
+ * and the bug that hid it are the same bug. Fixing geo detection is exactly what
+ * arms it, whether the fix is the IP fallback in this PR or proxying the
+ * hostname through Cloudflare. Both trip it.
+ *
+ * Exempting these opens nothing: geo and auth are independent, and each of these
+ * carries its own (cron secret, Stripe/Resend signature). No path that serves a
+ * human belongs in this list.
+ */
 const GEO_EXEMPT_PREFIXES = [
   "/geo-blocked",
   "/paid-restricted",
@@ -111,6 +137,13 @@ const GEO_EXEMPT_PREFIXES = [
   "/api/auth",
   "/api/geo",
   "/api/af-debug",
+  // Machine callers — see the block comment above. Not user traffic; each is
+  // authenticated by its own secret or provider signature.
+  "/api/cron",
+  "/api/webhooks",
+  "/api/stripe/webhook",
+  "/api/bracket/stripe/webhook",
+  "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",
 ]
