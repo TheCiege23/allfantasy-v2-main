@@ -167,3 +167,82 @@ export function rotateForFairness<T>(
   }
   return out
 }
+
+/**
+ * 270s against the 300s edge. A ceiling on the RESPONSE, not on the work.
+ *
+ * 🛑 WHY THE BUDGET ABOVE IS NOT ENOUGH, MEASURED 2026-09-07. Three different jobs 502'd in one
+ * night at the edge, all within 150ms of each other:
+ *
+ *     import-schedules?sport=all   502 @ 300043ms
+ *     import-stat-lines            502 @ 300147ms
+ *     import-players               502 @ 300033ms
+ *
+ * All three ALREADY used `createRunBudget()` at 240s. The budget is checked BETWEEN units, so a
+ * unit that starts at 239s runs as long as it likes — and these units call providers. Sixty
+ * seconds of headroom does not bound a unit that takes minutes, which the header above states in
+ * its own words: it bounds the NUMBER of units, not the duration of one.
+ *
+ * ⚠ THIS DOES NOT CANCEL THE WORK, AND CANNOT. There is no cancellation to reach for — the unit is
+ * awaiting provider calls deep in modules that accept no signal. What changes is what the CALLER
+ * gets. Today the edge severs at 300s and answers 502: the work is killed anyway, no row is
+ * written, no partial result survives, and the freshness probe then reports CONFIG. With this, the
+ * handler answers at 270s naming what it finished and what it deferred, the dispatcher records a
+ * run, and the next fire continues from the rotation.
+ *
+ * So the trade is NOT "clean shutdown vs. orphaned work". It is "killed with nothing recorded" vs.
+ * "killed with the partial result recorded". The work is equally dead either way.
+ *
+ * ⚠ REJECTIONS STILL PROPAGATE. If the work throws before the deadline the caller sees the throw
+ * unchanged. This intercepts only the case where the work is still running.
+ */
+export const CRON_HARD_RESPONSE_MS = 270_000
+
+export interface EdgeGuardResult<T> {
+  result: T
+  /** True when the deadline fired and `result` came from `onOverrun`, not from the work. */
+  overran: boolean
+}
+
+/**
+ * Race `work` against a hard deadline and return `onOverrun()` if it has not finished.
+ *
+ * @param work the handler's real work. Invoked immediately.
+ * @param onOverrun builds the partial response. Must not throw and must not await.
+ */
+export async function respondBeforeEdge<T>(
+  work: () => Promise<T>,
+  onOverrun: () => T,
+  hardMs: number = CRON_HARD_RESPONSE_MS,
+): Promise<EdgeGuardResult<T>> {
+  /*
+   * 🛑 A SYMBOL, NOT null/undefined/a string. The sentinel is compared by identity against the
+   * work's own resolved value, and handlers here legitimately resolve to undefined. Any sentinel a
+   * caller could also produce would report a timeout that never happened — marking finished work
+   * as deferred, which is the same class of lie as the 502 this replaces.
+   */
+  const TIMED_OUT = Symbol('cron.respondBeforeEdge.deadline')
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    const raced = await Promise.race<T | typeof TIMED_OUT>([
+      work(),
+      new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), hardMs)
+        /*
+         * ⚠ `unref` so a pending deadline cannot by itself hold the process open. Optional-called
+         * because the edge/browser timer type has no `unref`, and calling it blindly throws in the
+         * runtimes where this matters least.
+         */
+        ;(timer as unknown as { unref?: () => void }).unref?.()
+      }),
+    ])
+    return raced === TIMED_OUT ? { result: onOverrun(), overran: true } : { result: raced as T, overran: false }
+  } finally {
+    /*
+     * ⚠ Always clear. On the fast path the timer is still pending, and leaving one behind per
+     * invocation is a slow leak in a process that serves many cron fires.
+     */
+    if (timer) clearTimeout(timer)
+  }
+}
