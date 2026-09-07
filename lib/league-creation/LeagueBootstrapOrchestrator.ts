@@ -221,6 +221,104 @@ export async function runLeagueBootstrap(
     }
   }
 
+  /*
+   * 🛑 ZOMBIE AND BIG BROTHER WERE THE ONLY TWO FORMATS THE LIVE WIZARD COULD
+   * CREATE WITHOUT CONFIGURING.
+   *
+   * Their bootstrap lived exclusively in `legacyWizardSpecialtyBootstraps.ts`,
+   * whose only two callers are in `app/api/league/create/route.ts` — the route
+   * that labels itself DEPRECATED and that the wizard does not use. The wizard
+   * posts to `POST /api/leagues`, offers both formats (they have team-count
+   * tiers in the rules engine), and validation blocks only devy/c2c. So a
+   * zombie league came out with no `ZombieLeagueConfig` and no `ZombieLeague`
+   * row, and a Big Brother league with no config and no week-1 cycle. Measured
+   * 2026-09-07: both config tables hold zero rows in production.
+   *
+   * ⚠ THE FIX IS NOT TO CALL THE LEGACY BOOTSTRAP WHOLESALE. That function
+   * covers nine concepts, and this path already handles seven of them — six in
+   * the create transaction (guillotine, IDP, devy, C2C, dynasty, salary cap)
+   * and survivor immediately above. Calling it here would re-run every one:
+   * re-seeding survivor's exile league, FAQ and draft session, and overwriting
+   * the transaction's computed configs with the legacy path's bare `{}`
+   * defaults. Only the two genuinely missing concepts are added, beside
+   * survivor, which is the precedent this mirrors.
+   *
+   * ⚠ THESE ARE DEFAULTS, AND DELIBERATELY SO. The V2 wizard collects no
+   * zombie or Big Brother settings at all — no whisperer mode, no universe, no
+   * house rules — so everything below falls back. A valid default config that
+   * the concept's own engines and settings routes can then edit is the point;
+   * the alternative on this path today is no row at all, which is what makes
+   * the league structurally broken from birth. `settings.conceptSetup` is read
+   * anyway so the values land the moment the wizard learns to collect them.
+   */
+  const conceptSetup = ((settings as Record<string, unknown>).conceptSetup ?? {}) as Record<string, unknown>
+
+  if (leagueType === 'zombie') {
+    try {
+      const [{ upsertZombieLeagueConfig }, { createZombieLeague }] = await Promise.all([
+        import('@/lib/zombie/ZombieLeagueConfig'),
+        import('@/lib/zombie/setupEngine'),
+      ])
+      const league = await prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { name: true, leagueSize: true },
+      })
+      const whispererSelection =
+        conceptSetup.zombie_whisperer_selection === 'veteran_priority' ? 'veteran_priority' : 'random'
+      const universeId =
+        typeof conceptSetup.zombie_universe_id === 'string' && conceptSetup.zombie_universe_id.trim()
+          ? String(conceptSetup.zombie_universe_id).trim()
+          : null
+      const levelId =
+        typeof conceptSetup.zombie_level_id === 'string' && conceptSetup.zombie_level_id.trim()
+          ? String(conceptSetup.zombie_level_id).trim()
+          : null
+
+      await upsertZombieLeagueConfig(leagueId, { whispererSelection, universeId })
+      await createZombieLeague(
+        {
+          leagueId,
+          name: league?.name ?? null,
+          sport: String(leagueSport),
+          teamCount: typeof league?.leagueSize === 'number' ? league.leagueSize : 12,
+          isPaid: false,
+          buyInAmount: null,
+          whispererSelectionMode: whispererSelection,
+          namingMode: 'hybrid',
+          isSingleLeague: !universeId,
+        },
+        universeId,
+        levelId,
+      )
+    } catch (error) {
+      // Non-fatal, matching survivor above: the league itself is already
+      // committed, and a half-configured league is recoverable through the
+      // concept's own settings route. Failing creation here is not.
+      console.warn('[league-bootstrap] zombie bootstrap non-fatal:', error)
+    }
+  }
+
+  if (leagueType === 'big_brother') {
+    try {
+      const { upsertBigBrotherConfig } = await import('@/lib/big-brother/BigBrotherLeagueConfig')
+      await upsertBigBrotherConfig(leagueId, {})
+      try {
+        const { runBigBrotherLeagueBootstrap } = await import('@/lib/big-brother/bigBrotherLeagueBootstrap')
+        const boot = await runBigBrotherLeagueBootstrap(leagueId)
+        if (!boot.weekOneCycle.ok && boot.weekOneCycle.error) {
+          console.warn('[league-bootstrap] big brother week-1 cycle:', boot.weekOneCycle.error)
+        }
+      } catch (bootError) {
+        // The config is what makes the league usable; the week-1 cycle is
+        // recoverable from the commissioner panel. Keep them separately
+        // fallible so one cannot cost the other.
+        console.warn('[league-bootstrap] big brother bootstrap non-fatal:', bootError)
+      }
+    } catch (error) {
+      console.warn('[league-bootstrap] big brother config non-fatal:', error)
+    }
+  }
+
   void warmLeagueSportsDataAfterCreate(leagueSport).catch(() => {
     // non-fatal — chain warms on first read if this fails
   })
