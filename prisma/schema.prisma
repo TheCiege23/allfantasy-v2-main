@@ -1632,21 +1632,6 @@ model AiRecommendationOutcome {
   @@map("ai_recommendation_outcomes")
 }
 
-/// Cached LLM + deterministic outlook payloads per player + context hash.
-model AiPlayerOutlookCache {
-  id                String   @id @default(cuid())
-  playerId          String   @map("player_id")
-  sport             String
-  leagueContextHash String   @map("league_context_hash")
-  outlookPayload    Json     @map("outlook_payload")
-  expiresAt         DateTime @map("expires_at")
-  createdAt         DateTime @default(now()) @map("created_at")
-
-  @@unique([playerId, sport, leagueContextHash])
-  @@index([expiresAt])
-  @@map("ai_player_outlooks_cache")
-}
-
 model AIUserFeedback {
   id            String   @id @default(uuid())
   userId        String

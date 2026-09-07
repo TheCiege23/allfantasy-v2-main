@@ -1,0 +1,24 @@
+-- Drop `ai_player_outlooks_cache`.
+--
+-- The reader was removed in 87368412d (the `outlook` satellite in
+-- lib/canonical/getCanonicalPlayer.ts) and the writer in e4499a846
+-- (lib/ai/players/aiPlayerOutlook.ts). Nothing in the repo has queried this
+-- table since; the only remaining mention of the Prisma delegate is a test
+-- asserting `aiPlayerOutlookCache.findFirst` is NEVER called.
+--
+-- Verified read-only against production (ep-curly-block-ad0dlt9o/neondb)
+-- immediately before this migration was written:
+--
+--     select to_regclass('public.ai_player_outlooks_cache')  -> ai_player_outlooks_cache
+--     select count(*), max(created_at)                       -> 0 | NULL
+--
+-- Zero rows and a NULL max(created_at): the table was created and never
+-- written, so this drops no data. It was one of three empty-table /
+-- live-reader / dark-writer cases found in this estate; the reader was the
+-- part that mattered and it is already gone.
+--
+-- DROP TABLE removes the dependent objects with it -- the unique index on
+-- (player_id, sport, league_context_hash) and the index on (expires_at).
+-- There are no foreign keys in either direction.
+
+DROP TABLE IF EXISTS "ai_player_outlooks_cache";
