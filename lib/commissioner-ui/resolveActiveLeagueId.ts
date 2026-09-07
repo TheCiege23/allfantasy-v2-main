@@ -17,33 +17,43 @@ function isActiveStatus(league: League | null): league is League {
 }
 
 /**
- * This user's own active (non-archived) leagues, most-recent-roster first,
- * deduped by league id (one user can hold more than one roster in the same
- * league). Same session/roster/status rule `resolveActiveLeagueId` uses —
- * see its own doc comment for why `Roster.platformUserId` and not
- * `app/api/user/active-league/route.ts`'s broken `leagueMember` query.
+ * The active (non-archived) leagues this user is COMMISSIONER of.
+ *
+ * 🛑 THIS USED TO RESOLVE LEAGUES THE USER HAD A ROSTER IN, WHICH IS A DIFFERENT QUESTION AND
+ * ANSWERED IT WRONG IN BOTH DIRECTIONS. Commissioner OS is a commissioner's tool: every module in
+ * it — manager retention risk, per-manager engagement scores, who is about to quit — is
+ * commissioner-grade intelligence about other people in the league. Resolving by roster meant an
+ * ordinary league member opened it and saw all of that about their leaguemates, while a
+ * commissioner who does not hold a team in their own league saw nothing at all.
+ *
+ * Measured on prod 2026-09-07 against the 79 real accounts: 3 users resolved a league they do not
+ * commission (the exposure), and **6 commissioners resolved nothing in a league they own** (locked
+ * out of their own tool). Both are this one query.
+ *
+ * ⚠ COMMISSIONER = `League.userId`, AND THIS IS DELIBERATELY NOT A NEW DEFINITION. It is the one
+ * `lib/commissioner/permissions.ts` exports and that the 64 `/api/commissioner/*` routes already
+ * use at 69 call sites. This route tree's own comment warned that the app computes "isCommissioner"
+ * four-plus disagreeing ways and that picking one needs a decision; the decision here is to reuse
+ * the existing majority authority rather than add a fifth.
+ *
+ * ⚠ AND `league_teams.isCommissioner` IS NOT USABLE FOR THIS, THOUGH IT LOOKS LIKE IT SHOULD BE.
+ * Its `platformUserId` is a PROVIDER id, not an AllFantasy user id — 3,169 of 3,339 claimed rows
+ * hold a numeric Sleeper id against `League.userId`'s UUID. Comparing them appears to show the two
+ * signals agreeing on only 13 of 242 leagues; that 13 is just the count of rows that happen to
+ * hold a UUID, not evidence about commissioners. The same id-space split is why the old roster
+ * query matched so little: only 351 of 3,418 `rosters.platformUserId` values are AF user ids.
  */
 async function getActiveLeaguesForSessionUser(): Promise<League[]> {
   const session = await getServerSession(authOptions)
   const userId = session?.user?.id
   if (!userId) return []
 
-  const rosters = await prisma.roster.findMany({
-    where: { platformUserId: userId },
-    include: { league: true },
+  const owned = await prisma.league.findMany({
+    where: { userId },
     orderBy: { createdAt: 'desc' },
   })
 
-  const seen = new Set<string>()
-  const leagues: League[] = []
-  for (const r of rosters as { league: League | null }[]) {
-    if (!isActiveStatus(r.league)) continue
-    const id = String(r.league.id)
-    if (seen.has(id)) continue
-    seen.add(id)
-    leagues.push(r.league)
-  }
-  return leagues
+  return owned.filter((league): league is League => isActiveStatus(league))
 }
 
 /** The current commissioner's own active leagues, for the header's league selector to list. */
@@ -52,32 +62,6 @@ export async function listActiveLeaguesForUser(): Promise<ActiveLeagueOption[]> 
   return leagues.map((l) => ({ id: String(l.id), name: l.name ?? 'Untitled league' }))
 }
 
-/**
- * Resolves the current commissioner's league via the same session call and
- * "most recent non-archived" rule `app/api/user/active-league/route.ts`
- * intends — but querying `Roster` by `platformUserId`, not that route's own
- * `prisma.leagueMember` (there is no `LeagueMember` model in schema.prisma
- * at all; that route's `as any`-cast query does not correspond to any real
- * model and cannot work as written — a pre-existing bug in a route outside
- * Commissioner OS, out of scope to fix here). `Roster.platformUserId`
- * matched against the session's `user.id` is the real, already-established
- * pattern elsewhere in this app (e.g. `app/api/idp/scores/route.ts`).
- *
- * Established in Mission Control's `live.ts` (Phase 3.2) and duplicated
- * verbatim across League Health (3.5), Manager Intelligence (3.6),
- * Recommendations Center (3.7), and League Analytics (3.10) — each copy
- * flagged as a candidate for extraction, more urgently each time. Extracted
- * here in Phase 3.11 once a sixth module (Reports) turned out not to need
- * it at all, making this a clean, zero-risk moment to pay down the
- * duplication before some future module needs a sixth copy.
- *
- * A `commissioner_os_active_league_id` cookie, when present and naming one
- * of this user's own active leagues, overrides the "most recent roster"
- * default — the header's league selector writes it. Never trusted blindly:
- * the cookie is checked against this same ownership query, so a tampered or
- * stale cookie can only ever resolve to a league this session already owns,
- * never someone else's.
- */
 /**
  * The selector's cookie, or null when there is no request scope to read one from.
  *
@@ -89,7 +73,7 @@ export async function listActiveLeaguesForUser(): Promise<ActiveLeagueOption[]> 
  *     outside a request scope"), carrying no `digest`. That is every vitest run —
  *     a unit test has no request — and it is not an error condition for this
  *     function: with no request there is no user cookie, so there is no override
- *     and the caller should fall back to the "most recent roster" default.
+ *     and the caller should fall back to the "most recently created owned league" default.
  *   - During prerendering it throws Next's `DynamicServerError`, carrying
  *     `digest: 'DYNAMIC_SERVER_USAGE'`. That one is a SIGNAL, not a failure: it is
  *     how Next learns the route is dynamic. Swallowing it would let a page that
@@ -115,6 +99,19 @@ async function readActiveLeagueCookie(): Promise<string | null> {
   }
 }
 
+/**
+ * The league every Commissioner OS module reads: the most recently created league this user
+ * commissions, unless the header's selector cookie names another one they also commission.
+ *
+ * ⚠ RETURNING NULL IS THE SECOND HALF OF THE GATE, NOT A CONVENIENCE. The layout refuses to render
+ * for a non-commissioner, but in the App Router a page's own data fetching can run alongside the
+ * layout's — so the display being closed does not by itself close the data access. Every one of
+ * the five league-scoped live clients short-circuits on `if (!leagueId)`, so a non-commissioner
+ * resolving `null` here means no intelligence is fetched even if a page body runs.
+ *
+ * The cookie is never trusted blindly: it is matched against this same owned set, so a tampered or
+ * stale value can only ever select a league the session already commissions.
+ */
 export async function resolveActiveLeagueId(): Promise<string | null> {
   const leagues = await getActiveLeaguesForSessionUser()
   if (leagues.length === 0) return null
