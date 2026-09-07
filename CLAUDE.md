@@ -1480,9 +1480,123 @@ again. Read the variable back and confirm the SERVICE first
 (`get-service-config`), because `allfantasy-v2-main` and `allfantasy-v2-worker`
 are different services from the same repo and branch — the crons hit the worker.
 
-⚠ **BOTH SERVICES DEPLOY FROM `main`, SO ONE PUSH IS TWO BUILDS.** `list-deployments`
-filtered to one `serviceId` shows half the spend. Count both before quoting a
-number.
+⚠ **THE TWO SERVICES DEPLOY FROM DIFFERENT BRANCHES, SO COUNT BOTH — BUT NOT AS A
+PAIR.** `list-deployments` filtered to one `serviceId` shows part of the spend.
+`allfantasy-v2-main` tracks `main`, so a push builds it. `allfantasy-v2-worker`
+tracks `worker-release` and builds roughly once a day; see the section below.
+
+🛑 **THIS BULLET READ "BOTH SERVICES DEPLOY FROM `main`, SO ONE PUSH IS TWO BUILDS"
+AND WAS TRUE WHEN IT WAS WRITTEN.** The worker was repointed at `worker-release`
+around 16:00Z on 2026-09-07 — the same day — which is the second half of the change
+`.github/workflows/worker-release.yml` describes in its own header. Verified from
+`get-service-config` on both services rather than inferred. Left here as a worked
+example of the thing this file keeps warning about: an infrastructure fact goes stale
+in hours, and the deployment list looks identical either way.
+
+### The crons run on a SECOND service, on a DIFFERENT branch
+
+Two Railway services build from this repo, and confusing them wastes a day:
+
+| service | serves | deploys from |
+|---|---|---|
+| `allfantasy-v2-main` | `allfantasy.ai` — every user request | `main` |
+| `allfantasy-v2-worker` | the cron executor | **`worker-release`** |
+
+🛑 **`vars.APP_URL` POINTS AT THE WORKER, SO ALL 42 CRONS ARE REQUESTS TO IT — NEVER TO
+`allfantasy-v2-main`.** It is printed in any `cron-slow-tier` run's env block. The
+consequence is the navigational one: **the web service's logs, metrics and deployed SHA
+can never explain a cron.** A peer lost most of a day building an instrument, merging it,
+verifying it deployed, and reading the wrong service's logs for it.
+
+**And the worker's branch moves once a day, on purpose.**
+`.github/workflows/worker-release.yml` fast-forwards it at `20 21 * * *`, never forces,
+and treats a non-fast-forward as a finding. Read its header before changing the cadence —
+it records the measurement that set it (24 worker deploys in one day, each container swap
+killing in-flight 90–300 s cron requests; 8 hours without a deployment produced 0 server
+errors against 17 hours with one producing all 95).
+
+**So a cron fix landing on `main` is not live yet, and the check is one command:**
+
+```bash
+git ls-remote origin refs/heads/worker-release   # what the crons are actually running
+```
+
+⚠ Expect it to be behind `main` by up to a day. That is the design. If a cron fix is
+urgent, dispatch the workflow by hand rather than repointing the service. There is also
+`/api/af-debug/sha` on either service, which answers `{branch, sha}` for the container
+actually serving you.
+
+### 🛑 `export const maxDuration = 300` DOES NOTHING ON RAILWAY
+
+It is a Vercel directive and nothing enforces it here. Measured 2026-09-07 on
+`/api/cron/decision-os-activity-ingest`, whose own internal budgets are 180 s ingest plus
+60 s relay — these durations are from `sync_job_runs` rows the handler wrote itself, with
+real counters and warnings, so they are completions rather than reaped rows:
+
+```
+started 14:27:33  completed 14:55:40  1687 s   failed   626 rows written
+started 14:34:11  completed 14:55:18  1268 s   partial  140 rows written
+```
+
+⚠ A phase budget bounds ADMISSION to that phase, not the phase's in-flight unit, and
+`withDeadline` races a promise — it does not abort the fetch underneath. So a handler can
+respect every budget it declares and still run several times past its intended ceiling.
+
+⚠ And a `499`/`502` does not tell you which failure you have. THREE different things
+produce one, and they need different fixes: a container swap killing an in-flight request
+(see `worker-release.yml`), a handler genuinely exceeding the 300 s client cut (measured
+on `/api/cron/import-players` at 300,143 ms with NO deployment in flight), and a
+`cron-dispatch.mjs` retry leaving two copies of one job competing.
+
+### Crons queue behind each other on the worker, and the mechanism is NOT settled
+
+`start:railway` resolves to `scripts/railway-next-start.cjs`, which spawns `next start`:
+a single Node process, a single JavaScript thread, nothing clustering. Railway allocates
+24 vCPU; JavaScript can use about one of them.
+
+**The observation**, measured across 48 h of `sync_job_runs` on 2026-09-07: **48 runs of a
+sub-second cron took 65–350 s**, one such stall every 30–90 minutes. Not one bad job — it
+happens with a single long job running AND with eleven short ones and none long.
+
+**Ruled out, so nobody re-chases them:**
+
+- *Postgres capacity.* 13 connections of 901, 1 active, no lock waits.
+- *Memory.* 5.9 GB peak of 24.
+- *The Prisma pool.* `connection_limit=5` in `lib/prisma.ts` looks like the culprit and is
+  not: `applyNonProdConnectionGuardrails` returns early when `NODE_ENV === "production"`,
+  so it never applies on the worker.
+
+**Evidence that the thread is LOADED rather than CPU-pegged**, gathered by a peer without
+any deploy: the worker logged `ensureDraftPoolReady cold build done { ms: 522060 }`
+several times concurrently, and what those 522 s go on is visible in the same logs —
+failing provider I/O being retried (`[ClearSports] … 500 fetch failed`,
+`[rolling-insights] HTTP 404`, `[API-Sports] Free plans do not have access to this
+season`). CPU peaked at 1.51 of 24 vCPU throughout.
+
+🛑 **SO DO NOT "FIX" A HANDLER ON THE ASSUMPTION IT IS THE BLOCKER.** No job is present in
+every stall, and the binding constraint — one JS thread, request concurrency, or simply
+handlers held open by provider calls that will never succeed — is not established.
+Event-loop lag per request is the measurement that would settle it, and it needs a deploy.
+
+`sfo` was raised from 1 replica to 2 on 2026-09-07. That doubles capacity under every
+reading above, which is why it was worth doing, but it is a mitigation and not a proven
+fix. Three reasons replicas are safe here, worth re-checking before changing the count
+again: `instrumentation.ts` deliberately starts no in-process workers, so nothing
+duplicates; AI daily caps are DB-backed on `apiRateLimitRecord`, so they hold across
+processes; and the in-memory limiter in `lib/domain/rateLimit.ts` guards user-facing
+routes on the WEB service, not the worker's cron endpoints.
+
+⚠ **AND REPLICAS BREAK LOG-BASED DEBUGGING IN ONE SPECIFIC WAY.** A single cron request
+lands on one replica, so an ABSENT log line no longer means the code did not run. Any
+argument of the form "numReplicas is 1, therefore that traffic and this cron shared a
+container" is now dead, and at least one landed commit message still makes it.
+
+**How to measure the stalls again, because "the crons feel slow" is not evidence.** Pick a
+canary — a job whose normal duration is under a second (`cron-waivers`,
+`cron-redraft-score-sync`, `cron-notification-outbox-relay`) — and find every run where it
+exceeded 15 s, then count what else was running at each of those instants. Check the
+`status` column while you are there: every one of the 48 was `success` and untouched by
+the reaper, which is what separates this from the deploy-swap failures above.
 
 ### What is enforced for you, and what is not
 
