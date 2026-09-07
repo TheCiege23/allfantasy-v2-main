@@ -148,6 +148,33 @@ describe('commissioner-os analytics — warehouse-backed panels', () => {
     expect(screen.getByText('56 of 98')).toBeInTheDocument()
   })
 
+  it('does not call calendar weeks "this season"', () => {
+    /*
+     * The range label falls back to the transaction week count, and those are CALENDAR weeks —
+     * a dynasty league's activity runs January to August. A real league rendered "Weeks 1–13,
+     * this season" across thirteen weeks spanning two thirds of the year.
+     */
+    const weeks = Array.from({ length: 13 }, (_, i) => ({
+      weekLabel: `Jan ${i + 1}`,
+      tradeCount: 0,
+      waiverClaimCount: 1,
+    }))
+    render(<LeagueAnalyticsView snapshot={{ ...BASE, transactionsByWeek: weeks }} dataMode="live" />)
+    expect(screen.getByText('13 weeks with activity')).toBeInTheDocument()
+    expect(screen.queryByText(/Weeks 1–13, this season/)).not.toBeInTheDocument()
+  })
+
+  it('still says "this season" when the weeks really are season weeks', () => {
+    // The control: `healthByWeek` is genuinely season-indexed and keeps the season wording.
+    const health = Array.from({ length: 5 }, (_, i) => ({
+      weekLabel: `Wk ${i + 1}`,
+      thisSeason: 70,
+      lastSeason: null,
+    }))
+    render(<LeagueAnalyticsView snapshot={{ ...BASE, healthByWeek: health }} dataMode="live" />)
+    expect(screen.getByText('Weeks 1–5, this season')).toBeInTheDocument()
+  })
+
   it('carries the scoring season into the CSV, which has no panel note', () => {
     const csv = buildAnalyticsCsv({ ...BASE, pointsForAgainst: POINTS, seasonLabel: '2025' })
     expect(csv).toContain('Scoring season')
