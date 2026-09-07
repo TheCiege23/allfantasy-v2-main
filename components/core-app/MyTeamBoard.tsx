@@ -54,6 +54,9 @@ import '@/components/core-app/af-core-boards.css'
  * exists to prevent.
  */
 
+/** How many rows the board draws. The handoff's "top 10". */
+const BOARD_ROWS = 10
+
 export type MyTeamBoardProps = {
   pulse: MyTeamPulse
   /** Injected in tests so the rendered countdown is deterministic. */
@@ -224,7 +227,22 @@ function Row({ row, i, now }: { row: MyTeamRow; i: number; now: number }) {
 
 export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   const nowMs = now ?? Date.now()
-  const rows = pulse.needs
+  /*
+   * 🛑 BOTH COLUMNS, NOT JUST THE BROKEN ONE. This read `pulse.needs` alone and
+   * shipped that way — on a 94-league account where every readable lineup was
+   * fine it rendered ZERO rows under a heading promising ten, because
+   * "nothing is broken" and "nothing to show" had become the same thing.
+   * Caught by a production screenshot, not by any test here.
+   *
+   * ⚠ URGENCY IS SEVERITY THEN CLOCK, WHICH IS WHY THIS IS A CONCATENATION AND
+   * NOT A RE-SORT. The loader has already ordered `needs` by certain lost points
+   * and `set` by soonest lock; those two orderings are not comparable to each
+   * other, so merging them by any single key would be inventing a ranking
+   * neither column carries. A lineup with a hole outranks a clean one because a
+   * hole is a loss you can still prevent — that is the rule, and it falls out of
+   * the order rather than being computed here.
+   */
+  const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
   const total = pulse.considered
 
   /*
@@ -268,15 +286,44 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             urgency" reads as a list that failed to load; the ranking rule only
             belongs on a list that has something in it.
           */
-          label={rows.length > 0 ? `Top ${rows.length} · ranked by urgency` : 'Needs you first'}
+          /*
+            ⚠ THE LABEL NAMES WHICH RULE IS ACTUALLY IN FORCE. With something
+            broken the list leads on severity; with nothing broken it is purely
+            the clock. Printing "ranked by urgency" over ten clean lineups would
+            state a rule the list is not following — the same defect the trades
+            board's "ranked by deadline" had over rows with no deadline.
+          */
+          label={
+            rows.length === 0
+              ? 'Needs you first'
+              : pulse.needs.length > 0
+                ? `Top ${rows.length} · ranked by urgency`
+                : `Top ${rows.length} · nothing is broken, so ranked by lock time`
+          }
           count={`${pulse.checked.toLocaleString()} of ${total.toLocaleString()} teams read`}
         />
         {rows.length > 0 ? (
-          <ul className="af-bd-rows">
-            {rows.map((r, i) => (
-              <Row key={r.leagueId} row={r} i={i} now={nowMs} />
-            ))}
-          </ul>
+          <>
+            {/*
+              The aggregate fact, which the per-row SET tags cannot carry. Before
+              the fallback existed this was the whole body of the section; it is
+              still worth saying, because "ten clean lineups" and "every lineup
+              you have is clean" are different claims and only the second one
+              lets a manager stop looking.
+            */}
+            {pulse.needs.length === 0 ? (
+              <p className="af-bd-note">
+                Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
+                no empty slots, nobody ruled out
+                {pulse.byeChecked ? ', nobody on a bye' : ''}. These are the ones locking soonest.
+              </p>
+            ) : null}
+            <ul className="af-bd-rows">
+              {rows.map((r, i) => (
+                <Row key={r.leagueId} row={r} i={i} now={nowMs} />
+              ))}
+            </ul>
+          </>
         ) : pulse.checked === 0 ? (
           /*
             🛑 THE MOST IMPORTANT BRANCH ON THIS SCREEN, AND THE FIRST VERSION GOT

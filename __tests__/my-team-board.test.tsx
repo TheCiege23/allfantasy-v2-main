@@ -167,6 +167,58 @@ describe('MyTeamBoard', () => {
     expect(text).toMatch(/bye check did not run/i)
   })
 
+  /*
+   * 🛑 THIS SHIPPED BROKEN AND A PRODUCTION SCREENSHOT CAUGHT IT.
+   *
+   * On a 94-league account where every readable lineup was fine, the board
+   * rendered ZERO rows — `const rows = pulse.needs` threw `pulse.set` away, so
+   * "nothing is broken" and "nothing to show" were the same thing. The blurb
+   * promises "ranked by time left before lock" and the handoff's own sample rows
+   * include leagues whose only fact is a lock time.
+   *
+   * Urgency is severity THEN clock: a hole you can still fix outranks a clean
+   * lineup, and a clean lineup locking in an hour outranks one locking Sunday.
+   */
+  it('falls back to lineups that are merely locking soon when nothing is broken', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({
+          needs: [],
+          set: Array.from({ length: 6 }, (_, i) =>
+            row({ leagueId: `s${i}`, leagueName: `Quiet League ${i}` }),
+          ),
+          setTotal: 84,
+          considered: 94,
+          checked: 84,
+        })}
+      />,
+    )
+    const names = [...container.querySelectorAll('.af-bd-name')].map((n) => n.textContent)
+    expect(names.length).toBeGreaterThan(0)
+    expect(names).toContain('Quiet League 0')
+    expect(container.textContent ?? '').not.toMatch(/94 more leagues/)
+  })
+
+  it('puts a broken lineup above a merely-soon one', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({
+          set: [row({ leagueId: 'quiet', leagueName: 'Quiet League' })],
+          needs: [row({ leagueId: 'broken', leagueName: 'Broken League', empty: 1, severity: 1 })],
+          considered: 2,
+          checked: 2,
+        })}
+      />,
+    )
+    const names = [...container.querySelectorAll('.af-bd-name')].map((n) => n.textContent)
+    expect(names[0]).toBe('Broken League')
+    expect(names[1]).toBe('Quiet League')
+  })
+
   it('says a bye check ran clean rather than going silent', () => {
     const { container } = render(
       <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
