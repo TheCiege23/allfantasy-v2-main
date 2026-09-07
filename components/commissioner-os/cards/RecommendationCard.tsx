@@ -31,11 +31,13 @@ export interface RecommendationCardProps {
   /** Why it matters. */
   rationale: string
   severity: SeverityTier
-  confidence: CommissionerConfidenceLevel
-  /** Expected impact of acting. */
-  expectedImpact: string
-  primaryActionLabel: string
-  /** Optional — Mission Control and League Health's previews omit it; Recommendations Center's queue always sets it. */
+  /** Absent when nothing scored it — see `CommissionerRecommendationContract`. Never defaulted. */
+  confidence?: CommissionerConfidenceLevel
+  /** Expected impact of acting. Absent when no estimate exists upstream. */
+  expectedImpact?: string
+  /** Absent when the backend names no specific action; the footer is then not rendered. */
+  primaryActionLabel?: string
+  /** Optional — Mission Control and League Health's previews omit it, and nothing persists a lifecycle yet. */
   status?: CommissionerRecommendationStatus
   onPrimaryAction?: () => void
   onDismiss?: () => void
@@ -85,25 +87,42 @@ export function RecommendationCard({
         <p className="text-sm" style={{ color: 'var(--muted)' }}>
           {rationale}
         </p>
-        <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-          {CONFIDENCE_LABELS[confidence]} · {expectedImpact}
-        </p>
+        {/*
+          Omitted rather than defaulted. The metadata line used to render unconditionally, so an
+          absent confidence printed `undefined · undefined`; filling it with a placeholder would
+          have been worse — a confidence level the presentation layer invented for a
+          recommendation nothing scored.
+        */}
+        {confidence || expectedImpact ? (
+          <p className="text-xs" style={{ color: 'var(--muted2)' }}>
+            {[confidence ? CONFIDENCE_LABELS[confidence] : null, expectedImpact].filter(Boolean).join(' · ')}
+          </p>
+        ) : null}
         {onViewEvidence && (
           <button type="button" onClick={onViewEvidence} className="focus-ring link-themed text-xs">
             View evidence
           </button>
         )}
       </CardContent>
-      <CardFooter className="gap-2">
-        <Button size="sm" onClick={onPrimaryAction}>
-          {primaryActionLabel}
-        </Button>
-        {onDismiss && (
-          <Button size="sm" variant="ghost" onClick={onDismiss}>
-            Dismiss
-          </Button>
-        )}
-      </CardFooter>
+      {/*
+        A footer with no named action is no footer. Rendering an empty primary button would put a
+        control on the card that says nothing and does nothing — worse than the card simply ending
+        at its rationale.
+      */}
+      {primaryActionLabel || onDismiss ? (
+        <CardFooter className="gap-2">
+          {primaryActionLabel ? (
+            <Button size="sm" onClick={onPrimaryAction}>
+              {primaryActionLabel}
+            </Button>
+          ) : null}
+          {onDismiss && (
+            <Button size="sm" variant="ghost" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          )}
+        </CardFooter>
+      ) : null}
     </Card>
   )
 }
