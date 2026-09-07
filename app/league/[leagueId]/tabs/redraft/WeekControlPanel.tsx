@@ -5,7 +5,10 @@ import {
   runRedraftScheduleAction,
   type RedraftScheduleClient,
 } from '@/lib/redraft/client'
-import { matchupCompleted } from '@/lib/schedule-runtime'
+// Leaf module, not the '@/lib/schedule-runtime' barrel: the barrel also
+// re-exports `resolveNflRedraftScheduleRuntime`, which pulls prisma and
+// `server-only` into this client component and fails the production build.
+import { matchupCompleted } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
 
 /**
  * Commissioner week controls for the regular season.

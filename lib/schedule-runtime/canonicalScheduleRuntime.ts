@@ -3,7 +3,13 @@ import type {
   CanonicalLeagueRuntimeEvent,
   CanonicalLeagueRuntimeEventType,
 } from '@/lib/league-runtime'
-import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
+// Leaf module, not the '@/lib/league-runtime' barrel. The barrel also re-exports
+// `canonicalLeagueRules`, which reaches prisma and (via WaiverConfigResolver ->
+// the waiver-wire barrel -> claim-service) `server-only`. `matchupCompleted`
+// below is a pure predicate a client component imports, so a barrel hop here
+// drags the whole server graph into the client bundle and fails the build.
+// `leagueRuntimeEvents` has no imports of its own.
+import { toCanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 
 export type ScheduleRuntimeValidationIssue = {
   code:
