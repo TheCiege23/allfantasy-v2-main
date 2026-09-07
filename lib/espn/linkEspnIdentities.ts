@@ -203,10 +203,28 @@ export async function linkEspnIdentitiesToCanonical(options?: {
    *
    * Per-row queries would be hundreds of round trips inside a cron budget, and these
    * pools are small — ~13k and ~3.3k NFL rows. Both are bucketed with
-   * `normalizePlayerName` rather than read from a stored `normalizedName` column,
-   * which matters: PIM stores "a.j. bouye" with its punctuation intact while the
-   * canonical normalizer produces "aj bouye". Querying that column with a normalized
-   * string finds nothing, silently, for every punctuated name in the league.
+   * `normalizePlayerName` rather than read from a stored `normalizedName` column.
+   *
+   * ⚠ THE REASON THIS COMMENT USED TO GIVE IS NO LONGER TRUE, AND IT WAS ABOUT THE WRONG
+   * TABLE. It read: "PIM stores 'a.j. bouye' with its punctuation intact while the canonical
+   * normalizer produces 'aj bouye'." `PlayerIdentityMap` was rewritten on 2026-09-07 and now
+   * stores "aj bouye" — and this module never queries that table by name anyway. Its only
+   * `playerIdentityMap` read is keyed on `sleeperId`, not on a name.
+   *
+   * ✅ COMPUTING IS STILL RIGHT, for a reason that was measured rather than assumed.
+   * `Player.normalizedName` exists and is indexed, so reading it was the real alternative.
+   * Measured 2026-09-07 over all 13,010 NFL `Player` rows:
+   *
+   *     populated                                 13,010 of 13,010  (100%)
+   *     reproduced by `canonicalName`                        99.1%   <- what we compute here
+   *     reproduced by `lib/team-abbrev`                      96.3%
+   *     reproduced by a raw lowercase                        93.6%
+   *
+   * So the column agrees with the computed key 99.1% of the time and would newly MISS the
+   * other 0.9% — including "Dont'e Thornton Jr." (stored "donte thornton") and
+   * "Ray-Ray McCloud III" (stored "ray ray mccloud"), which follow neither rule cleanly.
+   * The rows are already in memory for `birthDate`, so reading the column saves no query and
+   * buys only that 0.9% of new misses. Compute.
    */
   const players = await prisma.player
     .findMany({

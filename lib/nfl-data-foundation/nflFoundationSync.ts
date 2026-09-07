@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { canonicalName, canonicalPosition, canonicalTeam } from '@/lib/draft-room/player-canonical-identity'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { canonicalName, canonicalPosition } from '@/lib/draft-room/player-canonical-identity'
+import { normalizePlayerName, normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import {
   fetchNFLPlayerStats,
   fetchNFLSchedule,
@@ -107,6 +107,8 @@ export type NflIdentityBackfillReport = NflIdentityAuditReport & {
   updated: number
   skippedExistingRollingInsightsId: number
   skippedAmbiguous: number
+  /** Refused a CREATE because the map already holds a row under this normalized name. */
+  skippedNameAlreadyMapped: number
   errors: string[]
   estimatedMatchRateAfter: number
 }
@@ -179,12 +181,57 @@ function seasonForDb(season: string | number): string {
   return raw.includes('-') ? raw.split('-')[0]! : raw
 }
 
+/*
+ * 🛑 THESE TWO KEYS ARE COMPARED WITH EACH OTHER, SO EVERY COMPONENT MUST SPEAK ONE
+ * VOCABULARY. Both halves were wrong, and the composite matched 1 row in 20,169.
+ *
+ *   TEAM   `SportsPlayer.team` holds "Washington Commanders"; `PlayerIdentityMap.currentTeam`
+ *          holds "WAS". `canonicalTeam` only uppercases, so the two never met. That is the
+ *          same defect `4c4469529` ("one column, two vocabularies again - this time it is
+ *          `team`") fixed for teamLogo and SleeperPlayerSeedService; this site was missed.
+ *          `normalizeTeamAbbrev` maps BOTH spellings onto "WAS" - it is already imported
+ *          here and already used by the schedule, stats and injury paths in this same file.
+ *
+ *   NAME   the right side reads the STORED `normalizedName`, which is stamped with
+ *          `lib/team-abbrev`'s `normalizePlayerName`, while the left side computed
+ *          `canonicalName` - a different rule (it keeps suffixes and strips apostrophes,
+ *          where the stored one is the reverse).
+ *
+ *   POS    the same defect a third time. `SportsPlayer.position` is specific (CB, FS, DE,
+ *          OT, OLB, PK); `PlayerIdentityMap.position` holds only families (DB, DL, OL, LB,
+ *          K). `canonicalPosition` uppercases and collapses DEF aliases but maps nothing
+ *          else, so "CB" never met "DB". `normalizePositionForSport('NFL', ...)` collapses
+ *          14 of the 15 specific tokens onto exactly those families and is idempotent on a
+ *          family token, so it is safe to apply to BOTH sides.
+ *
+ * Measured 2026-09-07 against 20,169 SportsPlayer NFL rows and 9,563 identity rows:
+ *
+ *     name only                     87.0% match
+ *     name | position               52.2%
+ *     name | team                    0.0%   <- 1 row
+ *     name | position | team (live)  0.0%
+ *
+ * ⚠ A MISS HERE IS NOT A NO-OP: `backfillNflRollingInsightsIdentities` CREATES an identity
+ * row when it finds no match, so `npm run sync:sports-foundation` (which calls it with a
+ * hardcoded `write: true`) would have inserted 14,312 duplicate rows into a 9,563-row table.
+ * It is not scheduled, which is the only reason this had not already happened.
+ */
+/*
+ * Composed, not replaced. `canonicalPosition` is the only one of the two that folds the
+ * DEF/DST/D-ST aliases together, and `normalizePositionForSport` is the only one that folds
+ * a specific position into its family. Dropping either loses a case the other cannot cover:
+ * on its own the family mapper leaves "D/ST" as "D/ST" while "DEF" and "DST" both become "DEF".
+ */
+function positionKeyPart(raw: string | null | undefined): string {
+  return normalizePositionForSport('NFL', canonicalPosition(raw)) ?? ''
+}
+
 function playerKey(row: Pick<SportsPlayerIdentityRow, 'name' | 'position' | 'team'>): string {
-  return `${canonicalName(row.name)}|${canonicalPosition(row.position)}|${canonicalTeam(row.team)}`
+  return `${normalizePlayerName(row.name)}|${positionKeyPart(row.position)}|${normalizeTeamAbbrev(row.team) ?? ''}`
 }
 
 function identityKey(row: Pick<IdentityRow, 'normalizedName' | 'position' | 'currentTeam'>): string {
-  return `${row.normalizedName}|${canonicalPosition(row.position)}|${canonicalTeam(row.currentTeam)}`
+  return `${row.normalizedName}|${positionKeyPart(row.position)}|${normalizeTeamAbbrev(row.currentTeam) ?? ''}`
 }
 
 function sourceScore(source: string | null | undefined): number {
@@ -626,6 +673,25 @@ export async function backfillNflRollingInsightsIdentities(options?: {
     list.push(identity)
     identitiesByName.set(key, list)
   }
+  /*
+   * Names the map ALREADY holds, under any position or team. This gates the CREATE branch
+   * only - the bind key above is untouched, so this adds no way to link the wrong person.
+   *
+   * Why it is needed: this function pairs Rolling Insights ids to identity rows, and that job
+   * is finished. All 9,563 NFL identity rows already carry a `rollingInsightsId`, so a unique
+   * name match always lands on a row whose id is set to something else and is refused by the
+   * guard below. Measured 2026-09-07 across 23,939 incoming rows, BIND was 0 under every key
+   * variant tried. The only live effect left is CREATE, and most of those are rows for a
+   * player the map already has under a different team or position:
+   *
+   *     strict key, create on miss (before)   0 bind   9,426 created
+   *     drop team from the key                0 bind   4,170 created
+   *     strict key + this guard               0 bind   2,693 created,  6,733 refused
+   *
+   * 2,693 is independently close to the 2,614 incoming names that appear NOWHERE in the map,
+   * which is the set a backfill SHOULD be inserting.
+   */
+  const namesAlreadyMapped = new Set(identities.map((row) => row.normalizedName).filter(Boolean))
 
   const report: NflIdentityBackfillReport = {
     ...audit,
@@ -634,6 +700,7 @@ export async function backfillNflRollingInsightsIdentities(options?: {
     updated: 0,
     skippedExistingRollingInsightsId: 0,
     skippedAmbiguous: 0,
+    skippedNameAlreadyMapped: 0,
     errors: [],
     estimatedMatchRateAfter: audit.matchRate,
   }
@@ -645,9 +712,12 @@ export async function backfillNflRollingInsightsIdentities(options?: {
     }
     const key = playerKey(player)
     const exactMatches = identitiesByName.get(key) ?? []
-    const normalizedName = canonicalName(player.name)
-    const position = canonicalPosition(player.position) || null
-    const currentTeam = canonicalTeam(player.team) || null
+    /* Stamp the column with the SAME rule `playerKey` above matches on, and store the team
+     * as the abbreviation the column already holds - writing "WASHINGTON COMMANDERS" into a
+     * currentTeam of "WAS" rows is what made the next run miss its own writes. */
+    const normalizedName = normalizePlayerName(player.name)
+    const position = positionKeyPart(player.position) || null
+    const currentTeam = normalizeTeamAbbrev(player.team) ?? null
     if (!normalizedName) continue
 
     if (exactMatches.length === 1) {
@@ -679,6 +749,14 @@ export async function backfillNflRollingInsightsIdentities(options?: {
 
     if (exactMatches.length > 1) {
       report.skippedAmbiguous += 1
+      continue
+    }
+
+    /* No match under the strict key, but the map already knows this name — inserting here
+     * would add a second row for one player. Refuse and count it; a genuinely new player
+     * has a name the map has never seen and still falls through to the create below. */
+    if (namesAlreadyMapped.has(normalizedName)) {
+      report.skippedNameAlreadyMapped += 1
       continue
     }
 

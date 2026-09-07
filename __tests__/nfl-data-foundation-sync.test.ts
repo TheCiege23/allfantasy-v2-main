@@ -369,6 +369,94 @@ describe('NFL foundation sync utilities', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
+  /*
+   * 🛑 THE CREATE BRANCH IS THE ONLY LIVE EFFECT THIS FUNCTION HAS LEFT, so it is the one that
+   * needs a guard. Measured against production on 2026-09-07: all 9,563 NFL identity rows
+   * already carry a `rollingInsightsId`, so a unique name match is always refused by the
+   * existing id guard and BIND was 0 under every key variant tried. Every remaining run just
+   * inserted — 9,426 rows, of which 6,733 were for a name the map already held.
+   *
+   * The row below is that case: same player as `id-2` ("Matched Name"), but Rolling Insights
+   * now reports him on a different team with a different id. The strict key misses on team, and
+   * WITHOUT the guard this inserts a second row for one man.
+   */
+  it('🛑 refuses to CREATE a second row for a name the map already holds', async () => {
+    const create = vi.fn()
+    const db = {
+      sportsPlayer: {
+        findMany: vi.fn().mockResolvedValue([
+          /* same person as id-2 below, traded, and carrying a new provider id */
+          { id: 'sp-a', externalId: 'ri-9', name: 'Matched Name', position: 'RB', team: 'DAL', source: 'rolling_insights' },
+          /* a genuinely new name must still be created - the guard must not swallow everything */
+          { id: 'sp-b', externalId: 'ri-8', name: 'Never Seen', position: 'TE', team: 'DAL', source: 'rolling_insights' },
+        ]),
+      },
+      playerIdentityMap: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'id-2',
+            canonicalName: 'Matched Name',
+            normalizedName: 'matched name',
+            position: 'RB',
+            currentTeam: 'SF',
+            rollingInsightsId: 'ri-2',
+          },
+        ]),
+        update: vi.fn(),
+        create,
+      },
+    }
+
+    const backfill = await backfillNflRollingInsightsIdentities({ write: true, prismaClient: db as never })
+
+    expect(backfill.skippedNameAlreadyMapped).toBe(1)
+    expect(backfill.created).toBe(1)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ normalizedName: 'never seen' }) }),
+    )
+    /* and never for the duplicate */
+    expect(create).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ normalizedName: 'matched name' }) }),
+    )
+  })
+
+  /*
+   * The key's three components are compared against STORED columns that use a different
+   * vocabulary for each. Asserted here because the composite silently matched 1 row in 20,169
+   * in production and nothing went red.
+   */
+  it('🛑 matches across the two vocabularies for team, position and name', async () => {
+    const update = vi.fn()
+    const db = {
+      sportsPlayer: {
+        findMany: vi.fn().mockResolvedValue([
+          /* provider spelling: full team name, specific position, suffix + punctuation */
+          { id: 'sp-1', externalId: 'ri-new', name: 'A.J. Corner Jr.', position: 'CB', team: 'Washington Commanders', source: 'rolling_insights' },
+        ]),
+      },
+      playerIdentityMap: {
+        findMany: vi.fn().mockResolvedValue([
+          /* stored spelling: abbreviation, position FAMILY, team-abbrev name rule */
+          {
+            id: 'id-1',
+            canonicalName: 'A.J. Corner Jr.',
+            normalizedName: 'aj corner',
+            position: 'DB',
+            currentTeam: 'WAS',
+            rollingInsightsId: null,
+          },
+        ]),
+        update,
+        create: vi.fn(),
+      },
+    }
+
+    const backfill = await backfillNflRollingInsightsIdentities({ write: false, prismaClient: db as never })
+    expect(backfill.updated).toBe(1)
+    expect(backfill.created).toBe(0)
+  })
+
   it('dedupes canonical draft and waiver-style pools by name/team/position', () => {
     const waiverPool = dedupeCanonicalNflPlayers([
       basePlayer({

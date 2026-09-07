@@ -11,12 +11,39 @@
  * must never be run: a wrong pairing is invisible once written and `sleeperId @unique` cannot
  * catch it, because the wrong id is still a free id.
  *
- * ⚠ `normalizedName` IS PLAIN LOWERCASE HERE, NOT `normalizePlayerName`. Measured on the 1,933
- * existing NFL rows: `normalizedName === canonicalName.trim().toLowerCase()` holds for 100% of
- * them, while `normalizePlayerName` from `lib/team-abbrev` agrees on only 93.2% — it strips
- * suffixes and punctuation the stored rows keep ("david sills v", "a.j. terrell", "james pearce
- * jr."). Writing that normalizer's output into an indexed column shared with 1,933 rows that use
- * the other convention would put half the table out of reach of the other half's lookups.
+ * `normalizedName` IS STAMPED WITH `lib/team-abbrev`'s `normalizePlayerName`, and that is now
+ * the whole column's rule rather than this script's opinion.
+ *
+ * 🛑 THIS LINE USED TO BE `canonicalName.toLowerCase()`, DEFENDED BY A MEASUREMENT THAT HAS SINCE
+ * INVERTED. The original read: "Measured on the 1,933 existing NFL rows: [plain lowercase] holds
+ * for 100% of them, while `normalizePlayerName` from `lib/team-abbrev` agrees on only 93.2%."
+ * Both figures were true when written, and both were stated present-tense with no population and
+ * no date — so they went on reading as standing fact. Re-measured 2026-09-07 at 9,563 NFL rows:
+ *
+ *     population                          plain lowercase   team-abbrev   canonicalName
+ *     the oldest 1,933 rows (its own)          100.0%           93.2%         90.4%
+ *     the 7,630 rows written since              96.2%           98.6%         93.8%
+ *     the whole table today                     97.0%           97.5%         93.1%
+ *
+ * The first row reproduces the original EXACTLY, which is what made the other two credible.
+ *
+ * ✅ RESOLVED 2026-09-07 BY DECISION, NOT BY THIS SCRIPT. The user rewrote the column to
+ * `normalizePlayerName` — 241 rows, verified before and after — and `lib/team-abbrev` was chosen
+ * over the alternatives because it was the only rewrite under which NO reader family regressed:
+ *
+ *     vendor spellings failing to reach a row   before 2,961 (23.5%)  ->  after 2,574 (20.4%)
+ *
+ * So this script no longer gets a vote, and plain lowercase would now be the ONLY writer out of
+ * step with the column. `A.J. Terrell` is stored as "aj terrell", `James Cook Iii` as
+ * "james cook" — this script would have written "a.j. terrell" and "james cook iii" straight back.
+ *
+ * ⚠ The three-way disagreement this replaced is worth remembering: four writers stamped
+ * `lib/team-abbrev`'s output, `nflFoundationSync` stamped `canonicalName`'s, and this script
+ * stamped neither. All 9,563 rows were reproducible by one of those rules and none by two, so the
+ * column had three vocabularies and no owner.
+ *
+ * The durable half, which is not about this column: a measurement quoted without its population
+ * and its date reads as a standing fact, and stays persuasive long after it stops being true.
  *
  * ⚠ ROLLING INSIGHTS HOLDS DUPLICATE ROWS FOR ONE PLAYER. "Harold Landry" and "Harold Landry Iii"
  * are separate RI ids that both resolve to Sleeper 5030. The `sleeperId @unique` constraint stops
@@ -25,7 +52,7 @@
 
 import { PrismaClient } from '@prisma/client'
 
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { normalizePlayerName, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 const prisma = new PrismaClient()
 const WRITE = process.argv.includes('--write')
@@ -120,7 +147,7 @@ async function main() {
     const canonicalName = r.name.trim()
     const data = {
       canonicalName,
-      normalizedName: canonicalName.toLowerCase(),
+      normalizedName: normalizePlayerName(canonicalName),
       position: r.position ?? null,
       currentTeam: rt ?? ct,
       sport: 'NFL',
