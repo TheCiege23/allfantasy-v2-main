@@ -34,12 +34,10 @@ type SyncCtx = { jobName: string; trigger?: string }
 
 const {
   withSyncJobRunMock, syncRuns, prismaMock, relayRunMock, relayCtorMock,
-  projectImportedManagerSnapshotsMock, ingestSleeperMock, ingestPlatformMock, fetchEspnMock,
+  projectImportedManagerSnapshotsMock, ingestSleeperImportedActivityMock, getLeagueRostersMock,
+  ingestPlatformMock, fetchEspnMock,
 } = vi.hoisted(() => {
   const syncRuns: Array<{ ctx: SyncCtx; outcome: unknown }> = []
-  const ingestSleeperMock = vi.fn(async () => ({ created: 0, updated: 0 }))
-  const ingestPlatformMock = vi.fn(async () => ({ writer: { created: 0, updated: 0, skipped: 0 }, normalizerSkipped: [], emitterSkipped: [] }))
-  const fetchEspnMock = vi.fn(async () => ({ teams: [{ teamId: '1', managerId: '{SWID-A}' }], transactions: [], transactionsFetched: true }))
   const relayRunMock = vi.fn(async () => ({
     fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, failed: 0, dryRun: false, failures: [],
   }))
@@ -56,13 +54,26 @@ const {
       decisionOsImportedActivity: { findMany: vi.fn(), upsert: vi.fn() },
       league: { findMany: vi.fn(async () => []) },
       leagueTeam: { findMany: vi.fn(async () => []) },
+      // Rotation state (2026-09-07). `undefined` on purpose in most tests — `FeatureToggleService`
+      // degrades a missing/erroring platformConfig read to `{}` rather than throwing, and that
+      // degrade path is itself exercised by leaving this unset in the base mock.
+      platformConfig: { findUnique: vi.fn(async () => null), upsert: vi.fn(async () => ({})) },
     },
-    ingestSleeperMock, ingestPlatformMock, fetchEspnMock,
     relayRunMock,
     relayCtorMock: vi.fn(),
     projectImportedManagerSnapshotsMock: vi.fn(async () => ({
       managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0,
     })),
+    // Real per-league work is exercised by the rotation tests below — rosters must be non-empty
+    // or `ingestOneLeague` short-circuits before ever reaching the ingest writer. Shape matches
+    // what `ingestOneLeague` actually reads (`result.writer.{created,updated,skipped}`) — the
+    // pre-existing mock here (`{ created, updated }` with no `.writer`) was never exercised
+    // because rosters were always empty, so the mismatch never threw.
+    ingestSleeperImportedActivityMock: vi.fn(async () => ({ writer: { created: 0, updated: 0, skipped: 0 } })),
+    getLeagueRostersMock: vi.fn(async () => [{ owner_id: 'owner-1', roster_id: 1 }]),
+    // ESPN/Yahoo platform-league ingestion (2026-09-06).
+    ingestPlatformMock: vi.fn(async () => ({ writer: { created: 0, updated: 0, skipped: 0 }, normalizerSkipped: [], emitterSkipped: [] })),
+    fetchEspnMock: vi.fn(async () => ({ teams: [{ teamId: '1', managerId: '{SWID-A}' }], transactions: [], transactionsFetched: true })),
   }
 })
 
@@ -87,7 +98,7 @@ vi.mock('@/lib/decision-os/ingestion/prismaImportedActivityStore', () => ({
   PrismaImportedActivityStore: class {},
 }))
 vi.mock('@/lib/decision-os/ingestion/sleeperActivityEmitter', () => ({
-  ingestSleeperImportedActivity: ingestSleeperMock,
+  ingestSleeperImportedActivity: ingestSleeperImportedActivityMock,
 }))
 vi.mock('@/lib/decision-os/ingestion/platformActivityEmitter', () => ({
   ingestPlatformImportedActivity: ingestPlatformMock,
@@ -99,7 +110,7 @@ vi.mock('@/lib/decision-os/ingestion/importedActivityNormalizer', () => ({
   buildManagerIdentityIndex: vi.fn(() => ({})),
 }))
 vi.mock('@/lib/sleeper-client', () => ({
-  getLeagueRosters: vi.fn(async () => []),
+  getLeagueRosters: getLeagueRostersMock,
   getLeagueTransactions: vi.fn(async () => []),
   getLeagueDrafts: vi.fn(async () => []),
   getDraftPicks: vi.fn(async () => []),
@@ -130,12 +141,16 @@ beforeEach(() => {
   syncRuns.length = 0
   vi.clearAllMocks()
   prismaMock.league.findMany.mockResolvedValue([])
+  prismaMock.platformConfig.findUnique.mockResolvedValue(null)
+  prismaMock.platformConfig.upsert.mockResolvedValue({})
   relayRunMock.mockResolvedValue({
     fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, failed: 0, dryRun: false, failures: [],
   })
   projectImportedManagerSnapshotsMock.mockResolvedValue({
     managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0,
   })
+  ingestSleeperImportedActivityMock.mockResolvedValue({ writer: { created: 0, updated: 0, skipped: 0 } })
+  getLeagueRostersMock.mockResolvedValue([{ owner_id: 'owner-1', roster_id: 1 }])
   process.env.CRON_SECRET = SECRET
   delete process.env.LEAGUE_CRON_SECRET
 })
@@ -161,7 +176,7 @@ describe('decision-os-activity-ingest ?relayOnly=1', () => {
     // its 40 leagues "by the 180s ingest budget" on every fire. A platform loop placed AFTER it under
     // the same budget check never ran — five ESPN leagues skipped for time, silently, every day.
     prismaMock.league.findMany
-      .mockResolvedValueOnce([{ id: 'L-sleeper', platformLeagueId: '1', season: 2026 }])
+      .mockResolvedValueOnce([{ id: 'L-sleeper', platformLeagueId: '1', season: 2026, updatedAt: new Date() }])
       .mockResolvedValueOnce([{ id: 'L-espn', platform: 'espn', platformLeagueId: '919', season: 2026, userId: 'u1' }])
     const realNow = Date.now
     let clockSkew = 0
@@ -229,5 +244,97 @@ describe('decision-os-activity-ingest ?relayOnly=1', () => {
     const probe = (PROBES as Record<string, { heartbeat?: string }>)['/api/cron/decision-os-activity-ingest?relayOnly=1']
     // A cron with no probe is an invisible cron, which is the condition this whole PR exists to end.
     expect(probe?.heartbeat).toBe('cron-decision-os-relay-drain')
+  })
+})
+
+/**
+ * Rotation selection (2026-09-07). See the route's own header note: a plain `updatedAt desc`
+ * top-N read starved any league beyond roughly the top 40 of 238 forever, because `updatedAt`
+ * bumps on ANY write to the row, not just ingest-relevant activity. `mergeRotation` itself
+ * (`lib/league-import/rotationPolicy.ts`) is already exhaustively unit-tested as a pure function —
+ * these tests pin the WIRING around it: that this route builds the starved ordering from the
+ * persisted rotation config rather than from `updatedAt`, and that it persists correctly
+ * afterward.
+ */
+describe('decision-os-activity-ingest rotation', () => {
+  /** One league per updatedAt rank, oldest last. `tail` is the very oldest — excluded by any pure demand-desc top-90 slice of 100. */
+  function buildEligibleLeagues(n: number) {
+    const now = Date.parse('2026-09-07T12:00:00.000Z')
+    return Array.from({ length: n }, (_, i) => ({
+      id: i === n - 1 ? 'tail-league' : `hot-${i}`,
+      platformLeagueId: i === n - 1 ? 'sleeper-tail' : `sleeper-hot-${i}`,
+      season: 2026,
+      updatedAt: new Date(now - i * 60_000), // each one minute older than the last
+    }))
+  }
+
+  /**
+   * `prisma.league.findMany` is called twice per fire now — once for the Sleeper-eligible set,
+   * once for the ESPN/Yahoo platform set (see the route's platform-loop query). These fixtures
+   * carry no `platform` field, so feeding them into the platform query too would make
+   * `ingestOnePlatformLeague` throw `unsupported_platform:undefined` for every one of them —
+   * harmless (caught per-league) but noisy and beside the point of these tests. `mockResolvedValueOnce`
+   * sequencing keeps the fixtures scoped to the Sleeper query only, matching how the ESPN/Yahoo
+   * test above already sequences the same two calls.
+   */
+  function mockSleeperEligibleOnly(leagues: ReturnType<typeof buildEligibleLeagues>) {
+    prismaMock.league.findMany.mockResolvedValueOnce(leagues).mockResolvedValueOnce([])
+  }
+
+  it('🛑 a league that is oldest by updatedAt (would be excluded by pure recency) is still attempted, because it is maximally starved', async () => {
+    const leagues = buildEligibleLeagues(100)
+    mockSleeperEligibleOnly(leagues)
+    // Every OTHER league already has a recent rotation timestamp; tail-league is absent from the
+    // map entirely, which is what makes it rank first in the starved ordering.
+    const rotationMap: Record<string, string> = {}
+    for (const l of leagues) if (l.id !== 'tail-league') rotationMap[l.id] = '2026-09-07T11:00:00.000Z'
+    prismaMock.platformConfig.findUnique.mockResolvedValue({ value: JSON.stringify(rotationMap) })
+
+    await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+
+    const attemptedIds = ingestSleeperImportedActivityMock.mock.calls.map(
+      (c) => (c[0] as { afLeagueId: string }).afLeagueId,
+    )
+    expect(attemptedIds).toContain('tail-league')
+    // The cap (90) is still respected — not all 100 eligible leagues run in one fire.
+    expect(attemptedIds.length).toBeLessThanOrEqual(90)
+  })
+
+  it('persists a fresh timestamp for every league actually attempted this fire', async () => {
+    const leagues = buildEligibleLeagues(3)
+    mockSleeperEligibleOnly(leagues)
+    prismaMock.platformConfig.findUnique.mockResolvedValue(null)
+
+    await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+
+    expect(prismaMock.platformConfig.upsert).toHaveBeenCalledTimes(1)
+    const call = prismaMock.platformConfig.upsert.mock.calls[0]![0] as { create: { value: string } }
+    const persisted = JSON.parse(call.create.value) as Record<string, string>
+    expect(Object.keys(persisted).sort()).toEqual(['hot-0', 'hot-1', 'tail-league'].sort())
+    for (const id of Object.keys(persisted)) expect(Number.isNaN(Date.parse(persisted[id]!))).toBe(false)
+  })
+
+  it('a league NOT selected this fire (over the cap) keeps its OLD rotation timestamp rather than losing its place', async () => {
+    const leagues = buildEligibleLeagues(100)
+    mockSleeperEligibleOnly(leagues)
+    const oldTimestamp = '2026-08-01T00:00:00.000Z'
+    const rotationMap: Record<string, string> = {}
+    // Everyone (including tail-league) already has an OLD timestamp, so ordering among the
+    // starved bucket falls back to array order — the point here is only that whoever does NOT
+    // get chosen this fire (there are 100 eligible, cap is 90) keeps their prior value untouched.
+    for (const l of leagues) rotationMap[l.id] = oldTimestamp
+    prismaMock.platformConfig.findUnique.mockResolvedValue({ value: JSON.stringify(rotationMap) })
+
+    await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+
+    const call = prismaMock.platformConfig.upsert.mock.calls[0]![0] as { create: { value: string } }
+    const persisted = JSON.parse(call.create.value) as Record<string, string>
+    const attemptedIds = new Set(
+      ingestSleeperImportedActivityMock.mock.calls.map((c) => (c[0] as { afLeagueId: string }).afLeagueId),
+    )
+    const untouched = leagues.map((l) => l.id).filter((id) => !attemptedIds.has(id))
+    expect(untouched.length).toBeGreaterThan(0) // sanity: the cap actually excluded someone
+    for (const id of untouched) expect(persisted[id]).toBe(oldTimestamp)
+    for (const id of attemptedIds) expect(persisted[id]).not.toBe(oldTimestamp)
   })
 })

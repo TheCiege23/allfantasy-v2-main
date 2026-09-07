@@ -18,6 +18,8 @@ import {
 } from "@/scripts/decision-os-ingest-sleeper-activity-helpers"
 import { getLeagueRosters, getLeagueTransactions, getLeagueDrafts, getDraftPicks } from "@/lib/sleeper-client"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { mergeRotation } from "@/lib/league-import/rotationPolicy"
+import { getValue as getConfigValue, setValue as setConfigValue } from "@/lib/feature-toggle/FeatureToggleService"
 import {
   OutboxRelay,
   PrismaOutboxStore,
@@ -51,8 +53,9 @@ export const maxDuration = 300
  *   external-only fallback) → per-week transactions → draft picks → ingest (idempotent writer,
  *   externalSourceKey dedupe — safe to re-run daily).
  *
- * Bounds: ≤40 Sleeper leagues per fire (freshest-updated first), 180s ingest budget with honest
- * skippedForTime, per-league failure isolation. Telemetry: SyncJobRun
+ * Bounds: ≤90 Sleeper leagues per fire, split between a starved (longest-since-attempted) bucket
+ * and a demand (freshest-updated) bucket — see the 2026-09-07 header note below — 180s ingest
+ * budget with honest skippedForTime, per-league failure isolation. Telemetry: SyncJobRun
  * `cron-decision-os-activity-ingest`. Runs 07:00 UTC — 30 min before the snapshot-capture walk,
  * so each day's snapshots see that day's ingested activity.
  *
@@ -100,6 +103,44 @@ export const maxDuration = 300
  * state has ~4x headroom and the accumulated backlog clears in roughly a week of fires. If the
  * accrual rate climbs materially, give the drain its own more-frequent schedule rather than
  * widening RELAY_BUDGET_MS into the ingest budget.
+ *
+ * ── 2026-09-07: THE 40-LEAGUE CAP WAS NEVER A ROTATION, AND `updatedAt DESC` STARVES THE TAIL ──
+ *
+ * Production carries 238 eligible Sleeper leagues, `LEAGUE_CAP` selected 40, and selection was
+ * `orderBy: { updatedAt: "desc" }` with no cursor. `leagues.updatedAt` bumps on ANY write to the
+ * row, not just activity relevant to this cron, so the "freshest 40" cohort is whichever leagues
+ * were touched most recently by anything — and it can rotate among the same leagues indefinitely
+ * while leagues ranked beyond ~40 are never attempted at all. Measured live: a league with real,
+ * ongoing Sleeper history (7 trades, 31 waivers, its most recent event 18 days old) ranked #115 of
+ * 238 by `updatedAt desc` — nowhere near the top 40 — and its last successful ingest write was 2
+ * weeks earlier. It read as "the league went quiet"; it was actually "this league has not been
+ * attempted since".
+ *
+ * Fixed the same way `sleeper-historical-refresh` already solved this exact shape of problem: two
+ * buckets via the shared, pure `mergeRotation` (`lib/league-import/rotationPolicy.ts`) — a starved
+ * bucket (oldest-considered-by-THIS-cron first) reserved a floor of slots so the tail cannot be
+ * locked out, and a demand bucket (`updatedAt desc`, same signal as before) filling the rest so
+ * actively-touched leagues keep near-daily coverage. Either bucket donates unused slots to the
+ * other, so a quiet system still does full rotation work rather than idling.
+ *
+ * `updatedAt` cannot serve as the STARVED signal — it is the exact field whose noise caused the
+ * starvation, so ordering the tail bucket by it would just re-launder the same bug. Instead:
+ * `decision_os_activity_ingest_rotation` in `platform_config` (via the existing, already-proven
+ * `FeatureToggleService.getValue`/`setValue` — no schema change) holds a JSON map of every
+ * eligible league id to the ISO timestamp it was last ATTEMPTED by this cron (success or handled
+ * failure both count — an attempt is what re-marks a league as no longer neglected, matching
+ * `sleeper-historical-refresh`'s own "refreshing is what makes it least stale" reasoning). A
+ * league skipped-for-time this fire keeps its old timestamp, so it stays maximally starved and is
+ * first in line next time rather than being pushed to the back for work that never happened.
+ *
+ * `LEAGUE_CAP` raised 40 -> 90 alongside the rotation, not instead of it: measured throughput is
+ * ~1.5s/league (the last good pre-rotation run did 40 in 59s), so 90 leagues costs ~135s against
+ * the 180s ingest budget — the existing per-league deadline and between-league budget check are
+ * untouched and still fully bound total ingest time regardless of how many candidates are queued,
+ * so raising the cap adds no overshoot risk. `STARVED_RESERVE_INGEST = 50` biases the majority of
+ * each fire at clearing the backlog (238 leagues / ~90 effective per fire laps in ~3 days, versus
+ * never before) while still leaving demand up to 40 slots — close to the entire previous cap — so
+ * actively-touched leagues should not read as meaningfully worse off than before this change.
  */
 /**
  * Ingest budget. Deliberately 180s rather than the full `maxDuration` — the outbox drain below
@@ -160,7 +201,12 @@ const RELAY_BATCH_SIZE = 100
  * started at 239s runs to completion past the check and the response still has to return.
  */
 const RELAY_ONLY_BUDGET_MS = 240_000
-const LEAGUE_CAP = 40
+/** Was 40. See the 2026-09-07 header note — raised alongside the rotation fix, not instead of it. */
+const LEAGUE_CAP = 90
+/** Slots reserved for the starved (longest-since-attempted) bucket before demand gets any. See `mergeRotation`. */
+const STARVED_RESERVE_INGEST = 50
+/** `platform_config` key holding the rotation's `{ [leagueId]: isoLastAttemptedAt }` map. Not a feature toggle — reuses the same generic KV store deliberately, no schema change. */
+const ROTATION_CONFIG_KEY = "decision_os_activity_ingest_rotation"
 /**
  * ESPN and Yahoo leagues per fire (2026-09-06). Their activity is read through the league
  * importers with the IMPORTING user's stored credentials (League.userId → LeagueAuth), one
@@ -225,6 +271,49 @@ function authorizeCron(request: Request): boolean {
 }
 
 type LeagueRow = { id: string; platformLeagueId: string | null; season: number | null }
+type EligibleLeagueRow = { id: string; platformLeagueId: string | null; season: number | null; updatedAt: Date }
+
+/** `{ [leagueId]: isoLastAttemptedAt }`. Malformed or missing config reads as "nothing considered yet" — safe, not a crash. */
+type RotationMap = Record<string, string>
+
+async function loadRotationMap(): Promise<RotationMap> {
+  const raw = await getConfigValue(ROTATION_CONFIG_KEY)
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: RotationMap = {}
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v === "string") out[k] = v
+      }
+      return out
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Two orderings over the SAME eligible set, computed in memory from one query — no second
+ * round trip, unlike `sleeper-historical-refresh`'s two separate tables.
+ *
+ * `starved`: oldest-attempted-by-THIS-cron first. A league absent from `rotationMap` (never
+ * attempted) sorts as maximally starved — `''` is lexicographically before any ISO timestamp.
+ * `demand`: `updatedAt desc`, the same signal the pre-rotation selection used alone.
+ */
+function buildRotationBuckets(
+  eligible: readonly EligibleLeagueRow[],
+  rotationMap: RotationMap,
+): { starvedLeagueIds: string[]; demandLeagueIds: string[] } {
+  const starvedLeagueIds = [...eligible]
+    .sort((a, b) => (rotationMap[a.id] ?? "").localeCompare(rotationMap[b.id] ?? ""))
+    .map((l) => l.id)
+  const demandLeagueIds = [...eligible]
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .map((l) => l.id)
+  return { starvedLeagueIds, demandLeagueIds }
+}
 
 async function ingestOneLeague(
   league: LeagueRow,
@@ -374,24 +463,40 @@ export async function GET(request: Request) {
           relay: { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null, starved: false },
           managerProjection: { managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null },
           leagueProjection: { leaguesWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null },
+          rotation: { totalEligible: 0, fromStarved: 0, fromDemand: 0 },
+          rotationPersistError: null as string | null,
         }
       }
       const store = new PrismaImportedActivityStore(
         delegate as ConstructorParameters<typeof PrismaImportedActivityStore>[0],
       )
 
-      const leagues = relayOnly ? ([] as LeagueRow[]) : (await prisma.league
+      // ── Rotation selection (see the 2026-09-07 header note) ─────────────────────────────────
+      // Fetch every eligible league once, unpaginated — 238 rows in prod, trivial — and derive
+      // BOTH orderings from it in memory rather than two separate queries.
+      const eligible: EligibleLeagueRow[] = relayOnly ? [] : (await prisma.league
         .findMany({
           where: {
             platform: "sleeper",
             platformLeagueId: { not: "" },
             status: { notIn: ["complete", "completed", "archived"] },
           },
-          select: { id: true, platformLeagueId: true, season: true },
-          orderBy: { updatedAt: "desc" },
-          take: LEAGUE_CAP,
+          select: { id: true, platformLeagueId: true, season: true, updatedAt: true },
         })
-        .catch(() => [])) as LeagueRow[]
+        .catch(() => [])) as EligibleLeagueRow[]
+
+      const rotationMap = relayOnly ? {} : await loadRotationMap().catch(() => ({}) as RotationMap)
+      const { starvedLeagueIds, demandLeagueIds } = buildRotationBuckets(eligible, rotationMap)
+      const rotation = mergeRotation({
+        starvedLeagueIds,
+        demandLeagueIds,
+        cap: LEAGUE_CAP,
+        starvedReserve: STARVED_RESERVE_INGEST,
+      })
+      const byId = new Map(eligible.map((l) => [l.id, l]))
+      const leagues: LeagueRow[] = rotation.leagueIds
+        .map((id) => byId.get(id))
+        .filter((l): l is EligibleLeagueRow => l !== undefined)
 
       // ESPN and Yahoo leagues, read through their importers (2026-09-06). Ordered the same way, capped smaller.
       const platformLeagues = relayOnly ? ([] as PlatformLeagueRow[]) : (await prisma.league
@@ -413,6 +518,11 @@ export async function GET(request: Request) {
       let created = 0
       let updated = 0
       const errors: string[] = []
+      // Only leagues actually ATTEMPTED (entered the try below) get their rotation timestamp
+      // bumped. A league skipped for time keeps its old (more-starved) timestamp so it stays at
+      // the front of the starved bucket next fire instead of being penalized for work that never
+      // happened.
+      const attemptedLeagueIds: string[] = []
       const ingestDeadline = startedAt + INGEST_BUDGET_MS
 
       // ESPN/Yahoo first, under their own budget — see PLATFORM_BUDGET_MS for why the order matters.
@@ -444,6 +554,7 @@ export async function GET(request: Request) {
         // Clamped to whatever budget is actually left, so no single league can carry the ingest
         // phase past `ingestDeadline`. That keeps the phase's overshoot at zero.
         const leagueDeadline = Math.min(Date.now() + LEAGUE_DEADLINE_MS, ingestDeadline)
+        attemptedLeagueIds.push(league.id)
         try {
           const r = await withDeadline(ingestOneLeague(league, store), leagueDeadline, "league_ingest")
           processed += 1
@@ -452,6 +563,20 @@ export async function GET(request: Request) {
         } catch (error) {
           failed += 1
           if (errors.length < 5) errors.push(`${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
+        }
+      }
+
+      // Persist the rotation map. Isolated: a config-write hiccup must not fail an ingest phase
+      // that already completed its real work, same isolation as the relay/projection phases below.
+      let rotationPersistError: string | null = null
+      if (!relayOnly && attemptedLeagueIds.length > 0) {
+        try {
+          const nowIso = new Date().toISOString()
+          const nextMap: RotationMap = { ...rotationMap }
+          for (const id of attemptedLeagueIds) nextMap[id] = nowIso
+          await setConfigValue(ROTATION_CONFIG_KEY, JSON.stringify(nextMap))
+        } catch (error) {
+          rotationPersistError = error instanceof Error ? error.message : "rotation_persist_failed"
         }
       }
 
@@ -540,7 +665,11 @@ export async function GET(request: Request) {
         leagueProjection.error = error instanceof Error ? error.message : "league_projection_failed"
       }
 
-      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, platform, relay, managerProjection, leagueProjection }
+      return {
+        storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, platform, relay, managerProjection, leagueProjection,
+        rotation: { totalEligible: eligible.length, fromStarved: rotation.fromStarved, fromDemand: rotation.fromDemand },
+        rotationPersistError,
+      }
     },
     (s) => ({
       rowsRead: s.discovered,
@@ -557,6 +686,7 @@ export async function GET(request: Request) {
         ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
         ...(s.managerProjection.error ? [`manager_projection: ${s.managerProjection.error}`] : []),
         ...(s.leagueProjection.error ? [`league_projection: ${s.leagueProjection.error}`] : []),
+        ...(s.rotationPersistError ? [`rotation_persist: ${s.rotationPersistError}`] : []),
       ],
       warnings: [
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
@@ -588,5 +718,6 @@ export async function GET(request: Request) {
     created: summary.created,
     updated: summary.updated,
     errors: summary.errors,
+    rotation: summary.rotation,
   })
 }
