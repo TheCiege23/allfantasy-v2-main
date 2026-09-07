@@ -9,6 +9,7 @@ import { CommissionerBreadcrumbs } from '@/components/commissioner-os/shell/Comm
 import { CommissionerSearchPalette } from '@/components/commissioner-os/search/CommissionerSearchPalette'
 import { NotificationPanel } from '@/components/commissioner-os/notifications/NotificationPanel'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
+import { listActiveLeaguesForUser, resolveActiveLeagueId } from '@/lib/commissioner-ui/resolveActiveLeagueId'
 
 export const metadata: Metadata = {
   title: 'Commissioner OS | AllFantasy',
@@ -57,11 +58,14 @@ export default async function CommissionerOSLayout({ children }: { children: Rea
   }
 
   const adapter = await getDecisionOSAdapter()
-  const [indexResponse, notificationsResponse, notificationsSummaryResponse] = await Promise.all([
-    adapter.search.getIndex(),
-    adapter.notifications.getNotifications(),
-    adapter.notifications.getSummary(),
-  ])
+  const [indexResponse, notificationsResponse, notificationsSummaryResponse, leagues, activeLeagueId] =
+    await Promise.all([
+      adapter.search.getIndex(),
+      adapter.notifications.getNotifications(),
+      adapter.notifications.getSummary(),
+      listActiveLeaguesForUser(),
+      resolveActiveLeagueId(),
+    ])
 
   return (
     <CommissionerOSProviders>
@@ -76,7 +80,11 @@ export default async function CommissionerOSLayout({ children }: { children: Rea
       <div className="flex min-h-screen" style={{ background: 'var(--bg)' }}>
         <CommissionerSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <CommissionerHeader unreadNotificationCount={notificationsSummaryResponse.data?.unreadCount ?? 0} />
+          <CommissionerHeader
+            unreadNotificationCount={notificationsSummaryResponse.data?.unreadCount ?? 0}
+            leagues={leagues}
+            activeLeagueId={activeLeagueId}
+          />
           <main className="flex-1">
             <div className="px-4 pt-2 sm:px-6 lg:px-8">
               <CommissionerBreadcrumbs />
