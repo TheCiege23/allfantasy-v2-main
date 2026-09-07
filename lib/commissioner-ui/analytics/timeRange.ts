@@ -57,9 +57,23 @@ export function applyTimeRange(
 }
 
 /** Rendered next to the switcher so the reader knows what the numbers cover. */
+/**
+ * Rendered next to the switcher so the reader knows what the numbers cover.
+ *
+ * ⚠ "Weeks 1–N, this season" WAS WRONG THE MOMENT REAL DATA ARRIVED. The week count falls back to
+ * `transactionsByWeek`, and those are CALENDAR weeks — a dynasty league's imported activity runs
+ * January to August, so a real league rendered "Weeks 1–13, this season" over thirteen weeks that
+ * span two thirds of a calendar year and no NFL week 13. The label was accurate only against a
+ * fixture whose weeks happened to be season weeks.
+ *
+ * `healthByWeek` genuinely is season weeks, so it keeps the season wording; the transaction
+ * fallback says what it actually counts.
+ */
 export function describeRange(range: AnalyticsTimeRange, snapshot: LeagueAnalyticsSnapshot): string {
-  const weeks = snapshot.healthByWeek.length || snapshot.transactionsByWeek.length
+  const seasonWeeks = snapshot.healthByWeek.length
+  const weeks = seasonWeeks || snapshot.transactionsByWeek.length
   if (range === 'last4') return `Last ${Math.min(LAST_N, weeks) || LAST_N} weeks`
   if (range === 'all') return `All ${snapshot.seasonComparison.length || 1} seasons on record`
-  return weeks ? `Weeks 1–${weeks}, this season` : 'This season'
+  if (seasonWeeks) return `Weeks 1–${seasonWeeks}, this season`
+  return weeks ? `${weeks} weeks with activity` : 'This season'
 }
