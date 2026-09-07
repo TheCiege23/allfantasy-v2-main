@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/prisma"
 import { ingestSleeperImportedActivity } from "@/lib/decision-os/ingestion/sleeperActivityEmitter"
+import { buildPlatformManagerMapping, ingestPlatformImportedActivity } from "@/lib/decision-os/ingestion/platformActivityEmitter"
+import { fetchEspnActivityForSync } from "@/lib/league-import/espn/EspnLeagueFetchService"
+import { fetchYahooActivityForSync } from "@/lib/league-import/yahoo/YahooLeagueFetchService"
 import { buildManagerIdentityIndex } from "@/lib/decision-os/ingestion/importedActivityNormalizer"
 import { PrismaImportedActivityStore } from "@/lib/decision-os/ingestion/prismaImportedActivityStore"
 import {
@@ -158,6 +161,13 @@ const RELAY_BATCH_SIZE = 100
  */
 const RELAY_ONLY_BUDGET_MS = 240_000
 const LEAGUE_CAP = 40
+/**
+ * ESPN and Yahoo leagues per fire (2026-09-06). Their activity is read through the league
+ * importers with the IMPORTING user's stored credentials (League.userId → LeagueAuth), one
+ * team read plus one transaction read per league; production holds five ESPN leagues and
+ * no Yahoo ones today, so this cap is headroom, not a limit anyone has hit.
+ */
+const PLATFORM_LEAGUE_CAP = 10
 const WEEKS = 18
 
 /** Map with a bounded number of in-flight promises, preserving input order. */
@@ -266,6 +276,54 @@ async function ingestOneLeague(
   return { created: result.writer.created, updated: result.writer.updated, skipped: result.writer.skipped }
 }
 
+type PlatformLeagueRow = { id: string; platform: string; platformLeagueId: string | null; season: number | null; userId: string | null }
+
+/**
+ * One ESPN or Yahoo league: the importer's own fetch for teams + transactions, the team → owner
+ * map the emitter binds through, and the league's claimed teams as the identity index (a claimed
+ * team attributes to its AllFantasy user; an unclaimed one to `<provider>:<manager id>`).
+ */
+async function ingestOnePlatformLeague(
+  league: PlatformLeagueRow,
+  store: PrismaImportedActivityStore,
+): Promise<{ created: number; updated: number; skipped: number; fetched: boolean }> {
+  const provider = league.platform === "espn" ? "espn" : league.platform === "yahoo" ? "yahoo" : null
+  if (!provider) throw new Error(`unsupported_platform:${league.platform}`)
+  if (!league.userId) throw new Error("no_importing_user")
+  const sourceLeagueId = league.platformLeagueId as string
+
+  const claimed = await prisma.leagueTeam.findMany({
+    where: { leagueId: league.id },
+    select: { platformUserId: true, claimedByUserId: true },
+  })
+  const afUserByManager = new Map<string, string | null>()
+  for (const t of claimed) if (t.platformUserId) afUserByManager.set(t.platformUserId, t.claimedByUserId ?? null)
+
+  if (provider === "espn") {
+    const activity = await fetchEspnActivityForSync(league.userId, sourceLeagueId, league.season ?? new Date().getUTCFullYear())
+    const teamOwnerMap = new Map<string, string | null>(activity.teams.map((t) => [t.teamId, t.managerId || null]))
+    const managerIds = [...new Set(activity.teams.map((t) => t.managerId).filter(Boolean))]
+    const identityIndex = buildManagerIdentityIndex(managerIds.map((id) => buildPlatformManagerMapping("espn", id, afUserByManager.get(id) ?? null)))
+    const r = await ingestPlatformImportedActivity(
+      { provider: "espn", providerLeagueId: sourceLeagueId, afLeagueId: league.id, transactions: activity.transactions, teamOwnerMap },
+      identityIndex,
+      store,
+    )
+    return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: activity.transactionsFetched }
+  }
+
+  const activity = await fetchYahooActivityForSync(league.userId, sourceLeagueId)
+  const teamOwnerMap = new Map<string, string | null>(activity.teams.map((t) => [t.teamKey, t.managerKey || null]))
+  const managerIds = [...new Set(activity.teams.map((t) => t.managerKey).filter(Boolean))]
+  const identityIndex = buildManagerIdentityIndex(managerIds.map((id) => buildPlatformManagerMapping("yahoo", id, afUserByManager.get(id) ?? null)))
+  const r = await ingestPlatformImportedActivity(
+    { provider: "yahoo", providerLeagueId: activity.leagueKey, afLeagueId: league.id, transactions: activity.transactions, teamOwnerMap },
+    identityIndex,
+    store,
+  )
+  return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: true }
+}
+
 export async function GET(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -325,6 +383,20 @@ export async function GET(request: Request) {
         })
         .catch(() => [])) as LeagueRow[]
 
+      // ESPN and Yahoo leagues, read through their importers (2026-09-06). Ordered the same way, capped smaller.
+      const platformLeagues = relayOnly ? ([] as PlatformLeagueRow[]) : (await prisma.league
+        .findMany({
+          where: {
+            platform: { in: ["espn", "yahoo"] },
+            platformLeagueId: { not: "" },
+            status: { notIn: ["complete", "completed", "archived"] },
+          },
+          select: { id: true, platform: true, platformLeagueId: true, season: true, userId: true },
+          orderBy: { updatedAt: "desc" },
+          take: PLATFORM_LEAGUE_CAP,
+        })
+        .catch(() => [])) as PlatformLeagueRow[]
+
       let processed = 0
       let failed = 0
       let skippedForTime = 0
@@ -348,6 +420,25 @@ export async function GET(request: Request) {
         } catch (error) {
           failed += 1
           if (errors.length < 5) errors.push(`${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
+        }
+      }
+
+      const platform = { discovered: platformLeagues.length, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0, unfetched: 0, errors: [] as string[] }
+      for (const league of platformLeagues) {
+        if (Date.now() - startedAt > INGEST_BUDGET_MS) {
+          platform.skippedForTime += 1
+          continue
+        }
+        const leagueDeadline = Math.min(Date.now() + LEAGUE_DEADLINE_MS, ingestDeadline)
+        try {
+          const r = await withDeadline(ingestOnePlatformLeague(league, store), leagueDeadline, "platform_league_ingest")
+          platform.processed += 1
+          platform.created += r.created
+          platform.updated += r.updated
+          if (!r.fetched) platform.unfetched += 1
+        } catch (error) {
+          platform.failed += 1
+          if (platform.errors.length < 5) platform.errors.push(`${league.platform}:${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
         }
       }
 
@@ -436,16 +527,19 @@ export async function GET(request: Request) {
         leagueProjection.error = error instanceof Error ? error.message : "league_projection_failed"
       }
 
-      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, relay, managerProjection, leagueProjection }
+      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, platform, relay, managerProjection, leagueProjection }
     },
     (s) => ({
       rowsRead: s.discovered,
       // Projected events are real writes too — count them so the relay's progress is visible
       // in SyncJobRun telemetry rather than hidden inside the ingest job's numbers.
-      rowsWritten: s.created + s.updated + s.relay.dispatched + s.managerProjection.managersWritten + s.leagueProjection.leaguesWritten,
+      rowsWritten: s.created + s.updated + (s.platform?.created ?? 0) + (s.platform?.updated ?? 0) + s.relay.dispatched + s.managerProjection.managersWritten + s.leagueProjection.leaguesWritten,
       rowsSkipped: s.skippedForTime,
       errors: [
         ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors),
+        ...(s.platform?.errors ?? []),
+        // A platform league whose feed ESPN did not serve wrote nothing — say so rather than count it as quiet.
+        ...((s.platform?.unfetched ?? 0) > 0 ? [`${s.platform!.unfetched} ESPN/Yahoo leagues served no activity feed`] : []),
         // A relay failure must be visible, not swallowed by the isolating catch above.
         ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
         ...(s.managerProjection.error ? [`manager_projection: ${s.managerProjection.error}`] : []),

@@ -189,6 +189,22 @@ describe('getGlobalRosterCounts', () => {
     expect(fresh.get('10236')).toBe(3)
     expect(mockRosterFindMany).toHaveBeenCalledTimes(2)
   })
+
+  it('keeps the stale count when the background refresh fails, and that failure reaches nobody', async () => {
+    const seed = await getGlobalRosterCounts(0) // beforeEach cleared the cache: this is the one read a caller waits on
+    expect(mockRosterFindMany).toHaveBeenCalledTimes(1)
+    // Eleven minutes on, the map is stale and the refresh behind it FAILS: the reader still gets the old map.
+    mockRosterFindMany.mockRejectedValueOnce(new Error('db down'))
+    const stale = await getGlobalRosterCounts(11 * 60_000)
+    expect(stale).toBe(seed)
+    await new Promise((r) => setTimeout(r, 0)) // the rejected refresh settles here — an unhandled rejection would fail this file
+    // Still stale (the failed refresh dated nothing), still the old map, and a new refresh starts.
+    const again = await getGlobalRosterCounts(11 * 60_000 + 1)
+    expect(again).toBe(seed)
+    expect(mockRosterFindMany).toHaveBeenCalledTimes(3)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(await getGlobalRosterCounts(11 * 60_000 + 2)).not.toBe(seed) // the retry landed a fresh map
+  })
 })
 
 describe('getRosterIndex', () => {

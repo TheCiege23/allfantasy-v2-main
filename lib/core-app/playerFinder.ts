@@ -13,6 +13,7 @@ import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCa
 import { resolveSportsWeek } from './sportsWeek'
 import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from './playerGame'
 import { designationOnset } from './designationOnset'
+import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
@@ -734,6 +735,197 @@ export async function getPlayerDetail(
   const { sport: refSport, externalId } = parsePlayerRef(playerReference)
 
   /*
+   * ⚠ TWO CACHES, AND WHAT IS NOT IN THEM. On game day the same few injured
+   * players are opened by many managers within minutes, and every open used to
+   * run a dozen reads. Everything that depends only on the PLAYER — his row,
+   * his injury, his stats, his projection, rank, snap share and defender value
+   * — is read once per minute per player and served to everyone (loadPlayerFacts);
+   * everything that depends on the WEEK — the schedule rows and the kickoff map —
+   * once per minute per sport (loadWeekSchedule). Nothing keyed on the USER is
+   * cached here: which of your leagues roster him, the impact per league and the
+   * pickup engine run for every request, because a manager's own rosters are
+   * theirs alone. Stale-while-revalidate: a stale entry is served at once and
+   * refreshed behind the request, so no reader waits on the refresh, and a
+   * failed refresh keeps the last good value (staleWhileRevalidate.ts).
+   *
+   * A minute is the ceiling on how old an injury designation can be here; the
+   * feeds behind it move every five (alert-sweep fold) to fifteen (import-injuries).
+   */
+  const facts = await playerFacts.get(cardFactsKey(refSport, externalId), () => loadPlayerFacts(refSport, externalId))
+  if (!facts) return null
+  const { row, identityResolved, injury, seasonStats, projection, snapShare, idpValue, positionRank: rank } = facts
+
+
+  const resolvedSlots = identityResolved
+    ? await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId)
+    : null
+  const leagues: SectionState<LeagueSlot[]> = !resolvedSlots
+    ? {
+        available: false,
+        reason:
+          'we have no platform id for this player, so we cannot tell which of your leagues roster him',
+      }
+    : { available: true, data: resolvedSlots.slots }
+  const rosterCoverage: PlayerDetail['rosterCoverage'] = { unmatched: resolvedSlots?.unmatched ?? [] }
+  const age = describeAge('player_bio', row.fetchedAt)
+
+  /*
+   * ⚠ KEYED ON sleeperId, WHICH IS NULLABLE — the same bridge every other
+   * cross-league feature here depends on. No Sleeper id means we cannot find him
+   * on a roster at all, which is a different statement from "he is on none of
+   * your teams" and must not be rendered as one.
+   */
+  const impactRows =
+    userId && row.sleeperId
+      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds: userLeagueIds }).catch(() => null)
+      : null
+
+  const impact: PlayerDetail['impact'] = impactRows
+    ? { available: true, data: impactRows }
+    : {
+        available: false,
+        reason: !userId
+          ? 'sign in to see which of your leagues this affects'
+          : !row.sleeperId
+            ? 'we hold no Sleeper id for this player, so we cannot locate him on your rosters'
+            : 'we could not read your rosters for this player',
+      }
+
+  /*
+   * ⚠ THE OUTSIDE HALF OF "THE MOVE TO MAKE". `impact` prices the bench swap
+   * under each league's own scoring; this adds who is UNROSTERED and better,
+   * with a real claim link, via the same engine the Player Command Center uses.
+   * Bounded on purpose: only leagues where he is on YOUR roster, starters
+   * first, capped — the engine scans a whole league's rosters per call, and
+   * this is a page view, not a cron. A league the engine cannot answer for is
+   * dropped rather than guessed at; if none survive, the section says so.
+   */
+  const MOVE_LEAGUE_CAP = 4
+  const moveLeagues =
+    userId && row.sleeperId && leagues.available
+      ? leagues.data
+          // Only leagues where he is on YOUR roster have a hole for a pickup to fill.
+          .filter((l) => l.isYours)
+          .sort((a, b) => Number(b.slot === 'STARTER') - Number(a.slot === 'STARTER'))
+          .slice(0, MOVE_LEAGUE_CAP)
+      : []
+
+  const moveRows = (
+    await Promise.all(
+      moveLeagues.map(async (l) => {
+        const r = await resolveReplacementOptions({
+          appUserId: userId!,
+          leagueId: l.leagueId,
+          affectedPlayerId: row.sleeperId!,
+        }).catch(() => null)
+        if (!r || r.freeAgentOptions.length === 0) return null
+        return {
+          leagueId: l.leagueId,
+          leagueName: l.leagueName,
+          platform: l.platform,
+          projectionWeek: r.projectionWeek,
+          affectedProjection: r.affectedProjection,
+          freeAgents: r.freeAgentOptions,
+          claimTarget: r.claimTarget,
+        }
+      })
+    )
+  ).filter((m): m is RecommendedMove => m !== null)
+
+  const recommendedMoves: PlayerDetail['recommendedMoves'] =
+    moveRows.length > 0
+      ? { available: true, data: moveRows }
+      : {
+          available: false,
+          reason: !userId
+            ? 'sign in to see pickup options for your own leagues'
+            : !row.sleeperId
+              ? 'we hold no Sleeper id for this player, so we cannot weigh him against your rosters'
+              : !leagues.available || leagues.data.every((l) => !l.isYours)
+                ? 'he is not on any of your rosters, so there is no lineup hole to fill'
+                : 'no unrostered player we can price would fill his slot in the leagues we checked',
+        }
+
+
+  /*
+   * His game this week, for the lineup lock, from the week's rows (cached per
+   * sport for a minute); the club is matched in memory, because SportsGame holds
+   * provider display names and `row.team` holds an abbreviation (nextGameMap.ts).
+   */
+  const sched = await weekSchedule.get(row.sport, () => loadWeekSchedule(row.sport))
+  const game: PlayerDetail['game'] = playerGame(sched.games, normalizeTeamAbbrev(row.team), sched.week)
+  // Every club's kickoff, for the bench candidates' locks — the same rows, no second read.
+  const kickoffs = sched.kickoffs
+  const scheduleWeek = sched.week ? { season: sched.week.season, week: sched.week.week } : null
+  const kickoffsUnresolved = sched.unresolved
+
+  return {
+    player: {
+      externalId: row.externalId,
+      sport: row.sport,
+      sleeperId: row.sleeperId,
+      name: row.name,
+      position: row.position,
+      team: row.team,
+      imageUrl: row.imageUrl,
+      number: row.number,
+      // YOUR rosters only — a league where another manager has him is not one
+      // you roster him in, and the header line says "on N of your leagues".
+      rosteredIn: leagues.available ? leagues.data.filter((l) => l.isYours).length : null,
+      platforms: leagues.available
+        ? [...new Set(leagues.data.filter((l) => l.isYours).map((l) => l.platform))]
+        : [],
+    },
+    identityResolved,
+    idpValue,
+    bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
+    injury,
+    seasonStats,
+    leagues,
+    rosterCoverage,
+    impact,
+    projection,
+    game,
+    kickoffs,
+    scheduleWeek,
+    kickoffsUnresolved,
+    snapShare,
+    positionRank: rank,
+    recommendedMoves,
+    freshness: { label: age.label, stale: age.stale },
+  }
+}
+
+const CARD_FACTS_TTL_MS = 60_000
+const CARD_FACTS_CAP = 500
+const WEEK_SCHEDULE_TTL_MS = 60_000
+
+function cardFactsKey(sport: string | null | undefined, externalId: string): string {
+  return `${sport ?? '*'}:${externalId}`
+}
+
+const playerFacts = createSwrCache<Awaited<ReturnType<typeof loadPlayerFacts>>>({ ttlMs: CARD_FACTS_TTL_MS, cap: CARD_FACTS_CAP })
+const weekSchedule = createSwrCache<Awaited<ReturnType<typeof loadWeekSchedule>>>({ ttlMs: WEEK_SCHEDULE_TTL_MS, cap: 8 })
+
+/** Tests and ops: drop every cached card fact and schedule. */
+export function clearPlayerCardCache(): void {
+  playerFacts.clear()
+  weekSchedule.clear()
+}
+
+/** Hit/miss/refresh counters and the number of players held, for a health read. */
+export function playerCardCacheStats() {
+  return { facts: playerFacts.stats(), schedule: weekSchedule.stats(), players: playerFacts.size() }
+}
+
+/**
+ * Everything about the player that is the same for every reader: his row,
+ * identity set, injury claim, season stats, projection, rank, snap share and
+ * defender value. Null when the reference resolves to nobody.
+ */
+async function loadPlayerFacts(refSport: string | null | undefined, externalId: string) {
+
+  /*
    * ⚠ SPORT-SCOPED AND EXPLICITLY ORDERED, BOTH FOR THE SAME REASON. `externalId`
    * is a provider id that only means anything inside one sport, so an unscoped
    * lookup can match several unrelated athletes; and an unordered findFirst then
@@ -769,18 +961,6 @@ export async function getPlayerDetail(
   if (!row) return null
 
   const identityResolved = Boolean(row.sleeperId)
-
-  const resolvedSlots = identityResolved
-    ? await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId)
-    : null
-  const leagues: SectionState<LeagueSlot[]> = !resolvedSlots
-    ? {
-        available: false,
-        reason:
-          'we have no platform id for this player, so we cannot tell which of your leagues roster him',
-      }
-    : { available: true, data: resolvedSlots.slots }
-  const rosterCoverage: PlayerDetail['rosterCoverage'] = { unmatched: resolvedSlots?.unmatched ?? [] }
 
   /*
    * 🛑 EVERY LOOKUP BELOW USED TO MATCH ON NAME, AND NAMES ARE NOT IDENTITIES.
@@ -986,85 +1166,6 @@ export async function getPlayerDetail(
         }
       : { available: false, reason: 'no season statistics ingested for this player' }
 
-  const age = describeAge('player_bio', row.fetchedAt)
-
-  /*
-   * ⚠ KEYED ON sleeperId, WHICH IS NULLABLE — the same bridge every other
-   * cross-league feature here depends on. No Sleeper id means we cannot find him
-   * on a roster at all, which is a different statement from "he is on none of
-   * your teams" and must not be rendered as one.
-   */
-  const impactRows =
-    userId && row.sleeperId
-      ? await getPlayerImpact(row.sleeperId, userId, { leagueIds: userLeagueIds }).catch(() => null)
-      : null
-
-  const impact: PlayerDetail['impact'] = impactRows
-    ? { available: true, data: impactRows }
-    : {
-        available: false,
-        reason: !userId
-          ? 'sign in to see which of your leagues this affects'
-          : !row.sleeperId
-            ? 'we hold no Sleeper id for this player, so we cannot locate him on your rosters'
-            : 'we could not read your rosters for this player',
-      }
-
-  /*
-   * ⚠ THE OUTSIDE HALF OF "THE MOVE TO MAKE". `impact` prices the bench swap
-   * under each league's own scoring; this adds who is UNROSTERED and better,
-   * with a real claim link, via the same engine the Player Command Center uses.
-   * Bounded on purpose: only leagues where he is on YOUR roster, starters
-   * first, capped — the engine scans a whole league's rosters per call, and
-   * this is a page view, not a cron. A league the engine cannot answer for is
-   * dropped rather than guessed at; if none survive, the section says so.
-   */
-  const MOVE_LEAGUE_CAP = 4
-  const moveLeagues =
-    userId && row.sleeperId && leagues.available
-      ? leagues.data
-          // Only leagues where he is on YOUR roster have a hole for a pickup to fill.
-          .filter((l) => l.isYours)
-          .sort((a, b) => Number(b.slot === 'STARTER') - Number(a.slot === 'STARTER'))
-          .slice(0, MOVE_LEAGUE_CAP)
-      : []
-
-  const moveRows = (
-    await Promise.all(
-      moveLeagues.map(async (l) => {
-        const r = await resolveReplacementOptions({
-          appUserId: userId!,
-          leagueId: l.leagueId,
-          affectedPlayerId: row.sleeperId!,
-        }).catch(() => null)
-        if (!r || r.freeAgentOptions.length === 0) return null
-        return {
-          leagueId: l.leagueId,
-          leagueName: l.leagueName,
-          platform: l.platform,
-          projectionWeek: r.projectionWeek,
-          affectedProjection: r.affectedProjection,
-          freeAgents: r.freeAgentOptions,
-          claimTarget: r.claimTarget,
-        }
-      })
-    )
-  ).filter((m): m is RecommendedMove => m !== null)
-
-  const recommendedMoves: PlayerDetail['recommendedMoves'] =
-    moveRows.length > 0
-      ? { available: true, data: moveRows }
-      : {
-          available: false,
-          reason: !userId
-            ? 'sign in to see pickup options for your own leagues'
-            : !row.sleeperId
-              ? 'we hold no Sleeper id for this player, so we cannot weigh him against your rosters'
-              : !leagues.available || leagues.data.every((l) => !l.isYours)
-                ? 'he is not on any of your rosters, so there is no lineup hole to fill'
-                : 'no unrostered player we can price would fill his slot in the leagues we checked',
-        }
-
   /*
    * ⚠ EVERYTHING BELOW HANGS ON `sleeperId`, AND IT IS NULLABLE. The projection
    * feed is keyed by Sleeper id; a player we hold only under a TheSportsDB
@@ -1074,30 +1175,6 @@ export async function getPlayerDetail(
    */
   const projectionWeek = row.sleeperId ? await latestProjectionWeek() : null
   const projKey = row.sleeperId ?? ''
-
-  /*
-   * His game this week, for the lineup lock. The week comes from the schedule
-   * (resolveSportsWeek), the rows are filtered on season + week + seasonType
-   * in SQL — preseason week 1 and regular week 1 share a key — and the club is
-   * matched in memory, because SportsGame holds provider display names and
-   * `row.team` holds an abbreviation (see nextGameMap.ts).
-   */
-  const sportsWeek = await resolveSportsWeek(row.sport).catch(() => null)
-  const weekGames = sportsWeek
-    ? await prisma.sportsGame
-        .findMany({
-          where: { sport: row.sport, season: sportsWeek.season, week: sportsWeek.week, seasonType: sportsWeek.seasonType },
-          orderBy: { startTime: 'asc' },
-          take: 400,
-          select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
-        })
-        .catch(() => [])
-    : []
-  const game: PlayerDetail['game'] = playerGame(weekGames, normalizeTeamAbbrev(row.team), sportsWeek)
-  // Every club's kickoff, for the bench candidates' locks — the same rows, no second read.
-  const kickoffs = weekKickoffs(weekGames)
-  const scheduleWeek = sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null
-  const kickoffsUnresolved = unresolvedClubNames(weekGames).length
 
   const projRow = projectionWeek
     ? (await lookupProjections([projKey], projectionWeek)).get(projKey)
@@ -1162,40 +1239,40 @@ export async function getPlayerDetail(
         reason: 'a rank needs this player to appear in the projection set, and he does not',
       }
 
+
+  return { row, identityResolved, injury, seasonStats, projection, snapShare, idpValue, positionRank: rank }
+}
+
+/**
+ * The week's schedule for a sport: the resolved week, its fixture rows, the
+ * club → kickoff map and how many club spellings the folder could not resolve
+ * (byeStatus.ts refuses a bye while that is non-zero).
+ */
+async function loadWeekSchedule(sport: string) {
+  /*
+   * His game this week, for the lineup lock. The week comes from the schedule
+   * (resolveSportsWeek), the rows are filtered on season + week + seasonType
+   * in SQL — preseason week 1 and regular week 1 share a key — and the club is
+   * matched in memory, because SportsGame holds provider display names and
+   * `row.team` holds an abbreviation (see nextGameMap.ts).
+   */
+  const sportsWeek = await resolveSportsWeek(sport).catch(() => null)
+  const weekGames = sportsWeek
+    ? await prisma.sportsGame
+        .findMany({
+          where: { sport, season: sportsWeek.season, week: sportsWeek.week, seasonType: sportsWeek.seasonType },
+          orderBy: { startTime: 'asc' },
+          take: 400,
+          select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+        })
+        .catch(() => [])
+    : []
+
   return {
-    player: {
-      externalId: row.externalId,
-      sport: row.sport,
-      sleeperId: row.sleeperId,
-      name: row.name,
-      position: row.position,
-      team: row.team,
-      imageUrl: row.imageUrl,
-      number: row.number,
-      // YOUR rosters only — a league where another manager has him is not one
-      // you roster him in, and the header line says "on N of your leagues".
-      rosteredIn: leagues.available ? leagues.data.filter((l) => l.isYours).length : null,
-      platforms: leagues.available
-        ? [...new Set(leagues.data.filter((l) => l.isYours).map((l) => l.platform))]
-        : [],
-    },
-    identityResolved,
-    idpValue,
-    bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
-    injury,
-    seasonStats,
-    leagues,
-    rosterCoverage,
-    impact,
-    projection,
-    game,
-    kickoffs,
-    scheduleWeek,
-    kickoffsUnresolved,
-    snapShare,
-    positionRank: rank,
-    recommendedMoves,
-    freshness: { label: age.label, stale: age.stale },
+    week: sportsWeek,
+    games: weekGames,
+    kickoffs: weekKickoffs(weekGames),
+    unresolved: unresolvedClubNames(weekGames).length,
   }
 }
 

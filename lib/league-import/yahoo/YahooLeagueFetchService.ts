@@ -301,6 +301,36 @@ function buildYahooWeekRange(startWeek: number | null, endWeek: number | null): 
  * Never throws for a missing connection: an unconnected account is a fact to
  * report, not an error to raise.
  */
+/**
+ * The activity the trade windows read, for the Decision OS activity ingest
+ * (app/api/cron/decision-os-activity-ingest): every team's manager key — the
+ * guid when Yahoo grants it, else the importer's manager id, else the team key,
+ * the same precedence the adapter uses for `LeagueTeam.platformUserId` — and
+ * the league's add/drop/trade transactions, dated by Yahoo. Two reads, on the
+ * importing user's stored credential; rosters are not what the ingest needs.
+ */
+export async function fetchYahooActivityForSync(
+  userId: string,
+  leagueKeyOrId: string,
+): Promise<{
+  leagueKey: string
+  teams: Array<{ teamKey: string; managerKey: string }>
+  transactions: YahooImportTransaction[]
+}> {
+  const context = await loadYahooCredential(userId)
+  const resolved = await resolveYahooLeagueLookup(leagueKeyOrId, context)
+  const leagueKey = resolved.leagueKey
+  const [teamsData, transactionsData] = await Promise.all([
+    yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/teams?format=json`, context),
+    yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/transactions;types=add,drop,trade;count=100?format=json`, context),
+  ])
+  const teams = [...parseYahooTeamsMetadata(teamsData).entries()].map(([teamKey, meta]) => ({
+    teamKey,
+    managerKey: meta.managerGuid || meta.managerId || teamKey,
+  }))
+  return { leagueKey, teams, transactions: parseYahooTransactions(transactionsData) }
+}
+
 export async function fetchYahooPendingTrades(
   userId: string,
   leagueKey: string,

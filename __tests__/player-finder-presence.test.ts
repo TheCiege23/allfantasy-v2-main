@@ -183,6 +183,26 @@ describe('getManagerPresence — nothing to pitch', () => {
     expect(res.reason).not.toMatch(/free agent/)
   })
 
+  /* ⚠ A "HIT" ON AN ESPN ROSTER IS A COLLISION, NOT A HOLDER. */
+  it('refuses a hit on rosters that speak ESPN ids — the number is a collision, not the player', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'espn' })
+    // ESPN player ids are bare integers too: an ESPN roster carrying "10236" holds an ESPN
+    // player, not Kincaid. Before the vocabulary guard ran first, this showed Tasha as his
+    // holder — and with her ESPN moves now ingested, a window on the wrong player.
+    mockRosterFindMany.mockResolvedValue([
+      { platformUserId: 'sl-tasha', playerData: { players: [KINCAID, 'e2', 'e3'], starters: [KINCAID] } },
+      { platformUserId: 'sl-me', playerData: { players: ['e4', 'e5'], starters: ['e4'] } },
+    ])
+    mockActivityFindMany.mockResolvedValue([
+      { occurredAt: new Date('2026-09-06T14:00:00Z'), activityType: 'waiver', normalized: { managerKeys: ['espn:sl-tasha'] } },
+    ])
+    const res = await getManagerPresence('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(res.available).toBe(false)
+    if (res.available) return
+    expect(res.reason).toMatch(/ESPN/i)
+    expect(res.reason).not.toMatch(/free agent/)
+  })
+
   it('needs a signed-in viewer', async () => {
     expect(await getManagerPresence('L-gang', KINCAID, null)).toEqual({ available: false, reason: 'sign in to see who to pitch' })
     expect(mockLeagueFindUnique).not.toHaveBeenCalled()

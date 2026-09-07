@@ -1314,3 +1314,36 @@ export async function fetchEspnScheduleForSync(
  * regression test that does not require a live ESPN league.
  */
 export { parseEspnRosterEntries as parseEspnRosterEntriesForTest }
+
+/**
+ * The activity the trade windows read, for the Decision OS activity ingest
+ * (app/api/cron/decision-os-activity-ingest): every team's owner (member SWID,
+ * the id the importer stores as `LeagueTeam.platformUserId`) and the
+ * communication feed's transactions, dated by ESPN. One `mTeam` read plus the
+ * feed — not the whole import — because the ingest runs for every ESPN league
+ * every day and rosters are not what it needs.
+ *
+ * `transactionsFetched` is false when ESPN served no feed (a season before the
+ * feed existed, or a fetch that failed after the cookie fallback); the caller
+ * must not read an empty list as "nobody moved".
+ */
+export async function fetchEspnActivityForSync(
+  userId: string,
+  leagueId: string,
+  season: number
+): Promise<{
+  teams: Array<{ teamId: string; managerId: string }>
+  transactions: EspnImportTransaction[]
+  transactionsFetched: boolean
+}> {
+  const auth = await getEspnAuthForUser(userId)
+  const raw = await loadEspnLeagueRaw({ leagueId, season, auth, views: ['mTeam'] })
+  const teams = parseEspnTeams(raw, null)
+  const transactionsRaw = await loadOptionalEspnTransactionsRaw({ leagueId, season, auth })
+  const transactions = transactionsRaw != null ? parseEspnTransactions(transactionsRaw, buildEspnPlayerDirectory(teams)) : []
+  return {
+    teams: teams.map((t) => ({ teamId: t.teamId, managerId: t.managerId })),
+    transactions,
+    transactionsFetched: transactionsRaw != null,
+  }
+}
