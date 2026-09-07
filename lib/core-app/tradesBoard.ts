@@ -1,4 +1,5 @@
 import 'server-only'
+import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
@@ -233,6 +234,7 @@ export async function getTradesBoard(
             name: true,
             platform: true,
             settings: true,
+            leagueType: true,
             platformLeagueId: true,
             logoUrl: true,
             avatarUrl: true,
@@ -324,6 +326,23 @@ export async function getTradesBoard(
           .catch(() => [])
       : []
 
+  /*
+   * Each league's own value book, and the distinct set the query must cover.
+   *
+   * ⚠ DERIVED ONCE, FROM `valueBook.ts`, SO THIS BOARD AND THE PER-LEAGUE TRADES
+   * SCREEN CANNOT DRIFT. They previously stayed consistent by copying the same
+   * two hardcoded literals, which kept them agreeing and made them both wrong on
+   * every redraft league.
+   */
+  const bookByLeagueId = new Map<string, ValueBook>()
+  for (const c of mine) {
+    if (c.league) bookByLeagueId.set(c.league.id, valueBookFor(c.league.settings, c.league.leagueType))
+  }
+  const booksInPlay = [...new Map([...bookByLeagueId.values()].map((b) => [`${b.format}:${b.qbFormat}`, b])).values()]
+  // A user with no claimed league still runs the query harmlessly rather than
+  // building an empty `OR`, which Prisma treats as "match nothing".
+  if (booksInPlay.length === 0) booksInPlay.push(CROSS_LEAGUE_BOOK)
+
   /* Names, faces and values for every asset we are about to print. */
   const assetIds = new Set<string>()
   for (const t of trades) {
@@ -355,10 +374,29 @@ export async function getTradesBoard(
                * nothing would fail.
                */
               source: 'FANTASYCALC',
-              format: 'DYNASTY',
-              qbFormat: 'SUPERFLEX',
+              /*
+               * 🛑 EVERY BOOK THIS USER'S LEAGUES NEED, NOT A PINNED
+               * DYNASTY/SUPERFLEX. This was two literals copied from
+               * `lib/core-app/trades.ts` so the board and the per-league screen
+               * could not disagree — they did not, and both graded a redraft
+               * league off the dynasty book. A cross-league board is precisely
+               * where this bites: one query priced a dynasty superflex league
+               * and a redraft 1QB league identically.
+               *
+               * Still ONE query. The OR is over the distinct books in play
+               * (at most four), and the rows carry `format`/`qbFormat` so each
+               * row can be filed under the book it belongs to.
+               */
+              OR: booksInPlay.map((b) => ({ format: b.format, qbFormat: b.qbFormat })),
             },
-            select: { sleeperId: true, value: true, overallRank: true, capturedAt: true },
+            select: {
+              sleeperId: true,
+              value: true,
+              overallRank: true,
+              capturedAt: true,
+              format: true,
+              qbFormat: true,
+            },
             orderBy: { capturedAt: 'desc' },
           })
           .catch(() => [])
@@ -366,16 +404,22 @@ export async function getTradesBoard(
   ])
 
   const playerById = new Map(players.map((p) => [p.sleeperId, p]))
-  const valueById = new Map<string, { value: number; rank: number | null }>()
+  /*
+   * ⚠ KEYED ON BOOK + PLAYER, NOT PLAYER. Two of this user's leagues can want
+   * different books for the same man, so a `Map<sleeperId, …>` silently served
+   * whichever row sorted first to both of them.
+   */
+  const valueByBookAndId = new Map<string, { value: number; rank: number | null }>()
   for (const s of snaps) {
-    if (!valueById.has(s.sleeperId)) {
-      valueById.set(s.sleeperId, { value: s.value, rank: s.overallRank ?? null })
+    const k = `${s.format}:${s.qbFormat}:${s.sleeperId}`
+    if (!valueByBookAndId.has(k)) {
+      valueByBookAndId.set(k, { value: s.value, rank: s.overallRank ?? null })
     }
   }
 
-  function toAsset(id: string): TradeAsset {
+  function toAsset(id: string, book: ValueBook): TradeAsset {
     const p = playerById.get(id)
-    const v = valueById.get(id)
+    const v = valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)
     return {
       id,
       /*
@@ -417,6 +461,13 @@ export async function getTradesBoard(
   for (const t of firstByLeague.values()) {
     const league = { id: t.leagueId }
     const h = { sleeperUsername: t.username }
+    /*
+     * This league's book. Falls back to the cross-league default only when the
+     * trade's league is not among the user's claimed ones, which the loader's
+     * own filter makes unreachable — kept so a future caller widening that
+     * filter gets a stated default rather than an undefined lookup.
+     */
+    const leagueBook = bookByLeagueId.get(t.leagueId) ?? CROSS_LEAGUE_BOOK
 
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
@@ -426,7 +477,7 @@ export async function getTradesBoard(
         label: 'received',
         assets: recvIds.map((id) => ({
           id,
-          rank: valueById.get(id)?.rank ?? null,
+          rank: valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null,
           rawValue: null,
         })),
       },
@@ -434,7 +485,7 @@ export async function getTradesBoard(
         label: 'gave',
         assets: sentIds.map((id) => ({
           id,
-          rank: valueById.get(id)?.rank ?? null,
+          rank: valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null,
           rawValue: null,
         })),
       },
@@ -447,8 +498,13 @@ export async function getTradesBoard(
       at: t.tradeDate ? t.tradeDate.toISOString() : null,
       fromName: h.sleeperUsername,
       toName: t.partnerName?.trim() || 'the other manager',
-      sent: sentIds.map(toAsset),
-      received: recvIds.map(toAsset),
+      /*
+       * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the
+       * array INDEX as the book — the classic `map` arity trap, and here it
+       * would have priced asset 0 against one book and asset 1 against another.
+       */
+      sent: sentIds.map((id) => toAsset(id, leagueBook)),
+      received: recvIds.map((id) => toAsset(id, leagueBook)),
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
       withheldReason: g.graded ? null : describeNoSignal(g),

@@ -1,4 +1,5 @@
 import 'server-only'
+import { valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -130,7 +131,8 @@ export type GradedTrade = {
  * mechanically favours whichever manager received him.
  */
 async function resolveGrades(
-  platformLeagueId: string | null
+  platformLeagueId: string | null,
+  book: ValueBook
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -180,9 +182,18 @@ async function resolveGrades(
   const snaps = await prisma.playerValueSnapshot.findMany({
     where: {
       sleeperId: { in: [...ids] },
-      source: 'FANTASYCALC',
-      format: 'DYNASTY',
-      qbFormat: 'SUPERFLEX',
+      /*
+       * 🛑 THE BOOK IS THIS LEAGUE'S, NOT A HARDCODED DYNASTY/SUPERFLEX PAIR.
+       * These three literals used to be pinned here and copied verbatim into the
+       * player card and the cross-league trades board, so that the three could
+       * not disagree. They agreed and were jointly wrong: a redraft league was
+       * graded off the dynasty book, which prices a 22-year-old rookie above a
+       * 30-year-old who will outscore him this season. `valueBook.ts` carries the
+       * one derivation and the licence reasoning for `source`.
+       */
+      source: book.source,
+      format: book.format,
+      qbFormat: book.qbFormat,
     },
     select: { sleeperId: true, overallRank: true, capturedAt: true },
     orderBy: { capturedAt: 'desc' },
@@ -278,7 +289,7 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
   if (!league) return null
 
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
-  const grades = await resolveGrades(league.platformLeagueId ?? null)
+  const grades = await resolveGrades(league.platformLeagueId ?? null, valueBookFor(league.settings, league.leagueType))
 
   const base = {
     league: {
