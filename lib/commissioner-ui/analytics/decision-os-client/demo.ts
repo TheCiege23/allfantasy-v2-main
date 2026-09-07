@@ -148,6 +148,20 @@ export const demoAnalyticsClient: AnalyticsClient = {
           { teamName: 'Sam Rivera', pointsFor: 1191.2, pointsAgainst: 1366.4 },
           { teamName: 'The Injury Reserve', pointsFor: 1164.7, pointsAgainst: 1394.1 },
         ],
+        /*
+         * Demo mode is the sales and QA surface, so this is a HEALTHY window rather than null:
+         * the curated league is meant to look like one whose data is arriving normally, and a
+         * missing window would hide the very affordance a demo should show off. Deliberately
+         * one day old, not zero — a real feed is never instantaneous, and the banner's
+         * "everything is current" path is the one worth demonstrating.
+         */
+        dataWindow: {
+          lookbackDays: 90,
+          inactiveAfterDays: 14,
+          lastActivityAt: new Date(Date.now() - 86_400_000).toISOString(),
+          daysSinceLastActivity: 1,
+          allTime: { tradeCount: 34, waiverCount: 218, eventCount: 1204 },
+        },
         generatedAt: ts(),
       },
       error: null,

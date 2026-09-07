@@ -15,6 +15,9 @@ export const stubAnalyticsClient: AnalyticsClient = {
         healthTarget: 75,
         managerActivity: [{ managerName: 'Test Manager', actionsPerWeek: 10, priorActionsPerWeek: 12 }],
         pointsForAgainst: [{ teamName: 'Test Team', pointsFor: 100, pointsAgainst: 90 }],
+        // A fixture has no real window. Null renders the page exactly as it did before the
+        // window existed, rather than asserting a freshness this data does not have.
+        dataWindow: null,
         generatedAt: new Date().toISOString(),
       },
       error: null,

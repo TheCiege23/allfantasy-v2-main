@@ -88,6 +88,40 @@ export interface TeamPointsEntry {
 }
 
 /**
+ * How old the data behind the window-derived KPIs actually is.
+ *
+ * 🛑 EVERY KPI ON THIS PAGE IS A ROLLING-WINDOW MEASUREMENT, AND WITHOUT THIS THE PAGE READS AS
+ * A STATEMENT ABOUT THE LEAGUE. Measured on a real 12-team Sleeper league on 2026-09-07: the
+ * page said "Active Managers 0 of 7" and "Trade Activity: None". Both were arithmetically
+ * correct and both were understood as facts about the league. What they actually meant was
+ * that the league's newest imported event was 18 days old — past the 14-day inactivity
+ * threshold, so every manager flipped inactive — and that its 7 real trades all landed outside
+ * the 90-day window. The league had 12 rostered teams and a six-season history.
+ *
+ * A commissioner cannot tell those two situations apart from the numbers, and the difference
+ * between "your league is dead" and "we stopped receiving your data" is the whole product.
+ *
+ * `null` when the client genuinely cannot establish the window (stub/demo, or an unresolvable
+ * league) — the view then renders exactly as it did before, with no invented reassurance.
+ */
+export interface AnalyticsDataWindow {
+  /** Rolling window every KPI on this page is computed over. */
+  lookbackDays: number
+  /** Days without an event after which a manager counts as inactive. */
+  inactiveAfterDays: number
+  /** Newest event of any kind for this league, all-time. Null = nothing has ever been recorded. */
+  lastActivityAt: string | null
+  /** Whole days between `lastActivityAt` and now. Null when `lastActivityAt` is null. */
+  daysSinceLastActivity: number | null
+  /**
+   * All-time counts, so a zero inside the window can say what it is instead of reading as
+   * "this has never happened". Deliberately all-time rather than a second window: the whole
+   * point is to contrast the window against everything we hold.
+   */
+  allTime: { tradeCount: number; waiverCount: number; eventCount: number }
+}
+
+/**
  * One cohesive snapshot rather than eight separate fetches — this is one
  * executive dashboard page conceptually, the same reasoning Mission
  * Control's own `MissionControlKpis` already applies to bundle several
@@ -112,6 +146,8 @@ export interface LeagueAnalyticsSnapshot {
   healthTarget: number | null
   managerActivity: ManagerActivityEntry[]
   pointsForAgainst: TeamPointsEntry[]
+  /** Provenance for every window-derived KPI above. Null when the window cannot be established. */
+  dataWindow: AnalyticsDataWindow | null
   generatedAt: string
 }
 

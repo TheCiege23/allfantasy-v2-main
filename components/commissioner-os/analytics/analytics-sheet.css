@@ -76,6 +76,42 @@
   gap: 10px;
 }
 
+/*
+ * Data freshness — reads as a caption over the stat row, not as a card beside it. It is
+ * provenance for those numbers, so giving it its own border and radius would make it a fifth
+ * sibling of the four stats rather than a note about them.
+ *
+ * Only the stale and no-data states are coloured. `current` stays in the same faint ink as the
+ * range label, because freshness is the expected state and a green badge on every healthy
+ * league teaches people to stop reading this line — which is exactly when the stale one needs
+ * to land.
+ */
+.cos-sheet-freshness {
+  margin: 0;
+  padding: 9px 12px;
+  border-left: 2px solid var(--line2, rgba(255, 255, 255, 0.14));
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-sheet-freshness strong {
+  color: var(--text2, #c7cbe4);
+  font-weight: 600;
+}
+
+.cos-sheet-freshness[data-state='stale'],
+.cos-sheet-freshness[data-state='none'] {
+  border-left-color: var(--warn, #f5b942);
+  background: var(--warn-soft, rgba(245, 185, 66, 0.08));
+  color: var(--text2, #c7cbe4);
+}
+
+.cos-sheet-freshness[data-state='stale'] strong,
+.cos-sheet-freshness[data-state='none'] strong {
+  color: var(--warn, #f5b942);
+}
+
 .cos-stat {
   padding: 12px 14px;
   border: 1px solid var(--line, rgba(255, 255, 255, 0.08));

@@ -47,7 +47,14 @@ import type { ImportedActivityEventRow }         from '../importedActivityToEven
 
 // ── Configuration (read at call time for env-override support) ────────────────
 
-function lookbackDays(): number {
+/**
+ * The rolling window every behavioral KPI is computed over.
+ *
+ * Exported so Commissioner OS can LABEL its KPIs with the window that produced them without
+ * restating `90` in the UI. Two statements of one rule is the bug this repo has already paid
+ * for elsewhere; a second literal would silently disagree the day this env var is tuned.
+ */
+export function lookbackDays(): number {
   return Math.max(1, parseInt(process.env.INTELLIGENCE_LOOKBACK_DAYS    ?? '90', 10) || 90)
 }
 
@@ -56,6 +63,46 @@ function maxPlatformLeagues(): number {
 }
 
 // ── Imported-activity loader (RC1 union — restored after the origin/main merge) ─
+
+/**
+ * The provider identity of an AF league, for the shared-league arm of the activity query.
+ *
+ * 🛑 ONE SLEEPER LEAGUE PRODUCES ONE AF `leagues` ROW **PER IMPORTING USER**, AND ONLY ONE OF
+ * THEM EVER HOLDS THE ACTIVITY. This is not a duplicate-import bug and must not be "fixed" by
+ * deduping leagues — two members of the same league both connecting it is the expected,
+ * supported case. Each gets their own `leagues` row with their own `userId`, and both rows
+ * carry the SAME `platformLeagueId`.
+ *
+ * `DecisionOsImportedActivity.externalSourceKey` is globally `@unique` and is derived from the
+ * PROVIDER event, not from the AF league. So whichever AF league row the ingest cron reaches
+ * first claims every event; for every other row the idempotent writer's dedupe is a permanent
+ * no-op. Without this arm, a query keyed on `afLeagueId` returns zero for those rows forever,
+ * and the existing `providerLeagueId: leagueId` arm cannot help — it compares an AF UUID
+ * against a Sleeper numeric id, which never matches.
+ *
+ * Measured on prod 2026-09-07: 23 Sleeper leagues are imported by more than one user, giving
+ * 54 AF league rows, of which **34 held zero imported activity** while a sibling row holding
+ * the same league's real history sat right beside them. Every surface reading through this
+ * loader — Commissioner OS, Commissioner Hub, Dashboard Overview, LeagueTab — showed those 34
+ * as dormant leagues with no managers and no trades.
+ *
+ * Returns null when the league is unknown or has no provider identity, which collapses this
+ * to exactly the previous behaviour.
+ */
+async function resolveProviderLeagueSource(
+  leagueId: string,
+): Promise<{ provider: string; providerLeagueId: string } | null> {
+  try {
+    const league = await defaultPrisma.league.findUnique({
+      where: { id: leagueId },
+      select: { platform: true, platformLeagueId: true },
+    })
+    if (!league?.platform || !league.platformLeagueId) return null
+    return { provider: league.platform, providerLeagueId: league.platformLeagueId }
+  } catch {
+    return null
+  }
+}
 
 /**
  * Default imported-activity loader. Degrades honestly: if the `decisionOsImportedActivity`
@@ -72,9 +119,19 @@ export async function defaultLoadImportedActivityRows(leagueId: string, since?: 
       decisionOsImportedActivity?: { findMany(args: unknown): Promise<ImportedActivityEventRow[]> }
     })?.decisionOsImportedActivity
     if (!delegate || typeof delegate.findMany !== 'function') return []
+
+    const source = await resolveProviderLeagueSource(leagueId)
+
     return await delegate.findMany({
       where: {
-        OR: [{ afLeagueId: leagueId }, { providerLeagueId: leagueId }],
+        OR: [
+          { afLeagueId: leagueId },
+          { providerLeagueId: leagueId },
+          // The shared-league arm — see `resolveProviderLeagueSource`. Scoped by BOTH
+          // provider and providerLeagueId so a Sleeper id can never match an ESPN league
+          // that happens to carry the same digits.
+          ...(source ? [{ provider: source.provider, providerLeagueId: source.providerLeagueId }] : []),
+        ],
         ...(since ? { occurredAt: { gte: since } } : {}),
       },
       orderBy: { occurredAt: 'desc' },

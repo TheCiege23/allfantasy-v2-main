@@ -14,6 +14,25 @@ import type { LeagueAnalyticsSnapshot } from './decision-os-client/types'
 export function buildAnalyticsCsv(snapshot: LeagueAnalyticsSnapshot): string {
   const lines: string[] = [csvRow(['Section', 'Label', 'Value'])]
 
+  /*
+   * Provenance leads, because a CSV outlives the screen it came from.
+   *
+   * The on-screen banner tells a commissioner that "Active Managers 0 of 7" is a statement about
+   * data age rather than about their league. A file emailed to a league or handed to a client
+   * carries no banner — so without these rows the export is the one artifact that still presents
+   * the stale reading as fact, and it is the artifact most likely to be quoted back later.
+   */
+  const w = snapshot.dataWindow
+  if (w) {
+    lines.push(csvRow(['Data window', 'Lookback (days)', w.lookbackDays]))
+    lines.push(csvRow(['Data window', 'Manager inactive after (days)', w.inactiveAfterDays]))
+    lines.push(csvRow(['Data window', 'Newest league activity', w.lastActivityAt ?? 'none recorded']))
+    lines.push(csvRow(['Data window', 'Days since newest activity', w.daysSinceLastActivity ?? 'n/a']))
+    lines.push(csvRow(['Data window', 'All-time trades', w.allTime.tradeCount]))
+    lines.push(csvRow(['Data window', 'All-time waiver claims', w.allTime.waiverCount]))
+    lines.push(csvRow(['Data window', 'All-time events', w.allTime.eventCount]))
+  }
+
   for (const kpi of snapshot.kpis) {
     lines.push(csvRow(['KPI', kpi.label, kpi.value]))
   }
