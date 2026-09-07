@@ -15,9 +15,22 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 // ── prisma double ────────────────────────────────────────────────────────────────────────────
 // `seasons` describes what fantasy_stat_lines holds; `linesBySeason` what each season yields.
-const state: { seasons: number[]; linesBySeason: Record<number, unknown[]> } = {
+const state: {
+  seasons: number[]
+  linesBySeason: Record<number, unknown[]>
+  /**
+   * Newest season with an UNPLAYED game, as `SportsGame` would report it. `null` is "no future
+   * game found", which is also what an offseason with next year's schedule not yet loaded looks
+   * like — the case where the clamp must stay out of the way.
+   */
+  scheduleBound: number | null
+  /** Set to make the bound lookup throw, to prove the writer fails OPEN rather than stalling. */
+  scheduleThrows: boolean
+} = {
   seasons: [],
   linesBySeason: {},
+  scheduleBound: null,
+  scheduleThrows: false,
 }
 
 vi.mock('@/lib/prisma', () => ({
@@ -42,6 +55,12 @@ vi.mock('@/lib/prisma', () => ({
     playerIdentityMap: { findMany: vi.fn(async () => []) },
     aFProjectionSnapshot: { upsert: vi.fn(async () => ({})) },
     fantasyProjection: { upsert: vi.fn(async () => ({})) },
+    sportsGame: {
+      aggregate: vi.fn(async () => {
+        if (state.scheduleThrows) throw new Error('schedule unavailable')
+        return { _max: { season: state.scheduleBound } }
+      }),
+    },
   },
 }))
 
@@ -67,6 +86,8 @@ import { assess } from '@/app/api/cron/compute-projections/route'
 beforeEach(() => {
   state.seasons = []
   state.linesBySeason = {}
+  state.scheduleBound = null
+  state.scheduleThrows = false
 })
 
 describe('B — the source season rolls back when the newest was never played', () => {
@@ -202,5 +223,86 @@ describe('C — the carve-out can no longer mask a stall', () => {
       refusalsByReason: { insufficient_sample: 3832 },
       olderSeasonAvailable: true,
     })).toBe(false)
+  })
+})
+
+/**
+ * D: `sourceSeason + 1` stamped a season the sport does not play yet.
+ *
+ * 🛑 THE PRODUCTION FAILURE THIS PINS. `inRegularSeason` — the only thing that stops the `+1` — is
+ * gated `sport === 'NFL'`, so for the other five sports the fallback always fires. Measured on prod
+ * 2026-09-07: **1,712 MLB rows stamped season 2027** while MLB's 2026 season was still being
+ * played, plus NCAAF's first 2027 row on 09-05. `snapshotLookupKey` contains the season, so a
+ * reader asking for 2026 finds none of them.
+ *
+ * The clamp is a BOUND, not a season authority, because neither available authority is usable:
+ * `SportsGame.season` labels winter seasons by their END year where snapshots use the START year,
+ * and stat-line recency is a sync artifact (finished seasons re-sync every 30 minutes). A bound
+ * needs neither to agree — it only has to be an over-estimate.
+ */
+describe('D — targetSeason is clamped to a season the sport actually plays', () => {
+  it('pulls MLB back from 2027 to 2026 while 2026 still has unplayed games', async () => {
+    state.seasons = [2026]
+    state.linesBySeason[2026] = Array.from({ length: 5 }, (_, i) => playedLine(`p${i}`))
+    state.scheduleBound = 2026 // 143 unplayed MLB games in 2026, as prod had
+
+    const r = await writeAfProjectionSnapshots({ sport: 'MLB' })
+
+    expect(r.targetSeason).toBe(2026)
+    expect(r.targetSeasonClamp).toEqual({
+      from: 2027,
+      to: 2026,
+      reason: expect.stringContaining('no MLB game is scheduled in season 2027'),
+    })
+  })
+
+  it('leaves the winter sports alone — their bound is HIGHER, so the clamp cannot fire', async () => {
+    // NBA/NHL/NCAAB: source 2025, fallback 2026, and SportsGame calls the 2026-27 season 2027.
+    state.seasons = [2025]
+    state.linesBySeason[2025] = Array.from({ length: 5 }, (_, i) => playedLine(`p${i}`))
+    state.scheduleBound = 2027
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NBA' })
+
+    expect(r.targetSeason).toBe(2026)
+    expect(r.targetSeasonClamp).toBeNull()
+  })
+
+  it('does not clamp when the schedule has no future game — an unloaded offseason must not drag the target back', async () => {
+    // MLB in January: 2026 is finished, 2027 is not loaded. The fallback to 2027 is CORRECT here,
+    // and a plain max(season) would have pulled it back onto the completed 2026.
+    state.seasons = [2026]
+    state.linesBySeason[2026] = Array.from({ length: 5 }, (_, i) => playedLine(`p${i}`))
+    state.scheduleBound = null
+
+    const r = await writeAfProjectionSnapshots({ sport: 'MLB' })
+
+    expect(r.targetSeason).toBe(2027)
+    expect(r.targetSeasonClamp).toBeNull()
+  })
+
+  it('an explicit targetSeason from the caller always wins over the bound', async () => {
+    state.seasons = [2026]
+    state.linesBySeason[2026] = Array.from({ length: 5 }, (_, i) => playedLine(`p${i}`))
+    state.scheduleBound = 2026
+
+    const r = await writeAfProjectionSnapshots({ sport: 'MLB', targetSeason: 2030 })
+
+    expect(r.targetSeason).toBe(2030)
+    expect(r.targetSeasonClamp).toBeNull()
+  })
+
+  it('fails OPEN when the schedule cannot be read — projections still write, and the error is reported', async () => {
+    state.seasons = [2026]
+    state.linesBySeason[2026] = Array.from({ length: 5 }, (_, i) => playedLine(`p${i}`))
+    state.scheduleThrows = true
+
+    const r = await writeAfProjectionSnapshots({ sport: 'MLB' })
+
+    // The pre-existing fallback ships; a bound lookup that cannot run must not stall the job.
+    expect(r.targetSeason).toBe(2027)
+    expect(r.targetSeasonClamp).toBeNull()
+    expect(r.written).toBeGreaterThan(0)
+    expect(r.errors.some((e) => e.includes('target-season bound lookup failed'))).toBe(true)
   })
 })
