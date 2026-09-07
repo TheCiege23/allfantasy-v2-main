@@ -2,7 +2,7 @@
  * Draft Decision AI Prompt
  *
  * Produces concise, opinionated narrative for draft picks.
- * Used by DraftAssistantModule and draft room UI.
+ * Exported through lib/draft-intelligence/index.ts.
  */
 
 import type { DraftDecisionResult, DraftDecisionInput } from './draft-decision-engine'

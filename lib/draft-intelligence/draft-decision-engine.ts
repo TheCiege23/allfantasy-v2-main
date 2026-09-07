@@ -5,7 +5,7 @@
  * recommendations with scoring, alerts, and strategy-aware guidance.
  *
  * Pure deterministic scoring. Fast (<20ms). No AI calls.
- * Plugs into existing AIAssistantEngine and DraftAssistantModule.
+ * Consumed by lib/draft-war-room/draft-war-room-engine.ts, reached from /api/draft-war-room.
  */
 
 import { getAgeCurve } from '@/lib/trade-engine/sport-tuning-registry'
