@@ -5,6 +5,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { playoffStartWeek } from './seasonTimeline'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import type { SectionState } from './leagueHome'
 
@@ -160,6 +161,19 @@ export type PlayerCardLeague = {
    */
   yourRoster: Array<{ name: string; value: number | null }>
   trades: PlayerCardTrade[]
+  /**
+   * His fixtures in THIS league's playoff weeks.
+   *
+   * ⚠ FIXTURES, NOT PROJECTIONS, for the same reason the next-5 section is:
+   * both projection tables hold exactly the current week, so a projected
+   * playoff column would be three permanent blanks. The opponents are real —
+   * the 2026 schedule is complete — and a bye inside the window is the fact
+   * this section exists to surface.
+   *
+   * Unavailable when the league has no derivable playoff start, which is 19 of
+   * 257 claimed leagues.
+   */
+  playoffSchedule: SectionState<{ weeks: PlayerCardWeek[]; startWeek: number }>
 }
 
 export type PlayerCardData = {
@@ -180,6 +194,27 @@ export type PlayerCardData = {
 /* ── tuning ──────────────────────────────────────────────────────────────── */
 
 const SCHEDULE_WEEKS = 5
+
+/**
+ * How many playoff weeks the league card shows.
+ *
+ * ⚠ THE DESIGN HARDCODES "WK 15-17" AND THAT IS WRONG FOR ~23% OF LEAGUES.
+ * Measured across 257 claimed leagues on production, `playoff_week_start` is:
+ *
+ *     15   197 leagues      <- what the design assumed
+ *      0    33              <- a SENTINEL, not week zero
+ *  absent   19
+ *     16     4
+ *     14     3
+ *     11     1
+ *
+ * So the window is derived per league with `playoffStartWeek`, which already
+ * handles the `0` sentinel (it requires `> 1` and otherwise falls back to
+ * `regularSeasonWeeks + 1`) — the same shape as the `trade_deadline_week` 99
+ * sentinel this repo already documents. Only the LENGTH is fixed, at the three
+ * weeks the design draws.
+ */
+const PLAYOFF_WEEKS = 3
 const DELTA_DAYS = 7
 const COMP_COUNT = 3
 const NEWS_COUNT = 3
@@ -348,7 +383,8 @@ async function loadSchedule(
   season: number,
   fromWeek: number,
   projectedWeek: number | null,
-  projection: number | null
+  projection: number | null,
+  weekCount: number = SCHEDULE_WEEKS
 ): Promise<{ schedule: SectionState<{ weeks: PlayerCardWeek[]; season: number; projectedWeek: number | null }>; byeWeek: number | null }> {
   const club = normalizeTeamAbbrev(team)
   if (!club) {
@@ -358,7 +394,7 @@ async function loadSchedule(
     }
   }
 
-  const lastWeek = fromWeek + SCHEDULE_WEEKS - 1
+  const lastWeek = fromWeek + weekCount - 1
   const games = await prisma.sportsGame
     .findMany({
       where: {
@@ -659,7 +695,9 @@ async function loadLeague(
   sleeperId: string | null,
   position: string | null,
   userId: string | null,
-  book: ValueBook
+  book: ValueBook,
+  club: string | null,
+  season: number
 ): Promise<PlayerCardLeague | null> {
   const league = await prisma.league
     .findUnique({
@@ -800,6 +838,27 @@ async function loadLeague(
 
   const leagueTrades = league.platformLeagueId ? await loadTrades(sleeperId, league.platformLeagueId) : null
 
+  /*
+   * The playoff window, from THIS league's settings rather than the design's
+   * literal 15-17 — see `PLAYOFF_WEEKS` for the distribution that makes the
+   * literal wrong for roughly a quarter of leagues. `playoffStartWeek` already
+   * rejects the `0` sentinel and falls back to `regularSeasonWeeks + 1`.
+   */
+  const startWeek = playoffStartWeek(league.settings)
+  let playoffSchedule: PlayerCardLeague['playoffSchedule']
+  if (startWeek == null) {
+    playoffSchedule = unavailable(
+      'This league has not published a playoff start week, so its playoff schedule cannot be named.'
+    )
+  } else {
+    // No projection is passed: nothing is published beyond the current week, and
+    // the playoff window is always later than that.
+    const { schedule } = await loadSchedule(club, season, startWeek, null, null, PLAYOFF_WEEKS)
+    playoffSchedule = schedule.available
+      ? { available: true, data: { weeks: schedule.data.weeks, startWeek } }
+      : schedule
+  }
+
   return {
     leagueId: league.id,
     leagueName: league.name ?? 'This league',
@@ -810,6 +869,7 @@ async function loadLeague(
     price,
     yourRoster,
     trades: leagueTrades?.available ? leagueTrades.data : [],
+    playoffSchedule,
   }
 }
 
@@ -909,7 +969,15 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     loadNews(player.name, player.sport),
     loadTrades(player.sleeperId),
     req.leagueId
-      ? loadLeague(req.leagueId, player.sleeperId, player.position, req.userId ?? null, book).catch(() => null)
+      ? loadLeague(
+          req.leagueId,
+          player.sleeperId,
+          player.position,
+          req.userId ?? null,
+          book,
+          player.team,
+          projWeek ? Number(projWeek.season) : new Date().getFullYear()
+        ).catch(() => null)
       : Promise.resolve(null),
   ])
 

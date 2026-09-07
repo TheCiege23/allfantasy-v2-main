@@ -469,6 +469,26 @@ export default function PlayerCardSheet({
 
                 {league ? (
                   <>
+                    {/*
+                      The design's "PLAYOFF SCHEDULE · WK 15-17". The weeks come
+                      from THIS league's settings, not that literal — 15 is right
+                      for 197 of 257 claimed leagues and wrong for the rest.
+                    */}
+                    <Label>
+                      {league.playoffSchedule.available
+                        ? `PLAYOFF SCHEDULE · WK ${league.playoffSchedule.data.startWeek}-${
+                            league.playoffSchedule.data.startWeek +
+                            league.playoffSchedule.data.weeks.length -
+                            1
+                          }`
+                        : 'PLAYOFF SCHEDULE'}
+                    </Label>
+                    {league.playoffSchedule.available ? (
+                      <ScheduleRows weeks={league.playoffSchedule.data.weeks} />
+                    ) : (
+                      <Absent reason={league.playoffSchedule.reason} />
+                    )}
+
                     <Label>YOUR ROSTER{position ? ` AT ${position.toUpperCase()}` : ''}</Label>
                     {league.yourRoster.length > 0 ? (
                       league.yourRoster.map((r) => (

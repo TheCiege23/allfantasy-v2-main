@@ -79,6 +79,14 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
       isYours: true,
       owner: null,
       price: SECTION_OK({ value: 126, mode: 'dynasty', numQbs: 1, teams: 14 }),
+      playoffSchedule: SECTION_OK({
+        startWeek: 15,
+        weeks: [
+          { week: 15, opponent: 'TEN', home: true, bye: false, projection: null },
+          { week: 16, opponent: 'HOU', home: false, bye: false, projection: null },
+          { week: 17, opponent: null, home: false, bye: true, projection: null },
+        ],
+      }),
       yourRoster: [
         { name: 'Zach Charbonnet', value: 1809 },
         { name: 'Aaron Jones', value: 1114 },
@@ -172,5 +180,66 @@ describe('player card — every number stays with the thing it describes', () =>
     expect(price?.value).toBe('126')
     expect(price?.sub).toContain('1QB')
     expect(price?.sub).toContain('14-team')
+  })
+})
+
+describe('player card — the playoff window comes from the league, not a literal', () => {
+  it('labels the window with the league’s OWN weeks', () => {
+    const { container } = mount(card())
+    const labels = [...container.querySelectorAll('.af-pc-label')].map((l) => l.textContent)
+    expect(labels).toContain('PLAYOFF SCHEDULE · WK 15-17')
+  })
+
+  /*
+   * ⚠ THE CASE THE DESIGN'S HARDCODED "15-17" GETS WRONG. Measured on
+   * production: 197 of 257 claimed leagues start playoffs at 15, but 4 start at
+   * 16, 3 at 14 and 1 at 11 — plus 33 carrying the `0` sentinel. A league that
+   * starts at 14 must say 14-16.
+   */
+  it('follows a league that does NOT start at week 15', () => {
+    const base = card()
+    const { container } = mount(
+      card({
+        league: {
+          ...base.league!,
+          playoffSchedule: {
+            available: true,
+            data: {
+              startWeek: 14,
+              weeks: [
+                { week: 14, opponent: 'KC', home: true, bye: false, projection: null },
+                { week: 15, opponent: 'DEN', home: false, bye: false, projection: null },
+                { week: 16, opponent: 'LV', home: true, bye: false, projection: null },
+              ],
+            },
+          },
+        },
+      })
+    )
+    const labels = [...container.querySelectorAll('.af-pc-label')].map((l) => l.textContent)
+    expect(labels).toContain('PLAYOFF SCHEDULE · WK 14-16')
+    expect(labels).not.toContain('PLAYOFF SCHEDULE · WK 15-17')
+  })
+
+  /* Each playoff week keeps its own opponent — the pairing rule, again. */
+  it('keeps each playoff opponent on its own week, and marks a bye', () => {
+    const { container } = mount(card())
+    const p = pairs(container)
+    expect(p).toContainEqual({ k: 'WK15 · vs TEN', v: '—' })
+    expect(p).toContainEqual({ k: 'WK16 · @ HOU', v: '—' })
+    expect(p).toContainEqual({ k: 'WK17 · BYE', v: '—' })
+  })
+
+  it('states a reason when the league published no playoff start', () => {
+    const base = card()
+    const { container } = mount(
+      card({
+        league: {
+          ...base.league!,
+          playoffSchedule: { available: false, reason: 'no playoff start week on file' },
+        },
+      })
+    )
+    expect(container.textContent).toContain('no playoff start week on file')
   })
 })

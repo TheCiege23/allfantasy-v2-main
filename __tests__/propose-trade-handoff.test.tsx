@@ -60,6 +60,9 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
       price: SECTION_NO('not priced'),
       yourRoster: [],
       trades: [],
+      /* Required on the type since the playoff window shipped; unavailable here
+         because this suite is about the button, not the schedule. */
+      playoffSchedule: SECTION_NO('no playoff start week on file'),
     },
     ...over,
   }
