@@ -304,6 +304,7 @@ export const PROBES = {
   '/api/cron/morning-briefing': { heartbeat: 'cron-morning-briefing' },
   '/api/cron/import-nfl-team-defense': { heartbeat: 'cron-nfl-team-defense-import' },
   '/api/cron/weekly-awards': { heartbeat: 'cron-weekly-awards' },
+  '/api/cron/fantasycalc-warm': { heartbeat: 'cron-fantasycalc-warm' },
 
   // The eight conditional jobs that used to sit in NO_PROBE as "Needs withSyncJobRun". Each
   // handler now records a run row on every SCHEDULED fire, the no-work ones included -- which is
