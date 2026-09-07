@@ -73,6 +73,17 @@ const PH = H - PAD.top - PAD.bottom
 /** The threshold the call-out speaks about. Named so the copy cannot drift from it. */
 const LOW_ACTIVITY_THRESHOLD = 5
 
+/** Pinned locale and time zone. Both sides must format the snapshot time the same, or hydration breaks (React error #425). */
+const SNAPSHOT_TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'America/New_York',
+  timeZoneName: 'short',
+})
+
 function Panel({
   title,
   note,
@@ -686,7 +697,7 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
       ) : null}
 
       <p className="cos-sheet-generated">
-        Snapshot generated {new Date(view.generatedAt).toLocaleString()}. The export carries exactly
+        Snapshot generated {SNAPSHOT_TIME_FORMAT.format(new Date(view.generatedAt))}. The export carries exactly
         the range shown above.
       </p>
     </div>
