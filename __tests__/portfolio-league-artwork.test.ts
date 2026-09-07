@@ -28,9 +28,31 @@ describe('league artwork reaches the card', () => {
    * written; `avatarUrl` is populated on 48. Reading the empty column is why no
    * league art has ever appeared anywhere in the app.
    */
-  it('selects avatarUrl, not the empty logoUrl', () => {
+  /*
+   * ⚠ THIS FORBADE THE SUBSTRING `logoUrl: true` AND COULD NOT TELL TWO
+   * OPPOSITE BEHAVIOURS APART. The hazard is the loader reading the empty
+   * column INSTEAD of `avatarUrl`. The same assertion also went red on the
+   * loader reading it FIRST AND FALLING BACK, which is the behaviour we want:
+   * `leagueArtUrl` returns a `logoUrl` only when it is a real http(s) url, so
+   * while the column is null on all 115 leagues the rendered result is
+   * unchanged, and a commissioner who does upload one is finally seen.
+   *
+   * A source-string scan cannot separate "instead" from "first". So assert the
+   * WIRING here and let `leagueArtUrl`'s own tests in core-boards.test.tsx
+   * carry the semantics -- they already pin both the preference and the
+   * fallback.
+   */
+  it('selects avatarUrl and routes it through the expander', () => {
     expect(LOADER).toContain('avatarUrl: true')
-    expect(LOADER).not.toContain('logoUrl: true')
+    expect(LOADER).toContain('leagueArtUrl(')
+  })
+
+  /*
+   * The original hazard, stated so it can only match the thing that was wrong:
+   * the row's artwork must never BE the empty column.
+   */
+  it('never hands the empty column straight to the row', () => {
+    expect(LOADER).not.toMatch(/avatarUrl:\s*t\.league\?\.logoUrl/)
   })
 
   it('carries it onto the row payload', () => {
