@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
+import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import {
   syncNflTeamDefenseBoxScores,
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
       { jobName: JOB, trigger: 'cron' },
       async () => {
         const seasons = await prisma.redraftSeason.findMany({
-          where: { status: 'active', sport: { in: ['NFL', 'nfl'] } },
+          where: engineSeasonScope({ sports: ['NFL', 'nfl'] }),
           select: { id: true, season: true, currentWeek: true },
           take: 200,
         })

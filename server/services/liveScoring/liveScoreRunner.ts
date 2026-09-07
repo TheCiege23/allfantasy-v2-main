@@ -14,6 +14,7 @@
 
 import type { PrismaClient } from '@prisma/client'
 import { recalculateMatchupsForSeasonWeek, isScoringStarterSlot } from '@/lib/redraft/scoringEngine'
+import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { leagueRealtimeStore } from '@/lib/league-events/realtime-store'
 import { runLiveScoringTick, type LiveBroadcastEvent, type LiveTickResult } from '@/lib/live-scoring/orchestrator'
@@ -344,8 +345,14 @@ export async function runLiveScoringForActiveSeasons(
   prisma: PrismaClient,
   deps: LiveScoreRunnerDeps = {},
 ): Promise<{ ticked: number; polled: number; nextPollDelayMs: number; summaries: SeasonTickSummary[] }> {
+  // ⚠ `status: 'active'` HERE WAS SILENTLY SKIPPING 242 OF 246 SEASONS. The two
+  // writers of this column disagree — the import materializer stores
+  // `'in_season'` — and every one of the skipped seasons happened to be an
+  // import, so the outcome looked like a policy nobody had written. It is now a
+  // policy: `engineSeasonScope` reads both spellings and excludes shadow
+  // leagues by name, defaulting to today's behaviour. See `lib/redraft/seasonStatus.ts`.
   const seasons = (await prisma.redraftSeason.findMany({
-    where: { status: 'active' },
+    where: engineSeasonScope(),
     select: { id: true, leagueId: true, sport: true, season: true, currentWeek: true },
   })) as ActiveSeasonForTick[]
 

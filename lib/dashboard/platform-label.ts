@@ -16,6 +16,15 @@
  */
 const NATIVE_PLATFORMS = new Set(['allfantasy', 'af', 'manual', 'native'])
 
+/**
+ * The same four spellings, exported for callers that need them as VALUES rather
+ * than as a predicate — a Prisma `where` clause cannot call `isNativePlatform`,
+ * and hand-copying the list into a query is the "two implementations of one
+ * rule" bug. `lib/redraft/seasonStatus.ts` builds its native-league scope from
+ * this, so widening the set here widens it everywhere at once.
+ */
+export const NATIVE_PLATFORM_VALUES: readonly string[] = [...NATIVE_PLATFORMS]
+
 export function isNativePlatform(platform: string | null | undefined): boolean {
   return NATIVE_PLATFORMS.has((platform ?? 'allfantasy').trim().toLowerCase())
 }

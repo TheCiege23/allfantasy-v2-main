@@ -11,6 +11,8 @@ import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeek
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
+import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -111,12 +113,68 @@ async function runLegacyAutomationBridge() {
   return {
     updated: 0,
     matchupsRecalculated: c2cMatchupsRecalculated,
-    message: 'score-sync automation bridge ran; pass leagueId or seasonId to sync NFL PlayerWeeklyScore cache.',
+    message: 'Survivor/zombie/C2C automation bridge ran. The scheduled GET also runs the redraft reconciliation sweep; POST with a leagueId or seasonId to reconcile one league on demand.',
     survivorBridge,
     zombieResolutionAttempts: zombieRes.length,
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
     c2cLeaguesSynced: c2cLeagues.length,
   }
+}
+
+/**
+ * The redraft half of this job, which the scheduled path never had.
+ *
+ * 🛑 THE GET RAN ONLY `runLegacyAutomationBridge` AND RETURNED `updated: 0` BY
+ * DESIGN. Its own message said so — "pass leagueId or seasonId to sync NFL
+ * PlayerWeeklyScore cache" — so every five minutes this job reported success
+ * having reconciled no redraft league at all. The work existed the whole time,
+ * in POST, behind a required `leagueId`.
+ *
+ * The reason it was POST-only is worth naming: a sweep needs to know WHICH WEEK
+ * to reconcile, and until now nothing could answer that per league. It fell back
+ * to `season.currentWeek`, which no code path increments. `resolveSeasonWeekForRedraftSeason`
+ * answers it from the schedule, and declines rather than guessing — a season it
+ * cannot place is skipped and counted, never reconciled against week 1.
+ *
+ * ⚠ THIS IS A RECONCILIATION PASS, NOT A SECOND LIVE SCORER. `live-score-tick`
+ * writes what CHANGED according to the live provider; this recomputes from the
+ * cached stat rows, which is what repairs a league that missed a tick.
+ */
+async function runRedraftReconciliation() {
+  const seasons = await prisma.redraftSeason.findMany({
+    where: engineSeasonScope(),
+    select: { id: true, leagueId: true, sport: true },
+    take: 50,
+  })
+
+  let reconciled = 0
+  let skippedUnresolvedWeek = 0
+  let failed = 0
+  let matchupsRecalculated = 0
+
+  for (const season of seasons) {
+    const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
+    if (!resolved.ok || resolved.phase === 'preseason') {
+      skippedUnresolvedWeek += 1
+      continue
+    }
+    try {
+      const summary = await syncPlayerWeeklyScoresForRedraftSeason({
+        seasonId: season.id,
+        week: resolved.fantasyWeek,
+        actorId: 'system:score-sync',
+      })
+      const matchups = await recalculateMatchupsForSeasonWeek(summary.seasonId, summary.week)
+      await updateStandings(summary.seasonId, summary.week)
+      matchupsRecalculated += matchups.updated
+      reconciled += 1
+    } catch {
+      // A single league's provider gap must not end the sweep for the rest.
+      failed += 1
+    }
+  }
+
+  return { seasonsConsidered: seasons.length, reconciled, skippedUnresolvedWeek, failed, matchupsRecalculated }
 }
 
 // This branch added its own cron GET here. #284 landed an equivalent one further down
@@ -197,13 +255,23 @@ export async function GET(request: Request) {
    */
   const bridge = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron', sport: 'NFL' },
-    () => runLegacyAutomationBridge(),
+    async () => {
+      // Both halves, and the redraft half is the one this job advertised and
+      // never ran. Legacy first so a redraft failure cannot cost the
+      // survivor/zombie/C2C sweep that has been working all along.
+      const legacy = await runLegacyAutomationBridge()
+      const redraft = await runRedraftReconciliation()
+      return { ...legacy, redraft, updated: redraft.reconciled }
+    },
     (r) => ({
-      rowsWritten: r.matchupsRecalculated,
+      rowsWritten: r.matchupsRecalculated + r.redraft.matchupsRecalculated,
+      rowsRead: r.redraft.seasonsConsidered,
       // Survivor/zombie leagues each report their own failures without throwing; a partial
       // sweep is a degraded run, not a dead one.
       status:
-        r.survivorBridge.failed > 0 || r.zombieResolutionFailed > 0 ? 'partial' : 'success',
+        r.survivorBridge.failed > 0 || r.zombieResolutionFailed > 0 || r.redraft.failed > 0
+          ? 'partial'
+          : 'success',
       metadata: {
         matchupsRecalculated: r.matchupsRecalculated,
         survivorSynced: r.survivorBridge.synced,
@@ -211,6 +279,7 @@ export async function GET(request: Request) {
         zombieResolutionAttempts: r.zombieResolutionAttempts,
         zombieResolutionFailed: r.zombieResolutionFailed,
         c2cLeaguesSynced: r.c2cLeaguesSynced,
+        redraft: r.redraft,
       },
     }),
   )

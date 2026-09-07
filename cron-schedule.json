@@ -133,6 +133,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/season-week-roll",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/keeper/session",
       "schedule": "0 * * * *"
     },

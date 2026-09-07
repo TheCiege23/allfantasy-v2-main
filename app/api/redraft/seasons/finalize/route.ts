@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { finalizeNflRedraftPlayoffRuntimeSeason } from '@/lib/playoff-runtime'
-import { triggerKeeperOffseason } from '@/lib/keeper/offseasonEngine'
-import { supportsKeeperDeclarations } from '@/lib/league/keeper-policy'
-import { enterRedraftOffseason } from '@/lib/redraft/offseason/RedraftOffseasonService'
+import { finalizeSeasonAndEnterOffseason } from '@/lib/redraft/offseason/finalizeSeasonAndEnterOffseason'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,85 +66,41 @@ export async function POST(req: NextRequest) {
   if (!allowed) return NextResponse.json({ error: 'Forbidden - commissioner only' }, { status: 403 })
 
   try {
-    const result = await finalizeNflRedraftPlayoffRuntimeSeason({ seasonId, actorUserId: userId })
-    if (!result.ok) {
-      const status = statusFromCode(result.code)
-      if (status === 'final_round_incomplete') {
-        return NextResponse.json({ error: 'Final playoff round is not yet complete', result, status }, { status: 422 })
-      }
-      if (status === 'no_winner') {
-        return NextResponse.json({ error: 'Final matchup has no winner - run advance first', result, status }, { status: 422 })
-      }
-      if (status === 'no_bracket') {
-        return NextResponse.json({ error: 'No playoff bracket exists for this season', result, status }, { status: 422 })
-      }
-      return NextResponse.json({ error: 'No playoff rounds found', result, status }, { status: 422 })
+    // The whole chain — finalize, archive, enter offseason, open the keeper
+    // window — now lives in one service so the scheduled postseason roller runs
+    // exactly what this route runs. It used to be inline here, which meant any
+    // second caller would have had to remember all four steps.
+    const outcome = await finalizeSeasonAndEnterOffseason({
+      seasonId,
+      leagueId: season.leagueId,
+      actorUserId: userId,
+    })
+
+    if (!outcome.ok) {
+      const status = statusFromCode(outcome.code)
+      const httpStatus = status === 'no_bracket' || status === 'no_final_round' ? 422 : 422
+      return NextResponse.json(
+        { error: outcome.message, result: outcome.result, status },
+        { status: httpStatus },
+      )
     }
 
-    const champion = result.state.teams.find((team) => team.rosterId === result.championRosterId)
-    const alreadyFinalized = 'alreadyFinalized' in result && result.alreadyFinalized === true
-
-    // First-time finalize only: archive the season and enter offseason.
-    // Previously nothing called `enterRedraftOffseason` either, so a
-    // finalized league's lifecycleState just sat at 'completed' forever —
-    // no LeagueSeason/FranchiseSeason archive snapshot, no offseason
-    // transition, and downstream renewal/keeper flows had nothing to key off.
-    let offseasonEntered = false
-    let offseasonSnapshotId: string | null = null
-    if (!alreadyFinalized) {
-      try {
-        const offseasonResult = await enterRedraftOffseason(seasonId, userId)
-        if (offseasonResult.ok) {
-          offseasonEntered = true
-          offseasonSnapshotId = offseasonResult.snapshotId
-        } else {
-          console.error('[redraft/seasons/finalize] enterRedraftOffseason declined', {
-            leagueId: season.leagueId,
-            seasonId,
-            code: offseasonResult.code,
-          })
-        }
-      } catch (error) {
-        console.error('[redraft/seasons/finalize] enterRedraftOffseason failed', {
-          leagueId: season.leagueId,
-          seasonId,
-          error,
-        })
-      }
-
-      // Open the keeper offseason (creates next season's roster shells if
-      // needed, opens the declaration window) for leagues that actually use
-      // keepers. Previously nothing called this at all, so a finalized
-      // keeper/dynasty league just sat there.
-      const leagueMeta = await prisma.league.findUnique({
-        where: { id: season.leagueId },
-        select: { leagueType: true, isDynasty: true },
-      })
-      const keeperEligible =
-        !!leagueMeta && (supportsKeeperDeclarations(leagueMeta.leagueType) || leagueMeta.isDynasty === true)
-      if (keeperEligible) {
-        triggerKeeperOffseason(season.leagueId, seasonId).catch((error) => {
-          console.error('[redraft/seasons/finalize] triggerKeeperOffseason failed', {
-            leagueId: season.leagueId,
-            seasonId,
-            error,
-          })
-        })
-      }
-    }
+    const champion = outcome.result.ok
+      ? outcome.result.state.teams.find((team) => team.rosterId === outcome.championRosterId)
+      : undefined
 
     return NextResponse.json({
-      status: alreadyFinalized ? 'already_finalized' : 'ok',
-      alreadyFinalized,
-      offseasonEntered,
-      offseasonSnapshotId,
-      championRosterId: result.championRosterId,
+      status: outcome.alreadyFinalized ? 'already_finalized' : 'ok',
+      alreadyFinalized: outcome.alreadyFinalized,
+      offseasonEntered: outcome.offseasonEntered,
+      offseasonSnapshotId: outcome.offseasonSnapshotId,
+      championRosterId: outcome.championRosterId,
       championUserId: champion?.ownerId ?? null,
       championTeamName: champion?.displayName ?? null,
-      runnerUpRosterId: result.runnerUpRosterId,
-      finalStandings: result.finalStandings,
-      playoffs: result.state,
-      events: result.events,
+      runnerUpRosterId: outcome.runnerUpRosterId,
+      finalStandings: outcome.result.ok ? outcome.result.finalStandings : [],
+      playoffs: outcome.result.ok ? outcome.result.state : null,
+      events: outcome.result.ok ? outcome.result.events : [],
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to finalize redraft season'
