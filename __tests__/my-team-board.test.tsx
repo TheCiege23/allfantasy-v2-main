@@ -383,9 +383,16 @@ describe('the board ranks only what it actually ordered', () => {
   const atLocks = (locks: Array<string | null>): MyTeamRow[] =>
     locks.map((lockAt, i) => row({ leagueId: `l${i}`, leagueName: `League ${i}`, lockAt }))
 
-  it('drops every numeral when nothing separates the rows', () => {
+  /*
+   * 🛑 NO GUTTER, NOT A GUTTER FULL OF MARKS. This first asserted five bullets
+   * and passed while the screen showed a column of ~2px specks — 20px of indent
+   * spent saying nothing. The assertion was satisfied by the presence of a mark
+   * and had no opinion about whether the column had earned its place.
+   */
+  it('renders no rank gutter at all when nothing separates the rows', () => {
     const { container } = board(atLocks(Array.from({ length: 5 }, () => '2026-09-13T17:00:00Z')))
-    expect(ranksOf(container)).toEqual(['·', '·', '·', '·', '·'])
+    expect(ranksOf(container)).toEqual([])
+    expect(container.querySelectorAll('.af-bd-row').length).toBe(5)
   })
 
   it('says so in the label rather than calling them a top N', () => {
@@ -417,7 +424,7 @@ describe('the board ranks only what it actually ordered', () => {
         '2026-09-14T00:20:00Z',
       ]),
     )
-    expect(ranksOf(container)).toEqual(['01', '·', '03', '·'])
+    expect(ranksOf(container)).toEqual(['01', '•', '03', '•'])
   })
 
   /*
@@ -436,7 +443,7 @@ describe('the board ranks only what it actually ordered', () => {
   /* An unknown lock has no order against another unknown lock. */
   it('treats unknown lock times as one tier', () => {
     const { container } = board(atLocks([null, null]))
-    expect(ranksOf(container)).toEqual(['·', '·'])
+    expect(ranksOf(container)).toEqual([])
   })
 
   /*

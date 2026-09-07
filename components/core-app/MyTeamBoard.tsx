@@ -155,7 +155,18 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   )
 }
 
-function Row({ row, rank, now }: { row: MyTeamRow; rank: string | null; now: number }) {
+function Row({
+  row,
+  rank,
+  showRank,
+  now,
+}: {
+  row: MyTeamRow
+  rank: string | null
+  /** False when NOTHING on the board is ordered — then there is no gutter at all. */
+  showRank: boolean
+  now: number
+}) {
   const tags = tagsOf(row)
   /*
    * ⚠ THE CTA GOES TO THE PLATFORM, NOT INTO AllFantasy. AllFantasy is
@@ -176,14 +187,23 @@ function Row({ row, rank, now }: { row: MyTeamRow; rank: string | null; now: num
     <li>
       <div className="af-bd-row">
         {/*
-          ⚠ A BULLET, NOT A BLANK, WHEN THE ROW TIES WITH THE ONE ABOVE IT. An
-          empty cell in a column of numerals reads as data that failed to load;
-          a bullet says "no order here", which is the actual fact. See
-          `rankTiers` for why most of this board ties on a normal week.
+          🛑 NO GUTTER AT ALL WHEN NOTHING IS ORDERED. This drew a column of ten
+          identical marks, which is 20px of indent spent saying nothing — and it
+          survived two corrections because each looked at the MARK (contrast,
+          then weight) rather than asking whether the column had earned its
+          place. It has not: the section label already says the rows are in no
+          particular order, and that sentence carries the whole meaning.
+
+          ⚠ A BULLET, NOT A BLANK, IN THE MIXED CASE. There the column is real —
+          numerals mark where each new lock time starts — so a row that ties with
+          the one above needs a mark saying "same as above". An empty cell
+          between numerals reads as data that failed to load.
         */}
-        <span className="af-bd-rank" data-untiered={rank == null ? '' : undefined} aria-hidden>
-          {rank ?? '·'}
-        </span>
+        {showRank ? (
+          <span className="af-bd-rank" data-untiered={rank == null ? '' : undefined} aria-hidden>
+            {rank ?? '•'}
+          </span>
+        ) : null}
         <LeagueCrest
           imageUrl={row.logoUrl}
           mark={row.leagueBadge}
@@ -346,7 +366,13 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             ) : null}
             <ul className="af-bd-rows">
               {rows.map((r, i) => (
-                <Row key={r.leagueId} row={r} rank={ranks[i]} now={nowMs} />
+                <Row
+                  key={r.leagueId}
+                  row={r}
+                  rank={ranks[i]}
+                  showRank={!unordered}
+                  now={nowMs}
+                />
               ))}
             </ul>
           </>

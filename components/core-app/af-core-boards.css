@@ -148,9 +148,20 @@
  *     1.00 -> #7d84a8  5.29:1   what ships
  *
  * The WEIGHT is what separates a bullet from a rank (400 against the numerals'
- * 800), and a `·` is not a numeral in the first place. Dimming was never doing
- * that work. Note an opacity here would hit light mode too, where `--faint` is
- * #5c6587 on a pale ground.
+ * 800), and a bullet is not a numeral in the first place. Dimming was never
+ * doing that work. Note an opacity here would hit light mode too, where
+ * `--faint` is #5c6587 on a pale ground.
+ *
+ * 🛑 AND THE CONTRAST FIX WAS STILL NOT THE WHOLE BUG — a third pass on the same
+ * screen. At 5.29:1 the mark was correctly coloured and still invisible, because
+ * it was U+00B7 MIDDLE DOT at 12px: about 1.5-2px of ink in a 20px column. Two
+ * corrections in a row tuned the MARK (contrast, then weight) without asking
+ * whether a column of ten identical marks was worth 20px of indent. It was not.
+ *
+ * So the gutter is no longer rendered at all when the whole board is one tier —
+ * see `showRank` in MyTeamBoard — and this selector now only ever appears on a
+ * MIXED board, where numerals sit beside it and give it context. The glyph is
+ * U+2022 BULLET, roughly 2.5x the ink of the middot it replaced.
  */
 .af-core .af-bd-rank[data-untiered] {
   font-weight: 400;
