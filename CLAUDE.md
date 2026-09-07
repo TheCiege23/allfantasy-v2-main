@@ -1462,6 +1462,28 @@ undercounts by ~45% (it read as ~39/day against a true ~71). Use
 `vercel ls --environment production --limit 100 --json` — `buildingAt`/`ready`
 give real build duration, and the CLI is installed and authenticated.
 
+🛑 **A PUSH IS NOT THE ONLY THING THAT STARTS A BUILD. WRITING A RAILWAY
+VARIABLE IS A DEPLOY.** Every `set-variables` call — through the Railway MCP,
+through Railway's own agent, or by hand in the dashboard — redeploys the service.
+Nothing warns you, and the deployment's `reason` still reads `deploy`, so it is
+indistinguishable from a push in the deployment list.
+
+This is where "builds nobody pushed for" come from, and it is not a defect to
+hunt. Measured 2026-09-07 while chasing exactly that: `DRAFT_TICK_CRON_ENABLED`
+was set and re-set **across four deploys** — roughly 36 minutes of build compute —
+by two independent write paths, on a flag that was being set on the wrong service
+the whole time. See `970f6bf5e`'s message for the account.
+
+⚠ **AND IT COMPOSES BADLY WITH A FLAG HUNT**, which is precisely the situation
+that tempts repeated writes: set, redeploy, wait ~9 min, observe, disbelieve, set
+again. Read the variable back and confirm the SERVICE first
+(`get-service-config`), because `allfantasy-v2-main` and `allfantasy-v2-worker`
+are different services from the same repo and branch — the crons hit the worker.
+
+⚠ **BOTH SERVICES DEPLOY FROM `main`, SO ONE PUSH IS TWO BUILDS.** `list-deployments`
+filtered to one `serviceId` shows half the spend. Count both before quoting a
+number.
+
 ### What is enforced for you, and what is not
 
 - **`vercel.json` gates builds to `main` only.** `ignoreCommand` skips every
