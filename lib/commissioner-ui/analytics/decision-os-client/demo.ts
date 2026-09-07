@@ -162,6 +162,8 @@ export const demoAnalyticsClient: AnalyticsClient = {
           daysSinceLastActivity: 1,
           allTime: { tradeCount: 34, waiverCount: 218, eventCount: 1204 },
         },
+        // The demo league is mid-season, so its scored season IS the current one.
+        seasonLabel: '2026',
         generatedAt: ts(),
       },
       error: null,

@@ -185,7 +185,14 @@ describe("commissioner-os analytics — view", () => {
      */
     const note = screen.getByRole('note')
     expect(note).toHaveTextContent(/2 managers are below 5 actions a week/i)
-    expect(note).toHaveTextContent(/above 12 earlier this season/i)
+    /*
+     * "earlier", not "earlier this season". The comparison is against the previous rolling
+     * lookback window, which for a dynasty league read in August is last spring — not this
+     * season at all. The copy was corrected when this panel was wired to real data; the
+     * assertion follows the correction rather than pinning the older, less accurate wording.
+     */
+    expect(note).toHaveTextContent(/above 12 earlier/i)
+    expect(note).not.toHaveTextContent(/earlier this season/i)
   })
 
   it("labels the target on the chart itself, not only in the legend", async () => {

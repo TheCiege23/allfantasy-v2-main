@@ -148,6 +148,15 @@ export interface LeagueAnalyticsSnapshot {
   pointsForAgainst: TeamPointsEntry[]
   /** Provenance for every window-derived KPI above. Null when the window cannot be established. */
   dataWindow: AnalyticsDataWindow | null
+  /**
+   * The season the season-scoped panels (points, scoring distribution, competitive balance)
+   * describe — which is the newest season with SCORES, not necessarily the current one.
+   *
+   * A preseason league has a full fixture list and no points; showing that as twelve bars at zero
+   * would read as "your league scored nothing". Naming the season lets the panels show the last
+   * real one instead of an empty current one. Null when no season has been scored yet.
+   */
+  seasonLabel: string | null
   generatedAt: string
 }
 
