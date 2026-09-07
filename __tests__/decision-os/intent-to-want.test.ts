@@ -17,12 +17,40 @@ const ALL_INTENTS: ChimmyOrchestrationIntent[] = [
  * PURE, so every intent's mapping is assertable directly — no route, no mocks, no request.
  */
 describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
-  it('start_sit turns on lineupDecision, and nothing else', () => {
+  /**
+   * ⚠ THE SECOND ASSERTION IN THIS FILE TO BE INVERTED DELIBERATELY, AND FOR THE OPPOSITE REASON
+   * TO THE WAIVER ONE BELOW — that one was turned ON because its gap became honest; this one is
+   * turned OFF because its slice cannot fit the budget it has to run inside.
+   *
+   * Measured 2026-09-07 against a real 13-roster Sleeper league, with the live chat route's own
+   * arguments: start_sit built the packet in 37,256 ms warm (38,528 ms on a second warm run,
+   * 56,729 ms cold) against a 3s route ceiling, while every other intent finished in 0.6–1.6s.
+   *
+   * 🛑 SO `false` IS NOT "WE DECIDED A LINEUP DECISION IS NOT WORTH IT". The ceiling is a
+   * `Promise.race`, which abandons the result without cancelling the work — the slice was
+   * discarded on every turn AND still paid for in full. Requesting it made start/sit strictly
+   * worse than not requesting it. Restore this mapping when the bridge is fast enough to land
+   * inside 3s, and not before; a green test here is not evidence that it is.
+   */
+  it('start_sit turns on NOTHING — lineupDecision costs 37s against a 3s ceiling', () => {
     const w = deriveWantFromIntent('start_sit')
-    expect(w.lineupDecision).toBe(true)
+    expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.psychologyConsistency).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
+    expect(w.waiverDecision).toBe(false)
+  })
+
+  /**
+   * The structural guard that would catch a careless restore: no intent may ask for
+   * `lineupDecision`, whatever else changes. Without this, re-adding `intent === 'start_sit'`
+   * turns the test above red and reads like a stale assertion to be updated — which is exactly
+   * how a 37s slice gets switched back on.
+   */
+  it('NO intent asks for lineupDecision, on any path', () => {
+    for (const intent of ALL_INTENTS) {
+      expect(deriveWantFromIntent(intent).lineupDecision).toBe(false)
+    }
   })
 
   it('commissioner turns on commissionerHealthDecision, and nothing else', () => {
