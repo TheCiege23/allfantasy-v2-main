@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { WaiverBoardRow, WaiverPlayer, WaiversBoardData } from '@/lib/core-app/waiversBoard'
 import { claimLink } from '@/lib/core-app/platformLinks'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
 import {
   BoardHead,
   FooterSummary,
@@ -52,11 +53,13 @@ function Side({
   player,
   tone,
   emptyNote,
+  leagueId,
 }: {
   label: string
   player: WaiverPlayer | null
   tone: 'good' | 'bad'
   emptyNote?: string
+  leagueId: string
 }) {
   return (
     <div className="af-bd-side">
@@ -70,7 +73,25 @@ function Side({
               teamLogoUrl={teamLogoUrl('NFL', player.team)}
             />
             <span className="af-bd-asset-name">
-              {player.name}
+              {/*
+                Opens the player card in THIS league's context.
+
+                ⚠ `WaiverPlayer.playerId` IS A SLEEPER ID, and that is an
+                invariant of this loader rather than a hope: `idSpaceOk` gates
+                the whole computation on the caller's roster resolving into the
+                projection id space, which is Sleeper's. A league whose ids do
+                not resolve is withheld before a row is ever built, so there is
+                no path by which an ESPN id reaches here.
+              */}
+              <PlayerName
+                sport="NFL"
+                sleeperId={player.playerId}
+                name={player.name}
+                position={player.position}
+                team={player.team}
+                imageUrl={player.imageUrl}
+                leagueId={leagueId}
+              />
               {player.position ? (
                 <span className="af-bd-pos" data-pos={player.position.toUpperCase()}>
                   {' '}
@@ -138,12 +159,13 @@ function Card({ row, i }: { row: WaiverBoardRow; i: number }) {
         </header>
 
         <div className="af-bd-card-body">
-          <Side label="Add" player={row.add} tone="good" />
+          <Side label="Add" player={row.add} tone="good" leagueId={row.leagueId} />
           <Side
             label="Drop"
             player={row.drop}
             tone="bad"
             emptyNote="No bench player here could be priced, so no drop is named."
+            leagueId={row.leagueId}
           />
         </div>
 

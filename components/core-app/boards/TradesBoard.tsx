@@ -7,6 +7,7 @@ import type {
   TradesBoardData,
 } from '@/lib/core-app/tradesBoard'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
 import {
   BoardHead,
   FooterSummary,
@@ -49,7 +50,7 @@ const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
   F: 'bad',
 }
 
-function Asset({ a }: { a: TradeAsset }) {
+function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
   return (
     <span className="af-bd-asset">
       <PlayerFace
@@ -59,7 +60,25 @@ function Asset({ a }: { a: TradeAsset }) {
         size="sm"
       />
       <span className="af-bd-asset-name">
-        {a.name}
+        {/*
+          Opens the player card in THIS league's context.
+
+          ⚠ `TradeAsset.id` is documented as "Sleeper id, or a synthetic key for
+          a pick", and only the first half is true today: the loader builds these
+          from `playersGiven`/`playersReceived` and never reads `picksGiven`, so
+          every asset here is a player. If picks are ever added to this list they
+          need a `kind` discriminator FIRST — a synthetic pick key is a non-empty
+          string, so it would not degrade to text, it would open the wrong card.
+        */}
+        <PlayerName
+          sport="NFL"
+          sleeperId={a.id}
+          name={a.name}
+          position={a.position}
+          team={a.team}
+          imageUrl={a.imageUrl}
+          leagueId={leagueId}
+        />
         {a.position ? (
           <span className="af-bd-pos" data-pos={a.position.toUpperCase()}>
             {' '}
@@ -77,14 +96,14 @@ function Asset({ a }: { a: TradeAsset }) {
   )
 }
 
-function TradeBody({ t }: { t: BoardTrade }) {
+function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
   return (
     <>
       <div className="af-bd-card-body">
         <div className="af-bd-side">
           <span className="af-bd-side-label">{t.fromName} sent</span>
           {t.sent.length > 0 ? (
-            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} />)
+            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
               <span className="af-bd-asset-name">Picks or FAAB only — no players on this side.</span>
@@ -94,7 +113,7 @@ function TradeBody({ t }: { t: BoardTrade }) {
         <div className="af-bd-side">
           <span className="af-bd-side-label">{t.toName} sent</span>
           {t.received.length > 0 ? (
-            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} />)
+            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
               <span className="af-bd-asset-name">Picks or FAAB only — no players on this side.</span>
@@ -170,7 +189,7 @@ function WindowCard({ row, i }: { row: TradeWindowRow; i: number }) {
         </header>
 
         {t ? (
-          <TradeBody t={t} />
+          <TradeBody t={t} leagueId={row.leagueId} />
         ) : (
           <p className="af-bd-reason">No trade has been made in this league on any season we hold.</p>
         )}
