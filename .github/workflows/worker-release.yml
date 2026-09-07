@@ -1,0 +1,112 @@
+name: Advance worker-release
+
+# Fast-forwards the `worker-release` branch to `main` on a schedule, so the cron worker redeploys
+# ONCE A DAY instead of on every push.
+#
+# WHY THIS EXISTS
+# `allfantasy-v2-worker` is the cron executor -- `vars.APP_URL` points at it and every slow- and
+# fast-tier job is an HTTP request to it. It has no human users. It was also tracking `main`, so it
+# took 24 deployments on 2026-09-07 alone, roughly one every 13 minutes.
+#
+# Railway tears the old container down as soon as the new one is live, and by default configures no
+# overlap or draining window. Every request still in flight at that instant dies. For the website
+# that costs almost nothing -- a page load is over in under a second, so the swap usually catches
+# nothing: `allfantasy-v2-main` logged 5 errors in 11,912 requests (0.04%) over the same 24h. The
+# worker holds 90-300s cron requests, so a swap almost always catches something. Measured over that
+# window, the separation is total:
+#
+#     8 hours with no deployment    ->   0 server errors
+#     17 hours with a deployment    ->  all 95
+#
+# Cutting the cadence is what removes those, and it halves this service's Railway build spend as a
+# second-order effect -- the worker was building the whole Next app 24 times a day to run crons that
+# do not care about the tip of main.
+#
+# 🛑 THIS FILE IS HALF THE CHANGE. The other half is a Railway setting: the `allfantasy-v2-worker`
+# service must track `worker-release` instead of `main`. Until it does, this workflow maintains a
+# branch nothing deploys from, and the worker keeps redeploying on every push exactly as before.
+#
+# ⚠ AND THE FAILURE MODE OF THE PAIR IS SILENT STALENESS, WHICH IS THE WORSE HALF. A worker pinned
+# to a branch nothing advances runs old code indefinitely while every cron keeps returning 200 and
+# every freshness probe stays green -- the same shape as an ingestion module with no scheduled
+# caller. Two things guard it, and neither is free:
+#   - this run prints how far behind `worker-release` was, so the lag is visible in the Actions log;
+#   - GitHub disables scheduled workflows after 60 days of repo inactivity (see the header of
+#     cron-slow-tier.yml), which would stop the advance with no error. If this repo ever goes quiet,
+#     check that the worker is still being advanced before trusting a green cron dashboard.
+#
+# ⚠ FAST-FORWARD ONLY, NEVER FORCE. `worker-release` is only ever written here, so a non-fast-forward
+# means somebody pushed to it by hand. That deserves a red run and a look, not a silent overwrite of
+# whatever they were doing.
+#
+# ⚠ NOT GATED ON CI. Gating the advance on a green `main` sounds obviously right and is not: the
+# Playwright lanes on this repo have been red for a long stretch, and a gate on a suite that is
+# rarely green is a gate that never opens -- which lands you in the silent-staleness case above,
+# having chosen it on purpose. If you add a gate, gate on a check that is actually green on main.
+
+on:
+  schedule:
+    # 21:20 UTC. Chosen because no daily slow-tier job runs between 20:00 and 02:00 UTC, and a build
+    # takes ~11 minutes, so the container swap lands around 21:31 -- between the `15,45 * * * *`
+    # jobs and clear of the hourly `0 * * * *` group. A heuristic that narrows the window, not a
+    # guarantee that nothing is in flight; the fast tier runs continuously.
+    - cron: "20 21 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report the lag without moving the branch'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: worker-release
+  cancel-in-progress: false
+
+jobs:
+  advance:
+    name: Fast-forward worker-release to main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Report lag and fast-forward
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --quiet
+
+          if git rev-parse --verify --quiet origin/worker-release >/dev/null; then
+            behind=$(git rev-list --count origin/worker-release..origin/main)
+            ahead=$(git rev-list --count origin/main..origin/worker-release)
+            echo "worker-release is $behind commit(s) behind main and $ahead ahead."
+            if [ "$ahead" -ne 0 ]; then
+              echo "::error::worker-release has $ahead commit(s) main does not. This branch is only"
+              echo "::error::ever written by this workflow, so that means a manual push. Refusing to"
+              echo "::error::fast-forward -- resolve it deliberately rather than losing that work."
+              exit 1
+            fi
+            if [ "$behind" -eq 0 ]; then
+              echo "Already up to date. No push, so no rebuild and nothing billed."
+              exit 0
+            fi
+          else
+            echo "worker-release does not exist yet; creating it at main."
+          fi
+
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "--dry-run: branch not moved."
+            exit 0
+          fi
+
+          # No --force. A non-fast-forward is a finding, not something to push through.
+          git push origin "origin/main:refs/heads/worker-release"
+          echo "worker-release now at $(git rev-parse --short origin/main)."

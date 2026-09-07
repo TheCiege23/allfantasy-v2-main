@@ -22,7 +22,10 @@
  * with `curl: (3) URL rejected: No host part in the URL` and mailing the owner about it forever.
  */
 
+import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
+
 import { readVercelCrons, classifyCrons, slowTierJobsForSchedule } from './cron-tier.mjs'
 
 /**
@@ -44,8 +47,52 @@ import { readVercelCrons, classifyCrons, slowTierJobsForSchedule } from './cron-
  *
  * ⚠ Keep this ABOVE the largest `maxDuration` in app/api/cron/*. If a route ever declares more
  * than 600, raise this too or the race comes back.
+ *
+ * 🛑 AND THIS NUMBER IS NOT THE CEILING THAT ACTUALLY APPLIES. Node's global `fetch` (undici)
+ * enforces its own `headersTimeout`, which no option on this call can raise and which fires long
+ * before the AbortController above. Measured on Node v22.22.2 against a server that accepts the
+ * connection and never sends headers, with the AbortController set to this same 600_000:
+ *
+ *     elapsedMs 300894   name TypeError   message "fetch failed"
+ *     cause.code UND_ERR_HEADERS_TIMEOUT  isAbortError false
+ *
+ * So the real ceiling is ~301s, and 23 cron routes declare `maxDuration = 300` -- which is exactly
+ * the dead heat the paragraph above says was removed. It was not removed; it moved from the
+ * platform's edge to our own HTTP client, where nothing named it. Raising this constant cannot fix
+ * that: the fix would be to stop using `fetch` here, and the workflow deliberately runs with no
+ * `npm ci`, so an undici `Agent` is not available to widen it.
+ *
+ * What IS fixed below is the consequence, which was the expensive half -- see `isTimeoutError`.
  */
 const DEFAULT_TIMEOUT_MS = 600_000
+
+/**
+ * Is this error the request running out of time, rather than the connection failing?
+ *
+ * 🛑 `err.name === 'AbortError'` ALONE IS NOT THAT TEST, AND GETTING IT WRONG DOUBLE-RUNS AN
+ * INGEST. An undici headers/body timeout arrives as `TypeError: fetch failed` carrying
+ * `cause.code`, so the AbortError test says "not a timeout" and `callJob` takes its RETRY branch --
+ * the one thing its own docblock says must never happen for a timeout.
+ *
+ * Observed in production on 2026-09-07, run 34122569411, with no deploy or outage anywhere near it:
+ *
+ *     12:38:58  /api/cron/import-schedules  300,007ms  499
+ *     12:43:58  /api/cron/import-schedules  300,009ms  499   <- the wrongful retry
+ *     12:48:58  step fails
+ *
+ * The first handler was still running server-side when the second was fired at it, which is the
+ * concurrent double-ingest the docblock warns about. In the same window `/api/cron/legacy-import-drain`
+ * went from its usual 460-1040ms to 90s.
+ *
+ * The shapes below are the MEASURED ones, not guessed: `UND_ERR_HEADERS_TIMEOUT` from the run
+ * quoted above the constant, and `UND_ERR_BODY_TIMEOUT` is its sibling for a response whose body
+ * stalls mid-stream -- same class, same correct answer, and cheaper to include than to rediscover.
+ */
+export function isTimeoutError(err) {
+  if (err?.name === 'AbortError') return true
+  const code = err?.cause?.code ?? err?.code
+  return code === 'UND_ERR_HEADERS_TIMEOUT' || code === 'UND_ERR_BODY_TIMEOUT'
+}
 
 function parseArgs(argv) {
   const args = { schedule: null, path: null, all: false, dryRun: false, timeoutMs: DEFAULT_TIMEOUT_MS }
@@ -108,11 +155,17 @@ async function callJob(baseUrl, secret, job, timeoutMs) {
       return { ok: false, status: res.status, elapsedMs, body, attempt, error: `HTTP ${res.status}` }
     } catch (err) {
       const elapsedMs = Date.now() - startedAt
-      const timedOut = err?.name === 'AbortError'
-      if (timedOut) {
+      if (isTimeoutError(err)) {
+        // Report the elapsed time, never `timeoutMs`. The undici ceiling fires at ~301s while
+        // `timeoutMs` says 600000, and a message quoting the budget rather than the clock is how
+        // this stayed invisible: the run reads "timed out after 600000ms" at the 300s mark.
+        const cause = err?.cause?.code ?? err?.code
         return {
           ok: false, status: null, elapsedMs, body: '', attempt,
-          error: `timed out after ${timeoutMs}ms (NOT retried -- the handler is probably still running)`,
+          error:
+            `timed out after ${elapsedMs}ms` +
+            (cause ? ` (${cause})` : '') +
+            ' (NOT retried -- the handler is probably still running)',
         }
       }
       lastError = err?.message ?? String(err)
@@ -176,10 +229,22 @@ async function main() {
   return 0
 }
 
-main()
-  .then((code) => process.exit(code))
-  .catch((err) => {
-    // Never interpolate the secret into output. It is only ever a header value above.
-    console.error(`cron-dispatch crashed: ${err?.message ?? err}`)
-    process.exit(1)
-  })
+/**
+ * ⚠ ONLY RUN WHEN EXECUTED DIRECTLY, for the reason `scripts/cron-fast-tier-loop.mjs` already
+ * records against its own copy of this guard: without it, merely IMPORTING this module fires every
+ * selected cron -- at production, if APP_URL and CRON_SECRET happen to be in the environment. That
+ * is what makes `isTimeoutError` testable at all.
+ */
+const invokedDirectly =
+  process.argv[1] != null &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])
+
+if (invokedDirectly) {
+  main()
+    .then((code) => process.exit(code))
+    .catch((err) => {
+      // Never interpolate the secret into output. It is only ever a header value above.
+      console.error(`cron-dispatch crashed: ${err?.message ?? err}`)
+      process.exit(1)
+    })
+}
