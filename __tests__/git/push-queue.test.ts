@@ -806,3 +806,68 @@ describe('push-queue — a live lock must not advertise a dead address', () => {
     expect(res.stdout).toContain('address confirmed 8 min ago')
   })
 })
+
+/**
+ * 🛑 `rebind` moved OTHER SESSIONS' tickets, and the default victim was the head
+ * of the line. Nine sessions share one checkout, so there is no such thing as a
+ * safe implicit "my ticket". Every test here asserts the ticket is UNCHANGED on
+ * the refusal path — an exit code alone would not catch a command that refuses
+ * loudly and mutates anyway.
+ */
+describe('push-queue — rebind cannot touch a ticket that is not yours', () => {
+  const ticketOf = (seq: number) =>
+    JSON.parse(readFileSync(join(queueDir, `${String(seq).padStart(6, '0')}.json`), 'utf8'))
+
+  it('refuses with no --from when the ticket belongs to another worktree, and moves nothing', () => {
+    // seed() writes worktree: '' — i.e. NOT this checkout. Before the fix this
+    // fell through to tickets[0] and rebound the head of the line.
+    seed(1, SHA_A)
+
+    const res = run(['rebind', `--to=${SHA_B}`], '')
+
+    expect(res.status).toBe(1)
+    expect(ticketOf(1).sha).toBe(SHA_A)
+  })
+
+  it('refuses with no --to, because any unrecognised flag used to rebind to HEAD', () => {
+    seed(1, SHA_A, { worktree: process.cwd() })
+
+    // There is no --help; this is exactly the invocation that mutated the queue.
+    const res = run(['rebind', '--help'], '')
+
+    expect(res.status).toBe(1)
+    expect(ticketOf(1).sha).toBe(SHA_A)
+  })
+
+  it('refuses when this worktree holds more than one ticket, rather than guessing', () => {
+    seed(1, SHA_A, { worktree: process.cwd() })
+    seed(2, SHA_B, { worktree: process.cwd() })
+
+    const res = run(['rebind', `--to=${SHA_C}`], '')
+
+    expect(res.status).toBe(1)
+    expect(ticketOf(1).sha).toBe(SHA_A)
+    expect(ticketOf(2).sha).toBe(SHA_B)
+  })
+
+  it('still rebinds the ticket named by --from, keeping its place', () => {
+    seed(1, SHA_A)
+    seed(2, SHA_B)
+
+    const res = run(['rebind', `--from=${SHA_B}`, `--to=${SHA_C}`], '')
+
+    expect(res.status ?? 0).toBe(0)
+    expect(ticketOf(2).sha).toBe(SHA_C)
+    expect(ticketOf(2).seq).toBe(2) // place kept
+    expect(ticketOf(1).sha).toBe(SHA_A) // the other ticket untouched
+  })
+
+  it('rebinds without --from when exactly one ticket is this worktree’s', () => {
+    seed(1, SHA_A, { worktree: process.cwd() })
+
+    const res = run(['rebind', `--to=${SHA_B}`], '')
+
+    expect(res.status ?? 0).toBe(0)
+    expect(ticketOf(1).sha).toBe(SHA_B)
+  })
+})
