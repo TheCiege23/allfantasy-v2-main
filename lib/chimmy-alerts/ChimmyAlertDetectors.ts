@@ -1,3 +1,4 @@
+import { pregameInactive } from '@/lib/core-app/pregameInactive'
 import type { ChimmyAlertCandidate, ChimmyAlertContext } from './types'
 
 function minutesUntil(targetIso: string | null | undefined, now: Date): number | null {
@@ -47,7 +48,11 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
     // Past lock there is nothing the manager can do, so saying it would be noise.
     if (mins != null && mins < 0) continue
 
-    const urgencySignal = mins == null ? 70 : mins <= 60 ? 99 : mins <= 180 ? 88 : mins <= 720 ? 74 : 60
+    // A pregame inactive — Out landed inside the last two hours before HIS kickoff — is the
+    // definitive form of this alert: no forecast left to wait on, and the last window to move
+    // him. It tops the scale whatever the clock says (lib/core-app/pregameInactive.ts).
+    const inactive = pregameInactive(player.designation, player.reportedAt ?? null, player.lockAt ?? null)
+    const urgencySignal = inactive ? 99 : mins == null ? 70 : mins <= 60 ? 99 : mins <= 180 ? 88 : mins <= 720 ? 74 : 60
 
     const where = player.platform
       ? `Set your lineup in ${player.platform}.`
@@ -63,9 +68,13 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
     out.push({
       class: 'lineup',
       type: 'injured_starter_before_lock',
-      title: `${player.playerName} is ${player.designation} and still starting`,
+      title: inactive
+        ? `${player.playerName} is inactive and still starting`
+        : `${player.playerName} is ${player.designation} and still starting`,
       message:
-        (mins != null
+        (inactive
+          ? `${player.playerName}${player.position ? ` (${player.position})` : ''} was declared inactive at ${inactive.clock}, ${inactive.minutesBeforeKickoff} minutes before kickoff${mins != null ? `, with ${mins} minutes to lock` : ''} in ${player.leagueName ?? 'your league'}.`
+          : mins != null
           ? `${player.playerName}${player.position ? ` (${player.position})` : ''} is listed ${player.designation} with ${mins} minutes to lock in ${player.leagueName ?? 'your league'}.`
           : `${player.playerName}${player.position ? ` (${player.position})` : ''} is listed ${player.designation} and is in your starting lineup in ${player.leagueName ?? 'your league'}.`) +
         swap +
@@ -83,6 +92,8 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
         playerName: player.playerName,
         minutesToLock: mins,
         designation: player.designation,
+        inactive: Boolean(inactive),
+        announcedAt: inactive?.announcedAt ?? null,
         detail: player.detail ?? null,
         platform: player.platform ?? null,
         replacement: player.replacement ?? null,

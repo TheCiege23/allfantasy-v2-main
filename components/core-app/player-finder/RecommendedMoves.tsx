@@ -1,3 +1,4 @@
+import { AppLinkHint } from '@/components/core-app/player-finder/AppLinkHint'
 import { formatDelta, type PlayerMove } from '@/lib/core-app/playerMoves'
 
 /**
@@ -63,6 +64,7 @@ export function RecommendedMoves({
                     rel="noopener noreferrer"
                   >
                     {m.link.label}
+                    <AppLinkHint platform={m.link.platformLabel} screen={m.link.screen} />
                   </a>
                 ) : (
                   <a className="af-btn af-pf-move-btn" href={m.link.href}>

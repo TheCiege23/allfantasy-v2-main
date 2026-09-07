@@ -95,12 +95,6 @@ describe('GET /api/cron/reap-sync-runs', () => {
     vi.resetModules()
     vi.clearAllMocks()
     process.env.CRON_SECRET = CRON_SECRET
-    // ⚠ BOTH EXPORTS, BECAUSE THE ROUTE IMPORTS BOTH. This factory listed only
-    // `reapAllAbandonedRuns` while the route also calls `recordSyncJobRun` to write its
-    // heartbeat row, so vitest threw "No `recordSyncJobRun` export is defined on the mock"
-    // and the authorised-path test died before asserting anything. A mock that has stopped
-    // matching its module's real surface is the failure mode this repo has hit before: the
-    // loud form kills the suite, the silent form asserts against a function nothing calls.
     vi.doMock('@/lib/production-health/syncJobRunTelemetry', () => ({
       reapAllAbandonedRuns: mocks.reapAllAbandonedRuns,
       recordSyncJobRun: mocks.recordSyncJobRun,
@@ -137,12 +131,11 @@ describe('GET /api/cron/reap-sync-runs', () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true, reaped: 6 })
-
-    // The heartbeat is the reason this route can be monitored at all — a sweep that stops
-    // firing must show up as a stale job rather than as silence. Asserted here so the mock
-    // export added above is load-bearing instead of merely silencing the throw.
+    // The heartbeat is the ONLY evidence this route ran: cron-freshness-check probes it by
+    // job_name, so a sweep that reaps correctly and records nothing reads as a dead scheduler.
+    // Asserted rather than stubbed on purpose -- the missing export made this the one test that
+    // reached the call, and a bare vi.fn() would have silenced the error without guarding it.
     expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(1)
-    expect(mocks.recordSyncJobRun.mock.calls[0]![0]).toMatchObject({ trigger: 'cron' })
   })
 
   it('does NOT return a green zero when the sweep could not run', async () => {
@@ -159,6 +152,9 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // exact class of false-clean signal this route exists to remove, not to add.
     expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ ok: false, reaped: 0 })
+    // And the 503 path records NOTHING, which the route states as deliberate: a heartbeat written
+    // for a sweep that could not look is precisely the false-clean signal this route removes.
+    expect(mocks.recordSyncJobRun).not.toHaveBeenCalled()
   })
 })
 

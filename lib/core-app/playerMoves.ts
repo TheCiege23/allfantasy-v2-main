@@ -175,20 +175,23 @@ export function composePlayerMoves(args: {
         : mv.claimTarget.kind === 'native'
           ? { href: mv.claimTarget.url, label: 'Open in AllFantasy', platformLabel: 'AllFantasy', screen: 'Waivers', external: false }
           : claimLink(league)
+    // His OWN kickoff: a free agent whose game has started cannot come into a
+    // lineup now, whatever the claim page allows. A candidate with no club on
+    // file is not called locked — an unknown club is not a lock (swapLegality.ts).
+    const locked = lockOf(fa.name, fa.team ?? null)
     out.push({
       key: `claim:${mv.leagueId}:${fa.playerId}`,
       leagueId: mv.leagueId,
       tone: 'good',
       title: `Claim ${fa.name} over ${last}`,
       path: movePath(league, 'Waivers'),
-      note: [fa.position, 'unrostered', mv.projectionWeek != null ? `week ${mv.projectionWeek}` : null, 'standard scoring']
+      note: [locked, fa.position, 'unrostered', mv.projectionWeek != null ? `week ${mv.projectionWeek}` : null, 'standard scoring']
         .filter(Boolean)
         .join(' · '),
       delta: fa.delta,
       scoring: 'standard',
       link,
-      // A free agent's club is not on the recommendation, so his lock is not read here.
-      locked: null,
+      locked,
     })
   }
 

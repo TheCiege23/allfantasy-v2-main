@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { designationOnset, type InjuryRowLike } from './designationOnset'
 import { triageRows, type GameDayTriage, type TriageInjury, type TriageStarter } from './gameDayTriage'
 import type { SectionState } from './leagueHome'
 import { asHeadshotUrl } from './playerIdentityCompose'
@@ -93,21 +94,30 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
       .findMany({
         where: { sport, playerName: { in: names } },
         orderBy: { fetchedAt: 'desc' },
-        select: { playerName: true, team: true, status: true, description: true, date: true },
+        select: { playerName: true, team: true, status: true, description: true, date: true, fetchedAt: true },
       })
-      .catch(() => [] as Array<{ playerName: string; team: string | null; status: string | null; description: string | null; date: Date | null }>),
+      .catch(() => [] as Array<{ playerName: string; team: string | null; status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>),
     resolveSportsWeek(sport).catch(() => null),
   ])
   const clubByName = new Map<string, string | null>()
   for (const p of playerById.values()) clubByName.set(p.name.trim().toLowerCase(), normalizeTeamAbbrev(p.team))
-  const injuries = new Map<string, TriageInjury>()
+  // Every source's row per name (a namesake on another club dropped), then one
+  // claim per name: the freshest word, the earliest report of it (designationOnset.ts).
+  const rowsByName = new Map<string, InjuryRowLike[]>()
   for (const r of injuryRows) {
     const key = r.playerName.trim().toLowerCase()
-    if (injuries.has(key)) continue // freshest first, by the orderBy
     const rowClub = normalizeTeamAbbrev(r.team)
     const club = clubByName.get(key) ?? null
     if (rowClub && club && rowClub !== club) continue // a namesake on another club
-    injuries.set(key, { status: r.status, description: r.description, reportedAt: r.date ? r.date.toISOString() : null })
+    const list = rowsByName.get(key) ?? []
+    list.push(r)
+    rowsByName.set(key, list)
+  }
+  const injuries = new Map<string, TriageInjury>()
+  for (const [key, rows] of rowsByName) {
+    const onset = designationOnset(rows)
+    if (!onset) continue
+    injuries.set(key, { status: onset.status, description: onset.description, reportedAt: onset.reportedAt ? onset.reportedAt.toISOString() : null })
   }
 
   const games = sportsWeek

@@ -211,6 +211,12 @@ export interface CrossLeaguePlayerPortfolioItem {
   injury: {
     status: InjuryStatus
     freshness: FreshnessMetadata
+    /**
+     * When the provider REPORTED the designation (the row's own `date`, never our fetch
+     * time), ISO. Lets the alert detector tell a pregame inactive — Out inside the last two
+     * hours before kickoff — from a Friday ruling (lib/core-app/pregameInactive.ts).
+     */
+    reportedAt?: string | null
   } | null
 
   schedule: {
@@ -665,6 +671,7 @@ export async function assembleCrossLeaguePlayerPortfolio(args: {
             state: riFact.stale || sportInjuryFacts?.feedStale ? 'stale' : 'fresh',
             lastSyncedAt: riFact.fetchedAt.toISOString(),
           },
+          reportedAt: riFact.date ? riFact.date.toISOString() : null,
         }
       : fallbackStatus != null && injuryContext
         ? {

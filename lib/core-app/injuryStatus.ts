@@ -64,6 +64,20 @@ export function isRuledOut(status: string | null | undefined): boolean {
 }
 
 /**
+ * He is OUT for a game — the game-day word, as distinct from the season-scale
+ * rulings (IR, PUP, NFI, a suspension) that isRuledOut also covers. This is the
+ * only designation a pregame inactive can wear (pregameInactive.ts): the NFL
+ * folds its 90-minute inactive list into "Out", never into IR.
+ */
+export function isOutDesignation(status: string | null | undefined): boolean {
+  if (!status) return false
+  const w = words(status)
+  if (!w.includes('out')) return false
+  if (w.some((t) => t === 'ir' || t === 'il' || t === 'pup' || t === 'nfi' || t.startsWith('suspen'))) return false
+  return true
+}
+
+/**
  * Values in the status column that carry NO designation at all.
  *
  * ⚠ "ACTIVE" IS THE SECOND MOST COMMON VALUE IN THE TABLE — 1,646 rows against
