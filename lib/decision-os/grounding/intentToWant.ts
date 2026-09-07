@@ -63,7 +63,37 @@ export type IntentDerivedWant = Required<
 
 export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentDerivedWant {
   return {
-    lineupDecision: intent === 'start_sit',
+    /*
+     * 🛑 ALWAYS FALSE, AND THE MEASUREMENT IS THE WHOLE REASON — 2026-09-07.
+     *
+     * This was `intent === 'start_sit'`, which is the obviously correct mapping and was also the
+     * most expensive line in the packet. Built against a real 13-roster Sleeper league with the
+     * live route's own arguments:
+     *
+     *     general       1,615 ms      waiver     1,004 ms      player_value  643 ms
+     *     start_sit    37,256 ms   (warm; 38,528 ms on a second warm run, 56,729 ms cold)
+     *
+     * The chat route caps the packet at 3s, so start/sit — the most common question in the
+     * product — lost its grounding on EVERY turn. It did not merely fail to help.
+     *
+     * ⚠ THE CEILING IS A `Promise.race`, WHICH ABANDONS THE RESULT WITHOUT CANCELLING THE WORK.
+     * All 37s of reads still complete and are still billed, so requesting this slice made
+     * start/sit strictly worse than not requesting it: same empty prompt section, plus 3s of
+     * user-visible latency and 37s of database work. The route says so in its own words — "a
+     * packet that is routinely late is therefore strictly WORSE than one that is switched off".
+     *
+     * ⚠ THIS IS NOT A JUDGEMENT THAT A LINEUP DECISION IS UNWANTED. It is the one slice whose
+     * cost exceeds the budget it has to fit in. The cost lives in `loadLineupSetInputs` +
+     * `runLineupSetDecision` (see `decisionBridge.ts`), which is the same engine the standing
+     * rule already forbids calling from a page render. Fix the bridge and this mapping comes
+     * back; restoring it first only re-buys the 37s.
+     *
+     * ⚠ KEPT AS AN EXPLICIT `false` RATHER THAN DROPPED FROM THE `Pick` ABOVE. `Required` makes a
+     * missing key `TS2741`, and that guard is what stops the OTHER four being silently lost to a
+     * rename — see the header. Removing the key to express "never" would spend a compiler check
+     * that is protecting unrelated flags.
+     */
+    lineupDecision: false,
     commissionerHealthDecision: intent === 'commissioner',
     psychologyConsistency: intent === 'manager_psychology',
     rosterValueGrade: intent === 'player_value',
