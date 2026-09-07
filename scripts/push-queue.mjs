@@ -835,26 +835,88 @@ function cmdDone(argv) {
   process.stdout.write(`push-queue: released #${pad(mine.seq)} (${String(sha).slice(0, 9)}).\n`)
 }
 
-/** Move an existing ticket onto a new sha WITHOUT losing its place in line. */
+/**
+ * Move an existing ticket onto a new sha WITHOUT losing its place in line.
+ *
+ * 🛑 THIS COMMAND USED TO HIJACK A PEER'S TICKET, AND THE MOST LIKELY VICTIM WAS
+ * THE HEAD OF THE LINE. `--from` was optional and the fallback was `tickets[0]`
+ * — the LOWEST sequence number, i.e. whoever was next to push. Nine sessions
+ * share one checkout, so "my ticket" was never a safe default. Measured
+ * 2026-09-07: a session ran rebind from the primary checkout and moved a
+ * DIFFERENT session's ticket, twice, without either noticing at the time.
+ *
+ * 🛑 AND `--to` DEFAULTED TO `HEAD`, SO ANY UNRECOGNISED FLAG WAS A REBIND.
+ * There is no `--help`; `push:rebind --help` parsed as "no --to", took the head
+ * of the line, and pointed it at whatever the shared checkout's HEAD happened to
+ * be. A command that reads as a request for documentation mutated shared state.
+ * Both defaults are now refusals.
+ *
+ * ⚠ AND THE LABEL CAME FROM THE CALLER'S HEAD, NOT FROM THE TARGET. That is why
+ * `push:status` spent a day describing tickets as work they did not contain —
+ * a ticket holding the card-cache sha displayed a FantasyCalc subject. The label
+ * is now read from the sha being rebound TO, which is the only thing it
+ * describes. A ticket that cannot be identified from the queue is what sends
+ * people looking for owners by guesswork.
+ */
 function cmdRebind(argv) {
   const dir = resolveDir()
   if (!dir) return
-  const from = argFor(argv, '--from')
-  const to = argFor(argv, '--to') || git(['rev-parse', 'HEAD'])
-  const { tickets } = readTickets(dir)
-  const t = from
-    ? tickets.find((x) => x.sha === from || pad(x.seq) === pad(Number(from)))
-    : tickets[0]
-  if (!t) {
-    process.stdout.write('push-queue: no ticket matched --from.\n')
-    return
+
+  const refuse = (msg) => {
+    process.stderr.write(`\n  🛑 push-queue rebind: ${msg}\n\n`)
+    process.exitCode = 1
   }
+
+  const to = argFor(argv, '--to')
+  if (!to) {
+    return refuse(
+      'no --to. This command moves a ticket onto a NEW sha and there is no safe\n' +
+        '     default — it used to fall back to HEAD, which turned any unrecognised flag\n' +
+        '     (there is no --help) into a rebind of somebody else\'s ticket.\n\n' +
+        '     Usage:  npm run push:rebind -- --from=<40-char sha> --to=<40-char sha>',
+    )
+  }
+
+  const from = argFor(argv, '--from')
+  const { tickets } = readTickets(dir)
+
+  /*
+   * Without `--from`, accept ONLY an unambiguous match on the calling worktree.
+   * Never `tickets[0]`: on a shared checkout that is the head of the line, which
+   * belongs to whoever has waited longest — the worst possible thing to move.
+   */
+  let t
+  if (from) {
+    t = tickets.find((x) => x.sha === from || pad(x.seq) === pad(Number(from)))
+    if (!t) return refuse(`no ticket matches --from=${String(from).slice(0, 12)}.`)
+  } else {
+    /*
+     * ⚠ Normalise separators before comparing. `git rev-parse --show-toplevel`
+     * returns forward slashes on Windows while most other sources of a path here
+     * return backslashes; a literal === would silently never match, and this
+     * branch would then refuse every time — a guard that always says no is as
+     * useless as one that always says yes, just in the safer direction.
+     */
+    const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '')
+    const wt = norm(describeContext().worktree)
+    const mine = wt ? tickets.filter((x) => norm(x.worktree) === wt) : []
+    if (mine.length !== 1) {
+      return refuse(
+        mine.length === 0
+          ? `no ticket belongs to this worktree, so there is nothing to rebind.\n     Pass --from=<40-char sha> to name one explicitly.`
+          : `${mine.length} tickets belong to this worktree; --from is required to say which.`,
+      )
+    }
+    t = mine[0]
+  }
+
   const was = t.sha
   t.sha = to
   t.state = 'waiting'
   delete t.allowedAt
   t.heartbeatAt = now()
-  t.label = describeContext().subject || t.label
+  // The label describes the TARGET sha, never the caller's HEAD.
+  t.label = git(['log', '-1', '--format=%s', to]) || t.label
   writeTicket(t)
   journal(dir, { event: 'rebound', seq: t.seq, from: was, to })
   process.stdout.write(
