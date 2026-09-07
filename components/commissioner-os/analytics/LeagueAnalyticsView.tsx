@@ -95,12 +95,21 @@ function Panel({
   )
 }
 
-function NotWired({ what }: { what: string }) {
+/**
+ * `because` is optional and carries the SPECIFIC reason a panel is blank.
+ *
+ * The generic sentence was written when every panel was unwired for one shared reason. Now that
+ * most read real data, the two that stay blank are blank for reasons a commissioner would
+ * otherwise assume were bugs — and "we could draw this and it would mislead you" is a materially
+ * different statement from "we have no data".
+ */
+function NotWired({ what, because }: { what: string; because?: string }) {
   return (
     <p className="cos-sheet-empty">
       No {what} for this league yet. This section reads from the live platform and is left blank
       rather than filled with an example — an empty chart here would read as “no activity”, which is
       a different thing.
+      {because ? <> {because}</> : null}
     </p>
   )
 }
@@ -316,17 +325,65 @@ function TransactionsChart({ weeks }: { weeks: TransactionWeek[] }) {
 
 /* ── Manager activity leaderboard ────────────────────────────────────────── */
 
+/** "A", "A and B", "A, B and C" — a naive join produced "A and B and C" on real data. */
+function nameList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/**
+ * The comparative call-out under the activity bars.
+ *
+ * ⚠ THREE COPY BUGS HERE WERE UNREACHABLE UNTIL THIS PANEL HAD REAL DATA. The demo fixture happens
+ * to contain exactly two lapsed managers, so `'Both were'` and a bare `' and '` join both read
+ * correctly and neither was wrong on screen. With a real league the panel produced "Both were
+ * above 0 earlier this season — A and B and C and D". Wiring live data into copy shaped around one
+ * fixture is how a fixture's assumptions ship as product.
+ *
+ * The threshold guard is the third: `LOW_ACTIVITY_THRESHOLD` is calibrated for in-season play, and
+ * a dynasty league in August is legitimately below it across the board. Firing "7 managers are
+ * below 5 actions a week" every offseason day would train the reader to ignore this line, so the
+ * call-out only speaks when someone has genuinely fallen off against their OWN prior rate.
+ */
 function buildActivityCallout(rows: ManagerActivityEntry[]): string | null {
   const low = rows.filter((r) => r.actionsPerWeek < LOW_ACTIVITY_THRESHOLD)
   if (!low.length) return null
   // Comparative, or not shown at all — a bare count is already in the bars.
   const wereHigher = low.filter((r) => r.priorActionsPerWeek > r.actionsPerWeek)
   if (!wereHigher.length) return null
-  const floor = Math.min(...wereHigher.map((r) => r.priorActionsPerWeek))
+  /*
+   * Past a handful of names the list stops being a call-out and becomes a second copy of the
+   * leaderboard directly beneath it. A league-wide drop is also a different finding from two
+   * managers going quiet — it is about the league, not about them — so it gets its own sentence
+   * rather than eight names the reader has to re-scan.
+   */
+  if (wereHigher.length > 3) {
+    const topPrior = round1(Math.max(...rows.map((r) => r.priorActionsPerWeek)))
+    const topNow = round1(Math.max(...rows.map((r) => r.actionsPerWeek)))
+    return `${wereHigher.length} of ${rows.length} managers are doing less than they were. The most active manager is down from ${topPrior} to ${topNow} actions a week.`
+  }
+
+  const floor = round1(Math.min(...wereHigher.map((r) => r.priorActionsPerWeek)))
   const noun = low.length === 1 ? 'manager is' : 'managers are'
-  const they = wereHigher.length === 1 ? 'They were' : 'Both were'
-  const named = wereHigher.map((r) => r.managerName).join(' and ')
-  return `${low.length} ${noun} below ${LOW_ACTIVITY_THRESHOLD} actions a week. ${they} above ${floor} earlier this season — ${named}.`
+  const named = nameList(wereHigher.map((r) => r.managerName))
+  /*
+   * The subject of the second clause is the managers who actually declined, which is not always
+   * the same set as those below the threshold — saying "They" after a count of 10 while naming 8
+   * asserts something false about the other two.
+   */
+  const subject = wereHigher.length === low.length ? (wereHigher.length === 1 ? 'They were' : 'They were each') : `${wereHigher.length} of them were`
+  return `${low.length} ${noun} below ${LOW_ACTIVITY_THRESHOLD} actions a week. ${subject} above ${floor} earlier — ${named}.`
+}
+
+function roundTo(value: number, dp: number): number {
+  const f = 10 ** dp
+  return Math.round(value * f) / f
+}
+
+/** Prose reads better at one decimal; a rate printed beside its own delta must match that column. */
+function round1(value: number): number {
+  return roundTo(value, 1)
 }
 
 function ManagerActivity({ rows }: { rows: ManagerActivityEntry[] }) {
@@ -358,7 +415,14 @@ function ManagerActivity({ rows }: { rows: ManagerActivityEntry[] }) {
               </span>
               <span className="cos-lb-val">{r.actionsPerWeek}</span>
               <span className="cos-lb-delta" data-dir={down ? 'down' : delta > 0 ? 'up' : 'flat'}>
-                {delta === 0 ? '—' : `${down ? '▼' : '▲'} ${Math.abs(delta)}`}
+                {/*
+                  Rounded at the point of display: `0.31 - 1.4` is `1.0899999999999999` in binary
+                  floating point, and the leaderboard rendered exactly that. It was intermittent —
+                  the same 1.09 computed from different operands printed cleanly two rows below —
+                  which is why the fix belongs here rather than at whichever subtraction happened
+                  to be caught.
+                */}
+                {delta === 0 ? '—' : `${down ? '▼' : '▲'} ${roundTo(Math.abs(delta), 2)}`}
               </span>
             </li>
           )
@@ -505,11 +569,14 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
         {view.healthByWeek.length ? (
           <HealthChart weeks={view.healthByWeek} target={view.healthTarget} />
         ) : (
-          <NotWired what="weekly health history" />
+          <NotWired
+            what="weekly health history"
+            because="A weekly engagement line is computable from league activity, but a dynasty league's activity is mostly offseason — it would draw a near-zero line for most of the year and read as a collapsing league rather than a normal August."
+          />
         )}
       </Panel>
 
-      <Panel title="Transactions by week" note="Waiver claims and trades, counted separately.">
+      <Panel title="Transactions by week" note="Waiver claims and trades, counted separately. Calendar weeks — most dynasty movement happens outside the NFL season.">
         {view.transactionsByWeek.length ? (
           <TransactionsChart weeks={view.transactionsByWeek} />
         ) : (
@@ -517,7 +584,7 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
         )}
       </Panel>
 
-      <Panel title="Manager activity" note="Ranked by actions a week, with the change against earlier in the season.">
+      <Panel title="Manager activity" note="Ranked by actions a week, against each manager's own rate over the previous window.">
         {view.managerActivity.length ? (
           <ManagerActivity rows={view.managerActivity} />
         ) : (
@@ -525,7 +592,15 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
         )}
       </Panel>
 
-      <Panel title="Points for and against" note="Season totals per team.">
+      {/*
+        The season is named rather than implied. These panels show the newest SCORED season, which
+        in preseason is last year — twelve bars at zero under "this season" would read as a league
+        that scored nothing.
+      */}
+      <Panel
+        title="Points for and against"
+        note={view.seasonLabel ? `Season totals per team — ${view.seasonLabel}.` : 'Season totals per team.'}
+      >
         {view.pointsForAgainst.length ? <PointsChart teams={view.pointsForAgainst} /> : <NotWired what="scoring totals" />}
       </Panel>
 

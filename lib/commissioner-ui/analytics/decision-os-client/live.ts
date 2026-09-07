@@ -2,6 +2,7 @@ import { callDecisionOS } from '../../adapter/transport'
 import { isLiveReady } from '../../liveReadiness'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
 import { readAnalyticsDataWindow } from '../dataWindow'
+import { readWarehouseAnalytics } from '../warehouseReads'
 import type {
   AnalyticsClient,
   AnalyticsDataWindow,
@@ -27,17 +28,31 @@ import type {
  * `archetype` in Phase 3.6), which has no honest empty state and forces the
  * whole record to fail.
  *
- * Two of the five array fields are backed by real Commissioner-OS/
- * application-layer data that simply isn't Decision OS's concern:
- * `transactionsByWeek` could be computed from `AfLeagueTrade`/`WaiverClaim`,
- * `scoringDistribution` from `WeeklyScore`/`WeeklyMatchup`. Wiring either
- * would mean building new aggregation logic directly in `live.ts` against
- * raw application tables — a materially different pattern from every prior
- * `live.ts` in this program (which only ever touch Prisma for league/user
- * resolution, never for the substantive intelligence payload itself) and a
- * new backend capability in spirit even if not in name. Left as placeholder
- * data, documented precisely in
- * LEAGUE_ANALYTICS_LIVE_INTEGRATION_REPORT.md — not wired this phase.
+ * ── SUPERSEDED 2026-09-07: SIX OF THOSE FIELDS NOW CARRY REAL DATA ──────────
+ *
+ * The paragraph above is kept because its reasoning about DECISION OS is still
+ * correct — behavioural intelligence genuinely has no scoring or standings
+ * analog. What it got wrong is the conclusion, by treating "Decision OS cannot
+ * answer this" as "AllFantasy cannot answer this". The Sleeper importer writes a
+ * six-season warehouse per league (`dw_matchup_facts`, `season_results`,
+ * `league_teams`, `dw_roster_snapshots`), covering **213 of 287 leagues**, and
+ * nothing on this page was reading any of it. `competitiveBalance`,
+ * `scoringDistribution`, `transactionsByWeek`, `seasonComparison`,
+ * `managerActivity` and `pointsForAgainst` now come from Postgres via
+ * `../warehouseReads`.
+ *
+ * 🛑 AND THE TABLES THIS COMMENT NAMED WERE THE WRONG ONES. It proposed
+ * `AfLeagueTrade`/`WaiverClaim` for transactions and `WeeklyScore`/`WeeklyMatchup`
+ * for scoring. Measured on a real imported league, **all four hold zero rows** —
+ * an imported league never touches AF-native tables. Anyone who had followed this
+ * comment would have shipped a page that stays blank and looks correct, which is
+ * why the replacement records where the data actually lives.
+ *
+ * The "new backend capability in spirit" objection does not apply: this is a
+ * read-only Postgres query from a DB-first module, which is exactly the
+ * architecture the repo's own boundary guard asks for — not a provider call.
+ * `healthByWeek`, `healthTarget` and `rosterUtilization` remain empty, each for
+ * its own specific reason recorded at the assignment site below.
  */
 function notYetIntegrated() {
   return {
@@ -196,12 +211,15 @@ export const liveAnalyticsClient: AnalyticsClient = {
       return { data: null, error: notYetIntegrated(), source: 'live', timestamp }
     }
 
-    const [leagueResult, trendResult, dataWindow] = await Promise.all([
+    const [leagueResult, trendResult, dataWindow, warehouse] = await Promise.all([
       callDecisionOS<LeagueIntelligenceAnalyticsShape>('analytics', `/api/v1/intelligence/league?leagueId=${encodeURIComponent(leagueId)}`),
       callDecisionOS<LeagueTrendShape>('analytics', `/api/v1/intelligence/league/trend?leagueId=${encodeURIComponent(leagueId)}`),
       // Runs alongside the two intelligence calls rather than after them: it is provenance for
       // their output, not a dependency of it, and it must not add latency to the page.
       readAnalyticsDataWindow(leagueId),
+      // The season-history half, straight from Postgres. Independent of Decision OS entirely — a
+      // league whose intelligence call fails still has six seasons of scoring, and vice versa.
+      readWarehouseAnalytics(leagueId),
     ])
 
     if (leagueResult.error || !leagueResult.data) {
@@ -214,28 +232,40 @@ export const liveAnalyticsClient: AnalyticsClient = {
     const snapshot: LeagueAnalyticsSnapshot = {
       kpis: buildKpis(intel, trend, dataWindow),
       trends: buildTrends(trend),
-      // No Decision OS (or honestly-wireable application-layer) analog exists for these — see this
-      // file's top comment and LEAGUE_ANALYTICS_LIVE_INTEGRATION_REPORT.md. Left honestly empty
-      // rather than fabricated, since every one of these fields is an array (a legitimate "nothing
-      // to show" value), not a required scalar that would force the whole snapshot to fail.
-      competitiveBalance: [],
-      scoringDistribution: [],
-      transactionsByWeek: [],
-      rosterUtilization: [],
-      seasonComparison: [],
       /*
-       * 30a's four fields, on the same rule as the five above: Decision OS
-       * tracks behavioural engagement, never fantasy scoring outcomes or
-       * standings, so there is no analog for points-for/against or a
-       * per-week health series here. Empty arrays and a null target are
-       * genuine "nothing to show" values; the view renders an explicit
-       * not-wired panel for each rather than an empty chart frame.
+       * These six were hard-coded `[]` with a comment explaining that Decision OS's behavioural
+       * pipeline has no analog for scoring or standings. That was true of Decision OS and beside
+       * the point: the Sleeper importer writes a six-season warehouse per league, covering 213 of
+       * 287 leagues, and nothing was reading it. They now come from Postgres directly — see
+       * `warehouseReads.ts`, which also records why the tables the old comment NAMED are the
+       * wrong ones (they hold zero rows for an imported league).
+       */
+      competitiveBalance: warehouse.competitiveBalance,
+      scoringDistribution: warehouse.scoringDistribution,
+      transactionsByWeek: warehouse.transactionsByWeek,
+      seasonComparison: warehouse.seasonComparison,
+      managerActivity: warehouse.managerActivity,
+      pointsForAgainst: warehouse.pointsForAgainst,
+      /*
+       * These three stay empty, and the reasons are specific rather than "no analog":
+       *
+       * - `healthByWeek` — a weekly engagement series IS computable from the activity table, and
+       *   it would be actively misleading. A dynasty league's imported activity is mostly
+       *   offseason (this one runs January to August, 137 events over 17 weeks with a draft spike
+       *   in May), so the series would show a near-zero line for most of the year and read as a
+       *   collapsing league rather than a normal offseason. That is the same "measuring our data,
+       *   not your league" failure the freshness banner exists to stop; wiring it here would
+       *   reintroduce it in chart form.
+       * - `healthTarget` — no league sets one anywhere in the schema. A default would be invented.
+       * - `rosterUtilization` — `dw_roster_snapshots` carries starters and bench, but starters is
+       *   a fixed lineup size, so "utilisation" would be the same ratio for all twelve teams every
+       *   week. A chart of twelve identical bars is not a measurement.
        */
       healthByWeek: [],
       healthTarget: null,
-      managerActivity: [],
-      pointsForAgainst: [],
+      rosterUtilization: [],
       dataWindow,
+      seasonLabel: warehouse.seasonLabel,
       generatedAt: timestamp,
     }
 

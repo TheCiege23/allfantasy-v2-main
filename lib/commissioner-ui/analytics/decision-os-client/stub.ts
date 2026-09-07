@@ -18,6 +18,7 @@ export const stubAnalyticsClient: AnalyticsClient = {
         // A fixture has no real window. Null renders the page exactly as it did before the
         // window existed, rather than asserting a freshness this data does not have.
         dataWindow: null,
+        seasonLabel: '2025',
         generatedAt: new Date().toISOString(),
       },
       error: null,

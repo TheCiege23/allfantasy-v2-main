@@ -22,6 +22,15 @@ export function buildAnalyticsCsv(snapshot: LeagueAnalyticsSnapshot): string {
    * carries no banner — so without these rows the export is the one artifact that still presents
    * the stale reading as fact, and it is the artifact most likely to be quoted back later.
    */
+  /*
+   * Which season the scoring rows describe. On screen this sits in the panel note; in a file the
+   * "Points" rows would otherwise be undated, and in preseason they are LAST season's — a reader
+   * opening this in December would reasonably assume the current one.
+   */
+  if (snapshot.seasonLabel) {
+    lines.push(csvRow(['Data window', 'Scoring season', snapshot.seasonLabel]))
+  }
+
   const w = snapshot.dataWindow
   if (w) {
     lines.push(csvRow(['Data window', 'Lookback (days)', w.lookbackDays]))
