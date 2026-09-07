@@ -1,0 +1,374 @@
+import { prisma } from '@/lib/prisma'
+
+/**
+ * League scoring, standings and transaction history, read from the facts warehouse the import
+ * wrote — the same tables `importedFactsH2HService` in this directory already reads.
+ *
+ * ── WHY THIS LIVES HERE AND NOT IN `lib/commissioner-ui/` ────────────────────────────────────
+ *
+ * It was written there first, and that was wrong twice over.
+ *
+ * Architecturally: none of this is Commissioner-OS-specific. It answers "what happened in this
+ * league" from `dw_matchup_facts` / `season_results` / `league_teams` — a question the league page,
+ * a season recap or the manager hub would ask in the same words. Burying it inside one UI module
+ * made a general league-history reader a private detail of that module.
+ *
+ * 🛑 AND IT BROKE THREE ENFORCED COMMISSIONER OS INVARIANTS, ONE OF WHICH IS A REAL BUG.
+ * `.eslintrc.json` restricts `lib/commissioner-ui/**` from importing prisma, from raw SQL, and
+ * from `findUnique` — with a bounded exemption list of exactly three grandfathered files and a
+ * test asserting a fourth cannot appear without explaining itself. The first version added two.
+ * The invariants, and what each one was protecting:
+ *
+ *  1. RAW SQL bypasses the Prisma extensions entirely, so tenancy and soft-delete scoping do not
+ *     apply to it. Every query below now uses the Prisma model API and aggregates in JS instead.
+ *     That is affordable precisely because the volumes are small — a six-season league is ~600
+ *     matchup rows — and it removed the `season` text-vs-integer mismatch that raw SQL made easy
+ *     to get wrong.
+ *  2. DB access through `lib/domain/` only. Honoured by moving out rather than by widening the
+ *     exemption: the reads leave Commissioner OS instead of Commissioner OS growing a fourth and
+ *     fifth way to reach Postgres.
+ *  3. `findUnique` cannot be soft-delete filtered — its `where` takes only unique fields, so it
+ *     returns rows that have been deleted. The first version used `prisma.league.findUnique` to
+ *     resolve a league's provider identity, which would have happily read a deleted league's
+ *     Sleeper id. `findFirst` throughout.
+ *
+ * These tables carry no tenant id, so they are outside the Commissioner OS tenancy model rather
+ * than smuggled past it — the same reason that model's own three exempt files "cannot move until
+ * a tenant id can be resolved".
+ */
+
+/** The newest season with real scores — never merely the newest season. */
+export interface LeagueWarehouseTeamPoints {
+  teamName: string
+  pointsFor: number
+  pointsAgainst: number
+}
+
+export interface LeagueWarehouseSeasonPoint {
+  season: string
+  averagePointsFor: number
+}
+
+export interface LeagueWarehouseMargins {
+  games: number
+  blowouts: number
+  oneScore: number
+  averageMargin: number
+}
+
+export interface LeagueWarehouseTitles {
+  distinctChampions: number
+  titleSeasons: number
+}
+
+export interface LeagueWarehouseTransactionWeek {
+  weekStart: Date
+  tradeCount: number
+  waiverCount: number
+}
+
+export interface LeagueWarehouseManagerActivity {
+  managerName: string
+  currentCount: number
+  priorCount: number
+}
+
+export interface LeagueWarehouseActivityWindow {
+  lastActivityAt: Date | null
+  tradeCount: number
+  waiverCount: number
+  eventCount: number
+}
+
+/**
+ * Prisma returns `Decimal` for a `Decimal?` column — an OBJECT, not a number or a string.
+ *
+ * 🛑 THE `object` ARM IS LOAD-BEARING. `SeasonResult.pointsFor` is `Decimal?`; without it a team
+ * that scored 2,488 points coerces to 0 and any `> 0` filter downstream deletes the row entirely,
+ * so real points render as "no data". `count`-style values arrive as plain numbers and coerce
+ * fine, which is what masked it the first time.
+ */
+function num(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (typeof value === 'bigint') return Number(value)
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  if (value && typeof value === 'object') {
+    const parsed = Number((value as { toString(): string }).toString())
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function round(value: number, dp = 1): number {
+  const f = 10 ** dp
+  return Math.round(value * f) / f
+}
+
+/** Monday-anchored week start, matching what `date_trunc('week', …)` produced before. */
+function weekStart(at: Date): Date {
+  const d = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()))
+  const dow = (d.getUTCDay() + 6) % 7
+  d.setUTCDate(d.getUTCDate() - dow)
+  return d
+}
+
+/**
+ * A league's provider identity, for the shared-league arm of every activity query.
+ *
+ * One provider league produces one AF `leagues` row PER IMPORTING USER, and the globally-unique
+ * `externalSourceKey` means imported activity attaches to only ONE of them. Matching on
+ * `provider` + `providerLeagueId` as well as `afLeagueId` is what lets a sibling row read its own
+ * league's history; scoping by BOTH fields keeps a Sleeper id from matching an ESPN league that
+ * happens to carry the same digits.
+ */
+async function providerIdentity(leagueId: string): Promise<{ provider: string; providerLeagueId: string } | null> {
+  const league = await prisma.league.findFirst({
+    where: { id: leagueId },
+    select: { platform: true, platformLeagueId: true },
+  })
+  if (!league?.platform || !league.platformLeagueId) return null
+  return { provider: league.platform, providerLeagueId: league.platformLeagueId }
+}
+
+function activityWhere(leagueId: string, identity: { provider: string; providerLeagueId: string } | null) {
+  return {
+    OR: [
+      { afLeagueId: leagueId },
+      { providerLeagueId: leagueId },
+      ...(identity ? [{ provider: identity.provider, providerLeagueId: identity.providerLeagueId }] : []),
+    ],
+  }
+}
+
+export async function latestScoredSeason(leagueId: string): Promise<number | null> {
+  const scored = await prisma.matchupFact.findFirst({
+    where: { leagueId, scoreA: { gt: 0 } },
+    orderBy: { season: 'desc' },
+    select: { season: true },
+  })
+  return scored?.season ?? null
+}
+
+/** Team names come from `league_teams`, joined on the roster id both fact tables use. */
+async function teamNames(leagueId: string): Promise<Map<string, string>> {
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId },
+    select: { externalId: true, teamName: true, ownerName: true },
+  })
+  const names = new Map<string, string>()
+  for (const t of teams) {
+    // A Sleeper team can be left unnamed, in which case the owner handle is what people call it.
+    const label = t.teamName?.trim() || t.ownerName?.trim()
+    if (label) names.set(t.externalId, label)
+  }
+  return names
+}
+
+export async function readSeasonPoints(leagueId: string, season: number): Promise<LeagueWarehouseTeamPoints[]> {
+  const [rows, names] = await Promise.all([
+    prisma.seasonResult.findMany({
+      where: { leagueId, season: String(season) },
+      select: { rosterId: true, pointsFor: true, pointsAgainst: true },
+    }),
+    teamNames(leagueId),
+  ])
+  return rows
+    .map((r) => ({
+      teamName: names.get(r.rosterId) ?? 'Unnamed team',
+      pointsFor: round(num(r.pointsFor)),
+      pointsAgainst: round(num(r.pointsAgainst)),
+    }))
+    .filter((t) => t.pointsFor > 0 || t.pointsAgainst > 0)
+    .sort((a, b) => b.pointsFor - a.pointsFor)
+}
+
+export async function readSeasonPointTotals(leagueId: string): Promise<LeagueWarehouseSeasonPoint[]> {
+  const rows = await prisma.seasonResult.findMany({
+    where: { leagueId },
+    select: { season: true, pointsFor: true },
+  })
+  const bySeason = new Map<string, { sum: number; n: number }>()
+  for (const r of rows) {
+    const pf = num(r.pointsFor)
+    if (pf <= 0) continue
+    const acc = bySeason.get(r.season) ?? { sum: 0, n: 0 }
+    acc.sum += pf
+    acc.n += 1
+    bySeason.set(r.season, acc)
+  }
+  return [...bySeason.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([season, acc]) => ({ season, averagePointsFor: round(acc.sum / acc.n) }))
+}
+
+export async function readSeasonPointsForDistribution(leagueId: string, season: number): Promise<number[]> {
+  const rows = await prisma.seasonResult.findMany({
+    where: { leagueId, season: String(season) },
+    select: { pointsFor: true },
+  })
+  return rows.map((r) => num(r.pointsFor)).filter((v) => v > 0)
+}
+
+export async function readMargins(leagueId: string, season: number): Promise<LeagueWarehouseMargins> {
+  const games = await prisma.matchupFact.findMany({
+    where: { leagueId, season, scoreA: { gt: 0 } },
+    select: { scoreA: true, scoreB: true },
+  })
+  let blowouts = 0
+  let oneScore = 0
+  let total = 0
+  for (const g of games) {
+    const margin = Math.abs(g.scoreA - g.scoreB)
+    total += margin
+    if (margin >= 30) blowouts += 1
+    if (margin < 10) oneScore += 1
+  }
+  return {
+    games: games.length,
+    blowouts,
+    oneScore,
+    averageMargin: games.length ? round(total / games.length) : 0,
+  }
+}
+
+export async function readSeasonSpread(leagueId: string, season: number): Promise<{ high: number; low: number } | null> {
+  const points = await readSeasonPointsForDistribution(leagueId, season)
+  if (points.length === 0) return null
+  return { high: round(Math.max(...points)), low: round(Math.min(...points)) }
+}
+
+export async function readTitles(leagueId: string): Promise<LeagueWarehouseTitles> {
+  const champs = await prisma.seasonResult.findMany({
+    where: { leagueId, champion: true },
+    select: { rosterId: true },
+  })
+  return { distinctChampions: new Set(champs.map((c) => c.rosterId)).size, titleSeasons: champs.length }
+}
+
+export async function readTransactionsByWeek(leagueId: string): Promise<LeagueWarehouseTransactionWeek[]> {
+  const identity = await providerIdentity(leagueId)
+  const rows = await prisma.decisionOsImportedActivity.findMany({
+    where: { ...activityWhere(leagueId, identity), activityType: { in: ['trade', 'waiver'] } },
+    select: { occurredAt: true, activityType: true },
+  })
+  const byWeek = new Map<number, { weekStart: Date; tradeCount: number; waiverCount: number }>()
+  for (const r of rows) {
+    const start = weekStart(r.occurredAt)
+    const key = start.getTime()
+    const acc = byWeek.get(key) ?? { weekStart: start, tradeCount: 0, waiverCount: 0 }
+    if (r.activityType === 'trade') acc.tradeCount += 1
+    else acc.waiverCount += 1
+    byWeek.set(key, acc)
+  }
+  return [...byWeek.values()].sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime())
+}
+
+/**
+ * Per-manager action counts for the current window and the one immediately before it.
+ *
+ * ⚠ THE MANAGER KEY IS INSIDE THE JSON, NOT IN A COLUMN. `stableExternalManagerKey`,
+ * `externalManagerId`, `rosterId` and `appUserId` are null on 100% of imported rows; identity
+ * lives in `normalized.managerKeys` as `sleeper:<ownerId>`. Grouping on any of those columns
+ * returns one bucket and looks like it worked.
+ *
+ * ⚠ AND THE NAME MAP MUST COME FROM THE NEWEST SNAPSHOT SEASON ONLY. Rosters change hands, so a
+ * map built across all seasons attributes a departed manager's activity to whoever holds their
+ * roster now — measured: two different Sleeper owner ids both resolving to one team.
+ */
+export async function readManagerActivity(
+  leagueId: string,
+  lookbackDays: number,
+): Promise<LeagueWarehouseManagerActivity[]> {
+  const newestSnapshot = await prisma.rosterSnapshot.findFirst({
+    where: { leagueId },
+    orderBy: { season: 'desc' },
+    select: { season: true },
+  })
+  if (!newestSnapshot?.season) return []
+
+  const [snapshots, names, identity] = await Promise.all([
+    prisma.rosterSnapshot.findMany({
+      where: { leagueId, season: newestSnapshot.season },
+      // `teamId` IS the roster id, so only the owner id has to come out of the JSON.
+      select: { teamId: true, rosterPlayers: true },
+    }),
+    teamNames(leagueId),
+    providerIdentity(leagueId),
+  ])
+
+  const ownerToTeam = new Map<string, string>()
+  for (const snap of snapshots) {
+    const team = names.get(snap.teamId)
+    if (!team) continue
+    const players = Array.isArray(snap.rosterPlayers) ? snap.rosterPlayers : []
+    for (const raw of players) {
+      const ownerId = (raw as { ownerId?: unknown } | null)?.ownerId
+      if (typeof ownerId === 'string' && ownerId) ownerToTeam.set(ownerId, team)
+    }
+  }
+  if (ownerToTeam.size === 0) return []
+
+  const now = Date.now()
+  const windowStart = new Date(now - lookbackDays * 86_400_000)
+  const priorStart = new Date(now - lookbackDays * 2 * 86_400_000)
+
+  const rows = await prisma.decisionOsImportedActivity.findMany({
+    where: { ...activityWhere(leagueId, identity), occurredAt: { gt: priorStart } },
+    select: { occurredAt: true, normalized: true },
+  })
+
+  const counts = new Map<string, { current: number; prior: number }>()
+  for (const row of rows) {
+    const normalized = row.normalized as { managerKeys?: unknown } | null
+    const keys = Array.isArray(normalized?.managerKeys) ? normalized.managerKeys : []
+    for (const rawKey of keys) {
+      if (typeof rawKey !== 'string') continue
+      const ownerId = rawKey.replace(/^[a-z]+:/, '')
+      const acc = counts.get(ownerId) ?? { current: 0, prior: 0 }
+      if (row.occurredAt > windowStart) acc.current += 1
+      else acc.prior += 1
+      counts.set(ownerId, acc)
+    }
+  }
+
+  const out: LeagueWarehouseManagerActivity[] = []
+  for (const [ownerId, acc] of counts) {
+    const managerName = ownerToTeam.get(ownerId)
+    if (!managerName) continue
+    out.push({ managerName, currentCount: acc.current, priorCount: acc.prior })
+  }
+  /*
+   * Name is the tiebreak, not an accident of Map order. Several managers legitimately share a
+   * count in a quiet offseason, and without a deterministic second key the leaderboard reorders
+   * between renders of identical data — which reads as movement that did not happen.
+   */
+  return out.sort((a, b) => b.currentCount - a.currentCount || a.managerName.localeCompare(b.managerName))
+}
+
+/** Freshness and all-time totals for a league's imported activity. */
+export async function readActivityWindow(leagueId: string): Promise<LeagueWarehouseActivityWindow> {
+  const identity = await providerIdentity(leagueId)
+  const where = activityWhere(leagueId, identity)
+  const [newest, byType] = await Promise.all([
+    prisma.decisionOsImportedActivity.findFirst({
+      where,
+      orderBy: { occurredAt: 'desc' },
+      select: { occurredAt: true },
+    }),
+    prisma.decisionOsImportedActivity.groupBy({
+      by: ['activityType'],
+      where,
+      _count: { _all: true },
+    }),
+  ])
+  const counts = new Map(byType.map((r) => [r.activityType, r._count._all]))
+  return {
+    lastActivityAt: newest?.occurredAt ?? null,
+    tradeCount: counts.get('trade') ?? 0,
+    waiverCount: counts.get('waiver') ?? 0,
+    eventCount: byType.reduce((sum, r) => sum + r._count._all, 0),
+  }
+}
