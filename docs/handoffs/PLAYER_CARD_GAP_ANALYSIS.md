@@ -65,7 +65,7 @@ allfantasy_market_player_values     283 published
 | PLAYOFF SCHEDULE wk15–17 | `SportsGame` | **Buildable** from the same loader as next-5; not yet surfaced separately. |
 | Propose Trade | existing trade flow | **NOT WIRED YET** — see below. |
 
-### The value book, and why it is deliberately the "wrong" one
+### The value book — SUPERSEDED 2026-09-07, and the original framing was wrong twice over
 
 Raised by the core-boards session, 2026-09-07, and they were right.
 
@@ -82,11 +82,40 @@ ONE_QB     11,422   overall #1
 SUPERFLEX  10,427   overall #2      <- a QB outranks him in superflex
 ```
 
-The card now pins the same three literals (`VALUE_SOURCE` / `VALUE_FORMAT` /
-`VALUE_QB_FORMAT` in `playerCard.ts`) and renders the book on screen
-("dynasty · superflex · fantasycalc"). It **is** a known wrongness for a redraft league —
-but a SHARED one, stated, rather than two surfaces silently disagreeing. The league
-flavour is unaffected: it re-derives from the league's own variant and scoring.
+The first fix pinned the same three literals across all three surfaces and rendered the
+book on screen — consistent, stated, and jointly wrong.
+
+🛑 **THAT DECISION IS SUPERSEDED. `lib/core-app/valueBook.ts` now derives the book from
+each league, and the framing above was wrong in two ways that mattered.**
+
+**Wrong once: it was not a minority case.** Measured across 257 claimed leagues on
+production:
+
+```
+DYNASTY  SUPERFLEX   83   correct — by accident
+REDRAFT  ONE_QB      76   wrong on BOTH axes
+REDRAFT  SUPERFLEX   65   format wrong
+DYNASTY  ONE_QB      33   qbFormat wrong
+                    174   = 68% on the wrong book
+```
+
+**Wrong twice, and this is the part both sessions missed: it was never only a redraft
+problem.** Two of the four buckets are dynasty leagues — **33 of them were wrong on
+`qbFormat`**, priced as superflex when they start one quarterback. "A known wrongness for
+redraft" was the shared description, and it excluded a bucket nobody had looked at. A
+framing that makes a decision look smaller than it is will survive review precisely
+because it sounds like a considered trade-off.
+
+⚠ **The cost is real and is the reason this needed a decision rather than a patch.** In the
+latest capture, DYNASTY prices 398 players and REDRAFT 199 — so redraft leagues now
+withhold roughly twice as many trade grades. That is correct (a withheld grade with a
+stated reason beats a number from the wrong book) but it is visible to users on a live
+surface.
+
+The universal player card keeps dynasty/superflex as a **stated** default and still renders
+the book, because with no league in context there is no correct answer — only a labelled
+one. `marketContextFor` reads its variant from the same module, so the trade engine and the
+value tables cannot drift apart either.
 
 🛑 **And `source: 'FANTASYCALC'` was missing from all three of this file's reads.** It is a
 **licence boundary**, not a tidy filter: DynastyProcess's value files are FantasyPros ECR
