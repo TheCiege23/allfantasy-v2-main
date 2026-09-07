@@ -78,12 +78,48 @@ export async function listActiveLeaguesForUser(): Promise<ActiveLeagueOption[]> 
  * stale cookie can only ever resolve to a league this session already owns,
  * never someone else's.
  */
+/**
+ * The selector's cookie, or null when there is no request scope to read one from.
+ *
+ * 🛑 THE `catch` IS NARROW ON PURPOSE, AND WIDENING IT WOULD BE A PRODUCTION BUG.
+ * `cookies()` throws two very different things, and only one of them is safe to
+ * swallow:
+ *
+ *   - Outside a request scope it throws a PLAIN `Error` ("`cookies` was called
+ *     outside a request scope"), carrying no `digest`. That is every vitest run —
+ *     a unit test has no request — and it is not an error condition for this
+ *     function: with no request there is no user cookie, so there is no override
+ *     and the caller should fall back to the "most recent roster" default.
+ *   - During prerendering it throws Next's `DynamicServerError`, carrying
+ *     `digest: 'DYNAMIC_SERVER_USAGE'`. That one is a SIGNAL, not a failure: it is
+ *     how Next learns the route is dynamic. Swallowing it would let a page that
+ *     reads a per-user cookie be statically cached, serving one commissioner's
+ *     league to everyone.
+ *
+ * So the discriminator is the `digest`, not the message: rethrow anything that
+ * carries one, swallow only the digest-less wrong-context error. That also keeps
+ * `NEXT_REDIRECT` and `NEXT_NOT_FOUND` — Next's other digest-carrying control-flow
+ * signals — propagating, which a bare `catch {}` would have eaten too.
+ *
+ * Production behaviour is unchanged: every caller of `resolveActiveLeagueId` is an
+ * App Router server component (`app/commissioner-os/**` pages and layout), where a
+ * request scope is guaranteed and this helper simply reads the cookie.
+ */
+async function readActiveLeagueCookie(): Promise<string | null> {
+  try {
+    const store = await cookies()
+    return store.get(ACTIVE_LEAGUE_COOKIE_KEY)?.value ?? null
+  } catch (error) {
+    if (typeof (error as { digest?: unknown } | null)?.digest === 'string') throw error
+    return null
+  }
+}
+
 export async function resolveActiveLeagueId(): Promise<string | null> {
   const leagues = await getActiveLeaguesForSessionUser()
   if (leagues.length === 0) return null
 
-  const store = await cookies()
-  const requested = store.get(ACTIVE_LEAGUE_COOKIE_KEY)?.value
+  const requested = await readActiveLeagueCookie()
   if (requested) {
     const match = leagues.find((l) => String(l.id) === requested)
     if (match) return String(match.id)
