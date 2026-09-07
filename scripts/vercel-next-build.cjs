@@ -211,6 +211,11 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'cron', 'import-depth-charts', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-projections', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'adp-refresh', 'route.ts').replace(/\\/g, '/'),
+  // Scheduled hourly in cron-schedule.json. This guard is not on today's build path (package.json
+  // `build` is plain `next build`; only `vercel-build`/`build:clean` reach this script), but a
+  // scheduled cron without a keep-line FAILS the build loudly under those, so the line is cheap
+  // insurance rather than dead weight.
+  path.join('app', 'api', 'cron', 'fantasycalc-warm', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'recompute-allfantasy-adp', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'draft-pool-prewarm', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'fantasy-os-exec-sync', 'route.ts').replace(/\\/g, '/'),

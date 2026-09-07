@@ -448,12 +448,26 @@ export async function runTradeConsoleAnalysis(
 
   const pprNfl = pprForNflFromLeagueContext(leagueNormCtx, leagueRow)
   const asOf = new Date().toISOString().slice(0, 10)
-  const fcPlayers = await getFantasyCalcValuesDbFirst({
-    isDynasty: true,
-    numQbs: isSuperFlex ? 2 : 1,
-    numTeams: leagueSize,
-    ppr: pprNfl,
-  })
+  /*
+   * ⚠ TOLERANCE TIGHTENED FROM THE 6 h DEFAULT TO 2 h, WHICH MAKES VALUES FRESHER, NOT FASTER.
+   * `/api/cron/fantasycalc-warm` refreshes every demanded profile hourly, so a served value is
+   * normally under an hour old; 2 h absorbs one missed run. Beyond that this falls through to a
+   * live fetch — slower for that one caller, but still correct and still fresh, which is the
+   * degrade Guap asked for when choosing freshness over the ~2 s this phase used to cost.
+   *
+   * 🛑 DO NOT WIDEN THIS TO BUY LATENCY. That was the alternative fix and it was rejected on
+   * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
+   * retired, this number has to come back DOWN to 6 h or lower, not up.
+   */
+  const fcPlayers = await getFantasyCalcValuesDbFirst(
+    {
+      isDynasty: true,
+      numQbs: isSuperFlex ? 2 : 1,
+      numTeams: leagueSize,
+      ppr: pprNfl,
+    },
+    { maxStaleMs: 1000 * 60 * 60 * 2 },
+  )
   mark('fantasycalc')
 
   /*
