@@ -169,6 +169,43 @@
  * that instead of standing empty (which reads as "still loading") or showing a
  * C (which reads as "average" when it means "no data").
  */
+/*
+ * Who moved. Sits between the counts and the grade slot, because it explains the
+ * counts above it and is the reason the grade below is still refused (we know
+ * the names, not which side received them — see lib/core-app/trades.ts).
+ */
+.af-tr-players {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* One row per side: who got it, then what they got. */
+.af-tr-players-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.af-tr-players-who {
+  flex: none;
+}
+/* Your own side is the one the reader is scanning for. */
+.af-tr-players-who[data-you='true'] {
+  color: var(--accent);
+}
+
+.af-tr-players-list {
+  font: 600 12px/1.6 'Archivo', system-ui, sans-serif;
+  color: var(--text2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .af-tr-grade {
   display: flex;
   align-items: flex-start;

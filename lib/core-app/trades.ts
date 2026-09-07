@@ -11,12 +11,34 @@ import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
  * rows across the imported leagues, each carrying the transaction id, the two
  * roster ids, the season and week, and how many players and picks moved each way.
  *
- * ⚠ WHAT IS NOT IN THAT DATA: WHICH players moved. The payload stores counts
- * (`playersIn: 1, playersOut: 1, picks: 0`), not identities. So a trade can be
- * listed, dated and attributed to two managers — but it cannot be valued, and
- * nothing on this screen may imply otherwise.
+ * ⚠ WHAT IS NOT IN THAT PAYLOAD: WHICH players moved. It stores counts
+ * (`playersIn: 1, playersOut: 1, picks: 0`), not identities.
  *
- * ⚠ AND THIS IS WHY NO LETTER GRADE IS SHOWN. lib/trade-intel exists and will
+ * 🛑 BUT "WE DO NOT KNOW WHICH PLAYERS" WAS TOO STRONG, AND THIS COMMENT SAID IT
+ * FOR MONTHS. `LeagueTrade` holds the Sleeper id arrays for the same trades, and
+ * 17,501 of 17,657 trade facts — 99.1%, measured 2026-09-07 — join to it on
+ * `payload.sleeperTransactionId`. The names were one join away the whole time.
+ * `TradeRecord.players` now carries them, and the screen renders them as
+ * clickable player cards.
+ *
+ * 🛑 AND THE FIRST FIX UNDER-CLAIMED IN THE SAME WAY. It said direction was
+ * unrecoverable — while naming, in that very sentence, the mechanism that
+ * recovers it. `playersGiven` / `playersReceived` ARE directional with respect to
+ * `LeagueTradeHistory.sleeperUsername`, which is the same join that supplies the
+ * rows. Measured on a real mirrored pair:
+ *
+ *   tx 1022535786568249344  owner 411273464511479808  got  ["9756"]
+ *   tx 1022535786568249344  owner 671391748378935296  gave ["9756"]
+ *
+ * So `TradeRecord.players` carries one entry PER SIDE, named by the manager who
+ * received it. Twice now the honest-looking move was to declare data absent; both
+ * times it was one join away. Check the join before writing the refusal.
+ *
+ * ⚠ NO LETTER GRADE IS STILL SHOWN, AND THE REASON IS COVERAGE, NOT DIRECTION.
+ * `gradeTrade(received, gave)` works fine now. What withholds the letter is that
+ * a grade needs EVERY asset on both sides priced, and `PlayerValueSnapshot`
+ * covers ~475 dynasty players — so the withheld reason renders where the letter
+ * would be, and it fires often. That is a pricing limit, not an unknowable one. lib/trade-intel exists and will
  * happily return one, but its own hasNoSignal() documents the trap: when no
  * points are credited to either side, every net is 0, every side lands in the C
  * band, and the engine reports a tie it has not earned. A "C" from this data
@@ -24,6 +46,14 @@ import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
  * rendered as explicitly ungradable instead — refusing the letter is the whole
  * point, and it is easier to add a real grade later than to retract a wrong one.
  */
+
+/** A named player in a trade, enough to open his card. */
+export type TradePlayerRef = {
+  sleeperId: string
+  name: string
+  position: string | null
+  team: string | null
+}
 
 export type TradeRecord = {
   transactionId: string
@@ -37,6 +67,37 @@ export type TradeRecord = {
   picks: number
   partnerTeamName: string | null
   at: Date
+  /**
+   * Who received what, per side.
+   *
+   * ⚠ THIS WAS SHIPPED AS ONE UNORDERED SET AND THAT WAS UNDER-CLAIMING. The
+   * first version said direction was unrecoverable — while naming, in the same
+   * comment, the exact mechanism that recovers it. `playersGiven` /
+   * `playersReceived` on a `LeagueTrade` row are directional **with respect to
+   * its history's `sleeperUsername`**, and that history is the join that already
+   * supplies the rows. Measured 2026-09-07 on a real mirrored pair:
+   *
+   *   tx 1022535786568249344  owner 411273464511479808  got  ["9756"]
+   *   tx 1022535786568249344  owner 671391748378935296  gave ["9756"]
+   *
+   * So each side is named by the manager who RECEIVED it. Caught by the
+   * core-boards session, whose board had been grading on this the whole time.
+   *
+   * ⚠ `manager` IS NULL WHEN THE ID DOES NOT RESOLVE, and that is a real case:
+   * `sleeperUsername` holds a numeric Sleeper user id, which maps to
+   * `LeagueTeam.platformUserId` for 3,413 of 4,362 histories (78%) and to
+   * `externalId` for ZERO. An unresolved side renders as "another manager"
+   * rather than as a raw id or a guessed name.
+   *
+   * Empty when the `LeagueTrade` join missed entirely — never a partial side,
+   * which would read as "these are the only players in it".
+   */
+  players: Array<{
+    /** Team name, else owner name, else null. */
+    manager: string | null
+    isYou: boolean
+    received: TradePlayerRef[]
+  }>
 }
 
 export type GradedTrade = {
@@ -265,9 +326,20 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
 
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId },
-    select: { externalId: true, teamName: true },
+    select: { externalId: true, platformUserId: true, teamName: true, ownerName: true, claimedByUserId: true },
   })
   const teamByExternal = new Map(teams.map((t) => [String(t.externalId), t.teamName]))
+  /*
+   * ⚠ KEYED ON `platformUserId`, NOT `externalId`. `LeagueTradeHistory.sleeperUsername`
+   * is a numeric Sleeper USER id; measured on production it matches `platformUserId`
+   * on 3,413 of 4,362 histories and `externalId` on **zero**. Keying this the
+   * obvious way would leave every trade side anonymous with nothing to say why.
+   */
+  const teamByPlatformUser = new Map(
+    teams.flatMap((t) =>
+      t.platformUserId ? [[String(t.platformUserId), t] as const] : [],
+    ),
+  )
 
   // Each trade writes one fact PER SIDE, so collapse on the sleeper transaction
   // id to get one row per trade rather than listing every deal twice.
@@ -281,6 +353,73 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
   }
 
   const mine = myTeam?.externalId != null ? String(myTeam.externalId) : null
+
+  /*
+   * Name the players each trade moved.
+   *
+   * `dw_transaction_facts` carries counts only; `LeagueTrade` carries the Sleeper
+   * id arrays. Two bounded queries for the whole page — one for the trades, one
+   * to resolve every referenced id to a name — rather than a lookup per row.
+   */
+  const txIds = [...bySleeperTx.keys()]
+  const tradeRows = txIds.length
+    ? await prisma.leagueTrade
+        .findMany({
+          where: { transactionId: { in: txIds } },
+          /*
+           * ⚠ ORDERED BEFORE IT IS GROUPED, DELIBERATELY. The two mirror rows for
+           * one trade tie on every payload field, so without a deterministic key
+           * the order Postgres happens to return decides which manager appears
+           * first — and a trade could read one way round on one render and the
+           * other way on the next. `historyId` is stable and unique per side.
+           */
+          orderBy: [{ transactionId: 'asc' }, { historyId: 'asc' }],
+          select: {
+            transactionId: true,
+            playersGiven: true,
+            playersReceived: true,
+            history: { select: { sleeperUsername: true } },
+          },
+        })
+        .catch(() => [])
+    : []
+
+  const asIds = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))).filter(Boolean) : []
+
+  /*
+   * One entry per SIDE, named by the manager who received it — see the note on
+   * `TradeRecord.players`. A side with an empty `received` (picks-only, or the
+   * giving half of a one-way move) is dropped rather than rendered as a manager
+   * who got nothing.
+   */
+  const sidesByTx = new Map<string, Array<{ username: string | null; ids: string[] }>>()
+  for (const r of tradeRows) {
+    const got = asIds(r.playersReceived)
+    if (got.length === 0) continue
+    const list = sidesByTx.get(r.transactionId) ?? []
+    list.push({ username: r.history?.sleeperUsername ?? null, ids: got })
+    sidesByTx.set(r.transactionId, list)
+  }
+
+  const allTradeIds = [...new Set([...sidesByTx.values()].flatMap((sides) => sides.flatMap((x) => x.ids)))]
+  const namedRows = allTradeIds.length
+    ? await prisma.sportsPlayer
+        .findMany({
+          where: { sleeperId: { in: allTradeIds } },
+          distinct: ['sleeperId'],
+          orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
+          select: { sleeperId: true, name: true, position: true, team: true },
+        })
+        .catch(() => [])
+    : []
+  const playerBySleeperId = new Map(
+    namedRows.flatMap((p) =>
+      p.sleeperId
+        ? [[p.sleeperId, { sleeperId: p.sleeperId, name: p.name, position: p.position, team: p.team }] as const]
+        : [],
+    ),
+  )
 
   const history: TradeRecord[] = []
   for (const [txId, sides] of bySleeperTx) {
@@ -302,6 +441,21 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
       picks: Number(payload.picks ?? 0),
       partnerTeamName: partnerId ? teamByExternal.get(partnerId) ?? `Roster ${partnerId}` : null,
       at: side.createdAt,
+      // An id we cannot name is dropped rather than printed raw — a bare
+      // "9221" in a trade row is noise the reader cannot act on.
+      players: (sidesByTx.get(txId) ?? []).map((sideRow) => {
+        const team = sideRow.username ? teamByPlatformUser.get(sideRow.username) : undefined
+        return {
+          manager: team ? (team.teamName ?? team.ownerName ?? null) : null,
+          isYou: !!(team && userId && team.claimedByUserId === userId),
+          // An id we cannot name is dropped rather than printed raw — a bare
+          // "9221" in a trade row is noise the reader cannot act on.
+          received: sideRow.ids.flatMap((id) => {
+            const hit = playerBySleeperId.get(id)
+            return hit ? [hit] : []
+          }),
+        }
+      }).filter((sideRow) => sideRow.received.length > 0),
     })
     if (history.length >= 60) break
   }

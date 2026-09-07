@@ -121,6 +121,18 @@ export type MatchupSide = {
  */
 export type MatchupPlayerCell = {
   playerId: string
+  /**
+   * The Sleeper id this cell resolved THROUGH, when it resolved at all.
+   *
+   * ⚠ NOT THE SAME AS `playerId`, AND THAT IS THE WHOLE REASON IT EXISTS.
+   * `playerId` is the ROSTER's own id — on a Sleeper league that happens to be
+   * the Sleeper id, but an ESPN roster holds ESPN ids and a Yahoo roster holds
+   * Yahoo ids. Anything keyed on Sleeper (the player card, the value tables)
+   * needs the id the identity join actually matched on, which the loader knows
+   * and used to hold privately. Null whenever the row did not resolve, so a
+   * caller cannot mistake an unresolved ESPN id for a Sleeper one.
+   */
+  sleeperId: string | null
   /** Null when the id does not resolve to a player row — a bridge failure, shown as such. */
   name: string | null
   position: string | null
@@ -592,6 +604,7 @@ export async function getMatchupData(
     if (entry.playerId === EMPTY_SLOT) {
       return {
         playerId: entry.playerId,
+        sleeperId: null,
         name: null,
         position: null,
         team: null,
@@ -612,6 +625,8 @@ export async function getMatchupData(
       const [, rawName, rawPos, rawTeam] = entry.playerId.split(':')
       return {
         playerId: entry.playerId,
+        // A `name:` descriptor exists precisely because no platform id resolved.
+        sleeperId: null,
         name: rawName || null,
         position: displayPosition(rawPos),
         team: rawTeam ? normalizeTeamAbbrev(rawTeam) : null,
@@ -625,6 +640,13 @@ export async function getMatchupData(
     const identity = identityBy.get(entry.playerId)
     return {
       playerId: entry.playerId,
+      /*
+       * `identityBy` is only populated when this key matched a SportsPlayer row
+       * BY SLEEPER ID, so the presence of `identity` is the proof that the
+       * folded key below is a real Sleeper id rather than a passed-through
+       * roster id.
+       */
+      sleeperId: identity ? (sleeperIdByRosterId.get(entry.playerId) ?? entry.playerId) : null,
       name: identity?.name ?? null,
       position: displayPosition(identity?.position),
       /*

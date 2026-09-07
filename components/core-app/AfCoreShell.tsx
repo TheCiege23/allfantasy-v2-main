@@ -8,6 +8,7 @@ import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
+import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -1133,7 +1134,21 @@ export function AfCoreShell(props: AfCoreShellProps) {
           {active === 'home' ? (
             <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} />
           ) : null}
-          {children}
+          {/*
+            The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted
+            once for the whole shell like the overlays below.
+
+            ⚠ IT WRAPS `children` RATHER THAN LIVING IN A SCREEN, because the same
+            card opens from a dozen surfaces — my team, matchup, waivers, trades,
+            draft, live. A per-screen mount would mean a dozen copies of the
+            fetch/escape/scroll-lock behaviour drifting apart.
+
+            It renders nothing at all until a name is clicked, so a screen that
+            shows no players pays only the context. A per-league screen supplies
+            its own league through `PlayerCardLeagueScope`, which is why this
+            mount takes no `leagueId` — the shell does not know one.
+          */}
+          <PlayerCardProvider>{children}</PlayerCardProvider>
         </main>
       </div>
 

@@ -1,6 +1,8 @@
 'use client'
 
 import '@/components/core-app/af-matchup.css'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
+import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { teamLogoUrl } from '@/lib/media-url'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type {
@@ -158,7 +160,24 @@ function PlayerHalf({
       </span>
       <div className="af-mu-half-text">
         <div className="af-mu-half-name">
-          {cell.name ?? <span className="af-mu-half-unresolved">Unresolved player</span>}
+          {/*
+            The name opens the player card. `PlayerName` degrades to plain text
+            when there is no id, which is exactly the unresolved case below —
+            an inert button on a row we could not identify would offer a lookup
+            that cannot happen.
+          */}
+          {cell.name ? (
+            <PlayerName
+              sport={cell.sport ?? 'NFL'}
+              sleeperId={cell.sleeperId}
+              name={cell.name}
+              position={cell.position}
+              team={cell.team}
+              imageUrl={cell.imageUrl}
+            />
+          ) : (
+            <span className="af-mu-half-unresolved">Unresolved player</span>
+          )}
         </div>
         <div className="af-mu-half-sub">
           {cell.name
@@ -299,6 +318,12 @@ export function Matchup({ data }: MatchupProps) {
       : null
 
   return (
+    /*
+      Every name in this lineup belongs to THIS league, so the card opens in
+      its league flavour. One wrap rather than a `leagueId` prop threaded
+      through LineupBoard and both PlayerHalf columns.
+    */
+    <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-mu">
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
@@ -502,6 +527,7 @@ export function Matchup({ data }: MatchupProps) {
         </ul>
       </section>
     </div>
+    </PlayerCardLeagueScope>
   )
 }
 

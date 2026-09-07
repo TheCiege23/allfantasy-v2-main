@@ -1,6 +1,8 @@
 'use client'
 
 import '@/components/core-app/af-trades.css'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
+import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import type { TradesData, TradeRecord } from '@/lib/core-app/trades'
 
 /**
@@ -73,6 +75,37 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
       </div>
 
       {/*
+        Who received what. Each row is a SIDE, named by the manager who got those
+        players — see `TradeRecord.players`. A side whose manager id did not
+        resolve says "another manager" rather than printing a raw Sleeper user id.
+      */}
+      {trade.players.length > 0 ? (
+        <div className="af-tr-players">
+          {trade.players.map((side, i) => (
+            <div className="af-tr-players-side" key={`${side.manager ?? 'unknown'}-${i}`}>
+              <span className="af-label af-tr-players-who" data-you={side.isYou}>
+                {side.isYou ? 'You got' : `${side.manager ?? 'Another manager'} got`}
+              </span>
+              <span className="af-tr-players-list">
+                {side.received.map((p, j) => (
+                  <span key={p.sleeperId}>
+                    {j > 0 ? ', ' : ''}
+                    <PlayerName
+                      sport="NFL"
+                      sleeperId={p.sleeperId}
+                      name={p.name}
+                      position={p.position}
+                      team={p.team}
+                    />
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/*
         The grade slot. Kept in the layout the handoff specifies so the shape is
         right, but filled with the reason no letter can be issued — an empty
         badge would read as a pending grade, and a "C" would read as average.
@@ -91,6 +124,16 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
 
 export function Trades({ data }: TradesProps) {
   return (
+    /*
+      Names on this screen belong to THIS league, so the card opens in its
+      league flavour — who holds him now, and what he costs here.
+
+      ⚠ BLOCK COMMENT, NOT `//`. Two `//` lines in exactly this position pass
+      `tsc --noEmit` and are REJECTED by SWC ("Unexpected token. Expected jsx
+      identifier"), so the typecheck was clean while the Next build failed and
+      took `app/core/[[...screen]]/page.tsx` down with it.
+    */
+    <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-tr">
       {/* ── League-specific grading banner ──────────────────────────── */}
       {data.gradingContext.available ? (
@@ -210,6 +253,7 @@ export function Trades({ data }: TradesProps) {
         )}
       </section>
     </div>
+    </PlayerCardLeagueScope>
   )
 }
 

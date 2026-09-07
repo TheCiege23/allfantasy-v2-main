@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
+import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
@@ -330,7 +332,21 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
       */}
       <div className="af-mt-player-text">
         <div className="af-mt-player-name">
-          {player.name}
+          {/*
+            The name opens the player card (design handoff 2026-09-07, STATE 7).
+            No `leagueId` prop: `PlayerCardLeagueScope` further down this file
+            supplies it, so every name on this screen gets the LEAGUE flavour —
+            who holds him here, this league's price, your roster at his position —
+            without threading an id through PlayerCell and BenchRow.
+          */}
+          <PlayerName
+            sport={player.sport ?? 'NFL'}
+            sleeperId={player.sleeperId}
+            name={player.name}
+            position={player.position}
+            team={player.team}
+            imageUrl={player.imageUrl}
+          />
           {/*
             ⚠ BESIDE THE NAME, NOT IN THE META LINE. A bye is the single most
             important fact about a player this week — it is the difference
@@ -689,6 +705,13 @@ export function MyTeam({ data }: MyTeamProps) {
   }
 
   return (
+    /*
+      Every player name inside this screen belongs to THIS league, so the
+      card opens in its league flavour. One wrap instead of a `leagueId`
+      prop threaded through PlayerCell, BenchRow and three call sites —
+      which is the version somebody silently half-applies.
+    */
+    <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-mt">
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {data.lock.available ? (
@@ -1064,6 +1087,7 @@ export function MyTeam({ data }: MyTeamProps) {
         </p>
       )}
     </div>
+    </PlayerCardLeagueScope>
   )
 }
 

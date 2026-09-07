@@ -1,5 +1,7 @@
 'use client'
 
+import PlayerName from '@/components/core-app/player-card/PlayerName'
+
 import { useEffect, useState } from 'react'
 
 import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
@@ -76,7 +78,17 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
           {board.candidates.map((c) => (
             <li key={c.sleeperId} className="af-wlb-row">
               <span className="af-wlb-who">
-                <span className="af-wlb-name">{c.name}</span>
+                <span className="af-wlb-name">
+                  {/* Opens the player card in this league's context (handoff STATE 7). */}
+                  <PlayerName
+                    sport="NFL"
+                    sleeperId={c.sleeperId}
+                    name={c.name}
+                    position={c.position}
+                    team={c.team}
+                    leagueId={leagueId}
+                  />
+                </span>
                 <span className="af-wlb-meta">
                   {c.position ?? '—'}
                   {c.team ? ` · ${c.team}` : ''} · proj{' '}
