@@ -4,6 +4,7 @@ import { Download } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { InfoCard } from '@/components/commissioner-os/cards'
+import { FormattedTimestamp } from '@/components/commissioner-os/FormattedTimestamp'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ErrorState } from '@/components/commissioner-os/states'
 import { downloadAnalyticsCsv } from '@/lib/commissioner-ui/analytics/exportCsv'
@@ -474,7 +475,7 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
       ) : null}
 
       <p className="cos-sheet-generated">
-        Snapshot generated {new Date(view.generatedAt).toLocaleString()}. The export carries exactly
+        Snapshot generated <FormattedTimestamp iso={view.generatedAt} />. The export carries exactly
         the range shown above.
       </p>
     </div>
