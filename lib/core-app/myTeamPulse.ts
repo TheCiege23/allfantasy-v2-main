@@ -144,6 +144,22 @@ export type MyTeamRow = {
   /** Certain lost points: empty slots, ruled-out starters and byes. */
   severity: number
   href: string
+  /**
+   * The three fields `lineupLink()` needs to build "Open in Sleeper ↗".
+   *
+   * ⚠ CARRIED ON THE ROW RATHER THAN RE-READ IN THE COMPONENT. The board is a
+   * server component but the link builder is client-safe by design, and a
+   * second prisma read per row to rebuild a URL the loader already had the
+   * ingredients for is the per-league fan-out this file's cost note warns
+   * about. Null on any of them and the resolver falls back to the in-app href.
+   */
+  platformLeagueId: string | null
+  /**
+   * The LEAGUE's season, which is not the row's `season` above — that one is the
+   * sports week's. Two different years on one row, and the deep link needs this one.
+   */
+  leagueSeason: number | null
+  teamId: string | null
 }
 
 export type MyTeamPulse = {
@@ -183,8 +199,17 @@ const EMPTY_PULSE: MyTeamPulse = {
   notChecked: { noRoster: 0, noLineup: 0 },
 }
 
-/** How many rows each column renders. The header states the totals either way. */
-const COLUMN_CAP = 5
+/**
+ * How many rows each column renders. The header states the totals either way.
+ *
+ * ⚠ THE TWO CAPS DIFFER, AND THE ASYMMETRY IS THE 2026-09-07 HANDOFF'S. The
+ * board leads with "your ten most urgent lineups"; the quiet column is context
+ * and five is enough of it, because the footer already accounts for the rest by
+ * count. Raising `SET_CAP` to match would put fifteen rows on a screen whose
+ * whole point is that only the first ten need you.
+ */
+const NEEDS_CAP = 10
+const SET_CAP = 5
 
 /**
  * Kickoff per club for one sport's current week.
@@ -246,6 +271,8 @@ export async function getMyTeamPulse(
             sport: true,
             logoUrl: true,
             avatarUrl: true,
+            platformLeagueId: true,
+            season: true,
           },
         },
       },
@@ -294,6 +321,9 @@ export async function getMyTeamPulse(
     logoUrl: string | null
     leagueBadge: string
     teamName: string | null
+    platformLeagueId: string | null
+    leagueSeason: number | null
+    teamId: string | null
     ids: string[]
     empty: number
   }
@@ -333,6 +363,9 @@ export async function getMyTeamPulse(
       logoUrl: asImageUrl(l.logoUrl, platform) ?? asImageUrl(l.avatarUrl, platform),
       leagueBadge: initialsOf(leagueName),
       teamName: c.teamName?.trim() || null,
+      platformLeagueId: l.platformLeagueId ?? null,
+      leagueSeason: typeof l.season === 'number' ? l.season : null,
+      teamId: c.externalId != null ? String(c.externalId) : null,
       ids,
       empty,
     })
@@ -491,6 +524,9 @@ export async function getMyTeamPulse(
       week: week?.week ?? null,
       severity,
       href: `/core/my-team?league=${encodeURIComponent(p.leagueId)}`,
+      platformLeagueId: p.platformLeagueId,
+      leagueSeason: p.leagueSeason,
+      teamId: p.teamId,
     })
   }
 
@@ -522,8 +558,8 @@ export async function getMyTeamPulse(
   const setAll = rows.filter((r) => r.severity === 0).sort(byLock)
 
   return {
-    needs: needsAll.slice(0, COLUMN_CAP),
-    set: setAll.slice(0, COLUMN_CAP),
+    needs: needsAll.slice(0, NEEDS_CAP),
+    set: setAll.slice(0, SET_CAP),
     needsTotal: needsAll.length,
     setTotal: setAll.length,
     considered: mine.length,

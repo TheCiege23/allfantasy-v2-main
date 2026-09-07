@@ -16,6 +16,17 @@ vi.mock('next/navigation', () => ({ useRouter: () => routerMock }))
 import { MatchupPulseBoard } from '@/components/core-app/MatchupPulseBoard'
 import type { MatchupPulse, PulseRow } from '@/lib/core-app/matchupPulse'
 
+/* The footer's escape hatch back to the full picker; asserted at the bottom. */
+const ALL_HREF = '/core/matchup?all=1'
+
+/*
+ * The footer's denominator is LEAGUES ON THE ACCOUNT, not claimed teams —
+ * `pulse.considered` counts the latter, and a manager with 65 leagues and four
+ * claimed teams was being offered "View all 4" from the only route to the
+ * picker.
+ */
+const TOTAL = 9
+
 /*
  * The matchup pulse shipped with no test at all while the my-team board it is
  * modelled on shipped with seventeen. Everything asserted here is a claim the
@@ -57,7 +68,7 @@ function pulse(over: Partial<MatchupPulse> = {}): MatchupPulse {
     considered: 1,
     ranked: 1,
     basis: 'scored',
-    notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0 },
+    notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 },
     ...over,
   }
 }
@@ -71,6 +82,8 @@ describe('MatchupPulseBoard', () => {
   it('tags a projected row so it cannot be read as a live score', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({
           basis: 'projected',
           leading: [row({ basis: 'projected', margin: 8.1 })],
@@ -83,7 +96,7 @@ describe('MatchupPulseBoard', () => {
 
   it('leaves a scored row untagged and says nothing about projections', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ leading: [row()] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row()] })} />,
     )
     expect(within(container).queryByText('PROJ')).toBeNull()
     expect(container.textContent ?? '').not.toMatch(/projection/i)
@@ -97,6 +110,8 @@ describe('MatchupPulseBoard', () => {
   it('tags only the projected rows on a mixed board', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({
           basis: 'mixed',
           leading: [row({ leagueId: 'a', basis: 'scored' }), row({ leagueId: 'b', basis: 'projected' })],
@@ -110,6 +125,8 @@ describe('MatchupPulseBoard', () => {
   it('signs the margin by side rather than repeating a bare number', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({ leading: [row({ margin: 12.4 })], trailing: [row({ leagueId: 'l2', margin: -9.2 })] })}
       />,
     )
@@ -120,7 +137,7 @@ describe('MatchupPulseBoard', () => {
   /* An unnamed opposing roster stays unnamed — never given a placeholder name. */
   it('says the opponent is not named rather than inventing one', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ leading: [row({ opponentName: null })] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ opponentName: null })] })} />,
     )
     expect(container.textContent ?? '').toContain('opponent not named')
   })
@@ -132,7 +149,7 @@ describe('MatchupPulseBoard', () => {
    */
   it('omits the left-to-play clause when it could not be measured', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ leading: [row({ startersLeft: null })] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ startersLeft: null })] })} />,
     )
     expect(container.textContent ?? '').not.toMatch(/left to play/)
   })
@@ -143,7 +160,7 @@ describe('MatchupPulseBoard', () => {
    */
   it('states a genuine zero left to play', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ leading: [row({ startersLeft: 0 })] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ startersLeft: 0 })] })} />,
     )
     expect(container.textContent ?? '').toContain('0 left to play')
   })
@@ -163,6 +180,8 @@ describe('MatchupPulseBoard', () => {
   it('renders no coverage fraction, because a ranked row is always like-for-like', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({
           basis: 'projected',
           leading: [
@@ -186,7 +205,7 @@ describe('MatchupPulseBoard', () => {
    */
   it('keeps the row meta to the opponent and the play count', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ leading: [row({ startersLeft: 6 })] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ startersLeft: 6 })] })} />,
     )
     expect(container.querySelector('.af-mp-meta')?.textContent).toBe(
       'vs Gridiron Ghosts · 6 left to play',
@@ -197,6 +216,8 @@ describe('MatchupPulseBoard', () => {
   it('accounts for every league it could not rank', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({
           considered: 12,
           ranked: 2,
@@ -213,24 +234,24 @@ describe('MatchupPulseBoard', () => {
   })
 
   it('tells no-claimed-team apart from nothing-rankable', () => {
-    const none = render(<MatchupPulseBoard pulse={pulse({ considered: 0, ranked: 0, basis: null })} />)
+    const none = render(<MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ considered: 0, ranked: 0, basis: null })} />)
     expect(none.container.textContent ?? '').toContain('No claimed team yet')
 
     const some = render(
-      <MatchupPulseBoard pulse={pulse({ considered: 9, ranked: 0, basis: null })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ considered: 9, ranked: 0, basis: null })} />,
     )
-    expect(some.container.textContent ?? '').toContain('None of your 9 leagues')
+    expect(some.container.textContent ?? '').toContain('None of your 9 claimed teams')
   })
 
   it('distinguishes the two empty columns instead of showing one blank list', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ ranked: 1, leading: [row()], trailing: [] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ ranked: 1, leading: [row()], trailing: [] })} />,
     )
     expect(container.textContent ?? '').toContain('You are not behind in any league right now.')
   })
 
   it('links each row into that league own matchup screen', () => {
-    const { container } = render(<MatchupPulseBoard pulse={pulse({ leading: [row()] })} />)
+    const { container } = render(<MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row()] })} />)
     expect(container.querySelector('a.af-mp-row')?.getAttribute('href')).toBe(
       '/core/matchup?league=l1',
     )
@@ -260,7 +281,7 @@ describe('MatchupPulseBoard — live refresh gate', () => {
 
   it('is live when a scored row still has starters to play', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: 6 })] })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: 6 })] })} />,
     )
     expect(indicator(container)?.getAttribute('data-inplay')).toBe('true')
   })
@@ -269,6 +290,8 @@ describe('MatchupPulseBoard — live refresh gate', () => {
   it('is NOT live when every scored row has no starters left', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({
           leading: [row({ basis: 'scored', startersLeft: 0 })],
           trailing: [row({ leagueId: 'l2', basis: 'scored', startersLeft: 0 })],
@@ -281,6 +304,8 @@ describe('MatchupPulseBoard — live refresh gate', () => {
   it('is NOT live before kickoff, when every row is a projection', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({
           basis: 'projected',
           leading: [row({ basis: 'projected', startersLeft: 10 })],
@@ -298,6 +323,8 @@ describe('MatchupPulseBoard — live refresh gate', () => {
   it('treats an unknown starters-left on a scored row as still in play', () => {
     const { container } = render(
       <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
         pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: null })] })} />,
     )
     expect(indicator(container)?.getAttribute('data-inplay')).toBe('true')
@@ -305,7 +332,7 @@ describe('MatchupPulseBoard — live refresh gate', () => {
 
   it('shows no indicator at all when nothing is ranked', () => {
     const { container } = render(
-      <MatchupPulseBoard pulse={pulse({ considered: 9, ranked: 0, basis: null })} />,
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ considered: 9, ranked: 0, basis: null })} />,
     )
     expect(indicator(container)).toBeNull()
   })
@@ -315,6 +342,8 @@ describe('MatchupPulseBoard — live refresh gate', () => {
     try {
       render(
         <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
           pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: 6 })] })} />,
       )
       expect(routerMock.refresh).not.toHaveBeenCalled()
@@ -337,6 +366,8 @@ describe('MatchupPulseBoard — live refresh gate', () => {
     try {
       render(
         <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
           pulse={pulse({
             basis: 'projected',
             leading: [row({ basis: 'projected', startersLeft: 10 })],
@@ -378,6 +409,8 @@ describe('MatchupPulseBoard — live refresh gate', () => {
     try {
       render(
         <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
           pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: 6 })] })} />,
       )
       act(() => {
@@ -388,5 +421,68 @@ describe('MatchupPulseBoard — live refresh gate', () => {
       spy.mockRestore()
       vi.useRealTimers()
     }
+  })
+})
+
+/*
+ * 🛑 THIS BLOCK EXISTS BECAUSE THE BOARD SHIPPED THE BUG IT ASSERTS AGAINST, AND
+ * A RENDER FOUND IT, NOT A TEST. `matchupPulse` drops a claimed team whose
+ * `externalId` is not numeric — an ESPN SWID, a Fantrax slug — because the
+ * WeeklyMatchup join needs Sleeper's numeric roster_id. With every team dropped,
+ * `considered` was 0 and this board told a manager holding four claimed teams
+ * "No claimed team yet".
+ */
+describe('MatchupPulseBoard — the unidentified-roster gap', () => {
+  it('does not claim you have no team when we simply could not use its id', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          considered: 4,
+          ranked: 0,
+          basis: null,
+          notRanked: {
+            noSchedule: 0,
+            noOpponent: 0,
+            unpriceable: 0,
+            uncomparable: 0,
+            unidentifiedRoster: 4,
+          },
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).not.toMatch(/no claimed team yet/i)
+    expect(text).toContain('None of your 4 claimed teams')
+    expect(text).toMatch(/roster id we cannot match to a schedule/i)
+    /* And it says whose fault it is. */
+    expect(text).toMatch(/our gap, not theirs/i)
+  })
+
+  it('still says "no claimed team" when there genuinely is none', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ considered: 0, ranked: 0, basis: null })}
+      />,
+    )
+    expect(container.textContent ?? '').toMatch(/no claimed team yet/i)
+  })
+
+  /*
+   * The footer is the only route left to the league picker on this screen, so
+   * its count must be the leagues the user actually holds.
+   */
+  it('counts the footer against leagues held, not claimed teams', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ considered: 4, ranked: 0, basis: null })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('View all 65')
   })
 })

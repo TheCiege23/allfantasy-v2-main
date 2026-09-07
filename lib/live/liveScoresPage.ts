@@ -52,6 +52,14 @@ export type LiveRosterTieIn = {
   playerId: string
   playerName: string
   position: string | null
+  /**
+   * The player's headshot, when we hold one.
+   *
+   * ⚠ NULL IS COMMON AND IS NOT AN ERROR — a large share of `SportsPlayer` rows
+   * carry no image. The row draws initials instead; it must never render a
+   * broken `<img>` beside a real name.
+   */
+  imageUrl: string | null
   /** True when he is in your starting lineup this week. */
   isStarter: boolean
   /** Points as THIS league scored them. Null when the league has not reported yet. */
@@ -171,6 +179,7 @@ type RosteredPlayer = {
   name: string
   position: string | null
   team: string | null
+  imageUrl: string | null
   leagues: Array<{ leagueId: string; leagueName: string; isStarter: boolean; points: number | null }>
 }
 
@@ -259,7 +268,7 @@ async function loadRosteredPlayers(
     where: { sleeperId: { in: [...new Set(current.map((r) => r.playerId))] } },
     // `sport` is required by `composePlayerIdentities` — it gates the NFL-only
     // club fold, and omitting it would silently leave every club unfolded.
-    select: { sleeperId: true, name: true, position: true, team: true, sport: true },
+    select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
   })
   /*
    * ⚠ `new Map(pairs)` RESOLVED A DUPLICATE KEY TO THE LAST PAIR, AND `sleeperId`
@@ -311,6 +320,11 @@ async function loadRosteredPlayers(
          * sides of that join speak one vocabulary.
          */
         team: identity.team,
+        /*
+         * Already run through `asHeadshotUrl` by the composer, so it is a URL or
+         * null — never a bare vendor id that would 404 in an <img src>.
+         */
+        imageUrl: identity.imageUrl,
         leagues: [entry],
       })
     }
@@ -545,6 +559,7 @@ export async function getLivePageData(opts: {
           playerId: p.playerId,
           playerName: p.name,
           position: p.position,
+          imageUrl: p.imageUrl,
           isStarter: l.isStarter,
           points: l.points,
         })

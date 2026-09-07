@@ -25,13 +25,23 @@ import { prisma } from '@/lib/prisma'
  * finished is worse than one labelled with a status the reader can look up.
  */
 
+import { leagueArtUrl } from './leagueArt'
+
 export type DraftPhase = 'live' | 'upcoming' | 'done' | 'unknown'
 
 export type DraftHqAllRow = {
   leagueId: string
   leagueName: string
   platform: string | null
-  /** Platform league avatar, so a draft card is recognisable at a glance. */
+  /**
+   * Platform league avatar, so a draft card is recognisable at a glance.
+   *
+   * ⚠ EXPANDED HERE, NOT AT THE CALL SITE. Both callers pass `League.avatarUrl`
+   * straight through, and on Sleeper that column holds an avatar *id* rather
+   * than a link — so every Sleeper draft card rendered a broken image until this
+   * ran the value through `leagueArtUrl`. Null when there is no artwork, which
+   * the surfaces draw as a monogram.
+   */
   imageUrl: string | null
   /** Normalised bucket for grouping and ordering. */
   phase: DraftPhase
@@ -46,6 +56,35 @@ export type DraftHqAllRow = {
   picksMade: number | null
   /** When status is in_progress, when the current pick expires. */
   pickExpiresAt: string | null
+  /**
+   * Whose turn it is, by the display name the draft order carries.
+   *
+   * Null off a live draft, and null on a live one whose `slotOrder` does not
+   * name the slot at `nextOverallPick` — a snake order can be shorter than the
+   * pick number implies, and inventing "team 7" for an unnamed roster is a
+   * fabricated manager on a screen people act on.
+   */
+  onClockName: string | null
+  /** True when the name above is yours. Drives the urgent tone. */
+  yoursOnClock: boolean
+  /** Display round, 1-based. */
+  currentRound: number | null
+  /** Next overall pick number, 1-based. */
+  nextOverallPick: number | null
+  /**
+   * How many players YOU have queued for this draft.
+   *
+   * ⚠ ZERO IS A REAL ANSWER AND IT IS THE COMMON ONE. The queue tables are
+   * AllFantasy's own; a draft that runs on Sleeper keeps its queue on Sleeper,
+   * so an imported draft reports 0 because there is nothing HERE, not because
+   * the manager is unprepared. Surfaces must say "no queue built here", never
+   * "no queue".
+   */
+  queuedCount: number
+  /** rookie | startup | supplemental | dispersal | standard, when the draft declares one. */
+  modeLabel: string | null
+  /** First transition to in_progress, ISO. Null for a draft that has never run. */
+  startedAt: string | null
 }
 
 export type DraftHqAllData = {
@@ -101,6 +140,10 @@ export async function getDraftHqAll(
         teamCount: true,
         slotOrder: true,
         timerEndAt: true,
+        nextOverallPick: true,
+        currentRoundNum: true,
+        draftModeLabel: true,
+        startedAt: true,
       },
     }),
     prisma.leagueTeam.findMany({
@@ -113,14 +156,47 @@ export async function getDraftHqAll(
     return { ...empty, withoutDraft: leagues.length }
   }
 
-  // One pass for pick counts rather than a query per draft.
-  const pickCounts = await prisma.draftPick
-    .groupBy({
-      by: ['sessionId'],
-      where: { sessionId: { in: sessions.map((s) => s.id) } },
-      _count: { _all: true },
-    })
-    .catch(() => [] as Array<{ sessionId: string; _count: { _all: number } }>)
+  /*
+   * Pick counts and the caller's queue depth, one pass each rather than a query
+   * per draft — the whole reason this aggregator exists.
+   *
+   * ⚠ THE QUEUE IS READ FROM BOTH TABLES BECAUSE BOTH ARE LIVE. `DraftQueue`
+   * holds one JSON array per (session, user); `DraftQueueEntry` is the newer
+   * per-player row and the schema's own comment says the two COEXIST. Reading
+   * only the newer one reports an empty queue for every draft built in the older
+   * room, which is most of them.
+   */
+  const sessionIds = sessions.map((s) => s.id)
+  const [pickCounts, queueEntryCounts, legacyQueues] = await Promise.all([
+    prisma.draftPick
+      .groupBy({
+        by: ['sessionId'],
+        where: { sessionId: { in: sessionIds } },
+        _count: { _all: true },
+      })
+      .catch(() => [] as Array<{ sessionId: string; _count: { _all: number } }>),
+    prisma.draftQueueEntry
+      .groupBy({
+        by: ['draftSessionId'],
+        where: { draftSessionId: { in: sessionIds }, userId },
+        _count: { _all: true },
+      })
+      .catch(() => [] as Array<{ draftSessionId: string; _count: { _all: number } }>),
+    prisma.draftQueue
+      .findMany({
+        where: { sessionId: { in: sessionIds }, userId },
+        select: { sessionId: true, order: true },
+      })
+      .catch(() => [] as Array<{ sessionId: string; order: unknown }>),
+  ])
+
+  const queuedBySession = new Map<string, number>()
+  for (const q of queueEntryCounts) queuedBySession.set(q.draftSessionId, q._count._all)
+  for (const q of legacyQueues) {
+    const n = Array.isArray(q.order) ? q.order.length : 0
+    /* Whichever room the manager actually used holds the longer list. */
+    queuedBySession.set(q.sessionId, Math.max(queuedBySession.get(q.sessionId) ?? 0, n))
+  }
 
   const picksBySession = new Map(pickCounts.map((p) => [p.sessionId, p._count._all]))
   const teamByLeague = new Map(myTeams.map((t) => [t.leagueId, t.externalId]))
@@ -136,18 +212,46 @@ export async function getDraftHqAll(
      * narrowed rather than trusted.
      */
     const order = Array.isArray(session.slotOrder)
-      ? (session.slotOrder as Array<{ slot?: number; rosterId?: string }>)
+      ? (session.slotOrder as Array<{ slot?: number; rosterId?: string; displayName?: string }>)
       : []
     const externalId = teamByLeague.get(session.leagueId)
     const entry = externalId
       ? order.find((o) => String(o.rosterId) === String(externalId))
       : undefined
 
+    /*
+     * Whose pick it is.
+     *
+     * ⚠ DERIVED FROM `nextOverallPick` AGAINST THE ORDER LENGTH, NOT FROM
+     * `DraftPick.slot`. `slot` is the roster's draft slot, so using it collapses
+     * every column of a snake draft onto one team — the mistake that shipped in
+     * Draft HQ's made-pick labels once already, and which warRoom.ts carries a
+     * standing note about.
+     */
+    let onClockName: string | null = null
+    let yoursOnClock = false
+    if (phase === 'live' && order.length > 0 && typeof session.nextOverallPick === 'number') {
+      const n = session.nextOverallPick
+      const teams = order.length
+      const roundIndex = Math.floor((n - 1) / teams)
+      const withinRound = (n - 1) % teams
+      const isSnake = String(session.draftType ?? '').toLowerCase() !== 'linear'
+      const slotIndex =
+        isSnake && roundIndex % 2 === 1 ? teams - 1 - withinRound : withinRound
+      const onClock = order[slotIndex]
+      if (onClock) {
+        const named = onClock.displayName?.trim()
+        onClockName = named && named.length > 0 ? named : null
+        yoursOnClock =
+          externalId != null && String(onClock.rosterId ?? '') === String(externalId)
+      }
+    }
+
     return {
       leagueId: session.leagueId,
       leagueName: meta?.name?.trim() || 'League',
       platform: meta?.platform ?? null,
-      imageUrl: meta?.imageUrl ?? null,
+      imageUrl: leagueArtUrl({ avatarUrl: meta?.imageUrl ?? null, platform: meta?.platform ?? null }),
       phase,
       rawStatus: session.status,
       draftType: session.draftType ?? null,
@@ -158,6 +262,14 @@ export async function getDraftHqAll(
       // Only meaningful while a pick is actually running.
       pickExpiresAt:
         phase === 'live' && session.timerEndAt ? session.timerEndAt.toISOString() : null,
+      onClockName,
+      yoursOnClock,
+      currentRound: typeof session.currentRoundNum === 'number' ? session.currentRoundNum : null,
+      nextOverallPick:
+        typeof session.nextOverallPick === 'number' ? session.nextOverallPick : null,
+      queuedCount: queuedBySession.get(session.id) ?? 0,
+      modeLabel: session.draftModeLabel?.trim() || null,
+      startedAt: session.startedAt ? session.startedAt.toISOString() : null,
     }
   })
 

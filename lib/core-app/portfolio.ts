@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { leagueArtUrl } from './leagueArt'
 import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 
@@ -153,6 +154,7 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
           sport: true,
           season: true,
           avatarUrl: true,
+          logoUrl: true,
           platformLeagueId: true,
           userId: true,
         },
@@ -209,7 +211,18 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
     out.push({
       leagueId: t.leagueId,
       leagueName: leagueDisplayName(t.league?.name ?? null),
-      avatarUrl: t.league?.avatarUrl ?? null,
+      /*
+       * ⚠ EXPANDED, NOT PASSED THROUGH. On Sleeper this column holds an avatar
+       * *id*, not a link — so the raw value in an `<img src>` is a broken image
+       * on every Sleeper league, which is most of them. `leagueArtUrl` prefers a
+       * commissioner `logoUrl` when one exists and returns null when there is no
+       * artwork at all, which the row draws as a monogram.
+       */
+      avatarUrl: leagueArtUrl({
+        logoUrl: t.league?.logoUrl ?? null,
+        avatarUrl: t.league?.avatarUrl ?? null,
+        platform: t.league?.platform ?? null,
+      }),
       platform: String(t.league?.platform ?? 'manual').toLowerCase(),
       sport: String(t.league?.sport ?? 'NFL'),
       season: t.league?.season != null ? String(t.league.season) : null,

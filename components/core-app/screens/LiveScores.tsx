@@ -625,6 +625,18 @@ function TieIn({ tie, isSelected }: { tie: LiveRosterTieIn; isSelected: boolean 
       <span className="af-live-tiein-tag af-label">
         {tie.leagueName} · {tie.isStarter ? 'Starting' : 'Bench'}
       </span>
+      {/*
+        The face, added 2026-09-07. `MiniPlayerImg` already falls back to
+        initials, so a player with no stored headshot renders a mark rather than
+        a broken image — which is the common case, not a failure.
+      */}
+      <MiniPlayerImg
+        sleeperId={tie.playerId}
+        name={tie.playerName}
+        avatarUrl={tie.imageUrl}
+        size={22}
+        className="af-live-tiein-face"
+      />
       <span className="af-live-tiein-name">
         {tie.playerName}
         {tie.position ? <span className="af-live-tiein-pos"> {tie.position}</span> : null}

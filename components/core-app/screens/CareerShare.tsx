@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { AfCrest } from '@/components/core-app/AfCrest'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { CareerData } from '@/lib/core-app/career'
 import '@/components/core-app/af-career-share.css'
@@ -87,7 +88,17 @@ export type CareerShareProps = {
    * Leagues we can attribute this card to, auto-detected. Never a manual entry
    * box — the app knows which leagues the user is in.
    */
-  leagues: Array<{ id: string; name: string; platform: string }>
+  leagues: Array<{
+    id: string
+    name: string
+    platform: string
+    /**
+     * The league's crest, already resolved to a URL by `leagueArtUrl` — never
+     * the raw `avatarUrl` column, which on Sleeper holds an avatar id and would
+     * render as a broken image on roughly half the account's leagues.
+     */
+    imageUrl?: string | null
+  }>
   /** Preselected from ?league=, when the user arrived from a league. */
   selectedLeagueId: string | null
   /**
@@ -445,7 +456,33 @@ export function CareerShare({
                 style={{ aspectRatio: ASPECTS.find((a) => a.id === aspect)!.ratio }}
               >
                 <div className="af-cs-card-top">
-                  <span className="af-cs-card-mark">AF</span>
+                  {/*
+                    ⚠ THE DRAWN CREST, NOT THE "AF" TEXT MARK IT REPLACED, and not
+                    `/af-crest.png` either — that file is a JPEG with a .png
+                    extension, so it carries a baked-in white background that
+                    would put a white square on a dark gradient card. See
+                    `AfCrest.tsx`.
+                  */}
+                  <span className="af-cs-card-mark">
+                    <AfCrest size={26} />
+                  </span>
+                  {/*
+                    The league's own artwork beside its name, when it has any. A
+                    league with none renders the name alone rather than a
+                    placeholder tile — 67 of 115 production leagues have no
+                    avatar on the platform either.
+                  */}
+                  {league?.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className="af-cs-card-crest"
+                      src={league.imageUrl}
+                      alt=""
+                      width={22}
+                      height={22}
+                      loading="lazy"
+                    />
+                  ) : null}
                   <span className="af-cs-card-league">{league?.name ?? 'Career'}</span>
                 </div>
 

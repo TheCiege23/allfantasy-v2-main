@@ -3,6 +3,12 @@
 import Link from 'next/link'
 import type { CareerData, PrestigeComponent } from '@/lib/core-app/career'
 import type { ShareCardData } from '@/lib/core-app/shareCard'
+import type { CareerRecordsData } from '@/lib/core-app/careerRecords'
+import {
+  CareerHallView,
+  CareerRecordsView,
+  CareerSeasonsView,
+} from '@/components/core-app/boards/CareerViews'
 import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
 import '@/components/core-app/af-career.css'
 
@@ -395,10 +401,18 @@ export function Career({
   data,
   view,
   share,
+  records,
 }: {
   data: CareerData
   view?: string | null
   share?: ShareCardData | null
+  /**
+   * Only loaded for `?view=records` — it reads every played week this account
+   * has, and no other tab needs it. Null on every other view, and null there
+   * too when the read failed, which the view renders as a read failure rather
+   * than as an empty career.
+   */
+  records?: CareerRecordsData | null
 }) {
   /*
    * `share` is a view but not a tab. 13a puts "Share card" in the header action
@@ -408,7 +422,7 @@ export function Career({
   const active = view === 'share' || TABS.some((t) => t.key === view) ? (view as string) : 'overview'
   return (
     <>
-      <CareerDesktop data={data} view={active} share={share ?? null} />
+      <CareerDesktop data={data} view={active} share={share ?? null} records={records ?? null} />
       <CareerMobile data={data} />
     </>
   )
@@ -561,10 +575,12 @@ function CareerDesktop({
   data,
   view,
   share,
+  records,
 }: {
   data: CareerData
   view: string
   share: ShareCardData | null
+  records: CareerRecordsData | null
 }) {
   const { prestige, legacy, titles, activeLeagues, leagueCounts, currentSeason } = data
 
@@ -622,6 +638,12 @@ function CareerDesktop({
 
       {view === 'share' ? (
         <SharePreview share={share} isEmpty={data.isEmpty} />
+      ) : view === 'seasons' ? (
+        <CareerSeasonsView data={data} />
+      ) : view === 'hall' ? (
+        <CareerHallView data={data} />
+      ) : view === 'records' ? (
+        <CareerRecordsView records={records} />
       ) : view !== 'overview' ? (
         <UnbuiltView label={TABS.find((t) => t.key === view)?.label ?? 'This view'} />
       ) : data.isEmpty ? (
